@@ -13,12 +13,10 @@ edition = "2021"
 
 readme.workspace = true
 
-[lib]
-path = "src/base64.rs"
 
 [dependencies]
 uucore = { workspace = true, features = ["encoding"] }
-uu_base32 = { workspace = true }
+clap = { workspace = true }
 
 [[bin]]
 name = "base64"

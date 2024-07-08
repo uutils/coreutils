@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
-use clap::{crate_version, Arg, ArgAction, Command};
+
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 #[cfg(unix)]
@@ -13,7 +13,6 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
-use uucore::{format_usage, help_about, help_section, help_usage};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -71,99 +70,34 @@ impl TruncateMode {
     }
 }
 
-const ABOUT: &str = help_about!("truncate.md");
-const AFTER_HELP: &str = help_section!("after help", "truncate.md");
-const USAGE: &str = help_usage!("truncate.md");
-
-pub mod options {
-    pub static IO_BLOCKS: &str = "io-blocks";
-    pub static NO_CREATE: &str = "no-create";
-    pub static REFERENCE: &str = "reference";
-    pub static SIZE: &str = "size";
-    pub static ARG_FILES: &str = "files";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(AFTER_HELP)
-        .try_get_matches_from(args)
-        .map_err(|e| {
-            e.print().expect("Error writing clap::Error");
-            match e.kind() {
-                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
-                _ => 1,
-            }
-        })?;
+    let matches = crate::uu_app().try_get_matches_from(args).map_err(|e| {
+        e.print().expect("Error writing clap::Error");
+        match e.kind() {
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
+            _ => 1,
+        }
+    })?;
 
     let files: Vec<String> = matches
-        .get_many::<String>(options::ARG_FILES)
+        .get_many::<String>(crate::options::ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
     if files.is_empty() {
         Err(UUsageError::new(1, "missing file operand"))
     } else {
-        let io_blocks = matches.get_flag(options::IO_BLOCKS);
-        let no_create = matches.get_flag(options::NO_CREATE);
+        let io_blocks = matches.get_flag(crate::options::IO_BLOCKS);
+        let no_create = matches.get_flag(crate::options::NO_CREATE);
         let reference = matches
-            .get_one::<String>(options::REFERENCE)
+            .get_one::<String>(crate::options::REFERENCE)
             .map(String::from);
-        let size = matches.get_one::<String>(options::SIZE).map(String::from);
+        let size = matches
+            .get_one::<String>(crate::options::SIZE)
+            .map(String::from);
         truncate(no_create, io_blocks, reference, size, &files)
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::IO_BLOCKS)
-                .short('o')
-                .long(options::IO_BLOCKS)
-                .help(
-                    "treat SIZE as the number of I/O blocks of the file rather than bytes \
-            (NOT IMPLEMENTED)",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::NO_CREATE)
-                .short('c')
-                .long(options::NO_CREATE)
-                .help("do not create files that do not exist")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::REFERENCE)
-                .short('r')
-                .long(options::REFERENCE)
-                .required_unless_present(options::SIZE)
-                .help("base the size of each file on the size of RFILE")
-                .value_name("RFILE")
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::SIZE)
-                .short('s')
-                .long(options::SIZE)
-                .required_unless_present(options::REFERENCE)
-                .help(
-                    "set or adjust the size of each file according to SIZE, which is in \
-            bytes unless --io-blocks is specified",
-                )
-                .value_name("SIZE"),
-        )
-        .arg(
-            Arg::new(options::ARG_FILES)
-                .value_name("FILE")
-                .action(ArgAction::Append)
-                .required(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 /// Truncate the named file to the specified size.
@@ -408,8 +342,8 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_mode_and_size;
-    use crate::TruncateMode;
+    use crate::truncate::parse_mode_and_size;
+    use crate::truncate::TruncateMode;
 
     #[test]
     fn test_parse_mode_and_size() {

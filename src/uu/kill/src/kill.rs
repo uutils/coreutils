@@ -5,24 +5,13 @@
 
 // spell-checker:ignore (ToDO) signalname pids killpg
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::show;
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value, ALL_SIGNALS};
-use uucore::{format_usage, help_about, help_usage, show};
-
-static ABOUT: &str = help_about!("kill.md");
-const USAGE: &str = help_usage!("kill.md");
-
-pub mod options {
-    pub static PIDS_OR_SIGNALS: &str = "pids_or_signals";
-    pub static LIST: &str = "list";
-    pub static TABLE: &str = "table";
-    pub static SIGNAL: &str = "signal";
-}
 
 #[derive(Clone, Copy)]
 pub enum Mode {
@@ -36,18 +25,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args.collect_ignore();
     let obs_signal = handle_obsolete(&mut args);
 
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let mode = if matches.get_flag(options::TABLE) {
+    let mode = if matches.get_flag(crate::options::TABLE) {
         Mode::Table
-    } else if matches.get_flag(options::LIST) {
+    } else if matches.get_flag(crate::options::LIST) {
         Mode::List
     } else {
         Mode::Kill
     };
 
     let pids_or_signals: Vec<String> = matches
-        .get_many::<String>(options::PIDS_OR_SIGNALS)
+        .get_many::<String>(crate::options::PIDS_OR_SIGNALS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
@@ -55,7 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Mode::Kill => {
             let sig = if let Some(signal) = obs_signal {
                 signal
-            } else if let Some(signal) = matches.get_one::<String>(options::SIGNAL) {
+            } else if let Some(signal) = matches.get_one::<String>(crate::options::SIGNAL) {
                 parse_signal_value(signal)?
             } else {
                 15_usize //SIGTERM
@@ -94,43 +83,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Ok(())
         }
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .allow_negative_numbers(true)
-        .arg(
-            Arg::new(options::LIST)
-                .short('l')
-                .long(options::LIST)
-                .help("Lists signals")
-                .conflicts_with(options::TABLE)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::TABLE)
-                .short('t')
-                .short_alias('L')
-                .long(options::TABLE)
-                .help("Lists table of signals")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SIGNAL)
-                .short('s')
-                .long(options::SIGNAL)
-                .value_name("signal")
-                .help("Sends given signal instead of SIGTERM"),
-        )
-        .arg(
-            Arg::new(options::PIDS_OR_SIGNALS)
-                .hide(true)
-                .action(ArgAction::Append),
-        )
 }
 
 fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {

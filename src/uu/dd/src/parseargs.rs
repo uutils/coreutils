@@ -2,13 +2,16 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore ctty, ctable, iseek, oseek, iconvflags, oconvflags parseargs outfile oconv
+
+// spell-checker:ignore ctty, datastructures, ctable, iseek, oseek, iconvflags, oconvflags parseargs outfile oconv
 
 #[cfg(test)]
 mod unit_tests;
 
-use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, Settings, StatusLevel};
 use crate::conversion_tables::ConversionTable;
+use crate::datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags};
+use crate::dd::{Num, Settings};
+use crate::progress::StatusLevel;
 use std::error::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
@@ -631,8 +634,8 @@ fn conversion_mode(
 #[cfg(test)]
 mod tests {
 
+    use crate::dd::Num;
     use crate::parseargs::{parse_bytes_with_opt_multiplier, Parser};
-    use crate::Num;
     use std::matches;
     const BIG: &str = "9999999999999999999999999999999999999999999999999999999999999";
 

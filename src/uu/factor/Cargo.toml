@@ -32,6 +32,3 @@ quickcheck = "1.0.3"
 [[bin]]
 name = "factor"
 path = "src/main.rs"
-
-[lib]
-path = "src/factor.rs"

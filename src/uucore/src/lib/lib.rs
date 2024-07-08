@@ -18,6 +18,9 @@ mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
 mod parser; // string parsing modules
 
+pub mod base_common; // common code for base64, base32, etc.
+pub mod commom_args; // common args
+
 pub use uucore_procs::*;
 
 // * cross-platform modules

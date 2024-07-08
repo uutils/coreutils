@@ -14,7 +14,7 @@ use uucore::{
     show_error,
 };
 
-use crate::SortError;
+use crate::sort::SortError;
 
 /// A wrapper around TempDir that may only exist once in a process.
 ///

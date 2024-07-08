@@ -2,8 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use super::get_metadata_with_deref_opt;
-use super::PathData;
+use crate::ls::get_metadata_with_deref_opt;
+use crate::ls::PathData;
 use lscolors::{Indicator, LsColors, Style};
 use std::fs::{DirEntry, Metadata};
 use std::io::{BufWriter, Stdout};

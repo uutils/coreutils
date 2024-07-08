@@ -5,7 +5,7 @@
 // spell-checker:ignore powf
 use uucore::display::Quotable;
 
-use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
+use crate::options_pgrm::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{DisplayableSuffix, RawSuffix, Result, Suffix, Unit, IEC_BASES, SI_BASES};
 
 /// Iterate over a line's fields, where each field is a contiguous sequence of
@@ -182,7 +182,7 @@ fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
 ///
 /// ```
 /// use uu_numfmt::format::div_round;
-/// use uu_numfmt::options::RoundMethod;
+/// use uu_numfmt::options_pgrm::RoundMethod;
 ///
 /// // Rounding methods:
 /// assert_eq!(div_round(1.01, 1.0, RoundMethod::FromZero), 1.1);

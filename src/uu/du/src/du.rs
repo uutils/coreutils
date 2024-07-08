@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use chrono::{DateTime, Local};
-use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
@@ -30,8 +30,7 @@ use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
-use uucore::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
+use uucore::{show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -39,41 +38,6 @@ use windows_sys::Win32::Storage::FileSystem::{
     FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
     FILE_STANDARD_INFO,
 };
-
-mod options {
-    pub const HELP: &str = "help";
-    pub const NULL: &str = "0";
-    pub const ALL: &str = "all";
-    pub const APPARENT_SIZE: &str = "apparent-size";
-    pub const BLOCK_SIZE: &str = "block-size";
-    pub const BYTES: &str = "b";
-    pub const TOTAL: &str = "c";
-    pub const MAX_DEPTH: &str = "d";
-    pub const HUMAN_READABLE: &str = "h";
-    pub const BLOCK_SIZE_1K: &str = "k";
-    pub const COUNT_LINKS: &str = "l";
-    pub const BLOCK_SIZE_1M: &str = "m";
-    pub const SEPARATE_DIRS: &str = "S";
-    pub const SUMMARIZE: &str = "s";
-    pub const THRESHOLD: &str = "threshold";
-    pub const SI: &str = "si";
-    pub const TIME: &str = "time";
-    pub const TIME_STYLE: &str = "time-style";
-    pub const ONE_FILE_SYSTEM: &str = "one-file-system";
-    pub const DEREFERENCE: &str = "dereference";
-    pub const DEREFERENCE_ARGS: &str = "dereference-args";
-    pub const NO_DEREFERENCE: &str = "no-dereference";
-    pub const INODES: &str = "inodes";
-    pub const EXCLUDE: &str = "exclude";
-    pub const EXCLUDE_FROM: &str = "exclude-from";
-    pub const FILES0_FROM: &str = "files0-from";
-    pub const VERBOSE: &str = "verbose";
-    pub const FILE: &str = "FILE";
-}
-
-const ABOUT: &str = help_about!("du.md");
-const AFTER_HELP: &str = help_section!("after help", "du.md");
-const USAGE: &str = help_usage!("du.md");
 
 struct TraversalOptions {
     all: bool,
@@ -278,8 +242,9 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 
 fn read_block_size(s: Option<&str>) -> UResult<u64> {
     if let Some(s) = s {
-        parse_size_u64(s)
-            .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
+        parse_size_u64(s).map_err(|e| {
+            USimpleError::new(1, format_error_message(&e, s, crate::options::BLOCK_SIZE))
+        })
     } else {
         for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
@@ -463,18 +428,18 @@ fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
 // to ignore the files
 fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
-        .get_many::<String>(options::EXCLUDE_FROM)
+        .get_many::<String>(crate::options::EXCLUDE_FROM)
         .unwrap_or_default()
         .flat_map(file_as_vec);
 
     let excludes_iterator = matches
-        .get_many::<String>(options::EXCLUDE)
+        .get_many::<String>(crate::options::EXCLUDE)
         .unwrap_or_default()
         .cloned();
 
     let mut exclude_patterns = Vec::new();
     for f in excludes_iterator.chain(exclude_from_iterator) {
-        if matches.get_flag(options::VERBOSE) {
+        if matches.get_flag(crate::options::VERBOSE) {
             println!("adding {:?} to the exclude list ", &f);
         }
         match parse_glob::from_str(&f) {
@@ -637,24 +602,27 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let summarize = matches.get_flag(options::SUMMARIZE);
+    let summarize = matches.get_flag(crate::options::SUMMARIZE);
 
     let max_depth = parse_depth(
         matches
-            .get_one::<String>(options::MAX_DEPTH)
+            .get_one::<String>(crate::options::MAX_DEPTH)
             .map(|s| s.as_str()),
         summarize,
     )?;
 
-    let files = if let Some(file_from) = matches.get_one::<String>(options::FILES0_FROM) {
-        if file_from == "-" && matches.get_one::<String>(options::FILE).is_some() {
+    let files = if let Some(file_from) = matches.get_one::<String>(crate::options::FILES0_FROM) {
+        if file_from == "-" && matches.get_one::<String>(crate::options::FILE).is_some() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!(
                     "extra operand {}\nfile operands cannot be combined with --files0-from",
-                    matches.get_one::<String>(options::FILE).unwrap().quote()
+                    matches
+                        .get_one::<String>(crate::options::FILE)
+                        .unwrap()
+                        .quote()
                 ),
             )
             .into());
@@ -662,9 +630,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         read_files_from(file_from)?
     } else {
-        match matches.get_one::<String>(options::FILE) {
+        match matches.get_one::<String>(crate::options::FILE) {
             Some(_) => matches
-                .get_many::<String>(options::FILE)
+                .get_many::<String>(crate::options::FILE)
                 .unwrap()
                 .map(PathBuf::from)
                 .collect(),
@@ -672,8 +640,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let time = matches.contains_id(options::TIME).then(|| {
-        match matches.get_one::<String>(options::TIME).map(AsRef::as_ref) {
+    let time = matches.contains_id(crate::options::TIME).then(|| {
+        match matches
+            .get_one::<String>(crate::options::TIME)
+            .map(AsRef::as_ref)
+        {
             None | Some("ctime" | "status") => Time::Modified,
             Some("access" | "atime" | "use") => Time::Accessed,
             Some("birth" | "creation") => Time::Created,
@@ -681,38 +652,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     });
 
-    let size_format = if matches.get_flag(options::HUMAN_READABLE) {
+    let size_format = if matches.get_flag(crate::options::HUMAN_READABLE) {
         SizeFormat::HumanBinary
-    } else if matches.get_flag(options::SI) {
+    } else if matches.get_flag(crate::options::SI) {
         SizeFormat::HumanDecimal
-    } else if matches.get_flag(options::BYTES) {
+    } else if matches.get_flag(crate::options::BYTES) {
         SizeFormat::BlockSize(1)
-    } else if matches.get_flag(options::BLOCK_SIZE_1K) {
+    } else if matches.get_flag(crate::options::BLOCK_SIZE_1K) {
         SizeFormat::BlockSize(1024)
-    } else if matches.get_flag(options::BLOCK_SIZE_1M) {
+    } else if matches.get_flag(crate::options::BLOCK_SIZE_1M) {
         SizeFormat::BlockSize(1024 * 1024)
     } else {
         SizeFormat::BlockSize(read_block_size(
             matches
-                .get_one::<String>(options::BLOCK_SIZE)
+                .get_one::<String>(crate::options::BLOCK_SIZE)
                 .map(AsRef::as_ref),
         )?)
     };
 
     let traversal_options = TraversalOptions {
-        all: matches.get_flag(options::ALL),
-        separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
-        one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
-        dereference: if matches.get_flag(options::DEREFERENCE) {
+        all: matches.get_flag(crate::options::ALL),
+        separate_dirs: matches.get_flag(crate::options::SEPARATE_DIRS),
+        one_file_system: matches.get_flag(crate::options::ONE_FILE_SYSTEM),
+        dereference: if matches.get_flag(crate::options::DEREFERENCE) {
             Deref::All
-        } else if matches.get_flag(options::DEREFERENCE_ARGS) {
+        } else if matches.get_flag(crate::options::DEREFERENCE_ARGS) {
             // We don't care about the cost of cloning as it is rarely used
             Deref::Args(files.clone())
         } else {
             Deref::None
         },
-        count_links: matches.get_flag(options::COUNT_LINKS),
-        verbose: matches.get_flag(options::VERBOSE),
+        count_links: matches.get_flag(crate::options::COUNT_LINKS),
+        verbose: matches.get_flag(crate::options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
     };
 
@@ -726,24 +697,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         max_depth,
         size_format,
         summarize,
-        total: matches.get_flag(options::TOTAL),
-        inodes: matches.get_flag(options::INODES),
+        total: matches.get_flag(crate::options::TOTAL),
+        inodes: matches.get_flag(crate::options::INODES),
         threshold: matches
-            .get_one::<String>(options::THRESHOLD)
+            .get_one::<String>(crate::options::THRESHOLD)
             .map(|s| {
                 Threshold::from_str(s).map_err(|e| {
-                    USimpleError::new(1, format_error_message(&e, s, options::THRESHOLD))
+                    USimpleError::new(1, format_error_message(&e, s, crate::options::THRESHOLD))
                 })
             })
             .transpose()?,
-        apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
+        apparent_size: matches.get_flag(crate::options::APPARENT_SIZE)
+            || matches.get_flag(crate::options::BYTES),
         time,
         time_format,
-        line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
+        line_ending: LineEnding::from_zero_flag(matches.get_flag(crate::options::NULL)),
     };
 
     if stat_printer.inodes
-        && (matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES))
+        && (matches.get_flag(crate::options::APPARENT_SIZE)
+            || matches.get_flag(crate::options::BYTES))
     {
         show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
@@ -829,238 +802,6 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
         (Some(s), None) => Err(DuError::InvalidMaxDepthArg(s.into()).into()),
         (Some(_), Some(_)) | (None, _) => Ok(max_depth),
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .disable_help_flag(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help("Print help information.")
-                .action(ArgAction::Help)
-        )
-        .arg(
-            Arg::new(options::ALL)
-                .short('a')
-                .long(options::ALL)
-                .help("write counts for all files, not just directories")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::APPARENT_SIZE)
-                .long(options::APPARENT_SIZE)
-                .help(
-                    "print apparent sizes, rather than disk usage \
-                    although the apparent size is usually smaller, it may be larger due to holes \
-                    in ('sparse') files, internal fragmentation, indirect blocks, and the like"
-                )
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::BLOCK_SIZE)
-                .short('B')
-                .long(options::BLOCK_SIZE)
-                .value_name("SIZE")
-                .help(
-                    "scale sizes by SIZE before printing them. \
-                    E.g., '-BM' prints sizes in units of 1,048,576 bytes. See SIZE format below."
-                )
-        )
-        .arg(
-            Arg::new(options::BYTES)
-                .short('b')
-                .long("bytes")
-                .help("equivalent to '--apparent-size --block-size=1'")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::TOTAL)
-                .long("total")
-                .short('c')
-                .help("produce a grand total")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::MAX_DEPTH)
-                .short('d')
-                .long("max-depth")
-                .value_name("N")
-                .help(
-                    "print the total for a directory (or file, with --all) \
-                    only if it is N or fewer levels below the command \
-                    line argument;  --max-depth=0 is the same as --summarize"
-                )
-        )
-        .arg(
-            Arg::new(options::HUMAN_READABLE)
-                .long("human-readable")
-                .short('h')
-                .help("print sizes in human readable format (e.g., 1K 234M 2G)")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::INODES)
-                .long(options::INODES)
-                .help(
-                    "list inode usage information instead of block usage like --block-size=1K"
-                )
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::BLOCK_SIZE_1K)
-                .short('k')
-                .help("like --block-size=1K")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::COUNT_LINKS)
-                .short('l')
-                .long("count-links")
-                .help("count sizes many times if hard linked")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::DEREFERENCE)
-                .short('L')
-                .long(options::DEREFERENCE)
-                .help("follow all symbolic links")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::DEREFERENCE_ARGS)
-                .short('D')
-                .visible_short_alias('H')
-                .long(options::DEREFERENCE_ARGS)
-                .help("follow only symlinks that are listed on the command line")
-                .action(ArgAction::SetTrue)
-        )
-         .arg(
-             Arg::new(options::NO_DEREFERENCE)
-                 .short('P')
-                 .long(options::NO_DEREFERENCE)
-                 .help("don't follow any symbolic links (this is the default)")
-                 .overrides_with(options::DEREFERENCE)
-                 .action(ArgAction::SetTrue),
-         )
-        .arg(
-            Arg::new(options::BLOCK_SIZE_1M)
-                .short('m')
-                .help("like --block-size=1M")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::NULL)
-                .short('0')
-                .long("null")
-                .help("end each output line with 0 byte rather than newline")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::SEPARATE_DIRS)
-                .short('S')
-                .long("separate-dirs")
-                .help("do not include size of subdirectories")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::SUMMARIZE)
-                .short('s')
-                .long("summarize")
-                .help("display only a total for each argument")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::SI)
-                .long(options::SI)
-                .help("like -h, but use powers of 1000 not 1024")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::ONE_FILE_SYSTEM)
-                .short('x')
-                .long(options::ONE_FILE_SYSTEM)
-                .help("skip directories on different file systems")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::THRESHOLD)
-                .short('t')
-                .long(options::THRESHOLD)
-                .value_name("SIZE")
-                .num_args(1)
-                .allow_hyphen_values(true)
-                .help("exclude entries smaller than SIZE if positive, \
-                          or entries greater than SIZE if negative")
-        )
-        .arg(
-            Arg::new(options::VERBOSE)
-                .short('v')
-                .long("verbose")
-                .help("verbose mode (option not present in GNU/Coreutils)")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new(options::EXCLUDE)
-                .long(options::EXCLUDE)
-                .value_name("PATTERN")
-                .help("exclude files that match PATTERN")
-                .action(ArgAction::Append)
-        )
-        .arg(
-            Arg::new(options::EXCLUDE_FROM)
-                .short('X')
-                .long("exclude-from")
-                .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath)
-                .help("exclude files that match any pattern in FILE")
-                .action(ArgAction::Append)
-        )
-        .arg(
-            Arg::new(options::FILES0_FROM)
-                .long("files0-from")
-                .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath)
-                .help("summarize device usage of the NUL-terminated file names specified in file F; if F is -, then read names from standard input")
-                .action(ArgAction::Append)
-        )
-        .arg(
-            Arg::new(options::TIME)
-                .long(options::TIME)
-                .value_name("WORD")
-                .require_equals(true)
-                .num_args(0..)
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("atime").alias("access").alias("use"),
-                    PossibleValue::new("ctime").alias("status"),
-                    PossibleValue::new("creation").alias("birth"),
-                ]))
-                .help(
-                    "show time of the last modification of any file in the \
-                    directory, or any of its subdirectories. If WORD is given, show time as WORD instead \
-                    of modification time: atime, access, use, ctime, status, birth or creation"
-                )
-        )
-        .arg(
-            Arg::new(options::TIME_STYLE)
-                .long(options::TIME_STYLE)
-                .value_name("STYLE")
-                .help(
-                    "show times using style STYLE: \
-                    full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'"
-                )
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .value_hint(clap::ValueHint::AnyPath)
-                .action(ArgAction::Append)
-        )
 }
 
 #[derive(Clone, Copy)]

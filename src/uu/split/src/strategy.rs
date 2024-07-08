@@ -5,7 +5,7 @@
 //! Determine the strategy for breaking up the input (file or stdin) into chunks
 //! based on the command line options
 
-use crate::{OPT_BYTES, OPT_LINES, OPT_LINE_BYTES, OPT_NUMBER};
+use crate::options::{OPT_BYTES, OPT_LINES, OPT_LINE_BYTES, OPT_NUMBER};
 use clap::{parser::ValueSource, ArgMatches};
 use std::fmt;
 use uucore::{

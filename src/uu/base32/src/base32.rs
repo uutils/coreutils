@@ -5,19 +5,16 @@
 
 use std::io::{stdin, Read};
 
-use clap::Command;
-use uucore::{encoding::Format, error::UResult, help_about, help_usage};
+use uucore::{encoding::Format, error::UResult};
 
-pub mod base_common;
-
-const ABOUT: &str = help_about!("base32.md");
-const USAGE: &str = help_usage!("base32.md");
+use uucore::base_common;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format = Format::Base32;
 
-    let config: base_common::Config = base_common::parse_base_cmd_args(args, ABOUT, USAGE)?;
+    let config: base_common::Config =
+        base_common::parse_base_cmd_args(args, crate::ABOUT, crate::USAGE)?;
 
     // Create a reference to stdin so we can return a locked stdin from
     // parse_base_cmd_args
@@ -31,8 +28,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         config.ignore_garbage,
         config.decode,
     )
-}
-
-pub fn uu_app() -> Command {
-    base_common::base_app(ABOUT, USAGE)
 }

@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset CHARCLASS
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -16,10 +15,6 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::num::ParseIntError;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::{format_usage, help_about, help_usage};
-
-const USAGE: &str = help_usage!("ptx.md");
-const ABOUT: &str = help_about!("ptx.md");
 
 const REGEX_CHARCLASS: &str = "^-]\\";
 
@@ -106,25 +101,26 @@ struct WordFilter {
 impl WordFilter {
     #[allow(clippy::cognitive_complexity)]
     fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<Self> {
-        let (o, oset): (bool, HashSet<String>) = if matches.contains_id(options::ONLY_FILE) {
-            let words =
-                read_word_filter_file(matches, options::ONLY_FILE).map_err_context(String::new)?;
-            (true, words)
-        } else {
-            (false, HashSet::new())
-        };
-        let (i, iset): (bool, HashSet<String>) = if matches.contains_id(options::IGNORE_FILE) {
-            let words = read_word_filter_file(matches, options::IGNORE_FILE)
+        let (o, oset): (bool, HashSet<String>) = if matches.contains_id(crate::options::ONLY_FILE) {
+            let words = read_word_filter_file(matches, crate::options::ONLY_FILE)
                 .map_err_context(String::new)?;
             (true, words)
         } else {
             (false, HashSet::new())
         };
-        let break_set: Option<HashSet<char>> = if matches.contains_id(options::BREAK_FILE)
-            && !matches.contains_id(options::WORD_REGEXP)
+        let (i, iset): (bool, HashSet<String>) = if matches.contains_id(crate::options::IGNORE_FILE)
         {
-            let chars =
-                read_char_filter_file(matches, options::BREAK_FILE).map_err_context(String::new)?;
+            let words = read_word_filter_file(matches, crate::options::IGNORE_FILE)
+                .map_err_context(String::new)?;
+            (true, words)
+        } else {
+            (false, HashSet::new())
+        };
+        let break_set: Option<HashSet<char>> = if matches.contains_id(crate::options::BREAK_FILE)
+            && !matches.contains_id(crate::options::WORD_REGEXP)
+        {
+            let chars = read_char_filter_file(matches, crate::options::BREAK_FILE)
+                .map_err_context(String::new)?;
             let mut hs: HashSet<char> = if config.gnu_ext {
                 HashSet::new() // really only chars found in file
             } else {
@@ -138,8 +134,8 @@ impl WordFilter {
             None
         };
         // Ignore empty string regex from cmd-line-args
-        let arg_reg: Option<String> = if matches.contains_id(options::WORD_REGEXP) {
-            match matches.get_one::<String>(options::WORD_REGEXP) {
+        let arg_reg: Option<String> = if matches.contains_id(crate::options::WORD_REGEXP) {
+            match matches.get_one::<String>(crate::options::WORD_REGEXP) {
                 Some(v) => {
                     if v.is_empty() {
                         None
@@ -220,50 +216,50 @@ impl Display for PtxError {
 fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     let mut config = Config::default();
     let err_msg = "parsing options failed";
-    if matches.get_flag(options::TRADITIONAL) {
+    if matches.get_flag(crate::options::TRADITIONAL) {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
         "[^ \t\n]+".clone_into(&mut config.context_regex);
     } else {
         return Err(PtxError::NotImplemented("GNU extensions").into());
     }
-    if matches.contains_id(options::SENTENCE_REGEXP) {
+    if matches.contains_id(crate::options::SENTENCE_REGEXP) {
         return Err(PtxError::NotImplemented("-S").into());
     }
-    config.auto_ref = matches.get_flag(options::AUTO_REFERENCE);
-    config.input_ref = matches.get_flag(options::REFERENCES);
-    config.right_ref &= matches.get_flag(options::RIGHT_SIDE_REFS);
-    config.ignore_case = matches.get_flag(options::IGNORE_CASE);
-    if matches.contains_id(options::MACRO_NAME) {
+    config.auto_ref = matches.get_flag(crate::options::AUTO_REFERENCE);
+    config.input_ref = matches.get_flag(crate::options::REFERENCES);
+    config.right_ref &= matches.get_flag(crate::options::RIGHT_SIDE_REFS);
+    config.ignore_case = matches.get_flag(crate::options::IGNORE_CASE);
+    if matches.contains_id(crate::options::MACRO_NAME) {
         config.macro_name = matches
-            .get_one::<String>(options::MACRO_NAME)
+            .get_one::<String>(crate::options::MACRO_NAME)
             .expect(err_msg)
             .to_string();
     }
-    if matches.contains_id(options::FLAG_TRUNCATION) {
+    if matches.contains_id(crate::options::FLAG_TRUNCATION) {
         config.trunc_str = matches
-            .get_one::<String>(options::FLAG_TRUNCATION)
+            .get_one::<String>(crate::options::FLAG_TRUNCATION)
             .expect(err_msg)
             .to_string();
     }
-    if matches.contains_id(options::WIDTH) {
+    if matches.contains_id(crate::options::WIDTH) {
         config.line_width = matches
-            .get_one::<String>(options::WIDTH)
+            .get_one::<String>(crate::options::WIDTH)
             .expect(err_msg)
             .parse()
             .map_err(PtxError::ParseError)?;
     }
-    if matches.contains_id(options::GAP_SIZE) {
+    if matches.contains_id(crate::options::GAP_SIZE) {
         config.gap_size = matches
-            .get_one::<String>(options::GAP_SIZE)
+            .get_one::<String>(crate::options::GAP_SIZE)
             .expect(err_msg)
             .parse()
             .map_err(PtxError::ParseError)?;
     }
-    if matches.get_flag(options::FORMAT_ROFF) {
+    if matches.get_flag(crate::options::FORMAT_ROFF) {
         config.format = OutFormat::Roff;
     }
-    if matches.get_flag(options::FORMAT_TEX) {
+    if matches.get_flag(crate::options::FORMAT_TEX) {
         config.format = OutFormat::Tex;
     }
     Ok(config)
@@ -692,31 +688,11 @@ fn write_traditional_output(
     Ok(())
 }
 
-mod options {
-    pub static FILE: &str = "file";
-    pub static AUTO_REFERENCE: &str = "auto-reference";
-    pub static TRADITIONAL: &str = "traditional";
-    pub static FLAG_TRUNCATION: &str = "flag-truncation";
-    pub static MACRO_NAME: &str = "macro-name";
-    pub static FORMAT_ROFF: &str = "format=roff";
-    pub static RIGHT_SIDE_REFS: &str = "right-side-refs";
-    pub static SENTENCE_REGEXP: &str = "sentence-regexp";
-    pub static FORMAT_TEX: &str = "format=tex";
-    pub static WORD_REGEXP: &str = "word-regexp";
-    pub static BREAK_FILE: &str = "break-file";
-    pub static IGNORE_CASE: &str = "ignore-case";
-    pub static GAP_SIZE: &str = "gap-size";
-    pub static IGNORE_FILE: &str = "ignore-file";
-    pub static ONLY_FILE: &str = "only-file";
-    pub static REFERENCES: &str = "references";
-    pub static WIDTH: &str = "width";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let mut input_files: Vec<String> = match &matches.get_many::<String>(options::FILE) {
+    let mut input_files: Vec<String> = match &matches.get_many::<String>(crate::options::FILE) {
         Some(v) => v.clone().cloned().collect(),
         None => vec!["-".to_string()],
     };
@@ -731,134 +707,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         "-".to_string()
     };
     write_traditional_output(&config, &file_map, &word_set, &output_file)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .about(ABOUT)
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::AUTO_REFERENCE)
-                .short('A')
-                .long(options::AUTO_REFERENCE)
-                .help("output automatically generated references")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::TRADITIONAL)
-                .short('G')
-                .long(options::TRADITIONAL)
-                .help("behave more like System V 'ptx'")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FLAG_TRUNCATION)
-                .short('F')
-                .long(options::FLAG_TRUNCATION)
-                .help("use STRING for flagging line truncations")
-                .value_name("STRING"),
-        )
-        .arg(
-            Arg::new(options::MACRO_NAME)
-                .short('M')
-                .long(options::MACRO_NAME)
-                .help("macro name to use instead of 'xx'")
-                .value_name("STRING"),
-        )
-        .arg(
-            Arg::new(options::FORMAT_ROFF)
-                .short('O')
-                .long(options::FORMAT_ROFF)
-                .help("generate output as roff directives")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::RIGHT_SIDE_REFS)
-                .short('R')
-                .long(options::RIGHT_SIDE_REFS)
-                .help("put references at right, not counted in -w")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SENTENCE_REGEXP)
-                .short('S')
-                .long(options::SENTENCE_REGEXP)
-                .help("for end of lines or end of sentences")
-                .value_name("REGEXP"),
-        )
-        .arg(
-            Arg::new(options::FORMAT_TEX)
-                .short('T')
-                .long(options::FORMAT_TEX)
-                .help("generate output as TeX directives")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::WORD_REGEXP)
-                .short('W')
-                .long(options::WORD_REGEXP)
-                .help("use REGEXP to match each keyword")
-                .value_name("REGEXP"),
-        )
-        .arg(
-            Arg::new(options::BREAK_FILE)
-                .short('b')
-                .long(options::BREAK_FILE)
-                .help("word break characters in this FILE")
-                .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::IGNORE_CASE)
-                .short('f')
-                .long(options::IGNORE_CASE)
-                .help("fold lower case to upper case for sorting")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::GAP_SIZE)
-                .short('g')
-                .long(options::GAP_SIZE)
-                .help("gap size in columns between output fields")
-                .value_name("NUMBER"),
-        )
-        .arg(
-            Arg::new(options::IGNORE_FILE)
-                .short('i')
-                .long(options::IGNORE_FILE)
-                .help("read ignore word list from FILE")
-                .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::ONLY_FILE)
-                .short('o')
-                .long(options::ONLY_FILE)
-                .help("read only word list from this FILE")
-                .value_name("FILE")
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::REFERENCES)
-                .short('r')
-                .long(options::REFERENCES)
-                .help("first field of each line is a reference")
-                .value_name("FILE")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::WIDTH)
-                .short('w')
-                .long(options::WIDTH)
-                .help("output width in columns, reference excluded")
-                .value_name("NUMBER"),
-        )
 }

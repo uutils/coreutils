@@ -10,19 +10,10 @@ use std::ffi::{CString, OsString};
 use std::io::{Error, Write};
 use std::ptr;
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::{
     error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
-    format_usage, help_about, help_usage, show_error,
+    show_error,
 };
-
-pub mod options {
-    pub static ADJUSTMENT: &str = "adjustment";
-    pub static COMMAND: &str = "COMMAND";
-}
-
-const ABOUT: &str = help_about!("nice.md");
-const USAGE: &str = help_usage!("nice.md");
 
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
     if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
@@ -107,7 +98,9 @@ fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = standardize_nice_args(args);
 
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches = crate::uu_app()
+        .try_get_matches_from(args)
+        .with_exit_code(125)?;
 
     nix::errno::Errno::clear();
     let mut niceness = unsafe { libc::getpriority(PRIO_PROCESS, 0) };
@@ -118,9 +111,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let adjustment = match matches.get_one::<String>(options::ADJUSTMENT) {
+    let adjustment = match matches.get_one::<String>(crate::options::ADJUSTMENT) {
         Some(nstr) => {
-            if !matches.contains_id(options::COMMAND) {
+            if !matches.contains_id(crate::options::COMMAND) {
                 return Err(UUsageError::new(
                     125,
                     "A command must be given with an adjustment.",
@@ -137,7 +130,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
         None => {
-            if !matches.contains_id(options::COMMAND) {
+            if !matches.contains_id(crate::options::COMMAND) {
                 println!("{niceness}");
                 return Ok(());
             }
@@ -164,7 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let cstrs: Vec<CString> = matches
-        .get_many::<String>(options::COMMAND)
+        .get_many::<String>(crate::options::COMMAND)
         .unwrap()
         .map(|x| CString::new(x.as_bytes()).unwrap())
         .collect();
@@ -183,27 +176,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
     set_exit_code(exit_code);
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .trailing_var_arg(true)
-        .infer_long_args(true)
-        .version(crate_version!())
-        .arg(
-            Arg::new(options::ADJUSTMENT)
-                .short('n')
-                .long(options::ADJUSTMENT)
-                .help("add N to the niceness (default is 10)")
-                .action(ArgAction::Set)
-                .overrides_with(options::ADJUSTMENT)
-                .allow_hyphen_values(true),
-        )
-        .arg(
-            Arg::new(options::COMMAND)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::CommandName),
-        )
 }

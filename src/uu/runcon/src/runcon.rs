@@ -4,12 +4,10 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (vars) RFILE
 
-use clap::builder::ValueParser;
+use clap::Command;
 use uucore::error::{UResult, UUsageError};
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
-use uucore::{format_usage, help_about, help_section, help_usage};
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
@@ -17,27 +15,12 @@ use std::os::raw::c_char;
 use std::os::unix::ffi::OsStrExt;
 use std::{io, ptr};
 
-mod errors;
-
-use errors::error_exit_status;
-use errors::{Error, Result, RunconError};
-
-const ABOUT: &str = help_about!("runcon.md");
-const USAGE: &str = help_usage!("runcon.md");
-const DESCRIPTION: &str = help_section!("after help", "runcon.md");
-
-pub mod options {
-    pub const COMPUTE: &str = "compute";
-
-    pub const USER: &str = "user";
-    pub const ROLE: &str = "role";
-    pub const TYPE: &str = "type";
-    pub const RANGE: &str = "range";
-}
+use crate::errors::error_exit_status;
+use crate::errors::{Error, Result, RunconError};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let config = uu_app();
+    let config = crate::uu_app();
 
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
@@ -99,65 +82,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(DESCRIPTION)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::COMPUTE)
-                .short('c')
-                .long(options::COMPUTE)
-                .help("Compute process transition context before modifying.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::USER)
-                .short('u')
-                .long(options::USER)
-                .value_name("USER")
-                .help("Set user USER in the target security context.")
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(options::ROLE)
-                .short('r')
-                .long(options::ROLE)
-                .value_name("ROLE")
-                .help("Set role ROLE in the target security context.")
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(options::TYPE)
-                .short('t')
-                .long(options::TYPE)
-                .value_name("TYPE")
-                .help("Set type TYPE in the target security context.")
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(options::RANGE)
-                .short('l')
-                .long(options::RANGE)
-                .value_name("RANGE")
-                .help("Set range RANGE in the target security context.")
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new("ARG")
-                .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::CommandName),
-        )
-        // Once "ARG" is parsed, everything after that belongs to it.
-        //
-        // This is not how POSIX does things, but this is how the GNU implementation
-        // parses its command line.
-        .trailing_var_arg(true)
-}
-
 #[derive(Debug)]
 enum CommandLineMode {
     Print,
@@ -201,7 +125,7 @@ struct Options {
 fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Options> {
     let matches = config.try_get_matches_from(args)?;
 
-    let compute_transition_context = matches.get_flag(options::COMPUTE);
+    let compute_transition_context = matches.get_flag(crate::options::COMPUTE);
 
     let mut args = matches
         .get_many::<OsString>("ARG")
@@ -209,19 +133,27 @@ fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Option
         .map(OsString::from);
 
     if compute_transition_context
-        || matches.contains_id(options::USER)
-        || matches.contains_id(options::ROLE)
-        || matches.contains_id(options::TYPE)
-        || matches.contains_id(options::RANGE)
+        || matches.contains_id(crate::options::USER)
+        || matches.contains_id(crate::options::ROLE)
+        || matches.contains_id(crate::options::TYPE)
+        || matches.contains_id(crate::options::RANGE)
     {
         // runcon [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] [COMMAND [args]]
 
         let mode = CommandLineMode::CustomContext {
             compute_transition_context,
-            user: matches.get_one::<OsString>(options::USER).map(Into::into),
-            role: matches.get_one::<OsString>(options::ROLE).map(Into::into),
-            the_type: matches.get_one::<OsString>(options::TYPE).map(Into::into),
-            range: matches.get_one::<OsString>(options::RANGE).map(Into::into),
+            user: matches
+                .get_one::<OsString>(crate::options::USER)
+                .map(Into::into),
+            role: matches
+                .get_one::<OsString>(crate::options::ROLE)
+                .map(Into::into),
+            the_type: matches
+                .get_one::<OsString>(crate::options::TYPE)
+                .map(Into::into),
+            range: matches
+                .get_one::<OsString>(crate::options::RANGE)
+                .map(Into::into),
             command: args.next(),
         };
 

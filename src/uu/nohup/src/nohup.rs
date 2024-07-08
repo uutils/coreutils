@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (ToDO) execvp SIGHUP cproc vprocmgr cstrs homeout
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
 use std::env;
@@ -17,21 +16,14 @@ use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult};
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::show_error;
 
-const ABOUT: &str = help_about!("nohup.md");
-const AFTER_HELP: &str = help_section!("after help", "nohup.md");
-const USAGE: &str = help_usage!("nohup.md");
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
 static EXIT_CANCELED: i32 = 125;
 static EXIT_CANNOT_INVOKE: i32 = 126;
 static EXIT_ENOENT: i32 = 127;
 static POSIX_NOHUP_FAILURE: i32 = 127;
-
-mod options {
-    pub const CMD: &str = "cmd";
-}
 
 #[derive(Debug)]
 enum NohupError {
@@ -74,7 +66,9 @@ impl Display for NohupError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches = crate::uu_app()
+        .try_get_matches_from(args)
+        .with_exit_code(125)?;
 
     replace_fds()?;
 
@@ -85,7 +79,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let cstrs: Vec<CString> = matches
-        .get_many::<String>(options::CMD)
+        .get_many::<String>(crate::options::CMD)
         .unwrap()
         .map(|x| CString::new(x.as_bytes()).unwrap())
         .collect();
@@ -98,23 +92,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         _ => set_exit_code(EXIT_CANNOT_INVOKE),
     }
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
-        .arg(
-            Arg::new(options::CMD)
-                .hide(true)
-                .required(true)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::CommandName),
-        )
-        .trailing_var_arg(true)
-        .infer_long_args(true)
 }
 
 fn replace_fds() -> UResult<()> {

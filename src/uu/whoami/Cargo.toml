@@ -13,9 +13,6 @@ edition = "2021"
 
 readme.workspace = true
 
-[lib]
-path = "src/whoami.rs"
-
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }

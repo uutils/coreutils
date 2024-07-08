@@ -23,17 +23,16 @@ use itertools::Itertools;
 use uucore::error::UResult;
 
 use crate::chunks::RecycledChunk;
+use crate::chunks::{self, Chunk};
+use crate::merge;
 use crate::merge::ClosedTmpFile;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
+use crate::sort::Output;
+use crate::sort::{compare_by, sort_by, GlobalSettings};
+use crate::sort::{print_sorted, Line};
 use crate::tmp_dir::TmpDirWrapper;
-use crate::Output;
-use crate::{
-    chunks::{self, Chunk},
-    compare_by, merge, sort_by, GlobalSettings,
-};
-use crate::{print_sorted, Line};
 
 const START_BUFFER_SIZE: usize = 8_000;
 

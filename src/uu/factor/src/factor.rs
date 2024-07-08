@@ -9,21 +9,11 @@ use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::io::{self, stdin, stdout, Write};
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show_error, show_warning};
-
-const ABOUT: &str = help_about!("factor.md");
-const USAGE: &str = help_usage!("factor.md");
-
-mod options {
-    pub static EXPONENTS: &str = "exponents";
-    pub static HELP: &str = "help";
-    pub static NUMBER: &str = "NUMBER";
-}
+use uucore::{show_error, show_warning};
 
 fn print_factors_str(
     num_str: &str,
@@ -80,16 +70,16 @@ fn write_result(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     // If matches find --exponents flag than variable print_exponents is true and p^e output format will be used.
-    let print_exponents = matches.get_flag(options::EXPONENTS);
+    let print_exponents = matches.get_flag(crate::options::EXPONENTS);
 
     let stdout = stdout();
     // We use a smaller buffer here to pass a gnu test. 4KiB appears to be the default pipe size for bash.
     let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
 
-    if let Some(values) = matches.get_many::<String>(options::NUMBER) {
+    if let Some(values) = matches.get_many::<String>(crate::options::NUMBER) {
         for number in values {
             print_factors_str(number, &mut w, print_exponents)?;
         }
@@ -117,28 +107,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .disable_help_flag(true)
-        .args_override_self(true)
-        .arg(Arg::new(options::NUMBER).action(ArgAction::Append))
-        .arg(
-            Arg::new(options::EXPONENTS)
-                .short('h')
-                .long(options::EXPONENTS)
-                .help("Print factors in the form p^e")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help("Print help information.")
-                .action(ArgAction::Help),
-        )
 }

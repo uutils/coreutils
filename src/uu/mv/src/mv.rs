@@ -5,13 +5,9 @@
 
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
 
-mod error;
-
-use clap::builder::ValueParser;
-use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
+use clap::{error::ErrorKind, ArgMatches};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
-use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
@@ -34,7 +30,7 @@ use uucore::update_control;
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
-use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
+use uucore::{prompt_yes, show};
 
 use fs_extra::dir::{
     get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
@@ -96,23 +92,14 @@ pub enum OverwriteMode {
     Force,
 }
 
-const ABOUT: &str = help_about!("mv.md");
-const USAGE: &str = help_usage!("mv.md");
-const AFTER_HELP: &str = help_section!("after help", "mv.md");
-
-static OPT_FORCE: &str = "force";
-static OPT_INTERACTIVE: &str = "interactive";
-static OPT_NO_CLOBBER: &str = "no-clobber";
-static OPT_STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
-static OPT_TARGET_DIRECTORY: &str = "target-directory";
-static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
-static OPT_VERBOSE: &str = "verbose";
-static OPT_PROGRESS: &str = "progress";
-static ARG_FILES: &str = "files";
+use crate::uu_args::{
+    ARG_FILES, OPT_INTERACTIVE, OPT_NO_CLOBBER, OPT_NO_TARGET_DIRECTORY, OPT_PROGRESS,
+    OPT_STRIP_TRAILING_SLASHES, OPT_TARGET_DIRECTORY, OPT_VERBOSE,
+};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut app = uu_app();
+    let mut app = crate::uu_app();
     let matches = app.try_get_matches_from_mut(args)?;
 
     let files: Vec<OsString> = matches
@@ -167,95 +154,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     mv(&files[..], &opts)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(format!(
-            "{AFTER_HELP}\n\n{}",
-            backup_control::BACKUP_CONTROL_LONG_HELP
-        ))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(OPT_FORCE)
-                .short('f')
-                .long(OPT_FORCE)
-                .help("do not prompt before overwriting")
-                .overrides_with_all([OPT_INTERACTIVE, OPT_NO_CLOBBER])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_INTERACTIVE)
-                .short('i')
-                .long(OPT_INTERACTIVE)
-                .help("prompt before override")
-                .overrides_with_all([OPT_FORCE, OPT_NO_CLOBBER])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_NO_CLOBBER)
-                .short('n')
-                .long(OPT_NO_CLOBBER)
-                .help("do not overwrite an existing file")
-                .overrides_with_all([OPT_FORCE, OPT_INTERACTIVE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_STRIP_TRAILING_SLASHES)
-                .long(OPT_STRIP_TRAILING_SLASHES)
-                .help("remove any trailing slashes from each SOURCE argument")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(backup_control::arguments::backup())
-        .arg(backup_control::arguments::backup_no_args())
-        .arg(backup_control::arguments::suffix())
-        .arg(update_control::arguments::update())
-        .arg(update_control::arguments::update_no_args())
-        .arg(
-            Arg::new(OPT_TARGET_DIRECTORY)
-                .short('t')
-                .long(OPT_TARGET_DIRECTORY)
-                .help("move all SOURCE arguments into DIRECTORY")
-                .value_name("DIRECTORY")
-                .value_hint(clap::ValueHint::DirPath)
-                .conflicts_with(OPT_NO_TARGET_DIRECTORY)
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(OPT_NO_TARGET_DIRECTORY)
-                .short('T')
-                .long(OPT_NO_TARGET_DIRECTORY)
-                .help("treat DEST as a normal file")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_VERBOSE)
-                .short('v')
-                .long(OPT_VERBOSE)
-                .help("explain what is being done")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_PROGRESS)
-                .short('g')
-                .long(OPT_PROGRESS)
-                .help(
-                    "Display a progress bar. \n\
-                Note: this feature is not supported by GNU coreutils.",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(ARG_FILES)
-                .action(ArgAction::Append)
-                .num_args(1..)
-                .required(true)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::AnyPath),
-        )
 }
 
 fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {

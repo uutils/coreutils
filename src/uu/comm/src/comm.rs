@@ -5,30 +5,13 @@
 
 // spell-checker:ignore (ToDO) delim mkdelim
 
+use clap::ArgMatches;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage};
-
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-
-const ABOUT: &str = help_about!("comm.md");
-const USAGE: &str = help_usage!("comm.md");
-
-mod options {
-    pub const COLUMN_1: &str = "1";
-    pub const COLUMN_2: &str = "2";
-    pub const COLUMN_3: &str = "3";
-    pub const DELIMITER: &str = "output-delimiter";
-    pub const DELIMITER_DEFAULT: &str = "\t";
-    pub const FILE_1: &str = "FILE1";
-    pub const FILE_2: &str = "FILE2";
-    pub const TOTAL: &str = "total";
-    pub const ZERO_TERMINATED: &str = "zero-terminated";
-}
 
 enum Input {
     Stdin(Stdin),
@@ -62,8 +45,8 @@ impl LineReader {
 }
 
 fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) {
-    let width_col_1 = usize::from(!opts.get_flag(options::COLUMN_1));
-    let width_col_2 = usize::from(!opts.get_flag(options::COLUMN_2));
+    let width_col_1 = usize::from(!opts.get_flag(crate::options::COLUMN_1));
+    let width_col_2 = usize::from(!opts.get_flag(crate::options::COLUMN_2));
 
     let delim_col_2 = delim.repeat(width_col_1);
     let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
@@ -92,7 +75,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
 
         match ord {
             Ordering::Less => {
-                if !opts.get_flag(options::COLUMN_1) {
+                if !opts.get_flag(crate::options::COLUMN_1) {
                     print!("{}", String::from_utf8_lossy(ra));
                 }
                 ra.clear();
@@ -100,7 +83,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                 total_col_1 += 1;
             }
             Ordering::Greater => {
-                if !opts.get_flag(options::COLUMN_2) {
+                if !opts.get_flag(crate::options::COLUMN_2) {
                     print!("{delim_col_2}{}", String::from_utf8_lossy(rb));
                 }
                 rb.clear();
@@ -108,7 +91,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
                 total_col_2 += 1;
             }
             Ordering::Equal => {
-                if !opts.get_flag(options::COLUMN_3) {
+                if !opts.get_flag(crate::options::COLUMN_3) {
                     print!("{delim_col_3}{}", String::from_utf8_lossy(ra));
                 }
                 ra.clear();
@@ -120,8 +103,9 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
         }
     }
 
-    if opts.get_flag(options::TOTAL) {
-        let line_ending = LineEnding::from_zero_flag(opts.get_flag(options::ZERO_TERMINATED));
+    if opts.get_flag(crate::options::TOTAL) {
+        let line_ending =
+            LineEnding::from_zero_flag(opts.get_flag(crate::options::ZERO_TERMINATED));
         print!("{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}total{line_ending}");
     }
 }
@@ -140,16 +124,16 @@ fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
-    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
-    let filename1 = matches.get_one::<String>(options::FILE_1).unwrap();
-    let filename2 = matches.get_one::<String>(options::FILE_2).unwrap();
+    let matches = crate::uu_app().try_get_matches_from(args)?;
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(crate::options::ZERO_TERMINATED));
+    let filename1 = matches.get_one::<String>(crate::options::FILE_1).unwrap();
+    let filename2 = matches.get_one::<String>(crate::options::FILE_2).unwrap();
     let mut f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string())?;
     let mut f2 = open_file(filename2, line_ending).map_err_context(|| filename2.to_string())?;
 
     // Due to default_value(), there must be at least one value here, thus unwrap() must not panic.
     let all_delimiters = matches
-        .get_many::<String>(options::DELIMITER)
+        .get_many::<String>(crate::options::DELIMITER)
         .unwrap()
         .map(String::from)
         .collect::<Vec<_>>();
@@ -170,65 +154,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
     comm(&mut f1, &mut f2, delim, &matches);
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::COLUMN_1)
-                .short('1')
-                .help("suppress column 1 (lines unique to FILE1)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::COLUMN_2)
-                .short('2')
-                .help("suppress column 2 (lines unique to FILE2)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::COLUMN_3)
-                .short('3')
-                .help("suppress column 3 (lines that appear in both files)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::DELIMITER)
-                .long(options::DELIMITER)
-                .help("separate columns with STR")
-                .value_name("STR")
-                .default_value(options::DELIMITER_DEFAULT)
-                .allow_hyphen_values(true)
-                .action(ArgAction::Append)
-                .hide_default_value(true),
-        )
-        .arg(
-            Arg::new(options::ZERO_TERMINATED)
-                .long(options::ZERO_TERMINATED)
-                .short('z')
-                .overrides_with(options::ZERO_TERMINATED)
-                .help("line delimiter is NUL, not newline")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE_1)
-                .required(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::FILE_2)
-                .required(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::TOTAL)
-                .long(options::TOTAL)
-                .help("output a summary")
-                .action(ArgAction::SetTrue),
-        )
 }

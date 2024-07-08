@@ -5,8 +5,8 @@
 
 // spell-checker:ignore (ToDO) ENOTDIR
 
-use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, Command};
+use uucore::show_error;
+
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
 use std::io;
@@ -14,28 +14,18 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UResult};
 
-use uucore::{format_usage, help_about, help_usage, show_error, util_name};
-
-static ABOUT: &str = help_about!("rmdir.md");
-const USAGE: &str = help_usage!("rmdir.md");
-static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
-static OPT_PARENTS: &str = "parents";
-static OPT_VERBOSE: &str = "verbose";
-
-static ARG_DIRS: &str = "dirs";
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let opts = Opts {
-        ignore: matches.get_flag(OPT_IGNORE_FAIL_NON_EMPTY),
-        parents: matches.get_flag(OPT_PARENTS),
-        verbose: matches.get_flag(OPT_VERBOSE),
+        ignore: matches.get_flag(crate::options::OPT_IGNORE_FAIL_NON_EMPTY),
+        parents: matches.get_flag(crate::options::OPT_PARENTS),
+        verbose: matches.get_flag(crate::options::OPT_VERBOSE),
     };
 
     for path in matches
-        .get_many::<OsString>(ARG_DIRS)
+        .get_many::<OsString>(crate::options::ARG_DIRS)
         .unwrap_or_default()
         .map(Path::new)
     {
@@ -109,7 +99,11 @@ fn remove(mut path: &Path, opts: Opts) -> Result<(), Error<'_>> {
 
 fn remove_single(path: &Path, opts: Opts) -> Result<(), Error<'_>> {
     if opts.verbose {
-        println!("{}: removing directory, {}", util_name(), path.quote());
+        println!(
+            "{}: removing directory, {}",
+            uucore::util_name(),
+            path.quote()
+        );
     }
     remove_dir(path).map_err(|error| Error { error, path })
 }
@@ -160,42 +154,4 @@ struct Opts {
     ignore: bool,
     parents: bool,
     verbose: bool,
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(OPT_IGNORE_FAIL_NON_EMPTY)
-                .long(OPT_IGNORE_FAIL_NON_EMPTY)
-                .help("ignore each failure that is solely because a directory is non-empty")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_PARENTS)
-                .short('p')
-                .long(OPT_PARENTS)
-                .help(
-                    "remove DIRECTORY and its ancestors; e.g.,
-                  'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_VERBOSE)
-                .short('v')
-                .long(OPT_VERBOSE)
-                .help("output a diagnostic for every directory processed")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(ARG_DIRS)
-                .action(ArgAction::Append)
-                .num_args(1..)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::DirPath),
-        )
 }

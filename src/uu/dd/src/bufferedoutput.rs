@@ -8,7 +8,8 @@
 //!
 //! Use the [`BufferedOutput`] struct to create a buffered form of the
 //! [`Output`] writer.
-use crate::{Output, WriteStat};
+use crate::dd::Output;
+use crate::progress::WriteStat;
 
 /// Buffer partial output blocks until they are completed.
 ///
@@ -17,13 +18,13 @@ use crate::{Output, WriteStat};
 /// completed.
 pub(crate) struct BufferedOutput<'a> {
     /// The unbuffered inner block writer.
-    inner: Output<'a>,
+    pub(crate) inner: Output<'a>,
 
     /// The internal buffer that stores a partial block.
     ///
     /// The size of this buffer is always less than the output block
     /// size (that is, the value of the `obs` command-line option).
-    buf: Vec<u8>,
+    pub(crate) buf: Vec<u8>,
 }
 
 impl<'a> BufferedOutput<'a> {
@@ -106,7 +107,7 @@ impl<'a> BufferedOutput<'a> {
 #[cfg(test)]
 mod tests {
     use crate::bufferedoutput::BufferedOutput;
-    use crate::{Dest, Output, Settings};
+    use crate::dd::{Dest, Output, Settings};
 
     #[test]
     fn test_buffered_output_write_blocks_empty() {

@@ -10,7 +10,7 @@ use crate::conversion_tables::{
     ASCII_TO_EBCDIC_UCASE_TO_LCASE, ASCII_TO_IBM, EBCDIC_TO_ASCII_LCASE_TO_UCASE,
 };
 use crate::parseargs::Parser;
-use crate::StatusLevel;
+use crate::progress::StatusLevel;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 #[allow(clippy::useless_vec)]

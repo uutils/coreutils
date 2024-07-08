@@ -5,9 +5,7 @@
 
 // spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime
 
-mod flags;
-
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
     cfgetospeed, cfsetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags,
@@ -21,7 +19,6 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
 
 #[cfg(not(any(
     target_os = "freebsd",
@@ -31,11 +28,8 @@ use uucore::{format_usage, help_about, help_usage};
     target_os = "netbsd",
     target_os = "openbsd"
 )))]
-use flags::BAUD_RATES;
-use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
-
-const USAGE: &str = help_usage!("stty.md");
-const SUMMARY: &str = help_about!("stty.md");
+use crate::flags::BAUD_RATES;
+use crate::flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
@@ -83,13 +77,6 @@ trait TermiosFlag: Copy {
     fn apply(&self, termios: &mut Termios, val: bool);
 }
 
-mod options {
-    pub const ALL: &str = "all";
-    pub const SAVE: &str = "save";
-    pub const FILE: &str = "file";
-    pub const SETTINGS: &str = "settings";
-}
-
 struct Options<'a> {
     all: bool,
     save: bool,
@@ -123,9 +110,9 @@ impl AsRawFd for Device {
 impl<'a> Options<'a> {
     fn from(matches: &'a ArgMatches) -> io::Result<Self> {
         Ok(Self {
-            all: matches.get_flag(options::ALL),
-            save: matches.get_flag(options::SAVE),
-            file: match matches.get_one::<String>(options::FILE) {
+            all: matches.get_flag(crate::options::ALL),
+            save: matches.get_flag(crate::options::SAVE),
+            file: match matches.get_one::<String>(crate::options::FILE) {
                 // Two notes here:
                 // 1. O_NONBLOCK is needed because according to GNU docs, a
                 //    POSIX tty can block waiting for carrier-detect if the
@@ -144,7 +131,7 @@ impl<'a> Options<'a> {
                 None => Device::Stdout(stdout()),
             },
             settings: matches
-                .get_many::<String>(options::SETTINGS)
+                .get_many::<String>(crate::options::SETTINGS)
                 .map(|v| v.map(|s| s.as_ref()).collect()),
         })
     }
@@ -176,7 +163,7 @@ ioctl_write_ptr_bad!(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let opts = Options::from(&matches)?;
 
@@ -459,41 +446,6 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
         }
     }
     ControlFlow::Continue(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::ALL)
-                .short('a')
-                .long(options::ALL)
-                .help("print all current settings in human-readable form")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SAVE)
-                .short('g')
-                .long(options::SAVE)
-                .help("print all current settings in a stty-readable form")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .short('F')
-                .long(options::FILE)
-                .value_hint(clap::ValueHint::FilePath)
-                .value_name("DEVICE")
-                .help("open and use the specified DEVICE instead of stdin"),
-        )
-        .arg(
-            Arg::new(options::SETTINGS)
-                .action(ArgAction::Append)
-                .help("settings to change"),
-        )
 }
 
 impl TermiosFlag for ControlFlags {

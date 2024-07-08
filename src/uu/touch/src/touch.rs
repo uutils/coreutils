@@ -10,8 +10,7 @@ use chrono::{
     DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime,
     TimeZone, Timelike,
 };
-use clap::builder::{PossibleValue, ValueParser};
-use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
+use clap::ArgMatches;
 use filetime::{set_file_times, set_symlink_file_times, FileTime};
 use std::ffi::OsString;
 use std::fs::{self, File};
@@ -19,29 +18,7 @@ use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_usage, show};
-
-const ABOUT: &str = help_about!("touch.md");
-const USAGE: &str = help_usage!("touch.md");
-
-pub mod options {
-    // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
-    pub static SOURCES: &str = "sources";
-    pub mod sources {
-        pub static DATE: &str = "date";
-        pub static REFERENCE: &str = "reference";
-        pub static TIMESTAMP: &str = "timestamp";
-    }
-    pub static HELP: &str = "help";
-    pub static ACCESS: &str = "access";
-    pub static MODIFICATION: &str = "modification";
-    pub static NO_CREATE: &str = "no-create";
-    pub static NO_DEREF: &str = "no-dereference";
-    pub static TIME: &str = "time";
-}
-
-static ARG_FILES: &str = "files";
+use uucore::show;
 
 mod format {
     pub(crate) const POSIX_LOCALE: &str = "%a %b %e %H:%M:%S %Y";
@@ -76,17 +53,19 @@ fn filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let files = matches.get_many::<OsString>(ARG_FILES).ok_or_else(|| {
-        USimpleError::new(
-            1,
-            format!(
-                "missing file operand\nTry '{} --help' for more information.",
-                uucore::execution_phrase()
-            ),
-        )
-    })?;
+    let files = matches
+        .get_many::<OsString>(crate::options::ARG_FILES)
+        .ok_or_else(|| {
+            USimpleError::new(
+                1,
+                format!(
+                    "missing file operand\nTry '{} --help' for more information.",
+                    uucore::execution_phrase()
+                ),
+            )
+        })?;
 
     let (atime, mtime) = determine_times(&matches)?;
 
@@ -100,7 +79,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let path = pathbuf.as_path();
 
-        let metadata_result = if matches.get_flag(options::NO_DEREF) {
+        let metadata_result = if matches.get_flag(crate::options::NO_DEREF) {
             path.symlink_metadata()
         } else {
             path.metadata()
@@ -111,11 +90,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
             }
 
-            if matches.get_flag(options::NO_CREATE) {
+            if matches.get_flag(crate::options::NO_CREATE) {
                 continue;
             }
 
-            if matches.get_flag(options::NO_DEREF) {
+            if matches.get_flag(crate::options::NO_DEREF) {
                 show!(USimpleError::new(
                     1,
                     format!(
@@ -148,7 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !matches.contains_id(options::SOURCES) {
+            if !matches.contains_id(crate::options::SOURCES) {
                 continue;
             }
         }
@@ -158,113 +137,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .disable_help_flag(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help("Print help information.")
-                .action(ArgAction::Help),
-        )
-        .arg(
-            Arg::new(options::ACCESS)
-                .short('a')
-                .help("change only the access time")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::sources::TIMESTAMP)
-                .short('t')
-                .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
-                .value_name("STAMP"),
-        )
-        .arg(
-            Arg::new(options::sources::DATE)
-                .short('d')
-                .long(options::sources::DATE)
-                .allow_hyphen_values(true)
-                .help("parse argument and use it instead of current time")
-                .value_name("STRING")
-                .conflicts_with(options::sources::TIMESTAMP),
-        )
-        .arg(
-            Arg::new(options::MODIFICATION)
-                .short('m')
-                .help("change only the modification time")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::NO_CREATE)
-                .short('c')
-                .long(options::NO_CREATE)
-                .help("do not create any files")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::NO_DEREF)
-                .short('h')
-                .long(options::NO_DEREF)
-                .help(
-                    "affect each symbolic link instead of any referenced file \
-                     (only for systems that can change the timestamps of a symlink)",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::sources::REFERENCE)
-                .short('r')
-                .long(options::sources::REFERENCE)
-                .help("use this file's times instead of the current time")
-                .value_name("FILE")
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::AnyPath)
-                .conflicts_with(options::sources::TIMESTAMP),
-        )
-        .arg(
-            Arg::new(options::TIME)
-                .long(options::TIME)
-                .help(
-                    "change only the specified time: \"access\", \"atime\", or \
-                     \"use\" are equivalent to -a; \"modify\" or \"mtime\" are \
-                     equivalent to -m",
-                )
-                .value_name("WORD")
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("atime").alias("access").alias("use"),
-                    PossibleValue::new("mtime").alias("modify"),
-                ])),
-        )
-        .arg(
-            Arg::new(ARG_FILES)
-                .action(ArgAction::Append)
-                .num_args(1..)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::AnyPath),
-        )
-        .group(
-            ArgGroup::new(options::SOURCES)
-                .args([
-                    options::sources::TIMESTAMP,
-                    options::sources::DATE,
-                    options::sources::REFERENCE,
-                ])
-                .multiple(true),
-        )
-}
-
 // Determine the access and modification time
 fn determine_times(matches: &ArgMatches) -> UResult<(FileTime, FileTime)> {
     match (
-        matches.get_one::<OsString>(options::sources::REFERENCE),
-        matches.get_one::<String>(options::sources::DATE),
+        matches.get_one::<OsString>(crate::options::sources::REFERENCE),
+        matches.get_one::<String>(crate::options::sources::DATE),
     ) {
         (Some(reference), Some(date)) => {
-            let (atime, mtime) = stat(Path::new(&reference), !matches.get_flag(options::NO_DEREF))?;
+            let (atime, mtime) = stat(
+                Path::new(&reference),
+                !matches.get_flag(crate::options::NO_DEREF),
+            )?;
             let atime = filetime_to_datetime(&atime).ok_or_else(|| {
                 USimpleError::new(1, "Could not process the reference access time")
             })?;
@@ -273,20 +156,21 @@ fn determine_times(matches: &ArgMatches) -> UResult<(FileTime, FileTime)> {
             })?;
             Ok((parse_date(atime, date)?, parse_date(mtime, date)?))
         }
-        (Some(reference), None) => {
-            stat(Path::new(&reference), !matches.get_flag(options::NO_DEREF))
-        }
+        (Some(reference), None) => stat(
+            Path::new(&reference),
+            !matches.get_flag(crate::options::NO_DEREF),
+        ),
         (None, Some(date)) => {
             let timestamp = parse_date(Local::now(), date)?;
             Ok((timestamp, timestamp))
         }
         (None, None) => {
-            let timestamp = if let Some(ts) = matches.get_one::<String>(options::sources::TIMESTAMP)
-            {
-                parse_timestamp(ts)?
-            } else {
-                datetime_to_filetime(&Local::now())
-            };
+            let timestamp =
+                if let Some(ts) = matches.get_one::<String>(crate::options::sources::TIMESTAMP) {
+                    parse_timestamp(ts)?
+                } else {
+                    datetime_to_filetime(&Local::now())
+                };
             Ok((timestamp, timestamp))
         }
     }
@@ -302,17 +186,17 @@ fn update_times(
 ) -> UResult<()> {
     // If changing "only" atime or mtime, grab the existing value of the other.
     // Note that "-a" and "-m" may be passed together; this is not an xor.
-    if matches.get_flag(options::ACCESS)
-        || matches.get_flag(options::MODIFICATION)
-        || matches.contains_id(options::TIME)
+    if matches.get_flag(crate::options::ACCESS)
+        || matches.get_flag(crate::options::MODIFICATION)
+        || matches.contains_id(crate::options::TIME)
     {
-        let st = stat(path, !matches.get_flag(options::NO_DEREF))?;
+        let st = stat(path, !matches.get_flag(crate::options::NO_DEREF))?;
         let time = matches
-            .get_one::<String>(options::TIME)
+            .get_one::<String>(crate::options::TIME)
             .map(|s| s.as_str())
             .unwrap_or("");
 
-        if !(matches.get_flag(options::ACCESS)
+        if !(matches.get_flag(crate::options::ACCESS)
             || time.contains(&"access".to_owned())
             || time.contains(&"atime".to_owned())
             || time.contains(&"use".to_owned()))
@@ -320,7 +204,7 @@ fn update_times(
             atime = st.0;
         }
 
-        if !(matches.get_flag(options::MODIFICATION)
+        if !(matches.get_flag(crate::options::MODIFICATION)
             || time.contains(&"modify".to_owned())
             || time.contains(&"mtime".to_owned()))
         {
@@ -336,7 +220,7 @@ fn update_times(
     // set the times for a symbolic link itself, rather than the file it points to.
     if filename == "-" {
         filetime::set_file_times(path, atime, mtime)
-    } else if matches.get_flag(options::NO_DEREF) {
+    } else if matches.get_flag(crate::options::NO_DEREF) {
         set_symlink_file_times(path, atime, mtime)
     } else {
         set_file_times(path, atime, mtime)

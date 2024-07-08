@@ -5,16 +5,12 @@
 
 // spell-checker:ignore (ToDO) sysv
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show};
-
-const USAGE: &str = help_usage!("sum.md");
-const ABOUT: &str = help_about!("sum.md");
+use uucore::show;
 
 // This can be replaced with usize::div_ceil once it is stabilized.
 // This implementation approach is optimized for when `b` is a constant,
@@ -94,22 +90,16 @@ fn open(name: &str) -> UResult<Box<dyn Read>> {
     }
 }
 
-mod options {
-    pub static FILE: &str = "file";
-    pub static BSD_COMPATIBLE: &str = "r";
-    pub static SYSTEM_V_COMPATIBLE: &str = "sysv";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
+    let files: Vec<String> = match matches.get_many::<String>(crate::options::FILE) {
         Some(v) => v.cloned().collect(),
         None => vec!["-".to_owned()],
     };
 
-    let sysv = matches.get_flag(options::SYSTEM_V_COMPATIBLE);
+    let sysv = matches.get_flag(crate::options::SYSTEM_V_COMPATIBLE);
 
     let print_names = files.len() > 1 || files[0] != "-";
     let width = if sysv { 1 } else { 5 };
@@ -135,31 +125,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::FILE)
-                .action(ArgAction::Append)
-                .hide(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::BSD_COMPATIBLE)
-                .short('r')
-                .help("use the BSD sum algorithm, use 1K blocks (default)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SYSTEM_V_COMPATIBLE)
-                .short('s')
-                .long(options::SYSTEM_V_COMPATIBLE)
-                .help("use System V sum algorithm, use 512 bytes blocks")
-                .action(ArgAction::SetTrue),
-        )
 }

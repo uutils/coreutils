@@ -26,12 +26,12 @@
 //! Here's an overview of the macros sorted by purpose
 //!
 //! - Print errors
-//!   - From types implementing [`crate::error::UError`]: [`show!`],
-//!     [`show_if_err!`]
-//!   - From custom messages: [`show_error!`]
-//! - Print warnings: [`show_warning!`]
+//!   - From types implementing [`crate::error::UError`]: [`crate::show!`],
+//!     [`crate::show_if_err!`]
+//!   - From custom messages: [`crate::show_error!`]
+//! - Print warnings: [`crate::show_warning!`]
 //! - Terminate util execution
-//!   - Crash program: [`crash!`], [`crash_if_err!`]
+//!   - Crash program: [`crate::crash!`], [`crate::crash_if_err!`]
 
 // spell-checker:ignore sourcepath targetpath rustdoc
 
@@ -100,7 +100,7 @@ macro_rules! show(
 /// Display an error and set global exit code in error case.
 ///
 /// Wraps around [`show!`] and takes a [`crate::error::UResult`] instead of a
-/// [`crate::error::UError`] type. This macro invokes [`show!`] if the
+/// [`crate::error::UError`] type. This macro invokes [`crate::show!`] if the
 /// [`crate::error::UResult`] is an `Err`-variant. This can be invoked directly
 /// on the result of a function call, like in the `install` utility:
 ///
@@ -192,7 +192,7 @@ macro_rules! show_warning_caps(
 
 /// Display an error and [`std::process::exit`]
 ///
-/// Displays the provided error message using [`show_error!`], then invokes
+/// Displays the provided error message using [`crate::show_error!`], then invokes
 /// [`std::process::exit`] with the provided exit code.
 ///
 /// # Examples
@@ -217,7 +217,7 @@ macro_rules! crash(
 /// Unwrap a [`std::result::Result`], crashing instead of panicking.
 ///
 /// If the result is an `Ok`-variant, returns the value contained inside. If it
-/// is an `Err`-variant, invokes [`crash!`] with the formatted error instead.
+/// is an `Err`-variant, invokes [`crate::crash!`] with the formatted error instead.
 ///
 /// # Examples
 ///

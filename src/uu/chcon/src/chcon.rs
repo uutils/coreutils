@@ -2,14 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (vars) RFILE
+
 #![allow(clippy::upper_case_acronyms)]
 
-use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{display::Quotable, format_usage, help_about, help_usage, show_error, show_warning};
+use uucore::{display::Quotable, show_error, show_warning};
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -18,47 +18,11 @@ use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-mod errors;
-mod fts;
-
-use errors::*;
-
-const ABOUT: &str = help_about!("chcon.md");
-const USAGE: &str = help_usage!("chcon.md");
-
-pub mod options {
-    pub static HELP: &str = "help";
-    pub static VERBOSE: &str = "verbose";
-
-    pub static REFERENCE: &str = "reference";
-
-    pub static USER: &str = "user";
-    pub static ROLE: &str = "role";
-    pub static TYPE: &str = "type";
-    pub static RANGE: &str = "range";
-
-    pub static RECURSIVE: &str = "recursive";
-
-    pub mod sym_links {
-        pub static FOLLOW_ARG_DIR_SYM_LINK: &str = "follow-arg-dir-sym-link";
-        pub static FOLLOW_DIR_SYM_LINKS: &str = "follow-dir-sym-links";
-        pub static NO_FOLLOW_SYM_LINKS: &str = "no-follow-sym-links";
-    }
-
-    pub mod dereference {
-        pub static DEREFERENCE: &str = "dereference";
-        pub static NO_DEREFERENCE: &str = "no-dereference";
-    }
-
-    pub mod preserve_root {
-        pub static PRESERVE_ROOT: &str = "preserve-root";
-        pub static NO_PRESERVE_ROOT: &str = "no-preserve-root";
-    }
-}
+use crate::errors::*;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let config = uu_app();
+    let config = crate::uu_app();
 
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
@@ -147,160 +111,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Err(libc::EXIT_FAILURE.into())
 }
 
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .disable_help_flag(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help("Print help information.")
-                .action(ArgAction::Help),
-        )
-        .arg(
-            Arg::new(options::dereference::DEREFERENCE)
-                .long(options::dereference::DEREFERENCE)
-                .overrides_with(options::dereference::NO_DEREFERENCE)
-                .help(
-                    "Affect the referent of each symbolic link (this is the default), \
-                     rather than the symbolic link itself.",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::dereference::NO_DEREFERENCE)
-                .short('h')
-                .long(options::dereference::NO_DEREFERENCE)
-                .help("Affect symbolic links instead of any referenced file.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::preserve_root::PRESERVE_ROOT)
-                .long(options::preserve_root::PRESERVE_ROOT)
-                .overrides_with(options::preserve_root::NO_PRESERVE_ROOT)
-                .help("Fail to operate recursively on '/'.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::preserve_root::NO_PRESERVE_ROOT)
-                .long(options::preserve_root::NO_PRESERVE_ROOT)
-                .help("Do not treat '/' specially (the default).")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::REFERENCE)
-                .long(options::REFERENCE)
-                .value_name("RFILE")
-                .value_hint(clap::ValueHint::FilePath)
-                .conflicts_with_all([options::USER, options::ROLE, options::TYPE, options::RANGE])
-                .help(
-                    "Use security context of RFILE, rather than specifying \
-                     a CONTEXT value.",
-                )
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(options::USER)
-                .short('u')
-                .long(options::USER)
-                .value_name("USER")
-                .value_hint(clap::ValueHint::Username)
-                .help("Set user USER in the target security context.")
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(options::ROLE)
-                .short('r')
-                .long(options::ROLE)
-                .value_name("ROLE")
-                .help("Set role ROLE in the target security context.")
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(options::TYPE)
-                .short('t')
-                .long(options::TYPE)
-                .value_name("TYPE")
-                .help("Set type TYPE in the target security context.")
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(options::RANGE)
-                .short('l')
-                .long(options::RANGE)
-                .value_name("RANGE")
-                .help("Set range RANGE in the target security context.")
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(options::RECURSIVE)
-                .short('R')
-                .long(options::RECURSIVE)
-                .help("Operate on files and directories recursively.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK)
-                .short('H')
-                .requires(options::RECURSIVE)
-                .overrides_with_all([
-                    options::sym_links::FOLLOW_DIR_SYM_LINKS,
-                    options::sym_links::NO_FOLLOW_SYM_LINKS,
-                ])
-                .help(
-                    "If a command line argument is a symbolic link to a directory, \
-                     traverse it. Only valid when -R is specified.",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::sym_links::FOLLOW_DIR_SYM_LINKS)
-                .short('L')
-                .requires(options::RECURSIVE)
-                .overrides_with_all([
-                    options::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
-                    options::sym_links::NO_FOLLOW_SYM_LINKS,
-                ])
-                .help(
-                    "Traverse every symbolic link to a directory encountered. \
-                     Only valid when -R is specified.",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::sym_links::NO_FOLLOW_SYM_LINKS)
-                .short('P')
-                .requires(options::RECURSIVE)
-                .overrides_with_all([
-                    options::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
-                    options::sym_links::FOLLOW_DIR_SYM_LINKS,
-                ])
-                .help(
-                    "Do not traverse any symbolic links (default). \
-                     Only valid when -R is specified.",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::VERBOSE)
-                .short('v')
-                .long(options::VERBOSE)
-                .help("Output a diagnostic for every file processed.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("FILE")
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath)
-                .num_args(1..)
-                .value_parser(ValueParser::os_string()),
-        )
-}
-
 #[derive(Debug)]
 struct Options {
     verbose: bool,
@@ -314,64 +124,72 @@ struct Options {
 fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<Options> {
     let matches = config.try_get_matches_from(args)?;
 
-    let verbose = matches.get_flag(options::VERBOSE);
+    let verbose = matches.get_flag(crate::options::VERBOSE);
 
-    let (recursive_mode, affect_symlink_referent) = if matches.get_flag(options::RECURSIVE) {
-        if matches.get_flag(options::sym_links::FOLLOW_DIR_SYM_LINKS) {
-            if matches.get_flag(options::dereference::NO_DEREFERENCE) {
+    let (recursive_mode, affect_symlink_referent) = if matches.get_flag(crate::options::RECURSIVE) {
+        if matches.get_flag(crate::options::sym_links::FOLLOW_DIR_SYM_LINKS) {
+            if matches.get_flag(crate::options::dereference::NO_DEREFERENCE) {
                 return Err(Error::ArgumentsMismatch(format!(
                     "'--{}' with '--{}' require '-P'",
-                    options::RECURSIVE,
-                    options::dereference::NO_DEREFERENCE
+                    crate::options::RECURSIVE,
+                    crate::options::dereference::NO_DEREFERENCE
                 )));
             }
 
             (RecursiveMode::RecursiveAndFollowAllDirSymLinks, true)
-        } else if matches.get_flag(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK) {
-            if matches.get_flag(options::dereference::NO_DEREFERENCE) {
+        } else if matches.get_flag(crate::options::sym_links::FOLLOW_ARG_DIR_SYM_LINK) {
+            if matches.get_flag(crate::options::dereference::NO_DEREFERENCE) {
                 return Err(Error::ArgumentsMismatch(format!(
                     "'--{}' with '--{}' require '-P'",
-                    options::RECURSIVE,
-                    options::dereference::NO_DEREFERENCE
+                    crate::options::RECURSIVE,
+                    crate::options::dereference::NO_DEREFERENCE
                 )));
             }
 
             (RecursiveMode::RecursiveAndFollowArgDirSymLinks, true)
         } else {
-            if matches.get_flag(options::dereference::DEREFERENCE) {
+            if matches.get_flag(crate::options::dereference::DEREFERENCE) {
                 return Err(Error::ArgumentsMismatch(format!(
                     "'--{}' with '--{}' require either '-H' or '-L'",
-                    options::RECURSIVE,
-                    options::dereference::DEREFERENCE
+                    crate::options::RECURSIVE,
+                    crate::options::dereference::DEREFERENCE
                 )));
             }
 
             (RecursiveMode::RecursiveButDoNotFollowSymLinks, false)
         }
     } else {
-        let no_dereference = matches.get_flag(options::dereference::NO_DEREFERENCE);
+        let no_dereference = matches.get_flag(crate::options::dereference::NO_DEREFERENCE);
         (RecursiveMode::NotRecursive, !no_dereference)
     };
 
     // By default, do not preserve root.
-    let preserve_root = matches.get_flag(options::preserve_root::PRESERVE_ROOT);
+    let preserve_root = matches.get_flag(crate::options::preserve_root::PRESERVE_ROOT);
 
     let mut files = matches.get_many::<OsString>("FILE").unwrap_or_default();
 
-    let mode = if let Some(path) = matches.get_one::<OsString>(options::REFERENCE) {
+    let mode = if let Some(path) = matches.get_one::<OsString>(crate::options::REFERENCE) {
         CommandLineMode::ReferenceBased {
             reference: PathBuf::from(path),
         }
-    } else if matches.contains_id(options::USER)
-        || matches.contains_id(options::ROLE)
-        || matches.contains_id(options::TYPE)
-        || matches.contains_id(options::RANGE)
+    } else if matches.contains_id(crate::options::USER)
+        || matches.contains_id(crate::options::ROLE)
+        || matches.contains_id(crate::options::TYPE)
+        || matches.contains_id(crate::options::RANGE)
     {
         CommandLineMode::Custom {
-            user: matches.get_one::<OsString>(options::USER).map(Into::into),
-            role: matches.get_one::<OsString>(options::ROLE).map(Into::into),
-            the_type: matches.get_one::<OsString>(options::TYPE).map(Into::into),
-            range: matches.get_one::<OsString>(options::RANGE).map(Into::into),
+            user: matches
+                .get_one::<OsString>(crate::options::USER)
+                .map(Into::into),
+            role: matches
+                .get_one::<OsString>(crate::options::ROLE)
+                .map(Into::into),
+            the_type: matches
+                .get_one::<OsString>(crate::options::TYPE)
+                .map(Into::into),
+            range: matches
+                .get_one::<OsString>(crate::options::RANGE)
+                .map(Into::into),
         }
     } else if let Some(context) = files.next() {
         CommandLineMode::ContextBased {
@@ -482,7 +300,7 @@ fn process_files(
     root_dev_ino: Option<DeviceAndINode>,
 ) -> Vec<Error> {
     let fts_options = options.recursive_mode.fts_open_options();
-    let mut fts = match fts::FTS::new(options.files.iter(), fts_options) {
+    let mut fts = match crate::fts::FTS::new(options.files.iter(), fts_options) {
         Ok(fts) => fts,
         Err(err) => return vec![err],
     };
@@ -510,7 +328,7 @@ fn process_files(
 fn process_file(
     options: &Options,
     context: &SELinuxSecurityContext,
-    fts: &mut fts::FTS,
+    fts: &mut crate::fts::FTS,
     root_dev_ino: Option<DeviceAndINode>,
 ) -> Result<()> {
     let mut entry = fts.last_entry_ref().unwrap();
@@ -735,14 +553,14 @@ fn root_dev_ino_warn(dir_name: &Path) {
         show_warning!(
             "It is dangerous to operate recursively on '/'. \
              Use --{} to override this failsafe.",
-            options::preserve_root::NO_PRESERVE_ROOT,
+            crate::options::preserve_root::NO_PRESERVE_ROOT,
         );
     } else {
         show_warning!(
             "It is dangerous to operate recursively on {} (same as '/'). \
              Use --{} to override this failsafe.",
             dir_name.quote(),
-            options::preserve_root::NO_PRESERVE_ROOT,
+            crate::options::preserve_root::NO_PRESERVE_ROOT,
         );
     }
 }
@@ -754,7 +572,7 @@ fn root_dev_ino_warn(dir_name: &Path) {
 // However, when invoked with "-P -R", it deserves a warning.
 // The fts_options parameter records the options that control this aspect of fts behavior,
 // so test that.
-fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
+fn cycle_warning_required(fts_options: c_int, entry: &crate::fts::EntryRef) -> bool {
     // When dereferencing no symlinks, or when dereferencing only those listed on the command line
     // and we're not processing a command-line argument, then a cycle is a serious problem.
     ((fts_options & fts_sys::FTS_PHYSICAL) != 0)

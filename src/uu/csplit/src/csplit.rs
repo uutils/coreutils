@@ -12,38 +12,18 @@ use std::{
     io::{BufRead, BufWriter, Write},
 };
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use regex::Regex;
+use uucore::crash_if_err;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{crash_if_err, format_usage, help_about, help_section, help_usage};
-
-mod csplit_error;
-mod patterns;
-mod split_name;
 
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-const ABOUT: &str = help_about!("csplit.md");
-const AFTER_HELP: &str = help_section!("after help", "csplit.md");
-const USAGE: &str = help_usage!("csplit.md");
-
-mod options {
-    pub const SUFFIX_FORMAT: &str = "suffix-format";
-    pub const SUPPRESS_MATCHED: &str = "suppress-matched";
-    pub const DIGITS: &str = "digits";
-    pub const PREFIX: &str = "prefix";
-    pub const KEEP_FILES: &str = "keep-files";
-    pub const QUIET: &str = "quiet";
-    pub const ELIDE_EMPTY_FILES: &str = "elide-empty-files";
-    pub const FILE: &str = "file";
-    pub const PATTERN: &str = "pattern";
-}
-
 /// Command line options for csplit.
 pub struct CsplitOptions {
-    split_name: crate::SplitName,
+    split_name: SplitName,
     keep_files: bool,
     quiet: bool,
     elide_empty_files: bool,
@@ -52,18 +32,20 @@ pub struct CsplitOptions {
 
 impl CsplitOptions {
     fn new(matches: &ArgMatches) -> Self {
-        let keep_files = matches.get_flag(options::KEEP_FILES);
-        let quiet = matches.get_flag(options::QUIET);
-        let elide_empty_files = matches.get_flag(options::ELIDE_EMPTY_FILES);
-        let suppress_matched = matches.get_flag(options::SUPPRESS_MATCHED);
+        let keep_files = matches.get_flag(crate::options::KEEP_FILES);
+        let quiet = matches.get_flag(crate::options::QUIET);
+        let elide_empty_files = matches.get_flag(crate::options::ELIDE_EMPTY_FILES);
+        let suppress_matched = matches.get_flag(crate::options::SUPPRESS_MATCHED);
 
         Self {
             split_name: crash_if_err!(
                 1,
                 SplitName::new(
-                    matches.get_one::<String>(options::PREFIX).cloned(),
-                    matches.get_one::<String>(options::SUFFIX_FORMAT).cloned(),
-                    matches.get_one::<String>(options::DIGITS).cloned()
+                    matches.get_one::<String>(crate::options::PREFIX).cloned(),
+                    matches
+                        .get_one::<String>(crate::options::SUFFIX_FORMAT)
+                        .cloned(),
+                    matches.get_one::<String>(crate::options::DIGITS).cloned()
                 )
             ),
             keep_files,
@@ -92,7 +74,7 @@ where
 {
     let mut input_iter = InputSplitter::new(input.lines().enumerate());
     let mut split_writer = SplitWriter::new(options);
-    let patterns: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
+    let patterns: Vec<crate::patterns::Pattern> = crate::patterns::get_patterns(patterns)?;
     let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
 
     // consume the rest, unless there was an error
@@ -116,7 +98,7 @@ where
 
 fn do_csplit<I>(
     split_writer: &mut SplitWriter,
-    patterns: Vec<patterns::Pattern>,
+    patterns: Vec<crate::patterns::Pattern>,
     input_iter: &mut InputSplitter<I>,
 ) -> Result<(), CsplitError>
 where
@@ -125,9 +107,9 @@ where
     // split the file based on patterns
     for pattern in patterns {
         let pattern_as_str = pattern.to_string();
-        let is_skip = matches!(pattern, patterns::Pattern::SkipToMatch(_, _, _));
+        let is_skip = matches!(pattern, crate::patterns::Pattern::SkipToMatch(_, _, _));
         match pattern {
-            patterns::Pattern::UpToLine(n, ex) => {
+            crate::patterns::Pattern::UpToLine(n, ex) => {
                 let mut up_to_line = n;
                 for (_, ith) in ex.iter() {
                     split_writer.new_writer()?;
@@ -146,8 +128,8 @@ where
                     up_to_line += n;
                 }
             }
-            patterns::Pattern::UpToMatch(regex, offset, ex)
-            | patterns::Pattern::SkipToMatch(regex, offset, ex) => {
+            crate::patterns::Pattern::UpToMatch(regex, offset, ex)
+            | crate::patterns::Pattern::SkipToMatch(regex, offset, ex) => {
                 for (max, ith) in ex.iter() {
                     if is_skip {
                         // when skipping a part of the input, no writer is created
@@ -259,8 +241,8 @@ impl<'a> SplitWriter<'a> {
     }
 
     /// Perform some operations after completing a split, i.e., either remove it
-    /// if the [`options::ELIDE_EMPTY_FILES`] option is enabled, or print how much bytes were written
-    /// to it if [`options::QUIET`] is disabled.
+    /// if the [`crate::options::ELIDE_EMPTY_FILES`] option is enabled, or print how much bytes were written
+    /// to it if [`crate::options::QUIET`] is disabled.
     ///
     /// # Errors
     ///
@@ -550,14 +532,14 @@ where
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     // get the file to split
-    let file_name = matches.get_one::<String>(options::FILE).unwrap();
+    let file_name = matches.get_one::<String>(crate::options::FILE).unwrap();
 
     // get the patterns to split on
     let patterns: Vec<String> = matches
-        .get_many::<String>(options::PATTERN)
+        .get_many::<String>(crate::options::PATTERN)
         .unwrap()
         .map(|s| s.to_string())
         .collect();
@@ -576,77 +558,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         Ok(csplit(&options, &patterns, BufReader::new(file))?)
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .args_override_self(true)
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::SUFFIX_FORMAT)
-                .short('b')
-                .long(options::SUFFIX_FORMAT)
-                .value_name("FORMAT")
-                .help("use sprintf FORMAT instead of %02d"),
-        )
-        .arg(
-            Arg::new(options::PREFIX)
-                .short('f')
-                .long(options::PREFIX)
-                .value_name("PREFIX")
-                .help("use PREFIX instead of 'xx'"),
-        )
-        .arg(
-            Arg::new(options::KEEP_FILES)
-                .short('k')
-                .long(options::KEEP_FILES)
-                .help("do not remove output files on errors")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SUPPRESS_MATCHED)
-                .long(options::SUPPRESS_MATCHED)
-                .help("suppress the lines matching PATTERN")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::DIGITS)
-                .short('n')
-                .long(options::DIGITS)
-                .value_name("DIGITS")
-                .help("use specified number of digits instead of 2"),
-        )
-        .arg(
-            Arg::new(options::QUIET)
-                .short('s')
-                .long(options::QUIET)
-                .visible_alias("silent")
-                .help("do not print counts of output file sizes")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::ELIDE_EMPTY_FILES)
-                .short('z')
-                .long(options::ELIDE_EMPTY_FILES)
-                .help("remove empty output files")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .required(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::PATTERN)
-                .hide(true)
-                .action(clap::ArgAction::Append)
-                .required(true),
-        )
-        .after_help(AFTER_HELP)
 }
 
 #[cfg(test)]

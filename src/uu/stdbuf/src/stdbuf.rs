@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::process::ExitStatusExt;
@@ -15,21 +15,6 @@ use tempfile::tempdir;
 use tempfile::TempDir;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
-use uucore::{format_usage, help_about, help_section, help_usage};
-
-const ABOUT: &str = help_about!("stdbuf.md");
-const USAGE: &str = help_usage!("stdbuf.md");
-const LONG_HELP: &str = help_section!("after help", "stdbuf.md");
-
-mod options {
-    pub const INPUT: &str = "input";
-    pub const INPUT_SHORT: char = 'i';
-    pub const OUTPUT: &str = "output";
-    pub const OUTPUT_SHORT: char = 'o';
-    pub const ERROR: &str = "error";
-    pub const ERROR_SHORT: char = 'e';
-    pub const COMMAND: &str = "command";
-}
 
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
@@ -50,9 +35,9 @@ impl TryFrom<&ArgMatches> for ProgramOptions {
 
     fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {
         Ok(Self {
-            stdin: check_option(matches, options::INPUT)?,
-            stdout: check_option(matches, options::OUTPUT)?,
-            stderr: check_option(matches, options::ERROR)?,
+            stdin: check_option(matches, crate::options::INPUT)?,
+            stdout: check_option(matches, crate::options::OUTPUT)?,
+            stderr: check_option(matches, crate::options::ERROR)?,
         })
     }
 }
@@ -94,7 +79,7 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
     match matches.get_one::<String>(name) {
         Some(value) => match value.as_str() {
             "L" => {
-                if name == options::INPUT {
+                if name == crate::options::INPUT {
                     Err(ProgramOptionsError(
                         "line buffering stdin is meaningless".to_string(),
                     ))
@@ -141,11 +126,11 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let options = ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.0))?;
 
-    let mut command_values = matches.get_many::<String>(options::COMMAND).unwrap();
+    let mut command_values = matches.get_many::<String>(crate::options::COMMAND).unwrap();
     let mut command = process::Command::new(command_values.next().unwrap());
     let command_params: Vec<&str> = command_values.map(|s| s.as_ref()).collect();
 
@@ -174,45 +159,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             format!("process killed by signal {}", status.signal().unwrap()),
         )),
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(LONG_HELP)
-        .override_usage(format_usage(USAGE))
-        .trailing_var_arg(true)
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::INPUT)
-                .long(options::INPUT)
-                .short(options::INPUT_SHORT)
-                .help("adjust standard input stream buffering")
-                .value_name("MODE")
-                .required_unless_present_any([options::OUTPUT, options::ERROR]),
-        )
-        .arg(
-            Arg::new(options::OUTPUT)
-                .long(options::OUTPUT)
-                .short(options::OUTPUT_SHORT)
-                .help("adjust standard output stream buffering")
-                .value_name("MODE")
-                .required_unless_present_any([options::INPUT, options::ERROR]),
-        )
-        .arg(
-            Arg::new(options::ERROR)
-                .long(options::ERROR)
-                .short(options::ERROR_SHORT)
-                .help("adjust standard error stream buffering")
-                .value_name("MODE")
-                .required_unless_present_any([options::INPUT, options::OUTPUT]),
-        )
-        .arg(
-            Arg::new(options::COMMAND)
-                .action(ArgAction::Append)
-                .hide(true)
-                .required(true)
-                .value_hint(clap::ValueHint::CommandName),
-        )
 }

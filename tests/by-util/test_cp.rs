@@ -2028,7 +2028,7 @@ fn test_cp_archive_recursive() {
     let result = scene2
         .cmd("ls")
         .arg("-al")
-        .arg(&at.subdir.join(TEST_COPY_TO_FOLDER))
+        .arg(at.subdir.join(TEST_COPY_TO_FOLDER))
         .run();
 
     println!("ls dest {}", result.stdout_str());
@@ -2036,7 +2036,7 @@ fn test_cp_archive_recursive() {
     let result = scene2
         .cmd("ls")
         .arg("-al")
-        .arg(&at.subdir.join(TEST_COPY_TO_FOLDER_NEW))
+        .arg(at.subdir.join(TEST_COPY_TO_FOLDER_NEW))
         .run();
 
     println!("ls dest {}", result.stdout_str());

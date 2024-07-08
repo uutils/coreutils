@@ -14,8 +14,6 @@ edition = "2021"
 
 readme.workspace = true
 
-[lib]
-path = "src/tail.rs"
 
 [dependencies]
 clap = { workspace = true }

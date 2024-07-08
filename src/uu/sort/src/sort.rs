@@ -9,23 +9,15 @@
 
 // spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim
 
-mod check;
-mod chunks;
-mod custom_str_cmp;
-mod ext_sort;
-mod merge;
-mod numeric_str_cmp;
-mod tmp_dir;
-
-use chunks::LineData;
-use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, Command};
-use custom_str_cmp::custom_str_cmp;
-use ext_sort::ext_sort;
+use crate::chunks::LineData;
+use crate::custom_str_cmp::custom_str_cmp;
+use crate::ext_sort::ext_sort;
+use crate::numeric_str_cmp::{
+    human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings,
+};
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
 use nix::libc::{getrlimit, rlimit, RLIMIT_NOFILE};
-use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
@@ -45,69 +37,11 @@ use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_size::{ParseSizeError, Parser};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+
+use uucore::show_error;
 use uucore::version_cmp::version_cmp;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 use crate::tmp_dir::TmpDirWrapper;
-
-const ABOUT: &str = help_about!("sort.md");
-const USAGE: &str = help_usage!("sort.md");
-const AFTER_HELP: &str = help_section!("after help", "sort.md");
-
-mod options {
-    pub mod modes {
-        pub const SORT: &str = "sort";
-
-        pub const HUMAN_NUMERIC: &str = "human-numeric-sort";
-        pub const MONTH: &str = "month-sort";
-        pub const NUMERIC: &str = "numeric-sort";
-        pub const GENERAL_NUMERIC: &str = "general-numeric-sort";
-        pub const VERSION: &str = "version-sort";
-        pub const RANDOM: &str = "random-sort";
-
-        pub const ALL_SORT_MODES: [&str; 6] = [
-            GENERAL_NUMERIC,
-            HUMAN_NUMERIC,
-            MONTH,
-            NUMERIC,
-            VERSION,
-            RANDOM,
-        ];
-    }
-
-    pub mod check {
-        pub const CHECK: &str = "check";
-        pub const CHECK_SILENT: &str = "check-silent";
-        pub const SILENT: &str = "silent";
-        pub const QUIET: &str = "quiet";
-        pub const DIAGNOSE_FIRST: &str = "diagnose-first";
-    }
-
-    pub const HELP: &str = "help";
-    pub const VERSION: &str = "version";
-    pub const DICTIONARY_ORDER: &str = "dictionary-order";
-    pub const MERGE: &str = "merge";
-    pub const DEBUG: &str = "debug";
-    pub const IGNORE_CASE: &str = "ignore-case";
-    pub const IGNORE_LEADING_BLANKS: &str = "ignore-leading-blanks";
-    pub const IGNORE_NONPRINTING: &str = "ignore-nonprinting";
-    pub const OUTPUT: &str = "output";
-    pub const REVERSE: &str = "reverse";
-    pub const STABLE: &str = "stable";
-    pub const UNIQUE: &str = "unique";
-    pub const KEY: &str = "key";
-    pub const SEPARATOR: &str = "field-separator";
-    pub const ZERO_TERMINATED: &str = "zero-terminated";
-    pub const PARALLEL: &str = "parallel";
-    pub const FILES0_FROM: &str = "files0-from";
-    pub const BUF_SIZE: &str = "buffer-size";
-    pub const TMP_DIR: &str = "temporary-directory";
-    pub const COMPRESS_PROG: &str = "compress-program";
-    pub const BATCH_SIZE: &str = "batch-size";
-
-    pub const FILES: &str = "files";
-}
 
 const DECIMAL_PT: char = '.';
 
@@ -120,7 +54,7 @@ const POSITIVE: char = '+';
 const DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
 
 #[derive(Debug)]
-enum SortError {
+pub(crate) enum SortError {
     Disorder {
         file: OsString,
         line_number: usize,
@@ -225,7 +159,7 @@ impl Display for SortError {
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Debug)]
-enum SortMode {
+pub(crate) enum SortMode {
     Numeric,
     HumanNumeric,
     GeneralNumeric,
@@ -276,7 +210,7 @@ impl Output {
         Ok(Self { file })
     }
 
-    fn into_write(self) -> BufWriter<Box<dyn Write>> {
+    pub(crate) fn into_write(self) -> BufWriter<Box<dyn Write>> {
         BufWriter::new(match self.file {
             Some((_name, file)) => {
                 // truncate the file
@@ -287,7 +221,7 @@ impl Output {
         })
     }
 
-    fn as_output_name(&self) -> Option<&str> {
+    pub(crate) fn as_output_name(&self) -> Option<&str> {
         match &self.file {
             Some((name, _file)) => Some(name),
             None => None,
@@ -297,33 +231,33 @@ impl Output {
 
 #[derive(Clone)]
 pub struct GlobalSettings {
-    mode: SortMode,
-    debug: bool,
-    ignore_leading_blanks: bool,
-    ignore_case: bool,
-    dictionary_order: bool,
-    ignore_non_printing: bool,
-    merge: bool,
-    reverse: bool,
-    stable: bool,
-    unique: bool,
-    check: bool,
-    check_silent: bool,
-    salt: Option<[u8; 16]>,
-    selectors: Vec<FieldSelector>,
-    separator: Option<char>,
-    threads: String,
-    line_ending: LineEnding,
-    buffer_size: usize,
-    compress_prog: Option<String>,
-    merge_batch_size: usize,
-    precomputed: Precomputed,
+    pub(crate) mode: SortMode,
+    pub(crate) debug: bool,
+    pub(crate) ignore_leading_blanks: bool,
+    pub(crate) ignore_case: bool,
+    pub(crate) dictionary_order: bool,
+    pub(crate) ignore_non_printing: bool,
+    pub(crate) merge: bool,
+    pub(crate) reverse: bool,
+    pub(crate) stable: bool,
+    pub(crate) unique: bool,
+    pub(crate) check: bool,
+    pub(crate) check_silent: bool,
+    pub(crate) salt: Option<[u8; 16]>,
+    pub(crate) selectors: Vec<FieldSelector>,
+    pub(crate) separator: Option<char>,
+    pub(crate) threads: String,
+    pub(crate) line_ending: LineEnding,
+    pub(crate) buffer_size: usize,
+    pub(crate) compress_prog: Option<String>,
+    pub(crate) merge_batch_size: usize,
+    pub(crate) precomputed: Precomputed,
 }
 
 /// Data needed for sorting. Should be computed once before starting to sort
 /// by calling `GlobalSettings::init_precomputed`.
 #[derive(Clone, Debug, Default)]
-struct Precomputed {
+pub(crate) struct Precomputed {
     needs_tokens: bool,
     num_infos_per_line: usize,
     floats_per_line: usize,
@@ -491,8 +425,8 @@ type Field = Range<usize>;
 
 #[derive(Clone, Debug)]
 pub struct Line<'a> {
-    line: &'a str,
-    index: usize,
+    pub(crate) line: &'a str,
+    pub(crate) index: usize,
 }
 
 impl<'a> Line<'a> {
@@ -500,7 +434,7 @@ impl<'a> Line<'a> {
     ///
     /// If additional data is needed for sorting it is added to `line_data`.
     /// `token_buffer` allows to reuse the allocation for tokens.
-    fn create(
+    pub(crate) fn create(
         line: &'a str,
         index: usize,
         line_data: &mut LineData<'a>,
@@ -532,7 +466,7 @@ impl<'a> Line<'a> {
         Self { line, index }
     }
 
-    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) {
+    pub(crate) fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) {
         if settings.debug {
             self.print_debug(settings, writer).unwrap();
         } else {
@@ -779,7 +713,7 @@ impl Default for KeyPosition {
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
-struct FieldSelector {
+pub(crate) struct FieldSelector {
     from: KeyPosition,
     to: Option<KeyPosition>,
     settings: KeySettings,
@@ -1021,21 +955,6 @@ impl FieldSelector {
     }
 }
 
-/// Creates an `Arg` that conflicts with all other sort modes.
-fn make_sort_mode_arg(mode: &'static str, short: char, help: &'static str) -> Arg {
-    let mut arg = Arg::new(mode)
-        .short(short)
-        .long(mode)
-        .help(help)
-        .action(ArgAction::SetTrue);
-    for possible_mode in &options::modes::ALL_SORT_MODES {
-        if *possible_mode != mode {
-            arg = arg.conflicts_with(possible_mode);
-        }
-    }
-    arg
-}
-
 #[cfg(target_os = "linux")]
 fn get_rlimit() -> UResult<usize> {
     let mut limit = rlimit {
@@ -1053,7 +972,7 @@ fn get_rlimit() -> UResult<usize> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings::default();
 
-    let matches = match uu_app().try_get_matches_from(args) {
+    let matches = match crate::uu_app().try_get_matches_from(args) {
         Ok(t) => t,
         Err(e) => {
             // not all clap "Errors" are because of a failure to parse arguments.
@@ -1069,12 +988,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    settings.debug = matches.get_flag(options::DEBUG);
+    settings.debug = matches.get_flag(crate::options::DEBUG);
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
-    let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
+    let mut files: Vec<OsString> = if matches.contains_id(crate::options::FILES0_FROM) {
         let files0_from: Vec<OsString> = matches
-            .get_many::<OsString>(options::FILES0_FROM)
+            .get_many::<OsString>(crate::options::FILES0_FROM)
             .map(|v| v.map(ToOwned::to_owned).collect())
             .unwrap_or_default();
 
@@ -1092,49 +1011,49 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         files
     } else {
         matches
-            .get_many::<OsString>(options::FILES)
+            .get_many::<OsString>(crate::options::FILES)
             .map(|v| v.map(ToOwned::to_owned).collect())
             .unwrap_or_default()
     };
 
-    settings.mode = if matches.get_flag(options::modes::HUMAN_NUMERIC)
+    settings.mode = if matches.get_flag(crate::options::modes::HUMAN_NUMERIC)
         || matches
-            .get_one::<String>(options::modes::SORT)
+            .get_one::<String>(crate::options::modes::SORT)
             .map(|s| s.as_str())
             == Some("human-numeric")
     {
         SortMode::HumanNumeric
-    } else if matches.get_flag(options::modes::MONTH)
+    } else if matches.get_flag(crate::options::modes::MONTH)
         || matches
-            .get_one::<String>(options::modes::SORT)
+            .get_one::<String>(crate::options::modes::SORT)
             .map(|s| s.as_str())
             == Some("month")
     {
         SortMode::Month
-    } else if matches.get_flag(options::modes::GENERAL_NUMERIC)
+    } else if matches.get_flag(crate::options::modes::GENERAL_NUMERIC)
         || matches
-            .get_one::<String>(options::modes::SORT)
+            .get_one::<String>(crate::options::modes::SORT)
             .map(|s| s.as_str())
             == Some("general-numeric")
     {
         SortMode::GeneralNumeric
-    } else if matches.get_flag(options::modes::NUMERIC)
+    } else if matches.get_flag(crate::options::modes::NUMERIC)
         || matches
-            .get_one::<String>(options::modes::SORT)
+            .get_one::<String>(crate::options::modes::SORT)
             .map(|s| s.as_str())
             == Some("numeric")
     {
         SortMode::Numeric
-    } else if matches.get_flag(options::modes::VERSION)
+    } else if matches.get_flag(crate::options::modes::VERSION)
         || matches
-            .get_one::<String>(options::modes::SORT)
+            .get_one::<String>(crate::options::modes::SORT)
             .map(|s| s.as_str())
             == Some("version")
     {
         SortMode::Version
-    } else if matches.get_flag(options::modes::RANDOM)
+    } else if matches.get_flag(crate::options::modes::RANDOM)
         || matches
-            .get_one::<String>(options::modes::SORT)
+            .get_one::<String>(crate::options::modes::SORT)
             .map(|s| s.as_str())
             == Some("random")
     {
@@ -1144,12 +1063,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         SortMode::Default
     };
 
-    settings.dictionary_order = matches.get_flag(options::DICTIONARY_ORDER);
-    settings.ignore_non_printing = matches.get_flag(options::IGNORE_NONPRINTING);
-    if matches.contains_id(options::PARALLEL) {
+    settings.dictionary_order = matches.get_flag(crate::options::DICTIONARY_ORDER);
+    settings.ignore_non_printing = matches.get_flag(crate::options::IGNORE_NONPRINTING);
+    if matches.contains_id(crate::options::PARALLEL) {
         // "0" is default - threads = num of cores
         settings.threads = matches
-            .get_one::<String>(options::PARALLEL)
+            .get_one::<String>(crate::options::PARALLEL)
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
         env::set_var("RAYON_NUM_THREADS", &settings.threads);
@@ -1157,25 +1076,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.buffer_size =
         matches
-            .get_one::<String>(options::BUF_SIZE)
+            .get_one::<String>(crate::options::BUF_SIZE)
             .map_or(Ok(DEFAULT_BUF_SIZE), |s| {
                 GlobalSettings::parse_byte_count(s).map_err(|e| {
-                    USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE))
+                    USimpleError::new(2, format_error_message(&e, s, crate::options::BUF_SIZE))
                 })
             })?;
 
     let mut tmp_dir = TmpDirWrapper::new(
         matches
-            .get_one::<String>(options::TMP_DIR)
+            .get_one::<String>(crate::options::TMP_DIR)
             .map(PathBuf::from)
             .unwrap_or_else(env::temp_dir),
     );
 
     settings.compress_prog = matches
-        .get_one::<String>(options::COMPRESS_PROG)
+        .get_one::<String>(crate::options::COMPRESS_PROG)
         .map(String::from);
 
-    if let Some(n_merge) = matches.get_one::<String>(options::BATCH_SIZE) {
+    if let Some(n_merge) = matches.get_one::<String>(crate::options::BATCH_SIZE) {
         match n_merge.parse::<usize>() {
             Ok(parsed_value) => {
                 if parsed_value < 2 {
@@ -1208,29 +1127,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    settings.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
-    settings.merge = matches.get_flag(options::MERGE);
+    settings.line_ending =
+        LineEnding::from_zero_flag(matches.get_flag(crate::options::ZERO_TERMINATED));
+    settings.merge = matches.get_flag(crate::options::MERGE);
 
-    settings.check = matches.contains_id(options::check::CHECK);
-    if matches.get_flag(options::check::CHECK_SILENT)
+    settings.check = matches.contains_id(crate::options::check::CHECK);
+    if matches.get_flag(crate::options::check::CHECK_SILENT)
         || matches!(
             matches
-                .get_one::<String>(options::check::CHECK)
+                .get_one::<String>(crate::options::check::CHECK)
                 .map(|s| s.as_str()),
-            Some(options::check::SILENT | options::check::QUIET)
+            Some(crate::options::check::SILENT | crate::options::check::QUIET)
         )
     {
         settings.check_silent = true;
         settings.check = true;
     };
 
-    settings.ignore_case = matches.get_flag(options::IGNORE_CASE);
+    settings.ignore_case = matches.get_flag(crate::options::IGNORE_CASE);
 
-    settings.ignore_leading_blanks = matches.get_flag(options::IGNORE_LEADING_BLANKS);
+    settings.ignore_leading_blanks = matches.get_flag(crate::options::IGNORE_LEADING_BLANKS);
 
-    settings.reverse = matches.get_flag(options::REVERSE);
-    settings.stable = matches.get_flag(options::STABLE);
-    settings.unique = matches.get_flag(options::UNIQUE);
+    settings.reverse = matches.get_flag(crate::options::REVERSE);
+    settings.stable = matches.get_flag(crate::options::STABLE);
+    settings.unique = matches.get_flag(crate::options::UNIQUE);
 
     if files.is_empty() {
         /* if no file, default to stdin */
@@ -1242,7 +1162,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if let Some(arg) = matches.get_one::<OsString>(options::SEPARATOR) {
+    if let Some(arg) = matches.get_one::<OsString>(crate::options::SEPARATOR) {
         let mut separator = arg.to_str().ok_or_else(|| {
             UUsageError::new(
                 2,
@@ -1267,7 +1187,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.separator = Some(separator.chars().next().unwrap());
     }
 
-    if let Some(values) = matches.get_many::<String>(options::KEY) {
+    if let Some(values) = matches.get_many::<String>(crate::options::KEY) {
         for value in values {
             let selector = FieldSelector::parse(value, &settings)?;
             if selector.settings.mode == SortMode::Random && settings.salt.is_none() {
@@ -1277,7 +1197,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    if !matches.contains_id(options::KEY) {
+    if !matches.contains_id(crate::options::KEY) {
         // add a default selector matching the whole line
         let key_settings = KeySettings::from(&settings);
         settings.selectors.push(
@@ -1304,7 +1224,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let output = Output::new(
         matches
-            .get_one::<String>(options::OUTPUT)
+            .get_one::<String>(crate::options::OUTPUT)
             .map(|s| s.as_str()),
     )?;
 
@@ -1317,251 +1237,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     result
 }
 
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .disable_help_flag(true)
-        .disable_version_flag(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help("Print help information.")
-                .action(ArgAction::Help),
-        )
-        .arg(
-            Arg::new(options::VERSION)
-                .long(options::VERSION)
-                .help("Print version information.")
-                .action(ArgAction::Version),
-        )
-        .arg(
-            Arg::new(options::modes::SORT)
-                .long(options::modes::SORT)
-                .value_parser(ShortcutValueParser::new([
-                    "general-numeric",
-                    "human-numeric",
-                    "month",
-                    "numeric",
-                    "version",
-                    "random",
-                ]))
-                .conflicts_with_all(options::modes::ALL_SORT_MODES),
-        )
-        .arg(make_sort_mode_arg(
-            options::modes::HUMAN_NUMERIC,
-            'h',
-            "compare according to human readable sizes, eg 1M > 100k",
-        ))
-        .arg(make_sort_mode_arg(
-            options::modes::MONTH,
-            'M',
-            "compare according to month name abbreviation",
-        ))
-        .arg(make_sort_mode_arg(
-            options::modes::NUMERIC,
-            'n',
-            "compare according to string numerical value",
-        ))
-        .arg(make_sort_mode_arg(
-            options::modes::GENERAL_NUMERIC,
-            'g',
-            "compare according to string general numerical value",
-        ))
-        .arg(make_sort_mode_arg(
-            options::modes::VERSION,
-            'V',
-            "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
-        ))
-        .arg(make_sort_mode_arg(
-            options::modes::RANDOM,
-            'R',
-            "shuffle in random order",
-        ))
-        .arg(
-            Arg::new(options::DICTIONARY_ORDER)
-                .short('d')
-                .long(options::DICTIONARY_ORDER)
-                .help("consider only blanks and alphanumeric characters")
-                .conflicts_with_all([
-                    options::modes::NUMERIC,
-                    options::modes::GENERAL_NUMERIC,
-                    options::modes::HUMAN_NUMERIC,
-                    options::modes::MONTH,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::MERGE)
-                .short('m')
-                .long(options::MERGE)
-                .help("merge already sorted files; do not sort")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::check::CHECK)
-                .short('c')
-                .long(options::check::CHECK)
-                .require_equals(true)
-                .num_args(0..)
-                .value_parser(ShortcutValueParser::new([
-                    options::check::SILENT,
-                    options::check::QUIET,
-                    options::check::DIAGNOSE_FIRST,
-                ]))
-                .conflicts_with(options::OUTPUT)
-                .help("check for sorted input; do not sort"),
-        )
-        .arg(
-            Arg::new(options::check::CHECK_SILENT)
-                .short('C')
-                .long(options::check::CHECK_SILENT)
-                .conflicts_with(options::OUTPUT)
-                .help(
-                    "exit successfully if the given file is already sorted, \
-                and exit with status 1 otherwise.",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORE_CASE)
-                .short('f')
-                .long(options::IGNORE_CASE)
-                .help("fold lower case to upper case characters")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORE_NONPRINTING)
-                .short('i')
-                .long(options::IGNORE_NONPRINTING)
-                .help("ignore nonprinting characters")
-                .conflicts_with_all([
-                    options::modes::NUMERIC,
-                    options::modes::GENERAL_NUMERIC,
-                    options::modes::HUMAN_NUMERIC,
-                    options::modes::MONTH,
-                ])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORE_LEADING_BLANKS)
-                .short('b')
-                .long(options::IGNORE_LEADING_BLANKS)
-                .help("ignore leading blanks when finding sort keys in each line")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::OUTPUT)
-                .short('o')
-                .long(options::OUTPUT)
-                .help("write output to FILENAME instead of stdout")
-                .value_name("FILENAME")
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::REVERSE)
-                .short('r')
-                .long(options::REVERSE)
-                .help("reverse the output")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::STABLE)
-                .short('s')
-                .long(options::STABLE)
-                .help("stabilize sort by disabling last-resort comparison")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::UNIQUE)
-                .short('u')
-                .long(options::UNIQUE)
-                .help("output only the first of an equal run")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::KEY)
-                .short('k')
-                .long(options::KEY)
-                .help("sort by a key")
-                .action(ArgAction::Append)
-                .num_args(1),
-        )
-        .arg(
-            Arg::new(options::SEPARATOR)
-                .short('t')
-                .long(options::SEPARATOR)
-                .help("custom separator for -k")
-                .value_parser(ValueParser::os_string()),
-        )
-        .arg(
-            Arg::new(options::ZERO_TERMINATED)
-                .short('z')
-                .long(options::ZERO_TERMINATED)
-                .help("line delimiter is NUL, not newline")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PARALLEL)
-                .long(options::PARALLEL)
-                .help("change the number of threads running concurrently to NUM_THREADS")
-                .value_name("NUM_THREADS"),
-        )
-        .arg(
-            Arg::new(options::BUF_SIZE)
-                .short('S')
-                .long(options::BUF_SIZE)
-                .help("sets the maximum SIZE of each segment in number of sorted items")
-                .value_name("SIZE"),
-        )
-        .arg(
-            Arg::new(options::TMP_DIR)
-                .short('T')
-                .long(options::TMP_DIR)
-                .help("use DIR for temporaries, not $TMPDIR or /tmp")
-                .value_name("DIR")
-                .value_hint(clap::ValueHint::DirPath),
-        )
-        .arg(
-            Arg::new(options::COMPRESS_PROG)
-                .long(options::COMPRESS_PROG)
-                .help("compress temporary files with PROG, decompress with PROG -d; PROG has to take input from stdin and output to stdout")
-                .value_name("PROG")
-                .value_hint(clap::ValueHint::CommandName),
-        )
-        .arg(
-            Arg::new(options::BATCH_SIZE)
-                .long(options::BATCH_SIZE)
-                .help("Merge at most N_MERGE inputs at once.")
-                .value_name("N_MERGE"),
-        )
-        .arg(
-            Arg::new(options::FILES0_FROM)
-                .long(options::FILES0_FROM)
-                .help("read input from the files specified by NUL-terminated NUL_FILES")
-                .value_name("NUL_FILES")
-                .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::DEBUG)
-                .long(options::DEBUG)
-                .help("underline the parts of the line that are actually used for sorting")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILES)
-                .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::FilePath),
-        )
-}
-
 fn exec(
     files: &mut [OsString],
     settings: &GlobalSettings,
@@ -1569,13 +1244,13 @@ fn exec(
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
     if settings.merge {
-        let file_merger = merge::merge(files, settings, output.as_output_name(), tmp_dir)?;
+        let file_merger = crate::merge::merge(files, settings, output.as_output_name(), tmp_dir)?;
         file_merger.write_all(settings, output)
     } else if settings.check {
         if files.len() > 1 {
             Err(UUsageError::new(2, "only one file allowed with -c"))
         } else {
-            check::check(files.first().unwrap(), settings)
+            crate::check::check(files.first().unwrap(), settings)
         }
     } else {
         let mut lines = files.iter().map(open);
@@ -1583,7 +1258,11 @@ fn exec(
     }
 }
 
-fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_data: &LineData<'a>) {
+pub(crate) fn sort_by<'a>(
+    unsorted: &mut Vec<Line<'a>>,
+    settings: &GlobalSettings,
+    line_data: &LineData<'a>,
+) {
     if settings.stable || settings.unique {
         unsorted.par_sort_by(|a, b| compare_by(a, b, settings, line_data, line_data));
     } else {
@@ -1591,7 +1270,7 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
     }
 }
 
-fn compare_by<'a>(
+pub(crate) fn compare_by<'a>(
     a: &Line<'a>,
     b: &Line<'a>,
     global_settings: &GlobalSettings,
@@ -1861,7 +1540,7 @@ fn month_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
+pub(crate) fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     iter: T,
     settings: &GlobalSettings,
     output: Output,
@@ -1872,7 +1551,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     }
 }
 
-fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
+pub(crate) fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
     let path = path.as_ref();
     if path == "-" {
         let stdin = stdin();

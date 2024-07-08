@@ -13,8 +13,6 @@ edition = "2021"
 
 readme.workspace = true
 
-[lib]
-path = "src/head.rs"
 
 [dependencies]
 clap = { workspace = true }

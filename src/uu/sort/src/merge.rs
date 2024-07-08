@@ -28,12 +28,9 @@ use compare::Compare;
 use itertools::Itertools;
 use uucore::error::UResult;
 
-use crate::{
-    chunks::{self, Chunk, RecycledChunk},
-    compare_by, open,
-    tmp_dir::TmpDirWrapper,
-    GlobalSettings, Output, SortError,
-};
+use crate::chunks::{self, Chunk, RecycledChunk};
+use crate::sort::{compare_by, open, GlobalSettings, Output, SortError};
+use crate::tmp_dir::TmpDirWrapper;
 
 /// If the output file occurs in the input files as well, copy the contents of the output file
 /// and replace its occurrences in the inputs with that copy.

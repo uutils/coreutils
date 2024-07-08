@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //! Types for representing and displaying block sizes.
-use crate::{OPT_BLOCKSIZE, OPT_PORTABILITY};
+use crate::options::{OPT_BLOCKSIZE, OPT_PORTABILITY};
 use clap::ArgMatches;
 use std::{env, fmt};
 

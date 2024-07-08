@@ -5,9 +5,7 @@
 
 // spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror
 
-mod mode;
-
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use std::error::Error;
@@ -27,10 +25,16 @@ use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 use uucore::process::{getegid, geteuid};
-use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
+use uucore::{show, show_error, show_if_err, uio_error};
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
+
+use crate::uu_args::{
+    ARG_FILES, OPT_COMPARE, OPT_CONTEXT, OPT_CREATE_LEADING, OPT_DIRECTORY, OPT_GROUP, OPT_MODE,
+    OPT_NO_TARGET_DIRECTORY, OPT_OWNER, OPT_PRESERVE_CONTEXT, OPT_PRESERVE_TIMESTAMPS, OPT_STRIP,
+    OPT_STRIP_PROGRAM, OPT_TARGET_DIRECTORY, OPT_VERBOSE,
+};
 
 #[allow(dead_code)]
 pub struct Behavior {
@@ -145,34 +149,13 @@ impl Behavior {
     }
 }
 
-const ABOUT: &str = help_about!("install.md");
-const USAGE: &str = help_usage!("install.md");
-
-static OPT_COMPARE: &str = "compare";
-static OPT_DIRECTORY: &str = "directory";
-static OPT_IGNORED: &str = "ignored";
-static OPT_CREATE_LEADING: &str = "create-leading";
-static OPT_GROUP: &str = "group";
-static OPT_MODE: &str = "mode";
-static OPT_OWNER: &str = "owner";
-static OPT_PRESERVE_TIMESTAMPS: &str = "preserve-timestamps";
-static OPT_STRIP: &str = "strip";
-static OPT_STRIP_PROGRAM: &str = "strip-program";
-static OPT_TARGET_DIRECTORY: &str = "target-directory";
-static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
-static OPT_VERBOSE: &str = "verbose";
-static OPT_PRESERVE_CONTEXT: &str = "preserve-context";
-static OPT_CONTEXT: &str = "context";
-
-static ARG_FILES: &str = "files";
-
 /// Main install utility function, called from main.rs.
 ///
 /// Returns a program return code.
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let paths: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
@@ -187,146 +170,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         MainFunction::Directory => directory(&paths, &behavior),
         MainFunction::Standard => standard(paths, &behavior),
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(backup_control::arguments::backup())
-        .arg(backup_control::arguments::backup_no_args())
-        .arg(
-            Arg::new(OPT_IGNORED)
-                .short('c')
-                .help("ignored")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_COMPARE)
-                .short('C')
-                .long(OPT_COMPARE)
-                .help(
-                    "compare each pair of source and destination files, and in some cases, \
-                    do not modify the destination at all",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_DIRECTORY)
-                .short('d')
-                .long(OPT_DIRECTORY)
-                .help(
-                    "treat all arguments as directory names. create all components of \
-                        the specified directories",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            // TODO implement flag
-            Arg::new(OPT_CREATE_LEADING)
-                .short('D')
-                .help(
-                    "create all leading components of DEST except the last, then copy \
-                        SOURCE to DEST",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_GROUP)
-                .short('g')
-                .long(OPT_GROUP)
-                .help("set group ownership, instead of process's current group")
-                .value_name("GROUP"),
-        )
-        .arg(
-            Arg::new(OPT_MODE)
-                .short('m')
-                .long(OPT_MODE)
-                .help("set permission mode (as in chmod), instead of rwxr-xr-x")
-                .value_name("MODE"),
-        )
-        .arg(
-            Arg::new(OPT_OWNER)
-                .short('o')
-                .long(OPT_OWNER)
-                .help("set ownership (super-user only)")
-                .value_name("OWNER")
-                .value_hint(clap::ValueHint::Username),
-        )
-        .arg(
-            Arg::new(OPT_PRESERVE_TIMESTAMPS)
-                .short('p')
-                .long(OPT_PRESERVE_TIMESTAMPS)
-                .help(
-                    "apply access/modification times of SOURCE files to \
-                    corresponding destination files",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_STRIP)
-                .short('s')
-                .long(OPT_STRIP)
-                .help("strip symbol tables (no action Windows)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_STRIP_PROGRAM)
-                .long(OPT_STRIP_PROGRAM)
-                .help("program used to strip binaries (no action Windows)")
-                .value_name("PROGRAM")
-                .value_hint(clap::ValueHint::CommandName),
-        )
-        .arg(backup_control::arguments::suffix())
-        .arg(
-            // TODO implement flag
-            Arg::new(OPT_TARGET_DIRECTORY)
-                .short('t')
-                .long(OPT_TARGET_DIRECTORY)
-                .help("move all SOURCE arguments into DIRECTORY")
-                .value_name("DIRECTORY")
-                .value_hint(clap::ValueHint::DirPath),
-        )
-        .arg(
-            // TODO implement flag
-            Arg::new(OPT_NO_TARGET_DIRECTORY)
-                .short('T')
-                .long(OPT_NO_TARGET_DIRECTORY)
-                .help("(unimplemented) treat DEST as a normal file")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_VERBOSE)
-                .short('v')
-                .long(OPT_VERBOSE)
-                .help("explain what is being done")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            // TODO implement flag
-            Arg::new(OPT_PRESERVE_CONTEXT)
-                .short('P')
-                .long(OPT_PRESERVE_CONTEXT)
-                .help("(unimplemented) preserve security context")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            // TODO implement flag
-            Arg::new(OPT_CONTEXT)
-                .short('Z')
-                .long(OPT_CONTEXT)
-                .help("(unimplemented) set security context of files and directories")
-                .value_name("CONTEXT")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(ARG_FILES)
-                .action(ArgAction::Append)
-                .num_args(1..)
-                .value_hint(clap::ValueHint::AnyPath),
-        )
 }
 
 /// Check for unimplemented command line arguments.
@@ -369,10 +212,12 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
-        Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
-            show_error!("Invalid mode string: {}", err);
-            1
-        })?)
+        Some(
+            crate::mode::parse(x, considering_dir, get_umask()).map_err(|err| {
+                show_error!("Invalid mode string: {}", err);
+                1
+            })?,
+        )
     } else {
         None
     };
@@ -484,7 +329,7 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
                 }
             }
 
-            if mode::chmod(path, b.mode()).is_err() {
+            if crate::mode::chmod(path, b.mode()).is_err() {
                 // Error messages are printed by the mode::chmod function!
                 uucore::error::set_exit_code(1);
                 continue;
@@ -831,7 +676,7 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
 fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
     // Silent the warning as we want to the error message
     #[allow(clippy::question_mark)]
-    if mode::chmod(to, b.mode()).is_err() {
+    if crate::mode::chmod(to, b.mode()).is_err() {
         return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
 

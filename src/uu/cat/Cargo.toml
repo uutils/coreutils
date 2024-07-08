@@ -13,9 +13,6 @@ edition = "2021"
 
 readme.workspace = true
 
-[lib]
-path = "src/cat.rs"
-
 [dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }

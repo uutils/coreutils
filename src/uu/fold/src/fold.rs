@@ -5,36 +5,24 @@
 
 // spell-checker:ignore (ToDOs) ncount routput
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
 
 const TAB_WIDTH: usize = 8;
-
-const USAGE: &str = help_usage!("fold.md");
-const ABOUT: &str = help_about!("fold.md");
-
-mod options {
-    pub const BYTES: &str = "bytes";
-    pub const SPACES: &str = "spaces";
-    pub const WIDTH: &str = "width";
-    pub const FILE: &str = "file";
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
     let (args, obs_width) = handle_obsolete(&args[..]);
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let bytes = matches.get_flag(options::BYTES);
-    let spaces = matches.get_flag(options::SPACES);
-    let poss_width = match matches.get_one::<String>(options::WIDTH) {
+    let bytes = matches.get_flag(crate::options::BYTES);
+    let spaces = matches.get_flag(crate::options::SPACES);
+    let poss_width = match matches.get_one::<String>(crate::options::WIDTH) {
         Some(v) => Some(v.clone()),
         None => obs_width,
     };
@@ -49,51 +37,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => 80,
     };
 
-    let files = match matches.get_many::<String>(options::FILE) {
+    let files = match matches.get_many::<String>(crate::options::FILE) {
         Some(v) => v.cloned().collect(),
         None => vec!["-".to_owned()],
     };
 
     fold(&files, bytes, spaces, width)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::BYTES)
-                .long(options::BYTES)
-                .short('b')
-                .help(
-                    "count using bytes rather than columns (meaning control characters \
-                     such as newline are not treated specially)",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SPACES)
-                .long(options::SPACES)
-                .short('s')
-                .help("break lines at word boundaries rather than a hard cut-off")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::WIDTH)
-                .long(options::WIDTH)
-                .short('w')
-                .help("set WIDTH as the maximum line width rather than 80")
-                .value_name("WIDTH")
-                .allow_hyphen_values(true),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {

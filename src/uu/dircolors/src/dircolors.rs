@@ -12,23 +12,9 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{help_about, help_section, help_usage};
-
-mod options {
-    pub const BOURNE_SHELL: &str = "bourne-shell";
-    pub const C_SHELL: &str = "c-shell";
-    pub const PRINT_DATABASE: &str = "print-database";
-    pub const PRINT_LS_COLORS: &str = "print-ls-colors";
-    pub const FILE: &str = "FILE";
-}
-
-const USAGE: &str = help_usage!("dircolors.md");
-const ABOUT: &str = help_about!("dircolors.md");
-const AFTER_HELP: &str = help_section!("after help", "dircolors.md");
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum OutputFmt {
@@ -129,16 +115,17 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let files = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<String>(crate::options::FILE)
         .map_or(vec![], |file_values| file_values.collect());
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
     // manually handle conflicts so we can match the output of GNU coreutils
-    if (matches.get_flag(options::C_SHELL) || matches.get_flag(options::BOURNE_SHELL))
-        && (matches.get_flag(options::PRINT_DATABASE) || matches.get_flag(options::PRINT_LS_COLORS))
+    if (matches.get_flag(crate::options::C_SHELL) || matches.get_flag(crate::options::BOURNE_SHELL))
+        && (matches.get_flag(crate::options::PRINT_DATABASE)
+            || matches.get_flag(crate::options::PRINT_LS_COLORS))
     {
         return Err(UUsageError::new(
             1,
@@ -147,14 +134,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if matches.get_flag(options::PRINT_DATABASE) && matches.get_flag(options::PRINT_LS_COLORS) {
+    if matches.get_flag(crate::options::PRINT_DATABASE)
+        && matches.get_flag(crate::options::PRINT_LS_COLORS)
+    {
         return Err(UUsageError::new(
             1,
             "options --print-database and --print-ls-colors are mutually exclusive",
         ));
     }
 
-    if matches.get_flag(options::PRINT_DATABASE) {
+    if matches.get_flag(crate::options::PRINT_DATABASE) {
         if !files.is_empty() {
             return Err(UUsageError::new(
                 1,
@@ -170,11 +159,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     }
 
-    let mut out_format = if matches.get_flag(options::C_SHELL) {
+    let mut out_format = if matches.get_flag(crate::options::C_SHELL) {
         OutputFmt::CShell
-    } else if matches.get_flag(options::BOURNE_SHELL) {
+    } else if matches.get_flag(crate::options::BOURNE_SHELL) {
         OutputFmt::Shell
-    } else if matches.get_flag(options::PRINT_LS_COLORS) {
+    } else if matches.get_flag(crate::options::PRINT_LS_COLORS) {
         OutputFmt::Display
     } else {
         OutputFmt::Unknown
@@ -252,53 +241,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
-        .args_override_self(true)
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::BOURNE_SHELL)
-                .long("sh")
-                .short('b')
-                .visible_alias("bourne-shell")
-                .overrides_with(options::C_SHELL)
-                .help("output Bourne shell code to set LS_COLORS")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::C_SHELL)
-                .long("csh")
-                .short('c')
-                .visible_alias("c-shell")
-                .overrides_with(options::BOURNE_SHELL)
-                .help("output C shell code to set LS_COLORS")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PRINT_DATABASE)
-                .long("print-database")
-                .short('p')
-                .help("print the byte counts")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PRINT_LS_COLORS)
-                .long("print-ls-colors")
-                .help("output fully escaped colors for display")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .value_hint(clap::ValueHint::FilePath)
-                .action(ArgAction::Append),
-        )
-}
-
 pub trait StrUtils {
     /// Remove comments and trim whitespace
     fn purify(&self) -> &Self;
@@ -360,7 +302,7 @@ enum ParseState {
     Pass,
 }
 
-use uucore::{format_usage, parse_glob};
+use uucore::parse_glob;
 
 #[allow(clippy::cognitive_complexity)]
 fn parse<T>(user_input: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>

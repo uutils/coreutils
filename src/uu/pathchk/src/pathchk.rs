@@ -5,12 +5,11 @@
 #![allow(unused_must_use)] // because we of writeln!
 
 // spell-checker:ignore (ToDO) lstat
-use clap::{crate_version, Arg, ArgAction, Command};
+
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
 
 // operating mode
 enum Mode {
@@ -20,28 +19,18 @@ enum Mode {
     Both,    // a combination of `Basic` and `Extra`
 }
 
-const ABOUT: &str = help_about!("pathchk.md");
-const USAGE: &str = help_usage!("pathchk.md");
-
-mod options {
-    pub const POSIX: &str = "posix";
-    pub const POSIX_SPECIAL: &str = "posix-special";
-    pub const PORTABILITY: &str = "portability";
-    pub const PATH: &str = "path";
-}
-
 // a few global constants as used in the GNU implementation
 const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     // set working mode
-    let is_posix = matches.get_flag(options::POSIX);
-    let is_posix_special = matches.get_flag(options::POSIX_SPECIAL);
-    let is_portability = matches.get_flag(options::PORTABILITY);
+    let is_posix = matches.get_flag(crate::options::POSIX);
+    let is_posix_special = matches.get_flag(crate::options::POSIX_SPECIAL);
+    let is_portability = matches.get_flag(crate::options::PORTABILITY);
 
     let mode = if (is_posix && is_posix_special) || is_portability {
         Mode::Both
@@ -54,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     // take necessary actions
-    let paths = matches.get_many::<String>(options::PATH);
+    let paths = matches.get_many::<String>(crate::options::PATH);
     if paths.is_none() {
         return Err(UUsageError::new(1, "missing operand"));
     }
@@ -75,38 +64,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         set_exit_code(1);
     }
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::POSIX)
-                .short('p')
-                .help("check for most POSIX systems")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::POSIX_SPECIAL)
-                .short('P')
-                .help(r#"check for empty names and leading "-""#)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PORTABILITY)
-                .long(options::PORTABILITY)
-                .help("check for all POSIX systems (equivalent to -p -P)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PATH)
-                .hide(true)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
-        )
 }
 
 // check a path, given as a slice of it's components and an operating mode

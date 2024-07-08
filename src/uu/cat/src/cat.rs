@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
-use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::{metadata, File};
 use std::io::{self, IsTerminal, Read, Write};
 use thiserror::Error;
@@ -15,10 +14,6 @@ use uucore::fs::FileInformation;
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 
-/// Linux splice support
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
-
 /// Unix domain socket support
 #[cfg(unix)]
 use std::net::Shutdown;
@@ -26,13 +21,9 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
-use uucore::{format_usage, help_about, help_usage};
-
-const USAGE: &str = help_usage!("cat.md");
-const ABOUT: &str = help_about!("cat.md");
 
 #[derive(Error, Debug)]
-enum CatError {
+pub enum CatError {
     /// Wrapper around `io::Error`
     #[error("{0}")]
     Io(#[from] io::Error),
@@ -54,7 +45,7 @@ enum CatError {
     TooManySymlinks,
 }
 
-type CatResult<T> = Result<T, CatError>;
+pub type CatResult<T> = Result<T, CatError>;
 
 #[derive(PartialEq)]
 enum NumberingMode {
@@ -125,9 +116,9 @@ struct OutputState {
 }
 
 #[cfg(unix)]
-trait FdReadable: Read + AsRawFd {}
+pub trait FdReadable: Read + AsRawFd {}
 #[cfg(not(unix))]
-trait FdReadable: Read {}
+pub trait FdReadable: Read {}
 
 #[cfg(unix)]
 impl<T> FdReadable for T where T: Read + AsRawFd {}
@@ -135,8 +126,8 @@ impl<T> FdReadable for T where T: Read + AsRawFd {}
 impl<T> FdReadable for T where T: Read {}
 
 /// Represents an open file handle, stream, or other device
-struct InputHandle<R: FdReadable> {
-    reader: R,
+pub struct InputHandle<R: FdReadable> {
+    pub reader: R,
     is_interactive: bool,
 }
 
@@ -159,59 +150,45 @@ enum InputType {
     Socket,
 }
 
-mod options {
-    pub static FILE: &str = "file";
-    pub static SHOW_ALL: &str = "show-all";
-    pub static NUMBER_NONBLANK: &str = "number-nonblank";
-    pub static SHOW_NONPRINTING_ENDS: &str = "e";
-    pub static SHOW_ENDS: &str = "show-ends";
-    pub static NUMBER: &str = "number";
-    pub static SQUEEZE_BLANK: &str = "squeeze-blank";
-    pub static SHOW_NONPRINTING_TABS: &str = "t";
-    pub static SHOW_TABS: &str = "show-tabs";
-    pub static SHOW_NONPRINTING: &str = "show-nonprinting";
-    pub static IGNORED_U: &str = "ignored-u";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
+    let number_mode = if matches.get_flag(crate::options::NUMBER_NONBLANK) {
         NumberingMode::NonEmpty
-    } else if matches.get_flag(options::NUMBER) {
+    } else if matches.get_flag(crate::options::NUMBER) {
         NumberingMode::All
     } else {
         NumberingMode::None
     };
 
     let show_nonprint = [
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-        options::SHOW_NONPRINTING.to_owned(),
+        crate::options::SHOW_ALL.to_owned(),
+        crate::options::SHOW_NONPRINTING_ENDS.to_owned(),
+        crate::options::SHOW_NONPRINTING_TABS.to_owned(),
+        crate::options::SHOW_NONPRINTING.to_owned(),
     ]
     .iter()
     .any(|v| matches.get_flag(v));
 
     let show_ends = [
-        options::SHOW_ENDS.to_owned(),
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
+        crate::options::SHOW_ENDS.to_owned(),
+        crate::options::SHOW_ALL.to_owned(),
+        crate::options::SHOW_NONPRINTING_ENDS.to_owned(),
     ]
     .iter()
     .any(|v| matches.get_flag(v));
 
     let show_tabs = [
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_TABS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
+        crate::options::SHOW_ALL.to_owned(),
+        crate::options::SHOW_TABS.to_owned(),
+        crate::options::SHOW_NONPRINTING_TABS.to_owned(),
     ]
     .iter()
     .any(|v| matches.get_flag(v));
 
-    let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
-    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
+    let squeeze_blank = matches.get_flag(crate::options::SQUEEZE_BLANK);
+    let files: Vec<String> = match matches.get_many::<String>(crate::options::FILE) {
         Some(v) => v.cloned().collect(),
         None => vec!["-".to_owned()],
     };
@@ -224,90 +201,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         squeeze_blank,
     };
     cat_files(&files, &options)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
-        .infer_long_args(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .action(clap::ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::SHOW_ALL)
-                .short('A')
-                .long(options::SHOW_ALL)
-                .help("equivalent to -vET")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::NUMBER_NONBLANK)
-                .short('b')
-                .long(options::NUMBER_NONBLANK)
-                .help("number nonempty output lines, overrides -n")
-                // Note: This MUST NOT .overrides_with(options::NUMBER)!
-                // In clap, overriding is symmetric, so "-b -n" counts as "-n", which is not what we want.
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_NONPRINTING_ENDS)
-                .short('e')
-                .help("equivalent to -vE")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_ENDS)
-                .short('E')
-                .long(options::SHOW_ENDS)
-                .help("display $ at end of each line")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::NUMBER)
-                .short('n')
-                .long(options::NUMBER)
-                .help("number all output lines")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SQUEEZE_BLANK)
-                .short('s')
-                .long(options::SQUEEZE_BLANK)
-                .help("suppress repeated empty output lines")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_NONPRINTING_TABS)
-                .short('t')
-                .help("equivalent to -vT")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_TABS)
-                .short('T')
-                .long(options::SHOW_TABS)
-                .help("display TAB characters at ^I")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SHOW_NONPRINTING)
-                .short('v')
-                .long(options::SHOW_NONPRINTING)
-                .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORED_U)
-                .short('u')
-                .help("(ignored)")
-                .action(ArgAction::SetTrue),
-        )
 }
 
 fn cat_handle<R: FdReadable>(
@@ -454,7 +347,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &stdout_lock)? {
+        if !crate::splice::write_fast_using_splice(handle, &stdout_lock)? {
             return Ok(());
         }
     }

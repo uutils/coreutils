@@ -6,23 +6,6 @@
 // spell-checker:ignore (clap) dont
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
 
-mod byteorder_io;
-mod formatteriteminfo;
-mod inputdecoder;
-mod inputoffset;
-#[cfg(test)]
-mod mockstream;
-mod multifilereader;
-mod output_info;
-mod parse_formats;
-mod parse_inputs;
-mod parse_nrofbytes;
-mod partialreader;
-mod peekreader;
-mod prn_char;
-mod prn_float;
-mod prn_int;
-
 use std::cmp;
 use std::fmt::Write;
 
@@ -38,33 +21,13 @@ use crate::parse_nrofbytes::parse_number_of_bytes;
 use crate::partialreader::PartialReader;
 use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
-use clap::ArgAction;
-use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
+use clap::{parser::ValueSource, ArgMatches};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::parse_size::ParseSizeError;
-use uucore::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_warning};
+use uucore::{show_error, show_warning};
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
-
-const ABOUT: &str = help_about!("od.md");
-const USAGE: &str = help_usage!("od.md");
-const AFTER_HELP: &str = help_section!("after help", "od.md");
-
-pub(crate) mod options {
-    pub const HELP: &str = "help";
-    pub const ADDRESS_RADIX: &str = "address-radix";
-    pub const SKIP_BYTES: &str = "skip-bytes";
-    pub const READ_BYTES: &str = "read-bytes";
-    pub const ENDIAN: &str = "endian";
-    pub const STRINGS: &str = "strings";
-    pub const FORMAT: &str = "format";
-    pub const OUTPUT_DUPLICATES: &str = "output-duplicates";
-    pub const TRADITIONAL: &str = "traditional";
-    pub const WIDTH: &str = "width";
-    pub const FILENAME: &str = "FILENAME";
-}
 
 struct OdOptions {
     byte_order: ByteOrder,
@@ -80,7 +43,7 @@ struct OdOptions {
 
 impl OdOptions {
     fn new(matches: &ArgMatches, args: &[String]) -> UResult<Self> {
-        let byte_order = if let Some(s) = matches.get_one::<String>(options::ENDIAN) {
+        let byte_order = if let Some(s) = matches.get_one::<String>(crate::options::ENDIAN) {
             match s.as_str() {
                 "little" => ByteOrder::Little,
                 "big" => ByteOrder::Big,
@@ -95,14 +58,14 @@ impl OdOptions {
             ByteOrder::Native
         };
 
-        let mut skip_bytes = match matches.get_one::<String>(options::SKIP_BYTES) {
+        let mut skip_bytes = match matches.get_one::<String>(crate::options::SKIP_BYTES) {
             None => 0,
             Some(s) => match parse_number_of_bytes(s) {
                 Ok(n) => n,
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format_error_message(&e, s, options::SKIP_BYTES),
+                        format_error_message(&e, s, crate::options::SKIP_BYTES),
                     ))
                 }
             },
@@ -123,17 +86,17 @@ impl OdOptions {
 
         let formats = parse_format_flags(args).map_err(|e| USimpleError::new(1, e))?;
 
-        let mut line_bytes = match matches.get_one::<String>(options::WIDTH) {
+        let mut line_bytes = match matches.get_one::<String>(crate::options::WIDTH) {
             None => 16,
             Some(s) => {
-                if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
+                if matches.value_source(crate::options::WIDTH) == Some(ValueSource::CommandLine) {
                     match parse_number_of_bytes(s) {
                         Ok(n) => usize::try_from(n)
                             .map_err(|_| USimpleError::new(1, format!("‘{s}‘ is too large")))?,
                         Err(e) => {
                             return Err(USimpleError::new(
                                 1,
-                                format_error_message(&e, s, options::WIDTH),
+                                format_error_message(&e, s, crate::options::WIDTH),
                             ))
                         }
                     }
@@ -151,22 +114,22 @@ impl OdOptions {
             line_bytes = min_bytes;
         }
 
-        let output_duplicates = matches.get_flag(options::OUTPUT_DUPLICATES);
+        let output_duplicates = matches.get_flag(crate::options::OUTPUT_DUPLICATES);
 
-        let read_bytes = match matches.get_one::<String>(options::READ_BYTES) {
+        let read_bytes = match matches.get_one::<String>(crate::options::READ_BYTES) {
             None => None,
             Some(s) => match parse_number_of_bytes(s) {
                 Ok(n) => Some(n),
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format_error_message(&e, s, options::READ_BYTES),
+                        format_error_message(&e, s, crate::options::READ_BYTES),
                     ))
                 }
             },
         };
 
-        let radix = match matches.get_one::<String>(options::ADDRESS_RADIX) {
+        let radix = match matches.get_one::<String>(crate::options::ADDRESS_RADIX) {
             None => Radix::Octal,
             Some(s) => {
                 let st = s.as_bytes();
@@ -216,7 +179,7 @@ impl OdOptions {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let clap_opts = uu_app();
+    let clap_opts = crate::uu_app();
 
     let clap_matches = clap_opts.try_get_matches_from(&args)?;
 
@@ -244,218 +207,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     );
 
     odfunc(&mut input_offset, &mut input_decoder, &output_info)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
-        .trailing_var_arg(true)
-        .dont_delimit_trailing_values(true)
-        .infer_long_args(true)
-        .args_override_self(true)
-        .disable_help_flag(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help("Print help information.")
-                .action(ArgAction::Help)
-        )
-        .arg(
-            Arg::new(options::ADDRESS_RADIX)
-                .short('A')
-                .long(options::ADDRESS_RADIX)
-                .help("Select the base in which file offsets are printed.")
-                .value_name("RADIX"),
-        )
-        .arg(
-            Arg::new(options::SKIP_BYTES)
-                .short('j')
-                .long(options::SKIP_BYTES)
-                .help("Skip bytes input bytes before formatting and writing.")
-                .value_name("BYTES"),
-        )
-        .arg(
-            Arg::new(options::READ_BYTES)
-                .short('N')
-                .long(options::READ_BYTES)
-                .help("limit dump to BYTES input bytes")
-                .value_name("BYTES"),
-        )
-        .arg(
-            Arg::new(options::ENDIAN)
-                .long(options::ENDIAN)
-                .help("byte order to use for multi-byte formats")
-                .value_parser(ShortcutValueParser::new(["big", "little"]))
-                .value_name("big|little"),
-        )
-        .arg(
-            Arg::new(options::STRINGS)
-                .short('S')
-                .long(options::STRINGS)
-                .help(
-                    "NotImplemented: output strings of at least BYTES graphic chars. 3 is assumed when \
-                     BYTES is not specified.",
-                )
-                .default_missing_value("3")
-                .value_name("BYTES"),
-        )
-        .arg(
-            Arg::new("a")
-                .short('a')
-                .help("named characters, ignoring high-order bit")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("b")
-                .short('b')
-                .help("octal bytes")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("c")
-                .short('c')
-                .help("ASCII characters or backslash escapes")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("d")
-                .short('d')
-                .help("unsigned decimal 2-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("D")
-                .short('D')
-                .help("unsigned decimal 4-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("o")
-                .short('o')
-                .help("octal 2-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("I")
-                .short('I')
-                .help("decimal 8-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("L")
-                .short('L')
-                .help("decimal 8-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("i")
-                .short('i')
-                .help("decimal 4-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("l")
-                .short('l')
-                .help("decimal 8-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("x")
-                .short('x')
-                .help("hexadecimal 2-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("h")
-                .short('h')
-                .help("hexadecimal 2-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("O")
-                .short('O')
-                .help("octal 4-byte units")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new("s")
-                .short('s')
-                .help("decimal 2-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("X")
-                .short('X')
-                .help("hexadecimal 4-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("H")
-                .short('H')
-                .help("hexadecimal 4-byte units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("e")
-                .short('e')
-                .help("floating point double precision (64-bit) units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("f")
-                .short('f')
-                .help("floating point double precision (32-bit) units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("F")
-                .short('F')
-                .help("floating point double precision (64-bit) units")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FORMAT)
-                .short('t')
-                .long("format")
-                .help("select output format or formats")
-                .action(ArgAction::Append)
-                .num_args(1)
-                .value_name("TYPE"),
-        )
-        .arg(
-            Arg::new(options::OUTPUT_DUPLICATES)
-                .short('v')
-                .long(options::OUTPUT_DUPLICATES)
-                .help("do not use * to mark line suppression")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::WIDTH)
-                .short('w')
-                .long(options::WIDTH)
-                .help(
-                    "output BYTES bytes per output line. 32 is implied when BYTES is not \
-                     specified.",
-                )
-                .default_missing_value("32")
-                .value_name("BYTES")
-                .num_args(..=1),
-        )
-        .arg(
-            Arg::new(options::TRADITIONAL)
-                .long(options::TRADITIONAL)
-                .help("compatibility mode with one input, offset and label.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILENAME)
-                .hide(true)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 /// Loops through the input line by line, calling `print_bytes` to take care of the output.

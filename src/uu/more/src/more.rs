@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 
-use clap::{crate_version, value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use crossterm::event::KeyEventKind;
 use crossterm::{
     cursor::{MoveTo, MoveUp},
@@ -25,28 +25,10 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{display::Quotable, show};
-use uucore::{format_usage, help_about, help_usage};
-
-const ABOUT: &str = help_about!("more.md");
-const USAGE: &str = help_usage!("more.md");
-const BELL: &str = "\x07";
-
-pub mod options {
-    pub const SILENT: &str = "silent";
-    pub const LOGICAL: &str = "logical";
-    pub const NO_PAUSE: &str = "no-pause";
-    pub const PRINT_OVER: &str = "print-over";
-    pub const CLEAN_PRINT: &str = "clean-print";
-    pub const SQUEEZE: &str = "squeeze";
-    pub const PLAIN: &str = "plain";
-    pub const LINES: &str = "lines";
-    pub const NUMBER: &str = "number";
-    pub const PATTERN: &str = "pattern";
-    pub const FROM_LINE: &str = "from-line";
-    pub const FILES: &str = "files";
-}
 
 const MULTI_FILE_TOP_PROMPT: &str = "\r::::::::::::::\n\r{}\n\r::::::::::::::\n";
+
+const BELL: &str = "\x07";
 
 struct Options {
     clean_print: bool,
@@ -61,8 +43,8 @@ struct Options {
 impl Options {
     fn from(matches: &ArgMatches) -> Self {
         let lines = match (
-            matches.get_one::<u16>(options::LINES).copied(),
-            matches.get_one::<u16>(options::NUMBER).copied(),
+            matches.get_one::<u16>(crate::options::LINES).copied(),
+            matches.get_one::<u16>(crate::options::NUMBER).copied(),
         ) {
             // We add 1 to the number of lines to display because the last line
             // is used for the banner
@@ -70,21 +52,21 @@ impl Options {
             (None, Some(number)) if number > 0 => Some(number + 1),
             (_, _) => None,
         };
-        let from_line = match matches.get_one::<usize>(options::FROM_LINE).copied() {
+        let from_line = match matches.get_one::<usize>(crate::options::FROM_LINE).copied() {
             Some(number) if number > 1 => number - 1,
             _ => 0,
         };
         let pattern = matches
-            .get_one::<String>(options::PATTERN)
+            .get_one::<String>(crate::options::PATTERN)
             .map(|s| s.to_owned());
         Self {
-            clean_print: matches.get_flag(options::CLEAN_PRINT),
+            clean_print: matches.get_flag(crate::options::CLEAN_PRINT),
             from_line,
             lines,
             pattern,
-            print_over: matches.get_flag(options::PRINT_OVER),
-            silent: matches.get_flag(options::SILENT),
-            squeeze: matches.get_flag(options::SQUEEZE),
+            print_over: matches.get_flag(crate::options::PRINT_OVER),
+            silent: matches.get_flag(crate::options::SILENT),
+            squeeze: matches.get_flag(crate::options::SQUEEZE),
         }
     }
 }
@@ -98,7 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         println!("{panic_info}");
     }));
 
-    let matches = match uu_app().try_get_matches_from(args) {
+    let matches = match crate::uu_app().try_get_matches_from(args) {
         Ok(m) => m,
         Err(e) => return Err(e.into()),
     };
@@ -107,7 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut buff = String::new();
 
-    if let Some(files) = matches.get_many::<String>(options::FILES) {
+    if let Some(files) = matches.get_many::<String>(crate::options::FILES) {
         let mut stdout = setup_term();
         let length = files.len();
 
@@ -167,105 +149,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         reset_term(&mut stdout);
     }
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .version(crate_version!())
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::PRINT_OVER)
-                .short('c')
-                .long(options::PRINT_OVER)
-                .help("Do not scroll, display text and clean line ends")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SILENT)
-                .short('d')
-                .long(options::SILENT)
-                .help("Display help instead of ringing bell")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::CLEAN_PRINT)
-                .short('p')
-                .long(options::CLEAN_PRINT)
-                .help("Do not scroll, clean screen and display text")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SQUEEZE)
-                .short('s')
-                .long(options::SQUEEZE)
-                .help("Squeeze multiple blank lines into one")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PLAIN)
-                .short('u')
-                .long(options::PLAIN)
-                .action(ArgAction::SetTrue)
-                .hide(true),
-        )
-        .arg(
-            Arg::new(options::PATTERN)
-                .short('P')
-                .long(options::PATTERN)
-                .allow_hyphen_values(true)
-                .required(false)
-                .value_name("pattern")
-                .help("Display file beginning from pattern match"),
-        )
-        .arg(
-            Arg::new(options::FROM_LINE)
-                .short('F')
-                .long(options::FROM_LINE)
-                .num_args(1)
-                .value_name("number")
-                .value_parser(value_parser!(usize))
-                .help("Display file beginning from line number"),
-        )
-        .arg(
-            Arg::new(options::LINES)
-                .short('n')
-                .long(options::LINES)
-                .value_name("number")
-                .num_args(1)
-                .value_parser(value_parser!(u16).range(0..))
-                .help("The number of lines per screen full"),
-        )
-        .arg(
-            Arg::new(options::NUMBER)
-                .long(options::NUMBER)
-                .num_args(1)
-                .value_parser(value_parser!(u16).range(0..))
-                .help("Same as --lines"),
-        )
-        // The commented arguments below are unimplemented:
-        /*
-        .arg(
-            Arg::new(options::LOGICAL)
-                .short('f')
-                .long(options::LOGICAL)
-                .help("Count logical rather than screen lines"),
-        )
-        .arg(
-            Arg::new(options::NO_PAUSE)
-                .short('l')
-                .long(options::NO_PAUSE)
-                .help("Suppress pause after form feed"),
-        )
-        */
-        .arg(
-            Arg::new(options::FILES)
-                .required(false)
-                .action(ArgAction::Append)
-                .help("Path to the files to be read")
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 #[cfg(not(target_os = "fuchsia"))]
@@ -586,7 +469,6 @@ impl<'a> Pager<'a> {
                 (lower_mark as f64 / self.line_count as f64 * 100.0).round() as u16
             )
         };
-
         let status = format!("--More--({status_inner})");
         let banner = match (self.silent, wrong_key) {
             (true, Some(key)) => format!(

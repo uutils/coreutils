@@ -13,12 +13,15 @@ edition = "2021"
 
 readme.workspace = true
 
-[lib]
-path = "src/arch.rs"
-
 [dependencies]
 platform-info = { workspace = true }
 clap = { workspace = true }
+uucore = { workspace = true }
+
+[build-dependencies]
+clap = "4.4"
+clap_complete = "4.4"
+clap_mangen = "0.2"
 uucore = { workspace = true }
 
 [[bin]]

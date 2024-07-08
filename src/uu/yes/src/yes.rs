@@ -5,19 +5,14 @@
 
 // cSpell:ignore strs
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, Command};
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError};
 #[cfg(unix)]
 use uucore::signals::enable_pipe_errors;
-use uucore::{format_usage, help_about, help_usage};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
 
-const ABOUT: &str = help_about!("yes.md");
-const USAGE: &str = help_usage!("yes.md");
+use crate::uu_app;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough
@@ -36,19 +31,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(err) => Err(USimpleError::new(1, format!("standard output: {err}"))),
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .arg(
-            Arg::new("STRING")
-                .value_parser(ValueParser::os_string())
-                .action(ArgAction::Append),
-        )
-        .infer_long_args(true)
 }
 
 // Copies words from `i` into `buf`, separated by spaces.
@@ -118,10 +100,10 @@ pub fn exec(bytes: &[u8]) -> io::Result<()> {
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        match splice::splice_data(bytes, &stdout) {
+        match crate::splice::splice_data(bytes, &stdout) {
             Ok(_) => return Ok(()),
-            Err(splice::Error::Io(err)) => return Err(err),
-            Err(splice::Error::Unsupported) => (),
+            Err(crate::splice::Error::Io(err)) => return Err(err),
+            Err(crate::splice::Error::Unsupported) => (),
         }
     }
 

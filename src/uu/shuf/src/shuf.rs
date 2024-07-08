@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shufable rvec fdata
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::memchr_iter;
 use rand::prelude::SliceRandom;
 use rand::{Rng, RngCore};
@@ -15,18 +14,12 @@ use std::io::{stdin, stdout, BufReader, BufWriter, Error, Read, Write};
 use std::ops::RangeInclusive;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
-
-mod rand_read_adapter;
 
 enum Mode {
     Default(String),
     Echo(Vec<String>),
     InputRange(RangeInclusive<usize>),
 }
-
-static USAGE: &str = help_usage!("shuf.md");
-static ABOUT: &str = help_about!("shuf.md");
 
 struct Options {
     head_count: usize,
@@ -36,30 +29,19 @@ struct Options {
     sep: u8,
 }
 
-mod options {
-    pub static ECHO: &str = "echo";
-    pub static INPUT_RANGE: &str = "input-range";
-    pub static HEAD_COUNT: &str = "head-count";
-    pub static OUTPUT: &str = "output";
-    pub static RANDOM_SOURCE: &str = "random-source";
-    pub static REPEAT: &str = "repeat";
-    pub static ZERO_TERMINATED: &str = "zero-terminated";
-    pub static FILE_OR_ARGS: &str = "file-or-args";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let mode = if matches.get_flag(options::ECHO) {
+    let mode = if matches.get_flag(crate::options::ECHO) {
         Mode::Echo(
             matches
-                .get_many::<String>(options::FILE_OR_ARGS)
+                .get_many::<String>(crate::options::FILE_OR_ARGS)
                 .unwrap_or_default()
                 .map(String::from)
                 .collect(),
         )
-    } else if let Some(range) = matches.get_one::<String>(options::INPUT_RANGE) {
+    } else if let Some(range) = matches.get_one::<String>(crate::options::INPUT_RANGE) {
         match parse_range(range) {
             Ok(m) => Mode::InputRange(m),
             Err(msg) => {
@@ -68,7 +50,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     } else {
         let mut operands = matches
-            .get_many::<String>(options::FILE_OR_ARGS)
+            .get_many::<String>(crate::options::FILE_OR_ARGS)
             .unwrap_or_default();
         let file = operands.next().cloned().unwrap_or("-".into());
         if let Some(second_file) = operands.next() {
@@ -83,7 +65,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = Options {
         head_count: {
             let headcounts = matches
-                .get_many::<String>(options::HEAD_COUNT)
+                .get_many::<String>(crate::options::HEAD_COUNT)
                 .unwrap_or_default()
                 .cloned()
                 .collect();
@@ -92,12 +74,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(msg) => return Err(USimpleError::new(1, msg)),
             }
         },
-        output: matches.get_one::<String>(options::OUTPUT).map(String::from),
-        random_source: matches
-            .get_one::<String>(options::RANDOM_SOURCE)
+        output: matches
+            .get_one::<String>(crate::options::OUTPUT)
             .map(String::from),
-        repeat: matches.get_flag(options::REPEAT),
-        sep: if matches.get_flag(options::ZERO_TERMINATED) {
+        random_source: matches
+            .get_one::<String>(crate::options::RANDOM_SOURCE)
+            .map(String::from),
+        repeat: matches.get_flag(crate::options::REPEAT),
+        sep: if matches.get_flag(crate::options::ZERO_TERMINATED) {
             0x00_u8
         } else {
             0x0a_u8
@@ -132,75 +116,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .about(ABOUT)
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::ECHO)
-                .short('e')
-                .long(options::ECHO)
-                .help("treat each ARG as an input line")
-                .action(clap::ArgAction::SetTrue)
-                .overrides_with(options::ECHO)
-                .conflicts_with(options::INPUT_RANGE),
-        )
-        .arg(
-            Arg::new(options::INPUT_RANGE)
-                .short('i')
-                .long(options::INPUT_RANGE)
-                .value_name("LO-HI")
-                .help("treat each number LO through HI as an input line")
-                .conflicts_with(options::FILE_OR_ARGS),
-        )
-        .arg(
-            Arg::new(options::HEAD_COUNT)
-                .short('n')
-                .long(options::HEAD_COUNT)
-                .value_name("COUNT")
-                .action(clap::ArgAction::Append)
-                .help("output at most COUNT lines"),
-        )
-        .arg(
-            Arg::new(options::OUTPUT)
-                .short('o')
-                .long(options::OUTPUT)
-                .value_name("FILE")
-                .help("write result to FILE instead of standard output")
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::RANDOM_SOURCE)
-                .long(options::RANDOM_SOURCE)
-                .value_name("FILE")
-                .help("get random bytes from FILE")
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::REPEAT)
-                .short('r')
-                .long(options::REPEAT)
-                .help("output lines can be repeated")
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::REPEAT),
-        )
-        .arg(
-            Arg::new(options::ZERO_TERMINATED)
-                .short('z')
-                .long(options::ZERO_TERMINATED)
-                .help("line delimiter is NUL, not newline")
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::ZERO_TERMINATED),
-        )
-        .arg(
-            Arg::new(options::FILE_OR_ARGS)
-                .action(clap::ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 fn read_input_file(filename: &str) -> UResult<Vec<u8>> {
@@ -427,7 +342,7 @@ fn shuf_exec(input: &mut impl Shufable, opts: Options) -> UResult<()> {
         Some(r) => {
             let file = File::open(&r[..])
                 .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
-            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
+            WrappedRng::RngFile(crate::rand_read_adapter::ReadRng::new(file))
         }
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
@@ -489,7 +404,7 @@ fn parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
 }
 
 enum WrappedRng {
-    RngFile(rand_read_adapter::ReadRng<File>),
+    RngFile(crate::rand_read_adapter::ReadRng<File>),
     RngDefault(rand::rngs::ThreadRng),
 }
 

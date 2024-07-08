@@ -16,3 +16,6 @@ lib*.a
 *.iml
 ### macOS ###
 .DS_Store
+
+completion/
+man-page/

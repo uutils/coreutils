@@ -85,7 +85,3 @@ pub struct OFlags {
     pub text: bool,
     pub seek_bytes: bool,
 }
-
-pub mod options {
-    pub const OPERANDS: &str = "operands";
-}

@@ -5,9 +5,8 @@
 
 // spell-checker:ignore (ToDO) ugoa cmode
 
-use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
@@ -15,21 +14,10 @@ use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::show_if_err;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
-use uucore::{format_usage, help_about, help_section, help_usage, show_if_err};
 
 static DEFAULT_PERM: u32 = 0o777;
-
-const ABOUT: &str = help_about!("mkdir.md");
-const USAGE: &str = help_usage!("mkdir.md");
-const AFTER_HELP: &str = help_section!("after help", "mkdir.md");
-
-mod options {
-    pub const MODE: &str = "mode";
-    pub const PARENTS: &str = "parents";
-    pub const VERBOSE: &str = "verbose";
-    pub const DIRS: &str = "dirs";
-}
 
 #[cfg(windows)]
 fn get_mode(_matches: &ArgMatches, _mode_had_minus_prefix: bool) -> Result<u32, String> {
@@ -41,7 +29,7 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
     // Not tested on Windows
     let mut new_mode = DEFAULT_PERM;
 
-    if let Some(m) = matches.get_one::<String>(options::MODE) {
+    if let Some(m) = matches.get_one::<String>(crate::options::MODE) {
         for mode in m.split(',') {
             if mode.chars().any(|c| c.is_ascii_digit()) {
                 new_mode = mode::parse_numeric(new_mode, m, true)?;
@@ -83,53 +71,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let dirs = matches
-        .get_many::<OsString>(options::DIRS)
+        .get_many::<OsString>(crate::options::DIRS)
         .unwrap_or_default();
-    let verbose = matches.get_flag(options::VERBOSE);
-    let recursive = matches.get_flag(options::PARENTS);
+    let verbose = matches.get_flag(crate::options::VERBOSE);
+    let recursive = matches.get_flag(crate::options::PARENTS);
 
     match get_mode(&matches, mode_had_minus_prefix) {
         Ok(mode) => exec(dirs, recursive, mode, verbose),
         Err(f) => Err(USimpleError::new(1, f)),
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::MODE)
-                .short('m')
-                .long(options::MODE)
-                .help("set file mode (not implemented on windows)"),
-        )
-        .arg(
-            Arg::new(options::PARENTS)
-                .short('p')
-                .long(options::PARENTS)
-                .help("make parent directories as needed")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::VERBOSE)
-                .short('v')
-                .long(options::VERBOSE)
-                .help("print a message for each printed directory")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::DIRS)
-                .action(ArgAction::Append)
-                .num_args(1..)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::DirPath),
-        )
 }
 
 /**

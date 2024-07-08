@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -16,23 +15,7 @@ use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
-
-const ABOUT: &str = help_about!("chmod.md");
-const USAGE: &str = help_usage!("chmod.md");
-const LONG_USAGE: &str = help_section!("after help", "chmod.md");
-
-mod options {
-    pub const CHANGES: &str = "changes";
-    pub const QUIET: &str = "quiet"; // visible_alias("silent")
-    pub const VERBOSE: &str = "verbose";
-    pub const NO_PRESERVE_ROOT: &str = "no-preserve-root";
-    pub const PRESERVE_ROOT: &str = "preserve-root";
-    pub const REFERENCE: &str = "RFILE";
-    pub const RECURSIVE: &str = "recursive";
-    pub const MODE: &str = "MODE";
-    pub const FILE: &str = "FILE";
-}
+use uucore::{show, show_error};
 
 /// Extract negative modes (starting with '-') from the rest of the arguments.
 ///
@@ -92,14 +75,14 @@ fn extract_negative_modes(mut args: impl uucore::Args) -> (Option<String>, Vec<O
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (parsed_cmode, args) = extract_negative_modes(args.skip(1)); // skip binary name
-    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let changes = matches.get_flag(options::CHANGES);
-    let quiet = matches.get_flag(options::QUIET);
-    let verbose = matches.get_flag(options::VERBOSE);
-    let preserve_root = matches.get_flag(options::PRESERVE_ROOT);
-    let recursive = matches.get_flag(options::RECURSIVE);
-    let fmode = match matches.get_one::<String>(options::REFERENCE) {
+    let changes = matches.get_flag(crate::options::CHANGES);
+    let quiet = matches.get_flag(crate::options::QUIET);
+    let verbose = matches.get_flag(crate::options::VERBOSE);
+    let preserve_root = matches.get_flag(crate::options::PRESERVE_ROOT);
+    let recursive = matches.get_flag(crate::options::RECURSIVE);
+    let fmode = match matches.get_one::<String>(crate::options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode() & 0o7777),
             Err(err) => {
@@ -112,7 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => None,
     };
 
-    let modes = matches.get_one::<String>(options::MODE);
+    let modes = matches.get_one::<String>(crate::options::MODE);
     let cmode = if let Some(parsed_cmode) = parsed_cmode {
         parsed_cmode
     } else {
@@ -120,7 +103,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
     // FIXME: enable non-utf8 paths
     let mut files: Vec<String> = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<String>(crate::options::FILE)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
     let cmode = if fmode.is_some() {
@@ -148,74 +131,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     chmoder.chmod(&files)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .args_override_self(true)
-        .infer_long_args(true)
-        .no_binary_name(true)
-        .arg(
-            Arg::new(options::CHANGES)
-                .long(options::CHANGES)
-                .short('c')
-                .help("like verbose but report only when a change is made")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::QUIET)
-                .long(options::QUIET)
-                .visible_alias("silent")
-                .short('f')
-                .help("suppress most error messages")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::VERBOSE)
-                .long(options::VERBOSE)
-                .short('v')
-                .help("output a diagnostic for every file processed")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::NO_PRESERVE_ROOT)
-                .long(options::NO_PRESERVE_ROOT)
-                .help("do not treat '/' specially (the default)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PRESERVE_ROOT)
-                .long(options::PRESERVE_ROOT)
-                .help("fail to operate recursively on '/'")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::RECURSIVE)
-                .long(options::RECURSIVE)
-                .short('R')
-                .help("change files and directories recursively")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::REFERENCE)
-                .long("reference")
-                .value_hint(clap::ValueHint::FilePath)
-                .help("use RFILE's mode instead of MODE values"),
-        )
-        .arg(
-            Arg::new(options::MODE).required_unless_present(options::REFERENCE), // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
-                                                                                 // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
-                                                                                 // Only one positional argument with .multiple_occurrences(true) set is allowed per command
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .required_unless_present(options::MODE)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
-        )
 }
 
 struct Chmoder {

@@ -25,7 +25,7 @@ use uucore::show_error;
 use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
-use crate::{
+use crate::cp::{
     aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, CopyResult, Error,
     Options,
 };
@@ -486,14 +486,16 @@ fn build_dir(options: &Options, path: &PathBuf, recursive: bool) -> CopyResult<(
         // we need to allow trivial casts here because some systems like linux have u32 constants in
         // in libc while others don't.
         #[allow(clippy::unnecessary_cast)]
-        let mut excluded_perms =
-            if matches!(options.attributes.ownership, crate::Preserve::Yes { .. }) {
-                libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
-            } else if matches!(options.attributes.mode, crate::Preserve::Yes { .. }) {
-                libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
-            } else {
-                0
-            } as u32;
+        let mut excluded_perms = if matches!(
+            options.attributes.ownership,
+            crate::cp::Preserve::Yes { .. }
+        ) {
+            libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
+        } else if matches!(options.attributes.mode, crate::cp::Preserve::Yes { .. }) {
+            libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
+        } else {
+            0
+        } as u32;
         excluded_perms |= uucore::mode::get_umask();
         let mode = !excluded_perms & 0o777; //use only the last three octet bits
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);

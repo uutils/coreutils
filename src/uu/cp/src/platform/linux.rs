@@ -17,7 +17,7 @@ use quick_error::ResultExt;
 
 use uucore::mode::get_umask;
 
-use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
+use crate::cp::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
 
 // From /usr/include/linux/fs.h:
 // #define FICLONE		_IOW(0x94, 9, int)

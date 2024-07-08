@@ -21,21 +21,10 @@ use uucore::libc::time_t;
 
 use uucore::error::{UResult, USimpleError};
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, Command, ValueHint};
-
-use uucore::{format_usage, help_about, help_usage};
-
 #[cfg(target_os = "openbsd")]
 use utmp_classic::{parse_from_path, UtmpEntry};
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::*;
-
-const ABOUT: &str = help_about!("uptime.md");
-const USAGE: &str = help_usage!("uptime.md");
-pub mod options {
-    pub static SINCE: &str = "since";
-    pub static PATH: &str = "path";
-}
 
 #[cfg(unix)]
 use uucore::libc::getloadavg;
@@ -67,8 +56,8 @@ impl UError for UptimeError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
-    let argument = matches.get_many::<OsString>(options::PATH);
+    let matches = crate::uu_app().try_get_matches_from(args)?;
+    let argument = matches.get_many::<OsString>(crate::options::PATH);
 
     // Switches to default uptime behaviour if there is no argument
     if argument.is_none() {
@@ -89,28 +78,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     uptime_with_file(file_path)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::SINCE)
-                .short('s')
-                .long(options::SINCE)
-                .help("system up since")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PATH)
-                .help("file to search boot time from")
-                .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
-                .value_hint(ValueHint::AnyPath),
-        )
 }
 
 #[cfg(unix)]
@@ -215,7 +182,7 @@ fn default_uptime(matches: &ArgMatches) -> UResult<()> {
     #[cfg(not(target_os = "openbsd"))]
     let uptime = get_uptime(boot_time);
 
-    if matches.get_flag(options::SINCE) {
+    if matches.get_flag(crate::options::SINCE) {
         let initial_date = Local
             .timestamp_opt(Utc::now().timestamp() - uptime, 0)
             .unwrap();
