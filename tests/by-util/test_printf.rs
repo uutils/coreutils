@@ -774,3 +774,21 @@ fn format_spec_zero_string_fails() {
     // It is invalid to have the format spec '%0s'
     new_ucmd!().args(&["%0s", "3"]).fails().code_is(1);
 }
+
+#[test]
+fn invalid_precision_fails() {
+    // It is invalid to have length of output string greater than i32::MAX
+    new_ucmd!()
+        .args(&["%.*d", "2147483648", "0"])
+        .fails()
+        .stderr_is("printf: invalid precision: '2147483648'\n");
+}
+
+#[test]
+fn float_invalid_precision_fails() {
+    // It is invalid to have length of output string greater than i32::MAX
+    new_ucmd!()
+        .args(&["%.*f", "2147483648", "0"])
+        .fails()
+        .stderr_is("printf: invalid precision: '2147483648'\n");
+}

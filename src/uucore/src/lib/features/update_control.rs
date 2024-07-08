@@ -48,26 +48,30 @@
 //! ```
 use clap::ArgMatches;
 
-// Available update mode
+/// Available update mode
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateMode {
-    // --update=`all`, ``
+    /// --update=`all`, ``
     ReplaceAll,
-    // --update=`none`
+    /// --update=`none`
     ReplaceNone,
-    // --update=`older`
-    // -u
+
+    /// --update=`older`
+    /// -u
     ReplaceIfOlder,
 }
 
 pub mod arguments {
+    //! Pre-defined arguments for update functionality.
     use crate::shortcut_value_parser::ShortcutValueParser;
     use clap::ArgAction;
 
+    /// `--update` argument
     pub static OPT_UPDATE: &str = "update";
+    /// `-u` argument
     pub static OPT_UPDATE_NO_ARG: &str = "u";
 
-    // `--update` argument, defaults to `older` if no values are provided
+    /// `--update` argument, defaults to `older` if no values are provided
     pub fn update() -> clap::Arg {
         clap::Arg::new(OPT_UPDATE)
             .long("update")
@@ -80,7 +84,7 @@ pub mod arguments {
             .action(clap::ArgAction::Set)
     }
 
-    // `-u` argument
+    /// `-u` argument
     pub fn update_no_args() -> clap::Arg {
         clap::Arg::new(OPT_UPDATE_NO_ARG)
             .short('u')

@@ -2,7 +2,7 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink
 
 set -e
 
@@ -343,3 +343,26 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
 # no need to replicate this output with hashsum
 sed -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
+
+# Our ls command always outputs ANSI color codes prepended with a zero. However,
+# in the case of GNU, it seems inconsistent. Nevertheless, it looks like it
+# doesn't matter whether we prepend a zero or not.
+sed -i -E 's/\^\[\[([1-9]m)/^[[0\1/g;  s/\^\[\[m/^[[0m/g' tests/ls/color-norm.sh
+# It says in the test itself that having more than one reset is a bug, so we
+# don't need to replicate that behavior.
+sed -i -E 's/(\^\[\[0m)+/\^\[\[0m/g' tests/ls/color-norm.sh
+
+# GNU's ls seems to output color codes in the order given in the environment
+# variable, but our ls seems to output them in a predefined order. Nevertheless,
+# the order doesn't matter, so it's okay.
+sed -i  's/44;37/37;44/' tests/ls/multihardlink.sh
+
+# Just like mentioned in the previous patch, GNU's ls output color codes in the
+# same way it is specified in the environment variable, but our ls emits them
+# differently. In this case, the color code is set to 0;31;42, and our ls would
+# ignore the 0; part. This would have been a bug if we output color codes
+# individually, for example, ^[[31^[[42 instead of ^[[31;42, but we don't do
+# that anywhere in our implementation, and it looks like GNU's ls also doesn't
+# do that. So, it's okay to ignore the zero.
+sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/color-clear-to-eol.sh
+

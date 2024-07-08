@@ -5,6 +5,7 @@
 // spell-checker:ignore (words) helloworld nodir objdump n'source
 
 use crate::common::util::{is_ci, run_ucmd_as_root, TestScenario};
+#[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -523,6 +524,7 @@ fn test_install_failing_no_such_file() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_install_copy_then_compare_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1598,6 +1600,7 @@ fn test_install_chown_directory_invalid() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_install_compare_option() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

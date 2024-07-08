@@ -109,7 +109,7 @@ impl Filesystem {
         #[cfg(unix)]
         let usage = FsUsage::new(statfs(_stat_path).ok()?);
         #[cfg(windows)]
-        let usage = FsUsage::new(Path::new(&_stat_path));
+        let usage = FsUsage::new(Path::new(&_stat_path)).ok()?;
         Some(Self {
             mount_info,
             usage,

@@ -12,7 +12,6 @@ use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::display::Quotable;
-use uucore::error::FromIo;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
 use uucore::parse_size::ParseSizeError;
@@ -333,7 +332,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
 /// `opt` excludes certain filesystems from consideration and allows for the synchronization of filesystems before running; see
 /// [`Options`] for more information.
 
-fn get_all_filesystems(opt: &Options) -> Result<Vec<Filesystem>, std::io::Error> {
+fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
         #[cfg(not(any(windows, target_os = "redox")))]
@@ -361,7 +360,7 @@ fn get_all_filesystems(opt: &Options) -> Result<Vec<Filesystem>, std::io::Error>
 }
 
 /// For each path, get the filesystem that contains that path.
-fn get_named_filesystems<P>(paths: &[P], opt: &Options) -> Result<Vec<Filesystem>, std::io::Error>
+fn get_named_filesystems<P>(paths: &[P], opt: &Options) -> UResult<Vec<Filesystem>>
 where
     P: AsRef<Path>,
 {
@@ -443,8 +442,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Get the list of filesystems to display in the output table.
     let filesystems: Vec<Filesystem> = match matches.get_many::<String>(OPT_PATHS) {
         None => {
-            let filesystems = get_all_filesystems(&opt)
-                .map_err_context(|| "cannot read table of mounted file systems".into())?;
+            let filesystems = get_all_filesystems(&opt).map_err(|e| {
+                let context = "cannot read table of mounted file systems";
+                USimpleError::new(e.code(), format!("{}: {}", context, e))
+            })?;
 
             if filesystems.is_empty() {
                 return Err(USimpleError::new(1, "no file systems processed"));
@@ -454,8 +455,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         Some(paths) => {
             let paths: Vec<_> = paths.collect();
-            let filesystems = get_named_filesystems(&paths, &opt)
-                .map_err_context(|| "cannot read table of mounted file systems".into())?;
+            let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
+                let context = "cannot read table of mounted file systems";
+                USimpleError::new(e.code(), format!("{}: {}", context, e))
+            })?;
 
             // This can happen if paths are given as command-line arguments
             // but none of the paths exist.

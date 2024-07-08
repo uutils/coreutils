@@ -488,7 +488,7 @@ fn test_cp_arg_interactive() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+#[cfg(not(any(target_os = "android", target_os = "freebsd", target_os = "openbsd")))]
 fn test_cp_arg_interactive_update_overwrite_newer() {
     // -u -i won't show the prompt to validate the override or not
     // Therefore, the error code will be 0
@@ -606,6 +606,36 @@ fn test_cp_arg_link_with_same_file() {
 
     assert_eq!(at.metadata(file).st_nlink(), 1);
     assert!(at.file_exists(file));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_verbose_preserved_link_to_dir() {
+    use std::os::linux::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let hardlink = "hardlink";
+    let dir = "dir";
+    let dst_file = "dir/file";
+    let dst_hardlink = "dir/hardlink";
+
+    at.touch(file);
+    at.hard_link(file, hardlink);
+    at.mkdir(dir);
+
+    ucmd.args(&["-d", "--verbose", file, hardlink, dir])
+        .succeeds()
+        .stdout_is("'file' -> 'dir/file'\n'hardlink' -> 'dir/hardlink'\n");
+
+    assert!(at.file_exists(dst_file));
+    assert!(at.file_exists(dst_hardlink));
+    assert_eq!(at.metadata(dst_file).st_nlink(), 2);
+    assert_eq!(at.metadata(dst_hardlink).st_nlink(), 2);
+    assert_eq!(
+        at.metadata(dst_file).st_ino(),
+        at.metadata(dst_hardlink).st_ino()
+    );
 }
 
 #[test]
@@ -1255,6 +1285,7 @@ fn test_cp_parents_dest_not_directory() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_cp_parents_with_permissions_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1295,6 +1326,7 @@ fn test_cp_parents_with_permissions_copy_file() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_cp_parents_with_permissions_copy_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1352,6 +1384,7 @@ fn test_cp_issue_1665() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_cp_preserve_no_args() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src_file = "a";
@@ -1379,6 +1412,7 @@ fn test_cp_preserve_no_args() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_cp_preserve_no_args_before_opts() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src_file = "a";
@@ -1433,7 +1467,7 @@ fn test_cp_preserve_all() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "openbsd"))))]
 fn test_cp_preserve_xattr() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src_file = "a";
@@ -2298,9 +2332,9 @@ fn test_closes_file_descriptors() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_cp_sparse_never_empty() {
+    const BUFFER_SIZE: usize = 4096 * 4;
     let (at, mut ucmd) = at_and_ucmd!();
 
-    const BUFFER_SIZE: usize = 4096 * 4;
     let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
     at.make_file("src_file1");
@@ -2318,10 +2352,10 @@ fn test_cp_sparse_never_empty() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_cp_sparse_always_empty() {
+    const BUFFER_SIZE: usize = 4096 * 4;
     for argument in ["--sparse=always", "--sparse=alway", "--sparse=al"] {
         let (at, mut ucmd) = at_and_ucmd!();
 
-        const BUFFER_SIZE: usize = 4096 * 4;
         let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
         at.make_file("src_file1");
@@ -2338,9 +2372,9 @@ fn test_cp_sparse_always_empty() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_cp_sparse_always_non_empty() {
+    const BUFFER_SIZE: usize = 4096 * 16 + 3;
     let (at, mut ucmd) = at_and_ucmd!();
 
-    const BUFFER_SIZE: usize = 4096 * 16 + 3;
     let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
     let blocks_to_touch = [buf.len() / 3, 2 * (buf.len() / 3)];
 
@@ -2408,12 +2442,11 @@ fn test_cp_sparse_never_reflink_always() {
 #[cfg(feature = "truncate")]
 #[test]
 fn test_cp_reflink_always_override() {
-    let scene = TestScenario::new(util_name!());
-
     const DISK: &str = "disk.img";
     const ROOTDIR: &str = "disk_root/";
     const USERDIR: &str = "dir/";
     const MOUNTPOINT: &str = "mountpoint/";
+    let scene = TestScenario::new(util_name!());
 
     let src1_path: &str = &[MOUNTPOINT, USERDIR, "src1"].concat();
     let src2_path: &str = &[MOUNTPOINT, USERDIR, "src2"].concat();
@@ -2529,6 +2562,7 @@ fn test_copy_symlink_force() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 fn test_no_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
@@ -2545,12 +2579,12 @@ fn test_no_preserve_mode() {
     let umask: u16 = 0o022;
     ucmd.arg("file")
         .arg("dest")
-        .umask(umask as libc::mode_t)
+        .umask(libc::mode_t::from(umask))
         .succeeds()
         .no_stderr()
         .no_stdout();
     // remove sticky bit, setuid and setgid bit; apply umask
-    let expected_perms = PERMS_ALL & !0o7000 & !umask as u32;
+    let expected_perms = PERMS_ALL & !0o7000 & u32::from(!umask);
     assert_eq!(
         at.plus("dest").metadata().unwrap().mode() & 0o7777,
         expected_perms
@@ -2559,6 +2593,7 @@ fn test_no_preserve_mode() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 fn test_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
@@ -2716,7 +2751,7 @@ fn test_cp_dangling_symlink_inside_directory() {
 }
 
 /// Test for copying a dangling symbolic link and its permissions.
-#[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))] // FIXME: fix this test for FreeBSD/OpenBSD
 #[test]
 fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2934,7 +2969,7 @@ fn test_copy_same_symlink_no_dereference_dangling() {
 }
 
 // TODO: enable for Android, when #3477 solved
-#[cfg(not(any(windows, target_os = "android")))]
+#[cfg(not(any(windows, target_os = "android", target_os = "openbsd")))]
 #[test]
 fn test_cp_parents_2_dirs() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3164,7 +3199,7 @@ fn test_copy_nested_directory_to_itself_disallowed() {
 }
 
 /// Test for preserving permissions when copying a directory.
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
 fn test_copy_dir_preserve_permissions() {
     // Create a directory that has some non-default permissions.
@@ -3194,7 +3229,7 @@ fn test_copy_dir_preserve_permissions() {
 
 /// Test for preserving permissions when copying a directory, even in
 /// the face of an inaccessible file in that directory.
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
 fn test_copy_dir_preserve_permissions_inaccessible_file() {
     // Create a directory that has some non-default permissions and
@@ -3264,7 +3299,7 @@ fn test_same_file_force_backup() {
 }
 
 /// Test for copying the contents of a FIFO as opposed to the FIFO object itself.
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
 fn test_copy_contents_fifo() {
     // TODO this test should work on FreeBSD, but the command was
@@ -3324,7 +3359,7 @@ fn test_reflink_never_sparse_always() {
 
 /// Test for preserving attributes of a hard link in a directory.
 #[test]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "openbsd")))]
 fn test_preserve_hardlink_attributes_in_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -5447,6 +5482,7 @@ mod link_deref {
 // disable these excessive permissions.
 #[test]
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 fn test_dir_perm_race_with_preserve_mode_and_ownership() {
     const SRC_DIR: &str = "src";
     const DEST_DIR: &str = "dest";
@@ -5477,16 +5513,17 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         let start_time = std::time::Instant::now();
         // wait for cp to create dirs
         loop {
-            if start_time.elapsed() >= timeout {
-                panic!("timed out: cp took too long to create destination directory")
-            }
+            assert!(
+                start_time.elapsed() < timeout,
+                "timed out: cp took too long to create destination directory"
+            );
             if at.dir_exists(&format!("{}/{}", DEST_DIR, SRC_DIR)) {
                 break;
             }
             std::thread::sleep(Duration::from_millis(100));
         }
         let mode = at.metadata(&format!("{}/{}", DEST_DIR, SRC_DIR)).mode();
-        #[allow(clippy::unnecessary_cast)]
+        #[allow(clippy::unnecessary_cast, clippy::cast_lossless)]
         let mask = if attr == "mode" {
             libc::S_IWGRP | libc::S_IWOTH
         } else {

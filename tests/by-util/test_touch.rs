@@ -689,10 +689,23 @@ fn test_touch_system_fails() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_touch_trailing_slash() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "no-file/";
-    ucmd.args(&[file]).fails();
+    ucmd.args(&[file]).fails().stderr_only(format!(
+        "touch: cannot touch '{file}': No such file or directory\n"
+    ));
+}
+
+#[test]
+#[cfg(target_os = "windows")]
+fn test_touch_trailing_slash_windows() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "no-file/";
+    ucmd.args(&[file]).fails().stderr_only(format!(
+        "touch: cannot touch '{file}': The filename, directory name, or volume label syntax is incorrect.\n"
+    ));
 }
 
 #[test]
@@ -708,7 +721,7 @@ fn test_touch_no_such_file_error_msg() {
 }
 
 #[test]
-#[cfg(not(target_os = "freebsd"))]
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
 fn test_touch_changes_time_of_file_in_stdout() {
     // command like: `touch - 1< ./c`
     // should change the timestamp of c
@@ -851,6 +864,7 @@ fn test_touch_no_dereference_dangling() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_touch_dash() {
     let (_, mut ucmd) = at_and_ucmd!();
 

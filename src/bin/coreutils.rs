@@ -34,6 +34,8 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     );
 }
 
+/// # Panics
+/// Panics if the binary path cannot be determined
 fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     match args.next() {
         Some(ref s) if !s.is_empty() => PathBuf::from(s),
@@ -85,9 +87,8 @@ fn main() {
             process::exit(1);
         }
 
-        let util = match util_os.to_str() {
-            Some(util) => util,
-            None => not_found(&util_os),
+        let Some(util) = util_os.to_str() else {
+            not_found(&util_os)
         };
 
         match util {
@@ -113,9 +114,8 @@ fn main() {
                 if util == "--help" || util == "-h" {
                     // see if they want help on a specific util
                     if let Some(util_os) = args.next() {
-                        let util = match util_os.to_str() {
-                            Some(util) => util,
-                            None => not_found(&util_os),
+                        let Some(util) = util_os.to_str() else {
+                            not_found(&util_os)
                         };
 
                         match utils.get(util) {
@@ -145,6 +145,8 @@ fn main() {
 }
 
 /// Prints completions for the utility in the first parameter for the shell in the second parameter to stdout
+/// # Panics
+/// Panics if the utility map is empty
 fn gen_completions<T: uucore::Args>(
     args: impl Iterator<Item = OsString>,
     util_map: &UtilityMap<T>,
@@ -183,6 +185,8 @@ fn gen_completions<T: uucore::Args>(
 }
 
 /// Generate the manpage for the utility in the first parameter
+/// # Panics
+/// Panics if the utility map is empty
 fn gen_manpage<T: uucore::Args>(
     args: impl Iterator<Item = OsString>,
     util_map: &UtilityMap<T>,
@@ -215,6 +219,8 @@ fn gen_manpage<T: uucore::Args>(
     process::exit(0);
 }
 
+/// # Panics
+/// Panics if the utility map is empty
 fn gen_coreutils_app<T: uucore::Args>(util_map: &UtilityMap<T>) -> Command {
     let mut command = Command::new("coreutils");
     for (name, (_, sub_app)) in util_map {

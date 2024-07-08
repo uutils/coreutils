@@ -35,6 +35,8 @@ cd "${project_main_dir}" &&
     else
     # Find 'coreutils' id with regex
     # with cargo v1.76.0, id = "coreutils 0.0.26 (path+file://<coreutils local directory>)"
-    # with cargo v1.77.0, id = "path+file://<coreutils local directory>#coreutils@0.0.26"
-        cargo metadata "$@" --format-version 1 | jq -r '[.resolve.nodes[] | select(.id|match(".*coreutils[ |@]\\d+\\.\\d+\\.\\d+")) | .deps[] | select(.pkg|match("uu_")) | .name | sub("^uu_"; "")] | sort | join(" ")'
+    # with cargo >= v1.77.0
+    # - if local path != '<...>/coreutils' id = "path+file://<coreutils local directory>#coreutils@0.0.26"
+    # - if local path == '<...>/coreutils' id = "path+file://<parent directory>/coreutils#0.0.26"
+        cargo metadata "$@" --format-version 1 | jq -r '[.resolve.nodes[] | select(.id|match(".*coreutils[ |@|#]\\d+\\.\\d+\\.\\d+")) | .deps[] | select(.pkg|match("uu_")) | .name | sub("^uu_"; "")] | sort | join(" ")'
     fi

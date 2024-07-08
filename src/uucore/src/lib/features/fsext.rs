@@ -25,7 +25,6 @@ static EXIT_ERR: i32 = 1;
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
-use crate::crash;
 #[cfg(windows)]
 use crate::show_warning;
 
@@ -376,6 +375,15 @@ extern "C" {
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 
+use crate::error::UResult;
+#[cfg(any(
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "windows"
+))]
+use crate::error::USimpleError;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -395,8 +403,9 @@ use std::ptr;
     target_os = "openbsd"
 ))]
 use std::slice;
+
 /// Read file system list.
-pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
+pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let (file_name, f) = File::open(LINUX_MOUNTINFO)
@@ -422,7 +431,7 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
         let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
         if len < 0 {
-            crash!(1, "get_mount_info() failed");
+            return Err(USimpleError::new(1, "get_mount_info() failed"));
         }
         let mounts = unsafe { slice::from_raw_parts(mount_buffer_ptr, len as usize) };
         Ok(mounts
@@ -437,11 +446,9 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         let find_handle =
             unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
         if INVALID_HANDLE_VALUE == find_handle {
-            crash!(
-                EXIT_ERR,
-                "FindFirstVolumeW failed: {}",
-                IOError::last_os_error()
-            );
+            let os_err = IOError::last_os_error();
+            let msg = format!("FindFirstVolumeW failed: {}", os_err);
+            return Err(USimpleError::new(EXIT_ERR, msg));
         }
         let mut mounts = Vec::<MountInfo>::new();
         loop {
@@ -462,7 +469,8 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
             } {
                 let err = IOError::last_os_error();
                 if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
-                    crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
+                    let msg = format!("FindNextVolumeW failed: {err}");
+                    return Err(USimpleError::new(EXIT_ERR, msg));
                 }
                 break;
             }
@@ -554,7 +562,7 @@ impl FsUsage {
         }
     }
     #[cfg(windows)]
-    pub fn new(path: &Path) -> Self {
+    pub fn new(path: &Path) -> UResult<Self> {
         let mut root_path = [0u16; MAX_PATH];
         let success = unsafe {
             let path = to_nul_terminated_wide_string(path);
@@ -567,11 +575,11 @@ impl FsUsage {
             )
         };
         if 0 == success {
-            crash!(
-                EXIT_ERR,
+            let msg = format!(
                 "GetVolumePathNamesForVolumeNameW failed: {}",
                 IOError::last_os_error()
             );
+            return Err(USimpleError::new(EXIT_ERR, msg));
         }
 
         let mut sectors_per_cluster = 0;
@@ -599,7 +607,7 @@ impl FsUsage {
         }
 
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
-        Self {
+        Ok(Self {
             // f_bsize      File system block size.
             blocksize: bytes_per_cluster,
             // f_blocks - Total number of blocks on the file system, in units of f_frsize.
@@ -614,7 +622,7 @@ impl FsUsage {
             files: 0, // Not available on windows
             // Total number of free file nodes (inodes).
             ffree: 0, // Meaningless on Windows
-        }
+        })
     }
 }
 

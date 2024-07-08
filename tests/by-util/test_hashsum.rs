@@ -890,3 +890,39 @@ fn test_star_to_start() {
         .succeeds()
         .stdout_only("f: OK\n");
 }
+
+#[test]
+fn test_check_b2sum_strict_check() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    let checksums = [
+        "2e  f\n",
+        "e4a6a0577479b2b4  f\n",
+        "cae66941d9efbd404e4d88758ea67670  f\n",
+        "246c0442cd564aced8145b8b60f1370aa7  f\n",
+        "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8  f\n",
+        "4ded8c5fc8b12f3273f877ca585a44ad6503249a2b345d6d9c0e67d85bcb700db4178c0303e93b8f4ad758b8e2c9fd8b3d0c28e585f1928334bb77d36782e8  f\n",
+        "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce  f\n",
+    ];
+
+    at.write("ck", &checksums.join(""));
+
+    let output = "f: OK\n".to_string().repeat(checksums.len());
+
+    scene
+        .ccmd("b2sum")
+        .arg("-c")
+        .arg(at.subdir.join("ck"))
+        .succeeds()
+        .stdout_only(&output);
+
+    scene
+        .ccmd("b2sum")
+        .arg("--strict")
+        .arg("-c")
+        .arg(at.subdir.join("ck"))
+        .succeeds()
+        .stdout_only(&output);
+}

@@ -207,38 +207,15 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         binary_flag_default
     };
     let check = matches.get_flag("check");
-    let tag = matches.get_flag("tag");
-    let nonames = *matches
-        .try_get_one("no-names")
-        .unwrap_or(None)
-        .unwrap_or(&false);
     let status = matches.get_flag("status");
     let quiet = matches.get_flag("quiet") || status;
-    //let strict = matches.get_flag("strict");
     let warn = matches.get_flag("warn") && !status;
-    let zero = matches.get_flag("zero");
     let ignore_missing = matches.get_flag("ignore-missing");
 
     if ignore_missing && !check {
         // --ignore-missing needs -c
         return Err(ChecksumError::IgnoreNotCheck.into());
     }
-
-    let opts = Options {
-        algoname: algo.name,
-        digest: (algo.create_fn)(),
-        output_bits: algo.bits,
-        binary,
-        //check,
-        tag,
-        nonames,
-        //status,
-        //quiet,
-        //strict,
-        //warn,
-        zero,
-        //ignore_missing,
-    };
 
     if check {
         let text_flag = matches.get_flag("text");
@@ -269,6 +246,26 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             Some(algo.bits),
         );
     }
+
+    let nonames = *matches
+        .try_get_one("no-names")
+        .unwrap_or(None)
+        .unwrap_or(&false);
+    let zero = matches.get_flag("zero");
+
+    let opts = Options {
+        algoname: algo.name,
+        digest: (algo.create_fn)(),
+        output_bits: algo.bits,
+        binary,
+        tag: matches.get_flag("tag"),
+        nonames,
+        //status,
+        //quiet,
+        //warn,
+        zero,
+        //ignore_missing,
+    };
 
     // Show the hashsum of the input
     match matches.get_many::<OsString>(options::FILE) {
