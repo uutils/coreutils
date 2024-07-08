@@ -133,7 +133,7 @@ impl TryFrom<String> for TerminalType {
     type Error = ();
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::try_from(PathBuf::from(value))
+        Self::try_from(value.as_str())
     }
 }
 
@@ -252,14 +252,6 @@ impl TryFrom<String> for RunState {
     type Error = io::Error;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::try_from(value.as_str())
-    }
-}
-
-impl TryFrom<&String> for RunState {
-    type Error = io::Error;
-
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
@@ -534,6 +526,8 @@ mod tests {
 
         assert!(RunState::try_from("G").is_err());
         assert!(RunState::try_from("Rg").is_err());
+
+        assert!(RunState::try_from(String::from("Rg")).is_err());
     }
 
     fn current_pid() -> usize {
@@ -557,7 +551,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pid_entry() {
+    fn test_process_information() {
         let current_pid = current_pid();
 
         let mut pid_entry = ProcessInformation::try_new(
@@ -574,6 +568,12 @@ mod tests {
             .collect::<HashSet<_>>();
 
         assert_eq!(pid_entry.ttys().unwrap(), result.into());
+    }
+
+    #[test]
+    fn test_process_information_new() {
+        let result = ProcessInformation::try_new(PathBuf::from_iter(["/", "proc", "self"]));
+        assert!(result.is_ok());
     }
 
     #[test]
