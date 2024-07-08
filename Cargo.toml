@@ -363,8 +363,8 @@ uu_base32 = { version = ">=0.0.18", path = "src/uu/base32" }
 clap = { workspace = true }
 once_cell = { workspace = true }
 uucore = { workspace = true }
-clap_complete.workspace = true
-clap_mangen.workspace = true
+clap_complete = { workspace = true }
+clap_mangen = { workspace = true }
 phf = { workspace = true }
 selinux = { workspace = true, optional = true }
 textwrap = { workspace = true }
