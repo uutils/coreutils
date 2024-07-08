@@ -259,6 +259,7 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
 }
 
 impl ChownExecutor {
+    /// Execute the chown command
     pub fn exec(&self) -> UResult<()> {
         let mut ret = 0;
         for f in &self.files {
@@ -487,32 +488,58 @@ impl ChownExecutor {
     }
 }
 
+/// common options
 pub mod options {
+    /// help flag option
     pub const HELP: &str = "help";
+
+    /// verbosity flags
     pub mod verbosity {
+        /// changes flag option
         pub const CHANGES: &str = "changes";
+        /// quiet flag option
         pub const QUIET: &str = "quiet";
+        /// silent flag option
         pub const SILENT: &str = "silent";
+        /// verbose flag option
         pub const VERBOSE: &str = "verbose";
     }
+
+    /// preserve-root flags
     pub mod preserve_root {
+        /// preserve-root flag option
         pub const PRESERVE: &str = "preserve-root";
+        /// no-preserve-root flag option
         pub const NO_PRESERVE: &str = "no-preserve-root";
     }
+    /// dereference flags
     pub mod dereference {
+        /// dereference flag option
         pub const DEREFERENCE: &str = "dereference";
+        /// no-dereference flag option
         pub const NO_DEREFERENCE: &str = "no-dereference";
     }
+    /// from flag
     pub const FROM: &str = "from";
+    /// recursive flag option
     pub const RECURSIVE: &str = "recursive";
+
+    /// traverse flags
     pub mod traverse {
+        /// traverse flag option
         pub const TRAVERSE: &str = "H";
+        /// no-traverse flag option
         pub const NO_TRAVERSE: &str = "P";
+        /// traverse every flag option
         pub const EVERY: &str = "L";
     }
+    /// reference flag option
     pub const REFERENCE: &str = "reference";
+    /// owner flag arg
     pub const ARG_OWNER: &str = "OWNER";
+    /// group flag arg
     pub const ARG_GROUP: &str = "GROUP";
+    /// files arg
     pub const ARG_FILES: &str = "FILE";
 }
 
