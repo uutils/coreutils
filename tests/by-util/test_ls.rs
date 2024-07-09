@@ -4950,3 +4950,18 @@ fn test_ls_color_clear_to_eol() {
     // cspell:disable-next-line
     result.stdout_contains("\x1b[0m\x1b[31;42mzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\x1b[0m\x1b[K");
 }
+
+#[test]
+fn test_ls_quotes_dirname_when_a_column_exists() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    //create a folder with a column in it.
+    at.mkdir("dir:name");
+    at.touch("dir:name/file1");
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("--quoting=shell-escape")
+        .succeeds()
+        .stdout_contains("'./dir:name'");
+}
