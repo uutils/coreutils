@@ -2814,6 +2814,7 @@ name = "uu_hostname"
 version = "0.0.27"
 dependencies = [
  "clap",
+ "dns-lookup",
  "hostname",
  "uucore",
  "windows-sys 0.48.0",
