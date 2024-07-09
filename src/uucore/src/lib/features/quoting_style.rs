@@ -285,7 +285,7 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
 }
 
 /// Escape a name according to the given quoting style.
-pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+pub fn escape_name(name: &OsStr, style: &QuotingStyle, quote_if_contains: &[char]) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {
             if *show_control {
@@ -316,7 +316,9 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             show_control,
         } => {
             let name = name.to_string_lossy();
-            let (quotes, must_quote) = if name.contains(&['"', '`', '$', '\\'][..]) {
+            let (quotes, must_quote) = if name
+                .contains(|v| ['"', '`', '$', '\\'].contains(&v) || quote_if_contains.contains(&v))
+            {
                 (Quotes::Single, true)
             } else if name.contains('\'') {
                 (Quotes::Double, true)
@@ -432,7 +434,7 @@ mod tests {
     fn check_names(name: &str, map: &[(&str, &str)]) {
         assert_eq!(
             map.iter()
-                .map(|(_, style)| escape_name(name.as_ref(), &get_style(style)))
+                .map(|(_, style)| escape_name(name.as_ref(), &get_style(style), &[]))
                 .collect::<Vec<String>>(),
             map.iter()
                 .map(|(correct, _)| correct.to_string())

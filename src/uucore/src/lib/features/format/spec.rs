@@ -363,6 +363,7 @@ impl Spec {
                                 always_quote: false,
                                 show_control: false,
                             },
+                            &[],
                         )
                         .as_bytes(),
                     )

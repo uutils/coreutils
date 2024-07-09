@@ -101,6 +101,7 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
                 &QuotingStyle::C {
                     quotes: Quotes::None,
                 },
+                &[],
             );
             match e {
                 ParseError::Overflow => {

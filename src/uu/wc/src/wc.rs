@@ -259,7 +259,7 @@ impl<'a> Input<'a> {
         match self {
             Self::Path(path) => Some(match path.to_str() {
                 Some(s) if !s.contains('\n') => Cow::Borrowed(s),
-                _ => Cow::Owned(escape_name(path.as_os_str(), QS_ESCAPE)),
+                _ => Cow::Owned(escape_name(path.as_os_str(), QS_ESCAPE, &[])),
             }),
             Self::Stdin(StdinKind::Explicit) => Some(Cow::Borrowed(STDIN_REPR)),
             Self::Stdin(StdinKind::Implicit) => None,
@@ -269,7 +269,7 @@ impl<'a> Input<'a> {
     /// Converts input into the form that appears in errors.
     fn path_display(&self) -> String {
         match self {
-            Self::Path(path) => escape_name(path.as_os_str(), QS_ESCAPE),
+            Self::Path(path) => escape_name(path.as_os_str(), QS_ESCAPE, &[]),
             Self::Stdin(_) => String::from("standard input"),
         }
     }
@@ -361,7 +361,7 @@ impl WcError {
             Some((input, idx)) => {
                 let path = match input {
                     Input::Stdin(_) => STDIN_REPR.into(),
-                    Input::Path(path) => escape_name(path.as_os_str(), QS_ESCAPE).into(),
+                    Input::Path(path) => escape_name(path.as_os_str(), QS_ESCAPE, &[]).into(),
                 };
                 Self::ZeroLengthFileNameCtx { path, idx }
             }
@@ -761,7 +761,7 @@ fn files0_iter_file<'a>(path: &Path) -> UResult<impl Iterator<Item = InputIterIt
         Err(e) => Err(e.map_err_context(|| {
             format!(
                 "cannot open {} for reading",
-                escape_name(path.as_os_str(), QS_QUOTE_ESCAPE)
+                escape_name(path.as_os_str(), QS_QUOTE_ESCAPE, &[])
             )
         })),
     }
@@ -794,7 +794,7 @@ fn files0_iter<'a>(
                     }
                 }
                 Err(e) => Err(e.map_err_context(|| {
-                    format!("{}: read error", escape_name(&err_path, QS_ESCAPE))
+                    format!("{}: read error", escape_name(&err_path, QS_ESCAPE, &[]))
                 }) as Box<dyn UError>),
             }),
     );

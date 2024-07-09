@@ -2037,12 +2037,18 @@ impl PathData {
 }
 
 fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
+    let name = escape_name(
+        path_data.p_buf.as_os_str(),
+        &config.quoting_style,
+        // We tell `escape_name` to quote if it contains ':' because the user
+        // could distinguish it from the ":" we are about to print next.
+        &[':'],
+    );
     if config.hyperlink && !config.dired {
-        let name = escape_name(path_data.p_buf.as_os_str(), &config.quoting_style);
         let hyperlink = create_hyperlink(&name, path_data);
         write!(out, "{}:", hyperlink).unwrap();
     } else {
-        write!(out, "{}:", path_data.p_buf.display()).unwrap();
+        write!(out, "{}:", name).unwrap();
     }
 }
 
@@ -2499,7 +2505,7 @@ fn display_items(
     // option, print the security context to the left of the size column.
 
     let quoted = items.iter().any(|item| {
-        let name = escape_name(&item.display_name, &config.quoting_style);
+        let name = escape_name(&item.display_name, &config.quoting_style, &[]);
         name.starts_with('\'')
     });
 
@@ -3213,7 +3219,7 @@ fn display_item_name(
     current_column: usize,
 ) -> String {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
-    let mut name = escape_name(&path.display_name, &config.quoting_style);
+    let mut name = escape_name(&path.display_name, &config.quoting_style, &[]);
 
     let is_wrap =
         |namelen: usize| config.width != 0 && current_column + namelen > config.width.into();
@@ -3295,7 +3301,7 @@ fn display_item_name(
                         name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
                     } else {
                         name.push_str(&color_name(
-                            &escape_name(target.as_os_str(), &config.quoting_style),
+                            &escape_name(target.as_os_str(), &config.quoting_style, &[]),
                             path,
                             style_manager,
                             out,
@@ -3306,7 +3312,7 @@ fn display_item_name(
                 } else {
                     // If no coloring is required, we just use target as is.
                     // Apply the right quoting
-                    name.push_str(&escape_name(target.as_os_str(), &config.quoting_style));
+                    name.push_str(&escape_name(target.as_os_str(), &config.quoting_style, &[]));
                 }
             }
             Err(err) => {
