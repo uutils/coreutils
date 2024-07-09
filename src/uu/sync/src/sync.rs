@@ -35,40 +35,41 @@ mod platform {
     use std::fs::File;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::os::unix::io::AsRawFd;
+    use uucore::error::UResult;
 
     /// # Safety
     /// This function is unsafe because it calls `libc::sync` or `libc::syscall` which are unsafe.
-    pub unsafe fn do_sync() -> isize {
+    pub unsafe fn do_sync() -> UResult<()> {
         // see https://github.com/rust-lang/libc/pull/2161
         #[cfg(target_os = "android")]
         libc::syscall(libc::SYS_sync);
         #[cfg(not(target_os = "android"))]
         libc::sync();
-        0
+        Ok(())
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     /// # Safety
     /// This function is unsafe because it calls `libc::syscall` which is unsafe.
-    pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
+    pub unsafe fn do_syncfs(files: Vec<String>) -> UResult<()> {
         for path in files {
             let f = File::open(path).unwrap();
             let fd = f.as_raw_fd();
             libc::syscall(libc::SYS_syncfs, fd);
         }
-        0
+        Ok(())
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     /// # Safety
     /// This function is unsafe because it calls `libc::syscall` which is unsafe.
-    pub unsafe fn do_fdatasync(files: Vec<String>) -> isize {
+    pub unsafe fn do_fdatasync(files: Vec<String>) -> UResult<()> {
         for path in files {
             let f = File::open(path).unwrap();
             let fd = f.as_raw_fd();
             libc::syscall(libc::SYS_fdatasync, fd);
         }
-        0
+        Ok(())
     }
 }
 
@@ -77,7 +78,7 @@ mod platform {
     use std::fs::OpenOptions;
     use std::os::windows::prelude::*;
     use std::path::Path;
-    use uucore::crash;
+    use uucore::error::{UResult, USimpleError};
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
         GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
@@ -89,50 +90,60 @@ mod platform {
 
     /// # Safety
     /// This function is unsafe because it calls an unsafe function.
-    unsafe fn flush_volume(name: &str) {
+    unsafe fn flush_volume(name: &str) -> UResult<()> {
         let name_wide = name.to_wide_null();
         if GetDriveTypeW(name_wide.as_ptr()) == DRIVE_FIXED {
             let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
                     if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
-                        crash!(GetLastError() as i32, "failed to flush file buffer");
+                        Err(USimpleError::new(
+                            GetLastError() as i32,
+                            "failed to flush file buffer",
+                        ))
+                    } else {
+                        Ok(())
                     }
                 }
-                Err(e) => crash!(
+                Err(e) => Err(USimpleError::new(
                     e.raw_os_error().unwrap_or(1),
-                    "failed to create volume handle"
-                ),
+                    "failed to create volume handle",
+                )),
             }
+        } else {
+            Ok(())
         }
     }
 
     /// # Safety
     /// This function is unsafe because it calls an unsafe function.
-    unsafe fn find_first_volume() -> (String, HANDLE) {
+    unsafe fn find_first_volume() -> UResult<(String, HANDLE)> {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
         let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
         if handle == INVALID_HANDLE_VALUE {
-            crash!(GetLastError() as i32, "failed to find first volume");
+            return Err(USimpleError::new(
+                GetLastError() as i32,
+                "failed to find first volume",
+            ));
         }
-        (String::from_wide_null(&name), handle)
+        Ok((String::from_wide_null(&name), handle))
     }
 
     /// # Safety
     /// This function is unsafe because it calls an unsafe function.
-    unsafe fn find_all_volumes() -> Vec<String> {
-        let (first_volume, next_volume_handle) = find_first_volume();
+    unsafe fn find_all_volumes() -> UResult<Vec<String>> {
+        let (first_volume, next_volume_handle) = find_first_volume()?;
         let mut volumes = vec![first_volume];
         loop {
             let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
             if FindNextVolumeW(next_volume_handle, name.as_mut_ptr(), name.len() as u32) == 0 {
-                match GetLastError() {
+                return match GetLastError() {
                     ERROR_NO_MORE_FILES => {
                         FindVolumeClose(next_volume_handle);
-                        return volumes;
+                        Ok(volumes)
                     }
-                    err => crash!(err as i32, "failed to find next volume"),
-                }
+                    err => Err(USimpleError::new(err as i32, "failed to find next volume")),
+                };
             } else {
                 volumes.push(String::from_wide_null(&name));
             }
@@ -141,17 +152,17 @@ mod platform {
 
     /// # Safety
     /// This function is unsafe because it calls `find_all_volumes` which is unsafe.
-    pub unsafe fn do_sync() -> isize {
-        let volumes = find_all_volumes();
+    pub unsafe fn do_sync() -> UResult<()> {
+        let volumes = find_all_volumes()?;
         for vol in &volumes {
-            flush_volume(vol);
+            flush_volume(vol)?;
         }
-        0
+        Ok(())
     }
 
     /// # Safety
     /// This function is unsafe because it calls `find_all_volumes` which is unsafe.
-    pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
+    pub unsafe fn do_syncfs(files: Vec<String>) -> UResult<()> {
         for path in files {
             flush_volume(
                 Path::new(&path)
@@ -161,9 +172,9 @@ mod platform {
                     .as_os_str()
                     .to_str()
                     .unwrap(),
-            );
+            )?;
         }
-        0
+        Ok(())
     }
 }
 
@@ -206,12 +217,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[allow(clippy::if_same_then_else)]
     if matches.get_flag(options::FILE_SYSTEM) {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-        syncfs(files);
+        syncfs(files)?;
     } else if matches.get_flag(options::DATA) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        fdatasync(files);
+        fdatasync(files)?;
     } else {
-        sync();
+        sync()?;
     }
     Ok(())
 }
@@ -245,16 +256,16 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn sync() -> isize {
+fn sync() -> UResult<()> {
     unsafe { platform::do_sync() }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-fn syncfs(files: Vec<String>) -> isize {
+fn syncfs(files: Vec<String>) -> UResult<()> {
     unsafe { platform::do_syncfs(files) }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn fdatasync(files: Vec<String>) -> isize {
+fn fdatasync(files: Vec<String>) -> UResult<()> {
     unsafe { platform::do_fdatasync(files) }
 }
