@@ -572,7 +572,7 @@ mod tests {
 
     #[test]
     fn test_process_information_new() {
-        let result = ProcessInformation::try_new(PathBuf::from_iter(["/", "proc", "self"]));
+        let result = ProcessInformation::try_new(PathBuf::from_iter(["/", "proc", "1"]));
         assert!(result.is_ok());
     }
 
