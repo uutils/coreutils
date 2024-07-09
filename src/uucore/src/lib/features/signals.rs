@@ -348,14 +348,15 @@ pub static ALL_SIGNALS: [&str; 37] = [
 
 /// Returns the signal number for a given signal name or value.
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
-    if let Ok(value) = signal_name_or_value.parse() {
+    let signal_name_upcase = signal_name_or_value.to_uppercase();
+    if let Ok(value) = signal_name_upcase.parse() {
         if is_signal(value) {
             return Some(value);
         } else {
             return None;
         }
     }
-    let signal_name = signal_name_or_value.trim_start_matches("SIG");
+    let signal_name = signal_name_upcase.trim_start_matches("SIG");
 
     ALL_SIGNALS.iter().position(|&s| s == signal_name)
 }
