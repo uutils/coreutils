@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
@@ -517,10 +519,39 @@ fn test_date_successive_file() {
          2023-04-01 12:00:00\n\
          2023-04-15 18:30:00",
     );
-    ucmd
-        .arg("-f")
+    ucmd.arg("-f")
         .arg("not-existent-file")
         .arg("-f")
+        .arg("file-with-dates")
+        .succeeds();
+}
+
+#[test]
+fn test_date_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch_and_set_modified("ref-file", SystemTime::UNIX_EPOCH);
+
+    ucmd.arg("-r")
+        .arg("ref-file")
+        .succeeds()
+        .stdout_is("Thu Jan  1 00:00:00 1970\n");
+}
+
+#[test]
+fn test_date_successive_reference() {
+    const FILE: &str = "file-with-dates";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write(
+        FILE,
+        "2023-03-27 08:30:00\n\
+         2023-04-01 12:00:00\n\
+         2023-04-15 18:30:00",
+    );
+    ucmd.arg("-r")
+        .arg("not-existent-file")
+        .arg("-r")
         .arg("file-with-dates")
         .succeeds();
 }
