@@ -318,6 +318,8 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(OPT_DATE)
                 .value_name("STRING")
+                .action(ArgAction::Set)
+                .overrides_with(OPT_DATE)
                 .help("display time described by STRING, not 'now'")
                 .conflicts_with_all(&[OPT_FILE, OPT_REFERENCE]),
         )
@@ -327,6 +329,8 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .action(ArgAction::Set)
+                .overrides_with(OPT_FILE) // several -f can be passed, but only the last is kept.
                 .help("like --date; once for each line of DATEFILE")
                 .conflicts_with_all(&[OPT_REFERENCE]),
         )
