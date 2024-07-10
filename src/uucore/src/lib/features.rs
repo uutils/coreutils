@@ -45,6 +45,8 @@ pub mod entries;
 pub mod perms;
 #[cfg(all(unix, feature = "pipes"))]
 pub mod pipes;
+#[cfg(all(target_os = "linux", feature = "proc-info"))]
+pub mod proc_info;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
 
