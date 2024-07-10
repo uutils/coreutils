@@ -4950,7 +4950,7 @@ fn test_ls_color_clear_to_eol() {
     // cspell:disable-next-line
     result.stdout_contains("\x1b[0m\x1b[31;42mzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\x1b[0m\x1b[K");
 }
-
+#[cfg(unix)]
 #[test]
 fn test_ls_quotes_dirname_when_a_column_exists() {
     let scene = TestScenario::new(util_name!());

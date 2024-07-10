@@ -123,7 +123,7 @@ impl EscapedChar {
         }
     }
 
-    fn new_c(c: char, quotes: Quotes) -> Self {
+    fn new_c(c: char, quotes: Quotes, force_escape: &[char]) -> Self {
         use EscapeState::*;
         let init_state = match c {
             '\x07' => Backslash('a'),
@@ -147,6 +147,7 @@ impl EscapedChar {
                 _ => Char(' '),
             },
             _ if c.is_ascii_control() => Octal(EscapeOctal::from(c)),
+            _ if force_escape.contains(&c) => Backslash(c),
             _ => Char(c),
         };
         Self { state: init_state }
@@ -285,7 +286,15 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
 }
 
 /// Escape a name according to the given quoting style.
-pub fn escape_name(name: &OsStr, style: &QuotingStyle, quote_if_contains: &[char]) -> String {
+/// # Arguments
+/// * `name` - The name to be escaped.
+/// * `style` - The quoting style to use for escaping the name
+/// * `additional_escaped_chars` - A list of extra characters that should be treated as escaped chars for a specific context.
+pub fn escape_name(
+    name: &OsStr,
+    style: &QuotingStyle,
+    additional_escaped_chars: &[char],
+) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {
             if *show_control {
@@ -301,7 +310,7 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle, quote_if_contains: &[char
             let escaped_str: String = name
                 .to_string_lossy()
                 .chars()
-                .flat_map(|c| EscapedChar::new_c(c, *quotes))
+                .flat_map(|c| EscapedChar::new_c(c, *quotes, additional_escaped_chars))
                 .collect();
 
             match quotes {
@@ -316,9 +325,9 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle, quote_if_contains: &[char
             show_control,
         } => {
             let name = name.to_string_lossy();
-            let (quotes, must_quote) = if name
-                .contains(|v| ['"', '`', '$', '\\'].contains(&v) || quote_if_contains.contains(&v))
-            {
+            let (quotes, must_quote) = if name.contains(|v| {
+                ['"', '`', '$', '\\'].contains(&v) || additional_escaped_chars.contains(&v)
+            }) {
                 (Quotes::Single, true)
             } else if name.contains('\'') {
                 (Quotes::Double, true)
@@ -431,10 +440,14 @@ mod tests {
         }
     }
 
-    fn check_names(name: &str, map: &[(&str, &str)]) {
+    fn check_names(name: &str, map: &[(&str, &str)], additional_escaped_chars: &[char]) {
         assert_eq!(
             map.iter()
-                .map(|(_, style)| escape_name(name.as_ref(), &get_style(style), &[]))
+                .map(|(_, style)| escape_name(
+                    name.as_ref(),
+                    &get_style(style),
+                    additional_escaped_chars
+                ))
                 .collect::<Vec<String>>(),
             map.iter()
                 .map(|(correct, _)| correct.to_string())
@@ -458,6 +471,7 @@ mod tests {
                 ("one_two", "shell-escape"),
                 ("\'one_two\'", "shell-escape-always"),
             ],
+            &[],
         );
     }
 
@@ -477,6 +491,7 @@ mod tests {
                 ("\'one two\'", "shell-escape"),
                 ("\'one two\'", "shell-escape-always"),
             ],
+            &[],
         );
 
         check_names(
@@ -493,6 +508,7 @@ mod tests {
                 ("' one'", "shell-escape"),
                 ("' one'", "shell-escape-always"),
             ],
+            &[],
         );
     }
 
@@ -513,6 +529,7 @@ mod tests {
                 ("'one\"two'", "shell-escape"),
                 ("'one\"two'", "shell-escape-always"),
             ],
+            &[],
         );
 
         // One single quote
@@ -530,6 +547,7 @@ mod tests {
                 ("\"one'two\"", "shell-escape"),
                 ("\"one'two\"", "shell-escape-always"),
             ],
+            &[],
         );
 
         // One single quote and one double quote
@@ -547,6 +565,7 @@ mod tests {
                 ("'one'\\''two\"three'", "shell-escape"),
                 ("'one'\\''two\"three'", "shell-escape-always"),
             ],
+            &[],
         );
 
         // Consecutive quotes
@@ -564,6 +583,7 @@ mod tests {
                 ("'one'\\'''\\''two\"\"three'", "shell-escape"),
                 ("'one'\\'''\\''two\"\"three'", "shell-escape-always"),
             ],
+            &[],
         );
     }
 
@@ -584,6 +604,7 @@ mod tests {
                 ("'one'$'\\n''two'", "shell-escape"),
                 ("'one'$'\\n''two'", "shell-escape-always"),
             ],
+            &[],
         );
 
         // A control character followed by a special shell character
@@ -601,6 +622,7 @@ mod tests {
                 ("'one'$'\\n''&two'", "shell-escape"),
                 ("'one'$'\\n''&two'", "shell-escape-always"),
             ],
+            &[],
         );
 
         // The first 16 control characters. NUL is also included, even though it is of
@@ -640,6 +662,7 @@ mod tests {
                     "shell-escape-always",
                 ),
             ],
+            &[],
         );
 
         // The last 16 control characters.
@@ -678,6 +701,7 @@ mod tests {
                     "shell-escape-always",
                 ),
             ],
+            &[]
         );
 
         // DEL
@@ -695,6 +719,7 @@ mod tests {
                 ("''$'\\177'", "shell-escape"),
                 ("''$'\\177'", "shell-escape-always"),
             ],
+            &[],
         );
     }
 
@@ -717,6 +742,7 @@ mod tests {
                 ("'one?two'", "shell-escape"),
                 ("'one?two'", "shell-escape-always"),
             ],
+            &[],
         );
     }
 
@@ -735,32 +761,45 @@ mod tests {
                 ("'one\\two'", "shell-escape"),
                 ("'one\\two'", "shell-escape-always"),
             ],
+            &[],
         );
     }
 
     #[test]
     fn test_tilde_and_hash() {
-        check_names("~", &[("'~'", "shell"), ("'~'", "shell-escape")]);
+        check_names("~", &[("'~'", "shell"), ("'~'", "shell-escape")], &[]);
         check_names(
             "~name",
             &[("'~name'", "shell"), ("'~name'", "shell-escape")],
+            &[],
         );
         check_names(
             "some~name",
             &[("some~name", "shell"), ("some~name", "shell-escape")],
+            &[],
         );
-        check_names("name~", &[("name~", "shell"), ("name~", "shell-escape")]);
+        check_names(
+            "name~",
+            &[("name~", "shell"), ("name~", "shell-escape")],
+            &[],
+        );
 
-        check_names("#", &[("'#'", "shell"), ("'#'", "shell-escape")]);
+        check_names("#", &[("'#'", "shell"), ("'#'", "shell-escape")], &[]);
         check_names(
             "#name",
             &[("'#name'", "shell"), ("'#name'", "shell-escape")],
+            &[],
         );
         check_names(
             "some#name",
             &[("some#name", "shell"), ("some#name", "shell-escape")],
+            &[],
         );
-        check_names("name#", &[("name#", "shell"), ("name#", "shell-escape")]);
+        check_names(
+            "name#",
+            &[("name#", "shell"), ("name#", "shell-escape")],
+            &[],
+        );
     }
 
     #[test]
@@ -773,6 +812,7 @@ mod tests {
                 ("'can'\\''$t'", "shell-escape"),
                 ("'can'\\''$t'", "shell-escape-always"),
             ],
+            &[],
         );
 
         check_names(
@@ -783,6 +823,7 @@ mod tests {
                 ("'can'\\''`t'", "shell-escape"),
                 ("'can'\\''`t'", "shell-escape-always"),
             ],
+            &[],
         );
 
         check_names(
@@ -793,6 +834,24 @@ mod tests {
                 ("'can'\\''\\t'", "shell-escape"),
                 ("'can'\\''\\t'", "shell-escape-always"),
             ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_additional_escaped_chars() {
+        check_names(
+            "one:two",
+            &[
+                ("one:two", "literal"),
+                ("'one:two'", "shell"),
+                ("'one:two'", "shell-always"),
+                ("'one:two'", "shell-escape"),
+                ("'one:two'", "shell-escape-always"),
+                ("\"one\\:two\"", "c"),
+                ("one\\:two", "escape"),
+            ],
+            &[':'],
         );
     }
 
