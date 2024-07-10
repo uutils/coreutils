@@ -7,20 +7,6 @@
 // spell-checker:ignore (sys/unix) WIFSIGNALED
 // spell-checker:ignore pgrep pwait snice
 
-//! Set of functions to manage IDs
-//!
-//! This module provide [`ProcessInformation`] and [`TerminalType`] and corresponding
-//! functions for obtaining process information.
-//!
-//! And also provide [`walk_process`] function to collecting all the information of
-//! processes in current system.
-//!
-//! Utilities that rely on this module:
-//! `pgrep` (TBD)
-//! `pwait` (TBD)
-//! `snice` (TBD)
-//!
-
 use libc::{gid_t, pid_t, uid_t};
 use std::io;
 use std::process::Child;

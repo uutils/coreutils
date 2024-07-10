@@ -1,3 +1,24 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore exitstatus cmdline kworker
+
+//! Set of functions to manage IDs
+//!
+//! This module provide [`ProcessInformation`] and [`TerminalType`] and corresponding
+//! functions for obtaining process information.
+//!
+//! And also provide [`walk_process`] function to collecting all the information of
+//! processes in current system.
+//!
+//! Utilities that rely on this module:
+//! `pgrep` (TBD)
+//! `pwait` (TBD)
+//! `snice` (TBD)
+//!
+
 use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Display, Formatter},
