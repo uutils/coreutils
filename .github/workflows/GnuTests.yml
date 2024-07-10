@@ -30,7 +30,7 @@ jobs:
       contents: read  # for actions/checkout to fetch code
       pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
     name: Run GNU tests
-    runs-on: ubuntu-22.04
+    runs-on: Linux-high-perf
     steps:
     - name: Initialize workflow variables
       id: vars
@@ -333,7 +333,7 @@ jobs:
 
   gnu_coverage:
     name: Run GNU tests with coverage
-    runs-on: ubuntu-22.04
+    runs-on: Linux-high-perf
     steps:
     - name: Checkout code uutil
       uses: actions/checkout@v4
