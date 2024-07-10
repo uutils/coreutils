@@ -123,6 +123,13 @@ impl EscapedChar {
         }
     }
 
+    /// Create a new c shell styled `EscapedChar`
+    ///
+    /// # Arguments
+    /// * `c` - The character to create the `EscapedChar` for.
+    /// * `quotes` - The type of quotes to use for escaping.
+    /// * `force_escape` - A list of extra characters that should be treated as
+    ///   escaped characters for a specific context.
     fn new_c(c: char, quotes: Quotes, force_escape: &[char]) -> Self {
         use EscapeState::*;
         let init_state = match c {
@@ -852,6 +859,34 @@ mod tests {
                 ("one\\:two", "escape"),
             ],
             &[':'],
+        );
+        check_names(
+            "one:two:three",
+            &[
+                ("one:two:three", "literal"),
+                ("'one:two:three'", "shell"),
+                ("'one:two:three'", "shell-always"),
+                ("'one:two:three'", "shell-escape"),
+                ("'one:two:three'", "shell-escape-always"),
+                ("\"one\\:two\\:three\"", "c"),
+                ("one\\:two\\:three", "escape"),
+            ],
+            &[':'],
+        );
+        // note: this is just to check multiple escaped chars are working
+        // properly no util has this behavior.
+        check_names(
+            "one:two@three",
+            &[
+                ("one:two@three", "literal"),
+                ("'one:two@three'", "shell"),
+                ("'one:two@three'", "shell-always"),
+                ("'one:two@three'", "shell-escape"),
+                ("'one:two@three'", "shell-escape-always"),
+                ("\"one\\:two\\@three\"", "c"),
+                ("one\\:two\\@three", "escape"),
+            ],
+            &[':', '@'],
         );
     }
 
