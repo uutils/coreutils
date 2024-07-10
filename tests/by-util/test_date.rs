@@ -478,3 +478,49 @@ fn test_date_from_stdin() {
              Sat Apr 15 18:30:00 2023\n",
         );
 }
+
+#[test]
+fn test_date_exclusive_date_sources() {
+    new_ucmd!()
+        .arg("-f")
+        .arg("foo.txt")
+        .arg("-d")
+        .arg("1111-11-11")
+        .fails()
+        .stderr_matches(&Regex::new("error: the argument .* cannot be used with .*").unwrap());
+
+    new_ucmd!()
+        .arg("-r")
+        .arg("foo.txt")
+        .arg("-d")
+        .arg("1111-11-11")
+        .fails()
+        .stderr_matches(&Regex::new("error: the argument .* cannot be used with .*").unwrap());
+
+    new_ucmd!()
+        .arg("-r")
+        .arg("foo.txt")
+        .arg("-f")
+        .arg("bar.txt")
+        .fails()
+        .stderr_matches(&Regex::new("error: the argument .* cannot be used with .*").unwrap());
+}
+
+#[test]
+fn test_date_successive_file() {
+    const FILE: &str = "file-with-dates";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write(
+        FILE,
+        "2023-03-27 08:30:00\n\
+         2023-04-01 12:00:00\n\
+         2023-04-15 18:30:00",
+    );
+    ucmd
+        .arg("-f")
+        .arg("not-existent-file")
+        .arg("-f")
+        .arg("file-with-dates")
+        .succeeds();
+}
