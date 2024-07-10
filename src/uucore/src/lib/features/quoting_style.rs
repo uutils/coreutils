@@ -123,7 +123,7 @@ impl EscapedChar {
         }
     }
 
-    fn new_c(c: char, quotes: Quotes) -> Self {
+    fn new_c(c: char, quotes: Quotes, dirname: bool) -> Self {
         use EscapeState::*;
         let init_state = match c {
             '\x07' => Backslash('a'),
@@ -142,10 +142,11 @@ impl EscapedChar {
                 Quotes::Double => Backslash('"'),
                 _ => Char('"'),
             },
-            ' ' => match quotes {
+            ' ' if !dirname => match quotes {
                 Quotes::None => Backslash(' '),
                 _ => Char(' '),
             },
+            ':' if dirname => Backslash(':'),
             _ if c.is_ascii_control() => Octal(EscapeOctal::from(c)),
             _ => Char(c),
         };
@@ -285,7 +286,10 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
 }
 
 /// Escape a name according to the given quoting style.
-pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+///
+/// This inner function provides an additional flag `dirname` which
+/// is meant for ls' directory name display.
+fn escape_name_inner(name: &OsStr, style: &QuotingStyle, dirname: bool) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {
             if *show_control {
@@ -301,7 +305,7 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             let escaped_str: String = name
                 .to_string_lossy()
                 .chars()
-                .flat_map(|c| EscapedChar::new_c(c, *quotes))
+                .flat_map(|c| EscapedChar::new_c(c, *quotes, dirname))
                 .collect();
 
             match quotes {
@@ -316,7 +320,10 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             show_control,
         } => {
             let name = name.to_string_lossy();
-            let (quotes, must_quote) = if name.contains(&['"', '`', '$', '\\'][..]) {
+
+            // Take ':' in account only if we are quoting a dirname
+            let start_index = if dirname { 0 } else { 1 };
+            let (quotes, must_quote) = if name.contains(&[':', '"', '`', '$', '\\'][start_index..]) {
                 (Quotes::Single, true)
             } else if name.contains('\'') {
                 (Quotes::Double, true)
@@ -339,6 +346,18 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             }
         }
     }
+}
+
+/// Escape a filename with respect to the given style.
+pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+    escape_name_inner(name, style, false)
+}
+
+/// Escape a directory name with respect to the given style.
+/// This is mainly meant to be used for ls' directory name printing and is not
+/// likely to be used elsewhere.
+pub fn escape_dir_name(dir_name: &OsStr, style: &QuotingStyle) -> String {
+    escape_name_inner(dir_name, style, true)
 }
 
 impl fmt::Display for QuotingStyle {
