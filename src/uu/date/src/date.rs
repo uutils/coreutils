@@ -91,6 +91,7 @@ enum DateSource {
     Now,
     Custom(String),
     File(PathBuf),
+    Reference(PathBuf),
     Stdin,
     Human(TimeDelta),
 }
@@ -178,6 +179,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             "-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
         }
+    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+        DateSource::Reference(file.into())
     } else {
         DateSource::Now
     };
@@ -260,6 +263,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let iter = lines.map_while(Result::ok).map(parse_date);
                 Box::new(iter)
             }
+            DateSource::Reference(ref path) => {
+                let modified_time: std::time::SystemTime = std::fs::metadata(path)?.modified()?;
+                let chrono_time: DateTime<Local> = modified_time.into();
+                Box::new(std::iter::once(Ok(chrono_time.into())))
+            }
             DateSource::Now => {
                 let iter = std::iter::once(Ok(now));
                 Box::new(iter)
@@ -321,7 +329,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Set)
                 .overrides_with(OPT_DATE)
                 .help("display time described by STRING, not 'now'")
-                .conflicts_with_all(&[OPT_FILE, OPT_REFERENCE]),
+                .conflicts_with_all([OPT_FILE, OPT_REFERENCE]),
         )
         .arg(
             Arg::new(OPT_FILE)
@@ -332,7 +340,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Set)
                 .overrides_with(OPT_FILE) // several -f can be passed, but only the last is kept.
                 .help("like --date; once for each line of DATEFILE")
-                .conflicts_with_all(&[OPT_REFERENCE]),
+                .conflicts_with_all([OPT_REFERENCE]),
         )
         .arg(
             Arg::new(OPT_ISO_8601)
@@ -372,6 +380,8 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
+                .action(ArgAction::Set)
+                .overrides_with(OPT_REFERENCE)
                 .help("display the last modification time of FILE"),
         )
         .arg(
