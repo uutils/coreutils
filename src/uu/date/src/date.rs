@@ -318,7 +318,8 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(OPT_DATE)
                 .value_name("STRING")
-                .help("display time described by STRING, not 'now'"),
+                .help("display time described by STRING, not 'now'")
+                .conflicts_with_all(&[OPT_FILE, OPT_REFERENCE]),
         )
         .arg(
             Arg::new(OPT_FILE)
@@ -326,7 +327,8 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .help("like --date; once for each line of DATEFILE"),
+                .help("like --date; once for each line of DATEFILE")
+                .conflicts_with_all(&[OPT_REFERENCE]),
         )
         .arg(
             Arg::new(OPT_ISO_8601)
