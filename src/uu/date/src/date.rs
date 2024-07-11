@@ -185,7 +185,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         DateSource::Now
     };
 
-    let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
+    let set_option = matches.get_one::<String>(OPT_SET);
+
+    // Before parsing an eventual OPT_SET, check if it can't be present.
+    if !matches!(date_source, DateSource::Now) && set_option.is_some() {
+        return Err(USimpleError::new(
+            1,
+            "the options to print and set the time may not be used together",
+        ));
+    }
+
+    let set_to = match set_option.map(parse_date) {
         None => None,
         Some(Err((input, _err))) => {
             return Err(USimpleError::new(
