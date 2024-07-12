@@ -1413,3 +1413,17 @@ fn check_complement_1_unique_in_set2() {
         .args(&["-c", "[:upper:]", arg.as_str()])
         .succeeds();
 }
+
+#[test]
+fn check_complement_set2_too_big() {
+    let x231 = "x".repeat(231);
+    let x230 = &x231[..230];
+
+    // The complement of [:upper:] expands to 230 characters,
+    // putting more characters in set2 should fail.
+    new_ucmd!().args(&["-c", "[:upper:]", x230]).succeeds();
+    new_ucmd!()
+        .args(&["-c", "[:upper:]", x231.as_str()])
+        .fails()
+        .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
+}
