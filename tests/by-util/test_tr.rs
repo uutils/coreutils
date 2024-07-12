@@ -5,6 +5,9 @@
 // spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
 use crate::common::util::TestScenario;
 
+#[cfg(unix)]
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
@@ -1426,4 +1429,19 @@ fn check_complement_set2_too_big() {
         .args(&["-c", "[:upper:]", x231.as_str()])
         .fails()
         .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_truncate_non_utf8_set() {
+    let stdin = &[b'\x01', b'a', b'm', b'p', 0xfe_u8, 0xff_u8];
+    let set1 = OsStr::from_bytes(&[b'a', 0xfe_u8, 0xff_u8, b'z']);
+    let set2 = OsStr::from_bytes(b"01234");
+
+    new_ucmd!()
+        .arg(set1)
+        .arg(set2)
+        .pipe_in(*stdin)
+        .succeeds()
+        .stdout_is_bytes(b"\x010mp12");
 }
