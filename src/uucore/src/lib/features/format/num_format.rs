@@ -5,6 +5,7 @@
 
 //! Utilities for formatting numbers in various formats
 
+use std::cmp::min;
 use std::io::Write;
 
 use super::{
@@ -77,22 +78,16 @@ pub struct SignedInt {
 impl Formatter for SignedInt {
     type Input = i64;
 
-    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        if x >= 0 {
-            match self.positive_sign {
-                PositiveSign::None => Ok(()),
-                PositiveSign::Plus => write!(writer, "+"),
-                PositiveSign::Space => write!(writer, " "),
-            }?;
-        }
+    fn fmt(&self, writer: impl Write, x: Self::Input) -> std::io::Result<()> {
+        let s = if self.precision > 0 {
+            format!("{:0>width$}", x.abs(), width = self.precision)
+        } else {
+            x.abs().to_string()
+        };
 
-        let s = format!("{:0width$}", x, width = self.precision);
+        let sign_indicator = get_sign_indicator(self.positive_sign, &x);
 
-        match self.alignment {
-            NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
-            NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
-            NumberAlignment::RightZero => write!(writer, "{s:0>width$}", width = self.width),
-        }
+        write_output(writer, sign_indicator, s, self.width, self.alignment)
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
@@ -244,16 +239,8 @@ impl Default for Float {
 impl Formatter for Float {
     type Input = f64;
 
-    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        if x.is_sign_positive() {
-            match self.positive_sign {
-                PositiveSign::None => Ok(()),
-                PositiveSign::Plus => write!(writer, "+"),
-                PositiveSign::Space => write!(writer, " "),
-            }?;
-        }
-
-        let s = if x.is_finite() {
+    fn fmt(&self, writer: impl Write, x: Self::Input) -> std::io::Result<()> {
+        let mut s = if x.is_finite() {
             match self.variant {
                 FloatVariant::Decimal => {
                     format_float_decimal(x, self.precision, self.force_decimal)
@@ -272,11 +259,13 @@ impl Formatter for Float {
             format_float_non_finite(x, self.case)
         };
 
-        match self.alignment {
-            NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
-            NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
-            NumberAlignment::RightZero => write!(writer, "{s:0>width$}", width = self.width),
-        }
+        // The format function will parse `x` together with its sign char,
+        // which should be placed in `sign_indicator`. So drop it here
+        s = if x < 0. { s[1..].to_string() } else { s };
+
+        let sign_indicator = get_sign_indicator(self.positive_sign, &x);
+
+        write_output(writer, sign_indicator, s, self.width, self.alignment)
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError>
@@ -323,6 +312,18 @@ impl Formatter for Float {
             alignment,
             precision,
         })
+    }
+}
+
+fn get_sign_indicator<T: PartialOrd + Default>(sign: PositiveSign, x: &T) -> String {
+    if *x >= T::default() {
+        match sign {
+            PositiveSign::None => String::new(),
+            PositiveSign::Plus => String::from("+"),
+            PositiveSign::Space => String::from(" "),
+        }
+    } else {
+        String::from("-")
     }
 }
 
@@ -497,6 +498,47 @@ fn strip_fractional_zeroes_and_dot(s: &mut String) {
         if c == '.' {
             s.truncate(trim_to);
             break;
+        }
+    }
+}
+
+fn write_output(
+    mut writer: impl Write,
+    sign_indicator: String,
+    mut s: String,
+    width: usize,
+    alignment: NumberAlignment,
+) -> std::io::Result<()> {
+    // Take length of `sign_indicator`, which could be 0 or 1, into consideration when padding
+    // by storing remaining_width indicating the actual width needed.
+    // Using min() because self.width could be 0, 0usize - 1usize should be avoided
+    let remaining_width = width - min(width, sign_indicator.len());
+    match alignment {
+        NumberAlignment::Left => write!(
+            writer,
+            "{sign_indicator}{s:<width$}",
+            width = remaining_width
+        ),
+        NumberAlignment::RightSpace => {
+            let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
+            if is_sign && remaining_width > 0 {
+                // Make sure sign_indicator is just next to number, e.g. "% +5.1f" 1 ==> $ +1.0
+                s = sign_indicator + s.as_str();
+                write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
+            } else {
+                write!(
+                    writer,
+                    "{sign_indicator}{s:>width$}",
+                    width = remaining_width
+                )
+            }
+        }
+        NumberAlignment::RightZero => {
+            write!(
+                writer,
+                "{sign_indicator}{s:0>width$}",
+                width = remaining_width
+            )
         }
     }
 }

@@ -252,7 +252,11 @@ impl Spec {
                 } else {
                     Case::Lowercase
                 },
-                alignment,
+                alignment: if flags.zero && !flags.minus {
+                    NumberAlignment::RightZero // float should always try to zero pad despite the precision
+                } else {
+                    alignment
+                },
                 positive_sign,
             },
             _ => return Err(&start[..index]),
