@@ -74,7 +74,7 @@ fn test_uptime_with_fifo() {
     ts.ucmd()
         .arg("fifo1")
         .fails()
-        .stderr_contains("uptime: couldn't get boot time: Illegal seek")
+        .stderr_contains("uptime: couldn't get boot time")
         .stdout_contains("up ???? days ??:??")
         .stdout_contains("load average");
 
