@@ -1896,9 +1896,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c82cf8cff14456045f55ec4241383baeff27af886adb72ffb2162f99911de0fd"
+checksum = "2a908a6e00f1fdd0dfd9c0eb08ce85126f6d8bbda50017e74bc4a4b7d4a926a4"
 dependencies = [
  "bitflags 2.5.0",
 ]
@@ -3299,7 +3299,7 @@ version = "0.0.27"
 dependencies = [
  "clap",
  "libc",
- "redox_syscall 0.5.2",
+ "redox_syscall 0.5.3",
  "uucore",
 ]
 
