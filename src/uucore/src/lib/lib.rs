@@ -100,7 +100,10 @@ pub use crate::features::fsxattr;
 
 //## core functions
 
+use std::ffi::OsStr;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
@@ -217,6 +220,24 @@ pub fn read_yes() -> bool {
         Ok(_) => matches!(s.chars().next(), Some('y' | 'Y')),
         _ => false,
     }
+}
+
+// Helper function for processing delimiter values (which could be non UTF-8)
+// It converts OsString to &[u8] for unix targets only
+// On non-unix (i.e. Windows) it will just return an error if delimiter value is not UTF-8
+pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
+    #[cfg(unix)]
+    let bytes = os_string.as_bytes();
+
+    #[cfg(not(unix))]
+    let bytes = os_string
+        .to_str()
+        .ok_or_else(|| {
+            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+        })?
+        .as_bytes();
+
+    Ok(bytes)
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`
