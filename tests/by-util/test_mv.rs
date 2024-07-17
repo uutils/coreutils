@@ -1622,3 +1622,37 @@ fn test_acl() {
 // $ mv -v a b
 // mv: try to overwrite 'b', overriding mode 0444 (r--r--r--)? y
 // 'a' -> 'b'
+
+// Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_mv_unlinks_dest_symlink() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    // create a file in the current partition.
+    at.write("src", "src contents");
+
+    // create a folder in another partition.
+    let other_fs_tempdir = tempfile::TempDir::new_in("/dev/shm/").unwrap();
+
+    // create a file inside that folder.
+    let file_path = other_fs_tempdir.path().join("other_fs_file.txt");
+    let mut file = std::fs::File::create(&file_path).expect("Unable to create file");
+    std::io::Write::write_all(&mut file, b"other fs file contents")
+        .expect("Unable to write to file");
+
+    // create a symlink to the file inside the same directory.
+    let symlink_path = other_fs_tempdir.path().join("symlink_to_file.txt");
+    std::os::unix::fs::symlink(&file_path, &symlink_path).unwrap();
+
+    // mv src to symlink in another partition
+    scene
+        .ucmd()
+        .arg("src")
+        .arg(symlink_path.to_str().unwrap())
+        .succeeds();
+    // make sure that src got removed.
+    assert!(!at.file_exists("src"));
+    // make sure symlink got unlinked
+    assert!(!symlink_path.is_symlink());
+}
