@@ -661,6 +661,9 @@ fn rename_with_fallback(
                 };
             }
         } else {
+            if to.is_symlink() {
+                fs::remove_file(to)?;
+            }
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             fs::copy(from, to)
                 .and_then(|_| fsxattr::copy_xattrs(&from, &to))
