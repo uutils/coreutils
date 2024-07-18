@@ -22,7 +22,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Display, Formatter},
-    fs,
+    fs, io,
     path::PathBuf,
     rc::Rc,
 };
