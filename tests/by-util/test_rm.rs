@@ -30,9 +30,9 @@ fn test_rm_failed() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_rm_one_file"; // Doesn't exist
 
-    ucmd.arg(file).fails().stderr_contains(&format!(
-        "cannot remove '{file}': No such file or directory"
-    ));
+    ucmd.arg(file)
+        .fails()
+        .stderr_contains(format!("cannot remove '{file}': No such file or directory"));
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn test_rm_non_empty_directory() {
     ucmd.arg("-d")
         .arg(dir)
         .fails()
-        .stderr_contains(&format!("cannot remove '{dir}': Directory not empty"));
+        .stderr_contains(format!("cannot remove '{dir}': Directory not empty"));
     assert!(at.file_exists(file_a));
     assert!(at.dir_exists(dir));
 }
@@ -225,7 +225,7 @@ fn test_rm_directory_without_flag() {
 
     ucmd.arg(dir)
         .fails()
-        .stderr_contains(&format!("cannot remove '{dir}': Is a directory"));
+        .stderr_contains(format!("cannot remove '{dir}': Is a directory"));
 }
 
 #[test]
@@ -289,7 +289,7 @@ fn test_rm_symlink_dir() {
         .ucmd()
         .arg(link)
         .fails()
-        .stderr_contains(&format!("cannot remove '{link}': Is a directory"));
+        .stderr_contains(format!("cannot remove '{link}': Is a directory"));
 
     assert!(at.dir_exists(link));
 
@@ -337,7 +337,7 @@ fn test_rm_verbose_slash() {
     ucmd.arg("-r")
         .arg("-f")
         .arg("-v")
-        .arg(&format!("{dir}///"))
+        .arg(format!("{dir}///"))
         .succeeds()
         .stdout_only(format!(
             "removed '{file_a_normalized}'\nremoved directory '{dir}'\n"

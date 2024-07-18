@@ -83,7 +83,7 @@ macro_rules! test_digest {
             // The asterisk indicates that the digest was computed in
             // binary mode.
             let n = expected.len();
-            let expected = [&expected[..n - 3], &[b' ', b'-', b'\n']].concat();
+            let expected = [&expected[..n - 3], b" -\n"].concat();
             new_ucmd!()
                 .args(&[DIGEST_ARG, BITS_ARG, "-t"])
                 .pipe_in("a\r\nb\r\nc\r\n")

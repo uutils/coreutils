@@ -143,7 +143,7 @@ fn test_range_repeat_no_overflow_1_max() {
     let upper_bound = usize::MAX;
     let result = new_ucmd!()
         .arg("-rn1")
-        .arg(&format!("-i1-{upper_bound}"))
+        .arg(format!("-i1-{upper_bound}"))
         .succeeds();
     result.no_stderr();
 
@@ -161,7 +161,7 @@ fn test_range_repeat_no_overflow_0_max_minus_1() {
     let upper_bound = usize::MAX - 1;
     let result = new_ucmd!()
         .arg("-rn1")
-        .arg(&format!("-i0-{upper_bound}"))
+        .arg(format!("-i0-{upper_bound}"))
         .succeeds();
     result.no_stderr();
 
@@ -179,7 +179,7 @@ fn test_range_permute_no_overflow_1_max() {
     let upper_bound = usize::MAX;
     let result = new_ucmd!()
         .arg("-n1")
-        .arg(&format!("-i1-{upper_bound}"))
+        .arg(format!("-i1-{upper_bound}"))
         .succeeds();
     result.no_stderr();
 
@@ -197,7 +197,7 @@ fn test_range_permute_no_overflow_0_max_minus_1() {
     let upper_bound = usize::MAX - 1;
     let result = new_ucmd!()
         .arg("-n1")
-        .arg(&format!("-i0-{upper_bound}"))
+        .arg(format!("-i0-{upper_bound}"))
         .succeeds();
     result.no_stderr();
 
@@ -218,7 +218,7 @@ fn test_range_permute_no_overflow_0_max() {
     let upper_bound = usize::MAX;
     let result = new_ucmd!()
         .arg("-n1")
-        .arg(&format!("-i0-{upper_bound}"))
+        .arg(format!("-i0-{upper_bound}"))
         .succeeds();
     result.no_stderr();
 
