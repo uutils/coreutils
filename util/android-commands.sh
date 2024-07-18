@@ -121,7 +121,7 @@ take_screen_shot() {
 
 get_app_user() {
     app="$1"
-    local app_user="$(adb shell dumpsys package $app | grep 'userId=' | cut -d= -f2 | sort -u)"
+    app_user="$(adb shell dumpsys package $app | grep 'userId=' | cut -d= -f2 | sort -u)"
     if [[ -z "$app_user" ]]; then
         echo "Couldn't find user for app: $app">&2
         exit 1
