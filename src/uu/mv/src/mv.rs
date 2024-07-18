@@ -662,7 +662,17 @@ fn rename_with_fallback(
             }
         } else {
             if to.is_symlink() {
-                fs::remove_file(to)?;
+                fs::remove_file(to).map_err(|err| {
+                    let to = to.to_string_lossy();
+                    let from = from.to_string_lossy();
+                    io::Error::new(
+                        err.kind(),
+                        format!(
+                            "inter-device move failed: '{from}' to '{to}'\
+                            ; unable to remove target: {err}"
+                        ),
+                    )
+                })?;
             }
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             fs::copy(from, to)
