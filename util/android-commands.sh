@@ -382,7 +382,7 @@ copy_file_or_dir_from_device_via_ssh() {
 # runs the in args provided command on android side via ssh. forwards return code.
 # adds a timestamp to every line to be able to see where delays are
 run_command_via_ssh() {
-    ssh -p 9022 "$(termux_user):@127.0.0.1" -o StrictHostKeyChecking=accept-new "$@" 2>&1 | add_timestamp_to_lines
+    ssh -p 9022 "$(termux_user)@127.0.0.1" -o StrictHostKeyChecking=accept-new "$@" 2>&1 | add_timestamp_to_lines
     return "${PIPESTATUS[0]}"
 }
 
@@ -393,7 +393,7 @@ test_ssh_connection() {
 # takes a local (on runner side) script file and runs it via ssh on the virtual android device. forwards return code.
 # adds a timestamp to every line to be able to see where delays are
 run_script_file_via_ssh() {
-    ssh -p 9022 "$(termux_user):@127.0.0.1" -o StrictHostKeyChecking=accept-new "bash -s" < "$1" 2>&1 | add_timestamp_to_lines
+    ssh -p 9022 "$(termux_user)@127.0.0.1" -o StrictHostKeyChecking=accept-new "bash -s" < "$1" 2>&1 | add_timestamp_to_lines
     return "${PIPESTATUS[0]}"
 }
 
