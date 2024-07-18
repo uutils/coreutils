@@ -5,10 +5,13 @@
 
 use libc::STDIN_FILENO;
 use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
+use rand::distributions::Uniform;
 use rand::prelude::SliceRandom;
 use rand::Rng;
 use similar::TextDiff;
+use std::env::temp_dir;
 use std::ffi::OsString;
+use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::process::{Command, Stdio};
@@ -391,4 +394,25 @@ pub fn generate_random_string(max_length: usize) -> String {
     }
 
     result
+}
+
+pub fn generate_random_file() -> Result<String, std::io::Error> {
+    let mut rng = rand::thread_rng();
+
+    let file_name: String = (0..10)
+        .map(|_| rng.sample(Uniform::new_inclusive(b'a', b'z')) as char)
+        .collect();
+    let mut file_path = temp_dir();
+    file_path.push(file_name);
+
+    let mut file = File::create(&file_path)?;
+
+    let content_length = rng.gen_range(10..1000);
+    let content: String = (0..content_length)
+        .map(|_| (rng.gen_range(b' '..b'~' + 1) as char))
+        .collect();
+
+    file.write_all(content.as_bytes())?;
+
+    Ok(file_path.to_str().unwrap().to_string())
 }
