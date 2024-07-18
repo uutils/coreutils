@@ -209,6 +209,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let check = matches.get_flag("check");
     let status = matches.get_flag("status");
     let quiet = matches.get_flag("quiet") || status;
+    let strict = matches.get_flag("strict");
     let warn = matches.get_flag("warn") && !status;
     let ignore_missing = matches.get_flag("ignore-missing");
 
@@ -220,7 +221,6 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     if check {
         let text_flag = matches.get_flag("text");
         let binary_flag = matches.get_flag("binary");
-        let strict = matches.get_flag("strict");
 
         if binary_flag || text_flag {
             return Err(ChecksumError::BinaryTextConflict.into());
@@ -245,6 +245,10 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             Some(algo.name),
             Some(algo.bits),
         );
+    } else if quiet {
+        return Err(ChecksumError::QuietNotCheck.into());
+    } else if strict {
+        return Err(ChecksumError::StrictNotCheck.into());
     }
 
     let nonames = *matches
