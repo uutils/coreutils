@@ -4,9 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore datetime
 
-#[cfg(target_os = "android")]
-use uucore::error::UResult;
-#[cfg(not(target_os = "android"))]
 use uucore::error::{UResult, USimpleError};
 
 use clap::builder::ValueParser;
