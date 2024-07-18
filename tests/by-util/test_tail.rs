@@ -4560,7 +4560,7 @@ fn test_gnu_args_c() {
         .arg("-12c")
         .pipe_in(format!("x{}z", "y".repeat(12)))
         .succeeds()
-        .stdout_only(&format!("{}z", "y".repeat(11)));
+        .stdout_only(format!("{}z", "y".repeat(11)));
 }
 
 #[test]
@@ -4594,7 +4594,7 @@ fn test_gnu_args_l() {
         .arg("-l")
         .pipe_in(format!("x{}z", "y\n".repeat(10)))
         .succeeds()
-        .stdout_only(&format!("{}z", "y\n".repeat(9)));
+        .stdout_only(format!("{}z", "y\n".repeat(9)));
 }
 
 #[test]
@@ -4681,7 +4681,7 @@ fn test_gnu_args_b() {
         .arg("-b")
         .pipe_in("x\n".repeat(512 * 10 / 2 + 1))
         .succeeds()
-        .stdout_only(&"x\n".repeat(512 * 10 / 2));
+        .stdout_only("x\n".repeat(512 * 10 / 2));
 }
 
 #[test]

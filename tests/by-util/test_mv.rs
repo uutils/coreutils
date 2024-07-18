@@ -133,7 +133,7 @@ fn test_mv_move_file_between_dirs() {
 
     assert!(at.file_exists(format!("{dir1}/{file}")));
 
-    ucmd.arg(&format!("{dir1}/{file}"))
+    ucmd.arg(format!("{dir1}/{file}"))
         .arg(dir2)
         .succeeds()
         .no_stderr();
