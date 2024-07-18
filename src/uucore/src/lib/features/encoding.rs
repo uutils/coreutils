@@ -86,7 +86,7 @@ pub fn decode(f: Format, input: &[u8]) -> DecodeResult {
         Z85 => {
             // The z85 crate implements a padded encoding by using a leading '#' which is otherwise not allowed.
             // We manually check for a leading '#' and return an error ourselves.
-            if input.starts_with(&[b'#']) {
+            if input.starts_with(b"#") {
                 return Err(z85::DecodeError::InvalidByte(0, b'#').into());
             } else {
                 z85::decode(input)?
