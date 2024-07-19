@@ -1623,105 +1623,96 @@ fn test_acl() {
 // mv: try to overwrite 'b', overriding mode 0444 (r--r--r--)? y
 // 'a' -> 'b'
 
-// Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
 #[cfg(target_os = "linux")]
-#[test]
-fn test_mv_unlinks_dest_symlink() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+mod inter_partition_copying {
+    use crate::common::util::TestScenario;
+    use std::fs::{read_to_string, set_permissions, write};
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    use tempfile::TempDir;
 
-    // create a file in the current partition.
-    at.write("src", "src contents");
+    // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
+    #[test]
+    pub(crate) fn test_mv_unlinks_dest_symlink() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
 
-    // create a folder in another partition.
-    let other_fs_tempdir =
-        tempfile::TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        // create a file in the current partition.
+        at.write("src", "src contents");
 
-    // create a file inside that folder.
-    let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
-    let mut file =
-        std::fs::File::create(&other_fs_file_path).expect("Unable to create other_fs_file");
-    std::io::Write::write_all(&mut file, b"other fs file contents")
-        .expect("Unable to write to other_fs_file");
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
 
-    // create a symlink to the file inside the same directory.
-    let symlink_path = other_fs_tempdir.path().join("symlink_to_file");
-    std::os::unix::fs::symlink(&other_fs_file_path, &symlink_path)
-        .expect("Unable to create symlink_to_file");
+        // create a file inside that folder.
+        let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
+        write(&other_fs_file_path, "other fs file contents")
+            .expect("Unable to write to other_fs_file");
 
-    // mv src to symlink in another partition
-    scene
-        .ucmd()
-        .arg("src")
-        .arg(symlink_path.to_str().unwrap())
-        .succeeds();
+        // create a symlink to the file inside the same directory.
+        let symlink_path = other_fs_tempdir.path().join("symlink_to_file");
+        symlink(&other_fs_file_path, &symlink_path).expect("Unable to create symlink_to_file");
 
-    // make sure that src got removed.
-    assert!(!at.file_exists("src"));
+        // mv src to symlink in another partition
+        scene
+            .ucmd()
+            .arg("src")
+            .arg(symlink_path.to_str().unwrap())
+            .succeeds();
 
-    // make sure symlink got unlinked
-    assert!(!symlink_path.is_symlink());
+        // make sure that src got removed.
+        assert!(!at.file_exists("src"));
 
-    // make sure that file contents in other_fs_file didn't change.
-    let mut new_contents = String::new();
-    std::io::Read::read_to_string(
-        &mut std::fs::File::open(&other_fs_file_path).expect("Unable to open other_fs_file"),
-        &mut new_contents,
-    )
-    .expect("Unable to read other_fs_file");
-    assert_eq!(new_contents, "other fs file contents");
+        // make sure symlink got unlinked
+        assert!(!symlink_path.is_symlink());
 
-    // make sure that src file contents got copied into new file created in symlink_path .
-    let mut new_contents = String::new();
-    std::io::Read::read_to_string(
-        &mut std::fs::File::open(&symlink_path).expect("Unable to open file"),
-        &mut new_contents,
-    )
-    .expect("Unable to read file");
-    assert_eq!(new_contents, "src contents");
-}
+        // make sure that file contents in other_fs_file didn't change.
+        assert_eq!(
+            read_to_string(&other_fs_file_path,).expect("Unable to read other_fs_file"),
+            "other fs file contents"
+        );
 
-// In an inter-partition move if unlinking the destination symlink fails, ensure
-// that it would output the proper error message.
-#[cfg(target_os = "linux")]
-#[test]
-fn test_mv_unlinks_dest_symlink_error_message() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+        // make sure that src file contents got copied into new file created in symlink_path
+        assert_eq!(
+            read_to_string(&symlink_path).expect("Unable to read other_fs_file"),
+            "src contents"
+        );
+    }
 
-    // create a file in the current partition.
-    at.write("src", "src contents");
+    // In an inter-partition move if unlinking the destination symlink fails, ensure
+    // that it would output the proper error message.
+    #[test]
+    pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
 
-    // create a folder in another partition.
-    let other_fs_tempdir =
-        tempfile::TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        // create a file in the current partition.
+        at.write("src", "src contents");
 
-    // create a file inside that folder.
-    let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
-    let mut file =
-        std::fs::File::create(&other_fs_file_path).expect("Unable to create other_fs_file");
-    std::io::Write::write_all(&mut file, b"other fs file contents")
-        .expect("Unable to write to other_fs_file");
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
 
-    // create a symlink to the file inside the same directory.
-    let symlink_path = other_fs_tempdir.path().join("symlink_to_file");
-    std::os::unix::fs::symlink(&other_fs_file_path, &symlink_path)
-        .expect("Unable to create symlink_to_file");
+        // create a file inside that folder.
+        let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
+        write(&other_fs_file_path, "other fs file contents")
+            .expect("Unable to write to other_fs_file");
 
-    // disable write for the target folder so that when mv tries to remove the
-    // the destination symlink inside the target directory it would fail.
-    std::fs::set_permissions(
-        other_fs_tempdir.path(),
-        std::os::unix::fs::PermissionsExt::from_mode(0o555),
-    )
-    .expect("Unable to set permissions for temp directory");
+        // create a symlink to the file inside the same directory.
+        let symlink_path = other_fs_tempdir.path().join("symlink_to_file");
+        symlink(&other_fs_file_path, &symlink_path).expect("Unable to create symlink_to_file");
 
-    // mv src to symlink in another partition
-    scene
-        .ucmd()
-        .arg("src")
-        .arg(symlink_path.to_str().unwrap())
-        .fails()
-        .stderr_contains("inter-device move failed:")
-        .stderr_contains("Permission denied");
+        // disable write for the target folder so that when mv tries to remove the
+        // the destination symlink inside the target directory it would fail.
+        set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o555))
+            .expect("Unable to set permissions for temp directory");
+
+        // mv src to symlink in another partition
+        scene
+            .ucmd()
+            .arg("src")
+            .arg(symlink_path.to_str().unwrap())
+            .fails()
+            .stderr_contains("inter-device move failed:")
+            .stderr_contains("Permission denied");
+    }
 }
