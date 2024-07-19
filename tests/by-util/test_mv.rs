@@ -1673,7 +1673,7 @@ mod inter_partition_copying {
 
         // make sure that src file contents got copied into new file created in symlink_path
         assert_eq!(
-            read_to_string(&symlink_path,).expect("Unable to read other_fs_file"),
+            read_to_string(&symlink_path).expect("Unable to read other_fs_file"),
             "src contents"
         );
     }
