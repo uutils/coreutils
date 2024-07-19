@@ -1626,9 +1626,7 @@ fn test_acl() {
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
     use crate::common::util::TestScenario;
-
-    use std::fs::{set_permissions, File};
-    use std::io::{Read, Write};
+    use std::fs::{read_to_string, set_permissions, write};
     use std::os::unix::fs::{symlink, PermissionsExt};
     use tempfile::TempDir;
 
@@ -1647,8 +1645,7 @@ mod inter_partition_copying {
 
         // create a file inside that folder.
         let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
-        let mut file = File::create(&other_fs_file_path).expect("Unable to create other_fs_file");
-        Write::write_all(&mut file, b"other fs file contents")
+        write(&other_fs_file_path, "other fs file contents")
             .expect("Unable to write to other_fs_file");
 
         // create a symlink to the file inside the same directory.
@@ -1669,22 +1666,16 @@ mod inter_partition_copying {
         assert!(!symlink_path.is_symlink());
 
         // make sure that file contents in other_fs_file didn't change.
-        let mut new_contents = String::new();
-        Read::read_to_string(
-            &mut File::open(&other_fs_file_path).expect("Unable to open other_fs_file"),
-            &mut new_contents,
-        )
-        .expect("Unable to read other_fs_file");
-        assert_eq!(new_contents, "other fs file contents");
+        assert_eq!(
+            read_to_string(&other_fs_file_path,).expect("Unable to read other_fs_file"),
+            "other fs file contents"
+        );
 
-        // make sure that src file contents got copied into new file created in symlink_path .
-        let mut new_contents = String::new();
-        Read::read_to_string(
-            &mut File::open(&symlink_path).expect("Unable to open file"),
-            &mut new_contents,
-        )
-        .expect("Unable to read file");
-        assert_eq!(new_contents, "src contents");
+        // make sure that src file contents got copied into new file created in symlink_path
+        assert_eq!(
+            read_to_string(&symlink_path,).expect("Unable to read other_fs_file"),
+            "src contents"
+        );
     }
 
     // In an inter-partition move if unlinking the destination symlink fails, ensure
@@ -1703,8 +1694,7 @@ mod inter_partition_copying {
 
         // create a file inside that folder.
         let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
-        let mut file = File::create(&other_fs_file_path).expect("Unable to create other_fs_file");
-        Write::write_all(&mut file, b"other fs file contents")
+        write(&other_fs_file_path, "other fs file contents")
             .expect("Unable to write to other_fs_file");
 
         // create a symlink to the file inside the same directory.
