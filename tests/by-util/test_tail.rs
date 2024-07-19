@@ -4828,13 +4828,11 @@ fn test_obsolete_encoding_windows() {
 #[test]
 fn test_following_with_pid() {
     use std::process::Command;
-    use std::time::Duration;
-    use std::thread::sleep;
 
     let scene = TestScenario::new(util_name!());
 
     let sleep_command = Command::new("sleep")
-        .arg("10")
+        .arg("999d")
         .spawn()
         .expect("failed to start sleep command");
 
@@ -4849,15 +4847,15 @@ fn test_following_with_pid() {
         .stderr_to_stdout()
         .run_no_wait();
 
-    sleep(Duration::from_secs(1));
-
-    child.make_assertion_with_delay(500).is_alive();
+    child.make_assertion_with_delay(1000).is_alive();
 
     Command::new("kill")
         .arg("-9")
         .arg(sleep_pid.to_string())
         .output()
         .expect("failed to kill sleep command");
+
+    child.make_assertion_with_delay(100).is_alive();
 
     child.kill();
 }
