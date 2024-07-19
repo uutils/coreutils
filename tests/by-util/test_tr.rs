@@ -1434,8 +1434,8 @@ fn check_complement_set2_too_big() {
 #[test]
 #[cfg(unix)]
 fn test_truncate_non_utf8_set() {
-    let stdin = &[b'\x01', b'a', b'm', b'p', 0xfe_u8, 0xff_u8];
-    let set1 = OsStr::from_bytes(&[b'a', 0xfe_u8, 0xff_u8, b'z']);
+    let stdin = b"\x01amp\xfe\xff";
+    let set1 = OsStr::from_bytes(b"a\xfe\xffz"); // spell-checker:disable-line
     let set2 = OsStr::from_bytes(b"01234");
 
     new_ucmd!()

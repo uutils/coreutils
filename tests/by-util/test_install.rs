@@ -962,7 +962,7 @@ fn test_install_dir() {
     at.mkdir(dir);
     ucmd.arg(file1)
         .arg(file2)
-        .arg(&format!("--target-directory={dir}"))
+        .arg(format!("--target-directory={dir}"))
         .succeeds()
         .no_stderr();
 

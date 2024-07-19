@@ -59,7 +59,7 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
 static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
-static END_OF_TRANSMISSION_SEQUENCE: &[u8] = &[b'\n', 0x04];
+static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 pub const PATH: &str = env!("PATH");
@@ -1522,12 +1522,12 @@ impl UCommand {
     ///
     /// These __defaults__ are:
     /// * `bin_path`: Depending on the platform and os, the native shell (unix -> `/bin/sh` etc.).
-    /// This default also requires to set the first argument to `-c` on unix (`/C` on windows) if
-    /// this argument wasn't specified explicitly by the user.
+    ///   This default also requires to set the first argument to `-c` on unix (`/C` on windows) if
+    ///   this argument wasn't specified explicitly by the user.
     /// * `util_name`: `None`. If neither `bin_path` nor `util_name` were given the arguments are
-    /// run in a shell (See `bin_path` above).
+    ///   run in a shell (See `bin_path` above).
     /// * `temp_dir`: If `current_dir` was not set, a new temporary directory will be created in
-    /// which this command will be run and `current_dir` will be set to this `temp_dir`.
+    ///   which this command will be run and `current_dir` will be set to this `temp_dir`.
     /// * `current_dir`: The temporary directory given by `temp_dir`.
     /// * `timeout`: `30 seconds`
     /// * `stdin`: `Stdio::null()`
@@ -3081,7 +3081,7 @@ mod tests {
         let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
 
         result.stdout_str_check(|stdout| stdout.ends_with("world\n"));
-        result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
         result.no_stderr();
     }
 
@@ -3096,7 +3096,7 @@ mod tests {
         ));
 
         result.stderr_str_check(|stderr| stderr.ends_with("world\n"));
-        result.stderr_check(|stderr| stderr.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.stderr_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
         result.no_stdout();
     }
 

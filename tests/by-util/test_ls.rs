@@ -75,7 +75,7 @@ fn test_invalid_value_returns_1() {
         "--time",
     ] {
         new_ucmd!()
-            .arg(&format!("{flag}=definitely_invalid_value"))
+            .arg(format!("{flag}=definitely_invalid_value"))
             .fails()
             .no_stdout()
             .code_is(1);
@@ -87,7 +87,7 @@ fn test_invalid_value_returns_2() {
     // Invalid values to flags *sometimes* result in error code 2:
     for flag in ["--block-size", "--width", "--tab-size"] {
         new_ucmd!()
-            .arg(&format!("{flag}=definitely_invalid_value"))
+            .arg(format!("{flag}=definitely_invalid_value"))
             .fails()
             .no_stdout()
             .code_is(2);
