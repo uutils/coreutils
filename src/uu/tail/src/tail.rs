@@ -65,12 +65,9 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     // Add `path` and `reader` to `files` map if `--follow` is selected.
     for input in &settings.inputs.clone() {
         match input.kind() {
-            // File points to /dev/stdin here
             InputKind::Stdin => {
                 tail_stdin(settings, &mut printer, input, &mut observer)?;
             }
-            // and here. Currently, on Linux, it seems that the presence and absence of this
-            // makes no difference, but leaving this here for verbosity and correctness
             InputKind::File(path) if cfg!(unix) && path == &PathBuf::from(text::DEV_STDIN) => {
                 tail_stdin(settings, &mut printer, input, &mut observer)?;
             }
