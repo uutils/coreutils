@@ -4824,3 +4824,40 @@ fn test_obsolete_encoding_windows() {
         .stderr_is("tail: bad argument encoding: '-�b'\n")
         .code_is(1);
 }
+
+#[test]
+fn test_following_with_pid() {
+    use std::process::Command;
+    use std::time::Duration;
+    use std::thread::sleep;
+
+    let scene = TestScenario::new(util_name!());
+
+    let sleep_command = Command::new("sleep")
+        .arg("10")
+        .spawn()
+        .expect("failed to start sleep command");
+
+    let sleep_pid = sleep_command.id();
+    
+    // when -f is specified, tail should die after
+    // the pid from --pid also dies
+    let mut child = scene
+        .ucmd()
+        .args(&["--pid", &sleep_pid.to_string(), "-f"])
+        .set_stdin(Stdio::null())
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    sleep(Duration::from_secs(1));
+
+    child.make_assertion_with_delay(500).is_alive();
+
+    Command::new("kill")
+        .arg("-9")
+        .arg(sleep_pid.to_string())
+        .output()
+        .expect("failed to kill sleep command");
+
+    child.kill();
+}
