@@ -5703,6 +5703,7 @@ fn test_copy_symlink_overwrite() {
     at.mkdir("a");
     at.mkdir("b");
     at.mkdir("c");
+
     at.write("t", "hello");
     at.relative_symlink_file("../t", "a/1");
     at.relative_symlink_file("../t", "b/1");
@@ -5717,5 +5718,27 @@ fn test_copy_symlink_overwrite() {
         } else {
             "cp: will not overwrite just-created 'c\\1' with 'b/1'\n"
         });
-    assert_eq!(at.read("c/1"), "hello");
+}
+
+#[test]
+fn test_symlink_mode_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+
+    at.write("a/1", "hello");
+    at.write("b/1", "hello");
+
+    ucmd.arg("-s")
+        .arg("a/1")
+        .arg("b/1")
+        .arg(".")
+        .fails()
+        .stderr_only(if cfg!(not(target_os = "windows")) {
+            "cp: will not overwrite just-created './1' with 'b/1'\n"
+        } else {
+            "cp: will not overwrite just-created '.\\1' with 'b/1'\n"
+        });
+
+    assert_eq!(at.read("./1"), "hello");
 }
