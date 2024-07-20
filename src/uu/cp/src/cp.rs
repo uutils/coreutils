@@ -1669,34 +1669,33 @@ fn handle_existing_dest(
             backup_dest(dest, &backup_path, is_dest_removed)?;
         }
     }
-    match options.overwrite {
-        // FIXME: print that the file was removed if --verbose is enabled
-        OverwriteMode::Clobber(ClobberMode::Force) => {
-            if !is_dest_removed
-                && (is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly())
-            {
+    if !is_dest_removed {
+        match options.overwrite {
+            // FIXME: print that the file was removed if --verbose is enabled
+            OverwriteMode::Clobber(ClobberMode::Force) => {
+                if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
+                    fs::remove_file(dest)?;
+                }
+            }
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
                 fs::remove_file(dest)?;
             }
-        }
-        OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
-            fs::remove_file(dest)?;
-        }
-        OverwriteMode::Clobber(ClobberMode::Standard) => {
-            // Consider the following files:
-            //
-            // * `src/f` - a regular file
-            // * `src/link` - a hard link to `src/f`
-            // * `dest/src/f` - a different regular file
-            //
-            // In this scenario, if we do `cp -a src/ dest/`, it is
-            // possible that the order of traversal causes `src/link`
-            // to get copied first (to `dest/src/link`). In that case,
-            // in order to make sure `dest/src/link` is a hard link to
-            // `dest/src/f` and `dest/src/f` has the contents of
-            // `src/f`, we delete the existing file to allow the hard
-            // linking.
+            OverwriteMode::Clobber(ClobberMode::Standard) => {
+                // Consider the following files:
+                //
+                // * `src/f` - a regular file
+                // * `src/link` - a hard link to `src/f`
+                // * `dest/src/f` - a different regular file
+                //
+                // In this scenario, if we do `cp -a src/ dest/`, it is
+                // possible that the order of traversal causes `src/link`
+                // to get copied first (to `dest/src/link`). In that case,
+                // in order to make sure `dest/src/link` is a hard link to
+                // `dest/src/f` and `dest/src/f` has the contents of
+                // `src/f`, we delete the existing file to allow the hard
+                // linking.
 
-            if options.preserve_hard_links()
+                if options.preserve_hard_links()
             // only try to remove dest file only if the current source
             // is hardlink to a file that is already copied
                 && copied_files.contains_key(
@@ -1705,14 +1704,13 @@ fn handle_existing_dest(
                         options.dereference(source_in_command_line),
                     )
                     .context(format!("cannot stat {}", source.quote()))?,
-                )
-                && !is_dest_removed
-            {
-                fs::remove_file(dest)?;
+                ) {
+                    fs::remove_file(dest)?;
+                }
             }
-        }
-        _ => (),
-    };
+            _ => (),
+        };
+    }
 
     Ok(())
 }
@@ -2044,6 +2042,7 @@ fn copy_file(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
+            && options.backup == BackupMode::NoBackup
         {
             fs::remove_file(dest)?;
         }
