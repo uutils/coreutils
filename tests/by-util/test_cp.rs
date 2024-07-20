@@ -5696,3 +5696,26 @@ fn test_cp_parents_absolute_path() {
     let res = format!("dest{}/a/b/f", at.root_dir_resolved());
     at.file_exists(res);
 }
+
+#[test]
+fn test_copy_symlink_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("t", "hello");
+    at.relative_symlink_file("../t", "a/1");
+    at.relative_symlink_file("../t", "b/1");
+
+    ucmd.arg("--no-dereference")
+        .arg("a/1")
+        .arg("b/1")
+        .arg("c")
+        .fails()
+        .stderr_only(if cfg!(not(target_os = "windows")) {
+            "cp: will not overwrite just-created 'c/1' with 'b/1'\n"
+        } else {
+            "cp: will not overwrite just-created 'c\\1' with 'b/1'\n"
+        });
+    assert_eq!(at.read("c/1"), "hello");
+}
