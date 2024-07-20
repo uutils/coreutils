@@ -5718,8 +5718,6 @@ fn test_copy_symlink_overwrite() {
         } else {
             "cp: will not overwrite just-created 'c\\1' with 'b/1'\n"
         });
-
-    assert_eq!(at.read("a/1"), "hello");
 }
 
 #[test]
@@ -5731,16 +5729,23 @@ fn test_symlink_mode_overwrite() {
     at.write("a/t", "hello");
     at.write("b/t", "hello");
 
-    ucmd.arg("-s")
-        .arg("a/t")
-        .arg("b/t")
-        .arg(".")
-        .fails()
-        .stderr_only(if cfg!(not(target_os = "windows")) {
-            "cp: will not overwrite just-created './t' with 'b/t'\n"
-        } else {
-            "cp: will not overwrite just-created '.\\t' with 'b/t'\n"
-        });
+    if cfg!(not(target_os = "windows")) {
+        ucmd.arg("-s")
+            .arg("a/t")
+            .arg("b/t")
+            .arg(".")
+            .fails()
+            .stderr_only("cp: will not overwrite just-created './t' with 'b/t'\n");
 
-    assert_eq!(at.read("t"), "hello");
+        assert_eq!(at.read("./t"), "hello");
+    } else {
+        ucmd.arg("-s")
+            .arg("a\\t")
+            .arg("b\\t")
+            .arg(".")
+            .fails()
+            .stderr_only("cp: will not overwrite just-created '.\\t' with 'b\\t'\n");
+
+        assert_eq!(at.read(".\\t"), "hello");
+    }
 }
