@@ -4837,7 +4837,7 @@ fn test_following_with_pid() {
         .expect("failed to start sleep command");
 
     let sleep_pid = sleep_command.id();
-    
+
     // when -f is specified, tail should die after
     // the pid from --pid also dies
     let mut child = scene
