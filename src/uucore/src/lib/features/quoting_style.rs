@@ -12,7 +12,8 @@ use std::fmt;
 // These are characters with special meaning in the shell (e.g. bash).
 // The first const contains characters that only have a special meaning when they appear at the beginning of a name.
 const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
-const SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
+// PR#6559 : Remove `]{}` from special shell chars.
+const SPECIAL_SHELL_CHARS: &str = "`$&*()|[;\\'\"<>?! ";
 
 /// The quoting style to use when escaping a name.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -285,6 +286,24 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
     (escaped_str, must_quote)
 }
 
+/// Return a set of characters that implies quoting of the word in
+/// shell-quoting mode.
+fn shell_escaped_char_set(is_dirname: bool) -> &'static [char] {
+    const ESCAPED_CHARS: &[char] = &[
+        // the ':' colon character only induce quoting in the
+        // context of ls displaying a directory name before listing its content.
+        // (e.g. with the recursive flag -R)
+        ':',
+        // Under this line are the control characters that should be
+        // quoted in shell mode in all cases.
+        '"', '`', '$', '\\', '^', '\n', '\t', '\r', '=',
+    ];
+
+    let start_index = if is_dirname { 0 } else { 1 };
+
+    &ESCAPED_CHARS[start_index..]
+}
+
 /// Escape a name according to the given quoting style.
 ///
 /// This inner function provides an additional flag `dirname` which
@@ -321,9 +340,7 @@ fn escape_name_inner(name: &OsStr, style: &QuotingStyle, dirname: bool) -> Strin
         } => {
             let name = name.to_string_lossy();
 
-            // Take ':' in account only if we are quoting a dirname
-            let start_index = if dirname { 0 } else { 1 };
-            let (quotes, must_quote) = if name.contains(&[':', '"', '`', '$', '\\'][start_index..]) {
+            let (quotes, must_quote) = if name.contains(shell_escaped_char_set(dirname)) {
                 (Quotes::Single, true)
             } else if name.contains('\'') {
                 (Quotes::Double, true)
