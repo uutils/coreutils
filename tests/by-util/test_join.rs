@@ -208,9 +208,9 @@ fn tab_multi_character() {
         .arg("semicolon_fields_1.txt")
         .arg("semicolon_fields_2.txt")
         .arg("-t")
-        .arg("э")
+        .arg("ab")
         .fails()
-        .stderr_is("join: multi-character tab э\n");
+        .stderr_is("join: multi-character tab ab\n");
 }
 
 #[test]
@@ -437,14 +437,22 @@ fn non_unicode() {
 
     #[cfg(unix)]
     {
-        let invalid_utf8: u8 = 167;
+        let non_utf8_byte: u8 = 167;
         new_ucmd!()
             .arg("-t")
-            .arg(OsStr::from_bytes(&[invalid_utf8]))
+            .arg(OsStr::from_bytes(&[non_utf8_byte]))
             .arg("non-unicode_1.bin")
             .arg("non-unicode_2.bin")
             .succeeds()
             .stdout_only_fixture("non-unicode_sep.expected");
+
+        new_ucmd!()
+            .arg("-t")
+            .arg(OsStr::from_bytes(&[non_utf8_byte, non_utf8_byte]))
+            .arg("non-unicode_1.bin")
+            .arg("non-unicode_2.bin")
+            .fails()
+            .stderr_is("join: non-UTF-8 multi-byte tab\n");
     }
 
     #[cfg(windows)]
@@ -460,6 +468,16 @@ fn non_unicode() {
                 "join: unprintable field separators are only supported on unix-like platforms\n",
             );
     }
+}
+
+#[test]
+fn multibyte_sep() {
+    new_ucmd!()
+        .arg("-t§")
+        .arg("multibyte_sep_1.txt")
+        .arg("multibyte_sep_2.txt")
+        .succeeds()
+        .stdout_only_fixture("multibyte_sep.expected");
 }
 
 #[test]
