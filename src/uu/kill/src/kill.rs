@@ -200,8 +200,7 @@ fn list(signals: &Vec<String>) {
 }
 
 fn parse_signal_value(signal_name: &str) -> UResult<usize> {
-    let signal_name_upcase = signal_name.to_uppercase();
-    let optional_signal_value = signal_by_name_or_value(&signal_name_upcase);
+    let optional_signal_value = signal_by_name_or_value(signal_name);
     match optional_signal_value {
         Some(x) => Ok(x),
         None => Err(USimpleError::new(

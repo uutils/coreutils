@@ -238,12 +238,14 @@ impl Sequence {
         set2_uniques.sort();
         set2_uniques.dedup();
 
-        //If the complement flag is used in translate mode, only one unique character may appear in
-        //set2. Validate this with the set of uniques in set2 that we just generated.
+        // If the complement flag is used in translate mode, only one unique
+        // character may appear in set2. Validate this with the set of uniques
+        // in set2 that we just generated.
+        // Also, set2 must not overgrow set1, otherwise the mapping can't be 1:1.
         if set1.iter().any(|x| matches!(x, Self::Class(_)))
             && translating
             && complement_flag
-            && set2_uniques.len() > 1
+            && (set2_uniques.len() > 1 || set2_solved.len() > set1_len)
         {
             return Err(BadSequence::ComplementMoreThanOneUniqueInSet2);
         }

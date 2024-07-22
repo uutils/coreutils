@@ -19,7 +19,10 @@ use std::fmt::Display;
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum LineEnding {
     #[default]
+    /// Newline character (`\n`)
     Newline = b'\n',
+
+    /// Null character (`\0`)
     Nul = 0,
 }
 

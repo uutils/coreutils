@@ -889,7 +889,7 @@ fn test_dictionary_and_nonprinting_conflicts() {
     for restricted_arg in ["d", "i"] {
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
-                .arg(&format!("-{restricted_arg}{conflicting_arg}"))
+                .arg(format!("-{restricted_arg}{conflicting_arg}"))
                 .fails();
         }
         for conflicting_arg in &conflicting_args {
@@ -897,7 +897,7 @@ fn test_dictionary_and_nonprinting_conflicts() {
                 .args(&[
                     format!("-{restricted_arg}").as_str(),
                     "-k",
-                    &format!("1,1{conflicting_arg}"),
+                    format!("1,1{conflicting_arg}").as_str(),
                 ])
                 .succeeds();
         }
