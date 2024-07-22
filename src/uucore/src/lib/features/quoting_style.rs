@@ -318,9 +318,20 @@ fn escape_name_inner(name: &OsStr, style: &QuotingStyle, dirname: bool) -> Strin
         } => {
             let name = name.to_string_lossy();
 
+            let escaped_chars = [
+                ':',
+                // Before this line, characters only induce quoting in the
+                // context of displaying a directory name.
+                // (e.g. with the recursive flag)
+                '"', '`', '$', '\\',
+                // Under this line are the control characters that should be
+                // quoted in shell mode in all cases.
+                '\n', '\t', '\r',
+            ];
             // Take ':' in account only if we are quoting a dirname
             let start_index = if dirname { 0 } else { 1 };
-            let (quotes, must_quote) = if name.contains(&[':', '"', '`', '$', '\\'][start_index..]) {
+
+            let (quotes, must_quote) = if name.contains(&escaped_chars[start_index..]) {
                 (Quotes::Single, true)
             } else if name.contains('\'') {
                 (Quotes::Double, true)
