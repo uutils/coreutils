@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) cvar exitstatus cmdline kworker
+// spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid
 // spell-checker:ignore (sys/unix) WIFSIGNALED
 // spell-checker:ignore pgrep pwait snice
 
@@ -34,6 +34,11 @@ pub fn getgid() -> gid_t {
 /// `getuid()` returns the real user ID of the calling process.
 pub fn getuid() -> uid_t {
     unsafe { libc::getuid() }
+}
+
+/// `getsid()` returns the session ID of the pid.
+pub fn getsid(pid: i32) -> pid_t {
+    unsafe { libc::getsid(pid) }
 }
 
 /// Missing methods for Child objects
