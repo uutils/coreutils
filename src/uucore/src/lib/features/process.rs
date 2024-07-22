@@ -8,6 +8,7 @@
 // spell-checker:ignore pgrep pwait snice
 
 use libc::{gid_t, pid_t, uid_t};
+use nix::errno::Errno;
 use std::io;
 use std::process::Child;
 use std::process::ExitStatus;
@@ -36,9 +37,23 @@ pub fn getuid() -> uid_t {
     unsafe { libc::getuid() }
 }
 
-/// `getsid()` returns the session ID of the pid.
-pub fn getsid(pid: i32) -> pid_t {
-    unsafe { libc::getsid(pid) }
+/// `getsid()` returns the session ID of the process with process ID pid.
+///
+/// If pid is 0, getsid() returns the session ID of the calling process.
+///
+/// # Error
+///
+/// - [Errno::EPERM] A process with process ID pid exists, but it is not in the same session as the calling process, and the implementation considers this an error.
+/// - [Errno::ESRCH] No process with process ID pid was found.
+pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
+    unsafe {
+        let result = libc::getsid(pid);
+        if Errno::last() == Errno::UnknownErrno {
+            Ok(result)
+        } else {
+            Err(Errno::last())
+        }
+    }
 }
 
 /// Missing methods for Child objects
