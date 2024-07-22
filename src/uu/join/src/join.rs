@@ -7,7 +7,7 @@
 
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, Command};
-use memchr::{memchr3_iter, memchr_iter};
+use memchr::{memchr3_iter, memchr_iter, memmem::Finder};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::OsString;
@@ -17,6 +17,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write}
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+use std::rc::Rc;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
@@ -60,9 +61,10 @@ enum FileNum {
     File2,
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Clone)]
 enum Sep {
-    Char(u8),
+    Byte(u8),
+    Char(Rc<Finder<'static>>),
     Line,
     Whitespaces,
 }
@@ -113,13 +115,18 @@ impl Default for Settings {
 /// Output representation.
 struct Repr<'a> {
     line_ending: LineEnding,
-    separator: u8,
+    separator: Vec<u8>,
     format: &'a [Spec],
     empty: &'a [u8],
 }
 
 impl<'a> Repr<'a> {
-    fn new(line_ending: LineEnding, separator: u8, format: &'a [Spec], empty: &'a [u8]) -> Self {
+    fn new(line_ending: LineEnding, separator: Sep, format: &'a [Spec], empty: &'a [u8]) -> Self {
+        let separator = match separator {
+            Sep::Byte(c) => vec![c],
+            Sep::Char(f) => f.needle().into(),
+            _ => vec![b' '],
+        };
         Repr {
             line_ending,
             separator,
@@ -155,7 +162,7 @@ impl<'a> Repr<'a> {
     ) -> Result<(), std::io::Error> {
         for i in 0..line.field_ranges.len() {
             if i != index {
-                writer.write_all(&[self.separator])?;
+                writer.write_all(&self.separator)?;
                 writer.write_all(line.get_field(i).unwrap())?;
             }
         }
@@ -169,7 +176,7 @@ impl<'a> Repr<'a> {
     {
         for i in 0..self.format.len() {
             if i > 0 {
-                writer.write_all(&[self.separator])?;
+                writer.write_all(&self.separator)?;
             }
 
             let field = match f(&self.format[i]) {
@@ -274,19 +281,30 @@ impl Line {
     fn new(string: Vec<u8>, separator: Sep, len_guess: usize) -> Self {
         let mut field_ranges = Vec::with_capacity(len_guess);
         let mut last_end = 0;
-        if separator == Sep::Whitespaces {
-            // GNU join uses Bourne shell field splitters by default
-            for i in memchr3_iter(b' ', b'\t', b'\n', &string) {
-                if i > last_end {
-                    field_ranges.push((last_end, i));
+        match separator {
+            Sep::Whitespaces => {
+                // GNU join used Bourne shell field splitters by default
+                // FIXME: but now uses locale-dependent whitespace
+                for i in memchr3_iter(b' ', b'\t', b'\n', &string) {
+                    if i > last_end {
+                        field_ranges.push((last_end, i));
+                    }
+                    last_end = i + 1;
                 }
-                last_end = i + 1;
             }
-        } else if let Sep::Char(sep) = separator {
-            for i in memchr_iter(sep, &string) {
-                field_ranges.push((last_end, i));
-                last_end = i + 1;
+            Sep::Byte(sep) => {
+                for i in memchr_iter(sep, &string) {
+                    field_ranges.push((last_end, i));
+                    last_end = i + 1;
+                }
             }
+            Sep::Char(finder) => {
+                for i in finder.find_iter(&string) {
+                    field_ranges.push((last_end, i));
+                    last_end = i + finder.needle().len();
+                }
+            }
+            Sep::Line => (),
         }
         field_ranges.push((last_end, string.len()));
 
@@ -445,7 +463,7 @@ impl<'a> State<'a> {
     }
 
     fn reset_read_line(&mut self, input: &Input) -> Result<(), std::io::Error> {
-        let line = self.read_line(input.separator)?;
+        let line = self.read_line(input.separator.clone())?;
         self.reset(line);
         Ok(())
     }
@@ -507,7 +525,7 @@ impl<'a> State<'a> {
 
     /// Get the next line with the order check.
     fn next_line(&mut self, input: &Input) -> Result<Option<Line>, JoinError> {
-        if let Some(line) = self.read_line(input.separator)? {
+        if let Some(line) = self.read_line(input.separator.clone())? {
             if input.check_order == CheckOrder::Disabled {
                 return Ok(Some(line));
             }
@@ -574,25 +592,43 @@ impl<'a> State<'a> {
 }
 
 fn parse_separator(value_os: &OsString) -> UResult<Sep> {
+    // Five possible separator values:
+    // No argument supplied, separate on whitespace; handled implicitly as the default elsewhere
+    // An empty string arg, whole line sparation
+    // On unix-likes only, a single arbitrary byte
+    // The two-character "\0" string, interpreted as a single 0 byte
+    // A single scalar valid in the locale encoding (currently only UTF-8)
+
+    if value_os.is_empty() {
+        return Ok(Sep::Line);
+    }
+
     #[cfg(unix)]
-    let value = value_os.as_bytes();
-    #[cfg(not(unix))]
-    let value = match value_os.to_str() {
-        Some(value) => value.as_bytes(),
-        None => {
-            return Err(USimpleError::new(
-                1,
-                "unprintable field separators are only supported on unix-like platforms",
-            ));
+    {
+        let value = value_os.as_bytes();
+        if value.len() == 1 {
+            return Ok(Sep::Byte(value[0]));
         }
+    }
+
+    let Some(value) = value_os.to_str() else {
+        #[cfg(unix)]
+        return Err(USimpleError::new(1, "non-UTF-8 multi-byte tab"));
+        #[cfg(not(unix))]
+        return Err(USimpleError::new(
+            1,
+            "unprintable field separators are only supported on unix-like platforms",
+        ));
     };
-    match value.len() {
-        0 => Ok(Sep::Line),
-        1 => Ok(Sep::Char(value[0])),
-        2 if value[0] == b'\\' && value[1] == b'0' => Ok(Sep::Char(0)),
+
+    let mut chars = value.chars();
+    let c = chars.next().expect("valid string with at least one byte");
+    match chars.next() {
+        None => Ok(Sep::Char(Finder::new(value).into_owned().into())),
+        Some('0') if c == '\\' => Ok(Sep::Byte(0)),
         _ => Err(USimpleError::new(
             1,
-            format!("multi-character tab {}", value_os.to_string_lossy()),
+            format!("multi-character tab {}", value),
         )),
     }
 }
@@ -838,7 +874,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
     )?;
 
     let input = Input::new(
-        settings.separator,
+        settings.separator.clone(),
         settings.ignore_case,
         settings.check_order,
     );
@@ -846,7 +882,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
     let format = if settings.autoformat {
         let mut format = vec![Spec::Key];
         let mut initialize = |state: &mut State| {
-            let max_fields = state.initialize(settings.separator, settings.autoformat);
+            let max_fields = state.initialize(settings.separator.clone(), settings.autoformat);
             for i in 0..max_fields {
                 if i != state.key {
                     format.push(Spec::Field(state.file_num, i));
@@ -857,17 +893,14 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
         initialize(&mut state2);
         format
     } else {
-        state1.initialize(settings.separator, settings.autoformat);
-        state2.initialize(settings.separator, settings.autoformat);
+        state1.initialize(settings.separator.clone(), settings.autoformat);
+        state2.initialize(settings.separator.clone(), settings.autoformat);
         settings.format
     };
 
     let repr = Repr::new(
         settings.line_ending,
-        match settings.separator {
-            Sep::Char(sep) => sep,
-            _ => b' ',
-        },
+        settings.separator,
         &format,
         &settings.empty,
     );
