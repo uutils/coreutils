@@ -1,4 +1,4 @@
-# spell-checker:ignore bigdecimal
+# spell-checker:ignore bigdecimal cfgs
 [package]
 name = "uu_seq"
 version = "0.0.27"
@@ -27,3 +27,8 @@ uucore = { workspace = true, features = ["format", "quoting-style"] }
 [[bin]]
 name = "seq"
 path = "src/main.rs"
+
+# Allow "fuzzing" as a "cfg" condition name
+# https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
