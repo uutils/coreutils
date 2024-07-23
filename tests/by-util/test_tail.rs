@@ -4855,7 +4855,7 @@ fn test_following_with_pid() {
         .output()
         .expect("failed to kill sleep command");
 
-    child.make_assertion_with_delay(100).is_alive();
+    child.make_assertion_with_delay(1000).is_alive();
 
     child.kill();
 }
