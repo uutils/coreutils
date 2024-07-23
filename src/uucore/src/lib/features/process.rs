@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid
-// spell-checker:ignore (sys/unix) WIFSIGNALED
+// spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH
 // spell-checker:ignore pgrep pwait snice
 
 use libc::{gid_t, pid_t, uid_t};
@@ -45,6 +45,13 @@ pub fn getuid() -> uid_t {
 ///
 /// - [Errno::EPERM] A process with process ID pid exists, but it is not in the same session as the calling process, and the implementation considers this an error.
 /// - [Errno::ESRCH] No process with process ID pid was found.
+///
+///
+/// # Platform
+///
+/// This function only support standard POSIX implementation platform,
+/// so some system such as redox doesn't supported.
+#[cfg(not(target_os = "redox"))]
 pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
     unsafe {
         let result = libc::getsid(pid);
