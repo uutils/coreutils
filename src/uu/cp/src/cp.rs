@@ -1947,7 +1947,8 @@ fn handle_copy_mode(
 ///
 /// * `Ok(Permissions)` - The calculated permissions for the destination file.
 /// * `Err(CopyError)` - An error occurred while getting the metadata of the destination file.
-/// Allow unused variables for Windows (on options)
+///
+// Allow unused variables for Windows (on options)
 #[allow(unused_variables)]
 fn calculate_dest_permissions(
     dest: &Path,
