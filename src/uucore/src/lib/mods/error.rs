@@ -29,7 +29,7 @@
 //! * When `Ok` is returned, the code set with [`set_exit_code`] is used as exit code. If
 //!   [`set_exit_code`] was not used, then `0` is used.
 //! * When `Err` is returned, the code corresponding with the error is used as exit code and the
-//! error message is displayed.
+//!   error message is displayed.
 //!
 //! Additionally, the errors can be displayed manually with the [`crate::show`] and [`crate::show_if_err`] macros:
 //! ```ignore
