@@ -91,3 +91,37 @@ impl TryFrom<PathBuf> for Teletype {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tty_from() {
+        assert_eq!(Teletype::try_from("?").unwrap(), Teletype::Unknown);
+        assert_eq!(Teletype::try_from("/dev/tty1").unwrap(), Teletype::Tty(1));
+        assert_eq!(Teletype::try_from("/dev/tty10").unwrap(), Teletype::Tty(10));
+        assert_eq!(Teletype::try_from("/dev/pts/1").unwrap(), Teletype::Pts(1));
+        assert_eq!(
+            Teletype::try_from("/dev/pts/10").unwrap(),
+            Teletype::Pts(10)
+        );
+        assert_eq!(Teletype::try_from("/dev/ttyS1").unwrap(), Teletype::TtyS(1));
+        assert_eq!(
+            Teletype::try_from("/dev/ttyS10").unwrap(),
+            Teletype::TtyS(10)
+        );
+        assert_eq!(Teletype::try_from("ttyS10").unwrap(), Teletype::TtyS(10));
+
+        assert!(Teletype::try_from("value").is_err());
+        assert!(Teletype::try_from("TtyS10").is_err());
+    }
+
+    #[test]
+    fn test_terminal_type_display() {
+        assert_eq!(Teletype::Pts(10).to_string(), "/dev/pts/10");
+        assert_eq!(Teletype::Tty(10).to_string(), "/dev/tty10");
+        assert_eq!(Teletype::TtyS(10).to_string(), "/dev/ttyS10");
+        assert_eq!(Teletype::Unknown.to_string(), "?");
+    }
+}
