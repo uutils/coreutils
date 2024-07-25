@@ -37,6 +37,11 @@ pub fn getuid() -> uid_t {
     unsafe { libc::getuid() }
 }
 
+/// `getpid()` returns the pid of the calling process.
+pub fn getpid() -> pid_t {
+    unsafe { libc::getpid() }
+}
+
 /// `getsid()` returns the session ID of the process with process ID pid.
 ///
 /// If pid is 0, getsid() returns the session ID of the calling process.
