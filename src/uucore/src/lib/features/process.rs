@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid
+// spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid getpid
 // spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH
 // spell-checker:ignore pgrep pwait snice
 
@@ -129,5 +129,40 @@ impl ChildExt for Child {
         }
 
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf, str::FromStr};
+
+    use super::*;
+
+    #[test]
+    fn test_getpid() {
+        let libc_pid = getgid();
+
+        // Read `/proc/self` directly.
+        let proc_pid = fs::read_link(PathBuf::from_str("/proc/self").unwrap())
+            .unwrap()
+            .iter()
+            .last()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .parse::<usize>()
+            .unwrap() as u32;
+
+        assert_eq!(libc_pid, proc_pid);
+    }
+
+    #[test]
+    #[cfg(not(target_os = "redox"))]
+    fn test_getsid() {
+        // This test assumes that the current allowed process is actually the session leader.
+        assert_eq!(getpid(), getsid(getpid()).unwrap());
+
+        // This might caused tests failure but the probability is low.
+        assert!(getsid(999999).is_err());
     }
 }
