@@ -262,14 +262,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let algo_name: &str = match matches.get_one::<String>(options::ALGORITHM) {
         Some(v) => v,
-        None => {
-            if check {
-                // if we are doing a --check, we should not default to crc
-                ""
-            } else {
-                ALGORITHM_OPTIONS_CRC
-            }
-        }
+        // if we are doing a --check, we should not default to crc
+        None if check => "",
+        None => ALGORITHM_OPTIONS_CRC,
     };
 
     if ["bsd", "crc", "sysv"].contains(&algo_name) && check {
