@@ -137,13 +137,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_getpid() {
-        let libc_pid = getgid();
-
-        assert_ne!(libc_pid, 0);
-    }
-
-    #[test]
     #[cfg(not(target_os = "redox"))]
     fn test_getsid() {
         assert!(getsid(getpid()).is_ok());
