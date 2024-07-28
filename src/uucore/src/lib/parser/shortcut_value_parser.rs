@@ -55,26 +55,35 @@ impl ShortcutValueParser {
 
         // if `possible_values` is not empty then that means this error is because of an ambiguous value.
         if !possible_values.is_empty() {
-            let mut formatted_possible_values = String::new();
-            for (i, s) in possible_values.iter().enumerate() {
-                formatted_possible_values.push_str(&format!("'{}'", s.get_name()));
-                if i < possible_values.len() - 2 {
-                    formatted_possible_values.push_str(", ");
-                } else if i < possible_values.len() - 1 {
-                    formatted_possible_values.push_str(" or ");
-                }
-            }
-            err.insert(
-                ContextKind::Suggested,
-                ContextValue::StyledStrs(vec![format!(
-                    "It looks like '{}' could match several values. Did you mean {}?",
-                    value, formatted_possible_values
-                )
-                .into()]),
-            );
+            add_ambiguous_value_tip(possible_values, &mut err, value);
         }
         err
     }
+}
+
+/// Adds a suggestion when error is because of ambiguous values based on the provided possible values.
+fn add_ambiguous_value_tip(
+    possible_values: &[&PossibleValue],
+    err: &mut clap::error::Error,
+    value: &str,
+) {
+    let mut formatted_possible_values = String::new();
+    for (i, s) in possible_values.iter().enumerate() {
+        formatted_possible_values.push_str(&format!("'{}'", s.get_name()));
+        if i < possible_values.len() - 2 {
+            formatted_possible_values.push_str(", ");
+        } else if i < possible_values.len() - 1 {
+            formatted_possible_values.push_str(" or ");
+        }
+    }
+    err.insert(
+        ContextKind::Suggested,
+        ContextValue::StyledStrs(vec![format!(
+            "It looks like '{}' could match several values. Did you mean {}?",
+            value, formatted_possible_values
+        )
+        .into()]),
+    );
 }
 
 impl TypedValueParser for ShortcutValueParser {
