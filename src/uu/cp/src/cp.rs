@@ -1891,6 +1891,9 @@ fn handle_copy_mode(
 
                         return Ok(());
                     }
+                    update_control::UpdateMode::ReplaceNoneFail => {
+                        return Err(Error::Error(format!("not replacing '{}'", dest.display())));
+                    }
                     update_control::UpdateMode::ReplaceIfOlder => {
                         let dest_metadata = fs::symlink_metadata(dest)?;
 
