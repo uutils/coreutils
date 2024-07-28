@@ -245,7 +245,7 @@ impl ProcessInformation {
     /// the result will contain [TerminalType::Unknown].
     ///
     /// Otherwise [TerminalType::Unknown] does not appear in the result.
-    pub fn tty(&mut self) -> Teletype {
+    pub fn tty(&self) -> Teletype {
         let path = PathBuf::from(format!("/proc/{}/fd", self.pid));
 
         let Ok(result) = fs::read_dir(path) else {
