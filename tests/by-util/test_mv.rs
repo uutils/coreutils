@@ -300,8 +300,7 @@ fn test_mv_interactive_no_clobber_force_last_arg_wins() {
     scene
         .ucmd()
         .args(&[file_a, file_b, "-f", "-i", "-n"])
-        .fails()
-        .stderr_is(format!("mv: not replacing '{file_b}'\n"));
+        .succeeds();
 
     scene
         .ucmd()
@@ -349,12 +348,7 @@ fn test_mv_no_clobber() {
     at.touch(file_a);
     at.touch(file_b);
 
-    ucmd.arg("-n")
-        .arg(file_a)
-        .arg(file_b)
-        .fails()
-        .code_is(1)
-        .stderr_only(format!("mv: not replacing '{file_b}'\n"));
+    ucmd.arg("-n").arg(file_a).arg(file_b).succeeds();
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -863,14 +857,16 @@ fn test_mv_backup_off() {
 }
 
 #[test]
-fn test_mv_backup_no_clobber_conflicting_options() {
-    new_ucmd!()
-        .arg("--backup")
-        .arg("--no-clobber")
-        .arg("file1")
-        .arg("file2")
-        .fails()
-        .usage_error("options --backup and --no-clobber are mutually exclusive");
+fn test_mv_backup_conflicting_options() {
+    for conflicting_opt in ["--no-clobber", "--update=none-fail", "--update=none"] {
+        new_ucmd!()
+            .arg("--backup")
+            .arg(conflicting_opt)
+            .arg("file1")
+            .arg("file2")
+            .fails()
+            .usage_error("cannot combine --backup with -n or --update=none-fail");
+    }
 }
 
 #[test]
@@ -1400,10 +1396,7 @@ fn test_mv_arg_interactive_skipped_vin() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    ucmd.args(&["-vin", "a", "b"])
-        .fails()
-        .stderr_is("mv: not replacing 'b'\n")
-        .no_stdout();
+    ucmd.args(&["-vin", "a", "b"]).succeeds().no_stdout();
 }
 
 #[test]
