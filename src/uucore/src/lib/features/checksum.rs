@@ -81,6 +81,10 @@ pub enum ChecksumError {
     RawMultipleFiles,
     #[error("the --ignore-missing option is meaningful only when verifying checksums")]
     IgnoreNotCheck,
+    #[error("the --strict option is meaningful only when verifying checksums")]
+    StrictNotCheck,
+    #[error("the --quiet option is meaningful only when verifying checksums")]
+    QuietNotCheck,
     #[error("Invalid output size for SHA3 (expected 224, 256, 384, or 512)")]
     InvalidOutputSizeForSha3,
     #[error("--bits required for SHA3")]

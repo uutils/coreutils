@@ -5696,3 +5696,23 @@ fn test_cp_parents_absolute_path() {
     let res = format!("dest{}/a/b/f", at.root_dir_resolved());
     at.file_exists(res);
 }
+
+// make sure that cp backup dest symlink before removing it.
+#[test]
+fn test_cp_with_options_backup_and_rem_when_dest_is_symlink() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("file", "xyz");
+    at.mkdir("inner_dir");
+    at.write("inner_dir/inner_file", "abc");
+    at.relative_symlink_file("inner_file", "inner_dir/sl");
+    scene
+        .ucmd()
+        .args(&["-b", "--rem", "file", "inner_dir/sl"])
+        .succeeds();
+    assert!(at.file_exists("inner_dir/inner_file"));
+    assert_eq!(at.read("inner_dir/inner_file"), "abc");
+    assert!(at.symlink_exists("inner_dir/sl~"));
+    assert!(!at.symlink_exists("inner_dir/sl"));
+    assert_eq!(at.read("inner_dir/sl"), "xyz");
+}

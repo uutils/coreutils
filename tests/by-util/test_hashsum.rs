@@ -874,6 +874,19 @@ fn test_check_quiet() {
         .fails()
         .stdout_contains("f: FAILED")
         .stderr_contains("WARNING: 1 computed checksum did NOT match");
+
+    scene
+        .ccmd("md5sum")
+        .arg("--quiet")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stderr_contains("md5sum: the --quiet option is meaningful only when verifying checksums");
+    scene
+        .ccmd("md5sum")
+        .arg("--strict")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stderr_contains("md5sum: the --strict option is meaningful only when verifying checksums");
 }
 
 #[test]
