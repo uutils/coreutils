@@ -22,7 +22,7 @@
 use crate::features::tty::Teletype;
 use std::hash::Hash;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::{self, Display, Formatter},
     fs, io,
     path::PathBuf,
@@ -120,7 +120,6 @@ pub struct ProcessInformation {
     cached_stat: Option<Rc<Vec<String>>>,
 
     cached_start_time: Option<u64>,
-    cached_tty: Option<Rc<HashSet<Teletype>>>,
 }
 
 impl ProcessInformation {
@@ -242,42 +241,26 @@ impl ProcessInformation {
 
     /// This function will scan the `/proc/<pid>/fd` directory
     ///
-    /// If the process does not belong to any terminal,
+    /// If the process does not belong to any terminal and mismatched permission,
     /// the result will contain [TerminalType::Unknown].
     ///
     /// Otherwise [TerminalType::Unknown] does not appear in the result.
-    ///
-    /// # Error
-    ///
-    /// If scanned pid had mismatched permission,
-    /// it will caused [std::io::ErrorKind::PermissionDenied] error.
-    pub fn ttys(&mut self) -> Result<Rc<HashSet<Teletype>>, io::Error> {
-        if let Some(tty) = &self.cached_tty {
-            return Ok(Rc::clone(tty));
-        }
-
+    pub fn tty(&mut self) -> Teletype {
         let path = PathBuf::from(format!("/proc/{}/fd", self.pid));
 
         let Ok(result) = fs::read_dir(path) else {
-            return Ok(Rc::new(HashSet::from_iter([Teletype::Unknown])));
+            return Teletype::Unknown;
         };
 
-        let mut result = result
-            .flatten()
-            .filter(|it| it.path().is_symlink())
-            .flat_map(|it| fs::read_link(it.path()))
-            .flat_map(Teletype::try_from)
-            .collect::<HashSet<_>>();
-
-        if result.is_empty() {
-            result.insert(Teletype::Unknown);
+        for dir in result.flatten().filter(|it| it.path().is_symlink()) {
+            if let Ok(path) = fs::read_link(dir.path()) {
+                if let Ok(tty) = Teletype::try_from(path) {
+                    return tty;
+                }
+            }
         }
 
-        let result = Rc::new(result);
-
-        self.cached_tty = Some(Rc::clone(&result));
-
-        Ok(result)
+        Teletype::Unknown
     }
 }
 
@@ -344,11 +327,9 @@ pub fn walk_process() -> impl Iterator<Item = ProcessInformation> {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::features::tty::Teletype;
-
     use super::*;
-    use std::str::FromStr;
+    use crate::features::tty::Teletype;
+    use std::{collections::HashSet, str::FromStr};
 
     #[test]
     fn test_run_state_conversion() {
@@ -402,7 +383,11 @@ mod tests {
             .flat_map(Teletype::try_from)
             .collect::<HashSet<_>>();
 
-        assert_eq!(pid_entry.ttys().unwrap(), result.into());
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            pid_entry.tty(),
+            Vec::from_iter(result.into_iter()).first().unwrap().clone()
+        );
     }
 
     #[test]
