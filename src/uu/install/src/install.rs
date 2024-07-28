@@ -13,8 +13,11 @@ use filetime::{set_file_times, FileTime};
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::fs;
+#[cfg(not(unix))]
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
@@ -750,27 +753,52 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     // fs::copy fails if destination is a invalid symlink.
     // so lets just remove all existing files at destination before copy.
-    if let Err(e) = fs::remove_file(to) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            show_error!(
-                "Failed to remove existing file {}. Error: {:?}",
-                to.display(),
-                e
-            );
+    let remove_destination = || {
+        if let Err(e) = fs::remove_file(to) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                show_error!(
+                    "Failed to remove existing file {}. Error: {:?}",
+                    to.display(),
+                    e
+                );
+            }
         }
+    };
+    remove_destination();
+
+    // create the destination file first. Using safer mode on unix to avoid
+    // potential unsafe mode between time-of-creation and time-of-chmod.
+    #[cfg(unix)]
+    let creation = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(to);
+    #[cfg(not(unix))]
+    let creation = File::create(to);
+
+    if let Err(e) = creation {
+        show_error!(
+            "Failed to create destination file {}. Error: {:?}",
+            to.display(),
+            e
+        );
+        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), e).into());
     }
 
-    if from.as_os_str() == "/dev/null" {
-        /* workaround a limitation of fs::copy
-         * https://github.com/rust-lang/rust/issues/79390
-         */
-        if let Err(err) = File::create(to) {
+    // drop the file to close the fd of creation
+    drop(creation);
+
+    /* workaround a limitation of fs::copy: skip copy if source is /dev/null
+     * https://github.com/rust-lang/rust/issues/79390
+     */
+    if from.as_os_str() != "/dev/null" {
+        if let Err(err) = fs::copy(from, to) {
+            remove_destination();
             return Err(
                 InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
             );
         }
-    } else if let Err(err) = fs::copy(from, to) {
-        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
     }
     Ok(())
 }
