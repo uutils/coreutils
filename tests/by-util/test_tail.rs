@@ -4829,7 +4829,7 @@ fn test_obsolete_encoding_windows() {
 fn test_following_with_pid() {
     use std::process::Command;
 
-    let scene = TestScenario::new(util_name!());
+    let ts = TestScenario::new(util_name!());
 
     let sleep_command = Command::new("sleep")
         .arg("999d")
@@ -4838,12 +4838,15 @@ fn test_following_with_pid() {
 
     let sleep_pid = sleep_command.id();
 
+    let at = &ts.fixtures;
+    at.touch("f");
+
     // when -f is specified, tail should die after
     // the pid from --pid also dies
-    let mut child = scene
+    let mut child = ts
         .ucmd()
         .args(&["--pid", &sleep_pid.to_string(), "-f"])
-        .set_stdin(Stdio::null())
+        .set_stdin(File::open(at.plus("f")).unwrap())
         .stderr_to_stdout()
         .run_no_wait();
 
