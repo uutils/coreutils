@@ -135,10 +135,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let backup_mode = backup_control::determine_backup_mode(&matches)?;
     let update_mode = update_control::determine_update_mode(&matches);
 
-    if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
+    if backup_mode != BackupMode::NoBackup
+        && (overwrite_mode == OverwriteMode::NoClobber
+            || update_mode == UpdateMode::ReplaceNone
+            || update_mode == UpdateMode::ReplaceNoneFail)
+    {
         return Err(UUsageError::new(
             1,
-            "options --backup and --no-clobber are mutually exclusive",
+            "cannot combine --backup with -n or --update=none-fail",
         ));
     }
 
@@ -530,10 +534,14 @@ fn rename(
             return Ok(());
         }
 
+        if opts.update == UpdateMode::ReplaceNoneFail {
+            let err_msg = format!("not replacing {}", to.quote());
+            return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+        }
+
         match opts.overwrite {
             OverwriteMode::NoClobber => {
-                let err_msg = format!("not replacing {}", to.quote());
-                return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+                return Ok(());
             }
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
