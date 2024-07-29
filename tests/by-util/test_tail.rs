@@ -4831,9 +4831,16 @@ fn test_following_with_pid() {
     use std::process::Command;
 
     let ts = TestScenario::new(util_name!());
-
+    
+    #[cfg(not(windows))]
     let sleep_command = Command::new("sleep")
         .arg("999d")
+        .spawn()
+        .expect("failed to start sleep command");
+    #[cfg(windows)]
+    let sleep_command = Command::new("powershell")
+        .arg("-Command")
+        .arg("Start-Sleep -Seconds 999")
         .spawn()
         .expect("failed to start sleep command");
 
@@ -4841,25 +4848,30 @@ fn test_following_with_pid() {
 
     let at = &ts.fixtures;
     at.touch("f");
-
     // when -f is specified, tail should die after
     // the pid from --pid also dies
     let mut child = ts
         .ucmd()
-        .args(&["--pid", &sleep_pid.to_string(), "-f"])
-        .set_stdin(File::open(at.plus("f")).unwrap())
+        .args(&["--pid", &sleep_pid.to_string(), "-f", at.plus("f").to_path_buf().to_str().unwrap()])
         .stderr_to_stdout()
         .run_no_wait();
-
-    child.make_assertion_with_delay(1000).is_alive();
-
+    child.make_assertion_with_delay(2000).is_alive();
+    
+    #[cfg(not(windows))]
     Command::new("kill")
         .arg("-9")
         .arg(sleep_pid.to_string())
         .output()
         .expect("failed to kill sleep command");
+    #[cfg(windows)]
+    Command::new("taskkill")
+        .arg("/PID")
+        .arg(sleep_pid.to_string())
+        .arg("/F")
+        .output()
+        .expect("failed to kill sleep command");
 
-    child.make_assertion_with_delay(1000).is_alive();
+    child.make_assertion_with_delay(2000).is_not_alive();
 
     child.kill();
 }
