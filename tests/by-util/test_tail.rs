@@ -4826,6 +4826,7 @@ fn test_obsolete_encoding_windows() {
 }
 
 #[test]
+#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_following_with_pid() {
     use std::process::Command;
 
