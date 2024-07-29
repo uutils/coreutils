@@ -4838,7 +4838,7 @@ fn test_following_with_pid() {
         .spawn()
         .expect("failed to start sleep command");
     #[cfg(windows)]
-    let sleep_command = Command::new("powershell")
+    let mut sleep_command = Command::new("powershell")
         .arg("-Command")
         .arg("Start-Sleep -Seconds 999")
         .spawn()
