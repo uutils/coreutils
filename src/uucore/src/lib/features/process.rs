@@ -139,7 +139,15 @@ mod tests {
     #[test]
     #[cfg(not(target_os = "redox"))]
     fn test_getsid() {
-        assert!(getsid(getpid()).is_ok());
+        assert_eq!(
+            getsid(getpid()).expect("getsid(getpid)"),
+            // zero is a special value for SID.
+            // https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsid.html
+            getsid(0).expect("getsid(0)")
+        );
+
+        // SID never be 0.
+        assert!(getsid(getpid()).expect("getsid(getpid)") > 0);
 
         // This might caused tests failure but the probability is low.
         assert!(getsid(999999).is_err());
