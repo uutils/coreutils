@@ -4833,7 +4833,7 @@ fn test_following_with_pid() {
     let ts = TestScenario::new(util_name!());
     
     #[cfg(not(windows))]
-    let sleep_command = Command::new("sleep")
+    let mut sleep_command = Command::new("sleep")
         .arg("999d")
         .spawn()
         .expect("failed to start sleep command");
@@ -4856,7 +4856,7 @@ fn test_following_with_pid() {
         .stderr_to_stdout()
         .run_no_wait();
     child.make_assertion_with_delay(2000).is_alive();
-    
+
     #[cfg(not(windows))]
     Command::new("kill")
         .arg("-9")
@@ -4871,7 +4871,9 @@ fn test_following_with_pid() {
         .output()
         .expect("failed to kill sleep command");
 
-    child.make_assertion_with_delay(5000).is_alive();
+    let _ = sleep_command.wait();
+
+    child.make_assertion_with_delay(2000).is_not_alive();
 
     child.kill();
 }
