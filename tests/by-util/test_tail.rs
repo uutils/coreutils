@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
+// spell-checker:ignore (cmd) taskkill
 #![allow(
     clippy::unicode_not_nfc,
     clippy::cast_lossless,
@@ -4831,7 +4832,7 @@ fn test_following_with_pid() {
     use std::process::Command;
 
     let ts = TestScenario::new(util_name!());
-    
+
     #[cfg(not(windows))]
     let mut sleep_command = Command::new("sleep")
         .arg("999d")
@@ -4852,7 +4853,12 @@ fn test_following_with_pid() {
     // the pid from --pid also dies
     let mut child = ts
         .ucmd()
-        .args(&["--pid", &sleep_pid.to_string(), "-f", at.plus("f").to_path_buf().to_str().unwrap()])
+        .args(&[
+            "--pid",
+            &sleep_pid.to_string(),
+            "-f",
+            at.plus("f").to_str().unwrap(),
+        ])
         .stderr_to_stdout()
         .run_no_wait();
     child.make_assertion_with_delay(2000).is_alive();
