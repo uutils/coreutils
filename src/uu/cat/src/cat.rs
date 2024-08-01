@@ -467,6 +467,13 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
         }
         stdout_lock.write_all(&buf[..n])?;
     }
+
+    // If the splice() call failed and there has been some data written to
+    // stdout via while loop above AND there will be second splice() call
+    // that will succeed, data pushed through splice will be output before
+    // the data buffered in stdout.lock. Therefore additional explicit flush
+    // is required here.
+    stdout_lock.flush()?;
     Ok(())
 }
 
