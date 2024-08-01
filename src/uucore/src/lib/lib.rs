@@ -102,8 +102,10 @@ pub use crate::features::fsxattr;
 
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::io::{BufRead, BufReader};
+use std::iter;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
@@ -238,6 +240,47 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
         .as_bytes();
 
     Ok(bytes)
+}
+
+/// Helper function for making an `OsString` from a byte field
+/// It converts `Vec<u8>` to `OsString` for unix targets only.
+/// On non-unix (i.e. Windows) it may fail if the bytes are not valid UTF-8
+pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
+    #[cfg(unix)]
+    let s = OsString::from_vec(vec);
+    #[cfg(not(unix))]
+    let s = OsString::from(String::from_utf8(vec).map_err(|_| {
+        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+    })?);
+
+    Ok(s)
+}
+
+/// Equivalent to `std::BufRead::lines` which doesn't panic
+/// upon non UTF-8 characters.
+pub fn read_os_string_lines<R: std::io::Read>(
+    mut buf_reader: BufReader<R>,
+) -> impl Iterator<Item = OsString> {
+    iter::from_fn(move || {
+        let mut buf = Vec::with_capacity(256);
+        let size = buf_reader.read_until(b'\n', &mut buf).ok()?;
+
+        if size == 0 {
+            return None;
+        }
+
+        // Trim (\r)\n
+        if buf.ends_with(b"\n") {
+            buf.pop();
+            if buf.ends_with(b"\r") {
+                buf.pop();
+            }
+        }
+
+        let s = os_string_from_vec(buf).expect("UTF-8 error");
+
+        Some(s)
+    })
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`
