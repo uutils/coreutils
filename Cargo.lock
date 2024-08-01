@@ -3186,6 +3186,7 @@ dependencies = [
  "nix",
  "rand",
  "rayon",
+ "rlimit",
  "self_cell",
  "tempfile",
  "unicode-width",
