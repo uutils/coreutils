@@ -147,7 +147,7 @@ where
                 (
                     if let Some(length) = options.length {
                         // Multiply by 8 here, as we want to print the length in bits.
-                        format!("BLAKE2b-{} (", length * 8)
+                        format!("BLAKE2b-{} (", length)
                     } else {
                         "BLAKE2b (".to_owned()
                     },
@@ -552,9 +552,8 @@ mod tests {
 
     #[test]
     fn test_calculate_length() {
-        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
+        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(256));
         assert_eq!(calculate_blake2b_length(512).unwrap(), None);
-        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
         calculate_blake2b_length(255).unwrap_err();
 
         calculate_blake2b_length(33).unwrap_err();

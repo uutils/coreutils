@@ -235,7 +235,7 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             } else {
                 Ok(HashAlgorithm {
                     name: ALGORITHM_OPTIONS_BLAKE2B,
-                    create_fn: Box::new(move || Box::new(Blake2b::with_output_bytes(bits))),
+                    create_fn: Box::new(move || Box::new(Blake2b::with_output_bytes(bits / 8))),
                     bits,
                 })
             }
@@ -248,7 +248,7 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
         ALGORITHM_OPTIONS_SM3 => Ok(HashAlgorithm {
             name: ALGORITHM_OPTIONS_SM3,
             create_fn: Box::new(|| Box::new(Sm3::new())),
-            bits: 512,
+            bits: 256,
         }),
         ALGORITHM_OPTIONS_SHAKE128 | "shake128sum" => {
             let bits =
@@ -438,7 +438,7 @@ fn identify_algo_name_and_length(
     let bits = caps.name("bits").map_or(Some(None), |m| {
         let bits_value = m.as_str().parse::<usize>().unwrap();
         if bits_value % 8 == 0 {
-            Some(Some(bits_value / 8))
+            Some(Some(bits_value))
         } else {
             *properly_formatted = false;
             None // Return None to signal a divisibility issue
@@ -516,7 +516,7 @@ where
                     get_expected_checksum(filename_to_check, &caps, &chosen_regex)?;
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
-                let (algo_name, length) = if is_algo_based_format {
+                let (algo_name, length_in_bits) = if is_algo_based_format {
                     identify_algo_name_and_length(
                         &caps,
                         algo_name_input,
@@ -530,7 +530,7 @@ where
                     if algo_name_input == Some(ALGORITHM_OPTIONS_BLAKE2B) {
                         // division by 2 converts the length of the Blake2b checksum from hexadecimal
                         // characters to bytes, as each byte is represented by two hexadecimal characters.
-                        let length = Some(expected_checksum.len() / 2);
+                        let length = Some(expected_checksum.len() * 4);
                         (ALGORITHM_OPTIONS_BLAKE2B.to_string(), length)
                     } else {
                         (a.to_lowercase(), length_input)
@@ -545,9 +545,9 @@ where
                     properly_formatted = false;
                     continue;
                 }
-                let mut algo = detect_algo(&algo_name, length)?;
+                let mut algo = detect_algo(&algo_name, length_in_bits)?;
 
-                if algo.bits != (expected_checksum.len() * 4) {
+                if length_in_bits.unwrap_or(algo.bits) != (expected_checksum.len() * 4) {
                     res.bad_format += 1;
                     continue;
                 }
@@ -704,7 +704,7 @@ pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
                 // So, don't show it
                 Ok(None)
             } else {
-                Ok(Some(n / 8))
+                Ok(Some(n))
             }
         }
     }
@@ -776,7 +776,7 @@ mod tests {
         assert!(calculate_blake2b_length(10).is_err());
         assert!(calculate_blake2b_length(520).is_err());
         assert_eq!(calculate_blake2b_length(512).unwrap(), None);
-        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
+        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(256));
     }
 
     #[test]
