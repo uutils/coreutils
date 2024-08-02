@@ -547,6 +547,11 @@ where
                 }
                 let mut algo = detect_algo(&algo_name, length)?;
 
+                if algo.bits != (expected_checksum.len() * 4) {
+                    res.bad_format += 1;
+                    continue;
+                }
+
                 let (filename_to_check_unescaped, prefix) = unescape_filename(filename_to_check);
 
                 // manage the input file
