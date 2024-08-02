@@ -142,7 +142,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         return Err(UUsageError::new(
             1,
-            "cannot combine --backup with -n or --update=none-fail",
+            "cannot combine --backup with -n/--no-clobber or --update=none-fail",
         ));
     }
 
