@@ -964,9 +964,6 @@ jobs:
         # * use requested TOOLCHAIN if specified
         if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
         outputs TOOLCHAIN
-        # staging directory
-        STAGING='_staging'
-        outputs STAGING
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='--all-features' ;  ## default to '--all-features' for code coverage
