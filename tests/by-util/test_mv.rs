@@ -865,7 +865,7 @@ fn test_mv_backup_conflicting_options() {
             .arg("file1")
             .arg("file2")
             .fails()
-            .usage_error("cannot combine --backup with -n or --update=none-fail");
+            .usage_error("cannot combine --backup with -n/--no-clobber or --update=none-fail");
     }
 }
 
