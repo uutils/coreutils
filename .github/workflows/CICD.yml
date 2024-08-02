@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: EmbarkStudios/cargo-deny-action@v1
+    - uses: EmbarkStudios/cargo-deny-action@v2
 
   style_deps:
     ## ToDO: [2021-11-10; rivy] 'Style/deps' needs more informative output and better integration of results into the GHA dashboard
