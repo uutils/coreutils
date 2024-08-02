@@ -174,7 +174,7 @@ pub(crate) fn color_name(
     } else {
         let md_option = path.get_metadata(out);
         let symlink_metadata = path.p_buf.symlink_metadata().ok();
-        let md = md_option.or_else(|| symlink_metadata.as_ref());
+        let md = md_option.or(symlink_metadata.as_ref());
         style_manager.apply_style_based_on_metadata(path, md, name, wrap)
     }
 }
