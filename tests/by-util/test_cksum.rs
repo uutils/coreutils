@@ -1277,3 +1277,27 @@ fn test_non_utf8_filename() {
         .stdout_is_bytes(b"SHA256 (funky\xffname) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n")
         .no_stderr();
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_non_utf8_comment() {
+    let hashes =
+        b"MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\n\
+        # Comment with a non utf8 char: >>\xff<<\n\
+        SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\n\
+        BLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n"
+    ;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("empty");
+    at.write_bytes("check", hashes);
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("check"))
+        .succeeds()
+        .stdout_is("empty: OK\nempty: OK\nempty: OK\n");
+}
