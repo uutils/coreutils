@@ -10,8 +10,7 @@ mod error;
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use std::collections::HashSet;
-use std::env;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::fs;
 use std::io;
@@ -25,10 +24,9 @@ use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
-    path_ends_with_terminator,
+    path_ends_with_terminator, FileInformation,
 };
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-use uucore::fsxattr;
+
 use uucore::update_control;
 
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -36,12 +34,9 @@ use uucore::update_control;
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
-use fs_extra::dir::{
-    get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
-    TransitProcess, TransitProcessResult,
-};
-
 use crate::error::MvError;
+
+use uu_cp::{copy_directory, copy_file, disk_usage, Attributes, CopyResult, Options as CpOptions};
 
 /// Options contains all the possible behaviors and flags for mv.
 ///
@@ -285,7 +280,12 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
     }
 }
 
-fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()> {
+fn handle_two_paths(
+    source: &Path,
+    target: &Path,
+    opts: &Options,
+    moved_files: &mut HashMap<FileInformation, PathBuf>,
+) -> UResult<()> {
     if opts.backup == BackupMode::SimpleBackup
         && source_is_target_backup(source, target, &opts.suffix)
     {
@@ -335,7 +335,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     if target_is_dir {
         if opts.no_target_dir {
             if source.is_dir() {
-                rename(source, target, opts, None).map_err_context(|| {
+                rename(source, target, opts, None, moved_files).map_err_context(|| {
                     format!("cannot move {} to {}", source.quote(), target.quote())
                 })
             } else {
@@ -350,7 +350,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             )
             .into())
         } else {
-            move_files_into_dir(&[source.to_path_buf()], target, opts)
+            move_files_into_dir(&[source.to_path_buf()], target, opts, moved_files)
         }
     } else if target.exists() && source.is_dir() {
         match opts.overwrite {
@@ -368,11 +368,16 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into())
     } else {
-        rename(source, target, opts, None).map_err(|e| USimpleError::new(1, format!("{e}")))
+        rename(source, target, opts, None, moved_files)
+            .map_err(|e| USimpleError::new(1, format!("{e}")))
     }
 }
 
-fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
+fn handle_multiple_paths(
+    paths: &[PathBuf],
+    opts: &Options,
+    moved_files: &mut HashMap<FileInformation, PathBuf>,
+) -> UResult<()> {
     if opts.no_target_dir {
         return Err(UUsageError::new(
             1,
@@ -382,27 +387,33 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
     let target_dir = paths.last().unwrap();
     let sources = &paths[..paths.len() - 1];
 
-    move_files_into_dir(sources, target_dir, opts)
+    move_files_into_dir(sources, target_dir, opts, moved_files)
 }
 
 /// Execute the mv command. This moves 'source' to 'target', where
 /// 'target' is a directory. If 'target' does not exist, and source is a single
 /// file or directory, then 'source' will be renamed to 'target'.
 pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
+    let mut moved_files: HashMap<FileInformation, PathBuf> = HashMap::new();
     let paths = parse_paths(files, opts);
 
     if let Some(ref name) = opts.target_dir {
-        return move_files_into_dir(&paths, &PathBuf::from(name), opts);
+        return move_files_into_dir(&paths, &PathBuf::from(name), opts, &mut moved_files);
     }
 
     match paths.len() {
-        2 => handle_two_paths(&paths[0], &paths[1], opts),
-        _ => handle_multiple_paths(&paths, opts),
+        2 => handle_two_paths(&paths[0], &paths[1], opts, &mut moved_files),
+        _ => handle_multiple_paths(&paths, opts, &mut moved_files),
     }
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) -> UResult<()> {
+fn move_files_into_dir(
+    files: &[PathBuf],
+    target_dir: &Path,
+    options: &Options,
+    moved_files: &mut HashMap<FileInformation, PathBuf>,
+) -> UResult<()> {
     // remember the moved destinations for further usage
     let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
 
@@ -479,7 +490,13 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             }
         }
 
-        match rename(sourcepath, &targetpath, options, multi_progress.as_ref()) {
+        match rename(
+            sourcepath,
+            &targetpath,
+            options,
+            multi_progress.as_ref(),
+            moved_files,
+        ) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| {
@@ -509,8 +526,15 @@ fn rename(
     to: &Path,
     opts: &Options,
     multi_progress: Option<&MultiProgress>,
+    moved_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> io::Result<()> {
     let mut backup_path = None;
+    //use path_ends_with_terminator
+    let to = if path_ends_with_terminator(to) {
+        Path::new(to.to_str().unwrap().trim_end_matches('/'))
+    } else {
+        to
+    };
 
     if to.exists() {
         if opts.update == UpdateMode::ReplaceIfOlder && opts.overwrite == OverwriteMode::Interactive
@@ -545,7 +569,7 @@ fn rename(
 
         backup_path = backup_control::get_backup_path(opts.backup, to, &opts.suffix);
         if let Some(ref backup_path) = backup_path {
-            rename_with_fallback(to, backup_path, multi_progress)?;
+            rename_with_fallback(to, backup_path, multi_progress, moved_files)?;
         }
     }
 
@@ -561,7 +585,7 @@ fn rename(
         }
     }
 
-    rename_with_fallback(from, to, multi_progress)?;
+    rename_with_fallback(from, to, multi_progress, moved_files)?;
 
     if opts.verbose {
         let message = match backup_path {
@@ -571,7 +595,7 @@ fn rename(
                 to.quote(),
                 path.quote()
             ),
-            None => format!("renamed {} -> {}", from.quote(), to.quote()),
+            None => format!("renamed {} -> {}", from.quote(), &to.quote()),
         };
 
         match multi_progress {
@@ -584,104 +608,118 @@ fn rename(
     Ok(())
 }
 
+// os error code for when rename operation crosses devices.
+#[cfg(unix)]
+const CROSSES_DEVICES_ERROR_CODE: i32 = 18;
+#[cfg(target_os = "windows")]
+const CROSSES_DEVICES_ERROR_CODE: i32 = 17;
+
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
 fn rename_with_fallback(
     from: &Path,
     to: &Path,
     multi_progress: Option<&MultiProgress>,
+    moved_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> io::Result<()> {
-    if fs::rename(from, to).is_err() {
+    let file_info = FileInformation::from_path(from, false)?;
+    if let Err(err) = fs::rename(from, to) {
         // Get metadata without following symlinks
-        let metadata = from.symlink_metadata()?;
-        let file_type = metadata.file_type();
-
+        let file_type = from.symlink_metadata()?.file_type();
         if file_type.is_symlink() {
             rename_symlink_fallback(from, to)?;
-        } else if file_type.is_dir() {
-            // We remove the destination directory if it exists to match the
-            // behavior of `fs::rename`. As far as I can tell, `fs_extra`'s
-            // `move_dir` would otherwise behave differently.
-            if to.exists() {
-                fs::remove_dir_all(to)?;
-            }
-            let options = DirCopyOptions {
-                // From the `fs_extra` documentation:
-                // "Recursively copy a directory with a new name or place it
-                // inside the destination. (same behaviors like cp -r in Unix)"
-                copy_inside: true,
-                ..DirCopyOptions::new()
-            };
-
-            // Calculate total size of directory
-            // Silently degrades:
-            //    If finding the total size fails for whatever reason,
-            //    the progress bar wont be shown for this file / dir.
-            //    (Move will probably fail due to permission error later?)
-            let total_size = dir_get_size(from).ok();
-
-            let progress_bar =
-                if let (Some(multi_progress), Some(total_size)) = (multi_progress, total_size) {
-                    let bar = ProgressBar::new(total_size).with_style(
-                        ProgressStyle::with_template(
-                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
-                        )
-                        .unwrap(),
-                    );
-
-                    Some(multi_progress.add(bar))
-                } else {
-                    None
-                };
-
-            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            let xattrs =
-                fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
-
-            let result = if let Some(ref pb) = progress_bar {
-                move_dir_with_progress(from, to, &options, |process_info: TransitProcess| {
-                    pb.set_position(process_info.copied_bytes);
-                    pb.set_message(process_info.file_name);
-                    TransitProcessResult::ContinueOrAbort
-                })
+        } else if matches!(err.raw_os_error(),Some(error_code)if error_code == CROSSES_DEVICES_ERROR_CODE)
+        {
+            copy(multi_progress, from, file_type, to, moved_files).map_err(|err| {
+                let to = to.to_string_lossy();
+                let from = from.to_string_lossy();
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "inter-device move failed: '{from}' to '{to}'\
+                            ;{err}"
+                    ),
+                )
+            })?;
+            if file_type.is_dir() {
+                fs::remove_dir_all(from)?;
             } else {
-                move_dir(from, to, &options)
-            };
-
-            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            fsxattr::apply_xattrs(to, xattrs).unwrap();
-
-            if let Err(err) = result {
-                return match err.kind {
-                    fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "Permission denied",
-                    )),
-                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
-                };
+                fs::remove_file(from)?;
             }
         } else {
-            if to.is_symlink() {
-                fs::remove_file(to).map_err(|err| {
-                    let to = to.to_string_lossy();
-                    let from = from.to_string_lossy();
-                    io::Error::new(
-                        err.kind(),
-                        format!(
-                            "inter-device move failed: '{from}' to '{to}'\
-                            ; unable to remove target: {err}"
-                        ),
-                    )
-                })?;
-            }
-            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            fs::copy(from, to)
-                .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-                .and_then(|_| fs::remove_file(from))?;
-            #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-            fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
+            return Err(err);
         }
     }
+    moved_files.insert(file_info, to.to_path_buf());
+    Ok(())
+}
+
+fn copy(
+    multi_progress: Option<&MultiProgress>,
+    from: &Path,
+    file_type: fs::FileType,
+    to: &Path,
+    moved_files: &mut HashMap<FileInformation, PathBuf>,
+) -> CopyResult<()> {
+    let cp_options = CpOptions {
+        attributes_only: false,
+        backup: BackupMode::NoBackup,
+        copy_contents: false,
+        cli_dereference: false,
+        copy_mode: uu_cp::CopyMode::Copy,
+        dereference: false,
+        no_target_dir: false,
+        one_file_system: false,
+        overwrite: uu_cp::OverwriteMode::Clobber(uu_cp::ClobberMode::RemoveDestination),
+        parents: false,
+        sparse_mode: uu_cp::SparseMode::Auto,
+        strip_trailing_slashes: false,
+        reflink_mode: uu_cp::ReflinkMode::Never,
+        attributes: Attributes::ALL,
+        recursive: true,
+        backup_suffix: String::new(),
+        target_dir: None,
+        update: UpdateMode::ReplaceAll,
+        debug: false,
+        verbose: false,
+        progress_bar: multi_progress.is_some(),
+    };
+    let total_size = disk_usage(&[from.to_path_buf()], true).ok();
+    let progress_bar =
+        if let (Some(multi_progress), Some(total_size)) = (multi_progress, total_size) {
+            let bar = ProgressBar::new(total_size).with_style(
+                ProgressStyle::with_template(
+                    "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
+                )
+                .unwrap(),
+            );
+            Some(multi_progress.add(bar))
+        } else {
+            None
+        };
+    if file_type.is_dir() {
+        copy_directory(
+            &progress_bar,
+            from,
+            to,
+            &cp_options,
+            &mut HashSet::new(),
+            &HashSet::new(),
+            moved_files,
+            false,
+        )
+    } else {
+        copy_file(
+            &progress_bar,
+            from,
+            to,
+            &cp_options,
+            &mut HashSet::new(),
+            &HashSet::new(),
+            moved_files,
+            false,
+        )
+    }?;
     Ok(())
 }
 

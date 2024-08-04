@@ -41,7 +41,7 @@ use uucore::{
     shortcut_value_parser::ShortcutValueParser, show_error, show_warning, util_name,
 };
 
-use crate::copydir::copy_directory;
+pub use crate::copydir::copy_directory;
 
 mod copydir;
 mod platform;
@@ -1987,7 +1987,7 @@ fn calculate_dest_permissions(
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
 #[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
-fn copy_file(
+pub fn copy_file(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
     dest: &Path,
@@ -2349,7 +2349,7 @@ pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResu
 /// This function is much like the `du` utility, by recursively getting the sizes of files in directories.
 /// Files are not deduplicated when appearing in multiple sources. If `recursive` is set to `false`, the
 /// directories in `paths` will be ignored.
-fn disk_usage(paths: &[PathBuf], recursive: bool) -> io::Result<u64> {
+pub fn disk_usage(paths: &[PathBuf], recursive: bool) -> io::Result<u64> {
     let mut total = 0;
     for p in paths {
         let md = fs::metadata(p)?;

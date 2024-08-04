@@ -18,7 +18,6 @@ path = "src/mv.rs"
 
 [dependencies]
 clap = { workspace = true }
-fs_extra = { workspace = true }
 indicatif = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
@@ -26,6 +25,7 @@ uucore = { workspace = true, features = [
   "fsxattr",
   "update-control",
 ] }
+uu_cp = { workspace = true }
 
 [[bin]]
 name = "mv"

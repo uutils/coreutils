@@ -358,6 +358,7 @@ digest = "0.10.7"
 uucore = { version = ">=0.0.19", package = "uucore", path = "src/uucore" }
 uucore_procs = { version = ">=0.0.19", package = "uucore_procs", path = "src/uucore_procs" }
 uu_ls = { version = ">=0.0.18", path = "src/uu/ls" }
+uu_cp = { version = ">=0.0.27", path = "src/uu/cp" }
 uu_base32 = { version = ">=0.0.18", path = "src/uu/base32" }
 
 [dependencies]
