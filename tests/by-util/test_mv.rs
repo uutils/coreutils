@@ -1715,4 +1715,78 @@ mod inter_partition_copying {
             .stderr_contains("inter-device move failed:")
             .stderr_contains("Permission denied");
     }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_mv_preserve_hard_link_file() {
+        use std::os::unix::fs::MetadataExt;
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file = "file";
+        let hardlink = "hardlink";
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dst_file = other_fs_tempdir.path().join(file);
+        let dst_hardlink = other_fs_tempdir.path().join(hardlink);
+        at.touch(file);
+        at.hard_link(file, hardlink);
+        ucmd.args(&[file, hardlink, &other_fs_tempdir.path().to_string_lossy()])
+            .succeeds();
+        assert!(dst_file.exists());
+        assert!(dst_hardlink.exists());
+        assert_eq!(
+            dst_file.metadata().map(|v| { v.ino() }).ok(),
+            dst_hardlink.metadata().map(|v| { v.ino() }).ok(),
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_mv_preserve_hard_link_folder() {
+        use std::os::unix::fs::MetadataExt;
+        let (at, mut ucmd) = at_and_ucmd!();
+        let folder_a = "folder_a";
+        let folder_b = "folder_b";
+        let file = "folder_a/file";
+        let hardlink = "folder_b/hardlink";
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dst_file = other_fs_tempdir.path().join(file);
+        let dst_hardlink = other_fs_tempdir.path().join(hardlink);
+        at.mkdir(folder_a);
+        at.mkdir(folder_b);
+        at.touch(file);
+        at.hard_link(file, hardlink);
+        ucmd.args(&[
+            folder_a,
+            folder_b,
+            &other_fs_tempdir.path().to_string_lossy(),
+        ])
+        .succeeds();
+        assert!(dst_file.exists());
+        assert!(dst_hardlink.exists());
+        assert_eq!(
+            dst_file.metadata().map(|v| { v.ino() }).ok(),
+            dst_hardlink.metadata().map(|v| { v.ino() }).ok(),
+        );
+    }
+}
+
+#[test]
+fn test_mv_backup_when_dest_has_trailing_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("D");
+    at.mkdir("E");
+    at.touch("D/d_file");
+    at.touch("E/e_file");
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg("--backup=numbered")
+        .arg("D")
+        .arg("E/")
+        .succeeds();
+    assert!(at.dir_exists("E.~1~"), "Backup folder not created");
+    assert!(at.file_exists("E.~1~/e_file"), "Backup file not created");
+    assert!(at.file_exists("E/d_file"), "source file didn't move");
 }

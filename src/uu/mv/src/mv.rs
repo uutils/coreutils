@@ -530,7 +530,7 @@ fn rename(
 ) -> io::Result<()> {
     let mut backup_path = None;
     //use path_ends_with_terminator
-    let to = if path_ends_with_terminator(to) {
+    let to = if path_ends_with_terminator(to) && opts.no_target_dir {
         Path::new(to.to_str().unwrap().trim_end_matches('/'))
     } else {
         to
