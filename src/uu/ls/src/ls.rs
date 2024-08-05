@@ -697,7 +697,7 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
                 Some(qs) => return qs,
                 None => eprintln!(
                     "{}: Ignoring invalid value of environment variable QUOTING_STYLE: '{}'",
-                    std::env::args().next().unwrap_or("ls".to_string()),
+                    std::env::args().next().unwrap_or_else(|| "ls".to_string()),
                     style
                 ),
             }
@@ -3332,7 +3332,7 @@ fn display_item_name(
 }
 
 fn create_hyperlink(name: &str, path: &PathData) -> String {
-    let hostname = hostname::get().unwrap_or(OsString::from(""));
+    let hostname = hostname::get().unwrap_or_else(|_| OsString::from(""));
     let hostname = hostname.to_string_lossy();
 
     let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
