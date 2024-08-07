@@ -326,6 +326,24 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
 
+    let path_as_str = path.as_os_str().to_str().unwrap();
+    #[cfg(unix)]
+    if path_as_str.ends_with("/.") || path_as_str.ends_with("/..") {
+        show_error!(
+            "refusing to remove '.' or '..' directory: skipping {}",
+            path.quote()
+        );
+        return true;
+    }
+    #[cfg(windows)]
+    if path_as_str.ends_with("\\.") || path_as_str.ends_with("\\..") {
+        show_error!(
+            "refusing to remove '.' or '..' directory: skipping {}",
+            path.quote()
+        );
+        return true;
+    }
+
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::Always && !options.verbose {
