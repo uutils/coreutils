@@ -123,7 +123,7 @@ impl EscapedChar {
         }
     }
 
-    fn new_c(c: char, quotes: Quotes) -> Self {
+    fn new_c(c: char, quotes: Quotes, dirname: bool) -> Self {
         use EscapeState::*;
         let init_state = match c {
             '\x07' => Backslash('a'),
@@ -142,10 +142,11 @@ impl EscapedChar {
                 Quotes::Double => Backslash('"'),
                 _ => Char('"'),
             },
-            ' ' => match quotes {
+            ' ' if !dirname => match quotes {
                 Quotes::None => Backslash(' '),
                 _ => Char(' '),
             },
+            ':' if dirname => Backslash(':'),
             _ if c.is_ascii_control() => Octal(EscapeOctal::from(c)),
             _ => Char(c),
         };
@@ -285,7 +286,7 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
 }
 
 /// Escape a name according to the given quoting style.
-pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+fn escape_name_inner(name: &OsStr, style: &QuotingStyle, dirname: bool) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {
             if *show_control {
@@ -301,7 +302,7 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             let escaped_str: String = name
                 .to_string_lossy()
                 .chars()
-                .flat_map(|c| EscapedChar::new_c(c, *quotes))
+                .flat_map(|c| EscapedChar::new_c(c, *quotes, dirname))
                 .collect();
 
             match quotes {
@@ -316,7 +317,21 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             show_control,
         } => {
             let name = name.to_string_lossy();
-            let (quotes, must_quote) = if name.contains(&['"', '`', '$', '\\'][..]) {
+
+            let escaped_chars = [
+                ':',
+                // Before this line, characters only induce quoting in the
+                // context of displaying a directory name.
+                // (e.g. with the recursive flag)
+                '"', '`', '$', '\\',
+                // Under this line are the control characters that should be
+                // quoted in shell mode in all cases.
+                '\n', '\t', '\r',
+            ];
+            // Take ':' in account only if we are quoting a dirname
+            let start_index = if dirname { 0 } else { 1 };
+
+            let (quotes, must_quote) = if name.contains(&escaped_chars[start_index..]) {
                 (Quotes::Single, true)
             } else if name.contains('\'') {
                 (Quotes::Double, true)
@@ -339,6 +354,14 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             }
         }
     }
+}
+
+pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+    escape_name_inner(name, style, false)
+}
+
+pub fn escape_dir_name(dir_name: &OsStr, style: &QuotingStyle) -> String {
+    escape_name_inner(dir_name, style, true)
 }
 
 impl fmt::Display for QuotingStyle {
@@ -575,8 +598,8 @@ mod tests {
                 ("one\ntwo", "literal-show"),
                 ("one\\ntwo", "escape"),
                 ("\"one\\ntwo\"", "c"),
-                ("one?two", "shell"),
-                ("one\ntwo", "shell-show"),
+                ("'one?two'", "shell"),
+                ("'one\ntwo'", "shell-show"),
                 ("'one?two'", "shell-always"),
                 ("'one\ntwo'", "shell-always-show"),
                 ("'one'$'\\n''two'", "shell-escape"),
@@ -619,9 +642,9 @@ mod tests {
                     "\"\\000\\001\\002\\003\\004\\005\\006\\a\\b\\t\\n\\v\\f\\r\\016\\017\"",
                     "c",
                 ),
-                ("????????????????", "shell"),
+                ("'????????????????'", "shell"),
                 (
-                    "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F",
+                    "'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F'",
                     "shell-show",
                 ),
                 ("'????????????????'", "shell-always"),
