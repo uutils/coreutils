@@ -295,21 +295,29 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
+                #[cfg(not(windows))]
                 let re = Regex::new(r"/\.{1,2}\/*$").unwrap();
                 if re.is_match(filename.as_bytes()) {
                     show_error!(
                         "refusing to remove '.' or '..' directory: skipping '{:}'",
-                        clean_trailing_slashes(file).display()
+                        clean_trailing_slashes(filename).display()
                     );
                     true
+                } else if metadata.is_dir() {
+                    handle_dir(file, options)
+                } else if is_symlink_dir(&metadata) {
+                    remove_dir(file, options)
                 } else {
-                    if metadata.is_dir() {
-                        handle_dir(file, options)
-                    } else if is_symlink_dir(&metadata) {
-                        remove_dir(file, options)
-                    } else {
-                        remove_file(file, options)
-                    }
+                    remove_file(file, options)
+                }
+
+                #[cfg(windows)]
+                if metadata.is_dir() {
+                    handle_dir(file, options)
+                } else if is_symlink_dir(&metadata) {
+                    remove_dir(file, options)
+                } else {
+                    remove_file(file, options)
                 }
             }
             Err(_e) => {
@@ -599,28 +607,23 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 }
 
 /// Removes trailing slashes, for example 'd/../////' yield 'd/../' required to fix rm-r4 GNU test
-fn clean_trailing_slashes(path: &Path) -> &Path {
-    let path_bytes = path.as_os_str().as_encoded_bytes();
+fn clean_trailing_slashes(path: &OsStr) -> &Path {
+    let path_bytes = path.as_bytes();
 
     let mut idx = path_bytes.len() - 1;
-
-    for i in (0..path_bytes.len()).rev() {
-        // Checks if element at the end is not a '/' and then breaks
-        if path_bytes[i] != b'/' {
-            break;
-        }
-        // Will break at the start of the continous sequence of '/', eg: "abc//////" , will break at
-        // "abc/"
-        if path_bytes[i - 1] != b'/' {
-            idx = i;
-            break;
-        } else {
-            idx = 1;
+    // Checks if element at the end is a '/'
+    if path_bytes[idx] == b'/' {
+        for i in (0..path_bytes.len()).rev() {
+            // Will break at the start of the continuous sequence of '/', eg: "abc//////" , will break at
+            // "abc/"
+            if path_bytes[i - 1] != b'/' {
+                idx = i;
+                break;
+            }
         }
     }
-    // As mentioned in the docs of from_encoded_bytes_unchecked() , this can be safely used if the byte
-    // slice we are passing is created using as_encoded_bytes()
-    unsafe { Path::new(OsStr::from_encoded_bytes_unchecked(&path_bytes[0..=idx])) }
+
+    Path::new(OsStr::from_bytes(&path_bytes[0..=idx]))
 }
 
 fn prompt_descend(path: &Path) -> bool {
