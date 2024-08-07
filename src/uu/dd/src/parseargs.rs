@@ -430,7 +430,7 @@ impl std::fmt::Display for ParseError {
                 write!(f, "Unrecognized conv=CONV -> {arg}")
             }
             Self::MultiplierStringParseFailure(arg) => {
-                write!(f, "Unrecognized byte multiplier -> {arg}")
+                write!(f, "invalid number: {arg}")
             }
             Self::MultiplierStringOverflow(arg) => {
                 write!(
