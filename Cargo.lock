@@ -3106,7 +3106,6 @@ version = "0.0.27"
 dependencies = [
  "clap",
  "libc",
- "regex",
  "uucore",
  "walkdir",
  "windows-sys 0.48.0",

@@ -20,7 +20,6 @@ path = "src/rm.rs"
 clap = { workspace = true }
 walkdir = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
-regex = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

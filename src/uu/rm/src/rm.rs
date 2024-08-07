@@ -3,17 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (path) eacces inacc
+// spell-checker:ignore (path) eacces inacc rm-r4
 
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
-use regex::bytes::Regex;
+use core::str;
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, Metadata};
 use std::io::ErrorKind;
 use std::ops::BitOr;
-use std::os::unix::ffi::OsStrExt;
+
 use std::path::{Path, PathBuf};
+use std::str::from_utf8;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
@@ -295,23 +296,6 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
-                #[cfg(not(windows))]
-                let re = Regex::new(r"/\.{1,2}\/*$").unwrap();
-                if re.is_match(filename.as_bytes()) {
-                    show_error!(
-                        "refusing to remove '.' or '..' directory: skipping '{:}'",
-                        clean_trailing_slashes(filename).display()
-                    );
-                    true
-                } else if metadata.is_dir() {
-                    handle_dir(file, options)
-                } else if is_symlink_dir(&metadata) {
-                    remove_dir(file, options)
-                } else {
-                    remove_file(file, options)
-                }
-
-                #[cfg(windows)]
                 if metadata.is_dir() {
                     handle_dir(file, options)
                 } else if is_symlink_dir(&metadata) {
@@ -320,6 +304,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
                     remove_file(file, options)
                 }
             }
+
             Err(_e) => {
                 // TODO: actually print out the specific error
                 // TODO: When the error is not about missing files
@@ -345,6 +330,15 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 #[allow(clippy::cognitive_complexity)]
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
+
+    let cleaned_path = clean_trailing_slashes(path);
+    if path_is_current_or_parent_directory(cleaned_path) {
+        show_error!(
+            "refusing to remove '.' or '..' directory: skipping '{:}'",
+            cleaned_path.display()
+        );
+        return true;
+    }
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
@@ -579,6 +573,24 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
         true
     }
 }
+/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g '/.....' , '....' . '../..'
+fn path_is_current_or_parent_directory(path: &Path) -> bool {
+    let path_str = path.to_str();
+    #[cfg(not(windows))]
+    let directory_separator = '/';
+    #[cfg(windows)]
+    let directory_separator = "\\";
+    if let Some(path) = path_str {
+        if path.ends_with(format!("{}.", directory_separator).as_str())
+            || path.ends_with(format!("{}..", directory_separator).as_str())
+            || path.ends_with(format!("{}..{}", directory_separator, directory_separator).as_str())
+            || path.ends_with(format!("{}.{}", directory_separator, directory_separator).as_str())
+        {
+            return true;
+        }
+    }
+    false
+}
 
 // For windows we can use windows metadata trait and file attributes to see if a directory is readonly
 #[cfg(windows)]
@@ -607,23 +619,29 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 }
 
 /// Removes trailing slashes, for example 'd/../////' yield 'd/../' required to fix rm-r4 GNU test
-fn clean_trailing_slashes(path: &OsStr) -> &Path {
-    let path_bytes = path.as_bytes();
-
-    let mut idx = path_bytes.len() - 1;
-    // Checks if element at the end is a '/'
-    if path_bytes[idx] == b'/' {
-        for i in (0..path_bytes.len()).rev() {
-            // Will break at the start of the continuous sequence of '/', eg: "abc//////" , will break at
-            // "abc/"
-            if path_bytes[i - 1] != b'/' {
-                idx = i;
-                break;
+fn clean_trailing_slashes(path: &Path) -> &Path {
+    let path_str = path.to_str();
+    #[cfg(not(windows))]
+    let directory_separator = b'/';
+    #[cfg(windows)]
+    let directory_separator = b'\\';
+    if let Some(path_str) = path_str {
+        let path_bytes = path_str.as_bytes();
+        let mut idx = path_str.len() - 1;
+        // Checks if element at the end is a '/'
+        if path_bytes[idx] == directory_separator {
+            for i in (0..path_bytes.len()).rev() {
+                // Will break at the start of the continuous sequence of '/', eg: "abc//////" , will break at
+                // "abc/"
+                if path_bytes[i - 1] != directory_separator {
+                    idx = i;
+                    break;
+                }
             }
+            return Path::new(from_utf8(&path_bytes[0..=idx]).unwrap_or(path_str));
         }
     }
-
-    Path::new(OsStr::from_bytes(&path_bytes[0..=idx]))
+    path
 }
 
 fn prompt_descend(path: &Path) -> bool {
