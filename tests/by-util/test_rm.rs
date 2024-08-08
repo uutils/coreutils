@@ -713,3 +713,37 @@ fn test_non_utf8() {
     ucmd.arg(file).succeeds();
     assert!(!at.file_exists(file));
 }
+
+#[test]
+fn test_rm_no_del_parent() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    #[cfg(not(windows))]
+    let del = "/";
+    #[cfg(windows)]
+    let del = "\\";
+
+    at.mkdir("test");
+    at.mkdir(&format!("test{del}dir"));
+    at.touch(&format!("test{del}dir{del}file"));
+    ucmd.arg("-rf").arg(format!("test{del}dir{del}..")).fails();
+    assert!(at.dir_exists("test"));
+    assert!(at.dir_exists(&format!("test{del}dir")));
+    assert!(at.file_exists(&format!("test{del}dir{del}file")));
+}
+
+#[test]
+fn test_rm_no_del_cur() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    #[cfg(not(windows))]
+    let del = "/";
+    #[cfg(windows)]
+    let del = "\\";
+
+    at.mkdir("test");
+    at.touch(&format!("test{del}file"));
+    ucmd.arg("-rf").arg(format!("test{del}.")).fails();
+    assert!(at.dir_exists("test"));
+    assert!(at.file_exists(&format!("test{del}file")));
+}
