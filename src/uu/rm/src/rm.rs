@@ -6,11 +6,16 @@
 // spell-checker:ignore (path) eacces inacc
 
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
+#[cfg(not(windows))]
+use regex::bytes::Regex;
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, Metadata};
 use std::io::ErrorKind;
 use std::ops::BitOr;
+#[cfg(not(windows))]
+use std::os::unix::ffi::OsStrExt;
+
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -290,14 +295,35 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 
     for filename in files {
         let file = Path::new(filename);
+
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
-                if metadata.is_dir() {
-                    handle_dir(file, options)
-                } else if is_symlink_dir(&metadata) {
-                    remove_dir(file, options)
-                } else {
-                    remove_file(file, options)
+                #[cfg(not(windows))]
+                {
+                    let re = Regex::new(r"/\.{1,2}\/*$").unwrap();
+                    if re.is_match(filename.as_bytes()) {
+                        show_error!(
+                            "refusing to remove '.' or '..' directory: skipping '{:}'",
+                            clean_trailing_slashes(filename).display()
+                        );
+                        true
+                    } else if metadata.is_dir() {
+                        handle_dir(file, options)
+                    } else if is_symlink_dir(&metadata) {
+                        remove_dir(file, options)
+                    } else {
+                        remove_file(file, options)
+                    }
+                }
+                #[cfg(windows)]
+                {
+                    if metadata.is_dir() {
+                        handle_dir(file, options)
+                    } else if is_symlink_dir(&metadata) {
+                        remove_dir(file, options)
+                    } else {
+                        remove_file(file, options)
+                    }
                 }
             }
             Err(_e) => {
@@ -584,6 +610,27 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     } else {
         true
     }
+}
+
+#[cfg(not(windows))]
+/// Removes trailing slashes, for example 'd/../////' yield 'd/../' required to fix rm-r4 GNU test
+fn clean_trailing_slashes(path: &OsStr) -> &Path {
+    let path_bytes = path.as_bytes();
+
+    let mut idx = path_bytes.len() - 1;
+    // Checks if element at the end is a '/'
+    if path_bytes[idx] == b'/' {
+        for i in (0..path_bytes.len()).rev() {
+            // Will break at the start of the continuous sequence of '/', eg: "abc//////" , will break at
+            // "abc/"
+            if path_bytes[i - 1] != b'/' {
+                idx = i;
+                break;
+            }
+        }
+    }
+
+    Path::new(OsStr::from_bytes(&path_bytes[0..=idx]))
 }
 
 fn prompt_descend(path: &Path) -> bool {
