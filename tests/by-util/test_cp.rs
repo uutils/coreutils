@@ -289,18 +289,25 @@ fn test_cp_arg_update_interactive_error() {
 
 #[test]
 fn test_cp_arg_update_none() {
-    for argument in ["--update=none", "--update=non", "--update=n"] {
-        let (at, mut ucmd) = at_and_ucmd!();
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--update=none")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+}
 
-        ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-            .arg(TEST_HOW_ARE_YOU_SOURCE)
-            .arg(argument)
-            .succeeds()
-            .no_stderr()
-            .no_stdout();
-
-        assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
-    }
+#[test]
+fn test_cp_arg_update_none_fail() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--update=none-fail")
+        .fails()
+        .stderr_contains(format!("not replacing '{}'", TEST_HOW_ARE_YOU_SOURCE));
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
 #[test]

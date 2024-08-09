@@ -59,6 +59,7 @@ pub enum UpdateMode {
     /// --update=`older`
     /// -u
     ReplaceIfOlder,
+    ReplaceNoneFail,
 }
 
 pub mod arguments {
@@ -76,7 +77,7 @@ pub mod arguments {
         clap::Arg::new(OPT_UPDATE)
             .long("update")
             .help("move only when the SOURCE file is newer than the destination file or when the destination file is missing")
-            .value_parser(ShortcutValueParser::new(["none", "all", "older"]))
+            .value_parser(ShortcutValueParser::new(["none", "all", "older","none-fail"]))
             .num_args(0..=1)
             .default_missing_value("older")
             .require_equals(true)
@@ -130,6 +131,7 @@ pub fn determine_update_mode(matches: &ArgMatches) -> UpdateMode {
             "all" => UpdateMode::ReplaceAll,
             "none" => UpdateMode::ReplaceNone,
             "older" => UpdateMode::ReplaceIfOlder,
+            "none-fail" => UpdateMode::ReplaceNoneFail,
             _ => unreachable!("other args restricted by clap"),
         }
     } else if matches.get_flag(arguments::OPT_UPDATE_NO_ARG) {
