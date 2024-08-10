@@ -889,6 +889,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "f128"
+version = "0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b7d29530784c8b9e49eccb10c95abc69ac72e9e7eb29cb2649b13e08f766d2c"
+dependencies = [
+ "f128_input",
+ "f128_internal",
+ "libc",
+ "num-traits",
+]
+
+[[package]]
+name = "f128_input"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18a821a6f74745607a8c99c932a8f513e6e7d6ee63725ec95511edf4a94510bb"
+dependencies = [
+ "f128_internal",
+]
+
+[[package]]
+name = "f128_internal"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9708a33de3cda4e6636670c1af561635fe249cb817dda1a14ec18fe9dda0a99d"
+dependencies = [
+ "cc",
+ "libc",
+ "num-traits",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3137,6 +3169,7 @@ version = "0.0.27"
 dependencies = [
  "bigdecimal",
  "clap",
+ "f128",
  "num-bigint",
  "num-traits",
  "uucore",

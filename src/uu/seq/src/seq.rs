@@ -1,3 +1,5 @@
+#![feature(f128)]
+
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
@@ -32,6 +34,7 @@ const OPT_SEPARATOR: &str = "separator";
 const OPT_TERMINATOR: &str = "terminator";
 const OPT_EQUAL_WIDTH: &str = "equal-width";
 const OPT_FORMAT: &str = "format";
+const OPT_BIGDECIMAL: &str = "bigdecimal";
 
 const ARG_NUMBERS: &str = "numbers";
 
@@ -40,6 +43,7 @@ struct SeqOptions<'a> {
     separator: String,
     terminator: String,
     equal_width: bool,
+    bigdecimal: bool,
     format: Option<&'a str>,
 }
 
@@ -72,12 +76,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or("\n")
             .to_string(),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
+        bigdecimal: matches.get_flag(OPT_BIGDECIMAL),
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
 
     let to_precise_number =
         |n| PreciseNumber::from_str(n).map_err(|err| SeqError::ParseError(n.to_string(), err));
-    let (first, increment, last) = match numbers.as_slice() {
+
+    let (first, increment, last) = match numbers[..] {
         [last] => (
             PreciseNumber::one(),
             PreciseNumber::one(),
@@ -97,6 +103,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // the argument specification in `uu_app()`.
         _ => unreachable!(),
     };
+
     if increment.is_zero() {
         return Err(SeqError::ZeroIncrement(numbers[1].clone()).into());
     }
@@ -116,15 +123,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         None => None,
     };
-    let result = print_seq(
-        (first.number, increment.number, last.number),
-        largest_dec,
-        &options.separator,
-        &options.terminator,
-        options.equal_width,
-        padding,
-        &format,
-    );
+
+    let result = if options.bigdecimal {
+        print_seq(
+            (first.number, increment.number, last.number),
+            largest_dec,
+            &options.separator,
+            &options.terminator,
+            options.equal_width,
+            padding,
+            &format,
+        )
+    } else {
+        // TODO: remove once f128::from_str() is available
+        let first = first.number.to_f128();
+        let increment = increment.number.to_f128();
+        let last = last.number.to_f128();
+
+        if increment == 0.0 {
+            return Err(SeqError::ZeroIncrement(numbers[1].clone()).into());
+        }
+
+        print_seq_128(
+            (first, increment, last),
+            largest_dec,
+            &options.separator,
+            &options.terminator,
+            options.equal_width,
+            padding,
+            &format,
+        )
+    };
+
     match result {
         Ok(_) => Ok(()),
         Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
@@ -169,6 +199,12 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_NUMBERS)
                 .action(ArgAction::Append)
                 .num_args(1..=3),
+        )
+        .arg(
+            Arg::new(OPT_BIGDECIMAL)
+            .long(OPT_BIGDECIMAL)
+            .help("use bigdecimal instead of f128 (breaks GNU compatibility but is more accurate)")
+            .action(ArgAction::SetTrue)
         )
 }
 
@@ -247,6 +283,63 @@ fn print_seq(
         }
         // TODO Implement augmenting addition.
         value = value + increment.clone();
+        is_first_iteration = false;
+    }
+    if !is_first_iteration {
+        write!(stdout, "{terminator}")?;
+    }
+    stdout.flush()?;
+    Ok(())
+}
+
+/// f128 based code path
+fn print_seq_128(
+    (first, increment, last): (f128, f128, f128),
+    largest_dec: usize,
+    separator: &str,
+    terminator: &str,
+    pad: bool,
+    padding: usize,
+    format: &Option<Format<num_format::Float>>,
+) -> std::io::Result<()> {
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
+    let mut value = first;
+    let padding = if pad {
+        padding + if largest_dec > 0 { largest_dec + 1 } else { 0 }
+    } else {
+        0
+    };
+    let mut is_first_iteration = true;
+    // inlined done_printing as f128 does not implement Zero
+    while !(increment >= 0.0 && value > last) || (increment < 0.0 && value < last) {
+        if !is_first_iteration {
+            write!(stdout, "{separator}")?;
+        }
+        // If there was an argument `-f FORMAT`, then use that format
+        // template instead of the default formatting strategy.
+        //
+        // TODO The `printf()` method takes a string as its second
+        // parameter but we have an `ExtendedBigDecimal`. In order to
+        // satisfy the signature of the function, we convert the
+        // `ExtendedBigDecimal` into a string. The `printf()`
+        // logic will subsequently parse that string into something
+        // similar to an `ExtendedBigDecimal` again before rendering
+        // it as a string and ultimately writing to `stdout`. We
+        // shouldn't have to do so much converting back and forth via
+        // strings.
+        match &format {
+            Some(f) => {
+                f.fmt(&mut stdout, value as f64)?;
+            }
+            None => write!(
+                &mut stdout,
+                "{:>0padding$.largest_dec$}",
+                // TODO: remove once impl Display for f128 is added
+                ExtendedBigDecimal::from_f128(value)
+            )?,
+        }
+        value += increment;
         is_first_iteration = false;
     }
     if !is_first_iteration {
