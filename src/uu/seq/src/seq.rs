@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) extendedbigdecimal numberparse
 use std::io::{stdout, ErrorKind, Write};
+use std::str::FromStr;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use num_traits::{ToPrimitive, Zero};
@@ -74,35 +75,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
 
-    let first = if numbers.len() > 1 {
-        match numbers[0].parse() {
-            Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[0].to_string(), e).into()),
-        }
-    } else {
-        PreciseNumber::one()
-    };
-    let increment = if numbers.len() > 2 {
-        match numbers[1].parse() {
-            Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[1].to_string(), e).into()),
-        }
-    } else {
-        PreciseNumber::one()
+    let to_precise_number =
+        |n| PreciseNumber::from_str(n).map_err(|err| SeqError::ParseError(n.to_string(), err));
+    let (first, increment, last) = match numbers.as_slice() {
+        [last] => (
+            PreciseNumber::one(),
+            PreciseNumber::one(),
+            to_precise_number(last)?,
+        ),
+        [first, last] => (
+            to_precise_number(first)?,
+            PreciseNumber::one(),
+            to_precise_number(last)?,
+        ),
+        [first, increment, last] => (
+            to_precise_number(first)?,
+            to_precise_number(increment)?,
+            to_precise_number(last)?,
+        ),
+        // We are guaranteed that `numbers.len()` is greater than zero and at most three because of
+        // the argument specification in `uu_app()`.
+        _ => unreachable!(),
     };
     if increment.is_zero() {
-        return Err(SeqError::ZeroIncrement(numbers[1].to_string()).into());
+        return Err(SeqError::ZeroIncrement(numbers[1].clone()).into());
     }
-    let last: PreciseNumber = {
-        // We are guaranteed that `numbers.len()` is greater than zero
-        // and at most three because of the argument specification in
-        // `uu_app()`.
-        let n: usize = numbers.len();
-        match numbers[n - 1].parse() {
-            Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_string(), e).into()),
-        }
-    };
 
     let padding = first
         .num_integral_digits
