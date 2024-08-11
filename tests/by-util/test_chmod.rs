@@ -238,7 +238,7 @@ fn test_chmod_ugoa() {
         .fails()
         .code_is(1)
         // spell-checker:disable-next-line
-        .stderr_is("chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x\n");
+        .stderr_is("chmod: file: new permissions are r-xr-xrwx, not r-xr-xr-x\n");
     assert_eq!(
         metadata(at.plus("file")).unwrap().permissions().mode(),
         0o100577
