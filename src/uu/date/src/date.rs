@@ -9,7 +9,7 @@ use chrono::format::{Item, StrftimeItems};
 use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::{metadata, File};
@@ -137,54 +137,65 @@ impl From<&str> for Rfc3339Format {
     }
 }
 
+impl Format {
+    fn extract_from(matches: &ArgMatches) -> UResult<Self> {
+        if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
+            if let Some(stripped_form) = form.strip_prefix('+') {
+                Ok(Self::Custom(stripped_form.to_string()))
+            } else {
+                Err(USimpleError::new(
+                    1,
+                    format!("invalid date {}", form.quote()),
+                ))
+            }
+        } else if let Some(fmt) = matches
+            .get_many::<String>(OPT_ISO_8601)
+            .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
+        {
+            Ok(Self::Iso8601(fmt))
+        } else if matches.get_flag(OPT_RFC_EMAIL) {
+            Ok(Self::Rfc5322)
+        } else if let Some(fmt) = matches
+            .get_one::<String>(OPT_RFC_3339)
+            .map(|s| s.as_str().into())
+        {
+            Ok(Self::Rfc3339(fmt))
+        } else {
+            Ok(Self::Default)
+        }
+    }
+}
+
+impl DateSource {
+    fn extract_from(matches: &ArgMatches) -> Self {
+        if let Some(date) = matches.get_one::<String>(OPT_DATE) {
+            let ref_time = Local::now();
+            if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date.as_str()) {
+                let duration = new_time.signed_duration_since(ref_time);
+                Self::Human(duration)
+            } else {
+                Self::Custom(date.into())
+            }
+        } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
+            match file.as_ref() {
+                "-" => Self::Stdin,
+                _ => Self::File(file.into()),
+            }
+        } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+            Self::Reference(file.into())
+        } else {
+            Self::Now
+        }
+    }
+}
+
 #[uucore::main]
-#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
-        if !form.starts_with('+') {
-            return Err(USimpleError::new(
-                1,
-                format!("invalid date {}", form.quote()),
-            ));
-        }
-        let form = form[1..].to_string();
-        Format::Custom(form)
-    } else if let Some(fmt) = matches
-        .get_many::<String>(OPT_ISO_8601)
-        .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
-    {
-        Format::Iso8601(fmt)
-    } else if matches.get_flag(OPT_RFC_EMAIL) {
-        Format::Rfc5322
-    } else if let Some(fmt) = matches
-        .get_one::<String>(OPT_RFC_3339)
-        .map(|s| s.as_str().into())
-    {
-        Format::Rfc3339(fmt)
-    } else {
-        Format::Default
-    };
+    let format = Format::extract_from(&matches)?;
 
-    let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        let ref_time = Local::now();
-        if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date.as_str()) {
-            let duration = new_time.signed_duration_since(ref_time);
-            DateSource::Human(duration)
-        } else {
-            DateSource::Custom(date.into())
-        }
-    } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
-        match file.as_ref() {
-            "-" => DateSource::Stdin,
-            _ => DateSource::File(file.into()),
-        }
-    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
-        DateSource::Reference(file.into())
-    } else {
-        DateSource::Now
-    };
+    let date_source = DateSource::extract_from(&matches);
 
     let set_to = matches.get_one::<String>(OPT_SET);
 
@@ -206,6 +217,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = if let Some(date_string) = &settings.set_to {
+        // Ignore settings.date_source, as it should not be able to be set on the command-line.
         let date = parse_datetime::parse_datetime_at_date(now.into(), date_string)
             .map_err(|_| USimpleError::new(1, format!("invalid date {}", date_string.quote())))?;
         // All set time functions expect UTC datetimes.
