@@ -25,6 +25,9 @@ use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetS
 
 use uucore::shortcut_value_parser::ShortcutValueParser;
 
+type MaybeParsedDatetime =
+    Result<DateTime<FixedOffset>, (String, parse_datetime::ParseDateTimeError)>;
+
 // Options
 const DATE: &str = "date";
 const HOURS: &str = "hours";
@@ -187,6 +190,64 @@ impl DateSource {
             Self::Now
         }
     }
+
+    // The hideous error-type stems from `parse_date`.
+    fn try_into_iterator(
+        &self,
+        now: &DateTime<FixedOffset>,
+    ) -> UResult<Box<dyn Iterator<Item = MaybeParsedDatetime>>> {
+        match self {
+            Self::Custom(ref input) => {
+                let date = parse_date(input.clone());
+                let iter = std::iter::once(date);
+                Ok(Box::new(iter))
+            }
+            Self::Human(relative_time) => {
+                // Double check the result is overflow or not of the current_time + relative_time
+                // it may cause a panic of chrono::datetime::DateTime add
+                match now.checked_add_signed(*relative_time) {
+                    Some(date) => {
+                        let iter = std::iter::once(Ok(date));
+                        Ok(Box::new(iter))
+                    }
+                    None => Err(USimpleError::new(
+                        1,
+                        format!("invalid date {relative_time}"),
+                    )),
+                }
+            }
+            Self::Stdin => {
+                let lines = BufReader::new(std::io::stdin()).lines();
+                let iter = lines.map_while(Result::ok).map(parse_date);
+                Ok(Box::new(iter))
+            }
+            Self::File(ref path) => {
+                if path.is_dir() {
+                    return Err(USimpleError::new(
+                        2,
+                        format!("expected file, got directory {}", path.quote()),
+                    ));
+                }
+                let file = File::open(path)
+                    .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+                let lines = BufReader::new(file).lines();
+                let iter = lines.map_while(Result::ok).map(parse_date);
+                Ok(Box::new(iter))
+            }
+            Self::Reference(ref path) => {
+                let metadata = metadata(path)?;
+                // TODO: "This field might not be available on all platforms" → which ones?
+                let date_utc: DateTime<Utc> = metadata.modified()?.into();
+                let date: DateTime<FixedOffset> = date_utc.into();
+                let iter = std::iter::once(Ok(date));
+                Ok(Box::new(iter))
+            }
+            Self::Now => {
+                let iter = std::iter::once(Ok(*now));
+                Ok(Box::new(iter))
+            }
+        }
+    }
 }
 
 #[uucore::main]
@@ -230,59 +291,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let date_fixed: DateTime<FixedOffset> = date.into();
         Box::new(std::iter::once(Ok(date_fixed)))
     } else {
-        match settings.date_source {
-            DateSource::Custom(ref input) => {
-                let date = parse_date(input.clone());
-                let iter = std::iter::once(date);
-                Box::new(iter)
-            }
-            DateSource::Human(relative_time) => {
-                // Double check the result is overflow or not of the current_time + relative_time
-                // it may cause a panic of chrono::datetime::DateTime add
-                match now.checked_add_signed(relative_time) {
-                    Some(date) => {
-                        let iter = std::iter::once(Ok(date));
-                        Box::new(iter)
-                    }
-                    None => {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid date {relative_time}"),
-                        ));
-                    }
-                }
-            }
-            DateSource::Stdin => {
-                let lines = BufReader::new(std::io::stdin()).lines();
-                let iter = lines.map_while(Result::ok).map(parse_date);
-                Box::new(iter)
-            }
-            DateSource::File(ref path) => {
-                if path.is_dir() {
-                    return Err(USimpleError::new(
-                        2,
-                        format!("expected file, got directory {}", path.quote()),
-                    ));
-                }
-                let file = File::open(path)
-                    .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
-                let lines = BufReader::new(file).lines();
-                let iter = lines.map_while(Result::ok).map(parse_date);
-                Box::new(iter)
-            }
-            DateSource::Reference(ref path) => {
-                let metadata = metadata(path)?;
-                // TODO: "This field might not be available on all platforms" → which ones?
-                let date_utc: DateTime<Utc> = metadata.modified()?.into();
-                let date: DateTime<FixedOffset> = date_utc.into();
-                let iter = std::iter::once(Ok(date));
-                Box::new(iter)
-            }
-            DateSource::Now => {
-                let iter = std::iter::once(Ok(now));
-                Box::new(iter)
-            }
-        }
+        settings.date_source.try_into_iterator(&now)?
     };
 
     let format_string = make_format_string(&settings);
@@ -443,9 +452,7 @@ fn make_format_string(settings: &Settings) -> &str {
 
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
-fn parse_date<S: AsRef<str> + Clone>(
-    s: S,
-) -> Result<DateTime<FixedOffset>, (String, parse_datetime::ParseDateTimeError)> {
+fn parse_date<S: AsRef<str> + Clone>(s: S) -> MaybeParsedDatetime {
     parse_datetime::parse_datetime(s.as_ref()).map_err(|e| (s.as_ref().into(), e))
 }
 
