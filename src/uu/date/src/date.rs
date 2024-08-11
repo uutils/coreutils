@@ -250,6 +250,32 @@ impl DateSource {
     }
 }
 
+fn print_date(format_string: &str, date: DateTime<FixedOffset>) -> UResult<()> {
+    let format_string = custom_time_format(format_string);
+    // Refuse to pass this string to chrono as it is crashing in this crate
+    if format_string.contains("%#z") {
+        return Err(USimpleError::new(
+            1,
+            format!("invalid format {}", format_string.replace("%f", "%N")),
+        ));
+    }
+    // Hack to work around panic in chrono,
+    // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
+    let format_items = StrftimeItems::new(format_string.as_str());
+    if format_items.clone().any(|i| i == Item::Error) {
+        return Err(USimpleError::new(
+            1,
+            format!("invalid format {}", format_string.replace("%f", "%N")),
+        ));
+    }
+    let formatted = date
+        .format_with_items(format_items)
+        .to_string()
+        .replace("%f", "%N");
+    println!("{formatted}");
+    Ok(())
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
@@ -300,28 +326,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for date in dates {
         match date {
             Ok(date) => {
-                let format_string = custom_time_format(format_string);
-                // Refuse to pass this string to chrono as it is crashing in this crate
-                if format_string.contains("%#z") {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid format {}", format_string.replace("%f", "%N")),
-                    ));
-                }
-                // Hack to work around panic in chrono,
-                // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
-                let format_items = StrftimeItems::new(format_string.as_str());
-                if format_items.clone().any(|i| i == Item::Error) {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid format {}", format_string.replace("%f", "%N")),
-                    ));
-                }
-                let formatted = date
-                    .format_with_items(format_items)
-                    .to_string()
-                    .replace("%f", "%N");
-                println!("{formatted}");
+                print_date(format_string, date)?;
             }
             Err((input, _err)) => show!(USimpleError::new(
                 1,
