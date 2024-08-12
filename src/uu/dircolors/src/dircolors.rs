@@ -469,7 +469,7 @@ fn escape(s: &str) -> String {
         match c {
             '\'' => result.push_str("'\\''"),
             ':' if previous != '\\' => result.push_str("\\:"),
-            _ => result.push_str(&c.to_string()),
+            _ => result.push(c),
         }
         previous = c;
     }
