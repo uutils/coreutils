@@ -7,7 +7,6 @@
 use quick_error::quick_error;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::fs::{self, File, Metadata, OpenOptions, Permissions};
@@ -29,16 +28,17 @@ use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, is_symlink_loop, path_ends_with_terminator,
-    paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
+    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop,
+    path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
+    ResolveMode,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enum.
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
-    format_usage, help_about, help_section, help_usage, prompt_yes, show_error, show_warning,
-    util_name,
+    format_usage, help_about, help_section, help_usage, prompt_yes,
+    shortcut_value_parser::ShortcutValueParser, show_error, show_warning, util_name,
 };
 
 use crate::copydir::copy_directory;
@@ -169,7 +169,7 @@ pub enum CopyMode {
 /// For full compatibility with GNU, these options should also combine. We
 /// currently only do a best effort imitation of that behavior, because it is
 /// difficult to achieve in clap, especially with `--no-preserve`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Attributes {
     #[cfg(unix)]
     pub ownership: Preserve,
@@ -396,23 +396,20 @@ static PRESERVABLE_ATTRIBUTES: &[&str] = &[
     "ownership",
     "timestamps",
     "context",
-    "link",
     "links",
     "xattr",
     "all",
 ];
 
 #[cfg(not(unix))]
-static PRESERVABLE_ATTRIBUTES: &[&str] = &[
-    "mode",
-    "timestamps",
-    "context",
-    "link",
-    "links",
-    "xattr",
-    "all",
-];
+static PRESERVABLE_ATTRIBUTES: &[&str] =
+    &["mode", "timestamps", "context", "links", "xattr", "all"];
 
+const PRESERVE_DEFAULT_VALUES: &str = if cfg!(unix) {
+    "mode,ownership,timestamp"
+} else {
+    "mode,timestamp"
+};
 pub fn uu_app() -> Command {
     const MODE_ARGS: &[&str] = &[
         options::LINK,
@@ -475,8 +472,8 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::RECURSIVE)
-                .short('r')
-                .visible_short_alias('R')
+                .short('R')
+                .visible_short_alias('r')
                 .long(options::RECURSIVE)
                 // --archive sets this option
                 .help("copy directories recursively")
@@ -543,7 +540,7 @@ pub fn uu_app() -> Command {
                 .overrides_with_all(MODE_ARGS)
                 .require_equals(true)
                 .default_missing_value("always")
-                .value_parser(["auto", "always", "never"])
+                .value_parser(ShortcutValueParser::new(["auto", "always", "never"]))
                 .num_args(0..=1)
                 .help("control clone/CoW copies. See below"),
         )
@@ -559,17 +556,11 @@ pub fn uu_app() -> Command {
                 .long(options::PRESERVE)
                 .action(ArgAction::Append)
                 .use_value_delimiter(true)
-                .value_parser(clap::builder::PossibleValuesParser::new(
-                    PRESERVABLE_ATTRIBUTES,
-                ))
+                .value_parser(ShortcutValueParser::new(PRESERVABLE_ATTRIBUTES))
                 .num_args(0..)
                 .require_equals(true)
                 .value_name("ATTR_LIST")
-                .overrides_with_all([
-                    options::ARCHIVE,
-                    options::PRESERVE_DEFAULT_ATTRIBUTES,
-                    options::NO_PRESERVE,
-                ])
+                .default_missing_value(PRESERVE_DEFAULT_VALUES)
                 // -d sets this option
                 // --archive sets this option
                 .help(
@@ -581,19 +572,18 @@ pub fn uu_app() -> Command {
             Arg::new(options::PRESERVE_DEFAULT_ATTRIBUTES)
                 .short('p')
                 .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
-                .overrides_with_all([options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
                 .help("same as --preserve=mode,ownership(unix only),timestamps")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_PRESERVE)
                 .long(options::NO_PRESERVE)
+                .action(ArgAction::Append)
+                .use_value_delimiter(true)
+                .value_parser(ShortcutValueParser::new(PRESERVABLE_ATTRIBUTES))
+                .num_args(0..)
+                .require_equals(true)
                 .value_name("ATTR_LIST")
-                .overrides_with_all([
-                    options::PRESERVE_DEFAULT_ATTRIBUTES,
-                    options::PRESERVE,
-                    options::ARCHIVE,
-                ])
                 .help("don't preserve the specified attributes"),
         )
         .arg(
@@ -630,11 +620,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
-                .overrides_with_all([
-                    options::PRESERVE_DEFAULT_ATTRIBUTES,
-                    options::PRESERVE,
-                    options::NO_PRESERVE,
-                ])
                 .help("Same as -dR --preserve=all")
                 .action(ArgAction::SetTrue),
         )
@@ -655,7 +640,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::SPARSE)
                 .long(options::SPARSE)
                 .value_name("WHEN")
-                .value_parser(["never", "auto", "always"])
+                .value_parser(ShortcutValueParser::new(["never", "auto", "always"]))
                 .help("control creation of sparse files. See below"),
         )
         // TODO: implement the following args
@@ -848,6 +833,27 @@ impl Attributes {
         }
     }
 
+    /// Set the field to Preserve::NO { explicit: true } if the corresponding field
+    /// in other is set to Preserve::Yes { .. }.
+    pub fn diff(self, other: &Self) -> Self {
+        fn update_preserve_field(current: Preserve, other: Preserve) -> Preserve {
+            if matches!(other, Preserve::Yes { .. }) {
+                Preserve::No { explicit: true }
+            } else {
+                current
+            }
+        }
+        Self {
+            #[cfg(unix)]
+            ownership: update_preserve_field(self.ownership, other.ownership),
+            mode: update_preserve_field(self.mode, other.mode),
+            timestamps: update_preserve_field(self.timestamps, other.timestamps),
+            context: update_preserve_field(self.context, other.context),
+            links: update_preserve_field(self.links, other.links),
+            xattr: update_preserve_field(self.xattr, other.xattr),
+        }
+    }
+
     pub fn parse_iter<T>(values: impl Iterator<Item = T>) -> Result<Self, Error>
     where
         T: AsRef<str>,
@@ -935,34 +941,85 @@ impl Options {
             }
         };
 
-        // Parse attributes to preserve
-        let mut attributes =
-            if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE) {
-                if attribute_strs.len() == 0 {
-                    Attributes::DEFAULT
-                } else {
-                    Attributes::parse_iter(attribute_strs)?
+        // cp follows POSIX conventions for overriding options such as "-a",
+        // "-d", "--preserve", and "--no-preserve". We can use clap's
+        // override-all behavior to achieve this, but there's a challenge: when
+        // clap overrides an argument, it removes all traces of it from the
+        // match. This poses a problem because flags like "-a" expand to "-dR
+        // --preserve=all", and we only want to override the "--preserve=all"
+        // part. Additionally, we need to handle multiple occurrences of the
+        // same flags. To address this, we create an overriding order from the
+        // matches here.
+        let mut overriding_order: Vec<(usize, &str, Vec<&String>)> = vec![];
+        // We iterate through each overriding option, adding each occurrence of
+        // the option along with its value and index as a tuple, and push it to
+        // `overriding_order`.
+        for option in [
+            options::PRESERVE,
+            options::NO_PRESERVE,
+            options::ARCHIVE,
+            options::PRESERVE_DEFAULT_ATTRIBUTES,
+            options::NO_DEREFERENCE_PRESERVE_LINKS,
+        ] {
+            if let (Ok(Some(val)), Some(index)) = (
+                matches.try_get_one::<bool>(option),
+                // even though it says in the doc that `index_of` would give us
+                // the first index of the argument, when it comes to flag it
+                // gives us the last index where the flag appeared (probably
+                // because it overrides itself). Since it is a flag and it would
+                // have same value across the occurrences we just need the last
+                // index.
+                matches.index_of(option),
+            ) {
+                if *val {
+                    overriding_order.push((index, option, vec![]));
                 }
-            } else if matches.get_flag(options::ARCHIVE) {
-                // --archive is used. Same as --preserve=all
-                Attributes::ALL
-            } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
-                Attributes::LINKS
-            } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
-                Attributes::DEFAULT
-            } else {
-                Attributes::NONE
-            };
+            } else if let (Some(occurrences), Some(mut indices)) = (
+                matches.get_occurrences::<String>(option),
+                matches.indices_of(option),
+            ) {
+                occurrences.for_each(|val| {
+                    if let Some(index) = indices.next() {
+                        let val = val.collect::<Vec<&String>>();
+                        // As mentioned in the documentation of the indices_of
+                        // function, it provides the indices of the individual
+                        // values. Therefore, to get the index of the first
+                        // value of the next occurrence in the next iteration,
+                        // we need to advance the indices iterator by the length
+                        // of the current occurrence's values.
+                        for _ in 1..val.len() {
+                            indices.next();
+                        }
+                        overriding_order.push((index, option, val));
+                    }
+                });
+            }
+        }
+        overriding_order.sort_by(|a, b| a.0.cmp(&b.0));
 
-        // handling no-preserve options and adjusting the attributes
-        if let Some(attribute_strs) = matches.get_many::<String>(options::NO_PRESERVE) {
-            if attribute_strs.len() > 0 {
-                let no_preserve_attributes = Attributes::parse_iter(attribute_strs)?;
-                if matches!(no_preserve_attributes.links, Preserve::Yes { .. }) {
-                    attributes.links = Preserve::No { explicit: true };
-                } else if matches!(no_preserve_attributes.mode, Preserve::Yes { .. }) {
-                    attributes.mode = Preserve::No { explicit: true };
+        let mut attributes = Attributes::NONE;
+
+        // Iterate through the `overriding_order` and adjust the attributes accordingly.
+        for (_, option, val) in overriding_order {
+            match option {
+                options::ARCHIVE => {
+                    attributes = Attributes::ALL;
                 }
+                options::PRESERVE_DEFAULT_ATTRIBUTES => {
+                    attributes = attributes.union(&Attributes::DEFAULT);
+                }
+                options::NO_DEREFERENCE_PRESERVE_LINKS => {
+                    attributes = attributes.union(&Attributes::LINKS);
+                }
+                options::PRESERVE => {
+                    attributes = attributes.union(&Attributes::parse_iter(val.into_iter())?);
+                }
+                options::NO_PRESERVE => {
+                    if !val.is_empty() {
+                        attributes = attributes.diff(&Attributes::parse_iter(val.into_iter())?);
+                    }
+                }
+                _ => (),
             }
         }
 
@@ -986,7 +1043,9 @@ impl Options {
             dereference: !(matches.get_flag(options::NO_DEREFERENCE)
                 || matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS)
                 || matches.get_flag(options::ARCHIVE)
-                || recursive)
+                // cp normally follows the link only when not copying recursively or when
+                // --link (-l) is used
+                || (recursive && CopyMode::from_matches(matches)!= CopyMode::Link ))
                 || matches.get_flag(options::DEREFERENCE),
             one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
             parents: matches.get_flag(options::PARENTS),
@@ -1129,6 +1188,9 @@ fn parse_path_args(
     };
 
     if options.strip_trailing_slashes {
+        // clippy::assigning_clones added with Rust 1.78
+        // Rust version = 1.76 on OpenBSD stable/7.5
+        #[cfg_attr(not(target_os = "openbsd"), allow(clippy::assigning_clones))]
         for source in &mut paths {
             *source = source.components().as_path().to_owned();
         }
@@ -1226,12 +1288,14 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 target_type,
                 options,
                 &mut symlinked_files,
+                &copied_destinations,
                 &mut copied_files,
             ) {
                 show_error_if_needed(&error);
                 non_fatal_errors = true;
+            } else {
+                copied_destinations.insert(dest.clone());
             }
-            copied_destinations.insert(dest.clone());
         }
         seen_sources.insert(source);
     }
@@ -1268,7 +1332,11 @@ fn construct_dest_path(
     Ok(match target_type {
         TargetType::Directory => {
             let root = if options.parents {
-                Path::new("")
+                if source_path.has_root() && cfg!(unix) {
+                    Path::new("/")
+                } else {
+                    Path::new("")
+                }
             } else {
                 source_path.parent().unwrap_or(source_path)
             };
@@ -1277,7 +1345,7 @@ fn construct_dest_path(
         TargetType::File => target.to_path_buf(),
     })
 }
-
+#[allow(clippy::too_many_arguments)]
 fn copy_source(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
@@ -1285,6 +1353,7 @@ fn copy_source(
     target_type: TargetType,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
@@ -1296,6 +1365,7 @@ fn copy_source(
             target,
             options,
             symlinked_files,
+            copied_destinations,
             copied_files,
             true,
         )
@@ -1308,12 +1378,15 @@ fn copy_source(
             dest.as_path(),
             options,
             symlinked_files,
+            copied_destinations,
             copied_files,
             true,
         );
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
-                copy_attributes(x, y, &options.attributes)?;
+                if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
+                    copy_attributes(&src, y, &options.attributes)?;
+                }
             }
         }
         res
@@ -1376,8 +1449,8 @@ pub(crate) fn copy_attributes(
 
         let dest_uid = source_metadata.uid();
         let dest_gid = source_metadata.gid();
-
-        wrap_chown(
+        // gnu compatibility: cp doesn't report an error if it fails to set the ownership.
+        let _ = wrap_chown(
             dest,
             &dest.symlink_metadata().context(context)?,
             Some(dest_uid),
@@ -1385,11 +1458,9 @@ pub(crate) fn copy_attributes(
             false,
             Verbosity {
                 groups_only: false,
-                level: VerbosityLevel::Normal,
+                level: VerbosityLevel::Silent,
             },
-        )
-        .map_err(Error::Error)?;
-
+        );
         Ok(())
     })?;
 
@@ -1478,16 +1549,23 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    context: &str,
     symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
     #[cfg(not(windows))]
     {
-        std::os::unix::fs::symlink(source, dest).context(context)?;
+        std::os::unix::fs::symlink(source, dest).context(format!(
+            "cannot create symlink {} to {}",
+            get_filename(dest).unwrap_or("invalid file name").quote(),
+            get_filename(source).unwrap_or("invalid file name").quote()
+        ))?;
     }
     #[cfg(windows)]
     {
-        std::os::windows::fs::symlink_file(source, dest).context(context)?;
+        std::os::windows::fs::symlink_file(source, dest).context(format!(
+            "cannot create symlink {} to {}",
+            get_filename(dest).unwrap_or("invalid file name").quote(),
+            get_filename(source).unwrap_or("invalid file name").quote()
+        ))?;
     }
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
@@ -1499,10 +1577,11 @@ fn context_for(src: &Path, dest: &Path) -> String {
     format!("{} -> {}", src.quote(), dest.quote())
 }
 
-/// Implements a simple backup copy for the destination file.
+/// Implements a simple backup copy for the destination file .
+/// if is_dest_symlink flag is set to true dest will be renamed to backup_path
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
-    if dest.is_symlink() {
+fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<PathBuf> {
+    if is_dest_symlink {
         fs::rename(dest, backup_path)?;
     } else {
         fs::copy(dest, backup_path)?;
@@ -1523,11 +1602,38 @@ fn is_forbidden_to_copy_to_same_file(
 ) -> bool {
     // TODO To match the behavior of GNU cp, we also need to check
     // that the file is a regular file.
+    let source_is_symlink = source.is_symlink();
+    let dest_is_symlink = dest.is_symlink();
+    // only disable dereference if both source and dest is symlink and dereference flag is disabled
     let dereference_to_compare =
-        options.dereference(source_in_command_line) || !source.is_symlink();
-    paths_refer_to_same_file(source, dest, dereference_to_compare)
-        && !(options.force() && options.backup != BackupMode::NoBackup)
-        && !(dest.is_symlink() && options.backup != BackupMode::NoBackup)
+        options.dereference(source_in_command_line) || (!source_is_symlink || !dest_is_symlink);
+    if !paths_refer_to_same_file(source, dest, dereference_to_compare) {
+        return false;
+    }
+    if options.backup != BackupMode::NoBackup {
+        if options.force() && !source_is_symlink {
+            return false;
+        }
+        if source_is_symlink && !options.dereference {
+            return false;
+        }
+        if dest_is_symlink {
+            return false;
+        }
+        if !dest_is_symlink && !source_is_symlink && dest != source {
+            return false;
+        }
+    }
+    if options.copy_mode == CopyMode::Link {
+        return false;
+    }
+    if options.copy_mode == CopyMode::SymLink && dest_is_symlink {
+        return false;
+    }
+    if dest_is_symlink && source_is_symlink && !options.dereference {
+        return false;
+    }
+    true
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
@@ -1536,6 +1642,7 @@ fn handle_existing_dest(
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
@@ -1547,6 +1654,7 @@ fn handle_existing_dest(
         options.overwrite.verify(dest)?;
     }
 
+    let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
         if paths_refer_to_same_file(source, &backup_path, true) {
@@ -1557,39 +1665,52 @@ fn handle_existing_dest(
             )
             .into());
         } else {
-            backup_dest(dest, &backup_path)?;
+            is_dest_removed = dest.is_symlink();
+            backup_dest(dest, &backup_path, is_dest_removed)?;
         }
     }
-    match options.overwrite {
-        // FIXME: print that the file was removed if --verbose is enabled
-        OverwriteMode::Clobber(ClobberMode::Force) => {
-            if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
+    if !is_dest_removed {
+        match options.overwrite {
+            // FIXME: print that the file was removed if --verbose is enabled
+            OverwriteMode::Clobber(ClobberMode::Force) => {
+                if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
+                    fs::remove_file(dest)?;
+                }
+            }
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
                 fs::remove_file(dest)?;
             }
-        }
-        OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
-            fs::remove_file(dest)?;
-        }
-        OverwriteMode::Clobber(ClobberMode::Standard) => {
-            // Consider the following files:
-            //
-            // * `src/f` - a regular file
-            // * `src/link` - a hard link to `src/f`
-            // * `dest/src/f` - a different regular file
-            //
-            // In this scenario, if we do `cp -a src/ dest/`, it is
-            // possible that the order of traversal causes `src/link`
-            // to get copied first (to `dest/src/link`). In that case,
-            // in order to make sure `dest/src/link` is a hard link to
-            // `dest/src/f` and `dest/src/f` has the contents of
-            // `src/f`, we delete the existing file to allow the hard
-            // linking.
-            if options.preserve_hard_links() {
-                fs::remove_file(dest)?;
+            OverwriteMode::Clobber(ClobberMode::Standard) => {
+                // Consider the following files:
+                //
+                // * `src/f` - a regular file
+                // * `src/link` - a hard link to `src/f`
+                // * `dest/src/f` - a different regular file
+                //
+                // In this scenario, if we do `cp -a src/ dest/`, it is
+                // possible that the order of traversal causes `src/link`
+                // to get copied first (to `dest/src/link`). In that case,
+                // in order to make sure `dest/src/link` is a hard link to
+                // `dest/src/f` and `dest/src/f` has the contents of
+                // `src/f`, we delete the existing file to allow the hard
+                // linking.
+
+                if options.preserve_hard_links()
+            // only try to remove dest file only if the current source
+            // is hardlink to a file that is already copied
+                && copied_files.contains_key(
+                    &FileInformation::from_path(
+                        source,
+                        options.dereference(source_in_command_line),
+                    )
+                    .context(format!("cannot stat {}", source.quote()))?,
+                ) {
+                    fs::remove_file(dest)?;
+                }
             }
-        }
-        _ => (),
-    };
+            _ => (),
+        };
+    }
 
     Ok(())
 }
@@ -1691,7 +1812,7 @@ fn handle_copy_mode(
     dest: &Path,
     options: &Options,
     context: &str,
-    source_metadata: Metadata,
+    source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
@@ -1710,7 +1831,7 @@ fn handle_copy_mode(
                 let backup_path =
                     backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
                 if let Some(backup_path) = backup_path {
-                    backup_dest(dest, &backup_path)?;
+                    backup_dest(dest, &backup_path, dest.is_symlink())?;
                     fs::remove_file(dest)?;
                 }
                 if options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
@@ -1724,7 +1845,11 @@ fn handle_copy_mode(
             } else {
                 fs::hard_link(source, dest)
             }
-            .context(context)?;
+            .context(format!(
+                "cannot create hard link {} to {}",
+                get_filename(dest).unwrap_or("invalid file name").quote(),
+                get_filename(source).unwrap_or("invalid file name").quote()
+            ))?;
         }
         CopyMode::Copy => {
             copy_helper(
@@ -1741,7 +1866,7 @@ fn handle_copy_mode(
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
                 fs::remove_file(dest)?;
             }
-            symlink_file(source, dest, context, symlinked_files)?;
+            symlink_file(source, dest, symlinked_files)?;
         }
         CopyMode::Update => {
             if dest.exists() {
@@ -1820,7 +1945,8 @@ fn handle_copy_mode(
 ///
 /// * `Ok(Permissions)` - The calculated permissions for the destination file.
 /// * `Err(CopyError)` - An error occurred while getting the metadata of the destination file.
-/// Allow unused variables for Windows (on options)
+///
+// Allow unused variables for Windows (on options)
 #[allow(unused_variables)]
 fn calculate_dest_permissions(
     dest: &Path,
@@ -1860,18 +1986,21 @@ fn calculate_dest_permissions(
 ///
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
-#[allow(clippy::cognitive_complexity)]
+#[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
 fn copy_file(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
     dest: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
+    let source_is_symlink = source.is_symlink();
+    let dest_is_symlink = dest.is_symlink();
     // Fail if dest is a dangling symlink or a symlink this program created previously
-    if dest.is_symlink() {
+    if dest_is_symlink {
         if FileInformation::from_path(dest, false)
             .map(|info| symlinked_files.contains(&info))
             .unwrap_or(false)
@@ -1882,7 +2011,18 @@ fn copy_file(
                 dest.display()
             )));
         }
-        let copy_contents = options.dereference(source_in_command_line) || !source.is_symlink();
+        // Fail if cp tries to copy two sources of the same name into a single symlink
+        // Example: "cp file1 dir1/file1 tmp" where "tmp" is a directory containing a symlink "file1" pointing to a file named "foo".
+        // foo will contain the contents of "file1" and "dir1/file1" will not be copied over to "tmp/file1"
+        if copied_destinations.contains(dest) {
+            return Err(Error::Error(format!(
+                "will not copy '{}' through just-created symlink '{}'",
+                source.display(),
+                dest.display()
+            )));
+        }
+
+        let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
         if copy_contents
             && !dest.exists()
             && !matches!(
@@ -1902,12 +2042,14 @@ fn copy_file(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
+            && options.backup == BackupMode::NoBackup
         {
             fs::remove_file(dest)?;
         }
     }
 
     if are_hardlinks_to_same_file(source, dest)
+        && source != dest
         && matches!(
             options.overwrite,
             OverwriteMode::Clobber(ClobberMode::RemoveDestination)
@@ -1923,19 +2065,37 @@ fn copy_file(
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             ))
     {
-        if are_hardlinks_to_same_file(source, dest)
-            && !options.force()
-            && options.backup == BackupMode::NoBackup
-            && source != dest
-            || (source == dest && options.copy_mode == CopyMode::Link)
-        {
-            return Ok(());
+        if paths_refer_to_same_file(source, dest, true) && options.copy_mode == CopyMode::Link {
+            if source_is_symlink {
+                if !dest_is_symlink {
+                    return Ok(());
+                }
+                if !options.dereference {
+                    return Ok(());
+                }
+            } else if options.backup != BackupMode::NoBackup && !dest_is_symlink {
+                if source == dest {
+                    if !options.force() {
+                        return Ok(());
+                    }
+                } else {
+                    return Ok(());
+                }
+            }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line)?;
+        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        if are_hardlinks_to_same_file(source, dest) {
+            if options.copy_mode == CopyMode::Copy && options.backup != BackupMode::NoBackup {
+                return Ok(());
+            }
+            if options.copy_mode == CopyMode::Link && (!source_is_symlink || !dest_is_symlink) {
+                return Ok(());
+            }
+        }
     }
 
     if options.attributes_only
-        && source.is_symlink()
+        && source_is_symlink
         && !matches!(
             options.overwrite,
             OverwriteMode::Clobber(ClobberMode::RemoveDestination)
@@ -1946,6 +2106,10 @@ fn copy_file(
             dest.quote()
         )
         .into());
+    }
+
+    if options.verbose {
+        print_verbose_output(options.parents, progress_bar, source, dest);
     }
 
     if options.preserve_hard_links() {
@@ -1961,10 +2125,6 @@ fn copy_file(
         };
     }
 
-    if options.verbose {
-        print_verbose_output(options.parents, progress_bar, source, dest);
-    }
-
     // Calculate the context upfront before canonicalizing the path
     let context = context_for(source, dest);
     let context = context.as_str();
@@ -1975,7 +2135,13 @@ fn copy_file(
         } else {
             fs::symlink_metadata(source)
         };
-        result.context(context)?
+        // this is just for gnu tests compatibility
+        result.map_err(|err| {
+            if err.to_string().contains("No such file or directory") {
+                return format!("cannot stat {}: No such file or directory", source.quote());
+            }
+            err.to_string()
+        })?
     };
 
     let dest_permissions = calculate_dest_permissions(dest, &source_metadata, options, context)?;
@@ -1985,13 +2151,13 @@ fn copy_file(
         dest,
         options,
         context,
-        source_metadata,
+        &source_metadata,
         symlinked_files,
         source_in_command_line,
     )?;
 
     // TODO: implement something similar to gnu's lchown
-    if !dest.is_symlink() {
+    if !dest_is_symlink {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.
@@ -2001,7 +2167,13 @@ fn copy_file(
         fs::set_permissions(dest, dest_permissions).ok();
     }
 
-    copy_attributes(source, dest, &options.attributes)?;
+    if options.dereference(source_in_command_line) {
+        if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
+            copy_attributes(&src, dest, &options.attributes)?;
+        }
+    } else {
+        copy_attributes(source, dest, &options.attributes)?;
+    }
 
     copied_files.insert(
         FileInformation::from_path(source, options.dereference(source_in_command_line))?,
@@ -2026,7 +2198,6 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         #[cfg(not(any(
             target_os = "android",
             target_os = "macos",
-            target_os = "macos-12",
             target_os = "freebsd",
             target_os = "redox",
         )))]
@@ -2043,7 +2214,6 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         #[cfg(any(
             target_os = "android",
             target_os = "macos",
-            target_os = "macos-12",
             target_os = "freebsd",
             target_os = "redox",
         ))]
@@ -2140,7 +2310,7 @@ fn copy_link(
     if dest.is_symlink() || dest.is_file() {
         fs::remove_file(dest)?;
     }
-    symlink_file(&link, dest, &context_for(&link, dest), symlinked_files)
+    symlink_file(&link, dest, symlinked_files)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`
@@ -2213,7 +2383,7 @@ fn disk_usage_directory(p: &Path) -> io::Result<u64> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{aligned_ancestors, localize_to_target};
+    use crate::{aligned_ancestors, localize_to_target, Attributes, Preserve};
     use std::path::Path;
 
     #[test]
@@ -2234,5 +2404,53 @@ mod tests {
             (Path::new("a/b"), Path::new("d/a/b")),
         ];
         assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_diff_attrs() {
+        assert_eq!(
+            Attributes::ALL.diff(&Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }),
+            Attributes {
+                #[cfg(unix)]
+                ownership: Preserve::No { explicit: true },
+                mode: Preserve::No { explicit: true },
+                timestamps: Preserve::No { explicit: true },
+                context: Preserve::No { explicit: true },
+                links: Preserve::No { explicit: true },
+                xattr: Preserve::No { explicit: true }
+            }
+        );
+        assert_eq!(
+            Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }
+            .diff(&Attributes::NONE),
+            Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }
+        );
+        assert_eq!(
+            Attributes::NONE.diff(&Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }),
+            Attributes {
+                #[cfg(unix)]
+                ownership: Preserve::No { explicit: true },
+                mode: Preserve::No { explicit: true },
+                timestamps: Preserve::No { explicit: true },
+                context: Preserve::No { explicit: true },
+                links: Preserve::No { explicit: true },
+                xattr: Preserve::No { explicit: true }
+            }
+        );
     }
 }

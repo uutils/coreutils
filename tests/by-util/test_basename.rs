@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) reallylongexecutable
+// spell-checker:ignore (words) reallylongexecutable nbaz
 
 use crate::common::util::TestScenario;
 #[cfg(any(unix, target_os = "redox"))]
@@ -70,7 +70,7 @@ fn test_multiple_param() {
         new_ucmd!()
             .args(&[multiple_param, path, path])
             .succeeds()
-            .stdout_only("baz\nbaz\n"); // spell-checker:disable-line
+            .stdout_only("baz\nbaz\n");
     }
 }
 
@@ -81,7 +81,7 @@ fn test_suffix_param() {
         new_ucmd!()
             .args(&[suffix_param, ".exe", path, path])
             .succeeds()
-            .stdout_only("baz\nbaz\n"); // spell-checker:disable-line
+            .stdout_only("baz\nbaz\n");
     }
 }
 

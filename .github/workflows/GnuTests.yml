@@ -77,7 +77,7 @@ jobs:
         ref: ${{ steps.vars.outputs.repo_GNU_ref }}
         submodules: recursive
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v3
+      uses: dawidd6/action-download-artifact@v6
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:

@@ -759,6 +759,33 @@ fn test_format_option() {
 }
 
 #[test]
+#[ignore = "Need issue #6233 to be fixed"]
+fn test_auto_precision() {
+    new_ucmd!()
+        .args(&["1", "0x1p-1", "2"])
+        .succeeds()
+        .stdout_only("1\n1.5\n2\n");
+}
+
+#[test]
+#[ignore = "Need issue #6234 to be fixed"]
+fn test_undefined() {
+    new_ucmd!()
+        .args(&["1e-9223372036854775808"])
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+#[ignore = "Need issue #6235 to be fixed"]
+fn test_invalid_float_point_fail_properly() {
+    new_ucmd!()
+        .args(&["66000e000000000000000000000000000000000000000000000000000009223372036854775807"])
+        .fails()
+        .stdout_only(""); // might need to be updated
+}
+
+#[test]
 fn test_invalid_zero_increment_value() {
     new_ucmd!()
         .args(&["0", "0", "1"])

@@ -32,6 +32,7 @@
 
 mod argument;
 mod escape;
+pub mod human;
 pub mod num_format;
 pub mod num_parser;
 mod spec;
@@ -61,6 +62,7 @@ pub enum FormatError {
     TooManySpecs(Vec<u8>),
     NeedAtLeastOneSpec(Vec<u8>),
     WrongSpecType,
+    InvalidPrecision(String),
 }
 
 impl Error for FormatError {}
@@ -90,6 +92,7 @@ impl Display for FormatError {
                 "format '{}' has no % directive",
                 String::from_utf8_lossy(s)
             ),
+            Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{precision}'"),
             // TODO: Error message below needs some work
             Self::WrongSpecType => write!(f, "wrong % directive type was given"),
             Self::IoError(_) => write!(f, "io error"),

@@ -46,7 +46,7 @@ pub struct ReverseChunks<'a> {
 }
 
 impl<'a> ReverseChunks<'a> {
-    pub fn new(file: &'a mut File) -> ReverseChunks<'a> {
+    pub fn new(file: &'a mut File) -> Self {
         let current = if cfg!(unix) {
             file.stream_position().unwrap()
         } else {

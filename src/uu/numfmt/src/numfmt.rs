@@ -15,6 +15,7 @@ use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::ranges::Range;
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
 pub mod errors;
@@ -176,7 +177,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
         vec![Range {
             low: 1,
-            high: std::usize::MAX,
+            high: usize::MAX,
         }]
     } else {
         Range::from_list(fields)?
@@ -340,7 +341,13 @@ pub fn uu_app() -> Command {
                 .help("use METHOD for rounding when scaling")
                 .value_name("METHOD")
                 .default_value("from-zero")
-                .value_parser(["up", "down", "from-zero", "towards-zero", "nearest"]),
+                .value_parser(ShortcutValueParser::new([
+                    "up",
+                    "down",
+                    "from-zero",
+                    "towards-zero",
+                    "nearest",
+                ])),
         )
         .arg(
             Arg::new(options::SUFFIX)

@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+//! Compare two version strings.
+
 use std::cmp::Ordering;
 
 /// Compares the non-digit parts of a version.
@@ -58,6 +61,7 @@ fn remove_file_ending(a: &str) -> &str {
     }
 }
 
+/// Compare two version strings.
 pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
     let str_cmp = a.cmp(b);
     if str_cmp == Ordering::Equal {

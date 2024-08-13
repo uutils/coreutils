@@ -23,7 +23,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
         };
     }
     if let Some(val) = opts.get_one::<String>(options::NUMBER_SEPARATOR) {
-        settings.number_separator = val.clone();
+        settings.number_separator.clone_from(val);
     }
     settings.number_format = opts
         .get_one::<String>(options::NUMBER_FORMAT)

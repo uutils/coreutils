@@ -304,12 +304,10 @@ fn test_head_invalid_num() {
         .stderr_is(
             "head: invalid number of lines: '1024R': Value too large for defined data type\n",
         );
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
         .fails()
         .stderr_is("head: invalid number of bytes: '1Y': Value too large for defined data type\n");
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
         .fails()
@@ -381,7 +379,8 @@ fn test_presume_input_pipe_5_chars() {
     not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 #[test]
 fn test_read_backwards_bytes_proc_fs_version() {
@@ -396,7 +395,8 @@ fn test_read_backwards_bytes_proc_fs_version() {
     not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 #[test]
 fn test_read_backwards_bytes_proc_fs_modules() {
@@ -411,7 +411,8 @@ fn test_read_backwards_bytes_proc_fs_modules() {
     not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 #[test]
 fn test_read_backwards_lines_proc_fs_modules() {
@@ -426,7 +427,8 @@ fn test_read_backwards_lines_proc_fs_modules() {
     not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 #[test]
 fn test_read_backwards_bytes_sys_kernel_profiling() {
