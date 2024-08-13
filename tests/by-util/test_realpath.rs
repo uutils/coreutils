@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore nusr
 use crate::common::util::{get_root_path, TestScenario};
 
 #[cfg(windows)]
@@ -353,7 +354,7 @@ fn test_relative() {
     new_ucmd!()
         .args(&["-sm", "--relative-base=/", "--relative-to=/", "/", "/usr"])
         .succeeds()
-        .stdout_is(".\nusr\n"); // spell-checker:disable-line
+        .stdout_is(".\nusr\n");
 
     let result = new_ucmd!()
         .args(&["-sm", "--relative-base=/usr", "/tmp", "/usr"])
@@ -366,7 +367,7 @@ fn test_relative() {
     new_ucmd!()
         .args(&["-sm", "--relative-base=/", "/", "/usr"])
         .succeeds()
-        .stdout_is(".\nusr\n"); // spell-checker:disable-line
+        .stdout_is(".\nusr\n");
 }
 
 #[test]

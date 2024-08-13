@@ -7,7 +7,14 @@
 //spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE
 
 #![allow(dead_code)]
+#![allow(
+    clippy::too_many_lines,
+    clippy::should_panic_without_expect,
+    clippy::missing_errors_doc
+)]
 
+#[cfg(unix)]
+use libc::mode_t;
 #[cfg(unix)]
 use nix::pty::OpenptyResult;
 use pretty_assertions::assert_eq;
@@ -52,7 +59,7 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
 static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
-static END_OF_TRANSMISSION_SEQUENCE: &[u8] = &[b'\n', 0x04];
+static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 pub const PATH: &str = env!("PATH");
@@ -75,9 +82,9 @@ fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_p
 /// within a struct which has convenience assertion functions about those outputs
 #[derive(Debug, Clone)]
 pub struct CmdResult {
-    /// bin_path provided by `TestScenario` or `UCommand`
+    /// `bin_path` provided by `TestScenario` or `UCommand`
     bin_path: PathBuf,
-    /// util_name provided by `TestScenario` or `UCommand`
+    /// `util_name` provided by `TestScenario` or `UCommand`
     util_name: Option<String>,
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
@@ -782,7 +789,7 @@ pub fn get_root_path() -> &'static str {
 /// # Returns
 ///
 /// `true` if both paths have the same set of extended attributes, `false` otherwise.
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
 pub fn compare_xattrs<P: AsRef<std::path::Path>>(path1: P, path2: P) -> bool {
     let get_sorted_xattrs = |path: P| {
         xattr::list(path)
@@ -791,7 +798,7 @@ pub fn compare_xattrs<P: AsRef<std::path::Path>>(path1: P, path2: P) -> bool {
                 attrs.sort();
                 attrs
             })
-            .unwrap_or_else(|_| Vec::new())
+            .unwrap_or_default()
     };
 
     get_sorted_xattrs(path1) == get_sorted_xattrs(path2)
@@ -1207,6 +1214,15 @@ impl TestScenario {
     }
 }
 
+#[cfg(unix)]
+#[derive(Debug, Default)]
+pub struct TerminalSimulation {
+    size: Option<libc::winsize>,
+    stdin: bool,
+    stdout: bool,
+    stderr: bool,
+}
+
 /// A `UCommand` is a builder wrapping an individual Command that provides several additional features:
 /// 1. it has convenience functions that are more ergonomic to use for piping in stdin, spawning the command
 ///       and asserting on the results.
@@ -1242,10 +1258,10 @@ pub struct UCommand {
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
     #[cfg(unix)]
-    terminal_simulation: bool,
-    #[cfg(unix)]
-    terminal_size: Option<libc::winsize>,
+    terminal_simulation: Option<TerminalSimulation>,
     tmpd: Option<Rc<TempDir>>, // drop last
+    #[cfg(unix)]
+    umask: Option<mode_t>,
 }
 
 impl UCommand {
@@ -1411,6 +1427,13 @@ impl UCommand {
         self
     }
 
+    #[cfg(unix)]
+    /// The umask is a value that restricts the permissions of newly created files and directories.
+    pub fn umask(&mut self, umask: mode_t) -> &mut Self {
+        self.umask = Some(umask);
+        self
+    }
+
     /// Set the timeout for [`UCommand::run`] and similar methods in [`UCommand`].
     ///
     /// After the timeout elapsed these `run` methods (besides [`UCommand::run_no_wait`]) will
@@ -1425,22 +1448,32 @@ impl UCommand {
 
     /// Set if process should be run in a simulated terminal
     ///
-    /// This is useful to test behavior that is only active if [`stdout.is_terminal()`] is [`true`].
-    /// (unix: pty, windows: ConPTY[not yet supported])
+    /// This is useful to test behavior that is only active if e.g. [`stdout.is_terminal()`] is [`true`].
+    /// This function uses default terminal size and attaches stdin, stdout and stderr to that terminal.
+    /// For more control over the terminal simulation, use `terminal_sim_stdio`
+    /// (unix: pty, windows: `ConPTY`[not yet supported])
     #[cfg(unix)]
     pub fn terminal_simulation(&mut self, enable: bool) -> &mut Self {
-        self.terminal_simulation = enable;
+        if enable {
+            self.terminal_simulation = Some(TerminalSimulation {
+                stdin: true,
+                stdout: true,
+                stderr: true,
+                ..Default::default()
+            });
+        } else {
+            self.terminal_simulation = None;
+        }
         self
     }
 
-    /// Set if process should be run in a simulated terminal with specific size
+    /// Allows to simulate a terminal use-case with specific properties.
     ///
-    /// This is useful to test behavior that is only active if [`stdout.is_terminal()`] is [`true`].
-    /// And the size of the terminal matters additionally.
+    /// This is useful to test behavior that is only active if e.g. [`stdout.is_terminal()`] is [`true`].
+    /// This function allows to set a specific size and to attach the terminal to only parts of the in/out.
     #[cfg(unix)]
-    pub fn terminal_size(&mut self, win_size: libc::winsize) -> &mut Self {
-        self.terminal_simulation(true);
-        self.terminal_size = Some(win_size);
+    pub fn terminal_sim_stdio(&mut self, config: TerminalSimulation) -> &mut Self {
+        self.terminal_simulation = Some(config);
         self
     }
 
@@ -1455,7 +1488,7 @@ impl UCommand {
             // Input/output error (os error 5) is returned due to pipe closes. Buffer gets content anyway.
             Err(e) if e.raw_os_error().unwrap_or_default() == 5 => {}
             Err(e) => {
-                eprintln!("Unexpected error: {:?}", e);
+                eprintln!("Unexpected error: {e:?}");
                 panic!("error forwarding output of pty");
             }
         }
@@ -1463,7 +1496,6 @@ impl UCommand {
 
     #[cfg(unix)]
     fn spawn_reader_thread(
-        &self,
         captured_output: Option<CapturedOutput>,
         pty_fd_master: OwnedFd,
         name: String,
@@ -1490,12 +1522,12 @@ impl UCommand {
     ///
     /// These __defaults__ are:
     /// * `bin_path`: Depending on the platform and os, the native shell (unix -> `/bin/sh` etc.).
-    /// This default also requires to set the first argument to `-c` on unix (`/C` on windows) if
-    /// this argument wasn't specified explicitly by the user.
+    ///   This default also requires to set the first argument to `-c` on unix (`/C` on windows) if
+    ///   this argument wasn't specified explicitly by the user.
     /// * `util_name`: `None`. If neither `bin_path` nor `util_name` were given the arguments are
-    /// run in a shell (See `bin_path` above).
+    ///   run in a shell (See `bin_path` above).
     /// * `temp_dir`: If `current_dir` was not set, a new temporary directory will be created in
-    /// which this command will be run and `current_dir` will be set to this `temp_dir`.
+    ///   which this command will be run and `current_dir` will be set to this `temp_dir`.
     /// * `current_dir`: The temporary directory given by `temp_dir`.
     /// * `timeout`: `30 seconds`
     /// * `stdin`: `Stdio::null()`
@@ -1628,35 +1660,48 @@ impl UCommand {
         };
 
         #[cfg(unix)]
-        if self.terminal_simulation {
-            let terminal_size = self.terminal_size.unwrap_or(libc::winsize {
+        if let Some(simulated_terminal) = &self.terminal_simulation {
+            let terminal_size = simulated_terminal.size.unwrap_or(libc::winsize {
                 ws_col: 80,
                 ws_row: 30,
                 ws_xpixel: 80 * 8,
                 ws_ypixel: 30 * 10,
             });
 
-            let OpenptyResult {
-                slave: pi_slave,
-                master: pi_master,
-            } = nix::pty::openpty(&terminal_size, None).unwrap();
-            let OpenptyResult {
-                slave: po_slave,
-                master: po_master,
-            } = nix::pty::openpty(&terminal_size, None).unwrap();
-            let OpenptyResult {
-                slave: pe_slave,
-                master: pe_master,
-            } = nix::pty::openpty(&terminal_size, None).unwrap();
+            if simulated_terminal.stdin {
+                let OpenptyResult {
+                    slave: pi_slave,
+                    master: pi_master,
+                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                stdin_pty = Some(File::from(pi_master));
+                command.stdin(pi_slave);
+            }
 
-            stdin_pty = Some(File::from(pi_master));
+            if simulated_terminal.stdout {
+                let OpenptyResult {
+                    slave: po_slave,
+                    master: po_master,
+                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                captured_stdout = Self::spawn_reader_thread(
+                    captured_stdout,
+                    po_master,
+                    "stdout_reader".to_string(),
+                );
+                command.stdout(po_slave);
+            }
 
-            captured_stdout =
-                self.spawn_reader_thread(captured_stdout, po_master, "stdout_reader".to_string());
-            captured_stderr =
-                self.spawn_reader_thread(captured_stderr, pe_master, "stderr_reader".to_string());
-
-            command.stdin(pi_slave).stdout(po_slave).stderr(pe_slave);
+            if simulated_terminal.stderr {
+                let OpenptyResult {
+                    slave: pe_slave,
+                    master: pe_master,
+                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                captured_stderr = Self::spawn_reader_thread(
+                    captured_stderr,
+                    pe_master,
+                    "stderr_reader".to_string(),
+                );
+                command.stderr(pe_slave);
+            }
         }
 
         #[cfg(unix)]
@@ -1675,6 +1720,16 @@ impl UCommand {
             // also, the closure doesn't access stdin, stdout and stderr.
             unsafe {
                 command.pre_exec(closure);
+            }
+        }
+
+        #[cfg(unix)]
+        if let Some(umask) = self.umask {
+            unsafe {
+                command.pre_exec(move || {
+                    libc::umask(umask);
+                    Ok(())
+                });
             }
         }
 
@@ -1703,7 +1758,7 @@ impl UCommand {
 
     /// Spawns the command, feeds the stdin if any, waits for the result
     /// and returns a command result.
-    /// It is recommended that you instead use succeeds() or fails()
+    /// It is recommended that you instead use `succeeds()` or `fails()`
     pub fn run(&mut self) -> CmdResult {
         self.run_no_wait().wait().unwrap()
     }
@@ -1711,7 +1766,7 @@ impl UCommand {
     /// Spawns the command, feeding the passed in stdin, waits for the result
     /// and returns a command result.
     /// It is recommended that, instead of this, you use a combination of `pipe_in()`
-    /// with succeeds() or fails()
+    /// with `succeeds()` or `fails()`
     pub fn run_piped_stdin<T: Into<Vec<u8>>>(&mut self, input: T) -> CmdResult {
         self.pipe_in(input).run()
     }
@@ -3026,7 +3081,7 @@ mod tests {
         let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
 
         result.stdout_str_check(|stdout| stdout.ends_with("world\n"));
-        result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
         result.no_stderr();
     }
 
@@ -3041,7 +3096,7 @@ mod tests {
         ));
 
         result.stderr_str_check(|stderr| stderr.ends_with("world\n"));
-        result.stderr_check(|stderr| stderr.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.stderr_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
         result.no_stdout();
     }
 
@@ -3138,8 +3193,6 @@ mod tests {
     #[cfg(feature = "sleep")]
     #[cfg(unix)]
     #[rstest]
-    #[case::signal_full_name_lower_case("sigkill")]
-    #[case::signal_short_name_lower_case("kill")]
     #[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
     #[case::signal_just_sig("SIG")]
     #[case::signal_value_too_high("100")]
@@ -3150,6 +3203,17 @@ mod tests {
         child.kill();
         let result = child.wait().unwrap();
         result.signal_name_is(signal_name);
+    }
+
+    #[test]
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    fn test_cmd_result_signal_name_is_accepts_lowercase() {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+        child.kill();
+        let result = child.wait().unwrap();
+        result.signal_name_is("sigkill");
+        result.signal_name_is("kill");
     }
 
     #[test]
@@ -3581,7 +3645,7 @@ mod tests {
         assert!(command.tmpd.is_some());
     }
 
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
     #[test]
     fn test_compare_xattrs() {
         use tempfile::tempdir;
@@ -3609,10 +3673,10 @@ mod tests {
     fn test_simulation_of_terminal_false() {
         let scene = TestScenario::new("util");
 
-        let out = scene.ccmd("env").arg("sh").arg("is_atty.sh").succeeds();
+        let out = scene.ccmd("env").arg("sh").arg("is_a_tty.sh").succeeds();
         std::assert_eq!(
             String::from_utf8_lossy(out.stdout()),
-            "stdin is not atty\nstdout is not atty\nstderr is not atty\n"
+            "stdin is not a tty\nstdout is not a tty\nstderr is not a tty\n"
         );
         std::assert_eq!(
             String::from_utf8_lossy(out.stderr()),
@@ -3629,12 +3693,93 @@ mod tests {
         let out = scene
             .ccmd("env")
             .arg("sh")
-            .arg("is_atty.sh")
+            .arg("is_a_tty.sh")
             .terminal_simulation(true)
             .succeeds();
         std::assert_eq!(
             String::from_utf8_lossy(out.stdout()),
-            "stdin is atty\r\nstdout is atty\r\nstderr is atty\r\nterminal size: 30 80\r\n"
+            "stdin is a tty\r\nterminal size: 30 80\r\nstdout is a tty\r\nstderr is a tty\r\n"
+        );
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stderr()),
+            "This is an error message.\r\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[cfg(feature = "env")]
+    #[test]
+    fn test_simulation_of_terminal_for_stdin_only() {
+        let scene = TestScenario::new("util");
+
+        let out = scene
+            .ccmd("env")
+            .arg("sh")
+            .arg("is_a_tty.sh")
+            .terminal_sim_stdio(TerminalSimulation {
+                stdin: true,
+                stdout: false,
+                stderr: false,
+                ..Default::default()
+            })
+            .succeeds();
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "stdin is a tty\nterminal size: 30 80\nstdout is not a tty\nstderr is not a tty\n"
+        );
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stderr()),
+            "This is an error message.\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[cfg(feature = "env")]
+    #[test]
+    fn test_simulation_of_terminal_for_stdout_only() {
+        let scene = TestScenario::new("util");
+
+        let out = scene
+            .ccmd("env")
+            .arg("sh")
+            .arg("is_a_tty.sh")
+            .terminal_sim_stdio(TerminalSimulation {
+                stdin: false,
+                stdout: true,
+                stderr: false,
+                ..Default::default()
+            })
+            .succeeds();
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "stdin is not a tty\r\nstdout is a tty\r\nstderr is not a tty\r\n"
+        );
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stderr()),
+            "This is an error message.\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[cfg(feature = "env")]
+    #[test]
+    fn test_simulation_of_terminal_for_stderr_only() {
+        let scene = TestScenario::new("util");
+
+        let out = scene
+            .ccmd("env")
+            .arg("sh")
+            .arg("is_a_tty.sh")
+            .terminal_sim_stdio(TerminalSimulation {
+                stdin: false,
+                stdout: false,
+                stderr: true,
+                ..Default::default()
+            })
+            .succeeds();
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "stdin is not a tty\nstdout is not a tty\nstderr is a tty\n"
         );
         std::assert_eq!(
             String::from_utf8_lossy(out.stderr()),
@@ -3651,17 +3796,22 @@ mod tests {
         let out = scene
             .ccmd("env")
             .arg("sh")
-            .arg("is_atty.sh")
-            .terminal_size(libc::winsize {
-                ws_col: 40,
-                ws_row: 10,
-                ws_xpixel: 40 * 8,
-                ws_ypixel: 10 * 10,
+            .arg("is_a_tty.sh")
+            .terminal_sim_stdio(TerminalSimulation {
+                size: Some(libc::winsize {
+                    ws_col: 40,
+                    ws_row: 10,
+                    ws_xpixel: 40 * 8,
+                    ws_ypixel: 10 * 10,
+                }),
+                stdout: true,
+                stdin: true,
+                stderr: true,
             })
             .succeeds();
         std::assert_eq!(
             String::from_utf8_lossy(out.stdout()),
-            "stdin is atty\r\nstdout is atty\r\nstderr is atty\r\nterminal size: 10 40\r\n"
+            "stdin is a tty\r\nterminal size: 10 40\r\nstdout is a tty\r\nstderr is a tty\r\n"
         );
         std::assert_eq!(
             String::from_utf8_lossy(out.stderr()),
@@ -3703,7 +3853,7 @@ mod tests {
 
         std::assert_eq!(
             String::from_utf8_lossy(out.stdout()),
-            format!("{}\r\n", message)
+            format!("{message}\r\n")
         );
         std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
     }
@@ -3755,5 +3905,34 @@ mod tests {
             .succeeds()
             .no_stderr()
             .stdout_is("8\n16\n");
+    }
+
+    #[cfg(unix)]
+    #[cfg(not(target_os = "openbsd"))]
+    #[test]
+    fn test_altering_umask() {
+        use uucore::mode::get_umask;
+        let p_umask = get_umask();
+        // make sure we are not testing against the same umask
+        let c_umask = if p_umask == 0o002 { 0o007 } else { 0o002 };
+        let expected = if cfg!(target_os = "android") {
+            if p_umask == 0o002 {
+                "007\n"
+            } else {
+                "002\n"
+            }
+        } else if p_umask == 0o002 {
+            "0007\n"
+        } else {
+            "0002\n"
+        };
+
+        let ts = TestScenario::new("util");
+        ts.cmd("sh")
+            .args(&["-c", "umask"])
+            .umask(c_umask)
+            .succeeds()
+            .stdout_is(expected);
+        std::assert_eq!(p_umask, get_umask()); // make sure parent umask didn't change
     }
 }

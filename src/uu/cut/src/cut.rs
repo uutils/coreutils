@@ -10,12 +10,11 @@ use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Comm
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
+use uucore::os_str_as_bytes;
 
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
@@ -59,7 +58,7 @@ impl Default for Delimiter<'_> {
 
 impl<'a> From<&'a OsString> for Delimiter<'a> {
     fn from(s: &'a OsString) -> Self {
-        Self::Slice(os_string_as_bytes(s).unwrap())
+        Self::Slice(os_str_as_bytes(s).unwrap())
     }
 }
 
@@ -347,27 +346,6 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
     }
 }
 
-// Helper function for processing delimiter values (which could be non UTF-8)
-// It converts OsString to &[u8] for unix targets only
-// On non-unix (i.e. Windows) it will just return an error if delimiter value is not UTF-8
-fn os_string_as_bytes(os_string: &OsString) -> UResult<&[u8]> {
-    #[cfg(unix)]
-    let bytes = os_string.as_bytes();
-
-    #[cfg(not(unix))]
-    let bytes = os_string
-        .to_str()
-        .ok_or_else(|| {
-            uucore::error::UUsageError::new(
-                1,
-                "invalid UTF-8 was detected in one or more arguments",
-            )
-        })?
-        .as_bytes();
-
-    Ok(bytes)
-}
-
 // Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
 // Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
 fn get_delimiters(
@@ -395,7 +373,7 @@ fn get_delimiters(
             } else {
                 // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
                 // and Non UTF-8 (and not ASCII) single byte "characters", like `b"\xAD"` to align with GNU behavior
-                let bytes = os_string_as_bytes(os_string)?;
+                let bytes = os_str_as_bytes(os_string)?;
                 if os_string.to_str().is_some_and(|s| s.chars().count() > 1)
                     || os_string.to_str().is_none() && bytes.len() > 1
                 {
@@ -408,10 +386,13 @@ fn get_delimiters(
                 }
             }
         }
-        None => match whitespace_delimited {
-            true => Delimiter::Whitespace,
-            false => Delimiter::default(),
-        },
+        None => {
+            if whitespace_delimited {
+                Delimiter::Whitespace
+            } else {
+                Delimiter::default()
+            }
+        }
     };
     let out_delim = matches
         .get_one::<OsString>(options::OUTPUT_DELIMITER)
@@ -419,7 +400,7 @@ fn get_delimiters(
             if os_string.is_empty() || os_string == "''" {
                 b"\0"
             } else {
-                os_string_as_bytes(os_string).unwrap()
+                os_str_as_bytes(os_string).unwrap()
             }
         });
     Ok((delim, out_delim))

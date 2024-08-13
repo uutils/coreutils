@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// TODO fix broken links
-#![allow(rustdoc::broken_intra_doc_links)]
 //! Macros for the uucore utilities.
 //!
 //! This module bundles all macros used across the uucore utilities. These
@@ -28,12 +26,12 @@
 //! Here's an overview of the macros sorted by purpose
 //!
 //! - Print errors
-//!   - From types implementing [`crate::error::UError`]: [`show!`],
-//!     [`show_if_err!`]
-//!   - From custom messages: [`show_error!`]
-//! - Print warnings: [`show_warning!`]
+//!   - From types implementing [`crate::error::UError`]: [`crate::show!`],
+//!     [`crate::show_if_err!`]
+//!   - From custom messages: [`crate::show_error!`]
+//! - Print warnings: [`crate::show_warning!`]
 //! - Terminate util execution
-//!   - Crash program: [`crash!`], [`crash_if_err!`]
+//!   - Crash program: [`crate::crash!`], [`crate::crash_if_err!`]
 
 // spell-checker:ignore sourcepath targetpath rustdoc
 
@@ -91,6 +89,7 @@ pub static UTILITY_IS_SECOND_ARG: AtomicBool = AtomicBool::new(false);
 #[macro_export]
 macro_rules! show(
     ($err:expr) => ({
+        #[allow(unused_imports)]
         use $crate::error::UError;
         let e = $err;
         $crate::error::set_exit_code(e.code());
@@ -100,8 +99,8 @@ macro_rules! show(
 
 /// Display an error and set global exit code in error case.
 ///
-/// Wraps around [`show!`] and takes a [`crate::error::UResult`] instead of a
-/// [`crate::error::UError`] type. This macro invokes [`show!`] if the
+/// Wraps around [`crate::show!`] and takes a [`crate::error::UResult`] instead of a
+/// [`crate::error::UError`] type. This macro invokes [`crate::show!`] if the
 /// [`crate::error::UResult`] is an `Err`-variant. This can be invoked directly
 /// on the result of a function call, like in the `install` utility:
 ///
@@ -178,6 +177,15 @@ macro_rules! show_error(
 macro_rules! show_warning(
     ($($args:tt)+) => ({
         eprint!("{}: warning: ", $crate::util_name());
+        eprintln!($($args)+);
+    })
+);
+
+/// Print a warning message to stderr, prepending the utility name.
+#[macro_export]
+macro_rules! show_warning_caps(
+    ($($args:tt)+) => ({
+        eprint!("{}: WARNING: ", $crate::util_name());
         eprintln!($($args)+);
     })
 );

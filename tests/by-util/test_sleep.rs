@@ -138,7 +138,7 @@ fn test_sleep_wrong_time() {
 #[test]
 fn test_sleep_when_single_input_exceeds_max_duration_then_no_error() {
     let mut child = new_ucmd!()
-        .arg(format!("{}", u64::MAX as u128 + 1))
+        .arg(format!("{}", u128::from(u64::MAX) + 1))
         .timeout(Duration::from_secs(10))
         .run_no_wait();
 

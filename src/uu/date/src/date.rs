@@ -91,6 +91,7 @@ enum DateSource {
     Now,
     Custom(String),
     File(PathBuf),
+    Stdin,
     Human(TimeDelta),
 }
 
@@ -173,7 +174,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             DateSource::Custom(date.into())
         }
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
-        DateSource::File(file.into())
+        match file.as_ref() {
+            "-" => DateSource::Stdin,
+            _ => DateSource::File(file.into()),
+        }
     } else {
         DateSource::Now
     };
@@ -223,11 +227,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Box::new(iter)
             }
             DateSource::Human(relative_time) => {
-                // Get the current DateTime<FixedOffset> for things like "1 year ago"
-                let current_time = DateTime::<FixedOffset>::from(Local::now());
-                // double check the result is overflow or not of the current_time + relative_time
+                // Double check the result is overflow or not of the current_time + relative_time
                 // it may cause a panic of chrono::datetime::DateTime add
-                match current_time.checked_add_signed(relative_time) {
+                match now.checked_add_signed(relative_time) {
                     Some(date) => {
                         let iter = std::iter::once(Ok(date));
                         Box::new(iter)
@@ -239,6 +241,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         ));
                     }
                 }
+            }
+            DateSource::Stdin => {
+                let lines = BufReader::new(std::io::stdin()).lines();
+                let iter = lines.map_while(Result::ok).map(parse_date);
+                Box::new(iter)
             }
             DateSource::File(ref path) => {
                 if path.is_dir() {

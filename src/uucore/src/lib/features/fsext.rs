@@ -5,13 +5,13 @@
 
 //! Set of functions to manage file systems
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs
+// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 static MOUNT_OPT_BIND: &str = "bind";
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
@@ -25,7 +25,6 @@ static EXIT_ERR: i32 = 1;
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
-use crate::crash;
 #[cfg(windows)]
 use crate::show_warning;
 
@@ -83,8 +82,8 @@ use std::time::UNIX_EPOCH;
 ))]
 pub use libc::statfs as StatFs;
 #[cfg(any(
+    target_os = "aix",
     target_os = "netbsd",
-    target_os = "bitrig",
     target_os = "dragonfly",
     target_os = "illumos",
     target_os = "solaris",
@@ -101,8 +100,8 @@ pub use libc::statvfs as StatFs;
 ))]
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
+    target_os = "aix",
     target_os = "netbsd",
-    target_os = "bitrig",
     target_os = "illumos",
     target_os = "solaris",
     target_os = "dragonfly",
@@ -304,7 +303,7 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -323,14 +322,14 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:enable
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
     dev_name.find(':').is_some()
         || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
         || dev_name == "-hosts"
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn mount_dev_id(mount_dir: &str) -> String {
     use std::os::unix::fs::MetadataExt;
 
@@ -357,7 +356,7 @@ use libc::c_int;
 ))]
 extern "C" {
     #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
-    #[link_name = "getmntinfo$INODE64"] // spell-checker:disable-line
+    #[link_name = "getmntinfo$INODE64"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
     #[cfg(any(
@@ -365,17 +364,26 @@ extern "C" {
         target_os = "openbsd",
         all(target_vendor = "apple", target_arch = "aarch64")
     ))]
-    #[link_name = "getmntinfo"] // spell-checker:disable-line
+    #[link_name = "getmntinfo"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
     // Rust on FreeBSD uses 11.x ABI for filesystem metadata syscalls.
     // Call the right version of the symbol for getmntinfo() result to
     // match libc StatFS layout.
     #[cfg(target_os = "freebsd")]
-    #[link_name = "getmntinfo@FBSD_1.0"] // spell-checker:disable-line
+    #[link_name = "getmntinfo@FBSD_1.0"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 
+use crate::error::UResult;
+#[cfg(any(
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "windows"
+))]
+use crate::error::USimpleError;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -395,8 +403,9 @@ use std::ptr;
     target_os = "openbsd"
 ))]
 use std::slice;
+
 /// Read file system list.
-pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
+pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let (file_name, f) = File::open(LINUX_MOUNTINFO)
@@ -422,7 +431,7 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
         let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
         if len < 0 {
-            crash!(1, "get_mount_info() failed");
+            return Err(USimpleError::new(1, "get_mount_info() failed"));
         }
         let mounts = unsafe { slice::from_raw_parts(mount_buffer_ptr, len as usize) };
         Ok(mounts
@@ -437,11 +446,9 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         let find_handle =
             unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
         if INVALID_HANDLE_VALUE == find_handle {
-            crash!(
-                EXIT_ERR,
-                "FindFirstVolumeW failed: {}",
-                IOError::last_os_error()
-            );
+            let os_err = IOError::last_os_error();
+            let msg = format!("FindFirstVolumeW failed: {}", os_err);
+            return Err(USimpleError::new(EXIT_ERR, msg));
         }
         let mut mounts = Vec::<MountInfo>::new();
         loop {
@@ -462,7 +469,8 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
             } {
                 let err = IOError::last_os_error();
                 if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
-                    crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
+                    let msg = format!("FindNextVolumeW failed: {err}");
+                    return Err(USimpleError::new(EXIT_ERR, msg));
                 }
                 break;
             }
@@ -472,7 +480,12 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         }
         Ok(mounts)
     }
-    #[cfg(any(target_os = "redox", target_os = "illumos", target_os = "solaris"))]
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "redox",
+        target_os = "illumos",
+        target_os = "solaris"
+    ))]
     {
         // No method to read mounts, yet
         Ok(Vec::new())
@@ -549,7 +562,7 @@ impl FsUsage {
         }
     }
     #[cfg(windows)]
-    pub fn new(path: &Path) -> Self {
+    pub fn new(path: &Path) -> UResult<Self> {
         let mut root_path = [0u16; MAX_PATH];
         let success = unsafe {
             let path = to_nul_terminated_wide_string(path);
@@ -562,11 +575,11 @@ impl FsUsage {
             )
         };
         if 0 == success {
-            crash!(
-                EXIT_ERR,
+            let msg = format!(
                 "GetVolumePathNamesForVolumeNameW failed: {}",
                 IOError::last_os_error()
             );
+            return Err(USimpleError::new(EXIT_ERR, msg));
         }
 
         let mut sectors_per_cluster = 0;
@@ -594,7 +607,7 @@ impl FsUsage {
         }
 
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
-        Self {
+        Ok(Self {
             // f_bsize      File system block size.
             blocksize: bytes_per_cluster,
             // f_blocks - Total number of blocks on the file system, in units of f_frsize.
@@ -609,7 +622,7 @@ impl FsUsage {
             files: 0, // Not available on windows
             // Total number of free file nodes (inodes).
             ffree: 0, // Meaningless on Windows
-        }
+        })
     }
 }
 
@@ -633,8 +646,10 @@ impl FsMeta for StatFs {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_vendor = "apple"),
+            not(target_os = "aix"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "netbsd"),
             not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
@@ -646,6 +661,7 @@ impl FsMeta for StatFs {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_os = "freebsd"),
+            not(target_os = "netbsd"),
             not(target_os = "redox"),
             any(
                 target_arch = "s390x",
@@ -658,7 +674,9 @@ impl FsMeta for StatFs {
         return self.f_bsize.into();
         #[cfg(any(
             target_env = "musl",
+            target_os = "aix",
             target_os = "freebsd",
+            target_os = "netbsd",
             target_os = "illumos",
             target_os = "solaris",
             target_os = "redox",
@@ -889,6 +907,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x0187 => "autofs".into(),
         0x4246_5331 => "befs".into(),
         0x6264_6576 => "bdevfs".into(),
+        0xCA451A4E => "bcachefs".into(),
         0x1BAD_FACE => "bfs".into(),
         0xCAFE_4A11 => "bpf_fs".into(),
         0x4249_4E4D => "binfmt_misc".into(),

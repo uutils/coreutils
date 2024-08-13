@@ -1,0 +1,32 @@
+diff --git a/tests/sort/sort-merge.pl b/tests/sort/sort-merge.pl
+index 89eed0c64..c2f5aa7e5 100755
+--- a/tests/sort/sort-merge.pl
++++ b/tests/sort/sort-merge.pl
+@@ -43,22 +43,22 @@ my @Tests =
+      # check validation of --batch-size option
+      ['nmerge-0', "-m --batch-size=0", @inputs,
+         {ERR=>"$prog: invalid --batch-size argument '0'\n".
+-              "$prog: minimum --batch-size argument is '2'\n"}, {EXIT=>2}],
++              "$prog: minimum --batch-size argument is '2'\nTry 'sort --help' for more information.\n"}, {EXIT=>2}],
+ 
+      ['nmerge-1', "-m --batch-size=1", @inputs,
+         {ERR=>"$prog: invalid --batch-size argument '1'\n".
+-              "$prog: minimum --batch-size argument is '2'\n"}, {EXIT=>2}],
++              "$prog: minimum --batch-size argument is '2'\nTry 'sort --help' for more information.\n"}, {EXIT=>2}],
+ 
+      ['nmerge-neg', "-m --batch-size=-1", @inputs,
+-        {ERR=>"$prog: invalid --batch-size argument '-1'\n"}, {EXIT=>2}],
++        {ERR=>"$prog: invalid --batch-size argument '-1'\nTry 'sort --help' for more information.\n"}, {EXIT=>2}],
+ 
+      ['nmerge-nan', "-m --batch-size=a", @inputs,
+-        {ERR=>"$prog: invalid --batch-size argument 'a'\n"}, {EXIT=>2}],
++        {ERR=>"$prog: invalid --batch-size argument 'a'\nTry 'sort --help' for more information.\n"}, {EXIT=>2}],
+ 
+      ['nmerge-big', "-m --batch-size=$bigint", @inputs,
+         {ERR_SUBST=>'s/(current rlimit is) \d+/$1/'},
+         {ERR=>"$prog: --batch-size argument '$bigint' too large\n".
+-              "$prog: maximum --batch-size argument with current rlimit is\n"},
++              "$prog: maximum --batch-size argument with current rlimit is\nTry 'sort --help' for more information.\n"},
+         {EXIT=>2}],
+ 
+      # This should work since nmerge >= the number of input files
