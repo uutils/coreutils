@@ -400,7 +400,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
                 // remove_dir_all failed. maybe it is because of the permissions
                 // but if the directory is empty, remove_dir might work.
                 // So, let's try that before failing for real
-                if let Err(_e) = fs::remove_dir(path) {
+                if fs::remove_dir(path).is_err() {
                     had_err = true;
                     if e.kind() == std::io::ErrorKind::PermissionDenied {
                         // GNU compatibility (rm/fail-eacces.sh)

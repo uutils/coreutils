@@ -1,7 +1,7 @@
 # spell-checker:ignore uuhelp
 [package]
 name = "uucore_procs"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["Roy Ivy III <rivy.dev@gmail.com>"]
 license = "MIT"
 description = "uutils ~ 'uucore' proc-macros"
@@ -17,6 +17,6 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "1.0"
-quote = "1.0"
-uuhelp_parser = { path = "../uuhelp_parser", version = "0.0.23" }
+proc-macro2 = "1.0.81"
+quote = "1.0.36"
+uuhelp_parser = { path = "../uuhelp_parser", version = "0.0.27" }

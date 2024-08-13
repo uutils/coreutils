@@ -10,6 +10,7 @@ mod error;
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -22,8 +23,14 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
-use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
+use uucore::fs::{
+    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
+    path_ends_with_terminator,
+};
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+use uucore::fsxattr;
 use uucore::update_control;
+
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
@@ -103,37 +110,18 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
 
-/// Returns true if the passed `path` ends with a path terminator.
-#[cfg(unix)]
-fn path_ends_with_terminator(path: &Path) -> bool {
-    use std::os::unix::prelude::OsStrExt;
-    path.as_os_str()
-        .as_bytes()
-        .last()
-        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
-}
-
-#[cfg(windows)]
-fn path_ends_with_terminator(path: &Path) -> bool {
-    use std::os::windows::prelude::OsStrExt;
-    path.as_os_str()
-        .encode_wide()
-        .last()
-        .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut app = uu_app();
     let matches = app.try_get_matches_from_mut(args)?;
 
-    if !matches.contains_id(OPT_TARGET_DIRECTORY)
-        && matches
-            .get_many::<OsString>(ARG_FILES)
-            .map(|f| f.len())
-            .unwrap_or(0)
-            == 1
-    {
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(ARG_FILES)
+        .unwrap_or_default()
+        .cloned()
+        .collect();
+
+    if files.len() == 1 && !matches.contains_id(OPT_TARGET_DIRECTORY) {
         app.error(
             ErrorKind::TooFewValues,
             format!(
@@ -142,12 +130,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         )
         .exit();
     }
-
-    let files: Vec<OsString> = matches
-        .get_many::<OsString>(ARG_FILES)
-        .unwrap_or_default()
-        .cloned()
-        .collect();
 
     let overwrite_mode = determine_overwrite_mode(&matches);
     let backup_mode = backup_control::determine_backup_mode(&matches)?;
@@ -340,9 +322,10 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     }
 
     let target_is_dir = target.is_dir();
+    let source_is_dir = source.is_dir();
 
     if path_ends_with_terminator(target)
-        && !target_is_dir
+        && (!target_is_dir && !source_is_dir)
         && !opts.no_target_dir
         && opts.update != UpdateMode::ReplaceIfOlder
     {
@@ -358,29 +341,15 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             } else {
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
             }
+        // Check that source & target do not contain same subdir/dir when both exist
+        // mkdir dir1/dir2; mv dir1 dir1/dir2
+        } else if target.starts_with(source) {
+            Err(MvError::SelfTargetSubdirectory(
+                source.display().to_string(),
+                target.display().to_string(),
+            )
+            .into())
         } else {
-            // Check that source & target  do not contain same subdir/dir when both exist
-            // mkdir dir1/dir2; mv dir1 dir1/dir2
-            let target_contains_itself = target
-                .as_os_str()
-                .to_str()
-                .ok_or("not a valid unicode string")
-                .and_then(|t| {
-                    source
-                        .as_os_str()
-                        .to_str()
-                        .ok_or("not a valid unicode string")
-                        .map(|s| t.contains(s))
-                })
-                .unwrap();
-
-            if target_contains_itself {
-                return Err(MvError::SelfTargetSubdirectory(
-                    source.display().to_string(),
-                    target.display().to_string(),
-                )
-                .into());
-            }
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
     } else if target.exists() && source.is_dir() {
@@ -433,7 +402,10 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> UResult<()> {
+fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) -> UResult<()> {
+    // remember the moved destinations for further usage
+    let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
+
     if !target_dir.is_dir() {
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
@@ -442,7 +414,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
         .canonicalize()
         .unwrap_or_else(|_| target_dir.to_path_buf());
 
-    let multi_progress = opts.progress_bar.then(MultiProgress::new);
+    let multi_progress = options.progress_bar.then(MultiProgress::new);
 
     let count_progress = if let Some(ref multi_progress) = multi_progress {
         if files.len() > 1 {
@@ -471,6 +443,20 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
             }
         };
 
+        if moved_destinations.contains(&targetpath) && options.backup != BackupMode::NumberedBackup
+        {
+            // If the target file was already created in this mv call, do not overwrite
+            show!(USimpleError::new(
+                1,
+                format!(
+                    "will not overwrite just-created '{}' with '{}'",
+                    targetpath.display(),
+                    sourcepath.display()
+                ),
+            ));
+            continue;
+        }
+
         // Check if we have mv dir1 dir2 dir2
         // And generate an error if this is the case
         if let Ok(canonicalized_source) = sourcepath.canonicalize() {
@@ -493,7 +479,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
             }
         }
 
-        match rename(sourcepath, &targetpath, opts, multi_progress.as_ref()) {
+        match rename(sourcepath, &targetpath, options, multi_progress.as_ref()) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| {
@@ -513,6 +499,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
         if let Some(ref pb) = count_progress {
             pb.inc(1);
         }
+        moved_destinations.insert(targetpath.clone());
     }
     Ok(())
 }
@@ -647,6 +634,10 @@ fn rename_with_fallback(
                     None
                 };
 
+            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+            let xattrs =
+                fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
+
             let result = if let Some(ref pb) = progress_bar {
                 move_dir_with_progress(from, to, &options, |process_info: TransitProcess| {
                     pb.set_position(process_info.copied_bytes);
@@ -656,6 +647,9 @@ fn rename_with_fallback(
             } else {
                 move_dir(from, to, &options)
             };
+
+            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+            fsxattr::apply_xattrs(to, xattrs).unwrap();
 
             if let Err(err) = result {
                 return match err.kind {
@@ -667,6 +661,24 @@ fn rename_with_fallback(
                 };
             }
         } else {
+            if to.is_symlink() {
+                fs::remove_file(to).map_err(|err| {
+                    let to = to.to_string_lossy();
+                    let from = from.to_string_lossy();
+                    io::Error::new(
+                        err.kind(),
+                        format!(
+                            "inter-device move failed: '{from}' to '{to}'\
+                            ; unable to remove target: {err}"
+                        ),
+                    )
+                })?;
+            }
+            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+            fs::copy(from, to)
+                .and_then(|_| fsxattr::copy_xattrs(&from, &to))
+                .and_then(|_| fs::remove_file(from))?;
+            #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
             fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
         }
     }

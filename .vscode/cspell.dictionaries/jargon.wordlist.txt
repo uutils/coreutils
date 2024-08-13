@@ -42,6 +42,7 @@ fileio
 filesystem
 filesystems
 flamegraph
+fsxattr
 fullblock
 getfacl
 gibi
@@ -73,6 +74,7 @@ microbenchmarks
 microbenchmarking
 multibyte
 multicall
+nmerge
 noatime
 nocache
 nocreat
@@ -133,6 +135,7 @@ urand
 whitespace
 wordlist
 wordlists
+xattrs
 
 # * abbreviations
 consts
@@ -153,3 +156,7 @@ retval
 subdir
 val
 vals
+
+# * clippy
+uninlined
+nonminimal

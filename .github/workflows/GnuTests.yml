@@ -30,7 +30,7 @@ jobs:
       contents: read  # for actions/checkout to fetch code
       pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
     name: Run GNU tests
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
     - name: Initialize workflow variables
       id: vars
@@ -46,7 +46,7 @@ jobs:
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="${{ github.event.repository.default_branch }}"
-        repo_GNU_ref="v9.4"
+        repo_GNU_ref="v9.5"
         repo_reference_branch="${{ github.event.repository.default_branch }}"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
@@ -77,7 +77,7 @@ jobs:
         ref: ${{ steps.vars.outputs.repo_GNU_ref }}
         submodules: recursive
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v3
+      uses: dawidd6/action-download-artifact@v6
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
@@ -232,16 +232,17 @@ jobs:
           if test -f "${ref_log_file}"; then
             echo "Reference ${test_type} test log SHA1/ID: $(sha1sum -- "${ref_log_file}") - ${test_type}"
             REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
-            NEW_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
+            CURRENT_RUN_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
             REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
-            NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
+            CURRENT_RUN_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
             echo "Detailled information:"
             echo "REF_ERROR = ${REF_ERROR}"
-            echo "NEW_ERROR = ${NEW_ERROR}"
+            echo "CURRENT_RUN_ERROR = ${CURRENT_RUN_ERROR}"
             echo "REF_FAILING = ${REF_FAILING}"
-            echo "NEW_FAILING = ${NEW_FAILING}"
+            echo "CURRENT_RUN_FAILING = ${CURRENT_RUN_FAILING}"
+
             # Compare failing and error tests
-            for LINE in ${NEW_FAILING}
+            for LINE in ${CURRENT_RUN_FAILING}
             do
               if ! grep -Fxq ${LINE}<<<"${REF_FAILING}"
               then
@@ -252,7 +253,7 @@ jobs:
                   echo $MSG >> ${COMMENT_LOG}
                   have_new_failures="true"
                 else
-                  MSG="Skip an intermittent issue ${LINE}"
+                  MSG="Skip an intermittent issue ${LINE} (fails in this run but passes in the 'main' branch)"
                   echo "::warning ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   echo ""
@@ -262,7 +263,7 @@ jobs:
 
             for LINE in ${REF_FAILING}
             do
-              if ! grep -Fxq ${LINE}<<<"${NEW_FAILING}"
+              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_FAILING}"
               then
                 if ! grep ${LINE} ${IGNORE_INTERMITTENT}
                 then
@@ -270,7 +271,7 @@ jobs:
                   echo "::warning ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                 else
-                  MSG="Skipping an intermittent issue ${LINE}"
+                  MSG="Skipping an intermittent issue ${LINE} (passes in this run but fails in the 'main' branch)"
                   echo "::warning ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   echo ""
@@ -278,7 +279,7 @@ jobs:
               fi
             done
 
-            for LINE in ${NEW_ERROR}
+            for LINE in ${CURRENT_RUN_ERROR}
             do
               if ! grep -Fxq ${LINE}<<<"${REF_ERROR}"
               then
@@ -291,7 +292,7 @@ jobs:
 
             for LINE in ${REF_ERROR}
             do
-              if ! grep -Fxq ${LINE}<<<"${NEW_ERROR}"
+              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_ERROR}"
               then
                 MSG="Congrats! The gnu test ${LINE} is no longer ERROR!"
                 echo "::warning ::$MSG"
@@ -332,7 +333,7 @@ jobs:
 
   gnu_coverage:
     name: Run GNU tests with coverage
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout code uutil
       uses: actions/checkout@v4
@@ -343,7 +344,7 @@ jobs:
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
-        ref: 'v9.4'
+        ref: 'v9.5'
         submodules: recursive
     - uses: dtolnay/rust-toolchain@master
       with:
@@ -396,8 +397,9 @@ jobs:
         grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: ${{ steps.coverage.outputs.report }}
         flags: gnutests
         name: gnutests

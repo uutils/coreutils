@@ -25,6 +25,7 @@ sudoedit
 tcsh
 tzselect
 urandom
+VARNAME
 wtmp
 zsh
 

@@ -759,10 +759,71 @@ fn test_format_option() {
 }
 
 #[test]
+#[ignore = "Need issue #6233 to be fixed"]
+fn test_auto_precision() {
+    new_ucmd!()
+        .args(&["1", "0x1p-1", "2"])
+        .succeeds()
+        .stdout_only("1\n1.5\n2\n");
+}
+
+#[test]
+#[ignore = "Need issue #6234 to be fixed"]
+fn test_undefined() {
+    new_ucmd!()
+        .args(&["1e-9223372036854775808"])
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+#[ignore = "Need issue #6235 to be fixed"]
+fn test_invalid_float_point_fail_properly() {
+    new_ucmd!()
+        .args(&["66000e000000000000000000000000000000000000000000000000000009223372036854775807"])
+        .fails()
+        .stdout_only(""); // might need to be updated
+}
+
+#[test]
 fn test_invalid_zero_increment_value() {
     new_ucmd!()
         .args(&["0", "0", "1"])
         .fails()
         .no_stdout()
         .usage_error("invalid Zero increment value: '0'");
+}
+
+#[test]
+fn test_power_of_ten_display() {
+    new_ucmd!()
+        .args(&["-f", "%.2g", "10", "10"])
+        .succeeds()
+        .stdout_only("10\n");
+}
+
+#[test]
+fn test_default_g_precision() {
+    new_ucmd!()
+        .args(&["-f", "%010g", "1e5", "1e5"])
+        .succeeds()
+        .stdout_only("0000100000\n");
+    new_ucmd!()
+        .args(&["-f", "%010g", "1e6", "1e6"])
+        .succeeds()
+        .stdout_only("000001e+06\n");
+}
+
+#[test]
+fn test_invalid_format() {
+    new_ucmd!()
+        .args(&["-f", "%%g", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("format '%%g' has no % directive");
+    new_ucmd!()
+        .args(&["-f", "%g%g", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("format '%g%g' has too many % directives");
 }

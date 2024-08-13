@@ -108,6 +108,7 @@ pub fn parse_escape_code(rest: &mut &[u8]) -> EscapedChar {
         *rest = new_rest;
         match c {
             b'\\' => EscapedChar::Byte(b'\\'),
+            b'"' => EscapedChar::Byte(b'"'),
             b'a' => EscapedChar::Byte(b'\x07'),
             b'b' => EscapedChar::Byte(b'\x08'),
             b'c' => EscapedChar::End,

@@ -1,6 +1,6 @@
 [package]
 name = "uu_users"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "users ~ (uutils) display names of currently logged-in users"
@@ -11,12 +11,17 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/users.rs"
 
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["utmpx"] }
+
+[target.'cfg(target_os = "openbsd")'.dependencies]
+utmp-classic = { workspace = true }
 
 [[bin]]
 name = "users"

@@ -1,6 +1,6 @@
 [package]
 name = "uu_factor"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "factor ~ (uutils) display the prime factors of each NUMBER"
@@ -10,6 +10,8 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uu/"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
+
+readme.workspace = true
 
 [build-dependencies]
 num-traits = { workspace = true } # used in src/numerics.rs, which is included by build.rs
@@ -21,6 +23,8 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 smallvec = { workspace = true }
 uucore = { workspace = true }
+num-bigint = { workspace = true }
+num-prime = { workspace = true }
 
 [dev-dependencies]
 quickcheck = "1.0.3"
@@ -30,4 +34,4 @@ name = "factor"
 path = "src/main.rs"
 
 [lib]
-path = "src/cli.rs"
+path = "src/factor.rs"

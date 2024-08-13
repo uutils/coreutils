@@ -58,13 +58,13 @@ pub(crate) struct Row {
     bytes_capacity: Option<f64>,
 
     /// Total number of inodes in the filesystem.
-    inodes: u64,
+    inodes: u128,
 
     /// Number of used inodes.
-    inodes_used: u64,
+    inodes_used: u128,
 
     /// Number of free inodes.
-    inodes_free: u64,
+    inodes_free: u128,
 
     /// Percentage of inodes that are used, given as a float between 0 and 1.
     ///
@@ -178,9 +178,9 @@ impl From<Filesystem> for Row {
             } else {
                 Some(bavail as f64 / ((bused + bavail) as f64))
             },
-            inodes: files,
-            inodes_used: fused,
-            inodes_free: ffree,
+            inodes: files as u128,
+            inodes_used: fused as u128,
+            inodes_free: ffree as u128,
             inodes_usage: if files == 0 {
                 None
             } else {
@@ -235,9 +235,9 @@ impl<'a> RowFormatter<'a> {
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
-    fn scaled_inodes(&self, size: u64) -> String {
+    fn scaled_inodes(&self, size: u128) -> String {
         if let Some(h) = self.options.human_readable {
-            to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h))
+            to_magnitude_and_suffix(size, SuffixType::HumanReadable(h))
         } else {
             size.to_string()
         }
@@ -395,12 +395,6 @@ impl Table {
                 let values = fmt.get_values();
                 total += row;
 
-                for (i, value) in values.iter().enumerate() {
-                    if UnicodeWidthStr::width(value.as_str()) > widths[i] {
-                        widths[i] = UnicodeWidthStr::width(value.as_str());
-                    }
-                }
-
                 rows.push(values);
             }
         }
@@ -408,6 +402,16 @@ impl Table {
         if options.show_total {
             let total_row = RowFormatter::new(&total, options, true);
             rows.push(total_row.get_values());
+        }
+
+        // extend the column widths (in chars) for long values in rows
+        // do it here, after total row was added to the list of rows
+        for row in &rows {
+            for (i, value) in row.iter().enumerate() {
+                if UnicodeWidthStr::width(value.as_str()) > widths[i] {
+                    widths[i] = UnicodeWidthStr::width(value.as_str());
+                }
+            }
         }
 
         Self {
@@ -466,9 +470,11 @@ impl fmt::Display for Table {
 #[cfg(test)]
 mod tests {
 
+    use std::vec;
+
     use crate::blocks::HumanReadable;
     use crate::columns::Column;
-    use crate::table::{Header, HeaderMode, Row, RowFormatter};
+    use crate::table::{Header, HeaderMode, Row, RowFormatter, Table};
     use crate::{BlockSize, Options};
 
     const COLUMNS_WITH_FS_TYPE: [Column; 7] = [
@@ -847,5 +853,90 @@ mod tests {
         let row = Row::from(d);
 
         assert_eq!(row.inodes_used, 0);
+    }
+
+    #[test]
+    fn test_table_column_width_computation_include_total_row() {
+        let d1 = crate::Filesystem {
+            file: None,
+            mount_info: crate::MountInfo {
+                dev_id: "28".to_string(),
+                dev_name: "none".to_string(),
+                fs_type: "9p".to_string(),
+                mount_dir: "/usr/lib/wsl/drivers".to_string(),
+                mount_option: "ro,nosuid,nodev,noatime".to_string(),
+                mount_root: "/".to_string(),
+                remote: false,
+                dummy: false,
+            },
+            usage: crate::table::FsUsage {
+                blocksize: 4096,
+                blocks: 244029695,
+                bfree: 125085030,
+                bavail: 125085030,
+                bavail_top_bit_set: false,
+                files: 99999999999,
+                ffree: 999999,
+            },
+        };
+
+        let filesystems = vec![d1.clone(), d1];
+
+        let mut options = Options {
+            show_total: true,
+            columns: vec![
+                Column::Source,
+                Column::Itotal,
+                Column::Iused,
+                Column::Iavail,
+            ],
+            ..Default::default()
+        };
+
+        let table_w_total = Table::new(&options, filesystems.clone());
+        assert_eq!(
+            table_w_total.to_string(),
+            "Filesystem           Inodes        IUsed   IFree\n\
+             none            99999999999  99999000000  999999\n\
+             none            99999999999  99999000000  999999\n\
+             total          199999999998 199998000000 1999998"
+        );
+
+        options.show_total = false;
+
+        let table_w_o_total = Table::new(&options, filesystems);
+        assert_eq!(
+            table_w_o_total.to_string(),
+            "Filesystem          Inodes       IUsed  IFree\n\
+             none           99999999999 99999000000 999999\n\
+             none           99999999999 99999000000 999999"
+        );
+    }
+
+    #[test]
+    fn test_row_accumulation_u64_overflow() {
+        let total = u64::MAX as u128;
+        let used1 = 3000u128;
+        let used2 = 50000u128;
+
+        let mut row1 = Row {
+            inodes: total,
+            inodes_used: used1,
+            inodes_free: total - used1,
+            ..Default::default()
+        };
+
+        let row2 = Row {
+            inodes: total,
+            inodes_used: used2,
+            inodes_free: total - used2,
+            ..Default::default()
+        };
+
+        row1 += row2;
+
+        assert_eq!(row1.inodes, total * 2);
+        assert_eq!(row1.inodes_used, used1 + used2);
+        assert_eq!(row1.inodes_free, total * 2 - used1 - used2);
     }
 }

@@ -318,13 +318,13 @@ fn test_invalid_substr() {
         .stdout_only("\n");
 
     new_ucmd!()
-        .args(&["substr", "abc", &(std::usize::MAX.to_string() + "0"), "1"])
+        .args(&["substr", "abc", &(usize::MAX.to_string() + "0"), "1"])
         .fails()
         .code_is(1)
         .stdout_only("\n");
 
     new_ucmd!()
-        .args(&["substr", "abc", "0", &(std::usize::MAX.to_string() + "0")])
+        .args(&["substr", "abc", "0", &(usize::MAX.to_string() + "0")])
         .fails()
         .code_is(1)
         .stdout_only("\n");

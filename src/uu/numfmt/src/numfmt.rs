@@ -15,6 +15,7 @@ use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::ranges::Range;
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
 pub mod errors;
@@ -176,7 +177,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
         vec![Range {
             low: 1,
-            high: std::usize::MAX,
+            high: usize::MAX,
         }]
     } else {
         Range::from_list(fields)?
@@ -229,29 +230,9 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     })
 }
 
-// If the --format argument and its value are provided separately, they are concatenated to avoid a
-// potential clap error. For example: "--format --%f--" is changed to "--format=--%f--".
-fn concat_format_arg_and_value(args: &[String]) -> Vec<String> {
-    let mut processed_args: Vec<String> = Vec::with_capacity(args.len());
-    let mut iter = args.iter().peekable();
-
-    while let Some(arg) = iter.next() {
-        if arg == "--format" && iter.peek().is_some() {
-            processed_args.push(format!("--format={}", iter.peek().unwrap()));
-            iter.next();
-        } else {
-            processed_args.push(arg.to_string());
-        }
-    }
-
-    processed_args
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
-    let matches = uu_app().try_get_matches_from(concat_format_arg_and_value(&args))?;
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
@@ -300,7 +281,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FORMAT)
                 .long(options::FORMAT)
                 .help("use printf style floating-point FORMAT; see FORMAT below for details")
-                .value_name("FORMAT"),
+                .value_name("FORMAT")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::FROM)
@@ -359,7 +341,13 @@ pub fn uu_app() -> Command {
                 .help("use METHOD for rounding when scaling")
                 .value_name("METHOD")
                 .default_value("from-zero")
-                .value_parser(["up", "down", "from-zero", "towards-zero", "nearest"]),
+                .value_parser(ShortcutValueParser::new([
+                    "up",
+                    "down",
+                    "from-zero",
+                    "towards-zero",
+                    "nearest",
+                ])),
         )
         .arg(
             Arg::new(options::SUFFIX)
