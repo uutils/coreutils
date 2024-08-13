@@ -258,6 +258,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
+        .args_override_self(true)
         .infer_long_args(true)
         .arg(
             Arg::new(options::BOURNE_SHELL)
@@ -468,7 +469,7 @@ fn escape(s: &str) -> String {
         match c {
             '\'' => result.push_str("'\\''"),
             ':' if previous != '\\' => result.push_str("\\:"),
-            _ => result.push_str(&c.to_string()),
+            _ => result.push(c),
         }
         previous = c;
     }

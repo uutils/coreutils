@@ -165,7 +165,7 @@ fn test_chroot_skip_chdir_not_root() {
 #[test]
 fn test_chroot_skip_chdir() {
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = &ts.fixtures;
     let dirs = ["/", "/.", "/..", "isroot"];
     at.symlink_file("/", "isroot");
     for dir in dirs {

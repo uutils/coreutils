@@ -2,23 +2,20 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use crate::common::util::{AtPath, TestScenario, UCommand};
-use once_cell::sync::Lazy;
 use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::sync::Mutex;
-
-use libc::umask;
 
 static TEST_FILE: &str = "file";
 static REFERENCE_FILE: &str = "reference";
 static REFERENCE_PERMS: u32 = 0o247;
-static UMASK_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 struct TestCase {
     args: Vec<&'static str>,
     before: u32,
     after: u32,
+    umask: Option<libc::mode_t>,
 }
 
 fn make_file(file: &str, mode: u32) {
@@ -36,15 +33,20 @@ fn make_file(file: &str, mode: u32) {
 fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     make_file(&at.plus_as_string(TEST_FILE), test.before);
     let perms = at.metadata(TEST_FILE).permissions().mode();
-    if perms != test.before {
-        panic!(
-            "{}: expected: {:o} got: {:o}",
-            "setting permissions on test files before actual test run failed", test.after, perms
-        );
-    }
+
+    assert!(
+        perms == test.before,
+        "{}: expected: {:o} got: {:o}",
+        "setting permissions on test files before actual test run failed",
+        test.after,
+        perms
+    );
 
     for arg in &test.args {
         ucmd.arg(arg);
+        if let Some(umask) = test.umask {
+            ucmd.umask(umask);
+        }
     }
     let r = ucmd.run();
     if !r.succeeded() {
@@ -53,9 +55,13 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     }
 
     let perms = at.metadata(TEST_FILE).permissions().mode();
-    if perms != test.after {
-        panic!("{}: expected: {:o} got: {:o}", ucmd, test.after, perms);
-    }
+    assert!(
+        perms == test.after,
+        "{}: expected: {:o} got: {:o}",
+        ucmd,
+        test.after,
+        perms
+    );
 }
 
 fn run_tests(tests: Vec<TestCase>) {
@@ -73,46 +79,55 @@ fn test_chmod_octal() {
             args: vec!["0700", TEST_FILE],
             before: 0o100000,
             after: 0o100700,
+            umask: None,
         },
         TestCase {
             args: vec!["0070", TEST_FILE],
             before: 0o100000,
             after: 0o100070,
+            umask: None,
         },
         TestCase {
             args: vec!["0007", TEST_FILE],
             before: 0o100000,
             after: 0o100007,
+            umask: None,
         },
         TestCase {
             args: vec!["-0700", TEST_FILE],
             before: 0o100700,
             after: 0o100000,
+            umask: None,
         },
         TestCase {
             args: vec!["-0070", TEST_FILE],
             before: 0o100060,
             after: 0o100000,
+            umask: None,
         },
         TestCase {
             args: vec!["-0007", TEST_FILE],
             before: 0o100001,
             after: 0o100000,
+            umask: None,
         },
         TestCase {
             args: vec!["+0100", TEST_FILE],
             before: 0o100600,
             after: 0o100700,
+            umask: None,
         },
         TestCase {
             args: vec!["+0020", TEST_FILE],
             before: 0o100050,
             after: 0o100070,
+            umask: None,
         },
         TestCase {
             args: vec!["+0004", TEST_FILE],
             before: 0o100003,
             after: 0o100007,
+            umask: None,
         },
     ];
     run_tests(tests);
@@ -120,88 +135,97 @@ fn test_chmod_octal() {
 
 #[test]
 #[allow(clippy::unreadable_literal)]
+#[allow(clippy::too_many_lines)]
 // spell-checker:disable-next-line
 fn test_chmod_ugoa() {
-    let _guard = UMASK_MUTEX.lock();
-
-    let last = unsafe { umask(0) };
     let tests = vec![
         TestCase {
             args: vec!["u=rwx", TEST_FILE],
             before: 0o100000,
             after: 0o100700,
+            umask: Some(0),
         },
         TestCase {
             args: vec!["g=rwx", TEST_FILE],
             before: 0o100000,
             after: 0o100070,
+            umask: Some(0),
         },
         TestCase {
             args: vec!["o=rwx", TEST_FILE],
             before: 0o100000,
             after: 0o100007,
+            umask: Some(0),
         },
         TestCase {
             args: vec!["a=rwx", TEST_FILE],
             before: 0o100000,
             after: 0o100777,
+            umask: Some(0),
         },
         TestCase {
             args: vec!["-r", TEST_FILE],
             before: 0o100777,
             after: 0o100333,
+            umask: Some(0),
         },
         TestCase {
             args: vec!["-w", TEST_FILE],
             before: 0o100777,
             after: 0o100555,
+            umask: Some(0),
         },
         TestCase {
             args: vec!["-x", TEST_FILE],
             before: 0o100777,
             after: 0o100666,
+            umask: Some(0),
         },
     ];
     run_tests(tests);
 
-    unsafe {
-        umask(0o022);
-    }
     let tests = vec![
         TestCase {
             args: vec!["u=rwx", TEST_FILE],
             before: 0o100000,
             after: 0o100700,
+            umask: Some(0o022),
         },
         TestCase {
             args: vec!["g=rwx", TEST_FILE],
             before: 0o100000,
             after: 0o100070,
+            umask: Some(0o022),
         },
         TestCase {
             args: vec!["o=rwx", TEST_FILE],
             before: 0o100000,
             after: 0o100007,
+            umask: Some(0o022),
         },
         TestCase {
             args: vec!["a=rwx", TEST_FILE],
             before: 0o100000,
             after: 0o100777,
+            umask: Some(0o022),
         },
         TestCase {
             args: vec!["+rw", TEST_FILE],
             before: 0o100000,
             after: 0o100644,
+            umask: Some(0o022),
         },
         TestCase {
             args: vec!["=rwx", TEST_FILE],
             before: 0o100000,
             after: 0o100755,
+            umask: Some(0o022),
         },
         TestCase {
             args: vec!["-x", TEST_FILE],
             before: 0o100777,
             after: 0o100666,
+            umask: Some(0o022),
         },
     ];
     run_tests(tests);
@@ -219,10 +243,6 @@ fn test_chmod_ugoa() {
         metadata(at.plus("file")).unwrap().permissions().mode(),
         0o100577
     );
-
-    unsafe {
-        umask(last);
-    }
 }
 
 #[test]
@@ -233,26 +253,31 @@ fn test_chmod_ugo_copy() {
             args: vec!["u=g", TEST_FILE],
             before: 0o100070,
             after: 0o100770,
+            umask: None,
         },
         TestCase {
             args: vec!["g=o", TEST_FILE],
             before: 0o100005,
             after: 0o100055,
+            umask: None,
         },
         TestCase {
             args: vec!["o=u", TEST_FILE],
             before: 0o100200,
             after: 0o100202,
+            umask: None,
         },
         TestCase {
             args: vec!["u-g", TEST_FILE],
             before: 0o100710,
             after: 0o100610,
+            umask: None,
         },
         TestCase {
             args: vec!["u+g", TEST_FILE],
             before: 0o100250,
             after: 0o100750,
+            umask: None,
         },
     ];
     run_tests(tests);
@@ -261,33 +286,30 @@ fn test_chmod_ugo_copy() {
 #[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_many_options() {
-    let _guard = UMASK_MUTEX.lock();
-
-    let original_umask = unsafe { umask(0) };
     let tests = vec![TestCase {
         args: vec!["-r,a+w", TEST_FILE],
         before: 0o100444,
         after: 0o100222,
+        umask: Some(0),
     }];
     run_tests(tests);
-    unsafe {
-        umask(original_umask);
-    }
 }
 
 #[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_reference_file() {
-    let tests = vec![
+    let tests = [
         TestCase {
             args: vec!["--reference", REFERENCE_FILE, TEST_FILE],
             before: 0o100070,
             after: 0o100247,
+            umask: None,
         },
         TestCase {
             args: vec!["a-w", "--reference", REFERENCE_FILE, TEST_FILE],
             before: 0o100070,
             after: 0o100247,
+            umask: None,
         },
     ];
     let (at, ucmd) = at_and_ucmd!();
@@ -318,14 +340,16 @@ fn test_permission_denied() {
 #[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive() {
-    let _guard = UMASK_MUTEX.lock();
-
-    let original_umask = unsafe { umask(0) };
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     at.mkdir("z");
+
+    // create expected permissions by removing read bits and write bits to the current perms
+    let a_perms_expected = (at.metadata("a").permissions().mode() & !0o444) | 0o222;
+    let z_perms_expected = (at.metadata("z").permissions().mode() & !0o444) | 0o222;
+
     make_file(&at.plus_as_string("a/a"), 0o100444);
     make_file(&at.plus_as_string("a/b/b"), 0o100444);
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
@@ -338,6 +362,7 @@ fn test_chmod_recursive() {
         .arg("-r,a+w")
         .arg("a")
         .arg("z")
+        .umask(0)
         .fails()
         .stderr_is("chmod: Permission denied\n");
 
@@ -346,12 +371,8 @@ fn test_chmod_recursive() {
     assert_eq!(at.metadata("a/b/b").permissions().mode(), 0o100444);
     assert_eq!(at.metadata("a/b/c/c").permissions().mode(), 0o100444);
     println!("mode {:o}", at.metadata("a").permissions().mode());
-    assert_eq!(at.metadata("a").permissions().mode(), 0o40333);
-    assert_eq!(at.metadata("z").permissions().mode(), 0o40333);
-
-    unsafe {
-        umask(original_umask);
-    }
+    assert_eq!(at.metadata("a").permissions().mode(), a_perms_expected);
+    assert_eq!(at.metadata("z").permissions().mode(), z_perms_expected);
 }
 
 #[test]
@@ -550,6 +571,7 @@ fn test_mode_after_dash_dash() {
             args: vec!["--", "-r", TEST_FILE],
             before: 0o100_777,
             after: 0o100_333,
+            umask: None,
         },
         &at,
         ucmd,
@@ -643,6 +665,20 @@ fn test_quiet_n_verbose_used_multiple_times() {
         .arg("--quiet")
         .arg("file")
         .succeeds();
+}
+
+#[test]
+fn test_changes_from_identical_reference() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("--reference=file")
+        .arg("file")
+        .succeeds()
+        .no_stdout();
 }
 
 #[test]

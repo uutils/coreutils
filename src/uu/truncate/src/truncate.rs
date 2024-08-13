@@ -178,10 +178,26 @@ pub fn uu_app() -> Command {
 ///
 /// If the file could not be opened, or there was a problem setting the
 /// size of the file.
-fn file_truncate(filename: &str, create: bool, size: u64) -> std::io::Result<()> {
+fn file_truncate(filename: &str, create: bool, size: u64) -> UResult<()> {
+    #[cfg(unix)]
+    if let Ok(metadata) = std::fs::metadata(filename) {
+        if metadata.file_type().is_fifo() {
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "cannot open {} for writing: No such device or address",
+                    filename.quote()
+                ),
+            ));
+        }
+    }
     let path = Path::new(filename);
-    let f = OpenOptions::new().write(true).create(create).open(path)?;
-    f.set_len(size)
+    match OpenOptions::new().write(true).create(create).open(path) {
+        Ok(file) => file.set_len(size),
+        Err(e) if e.kind() == ErrorKind::NotFound && !create => Ok(()),
+        Err(e) => Err(e),
+    }
+    .map_err_context(|| format!("cannot open {} for writing", filename.quote()))
 }
 
 /// Truncate files to a size relative to a given file.
@@ -233,19 +249,7 @@ fn truncate_reference_and_size(
     let fsize = metadata.len();
     let tsize = mode.to_size(fsize);
     for filename in filenames {
-        #[cfg(unix)]
-        if std::fs::metadata(filename)?.file_type().is_fifo() {
-            return Err(USimpleError::new(
-                1,
-                format!(
-                    "cannot open {} for writing: No such device or address",
-                    filename.quote()
-                ),
-            ));
-        }
-
-        file_truncate(filename, create, tsize)
-            .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
+        file_truncate(filename, create, tsize)?;
     }
     Ok(())
 }
@@ -280,18 +284,7 @@ fn truncate_reference_file_only(
     })?;
     let tsize = metadata.len();
     for filename in filenames {
-        #[cfg(unix)]
-        if std::fs::metadata(filename)?.file_type().is_fifo() {
-            return Err(USimpleError::new(
-                1,
-                format!(
-                    "cannot open {} for writing: No such device or address",
-                    filename.quote()
-                ),
-            ));
-        }
-        file_truncate(filename, create, tsize)
-            .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
+        file_truncate(filename, create, tsize)?;
     }
     Ok(())
 }
@@ -337,15 +330,8 @@ fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> 
             Err(_) => 0,
         };
         let tsize = mode.to_size(fsize);
-        match file_truncate(filename, create, tsize) {
-            Ok(_) => continue,
-            Err(e) if e.kind() == ErrorKind::NotFound && !create => continue,
-            Err(e) => {
-                return Err(
-                    e.map_err_context(|| format!("cannot open {} for writing", filename.quote()))
-                )
-            }
-        }
+        // TODO: Fix duplicate call to stat
+        file_truncate(filename, create, tsize)?;
     }
     Ok(())
 }

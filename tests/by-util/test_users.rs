@@ -31,3 +31,12 @@ fn test_users_check_name() {
 
     new_ucmd!().succeeds().stdout_is(&expected);
 }
+
+#[test]
+#[cfg(target_os = "openbsd")]
+fn test_users_check_name_openbsd() {
+    new_ucmd!()
+        .args(&["openbsd_utmp"])
+        .run()
+        .stdout_contains("test");
+}

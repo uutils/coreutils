@@ -124,7 +124,7 @@ pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
     Ok(sort_groups(groups, egid))
 }
 
-#[cfg(all(unix, feature = "process"))]
+#[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
 fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
     if let Some(index) = groups.iter().position(|&x| x == egid) {
         groups[..=index].rotate_right(1);
@@ -161,7 +161,9 @@ pub struct Passwd {
     pub expiration: time_t,
 }
 
-/// SAFETY: ptr must point to a valid C string.
+/// # Safety
+/// ptr must point to a valid C string.
+///
 /// Returns None if ptr is null.
 unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
@@ -172,7 +174,8 @@ unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
 }
 
 impl Passwd {
-    /// SAFETY: All the pointed-to strings must be valid and not change while
+    /// # Safety
+    /// All the pointed-to strings must be valid and not change while
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
         Self {
@@ -246,7 +249,8 @@ pub struct Group {
 }
 
 impl Group {
-    /// SAFETY: gr_name must be valid and not change while
+    /// # Safety
+    /// gr_name must be valid and not change while
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: group) -> Self {
         Self {

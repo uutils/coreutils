@@ -6,11 +6,9 @@
 // spell-checker:ignore (strings) ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUV
 // spell-checker:ignore (encodings) lsbf msbf hexupper
 
-use data_encoding::{self, BASE32, BASE64};
-
 use std::io::{self, Read, Write};
 
-use data_encoding::{Encoding, BASE32HEX, BASE64URL, HEXUPPER};
+use data_encoding::{Encoding, BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER};
 use data_encoding_macro::new_encoding;
 #[cfg(feature = "thiserror")]
 use thiserror::Error;
@@ -25,6 +23,7 @@ pub enum DecodeError {
     Io(#[from] io::Error),
 }
 
+#[derive(Debug)]
 pub enum EncodeError {
     Z85InputLenNotMultipleOf4,
     InvalidInput,
@@ -87,7 +86,7 @@ pub fn decode(f: Format, input: &[u8]) -> DecodeResult {
         Z85 => {
             // The z85 crate implements a padded encoding by using a leading '#' which is otherwise not allowed.
             // We manually check for a leading '#' and return an error ourselves.
-            if input.starts_with(&[b'#']) {
+            if input.starts_with(b"#") {
                 return Err(z85::DecodeError::InvalidByte(0, b'#').into());
             } else {
                 z85::decode(input)?

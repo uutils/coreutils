@@ -20,7 +20,6 @@ use std::fs::{metadata, File};
 use std::io;
 use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::Path;
-use std::u64;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
@@ -43,18 +42,6 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
 static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
-// Cap ---io-blksize value
-// For 64bit systems the max value is the same as in GNU
-// and is equivalent of `i32::MAX >> 20 << 20` operation.
-// On 32bit systems however, even though it fits within `u32` and `i32`,
-// it causes rust-lang `library/alloc/src/raw_vec.rs` to panic with 'capacity overflow' error.
-// Could be due to how `std::io::BufReader` handles internal buffers.
-// So we use much smaller value for those
-static OPT_IO_BLKSIZE_MAX: usize = if usize::BITS >= 64 {
-    2_146_435_072
-} else {
-    1_000_000_000
-};
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
@@ -421,7 +408,7 @@ struct Settings {
     /// chunks. If this is `false`, then empty files will not be
     /// created.
     elide_empty_files: bool,
-    io_blksize: Option<usize>,
+    io_blksize: Option<u64>,
 }
 
 /// An error when parsing settings from command-line arguments.
@@ -512,17 +499,10 @@ impl Settings {
             None => b'\n',
         };
 
-        let io_blksize: Option<usize> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
+        let io_blksize: Option<u64> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
             match parse_size_u64(s) {
-                Ok(n) => {
-                    let n: usize = n
-                        .try_into()
-                        .map_err(|_| SettingsError::InvalidIOBlockSize(s.to_string()))?;
-                    if n > OPT_IO_BLKSIZE_MAX {
-                        return Err(SettingsError::InvalidIOBlockSize(s.to_string()));
-                    }
-                    Some(n)
-                }
+                Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
+                Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
                 _ => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
             }
         } else {
@@ -645,14 +625,18 @@ fn get_input_size<R>(
     input: &String,
     reader: &mut R,
     buf: &mut Vec<u8>,
-    io_blksize: &Option<usize>,
+    io_blksize: &Option<u64>,
 ) -> std::io::Result<u64>
 where
     R: BufRead,
 {
     // Set read limit to io_blksize if specified
-    // Otherwise to OPT_IO_BLKSIZE_MAX
-    let read_limit = io_blksize.unwrap_or(OPT_IO_BLKSIZE_MAX) as u64;
+    let read_limit: u64 = if let Some(custom_blksize) = io_blksize {
+        *custom_blksize
+    } else {
+        // otherwise try to get it from filesystem, or use default
+        uucore::fs::sane_blksize::sane_blksize_from_path(Path::new(input))
+    };
 
     // Try to read into buffer up to a limit
     let num_bytes = reader
@@ -744,7 +728,7 @@ struct ByteChunkWriter<'a> {
 }
 
 impl<'a> ByteChunkWriter<'a> {
-    fn new(chunk_size: u64, settings: &'a Settings) -> UResult<ByteChunkWriter<'a>> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> UResult<Self> {
         let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
         let filename = filename_iterator
             .next()
@@ -868,7 +852,7 @@ struct LineChunkWriter<'a> {
 }
 
 impl<'a> LineChunkWriter<'a> {
-    fn new(chunk_size: u64, settings: &'a Settings) -> UResult<LineChunkWriter<'a>> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> UResult<Self> {
         let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
         let filename = filename_iterator
             .next()
@@ -918,8 +902,7 @@ impl<'a> Write for LineChunkWriter<'a> {
             // Write the line, starting from *after* the previous
             // separator character and ending *after* the current
             // separator character.
-            let num_bytes_written =
-                custom_write(&buf[prev..i + 1], &mut self.inner, self.settings)?;
+            let num_bytes_written = custom_write(&buf[prev..=i], &mut self.inner, self.settings)?;
             total_bytes_written += num_bytes_written;
             prev = i + 1;
             self.num_lines_remaining_in_current_chunk -= 1;
@@ -975,7 +958,7 @@ struct LineBytesChunkWriter<'a> {
 }
 
 impl<'a> LineBytesChunkWriter<'a> {
-    fn new(chunk_size: u64, settings: &'a Settings) -> UResult<LineBytesChunkWriter<'a>> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> UResult<Self> {
         let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
         let filename = filename_iterator
             .next()
@@ -1090,7 +1073,7 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                 // example comment above.)
                 Some(i) if i < self.num_bytes_remaining_in_current_chunk => {
                     let num_bytes_written =
-                        custom_write(&buf[..i + 1], &mut self.inner, self.settings)?;
+                        custom_write(&buf[..=i], &mut self.inner, self.settings)?;
                     self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
                     total_bytes_written += num_bytes_written;
                     buf = &buf[num_bytes_written..];
@@ -1146,6 +1129,11 @@ struct OutFile {
 /// and [`n_chunks_by_line_round_robin`] functions.
 type OutFiles = Vec<OutFile>;
 trait ManageOutFiles {
+    fn instantiate_writer(
+        &mut self,
+        idx: usize,
+        settings: &Settings,
+    ) -> UResult<&mut BufWriter<Box<dyn Write>>>;
     /// Initialize a new set of output files
     /// Each OutFile is generated with filename, while the writer for it could be
     /// optional, to be instantiated later by the calling function as needed.
@@ -1210,6 +1198,52 @@ impl ManageOutFiles for OutFiles {
         Ok(out_files)
     }
 
+    fn instantiate_writer(
+        &mut self,
+        idx: usize,
+        settings: &Settings,
+    ) -> UResult<&mut BufWriter<Box<dyn Write>>> {
+        let mut count = 0;
+        // Use-case for doing multiple tries of closing fds:
+        // E.g. split running in parallel to other processes (e.g. another split) doing similar stuff,
+        // sharing the same limits. In this scenario, after closing one fd, the other process
+        // might "steel" the freed fd and open a file on its side. Then it would be beneficial
+        // if split would be able to close another fd before cancellation.
+        'loop1: loop {
+            let filename_to_open = self[idx].filename.as_str();
+            let file_to_open_is_new = self[idx].is_new;
+            let maybe_writer =
+                settings.instantiate_current_writer(filename_to_open, file_to_open_is_new);
+            if let Ok(writer) = maybe_writer {
+                self[idx].maybe_writer = Some(writer);
+                return Ok(self[idx].maybe_writer.as_mut().unwrap());
+            }
+
+            if settings.filter.is_some() {
+                // Propagate error if in `--filter` mode
+                return Err(maybe_writer.err().unwrap().into());
+            }
+
+            // Could have hit system limit for open files.
+            // Try to close one previously instantiated writer first
+            for (i, out_file) in self.iter_mut().enumerate() {
+                if i != idx && out_file.maybe_writer.is_some() {
+                    out_file.maybe_writer.as_mut().unwrap().flush()?;
+                    out_file.maybe_writer = None;
+                    out_file.is_new = false;
+                    count += 1;
+
+                    // And then try to instantiate the writer again
+                    continue 'loop1;
+                }
+            }
+
+            // If this fails - give up and propagate the error
+            uucore::show_error!("at file descriptor limit, but no file descriptor left to close. Closed {count} writers before.");
+            return Err(maybe_writer.err().unwrap().into());
+        }
+    }
+
     fn get_writer(
         &mut self,
         idx: usize,
@@ -1220,34 +1254,7 @@ impl ManageOutFiles for OutFiles {
         } else {
             // Writer was not instantiated upfront or was temporarily closed due to system resources constraints.
             // Instantiate it and record for future use.
-            let maybe_writer =
-                settings.instantiate_current_writer(self[idx].filename.as_str(), self[idx].is_new);
-            if let Ok(writer) = maybe_writer {
-                self[idx].maybe_writer = Some(writer);
-                Ok(self[idx].maybe_writer.as_mut().unwrap())
-            } else if settings.filter.is_some() {
-                // Propagate error if in `--filter` mode
-                Err(maybe_writer.err().unwrap().into())
-            } else {
-                // Could have hit system limit for open files.
-                // Try to close one previously instantiated writer first
-                for (i, out_file) in self.iter_mut().enumerate() {
-                    if i != idx && out_file.maybe_writer.is_some() {
-                        out_file.maybe_writer.as_mut().unwrap().flush()?;
-                        out_file.maybe_writer = None;
-                        out_file.is_new = false;
-                        break;
-                    }
-                }
-                // And then try to instantiate the writer again
-                // If this fails - give up and propagate the error
-                self[idx].maybe_writer =
-                    Some(settings.instantiate_current_writer(
-                        self[idx].filename.as_str(),
-                        self[idx].is_new,
-                    )?);
-                Ok(self[idx].maybe_writer.as_mut().unwrap())
-            }
+            self.instantiate_writer(idx, settings)
         }
     }
 }
@@ -1627,16 +1634,12 @@ fn split(settings: &Settings) -> UResult<()> {
     let r_box = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
-        let r = File::open(Path::new(&settings.input)).map_err_context(|| {
-            format!(
-                "cannot open {} for reading: No such file or directory",
-                settings.input.quote()
-            )
-        })?;
+        let r = File::open(Path::new(&settings.input))
+            .map_err_context(|| format!("cannot open {} for reading", settings.input.quote()))?;
         Box::new(r) as Box<dyn Read>
     };
     let mut reader = if let Some(c) = settings.io_blksize {
-        BufReader::with_capacity(c, r_box)
+        BufReader::with_capacity(c.try_into().unwrap(), r_box)
     } else {
         BufReader::new(r_box)
     };

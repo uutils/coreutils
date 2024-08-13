@@ -23,7 +23,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
         };
     }
     if let Some(val) = opts.get_one::<String>(options::NUMBER_SEPARATOR) {
-        settings.number_separator = val.clone();
+        settings.number_separator.clone_from(val);
     }
     settings.number_format = opts
         .get_one::<String>(options::NUMBER_FORMAT)
@@ -36,7 +36,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     {
         None => {}
         Some(Ok(style)) => settings.header_numbering = style,
-        Some(Err(message)) => errs.push(message.to_string()),
+        Some(Err(message)) => errs.push(message),
     }
     match opts
         .get_one::<String>(options::BODY_NUMBERING)
@@ -45,7 +45,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     {
         None => {}
         Some(Ok(style)) => settings.body_numbering = style,
-        Some(Err(message)) => errs.push(message.to_string()),
+        Some(Err(message)) => errs.push(message),
     }
     match opts
         .get_one::<String>(options::FOOTER_NUMBERING)
@@ -54,7 +54,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     {
         None => {}
         Some(Ok(style)) => settings.footer_numbering = style,
-        Some(Err(message)) => errs.push(message.to_string()),
+        Some(Err(message)) => errs.push(message),
     }
     match opts.get_one::<usize>(options::NUMBER_WIDTH) {
         None => {}

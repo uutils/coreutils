@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) asdf algo algos
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname
 
 use crate::common::util::TestScenario;
 
@@ -81,6 +81,21 @@ fn test_nonexisting_file() {
 }
 
 #[test]
+fn test_nonexisting_file_out() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "f",
+        "MD5 (nonexistent) = e5773576fc75ff0f8eba14f61587ae28\n",
+    );
+
+    ucmd.arg("-c")
+        .arg("f")
+        .fails()
+        .stdout_contains("nonexistent: FAILED open or read")
+        .stderr_contains("cksum: nonexistent: No such file or directory");
+}
+
+#[test]
 fn test_one_nonexisting_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -126,6 +141,29 @@ fn test_stdin_larger_than_128_bytes() {
 
     assert_eq!(cksum, 945_881_979);
     assert_eq!(bytes_cnt, 2058);
+}
+
+#[test]
+fn test_repeated_flags() {
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha1")
+        .arg("--algo=sha256")
+        .arg("-a=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("md5_single_file.expected");
+}
+
+#[test]
+fn test_tag_after_untagged() {
+    new_ucmd!()
+        .arg("--untagged")
+        .arg("--tag")
+        .arg("-a=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("md5_single_file.expected");
 }
 
 #[test]
@@ -209,6 +247,28 @@ fn test_untagged_algorithm_single_file() {
 }
 
 #[test]
+fn test_tag_short() {
+    new_ucmd!()
+        .arg("-t")
+        .arg("--untagged")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa  lorem_ipsum.txt\n");
+}
+
+#[test]
+fn test_untagged_algorithm_after_tag() {
+    new_ucmd!()
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("untagged/md5_single_file.expected");
+}
+
+#[test]
 fn test_untagged_algorithm_multiple_files() {
     for algo in ALGOS {
         new_ucmd!()
@@ -234,11 +294,49 @@ fn test_untagged_algorithm_stdin() {
 }
 
 #[test]
+fn test_check_algo() {
+    new_ucmd!()
+        .arg("-a=bsd")
+        .arg("--check")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .code_is(1);
+    new_ucmd!()
+        .arg("-a=sysv")
+        .arg("--check")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .code_is(1);
+    new_ucmd!()
+        .arg("-a=crc")
+        .arg("--check")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .code_is(1);
+}
+
+#[test]
 fn test_length_with_wrong_algorithm() {
     new_ucmd!()
         .arg("--length=16")
         .arg("--algorithm=md5")
         .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b")
+        .code_is(1);
+
+    new_ucmd!()
+        .arg("--length=16")
+        .arg("--algorithm=md5")
+        .arg("-c")
+        .arg("foo.sums")
         .fails()
         .no_stdout()
         .stderr_contains("cksum: --length is only supported with --algorithm=blake2b")
@@ -252,7 +350,7 @@ fn test_length_not_supported() {
         .arg("lorem_ipsum.txt")
         .fails()
         .no_stdout()
-        .stderr_is_fixture("unsupported_length.expected")
+        .stderr_contains("--length is only supported with --algorithm=blake2b")
         .code_is(1);
 }
 
@@ -264,7 +362,9 @@ fn test_length() {
         .arg("lorem_ipsum.txt")
         .arg("alice_in_wonderland.txt")
         .succeeds()
-        .stdout_is_fixture("supported_length.expected");
+        .stdout_contains(
+            "BLAKE2b-16 (lorem_ipsum.txt) = 7e2f\nBLAKE2b-16 (alice_in_wonderland.txt) = a546",
+        );
 }
 
 #[test]
@@ -282,6 +382,20 @@ fn test_length_greater_than_512() {
 #[test]
 fn test_length_is_zero() {
     new_ucmd!()
+        .arg("--length=0")
+        .arg("--algorithm=blake2b")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture("length_is_zero.expected");
+}
+
+#[test]
+fn test_length_repeated() {
+    new_ucmd!()
+        .arg("--length=10")
+        .arg("--length=123456")
         .arg("--length=0")
         .arg("--algorithm=blake2b")
         .arg("lorem_ipsum.txt")
@@ -313,6 +427,43 @@ fn test_raw_multiple_files() {
         .no_stdout()
         .stderr_contains("cksum: the --raw option is not supported with multiple files")
         .code_is(1);
+}
+
+#[test]
+fn test_base64_raw_conflicts() {
+    new_ucmd!()
+        .arg("--base64")
+        .arg("--raw")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("--base64")
+        .stderr_contains("cannot be used with")
+        .stderr_contains("--raw");
+}
+
+#[test]
+fn test_base64_single_file() {
+    for algo in ALGOS {
+        new_ucmd!()
+            .arg("--base64")
+            .arg("lorem_ipsum.txt")
+            .arg(format!("--algorithm={algo}"))
+            .succeeds()
+            .no_stderr()
+            .stdout_is_fixture_bytes(format!("base64/{algo}_single_file.expected"));
+    }
+}
+#[test]
+fn test_base64_multiple_files() {
+    new_ucmd!()
+        .arg("--base64")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture_bytes("base64/md5_multiple_files.expected");
 }
 
 #[test]
@@ -348,6 +499,206 @@ fn test_all_algorithms_fail_on_folder() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn test_check_error_incorrect_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("checksum", "e5773576fc75ff0f8eba14f61587ae28  README.md");
+
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("checksum")
+        .fails()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_dev_null() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--algorithm=md5")
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e ");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_blake2b_512() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("blake2b")
+        .arg("-l512")
+        .arg("f")
+        .succeeds()
+        .stdout_contains("BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
+
+    // test also the read
+    at.write("checksum", "BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("checksum")
+        .succeeds()
+        .stdout_contains("f: OK");
+
+    scene
+        .ucmd()
+        .arg("--status")
+        .arg("--check")
+        .arg("checksum")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_reset_binary() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--binary") // should disappear because of the following option
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--algorithm=md5")
+        .arg(at.subdir.join("f"))
+        .succeeds()
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e  ");
+}
+
+#[ignore = "issue #6375"]
+#[test]
+fn test_reset_binary_but_set() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--binary")
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--binary")
+        .arg("--algorithm=md5")
+        .arg(at.subdir.join("f"))
+        .succeeds()
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *"); // currently, asterisk=false. It should be true
+}
+
+#[test]
+fn test_text_tag() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--text") // should disappear because of the following option
+        .arg("--tag")
+        .arg(at.subdir.join("f"))
+        .succeeds()
+        .stdout_contains("4294967295 0 ");
+}
+
+#[test]
+fn test_binary_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--untagged")
+        .arg("-b")
+        .arg("--algorithm=md5")
+        .arg(at.subdir.join("f"))
+        .succeeds()
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
+
+    scene
+        .ucmd()
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--binary")
+        .arg("--algorithm=md5")
+        .arg(at.subdir.join("f"))
+        .succeeds()
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
+
+    scene
+        .ucmd()
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--binary")
+        .arg("--algorithm=md5")
+        .arg("raw/blake2b_single_file.expected")
+        .succeeds()
+        .stdout_contains("7e297c07ed8e053600092f91bdd1dad7 *");
+
+    new_ucmd!()
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--binary")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa *lorem_ipsum.txt\n");
+
+    new_ucmd!()
+        .arg("--untagged")
+        .arg("--binary")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa *lorem_ipsum.txt\n");
+
+    new_ucmd!()
+        .arg("--binary")
+        .arg("--untagged")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa *lorem_ipsum.txt\n");
+
+    new_ucmd!()
+        .arg("-a")
+        .arg("md5")
+        .arg("--binary")
+        .arg("--untagged")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa *lorem_ipsum.txt\n");
+
+    new_ucmd!()
+        .arg("-a")
+        .arg("md5")
+        .arg("--binary")
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa  lorem_ipsum.txt\n");
+}
+
 #[test]
 fn test_folder_and_file() {
     let scene = TestScenario::new(util_name!());
@@ -364,4 +715,565 @@ fn test_folder_and_file() {
         .fails()
         .stderr_contains(format!("cksum: {folder_name}: Is a directory"))
         .stdout_is_fixture("crc_single_file.expected");
+}
+
+#[test]
+fn test_conflicting_options() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--binary")
+        .arg("--check")
+        .arg("f")
+        .fails()
+        .no_stdout()
+        .stderr_contains(
+            "cksum: the --binary and --text options are meaningless when verifying checksums",
+        )
+        .code_is(1);
+}
+
+#[test]
+fn test_check_algo_err() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("sm3")
+        .arg("--check")
+        .arg("f")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: f: no properly formatted checksum lines found")
+        .code_is(1);
+}
+
+#[test]
+fn test_check_pipe() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("-")
+        .pipe_in("f")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: 'standard input': no properly formatted checksum lines found")
+        .code_is(1);
+}
+
+#[test]
+fn test_cksum_check_empty_line() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("CHECKSUM", "\
+    SHA384 (f) = 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b\n\
+    BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n\
+    BLAKE2b-384 (f) = b32811423377f52d7862286ee1a72ee540524380fda1724a6f25d7978c6fd3244a6caf0498812673c5e05ef583825100\n\
+    SM3 (f) = 1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b\n\n");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
+        .stderr_does_not_contain("line is improperly formatted");
+}
+
+#[test]
+fn test_cksum_check_space() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("CHECKSUM", "\
+    SHA384 (f) = 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b\n\
+    BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n\
+    BLAKE2b-384 (f) = b32811423377f52d7862286ee1a72ee540524380fda1724a6f25d7978c6fd3244a6caf0498812673c5e05ef583825100\n\
+    SM3 (f) = 1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b\n  \n");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
+        .stderr_contains("line is improperly formatted");
+}
+
+#[test]
+fn test_cksum_check_leading_info() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("CHECKSUM", "\
+     \\SHA384 (f) = 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b\n\
+     \\BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n\
+     \\BLAKE2b-384 (f) = b32811423377f52d7862286ee1a72ee540524380fda1724a6f25d7978c6fd3244a6caf0498812673c5e05ef583825100\n\
+     \\SM3 (f) = 1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b\n");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n");
+}
+
+#[test]
+fn test_cksum_check() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("CHECKSUM", "\
+    SHA384 (f) = 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b\n\
+    BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n\
+    BLAKE2b-384 (f) = b32811423377f52d7862286ee1a72ee540524380fda1724a6f25d7978c6fd3244a6caf0498812673c5e05ef583825100\n\
+    SM3 (f) = 1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b\n");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
+        .stderr_does_not_contain("line is improperly formatted");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--strict")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
+        .stderr_does_not_contain("line is improperly formatted");
+    // inject invalid content
+    at.append("CHECKSUM", "incorrect data");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
+        .stderr_contains("line is improperly formatted");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--strict")
+        .arg("CHECKSUM")
+        .fails()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
+        .stderr_contains("line is improperly formatted");
+}
+
+#[test]
+fn test_cksum_check_case() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write(
+        "CHECKSUM",
+        "Sha1 (f) = da39a3ee5e6b4b0d3255bfef95601890afd80709\n",
+    );
+    scene.ucmd().arg("--check").arg("CHECKSUM").fails();
+}
+
+#[test]
+fn test_cksum_check_invalid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let commands = [vec!["-a", "sha384"]];
+    at.touch("f");
+    at.touch("CHECKSUM");
+    for command in &commands {
+        let result = scene.ucmd().args(command).arg("f").succeeds();
+        at.append("CHECKSUM", result.stdout_str());
+    }
+    // inject invalid content
+    at.append("CHECKSUM", "again incorrect data\naze\n");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--strict")
+        .arg("CHECKSUM")
+        .fails()
+        .stdout_contains("f: OK\n")
+        .stderr_contains("2 lines");
+
+    // without strict, it passes
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\n")
+        .stderr_contains("2 lines");
+}
+
+#[test]
+fn test_cksum_check_failed() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let commands = [vec!["-a", "sha384"]];
+    at.touch("f");
+    at.touch("CHECKSUM");
+    for command in &commands {
+        let result = scene.ucmd().args(command).arg("f").succeeds();
+        at.append("CHECKSUM", result.stdout_str());
+    }
+    // inject invalid content
+    at.append("CHECKSUM", "again incorrect data\naze\nSM3 (input) = 7cfb120d4fabea2a904948538a438fdb57c725157cb40b5aee8d937b8351477e\n");
+
+    let result = scene
+        .ucmd()
+        .arg("--check")
+        .arg("--strict")
+        .arg("CHECKSUM")
+        .fails();
+
+    assert!(result
+        .stderr_str()
+        .contains("input: No such file or directory"));
+    assert!(result
+        .stderr_str()
+        .contains("2 lines are improperly formatted\n"));
+    assert!(result
+        .stderr_str()
+        .contains("1 listed file could not be read\n"));
+    assert!(result.stdout_str().contains("f: OK\n"));
+
+    // without strict
+    let result = scene.ucmd().arg("--check").arg("CHECKSUM").fails();
+
+    assert!(result
+        .stderr_str()
+        .contains("input: No such file or directory"));
+    assert!(result
+        .stderr_str()
+        .contains("2 lines are improperly formatted\n"));
+    assert!(result
+        .stderr_str()
+        .contains("1 listed file could not be read\n"));
+    assert!(result.stdout_str().contains("f: OK\n"));
+
+    // tests with two files
+    at.touch("CHECKSUM2");
+    at.write("f2", "42");
+    for command in &commands {
+        let result = scene.ucmd().args(command).arg("f2").succeeds();
+        at.append("CHECKSUM2", result.stdout_str());
+    }
+    // inject invalid content
+    at.append("CHECKSUM2", "again incorrect data\naze\nSM3 (input2) = 7cfb120d4fabea2a904948538a438fdb57c725157cb40b5aee8d937b8351477e\n");
+    at.append("CHECKSUM2", "again incorrect data\naze\nSM3 (input2) = 7cfb120d4fabea2a904948538a438fdb57c725157cb40b5aee8d937b8351477e\n");
+
+    let result = scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .arg("CHECKSUM2")
+        .fails();
+    println!("result.stderr_str() {}", result.stderr_str());
+    println!("result.stdout_str() {}", result.stdout_str());
+    assert!(result
+        .stderr_str()
+        .contains("input2: No such file or directory"));
+    assert!(result
+        .stderr_str()
+        .contains("4 lines are improperly formatted\n"));
+    assert!(result
+        .stderr_str()
+        .contains("2 listed files could not be read\n"));
+    assert!(result.stdout_str().contains("f: OK\n"));
+    assert!(result.stdout_str().contains("2: OK\n"));
+}
+
+#[test]
+fn test_check_md5_format() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    at.touch("empty");
+    at.write("f", "d41d8cd98f00b204e9800998ecf8427e *empty\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("f")
+        .succeeds()
+        .stdout_contains("empty: OK");
+
+    // with a second file
+    at.write("not-empty", "42");
+    at.write("f2", "a1d0c6e83f027327d8461063f4ac58a6 *not-empty\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("f")
+        .arg("f2")
+        .succeeds()
+        .stdout_contains("empty: OK")
+        .stdout_contains("not-empty: OK");
+}
+
+// Manage the mixed behavior
+// cksum --check -a sm3 CHECKSUMS
+// when CHECKSUM contains among other lines:
+// SHA384 (input) = f392fd0ae43879ced890c665a1d47179116b5eddf6fb5b49f4982746418afdcbd54ba5eedcd422af3592f57f666da285
+#[test]
+fn test_cksum_mixed() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let commands = [
+        vec!["-a", "sha384"],
+        vec!["-a", "blake2b"],
+        vec!["-a", "blake2b", "-l", "384"],
+        vec!["-a", "sm3"],
+    ];
+    at.touch("f");
+    at.touch("CHECKSUM");
+    for command in &commands {
+        let result = scene.ucmd().args(command).arg("f").succeeds();
+        at.append("CHECKSUM", result.stdout_str());
+    }
+    println!("Content of CHECKSUM:\n{}", at.read("CHECKSUM"));
+    let result = scene
+        .ucmd()
+        .arg("--check")
+        .arg("-a")
+        .arg("sm3")
+        .arg("CHECKSUM")
+        .succeeds();
+
+    println!("result.stderr_str() {}", result.stderr_str());
+    println!("result.stdout_str() {}", result.stdout_str());
+    assert!(result.stdout_str().contains("f: OK"));
+    assert!(result
+        .stderr_str()
+        .contains("3 lines are improperly formatted"));
+}
+
+#[test]
+fn test_cksum_garbage() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Incorrect data at the start
+    at.write(
+        "check-file",
+        "garbage MD5 (README.md) = e5773576fc75ff0f8eba14f61587ae28",
+    );
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("check-file")
+        .fails()
+        .stderr_contains("check-file: no properly formatted checksum lines found");
+
+    // Incorrect data at the end
+    at.write(
+        "check-file",
+        "MD5 (README.md) = e5773576fc75ff0f8eba14f61587ae28 garbage",
+    );
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("check-file")
+        .fails()
+        .stderr_contains("check-file: no properly formatted checksum lines found");
+}
+
+#[ignore = "Should fail on bits"]
+#[test]
+fn test_md5_bits() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "f",
+        "MD5-65536 (README.md) = e5773576fc75ff0f8eba14f61587ae28\n",
+    );
+
+    ucmd.arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_blake2b_bits() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "f",
+        "BLAKE2b-257 (README.md) = f9a984b70cf9a7549920864860fd1131c9fb6c0552def0b6dcce1d87b4ec4c5d\n"
+    );
+
+    ucmd.arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_bsd_case() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("f", "bSD (README.md) = 0000\n");
+
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+    at.write("f", "BsD (README.md) = 0000\n");
+
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+}
+
+#[ignore = "Different output"]
+#[test]
+fn test_blake2d_tested_with_sha1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "f",
+        "BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n"
+    );
+
+    ucmd.arg("-a")
+        .arg("sha1")
+        .arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_unknown_sha() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "SHA4 (README.md) = 00000000\n");
+
+    ucmd.arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_check_directory_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.write(
+        "f",
+        "BLAKE2b (d) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n"
+    );
+    #[cfg(not(windows))]
+    let err_msg = "cksum: d: Is a directory\n";
+    #[cfg(windows)]
+    let err_msg = "cksum: d: Permission denied\n";
+    ucmd.arg("--check")
+        .arg(at.subdir.join("f"))
+        .fails()
+        .stderr_contains(err_msg);
+}
+
+#[test]
+fn test_check_base64_hashes() {
+    let hashes =
+        "MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\nSHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\nBLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n"
+    ;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("empty");
+    at.write("check", hashes);
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("check"))
+        .succeeds()
+        .stdout_is("empty: OK\nempty: OK\nempty: OK\n");
+}
+
+#[test]
+fn test_several_files_error_mgmt() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // don't exist
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("empty")
+        .arg("incorrect")
+        .fails()
+        .stderr_contains("empty: No such file ")
+        .stderr_contains("incorrect: No such file ");
+
+    at.touch("empty");
+    at.touch("incorrect");
+
+    // exists but incorrect
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("empty")
+        .arg("incorrect")
+        .fails()
+        .stderr_contains("empty: no properly ")
+        .stderr_contains("incorrect: no properly ");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_non_utf8_filename() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let filename: OsString = OsStringExt::from_vec(b"funky\xffname".to_vec());
+
+    at.touch(&filename);
+
+    scene
+        .ucmd()
+        .arg(&filename)
+        .succeeds()
+        .stdout_is_bytes(b"4294967295 0 funky\xffname\n")
+        .no_stderr();
+    scene
+        .ucmd()
+        .arg("-asha256")
+        .arg(filename)
+        .succeeds()
+        .stdout_is_bytes(b"SHA256 (funky\xffname) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n")
+        .no_stderr();
 }

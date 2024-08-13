@@ -101,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let recursive = matches.get_flag(options::RECURSIVE);
     let fmode = match matches.get_one::<String>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
-            Ok(meta) => Some(meta.mode()),
+            Ok(meta) => Some(meta.mode() & 0o7777),
             Err(err) => {
                 return Err(USimpleError::new(
                     1,
@@ -267,7 +267,7 @@ impl Chmoder {
                 return Err(USimpleError::new(
                     1,
                     format!(
-                        "it is dangerous to operate recursively on {}\nuse --no-preserve-root to override this failsafe",
+                        "it is dangerous to operate recursively on {}\nchmod: use --no-preserve-root to override this failsafe",
                         filename.quote()
                     )
                 ));

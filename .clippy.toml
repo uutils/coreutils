@@ -1,2 +1,4 @@
 msrv = "1.70.0"
-cognitive-complexity-threshold = 10
+cognitive-complexity-threshold = 24
+missing-docs-in-crate-items = true
+check-private-items = true

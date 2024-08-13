@@ -7,6 +7,7 @@
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::error::Error;
+use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
@@ -243,18 +244,20 @@ impl Options {
 
 /// Preprocess command line arguments and expand shortcuts. For example, "-7" is expanded to
 /// "--tabs=7" and "-1,3" to "--tabs=1 --tabs=3".
-fn expand_shortcuts(args: &[String]) -> Vec<String> {
+fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
 
     for arg in args {
-        if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
-            arg[1..]
-                .split(',')
-                .filter(|s| !s.is_empty())
-                .for_each(|s| processed_args.push(format!("--tabs={s}")));
-        } else {
-            processed_args.push(arg.to_string());
+        if let Some(arg) = arg.to_str() {
+            if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
+                arg[1..]
+                    .split(',')
+                    .filter(|s| !s.is_empty())
+                    .for_each(|s| processed_args.push(OsString::from(format!("--tabs={s}"))));
+                continue;
+            }
         }
+        processed_args.push(arg);
     }
 
     processed_args
@@ -262,9 +265,7 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
-    let matches = uu_app().try_get_matches_from(expand_shortcuts(&args))?;
+    let matches = uu_app().try_get_matches_from(expand_shortcuts(args.collect()))?;
 
     expand(&Options::new(&matches)?)
 }
@@ -471,15 +472,21 @@ fn expand(options: &Options) -> UResult<()> {
             set_exit_code(1);
             continue;
         }
-
-        let mut fh = open(file)?;
-
-        while match fh.read_until(b'\n', &mut buf) {
-            Ok(s) => s > 0,
-            Err(_) => buf.is_empty(),
-        } {
-            expand_line(&mut buf, &mut output, ts, options)
-                .map_err_context(|| "failed to write output".to_string())?;
+        match open(file) {
+            Ok(mut fh) => {
+                while match fh.read_until(b'\n', &mut buf) {
+                    Ok(s) => s > 0,
+                    Err(_) => buf.is_empty(),
+                } {
+                    expand_line(&mut buf, &mut output, ts, options)
+                        .map_err_context(|| "failed to write output".to_string())?;
+                }
+            }
+            Err(e) => {
+                show_error!("{}", e);
+                set_exit_code(1);
+                continue;
+            }
         }
     }
     Ok(())

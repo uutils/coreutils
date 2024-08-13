@@ -46,7 +46,7 @@ jobs:
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="${{ github.event.repository.default_branch }}"
-        repo_GNU_ref="v9.4"
+        repo_GNU_ref="v9.5"
         repo_reference_branch="${{ github.event.repository.default_branch }}"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
@@ -77,7 +77,7 @@ jobs:
         ref: ${{ steps.vars.outputs.repo_GNU_ref }}
         submodules: recursive
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v3
+      uses: dawidd6/action-download-artifact@v6
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
@@ -344,7 +344,7 @@ jobs:
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
-        ref: 'v9.4'
+        ref: 'v9.5'
         submodules: recursive
     - uses: dtolnay/rust-toolchain@master
       with:
@@ -397,8 +397,9 @@ jobs:
         grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: ${{ steps.coverage.outputs.report }}
         flags: gnutests
         name: gnutests

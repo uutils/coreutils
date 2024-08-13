@@ -3,302 +3,142 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#![allow(clippy::items_after_test_module)]
-use smallvec::SmallVec;
-use std::cell::RefCell;
-use std::fmt;
+// spell-checker:ignore funcs
 
-use crate::numeric::{Arithmetic, Montgomery};
-use crate::{miller_rabin, rho, table};
+use std::collections::BTreeMap;
+use std::io::BufRead;
+use std::io::{self, stdin, stdout, Write};
 
-type Exponent = u8;
+use clap::{crate_version, Arg, ArgAction, Command};
+use num_bigint::BigUint;
+use num_traits::FromPrimitive;
+use uucore::display::Quotable;
+use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
+use uucore::{format_usage, help_about, help_usage, show_error, show_warning};
 
-#[derive(Clone, Debug, Default)]
-struct Decomposition(SmallVec<[(u64, Exponent); NUM_FACTORS_INLINE]>);
+const ABOUT: &str = help_about!("factor.md");
+const USAGE: &str = help_usage!("factor.md");
 
-// spell-checker:ignore (names) Erdős–Kac * Erdős Kac
-// The number of factors to inline directly into a `Decomposition` object.
-// As a consequence of the Erdős–Kac theorem, the average number of prime factors
-// of integers < 10²⁵ ≃ 2⁸³ is 4, so we can use a slightly higher value.
-const NUM_FACTORS_INLINE: usize = 5;
-
-impl Decomposition {
-    fn one() -> Self {
-        Self::default()
-    }
-
-    fn add(&mut self, factor: u64, exp: Exponent) {
-        debug_assert!(exp > 0);
-
-        if let Some((_, e)) = self.0.iter_mut().find(|(f, _)| *f == factor) {
-            *e += exp;
-        } else {
-            self.0.push((factor, exp));
-        }
-    }
-
-    #[cfg(test)]
-    fn product(&self) -> u64 {
-        self.0
-            .iter()
-            .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
-    }
-
-    fn get(&self, p: u64) -> Option<&(u64, u8)> {
-        self.0.iter().find(|(q, _)| *q == p)
-    }
+mod options {
+    pub static EXPONENTS: &str = "exponents";
+    pub static HELP: &str = "help";
+    pub static NUMBER: &str = "NUMBER";
 }
 
-impl PartialEq for Decomposition {
-    fn eq(&self, other: &Self) -> bool {
-        for p in &self.0 {
-            if other.get(p.0) != Some(p) {
-                return false;
-            }
-        }
-
-        for p in &other.0 {
-            if self.get(p.0) != Some(p) {
-                return false;
-            }
-        }
-
-        true
-    }
-}
-impl Eq for Decomposition {}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Factors(RefCell<Decomposition>);
-
-impl Factors {
-    pub fn one() -> Self {
-        Self(RefCell::new(Decomposition::one()))
-    }
-
-    pub fn add(&mut self, prime: u64, exp: Exponent) {
-        debug_assert!(miller_rabin::is_prime(prime));
-        self.0.borrow_mut().add(prime, exp);
-    }
-
-    pub fn push(&mut self, prime: u64) {
-        self.add(prime, 1);
-    }
-
-    #[cfg(test)]
-    fn product(&self) -> u64 {
-        self.0.borrow().product()
-    }
-}
-
-impl fmt::Display for Factors {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let v = &mut (self.0).borrow_mut().0;
-        v.sort_unstable();
-
-        let include_exponents = f.alternate();
-        for (p, exp) in v {
-            if include_exponents && *exp > 1 {
-                write!(f, " {p}^{exp}")?;
-            } else {
-                for _ in 0..*exp {
-                    write!(f, " {p}")?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
-fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64, f: Factors) -> Factors {
-    use miller_rabin::Result::*;
-
-    // Shadow the name, so the recursion automatically goes from “Big” arithmetic to small.
-    let _factor = |n, f| {
-        if n < (1 << 32) {
-            _factor::<Montgomery<u32>>(n, f)
-        } else {
-            _factor::<A>(n, f)
-        }
+fn print_factors_str(
+    num_str: &str,
+    w: &mut io::BufWriter<impl io::Write>,
+    print_exponents: bool,
+) -> UResult<()> {
+    let rx = num_str.trim().parse::<num_bigint::BigUint>();
+    let Ok(x) = rx else {
+        // return Ok(). it's non-fatal and we should try the next number.
+        show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());
+        set_exit_code(1);
+        return Ok(());
     };
 
-    if num == 1 {
-        return f;
-    }
-
-    let n = A::new(num);
-    let divisor = match miller_rabin::test::<A>(n) {
-        Prime => {
-            #[cfg(feature = "coz")]
-            coz::progress!("factor found");
-            let mut r = f;
-            r.push(num);
-            return r;
-        }
-
-        Composite(d) => d,
-        Pseudoprime => rho::find_divisor::<A>(n),
-    };
-
-    let f = _factor(divisor, f);
-    _factor(num / divisor, f)
-}
-
-pub fn factor(mut n: u64) -> Factors {
-    #[cfg(feature = "coz")]
-    coz::begin!("factorization");
-    let mut factors = Factors::one();
-
-    if n < 2 {
-        return factors;
-    }
-
-    let n_zeros = n.trailing_zeros();
-    if n_zeros > 0 {
-        factors.add(2, n_zeros as Exponent);
-        n >>= n_zeros;
-    }
-
-    if n == 1 {
-        #[cfg(feature = "coz")]
-        coz::end!("factorization");
-        return factors;
-    }
-
-    table::factor(&mut n, &mut factors);
-
-    #[allow(clippy::let_and_return)]
-    let r = if n < (1 << 32) {
-        _factor::<Montgomery<u32>>(n, factors)
+    let (factorization, remaining) = if x > BigUint::from_u32(1).unwrap() {
+        num_prime::nt_funcs::factors(x.clone(), None)
     } else {
-        _factor::<Montgomery<u64>>(n, factors)
+        (BTreeMap::new(), None)
     };
 
-    #[cfg(feature = "coz")]
-    coz::end!("factorization");
+    if let Some(_remaining) = remaining {
+        return Err(USimpleError::new(
+            1,
+            "Factorization incomplete. Remainders exists.",
+        ));
+    }
 
-    r
+    write_result(w, &x, factorization, print_exponents).map_err_context(|| "write error".into())?;
+
+    Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{factor, Decomposition, Exponent, Factors};
-    use quickcheck::quickcheck;
-    use smallvec::smallvec;
-    use std::cell::RefCell;
-
-    #[test]
-    fn factor_2044854919485649() {
-        let f = Factors(RefCell::new(Decomposition(smallvec![
-            (503, 1),
-            (2423, 1),
-            (40961, 2)
-        ])));
-        assert_eq!(factor(f.product()), f);
-    }
-
-    #[test]
-    fn factor_recombines_small() {
-        assert!((1..10_000)
-            .map(|i| 2 * i + 1)
-            .all(|i| factor(i).product() == i));
-    }
-
-    #[test]
-    fn factor_recombines_overflowing() {
-        assert!((0..250)
-            .map(|i| 2 * i + 2u64.pow(32) + 1)
-            .all(|i| factor(i).product() == i));
-    }
-
-    #[test]
-    fn factor_recombines_strong_pseudoprime() {
-        // This is a strong pseudoprime (wrt. miller_rabin::BASIS)
-        //  and triggered a bug in rho::factor's code path handling
-        //  miller_rabbin::Result::Composite
-        let pseudoprime = 17179869183;
-        for _ in 0..20 {
-            // Repeat the test 20 times, as it only fails some fraction
-            // of the time.
-            assert!(factor(pseudoprime).product() == pseudoprime);
-        }
-    }
-
-    quickcheck! {
-        fn factor_recombines(i: u64) -> bool {
-            i == 0 || factor(i).product() == i
-        }
-
-        fn recombines_factors(f: Factors) -> () {
-            assert_eq!(factor(f.product()), f);
-        }
-
-        fn exponentiate_factors(f: Factors, e: Exponent) -> () {
-            if e == 0 { return; }
-            if let Some(fe) = f.product().checked_pow(e.into()) {
-                assert_eq!(factor(fe), f ^ e);
+fn write_result(
+    w: &mut io::BufWriter<impl Write>,
+    x: &BigUint,
+    factorization: BTreeMap<BigUint, usize>,
+    print_exponents: bool,
+) -> io::Result<()> {
+    write!(w, "{x}:")?;
+    for (factor, n) in factorization {
+        if print_exponents {
+            if n > 1 {
+                write!(w, " {}^{}", factor, n)?;
+            } else {
+                write!(w, " {}", factor)?;
             }
+        } else {
+            w.write_all(format!(" {}", factor).repeat(n).as_bytes())?;
         }
     }
+    writeln!(w)?;
+    w.flush()
 }
 
-#[cfg(test)]
-use rand::{
-    distributions::{Distribution, Standard},
-    Rng,
-};
-#[cfg(test)]
-impl Distribution<Factors> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Factors {
-        let mut f = Factors::one();
-        let mut g = 1u64;
-        let mut n = u64::MAX;
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().try_get_matches_from(args)?;
 
-        // spell-checker:ignore (names) Adam Kalai * Kalai's
-        // Adam Kalai's algorithm for generating uniformly-distributed
-        // integers and their factorization.
-        //
-        // See Generating Random Factored Numbers, Easily, J. Cryptology (2003)
-        'attempt: loop {
-            while n > 1 {
-                n = rng.gen_range(1..n);
-                if miller_rabin::is_prime(n) {
-                    if let Some(h) = g.checked_mul(n) {
-                        f.push(n);
-                        g = h;
-                    } else {
-                        // We are overflowing u64, retry
-                        continue 'attempt;
+    // If matches find --exponents flag than variable print_exponents is true and p^e output format will be used.
+    let print_exponents = matches.get_flag(options::EXPONENTS);
+
+    let stdout = stdout();
+    // We use a smaller buffer here to pass a gnu test. 4KiB appears to be the default pipe size for bash.
+    let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
+
+    if let Some(values) = matches.get_many::<String>(options::NUMBER) {
+        for number in values {
+            print_factors_str(number, &mut w, print_exponents)?;
+        }
+    } else {
+        let stdin = stdin();
+        let lines = stdin.lock().lines();
+        for line in lines {
+            match line {
+                Ok(line) => {
+                    for number in line.split_whitespace() {
+                        print_factors_str(number, &mut w, print_exponents)?;
                     }
                 }
+                Err(e) => {
+                    set_exit_code(1);
+                    show_error!("error reading input: {}", e);
+                    return Ok(());
+                }
             }
-
-            return f;
         }
     }
+
+    if let Err(e) = w.flush() {
+        show_error!("{}", e);
+    }
+
+    Ok(())
 }
 
-#[cfg(test)]
-impl quickcheck::Arbitrary for Factors {
-    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-        factor(u64::arbitrary(g))
-    }
-}
-
-#[cfg(test)]
-impl std::ops::BitXor<Exponent> for Factors {
-    type Output = Self;
-
-    fn bitxor(self, rhs: Exponent) -> Self {
-        debug_assert_ne!(rhs, 0);
-        let mut r = Self::one();
-        #[allow(clippy::explicit_iter_loop)]
-        for (p, e) in self.0.borrow().0.iter() {
-            r.add(*p, rhs * e);
-        }
-
-        debug_assert_eq!(r.product(), self.product().pow(rhs.into()));
-        r
-    }
+pub fn uu_app() -> Command {
+    Command::new(uucore::util_name())
+        .version(crate_version!())
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
+        .disable_help_flag(true)
+        .args_override_self(true)
+        .arg(Arg::new(options::NUMBER).action(ArgAction::Append))
+        .arg(
+            Arg::new(options::EXPONENTS)
+                .short('h')
+                .long(options::EXPONENTS)
+                .help("Print factors in the form p^e")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
+                .action(ArgAction::Help),
+        )
 }
