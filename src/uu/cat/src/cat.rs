@@ -170,12 +170,11 @@ mod options {
     pub static SHOW_NONPRINTING_TABS: &str = "t";
     pub static SHOW_TABS: &str = "show-tabs";
     pub static SHOW_NONPRINTING: &str = "show-nonprinting";
+    pub static IGNORED_U: &str = "ignored-u";
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
@@ -233,6 +232,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
@@ -251,7 +251,8 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::NUMBER_NONBLANK)
                 .help("number nonempty output lines, overrides -n")
-                .overrides_with(options::NUMBER)
+                // Note: This MUST NOT .overrides_with(options::NUMBER)!
+                // In clap, overriding is symmetric, so "-b -n" counts as "-n", which is not what we want.
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -299,6 +300,12 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .long(options::SHOW_NONPRINTING)
                 .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::IGNORED_U)
+                .short('u')
+                .help("(ignored)")
                 .action(ArgAction::SetTrue),
         )
 }
@@ -465,7 +472,6 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
 
 /// Outputs file contents to stdout in a line-by-line fashion,
 /// propagating any errors that might occur.
-#[allow(clippy::cognitive_complexity)]
 fn write_lines<R: FdReadable>(
     handle: &mut InputHandle<R>,
     options: &OutputOptions,
@@ -484,22 +490,7 @@ fn write_lines<R: FdReadable>(
         while pos < n {
             // skip empty line_number enumerating them if needed
             if in_buf[pos] == b'\n' {
-                // \r followed by \n is printed as ^M when show_ends is enabled, so that \r\n prints as ^M$
-                if state.skipped_carriage_return && options.show_ends {
-                    writer.write_all(b"^M")?;
-                    state.skipped_carriage_return = false;
-                }
-                if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
-                    state.one_blank_kept = true;
-                    if state.at_line_start && options.number == NumberingMode::All {
-                        write!(writer, "{0:6}\t", state.line_number)?;
-                        state.line_number += 1;
-                    }
-                    writer.write_all(options.end_of_line().as_bytes())?;
-                    if handle.is_interactive {
-                        writer.flush()?;
-                    }
-                }
+                write_new_line(&mut writer, options, state, handle.is_interactive)?;
                 state.at_line_start = true;
                 pos += 1;
                 continue;
@@ -516,13 +507,8 @@ fn write_lines<R: FdReadable>(
             }
 
             // print to end of line or end of buffer
-            let offset = if options.show_nonprint {
-                write_nonprint_to_end(&in_buf[pos..], &mut writer, options.tab().as_bytes())
-            } else if options.show_tabs {
-                write_tab_to_end(&in_buf[pos..], &mut writer)
-            } else {
-                write_to_end(&in_buf[pos..], &mut writer)
-            };
+            let offset = write_end(&mut writer, &in_buf[pos..], options);
+
             // end of buffer?
             if offset + pos == in_buf.len() {
                 state.at_line_start = false;
@@ -533,10 +519,11 @@ fn write_lines<R: FdReadable>(
             } else {
                 assert_eq!(in_buf[pos + offset], b'\n');
                 // print suitable end of line
-                writer.write_all(options.end_of_line().as_bytes())?;
-                if handle.is_interactive {
-                    writer.flush()?;
-                }
+                write_end_of_line(
+                    &mut writer,
+                    options.end_of_line().as_bytes(),
+                    handle.is_interactive,
+                )?;
                 state.at_line_start = true;
             }
             pos += offset + 1;
@@ -544,6 +531,41 @@ fn write_lines<R: FdReadable>(
     }
 
     Ok(())
+}
+
+// \r followed by \n is printed as ^M when show_ends is enabled, so that \r\n prints as ^M$
+fn write_new_line<W: Write>(
+    writer: &mut W,
+    options: &OutputOptions,
+    state: &mut OutputState,
+    is_interactive: bool,
+) -> CatResult<()> {
+    if state.skipped_carriage_return && options.show_ends {
+        writer.write_all(b"^M")?;
+        state.skipped_carriage_return = false;
+    }
+    if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
+        state.one_blank_kept = true;
+        if state.at_line_start && options.number == NumberingMode::All {
+            write!(writer, "{0:6}\t", state.line_number)?;
+            state.line_number += 1;
+        }
+        writer.write_all(options.end_of_line().as_bytes())?;
+        if is_interactive {
+            writer.flush()?;
+        }
+    }
+    Ok(())
+}
+
+fn write_end<W: Write>(writer: &mut W, in_buf: &[u8], options: &OutputOptions) -> usize {
+    if options.show_nonprint {
+        write_nonprint_to_end(in_buf, writer, options.tab().as_bytes())
+    } else if options.show_tabs {
+        write_tab_to_end(in_buf, writer)
+    } else {
+        write_to_end(in_buf, writer)
+    }
 }
 
 // write***_to_end methods
@@ -601,15 +623,27 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             9 => writer.write_all(tab),
             0..=8 | 10..=31 => writer.write_all(&[b'^', byte + 64]),
             32..=126 => writer.write_all(&[byte]),
-            127 => writer.write_all(&[b'^', b'?']),
+            127 => writer.write_all(b"^?"),
             128..=159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
             160..=254 => writer.write_all(&[b'M', b'-', byte - 128]),
-            _ => writer.write_all(&[b'M', b'-', b'^', b'?']),
+            _ => writer.write_all(b"M-^?"),
         }
         .unwrap();
         count += 1;
     }
     count
+}
+
+fn write_end_of_line<W: Write>(
+    writer: &mut W,
+    end_of_line: &[u8],
+    is_interactive: bool,
+) -> CatResult<()> {
+    writer.write_all(end_of_line)?;
+    if is_interactive {
+        writer.flush()?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

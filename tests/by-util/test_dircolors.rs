@@ -159,6 +159,18 @@ fn test_quoting() {
         .no_stderr();
 }
 
+/*
+#[test]
+fn test_print_ls_colors() {
+    new_ucmd!()
+        .pipe_in("OWT 40;33\n")
+        .args(&["--print-ls-colors"])
+        .succeeds()
+        .stdout_is("\x1B[40;33mtw\t40;33\x1B[0m\n")
+        .no_stderr();
+}
+*/
+
 #[test]
 fn test_extra_operand() {
     new_ucmd!()
@@ -188,15 +200,15 @@ TERM {term_pattern}
             .no_stderr();
     }
 
-    let expectation_if_match = r#"
+    let expectation_if_match = r"
 LS_COLORS='*.term_matching=00;38;5;61:';
 export LS_COLORS
-"#
+"
     .trim_start();
-    let expectation_if_no_match = r#"
+    let expectation_if_no_match = r"
 LS_COLORS='';
 export LS_COLORS
-"#
+"
     .trim_start();
 
     // sanity checks
@@ -233,4 +245,11 @@ fn test_dircolors_for_dir_as_file() {
         result.stderr_str().trim(),
         "dircolors: expected file, got directory '/'",
     );
+}
+
+#[test]
+fn test_repeated() {
+    for arg in ["-b", "-c", "--print-database", "--print-ls-colors"] {
+        new_ucmd!().arg(arg).arg(arg).succeeds().no_stderr();
+    }
 }

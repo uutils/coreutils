@@ -21,7 +21,10 @@ static CMD_PATH: &str = "expr";
 
 fn generate_expr(max_depth: u32) -> String {
     let mut rng = rand::thread_rng();
-    let ops = ["+", "-", "*", "/", "%", "<", ">", "=", "&", "|"];
+    let ops = [
+        "+", "-", "*", "/", "%", "<", ">", "=", "&", "|", "!=", "<=", ">=", ":", "index", "length",
+        "substr",
+    ];
 
     let mut expr = String::new();
     let mut depth = 0;
@@ -67,9 +70,9 @@ fuzz_target!(|_data: &[u8]| {
     // because uutils expr doesn't support localization yet
     // TODO remove once uutils expr supports localization
     env::set_var("LC_COLLATE", "C");
-    let rust_result = generate_and_run_uumain(&args, uumain);
+    let rust_result = generate_and_run_uumain(&args, uumain, None);
 
-    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false) {
+    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false, None) {
         Ok(result) => result,
         Err(error_result) => {
             eprintln!("Failed to run GNU command:");
@@ -86,12 +89,9 @@ fuzz_target!(|_data: &[u8]| {
     compare_result(
         "expr",
         &format!("{:?}", &args[1..]),
-        &rust_result.stdout,
-        &gnu_result.stdout,
-        &rust_result.stderr,
-        &gnu_result.stderr,
-        rust_result.exit_code,
-        gnu_result.exit_code,
+        None,
+        &rust_result,
+        &gnu_result,
         false, // Set to true if you want to fail on stderr diff
     );
 });

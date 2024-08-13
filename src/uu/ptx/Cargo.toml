@@ -1,6 +1,6 @@
 [package]
 name = "uu_ptx"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ptx ~ (uutils) display a permuted index of input"
@@ -10,6 +10,8 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ptx"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
+
+readme.workspace = true
 
 [lib]
 path = "src/ptx.rs"

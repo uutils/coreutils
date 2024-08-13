@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore NOFILE
+// spell-checker:ignore NOFILE nonewline
 
 #[cfg(not(windows))]
 use crate::common::util::vec_of_size;
@@ -23,7 +23,6 @@ fn test_output_simple() {
 
 #[test]
 fn test_no_options() {
-    // spell-checker:disable-next-line
     for fixture in ["empty.txt", "alpha.txt", "nonewline.txt"] {
         // Give fixture through command line file argument
         new_ucmd!()
@@ -175,6 +174,7 @@ fn test_piped_to_dev_full() {
             s.ucmd()
                 .set_stdout(dev_full)
                 .pipe_in_fixture("alpha.txt")
+                .ignore_stdin_write_error()
                 .fails()
                 .stderr_contains("No space left on device");
         }
@@ -195,7 +195,6 @@ fn test_directory() {
 fn test_directory_and_file() {
     let s = TestScenario::new(util_name!());
     s.fixtures.mkdir("test_directory2");
-    // spell-checker:disable-next-line
     for fixture in ["empty.txt", "alpha.txt", "nonewline.txt"] {
         s.ucmd()
             .args(&["test_directory2", fixture])
@@ -218,12 +217,13 @@ fn test_three_directories_and_file_and_stdin() {
             "alpha.txt",
             "-",
             "file_which_does_not_exist.txt",
-            "nonewline.txt", // spell-checker:disable-line
+            "nonewline.txt",
             "test_directory3/test_directory5",
             "test_directory3/../test_directory3/test_directory5",
             "test_directory3",
         ])
         .pipe_in("stdout bytes")
+        .ignore_stdin_write_error()
         .fails()
         .stderr_is_fixture("three_directories_and_file_and_stdin.stderr.expected")
         .stdout_is(
@@ -236,6 +236,28 @@ fn test_output_multi_files_print_all_chars() {
     // spell-checker:disable
     new_ucmd!()
         .args(&["alpha.txt", "256.txt", "-A", "-n"])
+        .succeeds()
+        .stdout_only(
+            "     1\tabcde$\n     2\tfghij$\n     3\tklmno$\n     4\tpqrst$\n     \
+             5\tuvwxyz$\n     6\t^@^A^B^C^D^E^F^G^H^I$\n     \
+             7\t^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z^[^\\^]^^^_ \
+             !\"#$%&\'()*+,-./0123456789:;\
+             <=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~^?M-^@M-^AM-^\
+             BM-^CM-^DM-^EM-^FM-^GM-^HM-^IM-^JM-^KM-^LM-^MM-^NM-^OM-^PM-^QM-^RM-^SM-^TM-^UM-^V\
+             M-^WM-^XM-^YM-^ZM-^[M-^\\M-^]M-^^M-^_M- \
+             M-!M-\"M-#M-$M-%M-&M-\'M-(M-)M-*M-+M-,M--M-.M-/M-0M-1M-2M-3M-4M-5M-6M-7M-8M-9M-:\
+             M-;M-<M-=M->M-?M-@M-AM-BM-CM-DM-EM-FM-GM-HM-IM-JM-KM-LM-MM-NM-OM-PM-QM-RM-SM-TM-U\
+             M-VM-WM-XM-YM-ZM-[M-\\M-]M-^M-_M-`M-aM-bM-cM-dM-eM-fM-gM-hM-iM-jM-kM-lM-mM-nM-oM-\
+             pM-qM-rM-sM-tM-uM-vM-wM-xM-yM-zM-{M-|M-}M-~M-^?",
+        );
+    // spell-checker:enable
+}
+
+#[test]
+fn test_output_multi_files_print_all_chars_repeated() {
+    // spell-checker:disable
+    new_ucmd!()
+        .args(&["alpha.txt", "256.txt", "-A", "-n", "-A", "-n"])
         .succeeds()
         .stdout_only(
             "     1\tabcde$\n     2\tfghij$\n     3\tklmno$\n     4\tpqrst$\n     \
@@ -268,7 +290,7 @@ fn test_numbered_lines_no_trailing_newline() {
 
 #[test]
 fn test_stdin_show_nonprinting() {
-    for same_param in ["-v", "--show-nonprinting", "--show-non"] {
+    for same_param in ["-v", "-vv", "--show-nonprinting", "--show-non"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -279,7 +301,7 @@ fn test_stdin_show_nonprinting() {
 
 #[test]
 fn test_stdin_show_tabs() {
-    for same_param in ["-T", "--show-tabs", "--show-ta"] {
+    for same_param in ["-T", "-TT", "--show-tabs", "--show-ta"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -290,7 +312,7 @@ fn test_stdin_show_tabs() {
 
 #[test]
 fn test_stdin_show_ends() {
-    for same_param in ["-E", "--show-ends", "--show-e"] {
+    for same_param in ["-E", "-EE", "--show-ends", "--show-e"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\t\0\n\t")
@@ -300,12 +322,23 @@ fn test_stdin_show_ends() {
 }
 
 #[test]
-fn squeeze_all_files() {
+fn test_squeeze_all_files() {
     // empty lines at the end of a file are "squeezed" together with empty lines at the beginning
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("input1", "a\n\n");
     at.write("input2", "\n\nb");
     ucmd.args(&["input1", "input2", "-s"])
+        .succeeds()
+        .stdout_only("a\n\nb");
+}
+
+#[test]
+fn test_squeeze_all_files_repeated() {
+    // empty lines at the end of a file are "squeezed" together with empty lines at the beginning
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a\n\n");
+    at.write("input2", "\n\nb");
+    ucmd.args(&["-s", "input1", "input2", "-s"])
         .succeeds()
         .stdout_only("a\n\nb");
 }
@@ -340,9 +373,27 @@ fn test_stdin_nonprinting_and_endofline() {
 }
 
 #[test]
+fn test_stdin_nonprinting_and_endofline_repeated() {
+    new_ucmd!()
+        .args(&["-ee", "-e"])
+        .pipe_in("\t\0\n")
+        .succeeds()
+        .stdout_only("\t^@$\n");
+}
+
+#[test]
 fn test_stdin_nonprinting_and_tabs() {
     new_ucmd!()
         .args(&["-t"])
+        .pipe_in("\t\0\n")
+        .succeeds()
+        .stdout_only("^I^@\n");
+}
+
+#[test]
+fn test_stdin_nonprinting_and_tabs_repeated() {
+    new_ucmd!()
+        .args(&["-tt", "-t"])
         .pipe_in("\t\0\n")
         .succeeds()
         .stdout_only("^I^@\n");
@@ -362,7 +413,7 @@ fn test_stdin_squeeze_blank() {
 #[test]
 fn test_stdin_number_non_blank() {
     // spell-checker:disable-next-line
-    for same_param in ["-b", "--number-nonblank", "--number-non"] {
+    for same_param in ["-b", "-bb", "--number-nonblank", "--number-non"] {
         new_ucmd!()
             .arg(same_param)
             .arg("-")
@@ -382,6 +433,15 @@ fn test_non_blank_overrides_number() {
             .succeeds()
             .stdout_only("\n     1\ta\n     2\tb\n\n\n     3\tc");
     }
+}
+
+#[test]
+fn test_non_blank_overrides_number_even_when_present() {
+    new_ucmd!()
+        .args(&["-n", "-b", "-n"])
+        .pipe_in("\na\nb\n\n\nc")
+        .succeeds()
+        .stdout_only("\n     1\ta\n     2\tb\n\n\n     3\tc");
 }
 
 #[test]
@@ -425,7 +485,7 @@ fn test_dev_random() {
 }
 
 /// Reading from /dev/full should return an infinite amount of zero bytes.
-/// Wikipedia says there is support on Linux, FreeBSD, and NetBSD.
+/// Wikipedia says there is support on Linux, FreeBSD, and `NetBSD`.
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_dev_full() {
@@ -503,7 +563,6 @@ fn test_write_to_self_empty() {
 
     let file = OpenOptions::new()
         .create_new(true)
-        .write(true)
         .append(true)
         .open(&file_path)
         .unwrap();
@@ -519,7 +578,6 @@ fn test_write_to_self() {
 
     let file = OpenOptions::new()
         .create_new(true)
-        .write(true)
         .append(true)
         .open(file_path)
         .unwrap();
@@ -543,6 +601,7 @@ fn test_write_to_self() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 fn test_error_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("2", "1");
@@ -551,4 +610,15 @@ fn test_error_loop() {
     ucmd.arg("1")
         .fails()
         .stderr_is("cat: 1: Too many levels of symbolic links\n");
+}
+
+#[test]
+fn test_u_ignored() {
+    for same_param in ["-u", "-uu"] {
+        new_ucmd!()
+            .arg(same_param)
+            .pipe_in("hello")
+            .succeeds()
+            .stdout_only("hello");
+    }
 }

@@ -13,7 +13,6 @@ use libc::{
     S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH,
     S_IXUSR,
 };
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
@@ -112,6 +111,7 @@ impl FileInformation {
         #[cfg(all(
             unix,
             not(target_vendor = "apple"),
+            not(target_os = "aix"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
             not(target_os = "netbsd"),
@@ -121,6 +121,7 @@ impl FileInformation {
             not(target_arch = "aarch64"),
             not(target_arch = "riscv64"),
             not(target_arch = "loongarch64"),
+            not(target_arch = "sparc64"),
             target_pointer_width = "64"
         ))]
         return self.0.st_nlink;
@@ -137,10 +138,13 @@ impl FileInformation {
                 target_arch = "aarch64",
                 target_arch = "riscv64",
                 target_arch = "loongarch64",
+                target_arch = "sparc64",
                 not(target_pointer_width = "64")
             )
         ))]
         return self.0.st_nlink.into();
+        #[cfg(target_os = "aix")]
+        return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.number_of_links();
     }
@@ -148,14 +152,13 @@ impl FileInformation {
     #[cfg(unix)]
     pub fn inode(&self) -> u64 {
         #[cfg(all(
-            not(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd")),
+            not(any(target_os = "freebsd", target_os = "netbsd")),
             target_pointer_width = "64"
         ))]
         return self.0.st_ino;
         #[cfg(any(
             target_os = "freebsd",
             target_os = "netbsd",
-            target_os = "openbsd",
             not(target_pointer_width = "64")
         ))]
         return self.0.st_ino.into();
@@ -192,30 +195,6 @@ impl Hash for FileInformation {
             self.0.file_index().hash(state);
         }
     }
-}
-
-/// resolve a relative path
-pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
-    if path.components().all(|e| e != Component::ParentDir) {
-        return path.into();
-    }
-    let root = Component::RootDir.as_os_str();
-    let mut result = env::current_dir().unwrap_or_else(|_| PathBuf::from(root));
-    for comp in path.components() {
-        match comp {
-            Component::ParentDir => {
-                if let Ok(p) = result.read_link() {
-                    result = p;
-                }
-                result.pop();
-            }
-            Component::CurDir => (),
-            Component::RootDir | Component::Normal(_) | Component::Prefix(_) => {
-                result.push(comp.as_os_str());
-            }
-        }
-    }
-    result.into()
 }
 
 /// Controls how symbolic links should be handled when canonicalizing a path.
@@ -715,6 +694,101 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
 }
 
+/// Returns true if the passed `path` ends with a path terminator.
+///
+/// This function examines the last character of the path to determine
+/// if it is a directory separator. It supports both Unix-style (`/`)
+/// and Windows-style (`\`) separators.
+///
+/// # Arguments
+///
+/// * `path` - A reference to the path to be checked.
+#[cfg(unix)]
+pub fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::unix::prelude::OsStrExt;
+    path.as_os_str()
+        .as_bytes()
+        .last()
+        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
+}
+
+#[cfg(windows)]
+pub fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::windows::prelude::OsStrExt;
+    path.as_os_str()
+        .encode_wide()
+        .last()
+        .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
+}
+
+pub mod sane_blksize {
+
+    #[cfg(not(target_os = "windows"))]
+    use std::os::unix::fs::MetadataExt;
+    use std::{fs::metadata, path::Path};
+
+    pub const DEFAULT: u64 = 512;
+    pub const MAX: u64 = (u32::MAX / 8 + 1) as u64;
+
+    /// Provides sanity checked blksize value from the provided value.
+    ///
+    /// If the provided value is a invalid values a meaningful adaption
+    /// of that value is done.
+    pub fn sane_blksize(st_blksize: u64) -> u64 {
+        match st_blksize {
+            0 => DEFAULT,
+            1..=MAX => st_blksize,
+            _ => DEFAULT,
+        }
+    }
+
+    /// Provides the blksize information from the provided metadata.
+    ///
+    /// If the metadata contain invalid values a meaningful adaption
+    /// of that value is done.
+    pub fn sane_blksize_from_metadata(_metadata: &std::fs::Metadata) -> u64 {
+        #[cfg(not(target_os = "windows"))]
+        {
+            sane_blksize(_metadata.blksize())
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            DEFAULT
+        }
+    }
+
+    /// Provides the blksize information from given file path's filesystem.
+    ///
+    /// If the metadata can't be fetched or contain invalid values a
+    /// meaningful adaption of that value is done.
+    pub fn sane_blksize_from_path(path: &Path) -> u64 {
+        match metadata(path) {
+            Ok(metadata) => sane_blksize_from_metadata(&metadata),
+            Err(_) => DEFAULT,
+        }
+    }
+}
+
+/// Extracts the filename component from the given `file` path and returns it as an `Option<&str>`.
+///
+/// If the `file` path contains a filename, this function returns `Some(filename)` where `filename` is
+/// the extracted filename as a string slice (`&str`). If the `file` path does not have a filename
+/// component or if the filename is not valid UTF-8, it returns `None`.
+///
+/// # Arguments
+///
+/// * `file`: A reference to a `Path` representing the file path from which to extract the filename.
+///
+/// # Returns
+///
+/// * `Some(filename)`: If a valid filename exists in the `file` path, where `filename` is the
+///   extracted filename as a string slice (`&str`).
+/// * `None`: If the `file` path does not contain a valid filename or if the filename is not valid UTF-8.
+pub fn get_filename(file: &Path) -> Option<&str> {
+    file.file_name().and_then(|filename| filename.to_str())
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -879,7 +953,7 @@ mod tests {
         let path1 = temp_file.path();
         let path2 = temp_file.path();
 
-        assert!(are_hardlinks_to_same_file(&path1, &path2));
+        assert!(are_hardlinks_to_same_file(path1, path2));
     }
 
     #[cfg(unix)]
@@ -894,7 +968,7 @@ mod tests {
         let path1 = temp_file1.path();
         let path2 = temp_file2.path();
 
-        assert!(!are_hardlinks_to_same_file(&path1, &path2));
+        assert!(!are_hardlinks_to_same_file(path1, path2));
     }
 
     #[cfg(unix)]
@@ -905,9 +979,9 @@ mod tests {
         let path1 = temp_file.path();
 
         let path2 = temp_file.path().with_extension("hardlink");
-        fs::hard_link(&path1, &path2).unwrap();
+        fs::hard_link(path1, &path2).unwrap();
 
-        assert!(are_hardlinks_to_same_file(&path1, &path2));
+        assert!(are_hardlinks_to_same_file(path1, &path2));
     }
 
     #[cfg(unix)]
@@ -921,5 +995,39 @@ mod tests {
         assert_eq!(get_file_display(S_IFLNK | 0o777), 'l');
         assert_eq!(get_file_display(S_IFSOCK | 0o600), 's');
         assert_eq!(get_file_display(0o777), '?');
+    }
+
+    #[test]
+    fn test_path_ends_with_terminator() {
+        // Path ends with a forward slash
+        assert!(path_ends_with_terminator(Path::new("/some/path/")));
+
+        // Path ends with a backslash
+        assert!(path_ends_with_terminator(Path::new("C:\\some\\path\\")));
+
+        // Path does not end with a terminator
+        assert!(!path_ends_with_terminator(Path::new("/some/path")));
+        assert!(!path_ends_with_terminator(Path::new("C:\\some\\path")));
+
+        // Empty path
+        assert!(!path_ends_with_terminator(Path::new("")));
+
+        // Root path
+        assert!(path_ends_with_terminator(Path::new("/")));
+        assert!(path_ends_with_terminator(Path::new("C:\\")));
+    }
+
+    #[test]
+    fn test_sane_blksize() {
+        assert_eq!(512, sane_blksize::sane_blksize(0));
+        assert_eq!(512, sane_blksize::sane_blksize(512));
+        assert_eq!(4096, sane_blksize::sane_blksize(4096));
+        assert_eq!(0x2000_0000, sane_blksize::sane_blksize(0x2000_0000));
+        assert_eq!(512, sane_blksize::sane_blksize(0x2000_0001));
+    }
+    #[test]
+    fn test_get_file_name() {
+        let file_path = PathBuf::from("~/foo.txt");
+        assert!(matches!(get_filename(&file_path), Some("foo.txt")));
     }
 }

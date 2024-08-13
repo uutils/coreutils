@@ -99,10 +99,8 @@ fn test_verbose() {
 }
 
 #[test]
-#[ignore]
 fn test_spams_newline() {
-    //this test is does not mirror what GNU does
-    new_ucmd!().pipe_in("a").succeeds().stdout_is("a\n");
+    new_ucmd!().pipe_in("a").succeeds().stdout_is("a");
 }
 
 #[test]
@@ -306,12 +304,10 @@ fn test_head_invalid_num() {
         .stderr_is(
             "head: invalid number of lines: '1024R': Value too large for defined data type\n",
         );
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
         .fails()
         .stderr_is("head: invalid number of bytes: '1Y': Value too large for defined data type\n");
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
         .fails()
@@ -330,7 +326,7 @@ fn test_head_invalid_num() {
             new_ucmd!()
                 .args(&["-c", size])
                 .fails()
-                .stderr_is("head: out of range integral type conversion attempted: number of bytes is too large\n");
+                .stderr_is("head: out of range integral type conversion attempted: number of -bytes or -lines is too large\n");
         }
     }
     new_ucmd!()
@@ -377,4 +373,88 @@ fn test_presume_input_pipe_5_chars() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
+}
+
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+#[test]
+fn test_read_backwards_bytes_proc_fs_version() {
+    let ts = TestScenario::new(util_name!());
+
+    let args = ["-c", "-1", "/proc/version"];
+    let result = ts.ucmd().args(&args).succeeds();
+    assert!(!result.stdout().is_empty());
+}
+
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+#[test]
+fn test_read_backwards_bytes_proc_fs_modules() {
+    let ts = TestScenario::new(util_name!());
+
+    let args = ["-c", "-1", "/proc/modules"];
+    let result = ts.ucmd().args(&args).succeeds();
+    assert!(!result.stdout().is_empty());
+}
+
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+#[test]
+fn test_read_backwards_lines_proc_fs_modules() {
+    let ts = TestScenario::new(util_name!());
+
+    let args = ["--lines", "-1", "/proc/modules"];
+    let result = ts.ucmd().args(&args).succeeds();
+    assert!(!result.stdout().is_empty());
+}
+
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+#[test]
+fn test_read_backwards_bytes_sys_kernel_profiling() {
+    let ts = TestScenario::new(util_name!());
+
+    let args = ["-c", "-1", "/sys/kernel/profiling"];
+    let result = ts.ucmd().args(&args).succeeds();
+    let stdout_str = result.stdout_str();
+    assert_eq!(stdout_str.len(), 1);
+    assert!(stdout_str == "0" || stdout_str == "1");
+}
+
+#[test]
+fn test_value_too_large() {
+    const MAX: u64 = u64::MAX;
+
+    new_ucmd!()
+        .args(&["-n", format!("{MAX}0").as_str(), "lorem_ipsum.txt"])
+        .fails()
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
+fn test_all_but_last_lines() {
+    new_ucmd!()
+        .args(&["-n", "-15", "lorem_ipsum.txt"])
+        .succeeds()
+        .stdout_is_fixture("lorem_ipsum_backwards_15_lines.expected");
 }

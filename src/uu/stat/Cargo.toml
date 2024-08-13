@@ -1,6 +1,6 @@
 [package]
 name = "uu_stat"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stat ~ (uutils) display FILE status"
@@ -11,12 +11,15 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/stat.rs"
 
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "libc", "fs", "fsext"] }
+chrono = { workspace = true }
 
 [[bin]]
 name = "stat"

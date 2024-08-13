@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
 
 const ABOUT: &str = help_about!("shred.md");
@@ -28,10 +29,17 @@ pub mod options {
     pub const FILE: &str = "file";
     pub const ITERATIONS: &str = "iterations";
     pub const SIZE: &str = "size";
+    pub const WIPESYNC: &str = "u";
     pub const REMOVE: &str = "remove";
     pub const VERBOSE: &str = "verbose";
     pub const EXACT: &str = "exact";
     pub const ZERO: &str = "zero";
+
+    pub mod remove {
+        pub const UNLINK: &str = "unlink";
+        pub const WIPE: &str = "wipe";
+        pub const WIPESYNC: &str = "wipesync";
+    }
 }
 
 // This block size seems to match GNU (2^16 = 65536)
@@ -79,6 +87,14 @@ enum Pattern {
 enum PassType {
     Pattern(Pattern),
     Random,
+}
+
+#[derive(PartialEq, Clone, Copy)]
+enum RemoveMethod {
+    None,     // Default method. Only obfuscate the file data
+    Unlink,   // The same as 'None' + unlink the file
+    Wipe,     // The same as 'Unlink' + obfuscate the file name before unlink
+    WipeSync, // The same as 'Wipe' sync the file name changes
 }
 
 /// Iterates over all possible filenames of a certain length using NAME_CHARSET as an alphabet
@@ -200,8 +216,6 @@ impl BytesWriter {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     if !matches.contains_id(options::FILE) {
@@ -221,17 +235,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => unreachable!(),
     };
 
-    // TODO: implement --remove HOW
-    //       The optional HOW parameter indicates how to remove a directory entry:
-    //         - 'unlink' => use a standard unlink call.
-    //         - 'wipe' => also first obfuscate bytes in the name.
-    //         - 'wipesync' => also sync each obfuscated byte to disk.
-    //       The default mode is 'wipesync', but note it can be expensive.
-
     // TODO: implement --random-source
 
+    let remove_method = if matches.get_flag(options::WIPESYNC) {
+        RemoveMethod::WipeSync
+    } else if matches.contains_id(options::REMOVE) {
+        match matches
+            .get_one::<String>(options::REMOVE)
+            .map(AsRef::as_ref)
+        {
+            Some(options::remove::UNLINK) => RemoveMethod::Unlink,
+            Some(options::remove::WIPE) => RemoveMethod::Wipe,
+            Some(options::remove::WIPESYNC) => RemoveMethod::WipeSync,
+            _ => unreachable!("should be caught by clap"),
+        }
+    } else {
+        RemoveMethod::None
+    };
+
     let force = matches.get_flag(options::FORCE);
-    let remove = matches.get_flag(options::REMOVE);
     let size_arg = matches
         .get_one::<String>(options::SIZE)
         .map(|s| s.to_string());
@@ -242,7 +264,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     for path_str in matches.get_many::<String>(options::FILE).unwrap() {
         show_if_err!(wipe_file(
-            path_str, iterations, remove, size, exact, zero, verbose, force,
+            path_str,
+            iterations,
+            remove_method,
+            size,
+            exact,
+            zero,
+            verbose,
+            force,
         ));
     }
     Ok(())
@@ -278,11 +307,25 @@ pub fn uu_app() -> Command {
                 .help("shred this many bytes (suffixes like K, M, G accepted)"),
         )
         .arg(
-            Arg::new(options::REMOVE)
+            Arg::new(options::WIPESYNC)
                 .short('u')
-                .long(options::REMOVE)
-                .help("truncate and remove file after overwriting;  See below")
+                .help("deallocate and remove file after overwriting")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::REMOVE)
+                .long(options::REMOVE)
+                .value_name("HOW")
+                .value_parser(ShortcutValueParser::new([
+                    options::remove::UNLINK,
+                    options::remove::WIPE,
+                    options::remove::WIPESYNC,
+                ]))
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value(options::remove::WIPESYNC)
+                .help("like -u but give control on HOW to delete;  See below")
+                .action(ArgAction::Set),
         )
         .arg(
             Arg::new(options::VERBOSE)
@@ -323,6 +366,7 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
         .or_else(|| {
             if let Some(size) = size_str_opt {
                 show_error!("invalid file size: {}", size.quote());
+                // TODO: replace with our error management
                 std::process::exit(1);
             }
             None
@@ -342,7 +386,7 @@ fn pass_name(pass_type: &PassType) -> String {
 fn wipe_file(
     path_str: &str,
     n_passes: usize,
-    remove: bool,
+    remove_method: RemoveMethod,
     size: Option<u64>,
     exact: bool,
     zero: bool,
@@ -364,17 +408,18 @@ fn wipe_file(
         ));
     }
 
+    let metadata = fs::metadata(path).map_err_context(String::new)?;
+
     // If force is true, set file permissions to not-readonly.
     if force {
-        let metadata = fs::metadata(path).map_err_context(String::new)?;
         let mut perms = metadata.permissions();
         #[cfg(unix)]
-        #[allow(clippy::useless_conversion)]
+        #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
         {
             // NOTE: set_readonly(false) makes the file world-writable on Unix.
-            // NOTE: S_IWUSR type is u16 on macOS.
-            if (perms.mode() & u32::from(S_IWUSR)) == 0 {
-                perms.set_mode(u32::from(S_IWUSR));
+            // NOTE: S_IWUSR type is u16 on macOS, i32 on Redox.
+            if (perms.mode() & (S_IWUSR as u32)) == 0 {
+                perms.set_mode(S_IWUSR as u32);
             }
         }
         #[cfg(not(unix))]
@@ -386,38 +431,41 @@ fn wipe_file(
 
     // Fill up our pass sequence
     let mut pass_sequence = Vec::new();
+    if metadata.len() != 0 {
+        // Only add passes if the file is non-empty
 
-    if n_passes <= 3 {
-        // Only random passes if n_passes <= 3
-        for _ in 0..n_passes {
-            pass_sequence.push(PassType::Random);
-        }
-    } else {
-        // First fill it with Patterns, shuffle it, then evenly distribute Random
-        let n_full_arrays = n_passes / PATTERNS.len(); // How many times can we go through all the patterns?
-        let remainder = n_passes % PATTERNS.len(); // How many do we get through on our last time through?
+        if n_passes <= 3 {
+            // Only random passes if n_passes <= 3
+            for _ in 0..n_passes {
+                pass_sequence.push(PassType::Random);
+            }
+        } else {
+            // First fill it with Patterns, shuffle it, then evenly distribute Random
+            let n_full_arrays = n_passes / PATTERNS.len(); // How many times can we go through all the patterns?
+            let remainder = n_passes % PATTERNS.len(); // How many do we get through on our last time through?
 
-        for _ in 0..n_full_arrays {
-            for p in PATTERNS {
-                pass_sequence.push(PassType::Pattern(p));
+            for _ in 0..n_full_arrays {
+                for p in PATTERNS {
+                    pass_sequence.push(PassType::Pattern(p));
+                }
+            }
+            for pattern in PATTERNS.into_iter().take(remainder) {
+                pass_sequence.push(PassType::Pattern(pattern));
+            }
+            let mut rng = rand::thread_rng();
+            pass_sequence.shuffle(&mut rng); // randomize the order of application
+
+            let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
+                                              // Evenly space random passes; ensures one at the beginning and end
+            for i in 0..n_random {
+                pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
             }
         }
-        for pattern in PATTERNS.into_iter().take(remainder) {
-            pass_sequence.push(PassType::Pattern(pattern));
-        }
-        let mut rng = rand::thread_rng();
-        pass_sequence.shuffle(&mut rng); // randomize the order of application
 
-        let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
-                                          // Evenly space random passes; ensures one at the beginning and end
-        for i in 0..n_random {
-            pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
+        // --zero specifies whether we want one final pass of 0x00 on our file
+        if zero {
+            pass_sequence.push(PassType::Pattern(PATTERNS[0]));
         }
-    }
-
-    // --zero specifies whether we want one final pass of 0x00 on our file
-    if zero {
-        pass_sequence.push(PassType::Pattern(PATTERNS[0]));
     }
 
     let total_passes = pass_sequence.len();
@@ -429,29 +477,19 @@ fn wipe_file(
 
     let size = match size {
         Some(size) => size,
-        None => get_file_size(path)?,
+        None => metadata.len(),
     };
 
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
         if verbose {
             let pass_name = pass_name(&pass_type);
-            if total_passes < 10 {
-                show_error!(
-                    "{}: pass {}/{} ({})... ",
-                    path.maybe_quote(),
-                    i + 1,
-                    total_passes,
-                    pass_name
-                );
-            } else {
-                show_error!(
-                    "{}: pass {:2.0}/{:2.0} ({})... ",
-                    path.maybe_quote(),
-                    i + 1,
-                    total_passes,
-                    pass_name
-                );
-            }
+            show_error!(
+                "{}: pass {:2}/{} ({})...",
+                path.maybe_quote(),
+                i + 1,
+                total_passes,
+                pass_name
+            );
         }
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
@@ -459,8 +497,8 @@ fn wipe_file(
             .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
     }
 
-    if remove {
-        do_remove(path, path_str, verbose)
+    if remove_method != RemoveMethod::None {
+        do_remove(path, path_str, verbose, remove_method)
             .map_err_context(|| format!("{}: failed to remove file", path.maybe_quote()))?;
     }
     Ok(())
@@ -497,13 +535,9 @@ fn do_pass(
     Ok(())
 }
 
-fn get_file_size(path: &Path) -> Result<u64, io::Error> {
-    Ok(fs::metadata(path)?.len())
-}
-
 // Repeatedly renames the file with strings of decreasing length (most likely all 0s)
 // Return the path of the file after its last renaming or None if error
-fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
+fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Option<PathBuf> {
     let file_name_len = orig_path.file_name().unwrap().to_str().unwrap().len();
 
     let mut last_path = PathBuf::from(orig_path);
@@ -524,16 +558,18 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                         show_error!(
                             "{}: renamed to {}",
                             last_path.maybe_quote(),
-                            new_path.quote()
+                            new_path.display()
                         );
                     }
 
-                    // Sync every file rename
-                    let new_file = OpenOptions::new()
-                        .write(true)
-                        .open(new_path.clone())
-                        .expect("Failed to open renamed file for syncing");
-                    new_file.sync_all().expect("Failed to sync renamed file");
+                    if remove_method == RemoveMethod::WipeSync {
+                        // Sync every file rename
+                        let new_file = OpenOptions::new()
+                            .write(true)
+                            .open(new_path.clone())
+                            .expect("Failed to open renamed file for syncing");
+                        new_file.sync_all().expect("Failed to sync renamed file");
+                    }
 
                     last_path = new_path;
                     break;
@@ -545,7 +581,8 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                         new_path.quote(),
                         e
                     );
-                    return None;
+                    // TODO: replace with our error management
+                    std::process::exit(1);
                 }
             }
         }
@@ -554,12 +591,23 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
     Some(last_path)
 }
 
-fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::Error> {
+fn do_remove(
+    path: &Path,
+    orig_filename: &str,
+    verbose: bool,
+    remove_method: RemoveMethod,
+) -> Result<(), io::Error> {
     if verbose {
         show_error!("{}: removing", orig_filename.maybe_quote());
     }
 
-    if let Some(rp) = wipe_name(path, verbose) {
+    let remove_path = if remove_method == RemoveMethod::Unlink {
+        Some(path.with_file_name(orig_filename))
+    } else {
+        wipe_name(path, verbose, remove_method)
+    };
+
+    if let Some(rp) = remove_path {
         fs::remove_file(rp)?;
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "uu_mktemp"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mktemp ~ (uutils) create and display a temporary file or directory from TEMPLATE"
@@ -10,6 +10,8 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mktemp"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
+
+readme.workspace = true
 
 [lib]
 path = "src/mktemp.rs"

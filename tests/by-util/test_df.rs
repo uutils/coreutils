@@ -3,6 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore udev pcent iuse itotal iused ipcent
+#![allow(
+    clippy::similar_names,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::float_cmp
+)]
+
 use std::collections::HashSet;
 
 use crate::common::util::TestScenario;
@@ -179,13 +186,28 @@ fn test_default_headers() {
 }
 
 #[test]
-fn test_precedence_of_human_readable_header_over_output_header() {
+fn test_precedence_of_human_readable_and_si_header_over_output_header() {
+    let args = ["-h", "--human-readable", "-H", "--si"];
+
+    for arg in args {
+        let output = new_ucmd!()
+            .args(&[arg, "--output=size"])
+            .succeeds()
+            .stdout_move_str();
+        let header = output.lines().next().unwrap();
+        assert_eq!(header, " Size");
+    }
+}
+
+#[test]
+fn test_used_header_starts_with_space() {
     let output = new_ucmd!()
-        .args(&["-H", "--output=size"])
+        // using -h here to ensure the width of the column's content is <= 4
+        .args(&["-h", "--output=used"])
         .succeeds()
         .stdout_move_str();
-    let header = output.lines().next().unwrap().to_string();
-    assert_eq!(header.trim(), "Size");
+    let header = output.lines().next().unwrap();
+    assert_eq!(header, " Used");
 }
 
 #[test]
@@ -422,7 +444,11 @@ fn test_total_label_in_correct_column() {
 #[test]
 fn test_use_percentage() {
     let output = new_ucmd!()
-        .args(&["--total", "--output=used,avail,pcent"])
+        // set block size = 1, otherwise the returned values for
+        // "used" and "avail" will be rounded. And using them to calculate
+        // the "percentage" values might lead to a mismatch with the returned
+        // "percentage" values.
+        .args(&["--total", "--output=used,avail,pcent", "--block-size=1"])
         .succeeds()
         .stdout_move_str();
 

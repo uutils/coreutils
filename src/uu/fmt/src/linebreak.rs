@@ -6,9 +6,7 @@
 // spell-checker:ignore (ToDO) INFTY MULT accum breakwords linebreak linebreaking linebreaks linelen maxlength minlength nchars ostream overlen parasplit plass posn powf punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen
 
 use std::io::{BufWriter, Stdout, Write};
-use std::{cmp, i64, mem};
-
-use uucore::crash;
+use std::{cmp, mem};
 
 use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 use crate::FmtOptions;
@@ -240,8 +238,8 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     let mut active_breaks = vec![0];
     let mut next_active_breaks = vec![];
 
-    let stretch = (args.opts.width - args.opts.goal) as isize;
-    let minlength = args.opts.goal - stretch as usize;
+    let stretch = args.opts.width - args.opts.goal;
+    let minlength = args.opts.goal.max(stretch + 1) - stretch;
     let mut new_linebreaks = vec![];
     let mut is_sentence_start = false;
     let mut least_demerits = 0;
@@ -302,7 +300,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
                         compute_demerits(
                             args.opts.goal as isize - tlen as isize,
                             stretch,
-                            w.word_nchars as isize,
+                            w.word_nchars,
                             active.prev_rat,
                         )
                     };
@@ -363,28 +361,26 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
 }
 
 fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a WordInfo<'a>, bool)> {
-    let mut breakwords = vec![];
     // of the active paths, we select the one with the fewest demerits
-    let mut best_idx = match active.iter().min_by_key(|&&a| paths[a].demerits) {
-        None => crash!(
-            1,
-            "Failed to find a k-p linebreak solution. This should never happen."
-        ),
-        Some(&s) => s,
-    };
-
-    // now, chase the pointers back through the break list, recording
-    // the words at which we should break
-    loop {
-        let next_best = &paths[best_idx];
-        match next_best.linebreak {
-            None => return breakwords,
-            Some(prev) => {
-                breakwords.push((prev, next_best.break_before));
-                best_idx = next_best.prev;
+    active
+        .iter()
+        .min_by_key(|&&a| paths[a].demerits)
+        .map(|&(mut best_idx)| {
+            let mut breakwords = vec![];
+            // now, chase the pointers back through the break list, recording
+            // the words at which we should break
+            loop {
+                let next_best = &paths[best_idx];
+                match next_best.linebreak {
+                    None => return breakwords,
+                    Some(prev) => {
+                        breakwords.push((prev, next_best.break_before));
+                        best_idx = next_best.prev;
+                    }
+                }
             }
-        }
-    }
+        })
+        .unwrap_or_default()
 }
 
 // "infinite" badness is more like (1+BAD_INFTY)^2 because of how demerits are computed
@@ -397,7 +393,7 @@ const DR_MULT: f32 = 600.0;
 // DL_MULT is penalty multiplier for short words at end of line
 const DL_MULT: f32 = 300.0;
 
-fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32) -> (i64, f32) {
+fn compute_demerits(delta_len: isize, stretch: usize, wlen: usize, prev_rat: f32) -> (i64, f32) {
     // how much stretch are we using?
     let ratio = if delta_len == 0 {
         0.0f32
@@ -423,7 +419,7 @@ fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32
     };
 
     // we penalize lines that have very different ratios from previous lines
-    let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 2.0).powi(3)).abs()) as i64;
+    let bad_delta_r = (DR_MULT * ((ratio - prev_rat) / 2.0).powi(3).abs()) as i64;
 
     let demerits = i64::pow(1 + bad_linelen + bad_wordlen + bad_delta_r, 2);
 
@@ -444,8 +440,8 @@ fn restart_active_breaks<'a>(
     } else {
         // choose the lesser evil: breaking too early, or breaking too late
         let wlen = w.word_nchars + args.compute_width(w, active.length, active.fresh);
-        let underlen = (min - active.length) as isize;
-        let overlen = ((wlen + slen + active.length) - args.opts.width) as isize;
+        let underlen = min as isize - active.length as isize;
+        let overlen = (wlen + slen + active.length) as isize - args.opts.width as isize;
         if overlen > underlen {
             // break early, put this word on the next line
             (true, args.indent_len + w.word_nchars)

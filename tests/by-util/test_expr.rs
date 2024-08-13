@@ -318,13 +318,13 @@ fn test_invalid_substr() {
         .stdout_only("\n");
 
     new_ucmd!()
-        .args(&["substr", "abc", &(std::usize::MAX.to_string() + "0"), "1"])
+        .args(&["substr", "abc", &(usize::MAX.to_string() + "0"), "1"])
         .fails()
         .code_is(1)
         .stdout_only("\n");
 
     new_ucmd!()
-        .args(&["substr", "abc", "0", &(std::usize::MAX.to_string() + "0")])
+        .args(&["substr", "abc", "0", &(usize::MAX.to_string() + "0")])
         .fails()
         .code_is(1)
         .stdout_only("\n");
@@ -361,4 +361,12 @@ fn test_invalid_syntax() {
             .code_is(2)
             .stderr_contains("syntax error");
     }
+}
+
+#[test]
+fn test_num_str_comparison() {
+    new_ucmd!()
+        .args(&["1a", "<", "1", "+", "1"])
+        .succeeds()
+        .stdout_is("1\n");
 }

@@ -5,10 +5,11 @@
 
 use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, Command};
 use std::fs::OpenOptions;
-use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
+use std::io::{copy, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 // spell-checker:ignore nopipe
@@ -89,6 +90,16 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
         .infer_long_args(true)
+        // Since we use value-specific help texts for "--output-error", clap's "short help" and "long help" differ.
+        // However, this is something that the GNU tests explicitly test for, so we *always* show the long help instead.
+        .disable_help_flag(true)
+        .arg(
+            Arg::new("--help")
+                .short('h')
+                .long("help")
+                .help("Print help")
+                .action(ArgAction::HelpLong)
+        )
         .arg(
             Arg::new(options::APPEND)
                 .long(options::APPEND)
@@ -119,7 +130,7 @@ pub fn uu_app() -> Command {
                 .long(options::OUTPUT_ERROR)
                 .require_equals(true)
                 .num_args(0..=1)
-                .value_parser([
+                .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("warn")
                         .help("produce warnings for errors writing to any output"),
                     PossibleValue::new("warn-nopipe")
@@ -127,7 +138,7 @@ pub fn uu_app() -> Command {
                     PossibleValue::new("exit").help("exit on write errors to any output"),
                     PossibleValue::new("exit-nopipe")
                         .help("exit on write errors to any output that are not pipe errors (equivalent to exit on non-unix platforms)"),
-                ])
+                ]))
                 .help("set write error behavior")
                 .conflicts_with(options::IGNORE_PIPE_ERRORS),
         )
@@ -148,15 +159,10 @@ fn tee(options: &Options) -> Result<()> {
     }
     let mut writers: Vec<NamedWriter> = options
         .files
-        .clone()
-        .into_iter()
-        .map(|file| {
-            Ok(NamedWriter {
-                name: file.clone(),
-                inner: open(file, options.append, options.output_error.as_ref())?,
-            })
-        })
+        .iter()
+        .filter_map(|file| open(file, options.append, options.output_error.as_ref()))
         .collect::<Result<Vec<NamedWriter>>>()?;
+    let had_open_errors = writers.len() != options.files.len();
 
     writers.insert(
         0,
@@ -181,38 +187,41 @@ fn tee(options: &Options) -> Result<()> {
         _ => Ok(()),
     };
 
-    if res.is_err() || output.flush().is_err() || output.error_occurred() {
+    if had_open_errors || res.is_err() || output.flush().is_err() || output.error_occurred() {
         Err(Error::from(ErrorKind::Other))
     } else {
         Ok(())
     }
 }
 
+/// Tries to open the indicated file and return it. Reports an error if that's not possible.
+/// If that error should lead to program termination, this function returns Some(Err()),
+/// otherwise it returns None.
 fn open(
-    name: String,
+    name: &str,
     append: bool,
     output_error: Option<&OutputErrorMode>,
-) -> Result<Box<dyn Write>> {
-    let path = PathBuf::from(name.clone());
-    let inner: Box<dyn Write> = {
-        let mut options = OpenOptions::new();
-        let mode = if append {
-            options.append(true)
-        } else {
-            options.truncate(true)
-        };
-        match mode.write(true).create(true).open(path.as_path()) {
-            Ok(file) => Box::new(file),
-            Err(f) => {
-                show_error!("{}: {}", name.maybe_quote(), f);
-                match output_error {
-                    Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => return Err(f),
-                    _ => Box::new(sink()),
-                }
+) -> Option<Result<NamedWriter>> {
+    let path = PathBuf::from(name);
+    let mut options = OpenOptions::new();
+    let mode = if append {
+        options.append(true)
+    } else {
+        options.truncate(true)
+    };
+    match mode.write(true).create(true).open(path.as_path()) {
+        Ok(file) => Some(Ok(NamedWriter {
+            inner: Box::new(file),
+            name: name.to_owned(),
+        })),
+        Err(f) => {
+            show_error!("{}: {}", name.maybe_quote(), f);
+            match output_error {
+                Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
+                _ => None,
             }
         }
-    };
-    Ok(Box::new(NamedWriter { inner, name }) as Box<dyn Write>)
+    }
 }
 
 struct MultiWriter {

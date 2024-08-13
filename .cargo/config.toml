@@ -1,0 +1,13 @@
+[target.x86_64-unknown-redox]
+linker = "x86_64-unknown-redox-gcc"
+
+[target.'cfg(clippy)']
+rustflags = [
+    "-Wclippy::use_self",
+    "-Wclippy::needless_pass_by_value",
+    "-Wclippy::semicolon_if_nothing_returned",
+    "-Wclippy::single_char_pattern",
+    "-Wclippy::explicit_iter_loop",
+    "-Wclippy::if_not_else",
+]
+

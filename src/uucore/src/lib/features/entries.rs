@@ -35,7 +35,6 @@
 #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 use libc::time_t;
 use libc::{c_char, c_int, gid_t, uid_t};
-#[cfg(not(target_os = "redox"))]
 use libc::{getgrgid, getgrnam, getgroups};
 use libc::{getpwnam, getpwuid, group, passwd};
 
@@ -67,7 +66,6 @@ extern "C" {
 /// > supplementary group IDs for the process is returned.  This allows
 /// > the caller to determine the size of a dynamically allocated list
 /// > to be used in a further call to getgroups().
-#[cfg(not(target_os = "redox"))]
 pub fn get_groups() -> IOResult<Vec<gid_t>> {
     let mut groups = Vec::new();
     loop {
@@ -126,7 +124,7 @@ pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
     Ok(sort_groups(groups, egid))
 }
 
-#[cfg(all(unix, feature = "process"))]
+#[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
 fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
     if let Some(index) = groups.iter().position(|&x| x == egid) {
         groups[..=index].rotate_right(1);
@@ -163,7 +161,9 @@ pub struct Passwd {
     pub expiration: time_t,
 }
 
-/// SAFETY: ptr must point to a valid C string.
+/// # Safety
+/// ptr must point to a valid C string.
+///
 /// Returns None if ptr is null.
 unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
@@ -174,7 +174,8 @@ unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
 }
 
 impl Passwd {
-    /// SAFETY: All the pointed-to strings must be valid and not change while
+    /// # Safety
+    /// All the pointed-to strings must be valid and not change while
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
         Self {
@@ -248,7 +249,8 @@ pub struct Group {
 }
 
 impl Group {
-    /// SAFETY: gr_name must be valid and not change while
+    /// # Safety
+    /// gr_name must be valid and not change while
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: group) -> Self {
         Self {
@@ -337,7 +339,6 @@ macro_rules! f {
 }
 
 f!(getpwnam, getpwuid, uid_t, Passwd);
-#[cfg(not(target_os = "redox"))]
 f!(getgrnam, getgrgid, gid_t, Group);
 
 #[inline]
@@ -345,7 +346,6 @@ pub fn uid2usr(id: uid_t) -> IOResult<String> {
     Passwd::locate(id).map(|p| p.name)
 }
 
-#[cfg(not(target_os = "redox"))]
 #[inline]
 pub fn gid2grp(id: gid_t) -> IOResult<String> {
     Group::locate(id).map(|p| p.name)
@@ -356,7 +356,6 @@ pub fn usr2uid(name: &str) -> IOResult<uid_t> {
     Passwd::locate(name).map(|p| p.uid)
 }
 
-#[cfg(not(target_os = "redox"))]
 #[inline]
 pub fn grp2gid(name: &str) -> IOResult<gid_t> {
     Group::locate(name).map(|p| p.gid)

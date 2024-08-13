@@ -41,6 +41,16 @@ fn test_path_without_trailing_slashes_and_zero() {
 }
 
 #[test]
+fn test_repeated_zero() {
+    new_ucmd!()
+        .arg("--zero")
+        .arg("--zero")
+        .arg("foo/bar")
+        .succeeds()
+        .stdout_only("foo\u{0}");
+}
+
+#[test]
 fn test_root() {
     new_ucmd!().arg("/").run().stdout_is("/\n");
 }

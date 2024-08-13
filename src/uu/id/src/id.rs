@@ -324,6 +324,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::OPT_AUDIT)
                 .short('A')
@@ -396,6 +397,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::OPT_PASSWORD)
                 .short('P')
                 .help("Display the id as a password file entry.")
+                .conflicts_with(options::OPT_HUMAN_READABLE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -507,7 +509,7 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
 fn pline(possible_uid: Option<uid_t>) {
     let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
@@ -524,10 +526,10 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
 fn auditid() {}
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]
 fn auditid() {
     use std::mem::MaybeUninit;
 
@@ -624,7 +626,7 @@ fn id_print(state: &State, groups: &[u32]) {
     }
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]
 mod audit {
     use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t};
 

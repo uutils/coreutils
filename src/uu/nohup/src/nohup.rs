@@ -74,8 +74,6 @@ impl Display for NohupError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
     let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     replace_fds()?;
@@ -150,7 +148,6 @@ fn find_stdout() -> UResult<File> {
     };
 
     match OpenOptions::new()
-        .write(true)
         .create(true)
         .append(true)
         .open(Path::new(NOHUP_OUT))
@@ -170,12 +167,7 @@ fn find_stdout() -> UResult<File> {
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
             let homeout_str = homeout.to_str().unwrap();
-            match OpenOptions::new()
-                .write(true)
-                .create(true)
-                .append(true)
-                .open(&homeout)
-            {
+            match OpenOptions::new().create(true).append(true).open(&homeout) {
                 Ok(t) => {
                     show_error!(
                         "ignoring input and appending output to {}",
@@ -200,7 +192,14 @@ extern "C" {
     fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "openbsd"
+))]
+/// # Safety
+/// This function is unsafe because it dereferences a raw pointer.
 unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int {
     std::ptr::null()
 }

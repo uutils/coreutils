@@ -5,7 +5,9 @@
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
 use crate::common::util::{AtPath, TestScenario};
-use filetime::{self, FileTime};
+#[cfg(not(target_os = "freebsd"))]
+use filetime::set_symlink_file_times;
+use filetime::FileTime;
 use std::fs::remove_file;
 use std::path::PathBuf;
 
@@ -32,7 +34,10 @@ fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
 
 fn str_to_filetime(format: &str, s: &str) -> FileTime {
     let tm = chrono::NaiveDateTime::parse_from_str(s, format).unwrap();
-    FileTime::from_unix_time(tm.timestamp(), tm.timestamp_subsec_nanos())
+    FileTime::from_unix_time(
+        tm.and_utc().timestamp(),
+        tm.and_utc().timestamp_subsec_nanos(),
+    )
 }
 
 #[test]
@@ -187,7 +192,14 @@ fn test_touch_set_cymdhms_time() {
 
 #[test]
 fn test_touch_set_only_atime() {
-    let atime_args = ["-a", "--time=access", "--time=atime", "--time=use"];
+    let atime_args = [
+        "-a",
+        "--time=access",
+        "--time=atime",
+        "--time=atim", // spell-checker:disable-line
+        "--time=a",
+        "--time=use",
+    ];
     let file = "test_touch_set_only_atime";
 
     for atime_arg in atime_args {
@@ -288,7 +300,7 @@ fn test_touch_set_both_time_and_date() {
 
 #[test]
 fn test_touch_set_only_mtime() {
-    let mtime_args = ["-m", "--time=modify", "--time=mtime"];
+    let mtime_args = ["-m", "--time=modify", "--time=mtime", "--time=m"];
     let file = "test_touch_set_only_mtime";
 
     for mtime_arg in mtime_args {
@@ -677,10 +689,23 @@ fn test_touch_system_fails() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_touch_trailing_slash() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "no-file/";
-    ucmd.args(&[file]).fails();
+    ucmd.args(&[file]).fails().stderr_only(format!(
+        "touch: cannot touch '{file}': No such file or directory\n"
+    ));
+}
+
+#[test]
+#[cfg(target_os = "windows")]
+fn test_touch_trailing_slash_windows() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "no-file/";
+    ucmd.args(&[file]).fails().stderr_only(format!(
+        "touch: cannot touch '{file}': The filename, directory name, or volume label syntax is incorrect.\n"
+    ));
 }
 
 #[test]
@@ -696,7 +721,7 @@ fn test_touch_no_such_file_error_msg() {
 }
 
 #[test]
-#[cfg(not(target_os = "freebsd"))]
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
 fn test_touch_changes_time_of_file_in_stdout() {
     // command like: `touch - 1< ./c`
     // should change the timestamp of c
@@ -839,6 +864,7 @@ fn test_touch_no_dereference_dangling() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_touch_dash() {
     let (_, mut ucmd) = at_and_ucmd!();
 
@@ -846,13 +872,48 @@ fn test_touch_dash() {
 }
 
 #[test]
-// Chrono panics for now
-#[ignore]
 fn test_touch_invalid_date_format() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_invalid_date_format";
 
     ucmd.args(&["-m", "-t", "+1000000000000 years", file])
         .fails()
-        .stderr_contains("touch: invalid date format ‘+1000000000000 years’");
+        .stderr_contains("touch: invalid date format '+1000000000000 years'");
+}
+
+#[test]
+#[cfg(not(target_os = "freebsd"))]
+fn test_touch_symlink_with_no_deref() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let target = "foo.txt";
+    let symlink = "bar.txt";
+    let time = FileTime::from_unix_time(123, 0);
+
+    at.touch(target);
+    at.relative_symlink_file(target, symlink);
+    set_symlink_file_times(at.plus(symlink), time, time).unwrap();
+
+    ucmd.args(&["-a", "--no-dereference", symlink]).succeeds();
+    // Modification time shouldn't be set to the destination's modification time
+    assert_eq!(time, get_symlink_times(&at, symlink).1);
+}
+
+#[test]
+#[cfg(not(target_os = "freebsd"))]
+fn test_touch_reference_symlink_with_no_deref() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let target = "foo.txt";
+    let symlink = "bar.txt";
+    let arg = "baz.txt";
+    let time = FileTime::from_unix_time(123, 0);
+
+    at.touch(target);
+    at.relative_symlink_file(target, symlink);
+    set_symlink_file_times(at.plus(symlink), time, time).unwrap();
+    at.touch(arg);
+
+    ucmd.args(&["--reference", symlink, "--no-dereference", arg])
+        .succeeds();
+    // Times should be taken from the symlink, not the destination
+    assert_eq!((time, time), get_symlink_times(&at, arg));
 }

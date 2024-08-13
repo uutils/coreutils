@@ -4,21 +4,22 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (regex) diuox
 
-use regex::Regex;
+use uucore::format::{num_format::UnsignedInt, Format, FormatError};
 
 use crate::csplit_error::CsplitError;
 
 /// Computes the filename of a split, taking into consideration a possible user-defined suffix
 /// format.
 pub struct SplitName {
-    fn_split_name: Box<dyn Fn(usize) -> String>,
+    prefix: Vec<u8>,
+    format: Format<UnsignedInt>,
 }
 
 impl SplitName {
     /// Creates a new SplitName with the given user-defined options:
     /// - `prefix_opt` specifies a prefix for all splits.
     /// - `format_opt` specifies a custom format for the suffix part of the filename, using the
-    /// `sprintf` format notation.
+    ///   `sprintf` format notation.
     /// - `n_digits_opt` defines the width of the split number.
     ///
     /// # Caveats
@@ -36,6 +37,7 @@ impl SplitName {
     ) -> Result<Self, CsplitError> {
         // get the prefix
         let prefix = prefix_opt.unwrap_or_else(|| "xx".to_string());
+
         // the width for the split offset
         let n_digits = n_digits_opt
             .map(|opt| {
@@ -44,120 +46,29 @@ impl SplitName {
             })
             .transpose()?
             .unwrap_or(2);
-        // translate the custom format into a function
-        let fn_split_name: Box<dyn Fn(usize) -> String> = match format_opt {
-            None => Box::new(move |n: usize| -> String { format!("{prefix}{n:0n_digits$}") }),
-            Some(custom) => {
-                let spec =
-                    Regex::new(r"(?P<ALL>%((?P<FLAG>[0#-])(?P<WIDTH>\d+)?)?(?P<TYPE>[diuoxX]))")
-                        .unwrap();
-                let mut captures_iter = spec.captures_iter(&custom);
-                let custom_fn: Box<dyn Fn(usize) -> String> = match captures_iter.next() {
-                    Some(captures) => {
-                        let all = captures.name("ALL").unwrap();
-                        let before = custom[0..all.start()].to_owned();
-                        let after = custom[all.end()..].to_owned();
-                        let width = match captures.name("WIDTH") {
-                            None => 0,
-                            Some(m) => m.as_str().parse::<usize>().unwrap(),
-                        };
-                        match (captures.name("FLAG"), captures.name("TYPE")) {
-                            (None, Some(ref t)) => match t.as_str() {
-                                "d" | "i" | "u" => Box::new(move |n: usize| -> String {
-                                    format!("{prefix}{before}{n}{after}")
-                                }),
-                                "o" => Box::new(move |n: usize| -> String {
-                                    format!("{prefix}{before}{n:o}{after}")
-                                }),
-                                "x" => Box::new(move |n: usize| -> String {
-                                    format!("{prefix}{before}{n:x}{after}")
-                                }),
-                                "X" => Box::new(move |n: usize| -> String {
-                                    format!("{prefix}{before}{n:X}{after}")
-                                }),
-                                _ => return Err(CsplitError::SuffixFormatIncorrect),
-                            },
-                            (Some(ref f), Some(ref t)) => {
-                                match (f.as_str(), t.as_str()) {
-                                    /*
-                                     * zero padding
-                                     */
-                                    // decimal
-                                    ("0", "d" | "i" | "u") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:0width$}{after}")
-                                    }),
-                                    // octal
-                                    ("0", "o") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:0width$o}{after}")
-                                    }),
-                                    // lower hexadecimal
-                                    ("0", "x") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:0width$x}{after}")
-                                    }),
-                                    // upper hexadecimal
-                                    ("0", "X") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:0width$X}{after}")
-                                    }),
 
-                                    /*
-                                     * Alternate form
-                                     */
-                                    // octal
-                                    ("#", "o") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:>#width$o}{after}")
-                                    }),
-                                    // lower hexadecimal
-                                    ("#", "x") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:>#width$x}{after}")
-                                    }),
-                                    // upper hexadecimal
-                                    ("#", "X") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:>#width$X}{after}")
-                                    }),
-
-                                    /*
-                                     * Left adjusted
-                                     */
-                                    // decimal
-                                    ("-", "d" | "i" | "u") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:<#width$}{after}")
-                                    }),
-                                    // octal
-                                    ("-", "o") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:<#width$o}{after}")
-                                    }),
-                                    // lower hexadecimal
-                                    ("-", "x") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:<#width$x}{after}")
-                                    }),
-                                    // upper hexadecimal
-                                    ("-", "X") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:<#width$X}{after}")
-                                    }),
-
-                                    _ => return Err(CsplitError::SuffixFormatIncorrect),
-                                }
-                            }
-                            _ => return Err(CsplitError::SuffixFormatIncorrect),
-                        }
-                    }
-                    None => return Err(CsplitError::SuffixFormatIncorrect),
-                };
-
-                // there cannot be more than one format pattern
-                if captures_iter.next().is_some() {
-                    return Err(CsplitError::SuffixFormatTooManyPercents);
-                }
-                custom_fn
-            }
+        let format_string = match format_opt {
+            Some(f) => f,
+            None => format!("%0{n_digits}u"),
         };
 
-        Ok(Self { fn_split_name })
+        let format = match Format::<UnsignedInt>::parse(format_string) {
+            Ok(format) => Ok(format),
+            Err(FormatError::TooManySpecs(_)) => Err(CsplitError::SuffixFormatTooManyPercents),
+            Err(_) => Err(CsplitError::SuffixFormatIncorrect),
+        }?;
+
+        Ok(Self {
+            prefix: prefix.as_bytes().to_owned(),
+            format,
+        })
     }
 
     /// Returns the filename of the i-th split.
     pub fn get(&self, n: usize) -> String {
-        (self.fn_split_name)(n)
+        let mut v = self.prefix.clone();
+        self.format.fmt(&mut v, n as u64).unwrap();
+        String::from_utf8_lossy(&v).to_string()
     }
 }
 
@@ -279,7 +190,7 @@ mod tests {
     #[test]
     fn alternate_form_octal() {
         let split_name = SplitName::new(None, Some(String::from("cst-%#10o-")), None).unwrap();
-        assert_eq!(split_name.get(42), "xxcst-      0o52-");
+        assert_eq!(split_name.get(42), "xxcst-       052-");
     }
 
     #[test]
@@ -291,7 +202,7 @@ mod tests {
     #[test]
     fn alternate_form_upper_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%#10X-")), None).unwrap();
-        assert_eq!(split_name.get(42), "xxcst-      0x2A-");
+        assert_eq!(split_name.get(42), "xxcst-      0X2A-");
     }
 
     #[test]
@@ -315,19 +226,19 @@ mod tests {
     #[test]
     fn left_adjusted_octal() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10o-")), None).unwrap();
-        assert_eq!(split_name.get(42), "xxcst-0o52      -");
+        assert_eq!(split_name.get(42), "xxcst-52        -");
     }
 
     #[test]
     fn left_adjusted_lower_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10x-")), None).unwrap();
-        assert_eq!(split_name.get(42), "xxcst-0x2a      -");
+        assert_eq!(split_name.get(42), "xxcst-2a        -");
     }
 
     #[test]
     fn left_adjusted_upper_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10X-")), None).unwrap();
-        assert_eq!(split_name.get(42), "xxcst-0x2A      -");
+        assert_eq!(split_name.get(42), "xxcst-2A        -");
     }
 
     #[test]

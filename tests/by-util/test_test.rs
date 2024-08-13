@@ -67,7 +67,7 @@ fn test_double_not_is_false() {
 
 #[test]
 fn test_and_not_is_false() {
-    new_ucmd!().args(&["-a", "!"]).run().code_is(1);
+    new_ucmd!().args(&["-a", "!"]).run().code_is(2);
 }
 
 #[test]
@@ -84,6 +84,18 @@ fn test_not_and_not_succeeds() {
 #[test]
 fn test_simple_or() {
     new_ucmd!().args(&["foo", "-o", ""]).succeeds();
+}
+
+#[test]
+fn test_errors_miss_and_or() {
+    new_ucmd!()
+        .args(&["-o", "arg"])
+        .fails()
+        .stderr_contains("'-o': unary operator expected");
+    new_ucmd!()
+        .args(&["-a", "arg"])
+        .fails()
+        .stderr_contains("'-a': unary operator expected");
 }
 
 #[test]
@@ -553,9 +565,9 @@ fn test_nonexistent_file_is_not_symlink() {
 }
 
 #[test]
-// Only the superuser is allowed to set the sticky bit on files on FreeBSD.
+// Only the superuser is allowed to set the sticky bit on files on FreeBSD/OpenBSD.
 // Windows has no concept of sticky bit
-#[cfg(not(any(windows, target_os = "freebsd")))]
+#[cfg(not(any(windows, target_os = "freebsd", target_os = "openbsd")))]
 fn test_file_is_sticky() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -667,7 +679,7 @@ fn test_nonexistent_file_not_owned_by_euid() {
 }
 
 #[test]
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(not(windows))]
 fn test_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-f", "/bin/sh", "-a", "!", "-O", "/bin/sh"])
@@ -675,9 +687,31 @@ fn test_file_not_owned_by_euid() {
 }
 
 #[test]
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(not(windows))]
 fn test_file_owned_by_egid() {
-    new_ucmd!().args(&["-G", "regular_file"]).succeeds();
+    // On some platforms (mostly the BSDs) the test fixture files copied to the
+    // /tmp directory will have a different gid than the current egid (due to
+    // the sticky bit set on the /tmp directory). Fix this before running the
+    // test command.
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::MetadataExt;
+    use uucore::process::getegid;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let metadata = at.metadata("regular_file");
+    let file_gid = metadata.gid();
+    let user_gid = getegid();
+
+    if user_gid != file_gid {
+        let file_metadata_uid = metadata.uid();
+        let path = CString::new(at.plus("regular_file").as_os_str().as_bytes()).expect("bad path");
+        let r = unsafe { libc::chown(path.as_ptr(), file_metadata_uid, user_gid) };
+        assert_ne!(r, -1);
+    }
+
+    scene.ucmd().args(&["-G", "regular_file"]).succeeds();
 }
 
 #[test]
@@ -690,10 +724,19 @@ fn test_nonexistent_file_not_owned_by_egid() {
 }
 
 #[test]
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(not(windows))]
 fn test_file_not_owned_by_egid() {
+    let target_file = if cfg!(target_os = "freebsd") {
+        // The coreutils test runner user has a primary group id of "wheel",
+        // which matches the gid of /bin/sh, so use /sbin/shutdown which has gid
+        // of "operator".
+        "/sbin/shutdown"
+    } else {
+        "/bin/sh"
+    };
+
     new_ucmd!()
-        .args(&["-f", "/bin/sh", "-a", "!", "-G", "/bin/sh"])
+        .args(&["-f", target_file, "-a", "!", "-G", target_file])
         .succeeds();
 }
 

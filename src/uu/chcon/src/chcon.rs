@@ -154,6 +154,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .disable_help_flag(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
@@ -163,7 +164,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::dereference::DEREFERENCE)
                 .long(options::dereference::DEREFERENCE)
-                .conflicts_with(options::dereference::NO_DEREFERENCE)
+                .overrides_with(options::dereference::NO_DEREFERENCE)
                 .help(
                     "Affect the referent of each symbolic link (this is the default), \
                      rather than the symbolic link itself.",
@@ -180,7 +181,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::preserve_root::PRESERVE_ROOT)
                 .long(options::preserve_root::PRESERVE_ROOT)
-                .conflicts_with(options::preserve_root::NO_PRESERVE_ROOT)
+                .overrides_with(options::preserve_root::NO_PRESERVE_ROOT)
                 .help("Fail to operate recursively on '/'.")
                 .action(ArgAction::SetTrue),
         )

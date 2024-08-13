@@ -6,7 +6,7 @@
 use std::io::{stdout, Read, Write};
 
 use uucore::display::Quotable;
-use uucore::encoding::{wrap_print, Data, Format};
+use uucore::encoding::{wrap_print, Data, EncodeError, Format};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 
@@ -87,8 +87,7 @@ pub fn parse_base_cmd_args(
     usage: &str,
 ) -> UResult<Config> {
     let command = base_app(about, usage);
-    let arg_list = args.collect_lossy();
-    Config::from(&command.try_get_matches_from(arg_list)?)
+    Config::from(&command.try_get_matches_from(args)?)
 }
 
 pub fn base_app(about: &'static str, usage: &str) -> Command {
@@ -103,23 +102,24 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
                 .short('d')
                 .long(options::DECODE)
                 .help("decode data")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DECODE),
         )
         .arg(
             Arg::new(options::IGNORE_GARBAGE)
                 .short('i')
                 .long(options::IGNORE_GARBAGE)
                 .help("when decoding, ignore non-alphabetic characters")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::IGNORE_GARBAGE),
         )
         .arg(
             Arg::new(options::WRAP)
                 .short('w')
                 .long(options::WRAP)
                 .value_name("COLS")
-                .help(
-                    "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
-                ),
+                .help("wrap encoded lines after COLS character (default 76, 0 to disable wrapping)")
+                .overrides_with(options::WRAP),
         )
         // "multiple" arguments are used to check whether there is more than one
         // file passed in.
@@ -175,6 +175,7 @@ pub fn handle_input<R: Read>(
                 wrap_print(&data, &s);
                 Ok(())
             }
+            Err(EncodeError::InvalidInput) => Err(USimpleError::new(1, "error: invalid input")),
             Err(_) => Err(USimpleError::new(
                 1,
                 "error: invalid input (length must be multiple of 4 characters)",

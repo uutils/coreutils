@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
 
@@ -61,12 +61,7 @@ impl LineReader {
     }
 }
 
-fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
-    let delim = match opts.get_one::<String>(options::DELIMITER).unwrap().as_str() {
-        "" => "\0",
-        delim => delim,
-    };
-
+fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) {
     let width_col_1 = usize::from(!opts.get_flag(options::COLUMN_1));
     let width_col_2 = usize::from(!opts.get_flag(options::COLUMN_2));
 
@@ -145,8 +140,6 @@ fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
     let matches = uu_app().try_get_matches_from(args)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let filename1 = matches.get_one::<String>(options::FILE_1).unwrap();
@@ -154,7 +147,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string())?;
     let mut f2 = open_file(filename2, line_ending).map_err_context(|| filename2.to_string())?;
 
-    comm(&mut f1, &mut f2, &matches);
+    // Due to default_value(), there must be at least one value here, thus unwrap() must not panic.
+    let all_delimiters = matches
+        .get_many::<String>(options::DELIMITER)
+        .unwrap()
+        .map(String::from)
+        .collect::<Vec<_>>();
+    for delim in &all_delimiters[1..] {
+        // Note that this check is very different from ".conflicts_with_self(true).action(ArgAction::Set)",
+        // as this accepts duplicate *identical* arguments.
+        if delim != &all_delimiters[0] {
+            // Note: This intentionally deviate from the GNU error message by inserting the word "conflicting".
+            return Err(USimpleError::new(
+                1,
+                "multiple conflicting output delimiters specified",
+            ));
+        }
+    }
+    let delim = match &*all_delimiters[0] {
+        "" => "\0",
+        delim => delim,
+    };
+    comm(&mut f1, &mut f2, delim, &matches);
     Ok(())
 }
 
@@ -164,6 +178,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::COLUMN_1)
                 .short('1')
@@ -188,6 +203,8 @@ pub fn uu_app() -> Command {
                 .help("separate columns with STR")
                 .value_name("STR")
                 .default_value(options::DELIMITER_DEFAULT)
+                .allow_hyphen_values(true)
+                .action(ArgAction::Append)
                 .hide_default_value(true),
         )
         .arg(

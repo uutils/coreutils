@@ -9,7 +9,6 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::default::Default;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Write as FmtWrite};
 use std::fs::File;
@@ -224,7 +223,7 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     if matches.get_flag(options::TRADITIONAL) {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
-        config.context_regex = "[^ \t\n]+".to_owned();
+        "[^ \t\n]+".clone_into(&mut config.context_regex);
     } else {
         return Err(PtxError::NotImplemented("GNU extensions").into());
     }
@@ -715,8 +714,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     let mut input_files: Vec<String> = match &matches.get_many::<String>(options::FILE) {

@@ -11,7 +11,6 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
 use regex::Regex;
-use std::convert::From;
 use std::fs::{metadata, File};
 use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Write};
 #[cfg(unix)]
@@ -387,13 +386,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let opt_args = recreate_arguments(&args);
 
     let mut command = uu_app();
-    let matches = match command.try_get_matches_from_mut(opt_args) {
-        Ok(m) => m,
-        Err(e) => {
-            e.print()?;
-            return Ok(());
-        }
-    };
+    let matches = command.try_get_matches_from_mut(opt_args)?;
 
     let mut files = matches
         .get_many::<String>(options::FILES)
@@ -577,18 +570,19 @@ fn build_options(
 
     // +page option is less priority than --pages
     let page_plus_re = Regex::new(r"\s*\+(\d+:*\d*)\s*").unwrap();
-    let start_page_in_plus_option = match page_plus_re.captures(free_args).map(|i| {
+    let res = page_plus_re.captures(free_args).map(|i| {
         let unparsed_num = i.get(1).unwrap().as_str().trim();
         let x: Vec<_> = unparsed_num.split(':').collect();
         x[0].to_string().parse::<usize>().map_err(|_e| {
             PrError::EncounteredErrors(format!("invalid {} argument {}", "+", unparsed_num.quote()))
         })
-    }) {
+    });
+    let start_page_in_plus_option = match res {
         Some(res) => res?,
         None => 1,
     };
 
-    let end_page_in_plus_option = match page_plus_re
+    let res = page_plus_re
         .captures(free_args)
         .map(|i| i.get(1).unwrap().as_str().trim())
         .filter(|i| i.contains(':'))
@@ -601,7 +595,8 @@ fn build_options(
                     unparsed_num.quote()
                 ))
             })
-        }) {
+        });
+    let end_page_in_plus_option = match res {
         Some(res) => Some(res?),
         None => None,
     };
@@ -616,27 +611,27 @@ fn build_options(
         })
     };
 
-    let start_page = match matches
+    let res = matches
         .get_one::<String>(options::PAGES)
         .map(|i| {
             let x: Vec<_> = i.split(':').collect();
             x[0].to_string()
         })
-        .map(invalid_pages_map)
-    {
+        .map(invalid_pages_map);
+    let start_page = match res {
         Some(res) => res?,
         None => start_page_in_plus_option,
     };
 
-    let end_page = match matches
+    let res = matches
         .get_one::<String>(options::PAGES)
         .filter(|i| i.contains(':'))
         .map(|i| {
             let x: Vec<_> = i.split(':').collect();
             x[1].to_string()
         })
-        .map(invalid_pages_map)
-    {
+        .map(invalid_pages_map);
+    let end_page = match res {
         Some(res) => Some(res?),
         None => end_page_in_plus_option,
     };
@@ -707,12 +702,13 @@ fn build_options(
 
     let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
 
-    let start_column_option = match re_col.captures(free_args).map(|i| {
+    let res = re_col.captures(free_args).map(|i| {
         let unparsed_num = i.get(1).unwrap().as_str().trim();
         unparsed_num.parse::<usize>().map_err(|_e| {
             PrError::EncounteredErrors(format!("invalid {} argument {}", "-", unparsed_num.quote()))
         })
-    }) {
+    });
+    let start_column_option = match res {
         Some(res) => Some(res?),
         None => None,
     };
@@ -960,7 +956,7 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
                 a.group_key < b.group_key
             }
         })
-        .group_by(|file_line| file_line.group_key);
+        .chunk_by(|file_line| file_line.group_key);
 
     let start_page = options.start_page;
     let mut lines = Vec::new();

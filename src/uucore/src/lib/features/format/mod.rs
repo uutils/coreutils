@@ -32,7 +32,9 @@
 
 mod argument;
 mod escape;
+pub mod human;
 pub mod num_format;
+pub mod num_parser;
 mod spec;
 
 pub use argument::*;
@@ -57,9 +59,10 @@ pub enum FormatError {
     IoError(std::io::Error),
     NoMoreArguments,
     InvalidArgument(FormatArgument),
-    TooManySpecs,
-    NeedAtLeastOneSpec,
+    TooManySpecs(Vec<u8>),
+    NeedAtLeastOneSpec(Vec<u8>),
     WrongSpecType,
+    InvalidPrecision(String),
 }
 
 impl Error for FormatError {}
@@ -79,9 +82,17 @@ impl Display for FormatError {
                 "%{}: invalid conversion specification",
                 String::from_utf8_lossy(s)
             ),
-            // TODO: The next two should print the spec as well
-            Self::TooManySpecs => write!(f, "format has too many % directives"),
-            Self::NeedAtLeastOneSpec => write!(f, "format has no % directive"),
+            Self::TooManySpecs(s) => write!(
+                f,
+                "format '{}' has too many % directives",
+                String::from_utf8_lossy(s)
+            ),
+            Self::NeedAtLeastOneSpec(s) => write!(
+                f,
+                "format '{}' has no % directive",
+                String::from_utf8_lossy(s)
+            ),
+            Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{precision}'"),
             // TODO: Error message below needs some work
             Self::WrongSpecType => write!(f, "wrong % directive type was given"),
             Self::IoError(_) => write!(f, "io error"),
@@ -303,7 +314,9 @@ impl<F: Formatter> Format<F> {
         }
 
         let Some(spec) = spec else {
-            return Err(FormatError::NeedAtLeastOneSpec);
+            return Err(FormatError::NeedAtLeastOneSpec(
+                format_string.as_ref().to_vec(),
+            ));
         };
 
         let formatter = F::try_from_spec(spec)?;
@@ -312,7 +325,7 @@ impl<F: Formatter> Format<F> {
         for item in &mut iter {
             match item? {
                 FormatItem::Spec(_) => {
-                    return Err(FormatError::TooManySpecs);
+                    return Err(FormatError::TooManySpecs(format_string.as_ref().to_vec()));
                 }
                 FormatItem::Char(c) => suffix.push(c),
             }

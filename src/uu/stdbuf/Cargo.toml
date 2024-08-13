@@ -1,6 +1,6 @@
 [package]
 name = "uu_stdbuf"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stdbuf ~ (uutils) run COMMAND with modified standard stream buffering"
@@ -11,6 +11,8 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/stdbuf.rs"
 
@@ -20,7 +22,7 @@ tempfile = { workspace = true }
 uucore = { workspace = true }
 
 [build-dependencies]
-libstdbuf = { version = "0.0.23", package = "uu_stdbuf_libstdbuf", path = "src/libstdbuf" }
+libstdbuf = { version = "0.0.27", package = "uu_stdbuf_libstdbuf", path = "src/libstdbuf" }
 
 [[bin]]
 name = "stdbuf"

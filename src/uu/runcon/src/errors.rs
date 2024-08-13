@@ -87,7 +87,6 @@ where
         err = source;
         write!(writer, ": {err}")?;
     }
-    write!(writer, ".")?;
     Ok(())
 }
 

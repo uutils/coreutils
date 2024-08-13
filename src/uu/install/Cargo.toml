@@ -1,6 +1,6 @@
 [package]
 name = "uu_install"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["Ben Eills <ben@beneills.com>", "uutils developers"]
 license = "MIT"
 description = "install ~ (uutils) copy files from SOURCE to DESTINATION (with specified attributes)"
@@ -10,6 +10,8 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uu/install"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
+
+readme.workspace = true
 
 [lib]
 path = "src/install.rs"
@@ -25,6 +27,7 @@ uucore = { workspace = true, features = [
   "mode",
   "perms",
   "entries",
+  "process",
 ] }
 
 [[bin]]

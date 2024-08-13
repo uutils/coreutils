@@ -167,6 +167,7 @@ RTLD_NEXT
     RTLD
 SIGINT
 SIGKILL
+SIGSTOP
 SIGTERM
 SYS_fdatasync
 SYS_syncfs
@@ -336,3 +337,6 @@ uutils
 
 # * function names
 getcwd
+
+# * other
+algs

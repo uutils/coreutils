@@ -17,12 +17,14 @@ use std::os::unix::io::AsRawFd;
 pub trait WordCountable: AsRawFd + Read {
     type Buffered: BufRead;
     fn buffered(self) -> Self::Buffered;
+    fn inner_file(&mut self) -> Option<&mut File>;
 }
 
 #[cfg(not(unix))]
 pub trait WordCountable: Read {
     type Buffered: BufRead;
     fn buffered(self) -> Self::Buffered;
+    fn inner_file(&mut self) -> Option<&mut File>;
 }
 
 impl WordCountable for StdinLock<'_> {
@@ -31,6 +33,9 @@ impl WordCountable for StdinLock<'_> {
     fn buffered(self) -> Self::Buffered {
         self
     }
+    fn inner_file(&mut self) -> Option<&mut File> {
+        None
+    }
 }
 
 impl WordCountable for File {
@@ -38,5 +43,9 @@ impl WordCountable for File {
 
     fn buffered(self) -> Self::Buffered {
         BufReader::new(self)
+    }
+
+    fn inner_file(&mut self) -> Option<&mut File> {
+        Some(self)
     }
 }

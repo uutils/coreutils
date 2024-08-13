@@ -5,6 +5,7 @@
 
 //! Utilities for formatting numbers in various formats
 
+use std::cmp::min;
 use std::io::Write;
 
 use super::{
@@ -60,7 +61,7 @@ pub enum PositiveSign {
     Space,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NumberAlignment {
     Left,
     RightSpace,
@@ -77,22 +78,16 @@ pub struct SignedInt {
 impl Formatter for SignedInt {
     type Input = i64;
 
-    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        if x >= 0 {
-            match self.positive_sign {
-                PositiveSign::None => Ok(()),
-                PositiveSign::Plus => write!(writer, "+"),
-                PositiveSign::Space => write!(writer, " "),
-            }?;
-        }
+    fn fmt(&self, writer: impl Write, x: Self::Input) -> std::io::Result<()> {
+        let s = if self.precision > 0 {
+            format!("{:0>width$}", x.abs(), width = self.precision)
+        } else {
+            x.abs().to_string()
+        };
 
-        let s = format!("{:0width$}", x, width = self.precision);
+        let sign_indicator = get_sign_indicator(self.positive_sign, &x);
 
-        match self.alignment {
-            NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
-            NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
-            NumberAlignment::RightZero => write!(writer, "{s:0>width$}", width = self.width),
-        }
+        write_output(writer, sign_indicator, s, self.width, self.alignment)
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
@@ -140,25 +135,25 @@ impl Formatter for UnsignedInt {
     fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
         let mut s = match self.variant {
             UnsignedIntVariant::Decimal => format!("{x}"),
-            UnsignedIntVariant::Octal(Prefix::No) => format!("{x:o}"),
-            UnsignedIntVariant::Octal(Prefix::Yes) => format!("{x:#o}"),
-            UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::No) => {
+            UnsignedIntVariant::Octal(_) => format!("{x:o}"),
+            UnsignedIntVariant::Hexadecimal(Case::Lowercase, _) => {
                 format!("{x:x}")
             }
-            UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes) => {
-                format!("{x:#x}")
-            }
-            UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::No) => {
+            UnsignedIntVariant::Hexadecimal(Case::Uppercase, _) => {
                 format!("{x:X}")
-            }
-            UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes) => {
-                format!("{x:#X}")
             }
         };
 
-        if self.precision > s.len() {
-            s = format!("{:0width$}", s, width = self.precision);
-        }
+        // Zeroes do not get a prefix. An octal value does also not get a
+        // prefix if the padded value will not start with a zero.
+        let prefix = match (x, self.variant) {
+            (1.., UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes)) => "0x",
+            (1.., UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes)) => "0X",
+            (1.., UnsignedIntVariant::Octal(Prefix::Yes)) if s.len() >= self.precision => "0",
+            _ => "",
+        };
+
+        s = format!("{prefix}{s:0>width$}", width = self.precision);
 
         match self.alignment {
             NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
@@ -168,6 +163,24 @@ impl Formatter for UnsignedInt {
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
+        // A signed int spec might be mapped to an unsigned int spec if no sign is specified
+        let s = if let Spec::SignedInt {
+            width,
+            precision,
+            positive_sign: PositiveSign::None,
+            alignment,
+        } = s
+        {
+            Spec::UnsignedInt {
+                variant: UnsignedIntVariant::Decimal,
+                width,
+                precision,
+                alignment,
+            }
+        } else {
+            s
+        };
+
         let Spec::UnsignedInt {
             variant,
             width,
@@ -226,16 +239,8 @@ impl Default for Float {
 impl Formatter for Float {
     type Input = f64;
 
-    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        if x.is_sign_positive() {
-            match self.positive_sign {
-                PositiveSign::None => Ok(()),
-                PositiveSign::Plus => write!(writer, "+"),
-                PositiveSign::Space => write!(writer, " "),
-            }?;
-        }
-
-        let s = if x.is_finite() {
+    fn fmt(&self, writer: impl Write, x: Self::Input) -> std::io::Result<()> {
+        let mut s = if x.is_finite() {
             match self.variant {
                 FloatVariant::Decimal => {
                     format_float_decimal(x, self.precision, self.force_decimal)
@@ -254,11 +259,13 @@ impl Formatter for Float {
             format_float_non_finite(x, self.case)
         };
 
-        match self.alignment {
-            NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
-            NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
-            NumberAlignment::RightZero => write!(writer, "{s:0>width$}", width = self.width),
-        }
+        // The format function will parse `x` together with its sign char,
+        // which should be placed in `sign_indicator`. So drop it here
+        s = if x < 0. { s[1..].to_string() } else { s };
+
+        let sign_indicator = get_sign_indicator(self.positive_sign, &x);
+
+        write_output(writer, sign_indicator, s, self.width, self.alignment)
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError>
@@ -286,7 +293,13 @@ impl Formatter for Float {
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
-            None => 0,
+            None => {
+                if matches!(variant, FloatVariant::Shortest) {
+                    6
+                } else {
+                    0
+                }
+            }
             Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
@@ -299,6 +312,18 @@ impl Formatter for Float {
             alignment,
             precision,
         })
+    }
+}
+
+fn get_sign_indicator<T: PartialOrd + Default>(sign: PositiveSign, x: &T) -> String {
+    if *x >= T::default() {
+        match sign {
+            PositiveSign::None => String::new(),
+            PositiveSign::Plus => String::from("+"),
+            PositiveSign::Space => String::from(" "),
+        }
+    } else {
+        String::from("-")
     }
 }
 
@@ -405,7 +430,7 @@ fn format_float_shortest(
         let mut normalized = format!("{normalized:.*}", precision);
 
         if force_decimal == ForceDecimal::No {
-            strip_zeros_and_dot(&mut normalized);
+            strip_fractional_zeroes_and_dot(&mut normalized);
         }
 
         let exp_char = match case {
@@ -418,8 +443,9 @@ fn format_float_shortest(
         // Decimal-ish notation with a few differences:
         //  - The precision works differently and specifies the total number
         //    of digits instead of the digits in the fractional part.
-        //  - If we don't force the decimal, '0' and `.` are trimmed.
-        let decimal_places = (precision as i32).saturating_sub(exponent) as usize;
+        //  - If we don't force the decimal, `.` and trailing `0` in the fractional part
+        //    are trimmed.
+        let decimal_places = (precision as i32 - exponent) as usize;
         let mut formatted = if decimal_places == 0 && force_decimal == ForceDecimal::Yes {
             format!("{f:.0}.")
         } else {
@@ -427,7 +453,7 @@ fn format_float_shortest(
         };
 
         if force_decimal == ForceDecimal::No {
-            strip_zeros_and_dot(&mut formatted);
+            strip_fractional_zeroes_and_dot(&mut formatted);
         }
 
         formatted
@@ -463,18 +489,84 @@ fn format_float_hexadecimal(
     s
 }
 
-fn strip_zeros_and_dot(s: &mut String) {
-    while s.ends_with('0') {
-        s.pop();
+fn strip_fractional_zeroes_and_dot(s: &mut String) {
+    let mut trim_to = s.len();
+    for (pos, c) in s.char_indices().rev() {
+        if pos + c.len_utf8() == trim_to && (c == '0' || c == '.') {
+            trim_to = pos;
+        }
+        if c == '.' {
+            s.truncate(trim_to);
+            break;
+        }
     }
-    if s.ends_with('.') {
-        s.pop();
+}
+
+fn write_output(
+    mut writer: impl Write,
+    sign_indicator: String,
+    mut s: String,
+    width: usize,
+    alignment: NumberAlignment,
+) -> std::io::Result<()> {
+    // Take length of `sign_indicator`, which could be 0 or 1, into consideration when padding
+    // by storing remaining_width indicating the actual width needed.
+    // Using min() because self.width could be 0, 0usize - 1usize should be avoided
+    let remaining_width = width - min(width, sign_indicator.len());
+    match alignment {
+        NumberAlignment::Left => write!(
+            writer,
+            "{sign_indicator}{s:<width$}",
+            width = remaining_width
+        ),
+        NumberAlignment::RightSpace => {
+            let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
+            if is_sign && remaining_width > 0 {
+                // Make sure sign_indicator is just next to number, e.g. "% +5.1f" 1 ==> $ +1.0
+                s = sign_indicator + s.as_str();
+                write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
+            } else {
+                write!(
+                    writer,
+                    "{sign_indicator}{s:>width$}",
+                    width = remaining_width
+                )
+            }
+        }
+        NumberAlignment::RightZero => {
+            write!(
+                writer,
+                "{sign_indicator}{s:0>width$}",
+                width = remaining_width
+            )
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::format::num_format::{Case, ForceDecimal};
+
+    #[test]
+    fn unsigned_octal() {
+        use super::{Formatter, NumberAlignment, Prefix, UnsignedInt, UnsignedIntVariant};
+        let f = |x| {
+            let mut s = Vec::new();
+            UnsignedInt {
+                variant: UnsignedIntVariant::Octal(Prefix::Yes),
+                width: 0,
+                precision: 0,
+                alignment: NumberAlignment::Left,
+            }
+            .fmt(&mut s, x)
+            .unwrap();
+            String::from_utf8(s).unwrap()
+        };
+
+        assert_eq!(f(0), "0");
+        assert_eq!(f(5), "05");
+        assert_eq!(f(8), "010");
+    }
 
     #[test]
     fn decimal_float() {
@@ -573,5 +665,19 @@ mod test {
         assert_eq!(f(12.3456789), "1.e+01");
         assert_eq!(f(1000000.0), "1.e+06");
         assert_eq!(f(99999999.0), "1.e+08");
+    }
+
+    #[test]
+    fn strip_insignificant_end() {
+        use super::strip_fractional_zeroes_and_dot;
+        let f = |s| {
+            let mut s = String::from(s);
+            strip_fractional_zeroes_and_dot(&mut s);
+            s
+        };
+        assert_eq!(&f("1000"), "1000");
+        assert_eq!(&f("1000."), "1000");
+        assert_eq!(&f("1000.02030"), "1000.0203");
+        assert_eq!(&f("1000.00000"), "1000");
     }
 }

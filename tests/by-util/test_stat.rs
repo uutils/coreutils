@@ -134,6 +134,7 @@ fn test_normal_format() {
 }
 
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 #[test]
 fn test_symlinks() {
     let ts = TestScenario::new(util_name!());
@@ -160,9 +161,7 @@ fn test_symlinks() {
             ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
         }
     }
-    if !tested {
-        panic!("No symlink found to test in this environment");
-    }
+    assert!(tested, "No symlink found to test in this environment");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
@@ -265,7 +264,10 @@ fn test_pipe_fifo() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_os = "freebsd"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "freebsd", target_os = "openbsd"))
+))]
 fn test_stdin_pipe_fifo1() {
     // $ echo | stat -
     // File: -
@@ -320,7 +322,12 @@ fn test_stdin_with_fs_option() {
 #[test]
 #[cfg(all(
     unix,
-    not(any(target_os = "android", target_os = "macos", target_os = "freebsd"))
+    not(any(
+        target_os = "android",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "openbsd"
+    ))
 ))]
 fn test_stdin_redirect() {
     // $ touch f && stat - < f
@@ -337,4 +344,11 @@ fn test_stdin_redirect() {
         .stdout_contains("regular empty file")
         .stdout_contains("File: -")
         .succeeded();
+}
+
+#[test]
+fn test_without_argument() {
+    new_ucmd!()
+        .fails()
+        .stderr_contains("missing operand\nTry 'stat --help' for more information.");
 }

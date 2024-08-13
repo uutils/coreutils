@@ -10,6 +10,7 @@ use uu_printf::uumain;
 
 use rand::seq::SliceRandom;
 use rand::Rng;
+use std::env;
 use std::ffi::OsString;
 
 mod fuzz_common;
@@ -80,9 +81,11 @@ fuzz_target!(|_data: &[u8]| {
     let printf_input = generate_printf();
     let mut args = vec![OsString::from("printf")];
     args.extend(printf_input.split_whitespace().map(OsString::from));
-    let rust_result = generate_and_run_uumain(&args, uumain);
+    let rust_result = generate_and_run_uumain(&args, uumain, None);
 
-    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false) {
+    // TODO remove once uutils printf supports localization
+    env::set_var("LC_ALL", "C");
+    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false, None) {
         Ok(result) => result,
         Err(error_result) => {
             eprintln!("Failed to run GNU command:");
@@ -99,12 +102,9 @@ fuzz_target!(|_data: &[u8]| {
     compare_result(
         "printf",
         &format!("{:?}", &args[1..]),
-        &rust_result.stdout,
-        &gnu_result.stdout,
-        &rust_result.stderr,
-        &gnu_result.stderr,
-        rust_result.exit_code,
-        gnu_result.exit_code,
+        None,
+        &rust_result,
+        &gnu_result,
         false, // Set to true if you want to fail on stderr diff
     );
 });

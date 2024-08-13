@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tempdir dyld dylib dragonflybsd optgrps libstdbuf
+// spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
@@ -64,7 +64,7 @@ struct ProgramOptionsError(String);
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
-    target_os = "dragonflybsd"
+    target_os = "dragonfly"
 ))]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Ok(("LD_PRELOAD", "so"))
@@ -80,7 +80,7 @@ fn preload_strings() -> UResult<(&'static str, &'static str)> {
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
-    target_os = "dragonflybsd",
+    target_os = "dragonfly",
     target_vendor = "apple"
 )))]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
@@ -141,8 +141,6 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     let options = ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.0))?;

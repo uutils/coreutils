@@ -118,7 +118,6 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<ControlFlow<
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
     let matches = uu_app().get_matches_from(args);
 
     let no_newline = matches.get_flag(options::NO_NEWLINE);
@@ -133,13 +132,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    // Note: echo is different from the other utils in that it should **not**
+    // have `infer_long_args(true)`, because, for example, `--ver` should be
+    // printed as `--ver` and not show the version text.
     Command::new(uucore::util_name())
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
         .trailing_var_arg(true)
         .allow_hyphen_values(true)
-        .infer_long_args(true)
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
@@ -154,13 +155,15 @@ pub fn uu_app() -> Command {
             Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
                 .short('e')
                 .help("enable interpretation of backslash escapes")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DISABLE_BACKSLASH_ESCAPE),
         )
         .arg(
             Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
                 .short('E')
                 .help("disable interpretation of backslash escapes (default)")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ENABLE_BACKSLASH_ESCAPE),
         )
         .arg(Arg::new(options::STRING).action(ArgAction::Append))
 }

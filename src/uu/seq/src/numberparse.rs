@@ -103,8 +103,13 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     // displayed as "0.01", but "1e2" will be displayed as "100",
     // without a decimal point.
     let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
+
     let num_integral_digits = if is_minus_zero_float(s, &x) {
-        2
+        if exponent > 0 {
+            2usize + exponent as usize
+        } else {
+            2usize
+        }
     } else {
         let total = j as i64 + exponent;
         let result = if total < 1 {
@@ -120,24 +125,18 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     };
     let num_fractional_digits = if exponent < 0 { -exponent as usize } else { 0 };
 
-    if exponent < 0 {
-        if is_minus_zero_float(s, &x) {
-            Ok(PreciseNumber::new(
-                ExtendedBigDecimal::MinusZero,
-                num_integral_digits,
-                num_fractional_digits,
-            ))
-        } else {
-            Ok(PreciseNumber::new(
-                ExtendedBigDecimal::BigDecimal(x),
-                num_integral_digits,
-                num_fractional_digits,
-            ))
-        }
+    if is_minus_zero_float(s, &x) {
+        Ok(PreciseNumber::new(
+            ExtendedBigDecimal::MinusZero,
+            num_integral_digits,
+            num_fractional_digits,
+        ))
     } else {
-        let zeros = "0".repeat(exponent.try_into().unwrap());
-        let expanded = [&s[0..j], &zeros].concat();
-        parse_no_decimal_no_exponent(&expanded)
+        Ok(PreciseNumber::new(
+            ExtendedBigDecimal::BigDecimal(x),
+            num_integral_digits,
+            num_fractional_digits,
+        ))
     }
 }
 
@@ -207,7 +206,11 @@ fn parse_decimal_and_exponent(
         let minimum: usize = {
             let integral_part: f64 = s[..j].parse().map_err(|_| ParseNumberError::Float)?;
             if integral_part.is_sign_negative() {
-                2
+                if exponent > 0 {
+                    2usize + exponent as usize
+                } else {
+                    2usize
+                }
             } else {
                 1
             }
@@ -234,30 +237,7 @@ fn parse_decimal_and_exponent(
             .unwrap()
     };
 
-    if num_digits_between_decimal_point_and_e <= exponent {
-        if is_minus_zero_float(s, &val) {
-            Ok(PreciseNumber::new(
-                ExtendedBigDecimal::MinusZero,
-                num_integral_digits,
-                num_fractional_digits,
-            ))
-        } else {
-            let zeros: String = "0".repeat(
-                (exponent - num_digits_between_decimal_point_and_e)
-                    .try_into()
-                    .unwrap(),
-            );
-            let expanded = [&s[0..i], &s[i + 1..j], &zeros].concat();
-            let n = expanded
-                .parse::<BigDecimal>()
-                .map_err(|_| ParseNumberError::Float)?;
-            Ok(PreciseNumber::new(
-                ExtendedBigDecimal::BigDecimal(n),
-                num_integral_digits,
-                num_fractional_digits,
-            ))
-        }
-    } else if is_minus_zero_float(s, &val) {
+    if is_minus_zero_float(s, &val) {
         Ok(PreciseNumber::new(
             ExtendedBigDecimal::MinusZero,
             num_integral_digits,

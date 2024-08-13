@@ -12,6 +12,7 @@ use uucore::{format_usage, help_about, help_usage};
 
 use std::env;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::ErrorKind;
 use std::iter;
@@ -235,8 +236,13 @@ impl Params {
         let (i, j) = match find_last_contiguous_block_of_xs(&options.template) {
             None => {
                 let s = match options.suffix {
+                    // If a suffix is specified, the error message includes the template without the suffix.
+                    Some(_) => options
+                        .template
+                        .chars()
+                        .take(options.template.len())
+                        .collect::<String>(),
                     None => options.template,
-                    Some(s) => format!("{}{}", options.template, s),
                 };
                 return Err(MkTempError::TooFewXs(s));
             }
@@ -308,8 +314,7 @@ impl Params {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
+    let args: Vec<_> = args.collect();
     let matches = match uu_app().try_get_matches_from(&args) {
         Ok(m) => m,
         Err(e) => {
@@ -333,7 +338,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
         if matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
-            if args.last().unwrap() != &options.template {
+            if args.last().unwrap() != OsStr::new(&options.template) {
                 return Err(Box::new(MkTempError::TooManyTemplates));
             }
         }

@@ -118,6 +118,19 @@ fn test_escape_newline() {
 }
 
 #[test]
+fn test_escape_override() {
+    new_ucmd!()
+        .args(&["-e", "-E", "\\na"])
+        .succeeds()
+        .stdout_only("\\na\n");
+
+    new_ucmd!()
+        .args(&["-E", "-e", "\\na"])
+        .succeeds()
+        .stdout_only("\na\n");
+}
+
+#[test]
 fn test_escape_no_further_output() {
     new_ucmd!()
         .args(&["-e", "a\\cb", "c"])
@@ -279,4 +292,14 @@ fn old_octal_syntax() {
         .arg("\\1011")
         .succeeds()
         .stdout_is("A1\n");
+}
+
+#[test]
+fn partial_version_argument() {
+    new_ucmd!().arg("--ver").succeeds().stdout_is("--ver\n");
+}
+
+#[test]
+fn partial_help_argument() {
+    new_ucmd!().arg("--he").succeeds().stdout_is("--he\n");
 }

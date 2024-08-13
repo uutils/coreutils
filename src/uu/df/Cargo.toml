@@ -1,6 +1,6 @@
 [package]
 name = "uu_df"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "df ~ (uutils) display file system information"
@@ -11,6 +11,8 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/df.rs"
 
@@ -20,7 +22,7 @@ uucore = { workspace = true, features = ["libc", "fsext"] }
 unicode-width = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }
 
 [[bin]]
 name = "df"

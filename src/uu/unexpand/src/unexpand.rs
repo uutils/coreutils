@@ -11,11 +11,12 @@ use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
 use std::num::IntErrorKind;
+use std::path::Path;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
-use uucore::{crash, crash_if_err, format_usage, help_about, help_usage};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::{crash_if_err, format_usage, help_about, help_usage, show};
 
 const USAGE: &str = help_usage!("unexpand.md");
 const ABOUT: &str = help_about!("unexpand.md");
@@ -105,8 +106,8 @@ impl Options {
             && !matches.get_flag(options::FIRST_ONLY);
         let uflag = !matches.get_flag(options::NO_UTF8);
 
-        let files = match matches.get_one::<String>(options::FILE) {
-            Some(v) => vec![v.to_string()],
+        let files = match matches.get_many::<String>(options::FILE) {
+            Some(v) => v.cloned().collect(),
             None => vec!["-".to_owned()],
         };
 
@@ -161,7 +162,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(expand_shortcuts(&args))?;
 
-    unexpand(&Options::new(&matches)?).map_err_context(String::new)
+    unexpand(&Options::new(&matches)?)
 }
 
 pub fn uu_app() -> Command {
@@ -209,16 +210,19 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
+fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
-    if path == "-" {
-        BufReader::new(Box::new(stdin()) as Box<dyn Read>)
+    let filename = Path::new(path);
+    if filename.is_dir() {
+        Err(Box::new(USimpleError {
+            code: 1,
+            message: format!("{}: Is a directory", filename.display()),
+        }))
+    } else if path == "-" {
+        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = match File::open(path) {
-            Ok(a) => a,
-            Err(e) => crash!(1, "{}: {}", path.maybe_quote(), e),
-        };
-        BufReader::new(Box::new(file_buf) as Box<dyn Read>)
+        file_buf = File::open(path).map_err_context(|| path.to_string())?;
+        Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
 
@@ -315,106 +319,108 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn unexpand(options: &Options) -> std::io::Result<()> {
+fn unexpand_line(
+    buf: &mut Vec<u8>,
+    output: &mut BufWriter<std::io::Stdout>,
+    options: &Options,
+    lastcol: usize,
+    ts: &[usize],
+) -> std::io::Result<()> {
+    let mut byte = 0; // offset into the buffer
+    let mut col = 0; // the current column
+    let mut scol = 0; // the start col for the current span, i.e., the already-printed width
+    let mut init = true; // are we at the start of the line?
+    let mut pctype = CharType::Other;
+
+    while byte < buf.len() {
+        // when we have a finite number of columns, never convert past the last column
+        if lastcol > 0 && col >= lastcol {
+            write_tabs(output, ts, scol, col, pctype == CharType::Tab, init, true);
+            output.write_all(&buf[byte..])?;
+            scol = col;
+            break;
+        }
+
+        // figure out how big the next char is, if it's UTF-8
+        let (ctype, cwidth, nbytes) = next_char_info(options.uflag, buf, byte);
+
+        // now figure out how many columns this char takes up, and maybe print it
+        let tabs_buffered = init || options.aflag;
+        match ctype {
+            CharType::Space | CharType::Tab => {
+                // compute next col, but only write space or tab chars if not buffering
+                col += if ctype == CharType::Space {
+                    1
+                } else {
+                    next_tabstop(ts, col).unwrap_or(1)
+                };
+
+                if !tabs_buffered {
+                    output.write_all(&buf[byte..byte + nbytes])?;
+                    scol = col; // now printed up to this column
+                }
+            }
+            CharType::Other | CharType::Backspace => {
+                // always
+                write_tabs(
+                    output,
+                    ts,
+                    scol,
+                    col,
+                    pctype == CharType::Tab,
+                    init,
+                    options.aflag,
+                );
+                init = false; // no longer at the start of a line
+                col = if ctype == CharType::Other {
+                    // use computed width
+                    col + cwidth
+                } else if col > 0 {
+                    // Backspace case, but only if col > 0
+                    col - 1
+                } else {
+                    0
+                };
+                output.write_all(&buf[byte..byte + nbytes])?;
+                scol = col; // we've now printed up to this column
+            }
+        }
+
+        byte += nbytes; // move on to next char
+        pctype = ctype; // save the previous type
+    }
+
+    // write out anything remaining
+    write_tabs(output, ts, scol, col, pctype == CharType::Tab, init, true);
+    output.flush()?;
+    buf.truncate(0); // clear out the buffer
+
+    Ok(())
+}
+
+fn unexpand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
     let ts = &options.tabstops[..];
     let mut buf = Vec::new();
     let lastcol = if ts.len() > 1 { *ts.last().unwrap() } else { 0 };
 
     for file in &options.files {
-        let mut fh = open(file);
+        let mut fh = match open(file) {
+            Ok(reader) => reader,
+            Err(err) => {
+                show!(err);
+                continue;
+            }
+        };
 
         while match fh.read_until(b'\n', &mut buf) {
             Ok(s) => s > 0,
             Err(_) => !buf.is_empty(),
         } {
-            let mut byte = 0; // offset into the buffer
-            let mut col = 0; // the current column
-            let mut scol = 0; // the start col for the current span, i.e., the already-printed width
-            let mut init = true; // are we at the start of the line?
-            let mut pctype = CharType::Other;
-
-            while byte < buf.len() {
-                // when we have a finite number of columns, never convert past the last column
-                if lastcol > 0 && col >= lastcol {
-                    write_tabs(
-                        &mut output,
-                        ts,
-                        scol,
-                        col,
-                        pctype == CharType::Tab,
-                        init,
-                        true,
-                    );
-                    output.write_all(&buf[byte..])?;
-                    scol = col;
-                    break;
-                }
-
-                // figure out how big the next char is, if it's UTF-8
-                let (ctype, cwidth, nbytes) = next_char_info(options.uflag, &buf, byte);
-
-                // now figure out how many columns this char takes up, and maybe print it
-                let tabs_buffered = init || options.aflag;
-                match ctype {
-                    CharType::Space | CharType::Tab => {
-                        // compute next col, but only write space or tab chars if not buffering
-                        col += if ctype == CharType::Space {
-                            1
-                        } else {
-                            next_tabstop(ts, col).unwrap_or(1)
-                        };
-
-                        if !tabs_buffered {
-                            output.write_all(&buf[byte..byte + nbytes])?;
-                            scol = col; // now printed up to this column
-                        }
-                    }
-                    CharType::Other | CharType::Backspace => {
-                        // always
-                        write_tabs(
-                            &mut output,
-                            ts,
-                            scol,
-                            col,
-                            pctype == CharType::Tab,
-                            init,
-                            options.aflag,
-                        );
-                        init = false; // no longer at the start of a line
-                        col = if ctype == CharType::Other {
-                            // use computed width
-                            col + cwidth
-                        } else if col > 0 {
-                            // Backspace case, but only if col > 0
-                            col - 1
-                        } else {
-                            0
-                        };
-                        output.write_all(&buf[byte..byte + nbytes])?;
-                        scol = col; // we've now printed up to this column
-                    }
-                }
-
-                byte += nbytes; // move on to next char
-                pctype = ctype; // save the previous type
-            }
-
-            // write out anything remaining
-            write_tabs(
-                &mut output,
-                ts,
-                scol,
-                col,
-                pctype == CharType::Tab,
-                init,
-                true,
-            );
-            output.flush()?;
-            buf.truncate(0); // clear out the buffer
+            unexpand_line(&mut buf, &mut output, options, lastcol, ts)?;
         }
     }
-    output.flush()
+    Ok(())
 }
 
 #[cfg(test)]

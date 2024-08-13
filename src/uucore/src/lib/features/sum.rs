@@ -391,7 +391,7 @@ pub struct DigestWriter<'a> {
 }
 
 impl<'a> DigestWriter<'a> {
-    pub fn new(digest: &'a mut Box<dyn Digest>, binary: bool) -> DigestWriter {
+    pub fn new(digest: &'a mut Box<dyn Digest>, binary: bool) -> Self {
         let was_last_character_carriage_return = false;
         DigestWriter {
             digest,
@@ -402,7 +402,7 @@ impl<'a> DigestWriter<'a> {
 
     pub fn finalize(&mut self) -> bool {
         if self.was_last_character_carriage_return {
-            self.digest.hash_update(&[b'\r']);
+            self.digest.hash_update(b"\r");
             true
         } else {
             false
@@ -433,7 +433,7 @@ impl<'a> Write for DigestWriter<'a> {
         // call to `write()`.
         let n = buf.len();
         if self.was_last_character_carriage_return && n > 0 && buf[0] != b'\n' {
-            self.digest.hash_update(&[b'\r']);
+            self.digest.hash_update(b"\r");
         }
 
         // Next, find all occurrences of "\r\n", inputting the slice
@@ -484,22 +484,23 @@ mod tests {
     fn test_crlf_across_blocks() {
         use std::io::Write;
 
-        use crate::digest::Digest;
-        use crate::digest::DigestWriter;
+        use super::Digest;
+        use super::DigestWriter;
+        use super::Md5;
 
         // Writing "\r" in one call to `write()`, and then "\n" in another.
-        let mut digest = Box::new(md5::Md5::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
         let mut writer_crlf = DigestWriter::new(&mut digest, false);
-        writer_crlf.write_all(&[b'\r']).unwrap();
-        writer_crlf.write_all(&[b'\n']).unwrap();
-        writer_crlf.hash_finalize();
+        writer_crlf.write_all(b"\r").unwrap();
+        writer_crlf.write_all(b"\n").unwrap();
+        writer_crlf.finalize();
         let result_crlf = digest.result_str();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
-        let mut digest = Box::new(md5::Md5::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
-        writer_lf.write_all(&[b'\n']).unwrap();
-        writer_lf.hash_finalize();
+        writer_lf.write_all(b"\n").unwrap();
+        writer_lf.finalize();
         let result_lf = digest.result_str();
 
         assert_eq!(result_crlf, result_lf);

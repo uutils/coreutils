@@ -1,6 +1,6 @@
 [package]
 name = "uu_more"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "more ~ (uutils) input perusal filter"
@@ -10,6 +10,8 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uu/more"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
+
+readme.workspace = true
 
 [lib]
 path = "src/more.rs"
@@ -23,6 +25,9 @@ unicode-segmentation = { workspace = true }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 nix = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+crossterm = { workspace = true, features = ["use-dev-tty"] }
 
 [[bin]]
 name = "more"
