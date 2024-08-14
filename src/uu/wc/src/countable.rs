@@ -11,10 +11,10 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read, StdinLock};
 
 #[cfg(unix)]
-use std::os::unix::io::AsRawFd;
+use std::os::fd::{AsFd, AsRawFd};
 
 #[cfg(unix)]
-pub trait WordCountable: AsRawFd + Read {
+pub trait WordCountable: AsFd + AsRawFd + Read {
     type Buffered: BufRead;
     fn buffered(self) -> Self::Buffered;
     fn inner_file(&mut self) -> Option<&mut File>;
