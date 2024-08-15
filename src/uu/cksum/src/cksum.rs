@@ -12,7 +12,7 @@ use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
 use uucore::checksum::{
-    calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
+    algo::detect_algo, calculate_blake2b_length, digest_reader, perform_checksum_validation,
     ChecksumError, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
     ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
 };
