@@ -16,16 +16,16 @@ use std::io::{stdin, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
-use uucore::checksum::calculate_blake2b_length;
-use uucore::checksum::create_sha3;
-use uucore::checksum::detect_algo;
-use uucore::checksum::digest_reader;
-use uucore::checksum::escape_filename;
-use uucore::checksum::perform_checksum_validation;
-use uucore::checksum::ChecksumError;
-use uucore::checksum::HashAlgorithm;
-use uucore::error::{FromIo, UResult};
+use uucore::checksum::{
+    algo::{create_sha3, detect_algo},
+    calculate_blake2b_length, digest_reader, escape_filename, perform_checksum_validation,
+    ChecksumError,
+};
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
+use uucore::{
+    checksum::HashAlgorithm,
+    error::{FromIo, UResult},
+};
 use uucore::{format_usage, help_about, help_usage};
 
 const NAME: &str = "hashsum";
