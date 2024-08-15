@@ -158,6 +158,23 @@ impl UError for ChecksumError {
     }
 }
 
+enum LineCheckError {
+    UError(Box<dyn UError>),
+    // ImproperlyFormatted,
+}
+
+impl From<Box<dyn UError>> for LineCheckError {
+    fn from(value: Box<dyn UError>) -> Self {
+        Self::UError(value)
+    }
+}
+
+impl From<ChecksumError> for LineCheckError {
+    fn from(value: ChecksumError) -> Self {
+        Self::UError(Box::new(value))
+    }
+}
+
 // Regexp to handle the three input formats:
 // 1. <algo>[-<bits>] (<filename>) = <checksum>
 //    algo must be uppercase or b (for blake2b)
@@ -344,7 +361,7 @@ fn process_checksum_line(
     properly_formatted: &mut bool,
     correct_format: &mut usize,
     opts: ChecksumOptions,
-) -> UResult<()> {
+) -> Result<(), LineCheckError> {
     if let Some(caps) =
         chosen_regex.captures(os_str_as_bytes(line).expect("UTF-8 decoding failure"))
     {
@@ -361,7 +378,8 @@ fn process_checksum_line(
         }
 
         let filename_lossy = String::from_utf8_lossy(filename_to_check);
-        let expected_checksum = get_expected_checksum(&filename_lossy, &caps, &chosen_regex)?;
+        let expected_checksum = get_expected_checksum(&filename_lossy, &caps, &chosen_regex)
+            .map_err(LineCheckError::from)?;
 
         // If the algo_name is provided, we use it, otherwise we try to detect it
         let (algo_name, length) = if is_algo_based_format {
@@ -502,7 +520,8 @@ where
         };
 
         for (i, line) in lines.iter().enumerate() {
-            process_checksum_line(
+            use LineCheckError::*;
+            match process_checksum_line(
                 &filename_input,
                 line,
                 i,
@@ -514,7 +533,11 @@ where
                 &mut properly_formatted,
                 &mut correct_format,
                 opts,
-            )?
+            ) {
+                Err(UError(e)) => return Err(e),
+                // Err(_) => todo!(),
+                Ok(_) => (),
+            }
         }
 
         // not a single line correctly formatted found
