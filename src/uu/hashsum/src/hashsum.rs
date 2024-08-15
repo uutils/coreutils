@@ -16,6 +16,7 @@ use std::io::{stdin, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::checksum::ChecksumOptions;
 use uucore::checksum::{
     algo::{create_sha3, detect_algo},
     calculate_blake2b_length, digest_reader, escape_filename, perform_checksum_validation,
@@ -233,15 +234,19 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             |files| files.map(OsStr::new).collect::<Vec<_>>(),
         );
 
+        let opts = ChecksumOptions {
+            binary: binary_flag,
+            ignore_missing,
+            quiet,
+            status,
+            strict,
+            warn,
+        };
+
         // Execute the checksum validation
         return perform_checksum_validation(
             input.iter().copied(),
-            strict,
-            status,
-            warn,
-            binary_flag,
-            ignore_missing,
-            quiet,
+            opts,
             Some(algo.name),
             Some(algo.bits),
         );
