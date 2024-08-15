@@ -69,6 +69,17 @@ pub struct HashAlgorithm {
     pub bits: usize,
 }
 
+/// This struct regroups CLI flags.
+#[derive(Debug, Clone, Copy)]
+pub struct ChecksumOptions {
+    pub binary: bool,
+    pub ignore_missing: bool,
+    pub quiet: bool,
+    pub status: bool,
+    pub strict: bool,
+    pub warn: bool,
+}
+
 #[derive(Default)]
 struct ChecksumResult {
     pub bad_format: i32,
@@ -337,11 +348,7 @@ fn process_checksum_line(
     cli_algo_length: Option<usize>,
     properly_formatted: &mut bool,
     correct_format: &mut usize,
-    status: bool,
-    ignore_missing: bool,
-    warn: bool,
-    binary: bool,
-    quiet: bool,
+    opts: ChecksumOptions,
 ) -> UResult<()> {
     if let Some(caps) =
         chosen_regex.captures(os_str_as_bytes(line).expect("UTF-8 decoding failure"))
@@ -399,28 +406,29 @@ fn process_checksum_line(
             &OsString::from(String::from_utf8(filename_to_check_unescaped).unwrap());
 
         // manage the input file
-        let file_to_check = match get_file_to_check(real_filename_to_check, ignore_missing, res) {
-            Some(file) => file,
-            None => {
-                // FIXME(dprn): report error in some way ?
-                return Ok(());
-            }
-        };
+        let file_to_check =
+            match get_file_to_check(real_filename_to_check, opts.ignore_missing, res) {
+                Some(file) => file,
+                None => {
+                    // FIXME(dprn): report error in some way ?
+                    return Ok(());
+                }
+            };
         let mut file_reader = BufReader::new(file_to_check);
         // Read the file and calculate the checksum
         let create_fn = &mut algo.create_fn;
         let mut digest = create_fn();
         let (calculated_checksum, _) =
-            digest_reader(&mut digest, &mut file_reader, binary, algo.bits).unwrap();
+            digest_reader(&mut digest, &mut file_reader, opts.binary, algo.bits).unwrap();
 
         // Do the checksum validation
         if expected_checksum == calculated_checksum {
-            if !quiet && !status {
+            if !opts.quiet && !opts.status {
                 println!("{prefix}{filename_lossy}: OK");
             }
             *correct_format += 1;
         } else {
-            if !status {
+            if !opts.status {
                 println!("{prefix}{filename_lossy}: FAILED");
             }
             res.failed_cksum += 1;
@@ -431,7 +439,7 @@ fn process_checksum_line(
             // FIXME(dprn): report error in some way ?
             return Ok(());
         }
-        if warn {
+        if opts.warn {
             let algo = if let Some(algo_name_input) = cli_algo_name {
                 algo_name_input.to_uppercase()
             } else {
@@ -457,12 +465,7 @@ fn process_checksum_line(
 #[allow(clippy::too_many_arguments)]
 pub fn perform_checksum_validation<'a, I>(
     files: I,
-    strict: bool,
-    status: bool,
-    warn: bool,
-    binary: bool,
-    ignore_missing: bool,
-    quiet: bool,
+    opts: ChecksumOptions,
     algo_name_input: Option<&str>,
     length_input: Option<usize>,
 ) -> UResult<()>
@@ -515,18 +518,14 @@ where
                 length_input,
                 &mut properly_formatted,
                 &mut correct_format,
-                status,
-                ignore_missing,
-                warn,
-                binary,
-                quiet,
+                opts,
             )?
         }
 
         // not a single line correctly formatted found
         // return an error
         if !properly_formatted {
-            if !status {
+            if !opts.status {
                 return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
                     filename: get_filename_for_output(filename_input, input_is_stdin),
                 }
@@ -537,7 +536,7 @@ where
             return Ok(());
         }
 
-        if ignore_missing && correct_format == 0 {
+        if opts.ignore_missing && correct_format == 0 {
             // we have only bad format
             // and we had ignore-missing
             eprintln!(
@@ -549,18 +548,18 @@ where
         }
 
         // strict means that we should have an exit code.
-        if strict && res.bad_format > 0 {
+        if opts.strict && res.bad_format > 0 {
             set_exit_code(1);
         }
 
         // if we have any failed checksum verification, we set an exit code
         // except if we have ignore_missing
-        if (res.failed_cksum > 0 || res.failed_open_file > 0) && !ignore_missing {
+        if (res.failed_cksum > 0 || res.failed_open_file > 0) && !opts.ignore_missing {
             set_exit_code(1);
         }
 
         // if any incorrectly formatted line, show it
-        cksum_output(&res, ignore_missing, status);
+        cksum_output(&res, opts.ignore_missing, opts.status);
     }
 
     Ok(())

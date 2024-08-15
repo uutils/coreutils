@@ -11,6 +11,7 @@ use std::fs::File;
 use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
+use uucore::checksum::ChecksumOptions;
 use uucore::checksum::{
     algo::detect_algo, calculate_blake2b_length, digest_reader, perform_checksum_validation,
     ChecksumError, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
@@ -309,17 +310,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
             |files| files.map(OsStr::new).collect::<Vec<_>>(),
         );
-        return perform_checksum_validation(
-            files.iter().copied(),
-            strict,
-            status,
-            warn,
-            binary_flag,
+
+        let opts = ChecksumOptions {
+            binary: binary_flag,
             ignore_missing,
             quiet,
-            algo_option,
-            length,
-        );
+            status,
+            strict,
+            warn,
+        };
+
+        return perform_checksum_validation(files.iter().copied(), opts, algo_option, length);
     }
 
     let (tag, asterisk) = handle_tag_text_binary_flags(&matches)?;
