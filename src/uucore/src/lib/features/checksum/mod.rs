@@ -414,8 +414,22 @@ fn process_checksum_line(
 
         // If the algo_name is provided, we use it, otherwise we try to detect it
         let (algo_name, length) = if is_algo_based_format {
-            identify_algo_name_and_length(&caps, cli_algo_name, res, properly_formatted)
-                .unwrap_or((String::new(), None))
+            let (algo, mut len) =
+                identify_algo_name_and_length(&caps, cli_algo_name, res, properly_formatted)
+                    .unwrap_or((String::new(), None));
+
+            // Specific case for BLAKE2b length
+            if algo == ALGORITHM_OPTIONS_BLAKE2B && len.is_none() {
+                if expected_checksum.len() / 2 == 64 {
+                    len = Some(64);
+                } else {
+                    // FIXME(dprn): Improve error handling
+                    res.bad_format += 1;
+                    *properly_formatted = false;
+                    return Ok(());
+                }
+            }
+            (algo, len)
         } else if let Some(a) = cli_algo_name {
             // When a specific algorithm name is input, use it and use the provided bits
             // except when dealing with blake2b, where we will detect the length
