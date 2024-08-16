@@ -15,6 +15,7 @@ use std::{
     ffi::OsStr,
     fs::File,
     io::{self, BufReader, Read},
+    str,
 };
 use utils::{get_filename_for_output, unescape_filename};
 
@@ -222,28 +223,29 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
         })
 }
 
-fn get_expected_checksum(filename: &str, caps: &Captures, chosen_regex: &Regex) -> UResult<String> {
-    if chosen_regex.as_str() == ALGO_BASED_REGEX_BASE64 {
-        let ck = caps.name("checksum").unwrap().as_bytes();
-        match BASE64.decode(ck) {
-            Ok(decoded_bytes) => {
-                match std::str::from_utf8(&decoded_bytes) {
-                    Ok(decoded_str) => Ok(decoded_str.to_string()),
-                    Err(_) => Ok(bytes_to_hex(&decoded_bytes)), // Handle as raw bytes if not valid UTF-8
-                }
+fn get_base64_checksum(checksum: &[u8]) -> Option<String> {
+    match BASE64.decode(checksum) {
+        Ok(decoded_bytes) => {
+            match str::from_utf8(&decoded_bytes) {
+                Ok(decoded_str) => Some(decoded_str.to_string()),
+                Err(_) => Some(bytes_to_hex(&decoded_bytes)), // Handle as raw bytes if not valid UTF-8
             }
-            Err(_) => Err(Box::new(
-                ChecksumError::NoProperlyFormattedChecksumLinesFound {
-                    filename: (&filename).to_string(),
-                },
-            )),
         }
+        Err(_) => None,
+    }
+}
+
+fn get_expected_checksum(filename: &str, checksum: &[u8], chosen_regex: &Regex) -> UResult<String> {
+    if chosen_regex.as_str() == ALGO_BASED_REGEX_BASE64 {
+        get_base64_checksum(checksum).ok_or(Box::new(
+            ChecksumError::NoProperlyFormattedChecksumLinesFound {
+                filename: (&filename).to_string(),
+            },
+        ))
     } else {
-        Ok(
-            std::str::from_utf8(caps.name("checksum").unwrap().as_bytes())
-                .unwrap()
-                .to_string(),
-        )
+        // Assume the checksum is already valid UTF-8
+        // (Validation should have been handled by regex)
+        Ok(str::from_utf8(checksum).unwrap().to_string())
     }
 }
 
@@ -370,7 +372,14 @@ fn process_checksum_line(
     {
         *properly_formatted = true;
 
-        let mut filename_to_check = caps.name("filename").unwrap().as_bytes();
+        let checksum = caps
+            .name("checksum")
+            .expect("safe because of regex")
+            .as_bytes();
+        let mut filename_to_check = caps
+            .name("filename")
+            .expect("safe because of regex")
+            .as_bytes();
 
         if filename_to_check.starts_with(b"*")
             && i == 0
@@ -381,7 +390,7 @@ fn process_checksum_line(
         }
 
         let filename_lossy = String::from_utf8_lossy(filename_to_check);
-        let expected_checksum = get_expected_checksum(&filename_lossy, &caps, &chosen_regex)
+        let expected_checksum = get_expected_checksum(&filename_lossy, checksum, &chosen_regex)
             .map_err(LineCheckError::from)?;
 
         // If the algo_name is provided, we use it, otherwise we try to detect it
@@ -830,8 +839,9 @@ mod tests {
         let caps = re
             .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=")
             .unwrap();
+        let checksum = caps.name("checksum").unwrap().as_bytes();
 
-        let result = get_expected_checksum("filename", &caps, &re);
+        let result = get_expected_checksum("filename", checksum, &re);
 
         assert_eq!(
             result.unwrap(),
@@ -845,8 +855,9 @@ mod tests {
         let caps = re
             .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU")
             .unwrap();
+        let checksum = caps.name("checksum").unwrap().as_bytes();
 
-        let result = get_expected_checksum("filename", &caps, &re);
+        let result = get_expected_checksum("filename", checksum, &re);
 
         assert!(result.is_err());
     }
