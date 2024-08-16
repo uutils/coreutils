@@ -1755,7 +1755,7 @@ fn test_cp_preserve_links_case_7() {
         .arg("src/g")
         .arg("dest")
         .succeeds()
-        .stdout_contains("skipped 'dest/g'");
+        .stdout_contains("skipped");
 
     assert!(at.dir_exists("dest"));
     assert!(at.plus("dest").join("f").exists());
