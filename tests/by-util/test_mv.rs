@@ -299,8 +299,9 @@ fn test_mv_interactive_no_clobber_force_last_arg_wins() {
 
     scene
         .ucmd()
-        .args(&[file_a, file_b, "-f", "-i", "-n"])
-        .succeeds();
+        .args(&[file_a, file_b, "-f", "-i", "-n", "--debug"])
+        .succeeds()
+        .stdout_contains("skipped 'b.txt'");
 
     scene
         .ucmd()
@@ -348,7 +349,12 @@ fn test_mv_no_clobber() {
     at.touch(file_a);
     at.touch(file_b);
 
-    ucmd.arg("-n").arg(file_a).arg(file_b).succeeds();
+    ucmd.arg("-n")
+        .arg(file_a)
+        .arg(file_b)
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'test_mv_no_clobber_file_b");
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -1396,7 +1402,9 @@ fn test_mv_arg_interactive_skipped_vin() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    ucmd.args(&["-vin", "a", "b"]).succeeds().no_stdout();
+    ucmd.args(&["-vin", "a", "b", "--debug"])
+        .succeeds()
+        .stdout_contains("skipped 'b'");
 }
 
 #[test]
