@@ -818,6 +818,29 @@ fn test_cksum_check_space() {
 }
 
 #[test]
+fn test_cksum_check_trailing_space() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("CHECKSUM",
+        &[
+            "SHA384 (f) = 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b\n",
+            "BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n",
+            "BLAKE2b-384 (f) = b32811423377f52d7862286ee1a72ee540524380fda1724a6f25d7978c6fd3244a6caf0498812673c5e05ef583825100\n",
+            // This line is improperly formatted because it has trailing spaces
+            "SM3 (f) = 1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b  \n"
+        ].join(""));
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\nf: OK\nf: OK\n")
+        .stderr_contains("line is improperly formatted");
+}
+
+#[test]
 fn test_cksum_check_leading_info() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1300,4 +1323,265 @@ fn test_non_utf8_comment() {
         .arg(at.subdir.join("check"))
         .succeeds()
         .stdout_is("empty: OK\nempty: OK\nempty: OK\n");
+}
+
+#[test]
+fn test_check_blake_length_guess() {
+    let correct_lines = [
+        // Correct: The length is not explicit, but the checksum's size
+        // matches the default parameter.
+        "BLAKE2b (foo.dat) = ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d",
+        // Correct: The length is explicitly given, and the checksum's size
+        // matches the length.
+        "BLAKE2b-512 (foo.dat) = ca002330e69d3e6b84a46a56a6533fd79d51d97a3bb7cad6c2ff43b354185d6dc1e723fb3db4ae0737e120378424c714bb982d9dc5bbd7a0ab318240ddd18f8d",
+        // Correct: the checksum size is not default but
+        // the length is explicitly given.
+        "BLAKE2b-48 (foo.dat) = 171cdfdf84ed",
+    ];
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo.dat", "foo");
+
+    for line in correct_lines {
+        at.write("foo.sums", line);
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg(at.subdir.join("foo.sums"))
+            .succeeds()
+            .stdout_is("foo.dat: OK\n");
+    }
+
+    // Incorrect lines
+
+    // This is incorrect because the algorithm provides no length,
+    // and the checksum length is not default.
+    let incorrect = "BLAKE2b (foo.dat) = 171cdfdf84ed";
+    at.write("foo.sums", incorrect);
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("foo.sums"))
+        .fails()
+        .stderr_contains("foo.sums: no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_check_confusing_base64() {
+    let cksum = "BLAKE2b-48 (foo.dat) = fc1f97C4";
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo.dat", "esq");
+    at.write("foo.sums", cksum);
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("foo.sums"))
+        .succeeds()
+        .stdout_is("foo.dat: OK\n");
+}
+
+/// This test checks that when a file contains several checksum lines
+/// with different encoding, the decoding still works.
+#[test]
+fn test_check_mix_hexa_base64() {
+    let b64 = "BLAKE2b-128 (foo1.dat) = BBNuJPhdRwRlw9tm5Y7VbA==";
+    let hex = "BLAKE2b-128 (foo2.dat) = 04136e24f85d470465c3db66e58ed56c";
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo1.dat", "foo");
+    at.write("foo2.dat", "foo");
+
+    at.write("hex_b64", &format!("{}\n{}", hex, b64));
+    at.write("b64_hex", &format!("{}\n{}", b64, hex));
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("hex_b64"))
+        .succeeds()
+        .stdout_is("foo2.dat: OK\nfoo1.dat: OK\n")
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("b64_hex"))
+        .succeeds()
+        .stdout_is("foo1.dat: OK\nfoo2.dat: OK\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_check_incorrectly_formatted_checksum_does_not_stop_processing() {
+    // The first line contains an incorrectly formatted checksum that can't be
+    // correctly decoded. This must not prevent the program from looking at the
+    // rest of the file.
+    let lines = [
+        "BLAKE2b-56 (foo1) = GFYEQ7HhAw=",    // Should be 2 '=' at the end
+        "BLAKE2b-56 (foo2) = 18560443b1e103", // OK
+    ];
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo1", "foo");
+    at.write("foo2", "foo");
+    at.write("sum", &lines.join("\n"));
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("sum"))
+        .succeeds()
+        .stderr_contains("1 line is improperly formatted")
+        .stdout_contains("foo2: OK");
+}
+
+/// This module reimplements the cksum-base64.pl GNU test.
+mod cksum_base64 {
+    use super::*;
+    use crate::common::util::log_info;
+
+    const PAIRS: [(&str, &str); 11] = [
+        ("sysv", "0 0 f"),
+        ("bsd", "00000     0 f"),
+        ("crc", "4294967295 0 f"),
+        ("md5", "1B2M2Y8AsgTpgAmY7PhCfg=="),
+        ("sha1", "2jmj7l5rSw0yVb/vlWAYkK/YBwk="),
+        ("sha224", "0UoCjCo6K8lHYQK7KII0xBWisB+CjqYqxbPkLw=="),
+        ("sha256", "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU="),
+        (
+            "sha384",
+            "OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb",
+        ),
+        (
+            "sha512",
+            "z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg=="
+        ),
+        (
+            "blake2b",
+            "eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg=="
+        ),
+        ("sm3", "GrIdg1XPoX+OYRlIMegajyK+yMco/vt0ftA161CCqis="),
+    ];
+
+    fn make_scene() -> TestScenario {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.touch("f");
+
+        scene
+    }
+
+    fn output_format(algo: &str, digest: &str) -> String {
+        if ["sysv", "bsd", "crc"].contains(&algo) {
+            digest.to_string()
+        } else {
+            format!("{} (f) = {}", algo.to_uppercase(), digest).replace("BLAKE2B", "BLAKE2b")
+        }
+    }
+
+    #[test]
+    fn test_generating() {
+        // Ensure that each algorithm works with `--base64`.
+        let scene = make_scene();
+
+        for (algo, digest) in PAIRS {
+            scene
+                .ucmd()
+                .arg("--base64")
+                .arg("-a")
+                .arg(algo)
+                .arg("f")
+                .succeeds()
+                .stdout_is(format!("{}\n", output_format(algo, digest)))
+                .no_stderr();
+        }
+    }
+
+    #[test]
+    fn test_chk() {
+        // For each algorithm that accepts `--check`,
+        // ensure that it works with base64 digests.
+        let scene = make_scene();
+
+        for (algo, digest) in PAIRS {
+            if ["sysv", "bsd", "crc"].contains(&algo) {
+                // These algorithms do not accept `--check`
+                continue;
+            }
+
+            let line = output_format(algo, digest);
+            scene
+                .ucmd()
+                .arg("--check")
+                .arg("--strict")
+                .pipe_in(line)
+                .succeeds()
+                .stdout_is("f: OK\n")
+                .no_stderr();
+        }
+    }
+
+    #[test]
+    fn test_chk_eq1() {
+        // For digests ending with '=', ensure `--check` fails if '=' is removed.
+        let scene = make_scene();
+
+        for (algo, digest) in PAIRS {
+            if !digest.ends_with('=') {
+                continue;
+            }
+
+            let mut line = output_format(algo, digest);
+            if line.ends_with("==") {
+                line = line.replace("==", "=");
+            } else if line.ends_with('=') {
+                line = line.replace('=', "");
+            }
+
+            log_info(format!("ALGORITHM: {algo}, STDIN: '{line}'"), "");
+            scene
+                .ucmd()
+                .arg("--check")
+                .pipe_in(line)
+                .fails()
+                .no_stdout()
+                .stderr_contains("no properly formatted checksum lines found");
+        }
+    }
+
+    #[test]
+    fn test_chk_eq2() {
+        // For digests ending with '==',
+        // ensure `--check` fails if '==' is removed.
+        let scene = make_scene();
+
+        for (algo, digest) in PAIRS {
+            if !digest.ends_with("==") {
+                continue;
+            }
+
+            let mut line = output_format(algo, digest);
+            if line.ends_with("==") {
+                line = line.replace("==", "");
+            }
+
+            log_info(format!("ALGORITHM: {algo}, STDIN: '{line}'"), "");
+            scene
+                .ucmd()
+                .arg("--check")
+                .pipe_in(line)
+                .fails()
+                .no_stdout()
+                .stderr_contains("no properly formatted checksum lines found");
+        }
+    }
 }
