@@ -560,10 +560,9 @@ fn test_cp_arg_interactive_verbose_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    ucmd.args(&["-vin", "a", "b"])
-        .fails()
-        .stderr_is("cp: not replacing 'b'\n")
-        .no_stdout();
+    ucmd.args(&["-vin", "--debug", "a", "b"])
+        .succeeds()
+        .stdout_contains("skipped 'b'");
 }
 
 #[test]
@@ -662,8 +661,9 @@ fn test_cp_arg_no_clobber() {
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clobber")
-        .fails()
-        .stderr_contains("not replacing");
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'how_are_you.txt'");
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
@@ -674,7 +674,9 @@ fn test_cp_arg_no_clobber_inferred_arg() {
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clob")
-        .fails();
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'how_are_you.txt'");
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
@@ -690,6 +692,7 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
+        .arg("--debug")
         .succeeds()
         .no_stderr();
 
@@ -701,7 +704,9 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
-        .fails();
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'dest.txt'");
 
     assert_eq!(at.read("source.txt"), "some-content");
     // Should be empty as the "no-clobber" should keep
@@ -1745,11 +1750,12 @@ fn test_cp_preserve_links_case_7() {
 
     ucmd.arg("-n")
         .arg("--preserve=links")
+        .arg("--debug")
         .arg("src/f")
         .arg("src/g")
         .arg("dest")
-        .fails()
-        .stderr_contains("not replacing");
+        .succeeds()
+        .stdout_contains("skipped 'dest/g'");
 
     assert!(at.dir_exists("dest"));
     assert!(at.plus("dest").join("f").exists());
