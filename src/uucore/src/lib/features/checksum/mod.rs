@@ -163,7 +163,8 @@ impl UError for ChecksumError {
 
 enum LineCheckError {
     UError(Box<dyn UError>),
-    // ImproperlyFormatted,
+    ImproperlyFormatted,
+    Skipped,
 }
 
 impl From<Box<dyn UError>> for LineCheckError {
@@ -386,6 +387,11 @@ fn process_checksum_line(
     correct_format: &mut usize,
     opts: ChecksumOptions,
 ) -> Result<(), LineCheckError> {
+    if line.is_empty() || os_str_as_bytes(line)?.starts_with(b"#") {
+        // Skip empty and comment lines.
+        return Err(LineCheckError::Skipped);
+    }
+
     if let Some(caps) =
         chosen_regex.captures(os_str_as_bytes(line).expect("UTF-8 decoding failure"))
     {
@@ -492,11 +498,6 @@ fn process_checksum_line(
             res.failed_cksum += 1;
         }
     } else {
-        if line.is_empty() {
-            // Don't show any warning for empty lines
-            // FIXME(dprn): report error in some way ?
-            return Ok(());
-        }
         if opts.warn {
             let algo = if let Some(algo_name_input) = cli_algo_name {
                 algo_name_input.to_uppercase()
@@ -571,7 +572,7 @@ fn process_checksum_file(
             opts,
         ) {
             Err(UError(e)) => return Err(e.into()),
-            // Err(_) => todo!(),
+            Err(Skipped) => continue,
             Ok(_) => (),
         }
     }
