@@ -7,10 +7,12 @@
 use data_encoding::BASE64;
 use os_display::Quotable;
 use regex::bytes::{Captures, Regex};
+#[cfg(not(unix))]
+use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::{
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     fs::File,
     io::{self, BufReader, Read},
 };
@@ -189,7 +191,7 @@ const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>
 const SINGLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s(?P<filename>\*?.*)$";
 
 /// Determines the appropriate regular expression to use based on the provided lines.
-fn determine_regex(lines: &[OsString]) -> Option<(Regex, bool)> {
+fn determine_regex<S: AsRef<OsStr>>(lines: &[S]) -> Option<(Regex, bool)> {
     let regexes = [
         (Regex::new(ALGO_BASED_REGEX).unwrap(), true),
         (Regex::new(DOUBLE_SPACE_REGEX).unwrap(), false),
@@ -349,6 +351,7 @@ fn identify_algo_name_and_length(
     Some((algorithm, bits))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_checksum_line(
     filename_input: &OsStr,
     line: &OsStr,
@@ -472,10 +475,8 @@ fn process_checksum_line(
     Ok(())
 }
 
-/***
- * Do the checksum validation (can be strict or not)
-*/
-#[allow(clippy::too_many_arguments)]
+/// Do the checksum validation (can be strict or not)
+///
 pub fn perform_checksum_validation<'a, I>(
     files: I,
     opts: ChecksumOptions,
