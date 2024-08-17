@@ -8,24 +8,23 @@ use data_encoding::BASE64;
 use os_display::Quotable;
 use regex::bytes::{Captures, Regex};
 #[cfg(unix)]
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::ffi::OsStrExt;
 use std::{
     ffi::{OsStr, OsString},
     fs::File,
     io::{self, BufReader, Read},
-    iter,
     path::Path,
 };
 
 use crate::{
+    bytes_trim_ascii,
     error::{set_exit_code, FromIo, UError, UResult, USimpleError},
-    os_str_as_bytes, show, show_error, show_warning_caps,
+    os_str_as_bytes, read_os_string_lines, show, show_error, show_warning_caps,
     sum::{Digest, DigestWriter},
     util_name,
 };
 use std::fmt::Write;
 use std::io::stdin;
-use std::io::BufRead;
 use thiserror::Error;
 
 pub mod algo;
@@ -179,18 +178,7 @@ fn determine_regex(lines: &[OsString]) -> Option<(Regex, bool)> {
     for line in lines {
         let mut line_trim = os_str_as_bytes(line).expect("UTF-8 decoding failed");
         // FIXME: Replace this with `.trim_ascii()` when MSRV is 1.80
-        while let Some(first) = line_trim.first() {
-            if !first.is_ascii_whitespace() {
-                break;
-            }
-            line_trim = &line_trim[1..];
-        }
-        while let Some(last) = line_trim.last() {
-            if !last.is_ascii_whitespace() {
-                break;
-            }
-            line_trim = &line_trim[..line_trim.len() - 1];
-        }
+        line_trim = bytes_trim_ascii(line_trim);
 
         for (regex, is_algo_based) in &regexes {
             if regex.is_match(line_trim) {
@@ -381,31 +369,8 @@ where
             }
         };
 
-        let mut reader = BufReader::new(file);
-        let lines = iter::from_fn(|| {
-            let mut buf = Vec::with_capacity(256);
-            let size = reader.read_until(b'\n', &mut buf).ok()?;
-
-            if size == 0 {
-                return None;
-            }
-
-            // Trim (\r)\n
-            if buf.ends_with(b"\n") {
-                buf.pop();
-                if buf.ends_with(b"\r") {
-                    buf.pop();
-                }
-            }
-
-            #[cfg(unix)]
-            let s = OsString::from_vec(buf);
-            #[cfg(not(unix))]
-            let s = OsString::from(String::from_utf8(buf).expect("UTF-8 error"));
-
-            Some(s)
-        })
-        .collect::<Vec<_>>();
+        let reader = BufReader::new(file);
+        let lines = read_os_string_lines(reader).collect::<Vec<_>>();
 
         let Some((chosen_regex, is_algo_based_format)) = determine_regex(&lines) else {
             let e = ChecksumError::NoProperlyFormattedChecksumLinesFound {
@@ -669,6 +634,8 @@ pub fn escape_filename(filename: &Path) -> (String, &'static str) {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+
     use super::*;
 
     #[test]
