@@ -178,6 +178,25 @@ impl From<ChecksumError> for LineCheckError {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
+enum FileCheckError {
+    UError(Box<dyn UError>),
+    NonCriticalError,
+    CriticalError,
+}
+
+impl From<Box<dyn UError>> for FileCheckError {
+    fn from(value: Box<dyn UError>) -> Self {
+        Self::UError(value)
+    }
+}
+
+impl From<ChecksumError> for FileCheckError {
+    fn from(value: ChecksumError) -> Self {
+        Self::UError(Box::new(value))
+    }
+}
+
 // Regexp to handle the three input formats:
 // 1. <algo>[-<bits>] (<filename>) = <checksum>
 //    algo must be uppercase or b (for blake2b)
@@ -484,6 +503,107 @@ fn process_checksum_line(
     Ok(())
 }
 
+fn process_checksum_file(
+    algo_name_input: Option<&str>,
+    length_input: Option<usize>,
+    filename_input: &OsStr,
+    opts: ChecksumOptions,
+) -> Result<(), FileCheckError> {
+    let mut correct_format = 0;
+    let mut properly_formatted = false;
+    let mut res = ChecksumResult::default();
+    let input_is_stdin = filename_input == OsStr::new("-");
+
+    let file: Box<dyn Read> = if input_is_stdin {
+        // Use stdin if "-" is specified
+        Box::new(stdin())
+    } else {
+        match get_input_file(filename_input) {
+            Ok(f) => f,
+            Err(e) => {
+                // Could not read the file, show the error and continue to the next file
+                show_error!("{e}");
+                set_exit_code(1);
+                return Err(FileCheckError::NonCriticalError);
+            }
+        }
+    };
+
+    let reader = BufReader::new(file);
+    let lines = read_os_string_lines(reader).collect::<Vec<_>>();
+
+    let Some((chosen_regex, is_algo_based_format)) = determine_regex(&lines) else {
+        let e = ChecksumError::NoProperlyFormattedChecksumLinesFound {
+            filename: get_filename_for_output(filename_input, input_is_stdin),
+        };
+        show_error!("{e}");
+        set_exit_code(1);
+        return Err(FileCheckError::NonCriticalError);
+    };
+
+    for (i, line) in lines.iter().enumerate() {
+        use LineCheckError::*;
+        match process_checksum_line(
+            filename_input,
+            line,
+            i,
+            &chosen_regex,
+            is_algo_based_format,
+            &mut res,
+            algo_name_input,
+            length_input,
+            &mut properly_formatted,
+            &mut correct_format,
+            opts,
+        ) {
+            Err(UError(e)) => return Err(e.into()),
+            // Err(_) => todo!(),
+            Ok(_) => (),
+        }
+    }
+
+    // not a single line correctly formatted found
+    // return an error
+    if !properly_formatted {
+        if !opts.status {
+            return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
+                filename: get_filename_for_output(filename_input, input_is_stdin),
+            }
+            .into());
+        }
+        set_exit_code(1);
+
+        return Err(FileCheckError::CriticalError);
+    }
+
+    if opts.ignore_missing && correct_format == 0 {
+        // we have only bad format
+        // and we had ignore-missing
+        eprintln!(
+            "{}: {}: no file was verified",
+            util_name(),
+            filename_input.maybe_quote(),
+        );
+        set_exit_code(1);
+    }
+
+    // strict means that we should have an exit code.
+    if opts.strict && res.bad_format > 0 {
+        set_exit_code(1);
+    }
+
+    // if we have any failed checksum verification, we set an exit code
+    // except if we have ignore_missing
+    if (res.failed_cksum > 0 || res.failed_open_file > 0) && !opts.ignore_missing {
+        set_exit_code(1);
+    }
+
+    // if any incorrectly formatted line, show it
+    res.print_output(opts.ignore_missing, opts.status);
+
+    Ok(())
+}
+
 /// Do the checksum validation (can be strict or not)
 ///
 pub fn perform_checksum_validation<'a, I>(
@@ -497,97 +617,12 @@ where
 {
     // if cksum has several input files, it will print the result for each file
     for filename_input in files {
-        let mut correct_format = 0;
-        let mut properly_formatted = false;
-        let mut res = ChecksumResult::default();
-        let input_is_stdin = filename_input == OsStr::new("-");
-
-        let file: Box<dyn Read> = if input_is_stdin {
-            // Use stdin if "-" is specified
-            Box::new(stdin())
-        } else {
-            match get_input_file(filename_input) {
-                Ok(f) => f,
-                Err(e) => {
-                    // Could not read the file, show the error and continue to the next file
-                    show_error!("{e}");
-                    set_exit_code(1);
-                    continue;
-                }
-            }
-        };
-
-        let reader = BufReader::new(file);
-        let lines = read_os_string_lines(reader).collect::<Vec<_>>();
-
-        let Some((chosen_regex, is_algo_based_format)) = determine_regex(&lines) else {
-            let e = ChecksumError::NoProperlyFormattedChecksumLinesFound {
-                filename: get_filename_for_output(filename_input, input_is_stdin),
-            };
-            show_error!("{e}");
-            set_exit_code(1);
-            continue;
-        };
-
-        for (i, line) in lines.iter().enumerate() {
-            use LineCheckError::*;
-            match process_checksum_line(
-                &filename_input,
-                line,
-                i,
-                &chosen_regex,
-                is_algo_based_format,
-                &mut res,
-                algo_name_input,
-                length_input,
-                &mut properly_formatted,
-                &mut correct_format,
-                opts,
-            ) {
-                Err(UError(e)) => return Err(e),
-                // Err(_) => todo!(),
-                Ok(_) => (),
-            }
+        use FileCheckError::*;
+        match process_checksum_file(algo_name_input, length_input, filename_input, opts) {
+            Err(UError(e)) => return Err(e),
+            Err(CriticalError) => break,
+            Err(NonCriticalError) | Ok(_) => continue,
         }
-
-        // not a single line correctly formatted found
-        // return an error
-        if !properly_formatted {
-            if !opts.status {
-                return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
-                    filename: get_filename_for_output(filename_input, input_is_stdin),
-                }
-                .into());
-            }
-            set_exit_code(1);
-
-            return Ok(());
-        }
-
-        if opts.ignore_missing && correct_format == 0 {
-            // we have only bad format
-            // and we had ignore-missing
-            eprintln!(
-                "{}: {}: no file was verified",
-                util_name(),
-                filename_input.maybe_quote(),
-            );
-            set_exit_code(1);
-        }
-
-        // strict means that we should have an exit code.
-        if opts.strict && res.bad_format > 0 {
-            set_exit_code(1);
-        }
-
-        // if we have any failed checksum verification, we set an exit code
-        // except if we have ignore_missing
-        if (res.failed_cksum > 0 || res.failed_open_file > 0) && !opts.ignore_missing {
-            set_exit_code(1);
-        }
-
-        // if any incorrectly formatted line, show it
-        res.print_output(opts.ignore_missing, opts.status);
     }
 
     Ok(())
