@@ -4950,3 +4950,111 @@ fn test_ls_color_clear_to_eol() {
     // cspell:disable-next-line
     result.stdout_contains("\x1b[0m\x1b[31;42mzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\x1b[0m\x1b[K");
 }
+
+#[test]
+fn test_suffix_case_sensitivity() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("img1.jpg");
+    at.touch("IMG2.JPG");
+    at.touch("img3.JpG");
+    at.touch("file1.z");
+    at.touch("file2.Z");
+
+    // *.jpg is specified only once so any suffix that has .jpg should match
+    // without caring about the letter case
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.Z=01;31")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("file1.z")
+        .arg("file2.Z")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35mIMG2.JPG\x1b[0m\n\
+                \x1b[01;31mfile1.z\x1b[0m\n\
+                \x1b[01;31mfile2.Z\x1b[0m",
+        /* cSpell:enable */
+    );
+
+    // *.jpg is specified more than once with different cases and style, so
+    // case should matter here
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.JPG=01;35;46")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
+                img3.JpG",
+        /* cSpell:enable */
+    );
+
+    // *.jpg is specified more than once with different cases but style is same, so
+    // case can ignored
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.JPG=01;35")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35mIMG2.JPG\x1b[0m\n\
+                \x1b[01;35mimg3.JpG\x1b[0m",
+        /* cSpell:enable */
+    );
+
+    // last *.jpg gets more priority resulting in same style across
+    // different cases specified, so case can ignored
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.jpg=01;35;46:*.JPG=01;35;46")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35;46mimg1.jpg\x1b[0m\n\
+                \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
+                \x1b[01;35;46mimg3.JpG\x1b[0m",
+        /* cSpell:enable */
+    );
+
+    // last *.jpg gets more priority resulting in different style across
+    // different cases specified, so case matters
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35;46:*.jpg=01;35:*.JPG=01;35;46")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
+                img3.JpG",
+        /* cSpell:enable */
+    );
+}

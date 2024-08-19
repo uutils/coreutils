@@ -298,7 +298,7 @@ hostname = "0.4"
 indicatif = "0.17.8"
 itertools = "0.13.0"
 libc = "0.2.153"
-lscolors = { version = "0.18.0", default-features = false, features = [
+lscolors = { version = "0.19.0", default-features = false, features = [
   "gnu_legacy",
 ] }
 memchr = "2.7.2"
