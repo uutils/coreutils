@@ -298,8 +298,7 @@ hostname = "0.4"
 indicatif = "0.17.8"
 itertools = "0.13.0"
 libc = "0.2.153"
-# this is just for a draft pr
-lscolors = { git = "https://github.com/matrixhead/lscolors", default-features = false, features = [
+lscolors = { version = "0.19.0", default-features = false, features = [
   "gnu_legacy",
 ] }
 memchr = "2.7.2"
