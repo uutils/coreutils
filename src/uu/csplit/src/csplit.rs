@@ -351,7 +351,7 @@ impl<'a> SplitWriter<'a> {
     /// In addition to errors reading/writing from/to a file, the following errors may be returned:
     /// - if no line matched, an [`CsplitError::MatchNotFound`].
     /// - if there are not enough lines to accommodate the offset, an
-    /// [`CsplitError::LineOutOfRange`].
+    ///   [`CsplitError::LineOutOfRange`].
     #[allow(clippy::cognitive_complexity)]
     fn do_to_match<I>(
         &mut self,

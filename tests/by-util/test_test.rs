@@ -67,7 +67,7 @@ fn test_double_not_is_false() {
 
 #[test]
 fn test_and_not_is_false() {
-    new_ucmd!().args(&["-a", "!"]).run().code_is(1);
+    new_ucmd!().args(&["-a", "!"]).run().code_is(2);
 }
 
 #[test]
@@ -84,6 +84,18 @@ fn test_not_and_not_succeeds() {
 #[test]
 fn test_simple_or() {
     new_ucmd!().args(&["foo", "-o", ""]).succeeds();
+}
+
+#[test]
+fn test_errors_miss_and_or() {
+    new_ucmd!()
+        .args(&["-o", "arg"])
+        .fails()
+        .stderr_contains("'-o': unary operator expected");
+    new_ucmd!()
+        .args(&["-a", "arg"])
+        .fails()
+        .stderr_contains("'-a': unary operator expected");
 }
 
 #[test]

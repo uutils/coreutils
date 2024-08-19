@@ -19,81 +19,16 @@
 //! `snice` (TBD)
 //!
 
+use crate::features::tty::Teletype;
+use std::hash::Hash;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::{self, Display, Formatter},
     fs, io,
     path::PathBuf,
     rc::Rc,
 };
 use walkdir::{DirEntry, WalkDir};
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TerminalType {
-    Tty(u64),
-    TtyS(u64),
-    Pts(u64),
-}
-
-impl TryFrom<String> for TerminalType {
-    type Error = ();
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::try_from(value.as_str())
-    }
-}
-
-impl TryFrom<&str> for TerminalType {
-    type Error = ();
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        Self::try_from(PathBuf::from(value))
-    }
-}
-
-impl TryFrom<PathBuf> for TerminalType {
-    type Error = ();
-
-    fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
-        // Three case: /dev/pts/* , /dev/ttyS**, /dev/tty**
-
-        let mut iter = value.iter();
-        // Case 1
-
-        // Considering this format: **/**/pts/<num>
-        if let (Some(_), Some(num)) = (iter.find(|it| *it == "pts"), iter.next()) {
-            return num
-                .to_str()
-                .ok_or(())?
-                .parse::<u64>()
-                .map_err(|_| ())
-                .map(TerminalType::Pts);
-        };
-
-        // Considering this format: **/**/ttyS** then **/**/tty**
-        let path = value.to_str().ok_or(())?;
-
-        let f = |prefix: &str| {
-            value
-                .iter()
-                .last()?
-                .to_str()?
-                .strip_prefix(prefix)?
-                .parse::<u64>()
-                .ok()
-        };
-
-        if path.contains("ttyS") {
-            // Case 2
-            f("ttyS").ok_or(()).map(TerminalType::TtyS)
-        } else if path.contains("tty") {
-            // Case 3
-            f("tty").ok_or(()).map(TerminalType::Tty)
-        } else {
-            Err(())
-        }
-    }
-}
 
 /// State or process
 #[derive(Debug, PartialEq, Eq)]
@@ -162,8 +97,16 @@ impl TryFrom<String> for RunState {
     }
 }
 
+impl TryFrom<&String> for RunState {
+    type Error = io::Error;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+
 /// Process ID and its information
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProcessInformation {
     pub pid: usize,
     pub cmdline: String,
@@ -177,7 +120,6 @@ pub struct ProcessInformation {
     cached_stat: Option<Rc<Vec<String>>>,
 
     cached_start_time: Option<u64>,
-    cached_tty: Option<Rc<HashSet<TerminalType>>>,
 }
 
 impl ProcessInformation {
@@ -252,7 +194,7 @@ impl ProcessInformation {
     }
 
     /// Collect information from `/proc/<pid>/stat` file
-    fn stat(&mut self) -> Rc<Vec<String>> {
+    pub fn stat(&mut self) -> Rc<Vec<String>> {
         if let Some(c) = &self.cached_stat {
             return Rc::clone(c);
         }
@@ -264,7 +206,7 @@ impl ProcessInformation {
         Rc::clone(&result)
     }
 
-    /// Fetch start time
+    /// Fetch start time from [ProcessInformation::cached_stat]
     ///
     /// - [The /proc Filesystem: Table 1-4](https://docs.kernel.org/filesystems/proc.html#id10)
     pub fn start_time(&mut self) -> Result<u64, io::Error> {
@@ -286,7 +228,7 @@ impl ProcessInformation {
         Ok(time)
     }
 
-    /// Fetch run state
+    /// Fetch run state from [ProcessInformation::cached_stat]
     ///
     /// - [The /proc Filesystem: Table 1-4](https://docs.kernel.org/filesystems/proc.html#id10)
     ///
@@ -299,29 +241,26 @@ impl ProcessInformation {
 
     /// This function will scan the `/proc/<pid>/fd` directory
     ///
-    /// # Error
+    /// If the process does not belong to any terminal and mismatched permission,
+    /// the result will contain [TerminalType::Unknown].
     ///
-    /// If scanned pid had mismatched permission,
-    /// it will caused [std::io::ErrorKind::PermissionDenied] error.
-    pub fn ttys(&mut self) -> Result<Rc<HashSet<TerminalType>>, io::Error> {
-        if let Some(tty) = &self.cached_tty {
-            return Ok(Rc::clone(tty));
-        }
-
+    /// Otherwise [TerminalType::Unknown] does not appear in the result.
+    pub fn tty(&self) -> Teletype {
         let path = PathBuf::from(format!("/proc/{}/fd", self.pid));
 
-        let result = Rc::new(
-            fs::read_dir(path)?
-                .flatten()
-                .filter(|it| it.path().is_symlink())
-                .flat_map(|it| fs::read_link(it.path()))
-                .flat_map(TerminalType::try_from)
-                .collect::<HashSet<_>>(),
-        );
+        let Ok(result) = fs::read_dir(path) else {
+            return Teletype::Unknown;
+        };
 
-        self.cached_tty = Some(Rc::clone(&result));
+        for dir in result.flatten().filter(|it| it.path().is_symlink()) {
+            if let Ok(path) = fs::read_link(dir.path()) {
+                if let Ok(tty) = Teletype::try_from(path) {
+                    return tty;
+                }
+            }
+        }
 
-        Ok(result)
+        Teletype::Unknown
     }
 }
 
@@ -332,6 +271,15 @@ impl TryFrom<DirEntry> for ProcessInformation {
         let value = value.into_path();
 
         Self::try_new(value)
+    }
+}
+
+impl Hash for ProcessInformation {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Make it faster.
+        self.pid.hash(state);
+        self.inner_status.hash(state);
+        self.inner_stat.hash(state);
     }
 }
 
@@ -378,46 +326,10 @@ pub fn walk_process() -> impl Iterator<Item = ProcessInformation> {
 }
 
 #[cfg(test)]
-#[cfg(target_os = "linux")]
 mod tests {
-
     use super::*;
-    use std::str::FromStr;
-
-    #[test]
-    fn test_tty_convention() {
-        assert_eq!(
-            TerminalType::try_from("/dev/tty1").unwrap(),
-            TerminalType::Tty(1)
-        );
-        assert_eq!(
-            TerminalType::try_from("/dev/tty10").unwrap(),
-            TerminalType::Tty(10)
-        );
-        assert_eq!(
-            TerminalType::try_from("/dev/pts/1").unwrap(),
-            TerminalType::Pts(1)
-        );
-        assert_eq!(
-            TerminalType::try_from("/dev/pts/10").unwrap(),
-            TerminalType::Pts(10)
-        );
-        assert_eq!(
-            TerminalType::try_from("/dev/ttyS1").unwrap(),
-            TerminalType::TtyS(1)
-        );
-        assert_eq!(
-            TerminalType::try_from("/dev/ttyS10").unwrap(),
-            TerminalType::TtyS(10)
-        );
-        assert_eq!(
-            TerminalType::try_from("ttyS10").unwrap(),
-            TerminalType::TtyS(10)
-        );
-
-        assert!(TerminalType::try_from("value").is_err());
-        assert!(TerminalType::try_from("TtyS10").is_err());
-    }
+    use crate::features::tty::Teletype;
+    use std::{collections::HashSet, str::FromStr};
 
     #[test]
     fn test_run_state_conversion() {
@@ -432,8 +344,6 @@ mod tests {
 
         assert!(RunState::try_from("G").is_err());
         assert!(RunState::try_from("Rg").is_err());
-
-        assert!(RunState::try_from(String::from("Rg")).is_err());
     }
 
     fn current_pid() -> usize {
@@ -457,7 +367,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_information() {
+    fn test_pid_entry() {
         let current_pid = current_pid();
 
         let mut pid_entry = ProcessInformation::try_new(
@@ -470,16 +380,14 @@ mod tests {
             .flatten()
             .map(DirEntry::into_path)
             .flat_map(|it| it.read_link())
-            .flat_map(TerminalType::try_from)
+            .flat_map(Teletype::try_from)
             .collect::<HashSet<_>>();
 
-        assert_eq!(pid_entry.ttys().unwrap(), result.into());
-    }
-
-    #[test]
-    fn test_process_information_new() {
-        let result = ProcessInformation::try_new(PathBuf::from_iter(["/", "proc", "1"]));
-        assert!(result.is_ok());
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            pid_entry.tty(),
+            Vec::from_iter(result.into_iter()).first().unwrap().clone()
+        );
     }
 
     #[test]
