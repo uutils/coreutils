@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG unwritable
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -5728,4 +5728,116 @@ fn test_cp_with_options_backup_and_rem_when_dest_is_symlink() {
     assert!(at.symlink_exists("inner_dir/sl~"));
     assert!(!at.symlink_exists("inner_dir/sl"));
     assert_eq!(at.read("inner_dir/sl"), "xyz");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cp_interactive_with_read_only_dest() {
+    let src = "src";
+    let dest = "dest";
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write(src, "src contents");
+    at.write(dest, "dest contents");
+    // create dest without write permissions
+    let mut permissions = at
+        .plus(dest)
+        .metadata()
+        .expect("couldn't stat dest")
+        .permissions();
+    permissions.set_readonly(true);
+    set_permissions(at.plus(dest), permissions).expect("couldn't set permissions");
+    scene
+        .ucmd()
+        .args(&[
+            "-i",
+            &at.plus(src).to_string_lossy(),
+            &at.plus(dest).to_string_lossy(),
+        ])
+        .pipe_in("y\n")
+        .fails()
+        .stderr_contains("unwritable")
+        .stderr_contains("(mode 0444, r--r--r--); try anyway?")
+        .stderr_contains("Permission denied");
+    assert_eq!(at.read(&at.plus(dest).to_string_lossy()), "dest contents");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cp_interactive_with_read_only_dest_and_force() {
+    let src = "src";
+    let dest = "dest";
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write(src, "src contents");
+    at.write(dest, "dest contents");
+    // create dest without write permissions
+    let mut permissions = at
+        .plus(dest)
+        .metadata()
+        .expect("couldn't stat dest")
+        .permissions();
+    permissions.set_readonly(true);
+    set_permissions(at.plus(dest), permissions).expect("couldn't set permissions");
+    scene
+        .ucmd()
+        .args(&[
+            "-if",
+            &at.plus(src).to_string_lossy(),
+            &at.plus(dest).to_string_lossy(),
+        ])
+        .pipe_in("y\n")
+        .succeeds()
+        .stderr_contains("replace")
+        .stderr_contains(" overriding mode 0444 (r--r--r--)?");
+    assert_eq!(at.read(&at.plus(dest).to_string_lossy()), "src contents");
+}
+
+#[test]
+fn test_cp_interactive_with_read_only_dest_and_rem() {
+    let src = "src";
+    let dest = "dest";
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write(src, "src contents");
+    at.write(dest, "dest contents");
+    // create dest without write permissions
+    let mut permissions = at
+        .plus(dest)
+        .metadata()
+        .expect("couldn't stat dest")
+        .permissions();
+    permissions.set_readonly(true);
+    set_permissions(at.plus(dest), permissions).expect("couldn't set permissions");
+
+    scene
+        .ucmd()
+        .args(&[
+            "-i",
+            "--rem",
+            &at.plus(src).to_string_lossy(),
+            &at.plus(dest).to_string_lossy(),
+        ])
+        .pipe_in("y\n")
+        .succeeds()
+        .stderr_contains("replace")
+        .stderr_contains(" overriding mode 0444 (r--r--r--)?");
+    assert_eq!(at.read(&at.plus(dest).to_string_lossy()), "src contents");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_cp_symbolic_link_loop_interactive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("loop", "loop");
+    at.touch("f");
+    // gnu compatibility -i won't prompt when dest is a symlink loop
+    ucmd.args(&["-fi", "f", "loop"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists("loop"));
 }

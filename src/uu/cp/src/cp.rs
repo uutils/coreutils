@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO unwritable
 
 use quick_error::quick_error;
 use std::cmp::Ordering;
@@ -28,7 +28,7 @@ use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop,
+    are_hardlinks_to_same_file, canonicalize, display_permissions, get_filename, is_symlink_loop,
     path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
     ResolveMode,
 };
@@ -1406,8 +1406,31 @@ impl OverwriteMode {
                 }
                 Err(Error::Skipped(false))
             }
-            Self::Interactive(_) => {
-                if prompt_yes!("overwrite {}?", path.quote()) {
+            Self::Interactive(clobber_mode) => {
+                let prompt = if cfg!(unix) {
+                    let path_md = path.metadata()?;
+                    if path_md.permissions().readonly() {
+                        match clobber_mode {
+                            ClobberMode::Force | ClobberMode::RemoveDestination => format!(
+                                "replace {}, overriding mode {:04o} ({})?",
+                                path.quote(),
+                                path_md.permissions().mode() & 0o7777,
+                                display_permissions(&path_md, false)
+                            ),
+                            ClobberMode::Standard => format!(
+                                "unwritable {} (mode {:04o}, {}); try anyway?",
+                                path.quote(),
+                                path_md.permissions().mode() & 0o7777,
+                                display_permissions(&path_md, false)
+                            ),
+                        }
+                    } else {
+                        format!("overwrite {}?", path.quote())
+                    }
+                } else {
+                    format!("overwrite {}?", path.quote())
+                };
+                if prompt_yes!("{prompt}") {
                     Ok(())
                 } else {
                     Err(Error::Skipped(true))
@@ -1656,7 +1679,9 @@ fn handle_existing_dest(
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
-    if options.update != UpdateMode::ReplaceIfOlder {
+    let is_symlink_loop = is_symlink_loop(dest);
+
+    if !is_symlink_loop && options.update != UpdateMode::ReplaceIfOlder {
         options.overwrite.verify(dest, options.debug)?;
     }
 
@@ -1678,15 +1703,18 @@ fn handle_existing_dest(
     if !is_dest_removed {
         match options.overwrite {
             // FIXME: print that the file was removed if --verbose is enabled
-            OverwriteMode::Clobber(ClobberMode::Force) => {
-                if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
+            OverwriteMode::Clobber(ClobberMode::Force)
+            | OverwriteMode::Interactive(ClobberMode::Force) => {
+                if is_symlink_loop || fs::metadata(dest)?.permissions().readonly() {
                     fs::remove_file(dest)?;
                 }
             }
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+            | OverwriteMode::Interactive(ClobberMode::RemoveDestination) => {
                 fs::remove_file(dest)?;
             }
-            OverwriteMode::Clobber(ClobberMode::Standard) => {
+            OverwriteMode::Clobber(ClobberMode::Standard)
+            | OverwriteMode::Interactive(ClobberMode::Standard) => {
                 // Consider the following files:
                 //
                 // * `src/f` - a regular file
