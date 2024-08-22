@@ -676,6 +676,7 @@ fn test_remove_inaccessible_dir() {
     scene.ucmd().arg("-rf").arg(dir_1).succeeds();
     assert!(!at.dir_exists(dir_1));
 }
+
 #[test]
 #[cfg(not(windows))]
 fn test_rm_current_or_parent_dir_rm4() {
@@ -706,6 +707,7 @@ fn test_rm_current_or_parent_dir_rm4() {
         assert_eq!(line, answers[idx]);
     }
 }
+
 #[test]
 #[cfg(windows)]
 fn test_rm_current_or_parent_dir_rm4_windows() {
