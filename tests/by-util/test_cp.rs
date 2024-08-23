@@ -5748,6 +5748,11 @@ fn test_cp_interactive_with_read_only_dest() {
         .permissions();
     permissions.set_readonly(true);
     set_permissions(at.plus(dest), permissions).expect("couldn't set permissions");
+    let perms_prompt = if cfg!(target_os = "android") {
+        " (mode 0400, r--------); try anyway?"
+    } else {
+        "(mode 0444, r--r--r--); try anyway?"
+    };
     scene
         .ucmd()
         .args(&[
@@ -5758,7 +5763,7 @@ fn test_cp_interactive_with_read_only_dest() {
         .pipe_in("y\n")
         .fails()
         .stderr_contains("unwritable")
-        .stderr_contains("(mode 0444, r--r--r--); try anyway?")
+        .stderr_contains(perms_prompt)
         .stderr_contains("Permission denied");
     assert_eq!(at.read(&at.plus(dest).to_string_lossy()), "dest contents");
 }
@@ -5781,6 +5786,11 @@ fn test_cp_interactive_with_read_only_dest_and_force() {
         .permissions();
     permissions.set_readonly(true);
     set_permissions(at.plus(dest), permissions).expect("couldn't set permissions");
+    let perms_prompt = if cfg!(target_os = "android") {
+        " overriding mode 0400 (r--------)?"
+    } else {
+        " overriding mode 0444 (r--r--r--)?"
+    };
     scene
         .ucmd()
         .args(&[
@@ -5791,10 +5801,11 @@ fn test_cp_interactive_with_read_only_dest_and_force() {
         .pipe_in("y\n")
         .succeeds()
         .stderr_contains("replace")
-        .stderr_contains(" overriding mode 0444 (r--r--r--)?");
+        .stderr_contains(perms_prompt);
     assert_eq!(at.read(&at.plus(dest).to_string_lossy()), "src contents");
 }
 
+#[cfg(unix)]
 #[test]
 fn test_cp_interactive_with_read_only_dest_and_rem() {
     let src = "src";
@@ -5812,7 +5823,11 @@ fn test_cp_interactive_with_read_only_dest_and_rem() {
         .permissions();
     permissions.set_readonly(true);
     set_permissions(at.plus(dest), permissions).expect("couldn't set permissions");
-
+    let perms_prompt = if cfg!(target_os = "android") {
+        " overriding mode 0400 (r--------)?"
+    } else {
+        " overriding mode 0444 (r--r--r--)?"
+    };
     scene
         .ucmd()
         .args(&[
@@ -5824,7 +5839,7 @@ fn test_cp_interactive_with_read_only_dest_and_rem() {
         .pipe_in("y\n")
         .succeeds()
         .stderr_contains("replace")
-        .stderr_contains(" overriding mode 0444 (r--r--r--)?");
+        .stderr_contains(perms_prompt);
     assert_eq!(at.read(&at.plus(dest).to_string_lossy()), "src contents");
 }
 

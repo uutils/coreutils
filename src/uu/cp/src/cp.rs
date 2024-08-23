@@ -27,8 +27,10 @@ use quick_error::ResultExt;
 use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
+#[cfg(unix)]
+use uucore::fs::display_permissions;
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, display_permissions, get_filename, is_symlink_loop,
+    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop,
     path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
     ResolveMode,
 };
@@ -1406,8 +1408,11 @@ impl OverwriteMode {
                 }
                 Err(Error::Skipped(false))
             }
+            // allow `unused_variables` because windows doesn't use `clobber_mode`
+            #[allow(unused_variables)]
             Self::Interactive(clobber_mode) => {
-                let prompt = if cfg!(unix) {
+                #[cfg(unix)]
+                let prompt = {
                     let path_md = path.metadata()?;
                     if path_md.permissions().readonly() {
                         match clobber_mode {
@@ -1427,9 +1432,9 @@ impl OverwriteMode {
                     } else {
                         format!("overwrite {}?", path.quote())
                     }
-                } else {
-                    format!("overwrite {}?", path.quote())
                 };
+                #[cfg(not(unix))]
+                let prompt = { format!("overwrite {}?", path.quote()) };
                 if prompt_yes!("{prompt}") {
                     Ok(())
                 } else {
