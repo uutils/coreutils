@@ -1093,14 +1093,16 @@ fn test_cp_backup_off() {
 }
 
 #[test]
-fn test_cp_backup_no_clobber_conflicting_options() {
-    new_ucmd!()
-        .arg("--backup")
-        .arg("--no-clobber")
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .fails()
-        .usage_error("options --backup and --no-clobber are mutually exclusive");
+fn test_cp_backup_conflicting_options() {
+    for conflicting_opt in ["--no-clobber", "--update=none-fail", "--update=none"] {
+        new_ucmd!()
+            .arg("--backup")
+            .arg(conflicting_opt)
+            .arg("file1")
+            .arg("file2")
+            .fails()
+            .usage_error("cannot combine --backup with -n/--no-clobber or --update=none-fail");
+    }
 }
 
 #[test]

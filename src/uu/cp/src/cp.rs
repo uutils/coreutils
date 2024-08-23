@@ -703,10 +703,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if let Ok(mut matches) = matches {
         let options = Options::from_matches(&matches)?;
 
-        if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
+        if options.backup != BackupMode::NoBackup
+            && (options.overwrite == OverwriteMode::NoClobber
+                || options.update == UpdateMode::ReplaceNone
+                || options.update == UpdateMode::ReplaceNoneFail)
+        {
             return Err(UUsageError::new(
-                EXIT_ERR,
-                "options --backup and --no-clobber are mutually exclusive",
+                1,
+                "cannot combine --backup with -n/--no-clobber or --update=none-fail",
             ));
         }
 
