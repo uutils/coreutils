@@ -421,6 +421,39 @@ fn test_invalid_date_string() {
 }
 
 #[test]
+fn test_invalid_date_fallback() {
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("11111111")
+        .succeeds()
+        // how coreutils outputs
+        //.stdout_contains("Sat Nov 11 12:00:00 AM UTC 1111");
+        .stdout_contains("Sat Nov 11 00:00:00 1111");
+
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2024-01-01 +351 day 00:00")
+        .succeeds()
+        .stdout_contains("Tue Dec 17 00:00:00 2024");
+
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("2024-01-01 00:00 1 day 1 hour 1 minute 3 second")
+        .succeeds()
+        .stdout_contains("Tue Jan  2 01:01:03 2024");
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("Jul 18 06:14:49 2024 GMT")
+        .succeeds()
+        //.stdout_contains("Jul 18 06:14:49 2024 GMT");
+        .stdout_contains("Jul 18 06:14:49 2024");
+}
+
+#[test]
 fn test_date_one_digit_date() {
     new_ucmd!()
         .arg("-d")

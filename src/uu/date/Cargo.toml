@@ -22,6 +22,8 @@ chrono = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true }
 parse_datetime = { workspace = true }
+regex = { workspace = true }
+lazy_static = "1.5.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

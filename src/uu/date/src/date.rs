@@ -24,6 +24,8 @@ use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetS
 
 use uucore::shortcut_value_parser::ShortcutValueParser;
 
+mod parser;
+
 // Options
 const DATE: &str = "date";
 const HOURS: &str = "hours";
@@ -222,7 +224,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Iterate over all dates - whether it's a single date or a file.
         let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
             DateSource::Custom(ref input) => {
-                let date = parse_date(input.clone());
+                let date = parse_date(input.clone())
+                    // fallback to parser::parse_fb if parse_date fails
+                    .or_else(|_| parser::parse_fb(input, now).map_err(|(i, e)| (i.to_string(), e)));
                 let iter = std::iter::once(date);
                 Box::new(iter)
             }
