@@ -570,6 +570,10 @@ fn process_checksum_file(
             opts,
         ) {
             Err(UError(e)) => return Err(e.into()),
+            Err(ImproperlyFormatted) => {
+                res.bad_format += 1;
+                continue;
+            }
             Err(Skipped) => continue,
             Ok(_) => (),
         }
