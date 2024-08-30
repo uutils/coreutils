@@ -163,7 +163,8 @@ impl UError for ChecksumError {
 
 enum LineCheckError {
     UError(Box<dyn UError>),
-    ImproperlyFormatted,
+    ImproperlyFormatted(bool),
+    CantOpenFile,
     Skipped,
 }
 
@@ -272,10 +273,9 @@ fn get_expected_checksum(filename: &str, checksum: &[u8]) -> UResult<String> {
 /// Returns a reader that reads from the specified file, or from stdin if `filename_to_check` is "-".
 fn get_file_to_check(
     filename: &OsStr,
+    filename_lossy: &str,
     ignore_missing: bool,
-    res: &mut ChecksumResult,
 ) -> Option<Box<dyn Read>> {
-    let filename_lossy = String::from_utf8_lossy(os_str_as_bytes(filename).expect("UTF-8 error"));
     if filename == "-" {
         Some(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
@@ -297,7 +297,6 @@ fn get_file_to_check(
                     show!(err.map_err_context(|| filename_lossy.to_string()));
                     println!("{filename_lossy}: FAILED open or read");
                 }
-                res.failed_open_file += 1;
                 // we could not open the file but we want to continue
                 None
             }
@@ -331,8 +330,6 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
 fn identify_algo_name_and_length(
     caps: &Captures,
     algo_name_input: Option<&str>,
-    res: &mut ChecksumResult,
-    properly_formatted: &mut bool,
 ) -> Option<(String, Option<usize>)> {
     // When the algo-based format is matched, extract details from regex captures
     let algorithm = caps
@@ -346,14 +343,11 @@ fn identify_algo_name_and_length(
     // (for example SHA1 (f) = d...)
     // Also handle the case cksum -s sm3 but the file contains other formats
     if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
-        res.bad_format += 1;
-        *properly_formatted = false;
         return None;
     }
 
     if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
         // Not supported algo, leave early
-        *properly_formatted = false;
         return None;
     }
 
@@ -365,12 +359,21 @@ fn identify_algo_name_and_length(
         if bits_value % 8 == 0 {
             Some(Some(bits_value / 8))
         } else {
-            *properly_formatted = false;
             None // Return None to signal a divisibility issue
         }
     })?;
 
     Some((algorithm, bits))
+}
+
+fn print_line_result(is_checksum_correct: bool, opts: ChecksumOptions, filename: &str) {
+    if is_checksum_correct {
+        if !opts.quiet && !opts.status {
+            println!("{filename}: OK");
+        }
+    } else if !opts.status {
+        println!("{filename}: FAILED");
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -380,13 +383,11 @@ fn process_checksum_line(
     i: usize,
     chosen_regex: &Regex,
     is_algo_based_format: bool,
-    res: &mut ChecksumResult,
     cli_algo_name: Option<&str>,
     cli_algo_length: Option<usize>,
     properly_formatted: &mut bool,
-    correct_format: &mut usize,
     opts: ChecksumOptions,
-) -> Result<(), LineCheckError> {
+) -> Result<bool, LineCheckError> {
     if line.is_empty() || os_str_as_bytes(line)?.starts_with(b"#") {
         // Skip empty and comment lines.
         return Err(LineCheckError::Skipped);
@@ -416,23 +417,19 @@ fn process_checksum_line(
 
         let filename_lossy = String::from_utf8_lossy(filename_to_check);
         let expected_checksum = get_expected_checksum(&filename_lossy, checksum)
-            .map_err(LineCheckError::from)?;
+            .map_err(|_| LineCheckError::ImproperlyFormatted(true))?;
 
         // If the algo_name is provided, we use it, otherwise we try to detect it
         let (algo_name, length) = if is_algo_based_format {
-            let (algo, mut len) =
-                identify_algo_name_and_length(&caps, cli_algo_name, res, properly_formatted)
-                    .unwrap_or((String::new(), None));
+            let (algo, mut len) = identify_algo_name_and_length(&caps, cli_algo_name)
+                .unwrap_or((String::new(), None));
 
             // Specific case for BLAKE2b length
             if algo == ALGORITHM_OPTIONS_BLAKE2B && len.is_none() {
                 if expected_checksum.len() / 2 == 64 {
                     len = Some(64);
                 } else {
-                    // FIXME(dprn): Improve error handling
-                    res.bad_format += 1;
-                    *properly_formatted = false;
-                    return Ok(());
+                    return Err(LineCheckError::ImproperlyFormatted(true));
                 }
             }
             (algo, len)
@@ -454,10 +451,7 @@ fn process_checksum_line(
 
         if algo_name.is_empty() {
             // we haven't been able to detect the algo name. No point to continue
-            *properly_formatted = false;
-
-            // FIXME(dprn): report error in some way ?
-            return Ok(());
+            return Err(LineCheckError::ImproperlyFormatted(true));
         }
         let mut algo = algo::detect_algo(&algo_name, length)?;
 
@@ -471,11 +465,11 @@ fn process_checksum_line(
 
         // manage the input file
         let file_to_check =
-            match get_file_to_check(real_filename_to_check, opts.ignore_missing, res) {
+            match get_file_to_check(real_filename_to_check, &filename_lossy, opts.ignore_missing) {
                 Some(file) => file,
                 None => {
                     // FIXME(dprn): report error in some way ?
-                    return Ok(());
+                    return Err(LineCheckError::CantOpenFile);
                 }
             };
         let mut file_reader = BufReader::new(file_to_check);
@@ -486,18 +480,16 @@ fn process_checksum_line(
             digest_reader(&mut digest, &mut file_reader, opts.binary, algo.bits).unwrap();
 
         // Do the checksum validation
-        if expected_checksum == calculated_checksum {
-            if !opts.quiet && !opts.status {
-                println!("{prefix}{filename_lossy}: OK");
-            }
-            *correct_format += 1;
-        } else {
-            if !opts.status {
-                println!("{prefix}{filename_lossy}: FAILED");
-            }
-            res.failed_cksum += 1;
-        }
+        let is_checksum_correct = expected_checksum == calculated_checksum;
+        print_line_result(
+            is_checksum_correct,
+            opts,
+            &format!("{}{}", prefix, filename_lossy),
+        );
+
+        Ok(is_checksum_correct)
     } else {
+        // The line did not match the regex.
         if opts.warn {
             let algo = if let Some(algo_name_input) = cli_algo_name {
                 algo_name_input.to_uppercase()
@@ -513,9 +505,8 @@ fn process_checksum_line(
             );
         }
 
-        res.bad_format += 1;
+        Err(LineCheckError::ImproperlyFormatted(false))
     }
-    Ok(())
 }
 
 fn process_checksum_file(
@@ -564,20 +555,23 @@ fn process_checksum_file(
             i,
             &chosen_regex,
             is_algo_based_format,
-            &mut res,
             algo_name_input,
             length_input,
             &mut properly_formatted,
-            &mut correct_format,
             opts,
         ) {
             Err(UError(e)) => return Err(e.into()),
-            Err(ImproperlyFormatted) => {
+            Err(ImproperlyFormatted(reset_properly_formatted)) => {
                 res.bad_format += 1;
+                if reset_properly_formatted {
+                    properly_formatted = false;
+                }
                 continue;
             }
+            Err(CantOpenFile) => res.failed_open_file += 1,
             Err(Skipped) => continue,
-            Ok(_) => (),
+            Ok(true) => correct_format += 1,
+            Ok(false) => res.failed_cksum += 1,
         }
     }
 
