@@ -202,8 +202,7 @@ impl From<ChecksumError> for FileCheckError {
 //    algo must be uppercase or b (for blake2b)
 // 2. <checksum> [* ]<filename>
 // 3. <checksum> [*]<filename> (only one space)
-const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>.*)\)\s*=\s*(?P<checksum>[a-fA-F0-9]+)$";
-const ALGO_BASED_REGEX_BASE64: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>.*)\)\s*=\s*(?P<checksum>[A-Za-z0-9+/]+={0,2})$";
+const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>.*)\)\s*=\s*(?P<checksum>[A-Za-z0-9+/]+={0,2})$";
 
 const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>.*)$";
 
@@ -216,7 +215,6 @@ fn determine_regex<S: AsRef<OsStr>>(lines: &[S]) -> Option<(Regex, bool)> {
         (Regex::new(ALGO_BASED_REGEX).unwrap(), true),
         (Regex::new(DOUBLE_SPACE_REGEX).unwrap(), false),
         (Regex::new(SINGLE_SPACE_REGEX).unwrap(), false),
-        (Regex::new(ALGO_BASED_REGEX_BASE64).unwrap(), true),
     ];
 
     for line in lines {
@@ -254,17 +252,19 @@ fn get_base64_checksum(checksum: &[u8]) -> Option<String> {
     }
 }
 
-fn get_expected_checksum(filename: &str, checksum: &[u8], chosen_regex: &Regex) -> UResult<String> {
-    if chosen_regex.as_str() == ALGO_BASED_REGEX_BASE64 {
+fn get_expected_checksum(filename: &str, checksum: &[u8]) -> UResult<String> {
+    if checksum.iter().all(u8::is_ascii_hexdigit) {
+        // All hexa characters, assume checksum is encoded in hexadecimal.
+        // Assume the checksum is already valid UTF-8
+        // (Validation should have been handled by regex)
+        Ok(str::from_utf8(checksum).unwrap().to_string())
+    } else {
+        // At least 1 non-hexa character, checksum is encoded in base64.
         get_base64_checksum(checksum).ok_or(Box::new(
             ChecksumError::NoProperlyFormattedChecksumLinesFound {
                 filename: (&filename).to_string(),
             },
         ))
-    } else {
-        // Assume the checksum is already valid UTF-8
-        // (Validation should have been handled by regex)
-        Ok(str::from_utf8(checksum).unwrap().to_string())
     }
 }
 
@@ -409,7 +409,7 @@ fn process_checksum_line(
         }
 
         let filename_lossy = String::from_utf8_lossy(filename_to_check);
-        let expected_checksum = get_expected_checksum(&filename_lossy, checksum, &chosen_regex)
+        let expected_checksum = get_expected_checksum(&filename_lossy, checksum)
             .map_err(LineCheckError::from)?;
 
         // If the algo_name is provided, we use it, otherwise we try to detect it
@@ -884,13 +884,13 @@ mod tests {
 
     #[test]
     fn test_get_expected_checksum() {
-        let re = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
+        let re = Regex::new(ALGO_BASED_REGEX).unwrap();
         let caps = re
             .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=")
             .unwrap();
         let checksum = caps.name("checksum").unwrap().as_bytes();
 
-        let result = get_expected_checksum("filename", checksum, &re);
+        let result = get_expected_checksum("filename", checksum);
 
         assert_eq!(
             result.unwrap(),
@@ -900,13 +900,13 @@ mod tests {
 
     #[test]
     fn test_get_expected_checksum_invalid() {
-        let re = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
+        let re = Regex::new(ALGO_BASED_REGEX).unwrap();
         let caps = re
             .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU")
             .unwrap();
         let checksum = caps.name("checksum").unwrap().as_bytes();
 
-        let result = get_expected_checksum("filename", checksum, &re);
+        let result = get_expected_checksum("filename", checksum);
 
         assert!(result.is_err());
     }
