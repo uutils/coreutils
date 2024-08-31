@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (clap) dont
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
+// spell-checker:ignore Anone
 
 mod byteorder_io;
 mod formatteriteminfo;
@@ -169,29 +170,24 @@ impl OdOptions {
         let radix = match matches.get_one::<String>(options::ADDRESS_RADIX) {
             None => Radix::Octal,
             Some(s) => {
+                // Other implementations of od only check the first character of this argument's value.
+                // This means executing "od -Anone" is equivalent to "od -An".
+                // Existing users of od rely on this behavior:
+                // https://github.com/landley/toybox/blob/d50372cad35d5dd12e6391c3c7c901a96122dc67/scripts/make.sh#L239
+                // https://github.com/google/jsonnet/blob/913281d203578bb394995bacc792f2576371e06c/Makefile#L212
                 let st = s.as_bytes();
-                if st.len() == 1 {
-                    let radix: char = *(st
-                        .first()
-                        .expect("byte string of length 1 lacks a 0th elem"))
-                        as char;
-                    match radix {
-                        'd' => Radix::Decimal,
-                        'x' => Radix::Hexadecimal,
-                        'o' => Radix::Octal,
-                        'n' => Radix::NoPrefix,
-                        _ => {
-                            return Err(USimpleError::new(
-                                1,
-                                "Radix must be one of [d, o, n, x]".to_string(),
-                            ))
-                        }
+                let radix: char = *(st.first().expect("should be caught by clap")) as char;
+                match radix {
+                    'd' => Radix::Decimal,
+                    'x' => Radix::Hexadecimal,
+                    'o' => Radix::Octal,
+                    'n' => Radix::NoPrefix,
+                    _ => {
+                        return Err(USimpleError::new(
+                            1,
+                            "Radix must be one of [d, o, n, x]".to_string(),
+                        ))
                     }
-                } else {
-                    return Err(USimpleError::new(
-                        1,
-                        "Radix must be one of [d, o, n, x]".to_string(),
-                    ));
                 }
             }
         };

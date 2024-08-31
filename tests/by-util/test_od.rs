@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone
 
 use crate::common::util::TestScenario;
 use unindent::unindent;
@@ -577,6 +577,19 @@ fn test_no_offset() {
 #[test]
 fn test_invalid_offset() {
     new_ucmd!().arg("-Ab").fails();
+}
+
+#[test]
+fn test_offset_compatibility() {
+    let input = [0u8; 4];
+    let expected_output = " 000000 000000\n";
+
+    new_ucmd!()
+        .arg("-Anone")
+        .run_piped_stdin(input)
+        .no_stderr()
+        .success()
+        .stdout_is(expected_output);
 }
 
 #[test]
