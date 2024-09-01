@@ -171,23 +171,30 @@ impl OdOptions {
             None => Radix::Octal,
             Some(s) => {
                 // Other implementations of od only check the first character of this argument's value.
-                // This means executing "od -Anone" is equivalent to "od -An".
+                // This means executing `od -Anone` is equivalent to executing `od -An`.
                 // Existing users of od rely on this behavior:
                 // https://github.com/landley/toybox/blob/d50372cad35d5dd12e6391c3c7c901a96122dc67/scripts/make.sh#L239
                 // https://github.com/google/jsonnet/blob/913281d203578bb394995bacc792f2576371e06c/Makefile#L212
                 let st = s.as_bytes();
-                let radix: char = *(st.first().expect("should be caught by clap")) as char;
-                match radix {
-                    'd' => Radix::Decimal,
-                    'x' => Radix::Hexadecimal,
-                    'o' => Radix::Octal,
-                    'n' => Radix::NoPrefix,
-                    _ => {
-                        return Err(USimpleError::new(
-                            1,
-                            "Radix must be one of [d, o, n, x]".to_string(),
-                        ))
+                if let Some(u) = st.first() {
+                    match *u {
+                        b'o' => Radix::Octal,
+                        b'd' => Radix::Decimal,
+                        b'x' => Radix::Hexadecimal,
+                        b'n' => Radix::NoPrefix,
+                        _ => {
+                            return Err(USimpleError::new(
+                                1,
+                                "Radix must be one of [o, d, x, n]".to_string(),
+                            ));
+                        }
                     }
+                } else {
+                    // Return an error instead of panicking when `od -A ''` is executed.
+                    return Err(USimpleError::new(
+                        1,
+                        "Radix cannot be empty, and must be one of [o, d, x, n]".to_string(),
+                    ));
                 }
             }
         };

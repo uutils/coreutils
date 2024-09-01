@@ -580,16 +580,24 @@ fn test_invalid_offset() {
 }
 
 #[test]
+fn test_empty_offset() {
+    new_ucmd!()
+        .arg("-A")
+        .arg("")
+        .fails()
+        .stderr_only("od: Radix cannot be empty, and must be one of [o, d, x, n]\n");
+}
+
+#[test]
 fn test_offset_compatibility() {
     let input = [0u8; 4];
     let expected_output = " 000000 000000\n";
 
     new_ucmd!()
         .arg("-Anone")
-        .run_piped_stdin(input)
-        .no_stderr()
-        .success()
-        .stdout_is(expected_output);
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
 }
 
 #[test]
