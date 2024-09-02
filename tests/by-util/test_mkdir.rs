@@ -208,6 +208,46 @@ fn test_recursive_reporting() {
 }
 
 #[test]
+// Windows don't have acl entries
+#[cfg(not(windows))]
+fn test_mkdir_acl() {
+    use std::str::FromStr;
+
+    use exacl::{getfacl, setfacl, AclEntry, Flag, Perm};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+    let mut acl_entries = getfacl(at.plus("a"), None).unwrap();
+
+    // Doing a setfacl on the command adds all required default flagged acl entries but
+    // the exacl library doesn't so we are manually pushing
+    acl_entries.push(AclEntry::allow_group(
+        "",
+        Perm::EXECUTE | Perm::READ | Perm::WRITE,
+        Flag::DEFAULT,
+    ));
+    acl_entries.push(AclEntry::allow_user(
+        "",
+        Perm::EXECUTE | Perm::READ | Perm::WRITE,
+        Flag::DEFAULT,
+    ));
+    acl_entries.push(AclEntry::allow_other(
+        Perm::from_str("rx").unwrap(),
+        Flag::DEFAULT,
+    ));
+
+    println!("{:?}", acl_entries);
+    setfacl(&[at.plus_as_string("a")], &acl_entries, None).unwrap();
+    ucmd.arg("-p").arg("a/b").umask(0x077).succeeds();
+
+    let perms = at.metadata("a/b").permissions().mode();
+
+    // 0x770 would be user:rwx,group:rwx permissions
+    assert_eq!(perms, 16893);
+}
+
+#[test]
 fn test_mkdir_trailing_dot() {
     new_ucmd!().arg("-p").arg("-v").arg("test_dir").succeeds();
 
