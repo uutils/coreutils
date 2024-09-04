@@ -8,8 +8,6 @@
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-#[cfg(not(windows))]
-use exacl::{getfacl, AclOption};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
@@ -225,13 +223,14 @@ fn create_dir(
             }
             #[cfg(not(windows))]
             if !path_exists {
-                let acl_perm_bits = get_acl_perm_bits(path);
+                let acl_perm_bits = get_acl_perm_bits_from_xattr(path);
                 if is_parent {
                     chmod(path, (!mode::get_umask() & 0o777) | (0o300 | acl_perm_bits))?;
                 } else {
                     chmod(path, mode | acl_perm_bits)?;
                 }
             }
+
             Ok(())
         }
 
@@ -243,14 +242,39 @@ fn create_dir(
 /// Only default acl entries get inherited by objects under the path i.e. if child directories
 /// will have their permissions modified.
 #[cfg(not(windows))]
-fn get_acl_perm_bits(path: &Path) -> u32 {
-    if let Ok(entries) = getfacl(path, AclOption::DEFAULT_ACL) {
+fn get_acl_perm_bits_from_xattr(path: &Path) -> u32 {
+    if let Ok(entries) = uucore::fsxattr::retrieve_xattrs(path) {
         let mut perm: u32 = 0;
-        for entry in entries {
-            perm = (perm << 3) | entry.perms.bits();
+        // value is xattr byte vector
+        // value follows a starts with a 4 byte header, and then has posix_acl_entries, each
+        // posix_acl_entry is separated by a u32 sequence i.e. 0xFFFFFFFF
+        //
+        // struct posix_acl_entries {
+        //  e_tag: u16
+        //  e_perm: u16
+        //  e_id: u32
+        // }
+        //
+        // Reference: `https://github.com/torvalds/linux/blob/master/include/uapi/linux/posix_acl_xattr.h`
+        //
+        // The value of the header is 0x0002, so we skip the first four bytes of the value and
+        // process the rest
+        //
+        if let Some(value) = entries.get(&OsString::from("system.posix_acl_default")) {
+            let acl_entries = value
+                .split_at(3)
+                .1
+                .iter()
+                .filter(|&x| *x != 255)
+                .copied()
+                .collect::<Vec<u8>>();
+
+            for entry in acl_entries.chunks_exact(4) {
+                // Third byte and fourth byte will be the perm bits
+                perm = (perm << 3) | entry[2] as u32 | entry[3] as u32;
+            }
+            return perm;
         }
-        perm
-    } else {
-        0
     }
+    0
 }

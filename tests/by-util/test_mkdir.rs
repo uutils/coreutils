@@ -211,34 +211,25 @@ fn test_recursive_reporting() {
 // Windows don't have acl entries
 #[cfg(not(windows))]
 fn test_mkdir_acl() {
-    use std::str::FromStr;
-
-    use exacl::{getfacl, setfacl, AclEntry, Flag, Perm};
+    use std::{collections::HashMap, ffi::OsString};
 
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("a");
-    let mut acl_entries = getfacl(at.plus("a"), None).unwrap();
+
+    let mut map: HashMap<OsString, Vec<u8>> = HashMap::new();
+    let xattr_val: Vec<u8> = vec![
+        2, 0, 0, 0, 1, 0, 7, 0, 255, 255, 255, 255, 4, 0, 7, 0, 255, 255, 255, 255, 32, 0, 5, 0,
+        255, 255, 255, 255,
+    ];
+
+    map.insert(OsString::from("system.posix_acl_default"), xattr_val);
+
+    uucore::fsxattr::apply_xattrs(at.plus("a"), map).unwrap();
 
     // Doing a setfacl on the command adds all required default flagged acl entries but
     // the exacl library doesn't so we are manually pushing
-    acl_entries.push(AclEntry::allow_group(
-        "",
-        Perm::EXECUTE | Perm::READ | Perm::WRITE,
-        Flag::DEFAULT,
-    ));
-    acl_entries.push(AclEntry::allow_user(
-        "",
-        Perm::EXECUTE | Perm::READ | Perm::WRITE,
-        Flag::DEFAULT,
-    ));
-    acl_entries.push(AclEntry::allow_other(
-        Perm::from_str("rx").unwrap(),
-        Flag::DEFAULT,
-    ));
 
-    println!("{:?}", acl_entries);
-    setfacl(&[at.plus_as_string("a")], &acl_entries, None).unwrap();
     ucmd.arg("-p").arg("a/b").umask(0x077).succeeds();
 
     let perms = at.metadata("a/b").permissions().mode();
