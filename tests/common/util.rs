@@ -187,7 +187,7 @@ impl CmdResult {
 
     /// Assert `stdout` as bytes with a predicate function returning a `bool`.
     #[track_caller]
-    pub fn stdout_check<'a, F>(&'a self, predicate: F) -> &Self
+    pub fn stdout_check<'a, F>(&'a self, predicate: F) -> &'a Self
     where
         F: Fn(&'a [u8]) -> bool,
     {
@@ -202,7 +202,7 @@ impl CmdResult {
 
     /// Assert `stdout` as `&str` with a predicate function returning a `bool`.
     #[track_caller]
-    pub fn stdout_str_check<'a, F>(&'a self, predicate: F) -> &Self
+    pub fn stdout_str_check<'a, F>(&'a self, predicate: F) -> &'a Self
     where
         F: Fn(&'a str) -> bool,
     {
@@ -217,7 +217,7 @@ impl CmdResult {
 
     /// Assert `stderr` as bytes with a predicate function returning a `bool`.
     #[track_caller]
-    pub fn stderr_check<'a, F>(&'a self, predicate: F) -> &Self
+    pub fn stderr_check<'a, F>(&'a self, predicate: F) -> &'a Self
     where
         F: Fn(&'a [u8]) -> bool,
     {
@@ -232,7 +232,7 @@ impl CmdResult {
 
     /// Assert `stderr` as `&str` with a predicate function returning a `bool`.
     #[track_caller]
-    pub fn stderr_str_check<'a, F>(&'a self, predicate: F) -> &Self
+    pub fn stderr_str_check<'a, F>(&'a self, predicate: F) -> &'a Self
     where
         F: Fn(&'a str) -> bool,
     {
