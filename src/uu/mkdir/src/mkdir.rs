@@ -221,7 +221,10 @@ fn create_dir(
                     path.quote()
                 );
             }
-            #[cfg(not(windows))]
+
+            // TODO: Make this macos compatible by creating a function to get permission bits from
+            // acl in extended attributes
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
             if !path_exists {
                 let acl_perm_bits = uucore::fsxattr::get_acl_perm_bits_from_xattr(path);
                 let new_mode = if is_parent {
@@ -230,6 +233,15 @@ fn create_dir(
                     mode
                 };
                 chmod(path, new_mode | acl_perm_bits)?;
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let new_mode = if is_parent {
+                    (!mode::get_umask() & 0o777) | 0o300
+                } else {
+                    mode
+                };
+                chmod(path, new_mode)?;
             }
             Ok(())
         }
