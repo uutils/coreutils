@@ -117,3 +117,17 @@ impl Display for RunconError {
         write_full_error(f, &self.inner)
     }
 }
+
+impl UError for Error {
+    fn code(&self) -> i32 {
+        match self {
+            Error::MissingCommand => error_exit_status::ANOTHER_ERROR,
+            Error::SELinuxNotEnabled => error_exit_status::ANOTHER_ERROR,
+            Error::NotUTF8(_) => error_exit_status::ANOTHER_ERROR,
+            Error::CommandLine(e) => e.exit_code(),
+            Error::SELinux { .. } => error_exit_status::ANOTHER_ERROR,
+            Error::Io { .. } => error_exit_status::ANOTHER_ERROR,
+            Error::Io1 { .. } => error_exit_status::ANOTHER_ERROR,
+        }
+    }
+}
