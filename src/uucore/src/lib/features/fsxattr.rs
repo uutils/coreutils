@@ -196,6 +196,31 @@ mod tests {
         std::fs::create_dir(&source_path).unwrap();
 
         let test_attr = "system.posix_acl_default";
+        // posix_acl entries are in the form of
+        // struct posix_acl_entry{
+        //  tag: u16,
+        //  perm: u16,
+        //  id: u32,
+        // }
+        // the fields are serialized in little endian.
+        // The entries are precedded by a header of value of 0x0002
+        // Reference: `<https://github.com/torvalds/linux/blob/master/include/uapi/linux/posix_acl_xattr.h>`
+        // The id is undefined i.e. -1 which in u32 is 0xFFFFFFFF and tag and perm bits as given in the
+        // header file.
+        // Reference: `<https://github.com/torvalds/linux/blob/master/include/uapi/linux/posix_acl.h>`
+        //
+        //
+        // There is a bindgen bug which generates the ACL_OTHER constant whose value is 0x20 into 32.
+        // which when the bug is fixed will need to be changed back to 20 from 32 in the vec 'test_value'.
+        //
+        // Reference `<https://github.com/rust-lang/rust-bindgen/issues/2926>`
+        //
+        // The test_value vector is the header 0x0002 followed by tag and permissions for user_obj , tag
+        // and permissions and for group_obj and finally the tag and permissions for ACL_OTHER. Each
+        // entry has undefined id as mentioned above.
+        //
+        //
+
         let test_value = vec![
             2, 0, 0, 0, 1, 0, 7, 0, 255, 255, 255, 255, 4, 0, 0, 0, 255, 255, 255, 255, 32, 0, 0,
             0, 255, 255, 255, 255,

@@ -243,6 +243,10 @@ fn create_dir(
                 };
                 chmod(path, new_mode)?;
             }
+
+            #[cfg(windows)]
+            chmod(path, mode)?;
+
             Ok(())
         }
 
