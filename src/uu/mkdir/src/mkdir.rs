@@ -165,8 +165,10 @@ pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<
     let path_buf = dir_strip_dot_for_creation(path);
     let path = path_buf.as_path();
 
-    create_dir(path, recursive, verbose, false)?;
-    chmod(path, mode)
+    if create_dir(path, recursive, verbose, false)? {
+        chmod(path, mode)?;
+    }
+    Ok(())
 }
 
 #[cfg(any(unix, target_os = "redox"))]
@@ -186,9 +188,10 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     Ok(())
 }
 
+// Return true if the directory at `path` has been created by this call.
 // `is_parent` argument is not used on windows
 #[allow(unused_variables)]
-fn create_dir(path: &Path, recursive: bool, verbose: bool, is_parent: bool) -> UResult<()> {
+fn create_dir(path: &Path, recursive: bool, verbose: bool, is_parent: bool) -> UResult<bool> {
     if path.exists() && !recursive {
         return Err(USimpleError::new(
             1,
@@ -196,12 +199,14 @@ fn create_dir(path: &Path, recursive: bool, verbose: bool, is_parent: bool) -> U
         ));
     }
     if path == Path::new("") {
-        return Ok(());
+        return Ok(false);
     }
 
     if recursive {
         match path.parent() {
-            Some(p) => create_dir(p, recursive, verbose, true)?,
+            Some(p) => {
+                create_dir(p, recursive, verbose, true)?;
+            }
             None => {
                 USimpleError::new(1, "failed to create whole tree");
             }
@@ -222,9 +227,9 @@ fn create_dir(path: &Path, recursive: bool, verbose: bool, is_parent: bool) -> U
                 // which is umask modified by 'u+wx'
                 chmod(path, (!mode::get_umask() & 0o0777) | 0o0300)?;
             }
-            Ok(())
+            Ok(true)
         }
-        Err(_) if path.is_dir() => Ok(()),
+        Err(_) if path.is_dir() => Ok(false),
         Err(e) => Err(e.into()),
     }
 }
