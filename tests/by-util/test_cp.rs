@@ -54,7 +54,6 @@ static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
 static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
-#[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 #[cfg(all(
     unix,
@@ -164,6 +163,32 @@ fn test_cp_multiple_files() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
         .succeeds();
+
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
+}
+
+#[test]
+fn test_cp_multiple_files_with_nonexistent_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_NONEXISTENT_FILE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .fails();
+
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
+}
+
+#[test]
+fn test_cp_multiple_files_with_empty_file_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .fails();
 
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
