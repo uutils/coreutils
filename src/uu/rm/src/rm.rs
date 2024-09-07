@@ -326,10 +326,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
 
-    #[cfg(unix)]
-    let del = "/";
-    #[cfg(windows)]
-    let del = "\\";
+    let del = std::path::MAIN_SEPARATOR;
 
     if path
         .to_str()

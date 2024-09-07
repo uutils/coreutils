@@ -718,10 +718,7 @@ fn test_non_utf8() {
 fn test_rm_no_del_parent() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(not(windows))]
-    let del = "/";
-    #[cfg(windows)]
-    let del = "\\";
+    let del = std::path::MAIN_SEPARATOR;
 
     at.mkdir("test");
     at.mkdir(&format!("test{del}dir"));
@@ -736,10 +733,7 @@ fn test_rm_no_del_parent() {
 fn test_rm_no_del_cur() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(not(windows))]
-    let del = "/";
-    #[cfg(windows)]
-    let del = "\\";
+    let del = std::path::MAIN_SEPARATOR;
 
     at.mkdir("test");
     at.touch(&format!("test{del}file"));
