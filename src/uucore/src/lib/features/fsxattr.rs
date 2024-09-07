@@ -203,7 +203,7 @@ mod tests {
         //  id: u32,
         // }
         // the fields are serialized in little endian.
-        // The entries are precedded by a header of value of 0x0002
+        // The entries are preceded by a header of value of 0x0002
         // Reference: `<https://github.com/torvalds/linux/blob/master/include/uapi/linux/posix_acl_xattr.h>`
         // The id is undefined i.e. -1 which in u32 is 0xFFFFFFFF and tag and perm bits as given in the
         // header file.
