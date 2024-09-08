@@ -222,31 +222,30 @@ fn create_dir(
                 );
             }
 
-            // TODO: Make this macos and freebsd compatible by creating a function to get permission bits from
-            // acl in extended attributes
-            #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "freebsd")))]
-            if !path_exists {
+            #[cfg(all(unix, target_os = "linux"))]
+            let new_mode = if !path_exists {
+                // TODO: Make this macos and freebsd compatible by creating a function to get permission bits from
+                // acl in extended attributes
                 let acl_perm_bits = uucore::fsxattr::get_acl_perm_bits_from_xattr(path);
-                let new_mode = if is_parent {
-                    (!mode::get_umask() & 0o777) | 0o300
-                } else {
-                    mode
-                };
-                chmod(path, new_mode | acl_perm_bits)?;
-            }
-            #[cfg(any(target_os = "macos", target_os = "freebsd"))]
-            {
-                let new_mode = if is_parent {
-                    (!mode::get_umask() & 0o777) | 0o300
-                } else {
-                    mode
-                };
-                chmod(path, new_mode)?;
-            }
 
+                if is_parent {
+                    (!mode::get_umask() & 0o777) | 0o300 | acl_perm_bits
+                } else {
+                    mode | acl_perm_bits
+                }
+            } else {
+                mode
+            };
+            #[cfg(all(unix, not(target_os = "linux")))]
+            let new_mode = if is_parent {
+                (!mode::get_umask() & 0o777) | 0o300
+            } else {
+                mode
+            };
             #[cfg(windows)]
-            chmod(path, mode)?;
+            let new_mode = mode;
 
+            chmod(path, new_mode)?;
             Ok(())
         }
 
