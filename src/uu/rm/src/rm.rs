@@ -6,18 +6,20 @@
 // spell-checker:ignore (path) eacces inacc rm-r4
 
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
-use core::str;
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, Metadata};
 use std::io::ErrorKind;
 use std::ops::BitOr;
-
+#[cfg(not(windows))]
+use std::os::unix::ffi::OsStrExt;
+use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
-use std::str::from_utf8;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
+use uucore::{
+    format_usage, help_about, help_section, help_usage, os_str_as_bytes, prompt_yes, show_error,
+};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -331,11 +333,11 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
 
-    let cleaned_path = clean_trailing_slashes(path);
-    if path_is_current_or_parent_directory(cleaned_path) {
+    let path = clean_trailing_slashes(path);
+    if path_is_current_or_parent_directory(path) {
         show_error!(
             "refusing to remove '.' or '..' directory: skipping '{:}'",
-            cleaned_path.display()
+            path.display()
         );
         return true;
     }
@@ -410,8 +412,17 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
     } else if options.recursive {
-        show_error!("could not remove directory {}", path.quote());
-        had_err = true;
+        if is_root || !options.preserve_root {
+            show_error!(
+                "it is dangerous to operate recursively on '{}'",
+                MAIN_SEPARATOR
+            );
+            show_error!("use --no-preserve-root to override this failsafe");
+            had_err = true;
+        } else {
+            show_error!("could not remove directory {}", path.quote());
+            had_err = true;
+        }
     } else {
         show_error!(
             "cannot remove {}: Is a directory", // GNU's rm error message does not include help
@@ -575,19 +586,15 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 }
 /// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g '/.....' , '....' . '../..'
 fn path_is_current_or_parent_directory(path: &Path) -> bool {
-    let path_str = path.to_str();
-    #[cfg(not(windows))]
-    let directory_separator = '/';
-    #[cfg(windows)]
-    let directory_separator = "\\";
-    if let Some(path) = path_str {
-        if path.ends_with(format!("{}.", directory_separator).as_str())
-            || path.ends_with(format!("{}..", directory_separator).as_str())
-            || path.ends_with(format!("{}..{}", directory_separator, directory_separator).as_str())
-            || path.ends_with(format!("{}.{}", directory_separator, directory_separator).as_str())
-        {
-            return true;
-        }
+    let path_str = os_str_as_bytes(path.as_os_str());
+    let dir_separator = MAIN_SEPARATOR as u8;
+    if let Ok(path_bytes) = path_str {
+        return path_bytes == ([b'.'])
+            || path_bytes == ([b'.', b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
+            || path_bytes.ends_with(&[dir_separator, b'.', b'.', dir_separator]);
     }
     false
 }
@@ -620,25 +627,33 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 
 /// Removes trailing slashes, for example 'd/../////' yield 'd/../' required to fix rm-r4 GNU test
 fn clean_trailing_slashes(path: &Path) -> &Path {
-    let path_str = path.to_str();
-    #[cfg(not(windows))]
-    let directory_separator = b'/';
-    #[cfg(windows)]
-    let directory_separator = b'\\';
-    if let Some(path_str) = path_str {
-        let path_bytes = path_str.as_bytes();
-        let mut idx = path_str.len() - 1;
+    let path_str = os_str_as_bytes(path.as_os_str());
+    let dir_separator = MAIN_SEPARATOR as u8;
+
+    if let Ok(path_bytes) = path_str {
+        let mut idx = if path_bytes.len() > 1 {
+            path_bytes.len() - 1
+        } else {
+            return path;
+        };
         // Checks if element at the end is a '/'
-        if path_bytes[idx] == directory_separator {
-            for i in (0..path_bytes.len()).rev() {
+        if path_bytes[idx] == dir_separator {
+            for i in (1..path_bytes.len()).rev() {
                 // Will break at the start of the continuous sequence of '/', eg: "abc//////" , will break at
-                // "abc/"
-                if path_bytes[i - 1] != directory_separator {
+                // "abc/", this will clean ////// to the root '/', so we have to be careful to not
+                // delete the root.
+                if path_bytes[i - 1] != dir_separator {
                     idx = i;
                     break;
                 }
             }
-            return Path::new(from_utf8(&path_bytes[0..=idx]).unwrap_or(path_str));
+            #[cfg(unix)]
+            return Path::new(OsStr::from_bytes(&path_bytes[0..=idx]));
+
+            #[cfg(not(unix))]
+            // Unwrapping is fine here as os_str_as_bytes() would return an error on non unix
+            // systems with non utf-8 characters and thus bypass the if let Ok branch
+            return Path::new(std::str::from_utf8(&path_bytes[0..=idx]).unwrap());
         }
     }
     path
