@@ -677,6 +677,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::PATHS)
                 .action(ArgAction::Append)
+                .num_args(1..)
+                .required(true)
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(ValueParser::os_string()),
         )
