@@ -164,7 +164,6 @@ pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<
     // std::fs::create_dir("foo/."); fails in pure Rust
     let path_buf = dir_strip_dot_for_creation(path);
     let path = path_buf.as_path();
-
     create_dir(path, recursive, verbose, false, mode)
 }
 
@@ -183,6 +182,7 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     Ok(())
 }
 
+// Return true if the directory at `path` has been created by this call.
 // `is_parent` argument is not used on windows
 #[allow(unused_variables)]
 fn create_dir(
@@ -200,7 +200,7 @@ fn create_dir(
         ));
     }
     if path == Path::new("") {
-        return Ok(());
+        return Ok(false);
     }
 
     if recursive {
