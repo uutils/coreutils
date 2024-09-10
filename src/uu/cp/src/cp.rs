@@ -9,6 +9,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 #[cfg(not(windows))]
 use std::ffi::CString;
+use std::ffi::OsString;
 use std::fs::{self, File, Metadata, OpenOptions, Permissions};
 use std::io;
 #[cfg(unix)]
@@ -680,8 +681,10 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::PATHS)
                 .action(ArgAction::Append)
+                .num_args(1..)
+                .required(true)
                 .value_hint(clap::ValueHint::AnyPath)
-                .value_parser(ValueParser::path_buf()),
+                .value_parser(ValueParser::os_string()),
         )
 }
 
@@ -715,8 +718,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         let paths: Vec<PathBuf> = matches
-            .remove_many::<PathBuf>(options::PATHS)
-            .map(|v| v.collect())
+            .remove_many::<OsString>(options::PATHS)
+            .map(|v| v.map(PathBuf::from).collect())
             .unwrap_or_default();
 
         let (sources, target) = parse_path_args(paths, &options)?;
