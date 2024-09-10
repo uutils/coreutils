@@ -89,7 +89,7 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
-/// extended attributes.
+/// extended attributes (Only works for linux)
 ///
 /// # Arguments
 ///
@@ -100,6 +100,8 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
 /// `u32`  the perm bits of a file having extended attributes of type 'system.posix_acl_default' with permissions
 /// otherwise returns a 0 if perm bits are 0 or the file has no extended attributes
 pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
+    // TODO: Modify this to work on non linux unix systems.
+
     // Only default acl entries get inherited by objects under the path i.e. if child directories
     // will have their permissions modified.
     if let Ok(entries) = retrieve_xattrs(source) {
@@ -189,6 +191,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_get_perm_bits_from_xattrs() {
         let temp_dir = tempdir().unwrap();
         let source_path = temp_dir.path().join("source_dir");

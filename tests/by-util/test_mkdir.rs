@@ -232,7 +232,7 @@ fn test_recursive_reporting() {
 // Windows don't have acl entries
 // TODO Enable and modify this for macos when xattr processing for macos is added.
 // TODO Enable and modify this for freebsd when xattr processing for freebsd is enabled.
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "android"))))]
+#[cfg(target_os = "linux")]
 fn test_mkdir_acl() {
     use std::{collections::HashMap, ffi::OsString};
 

@@ -223,7 +223,9 @@ fn create_dir(
             }
 
             #[cfg(all(unix, target_os = "linux"))]
-            let new_mode = if !path_exists {
+            let new_mode = if path_exists {
+                mode
+            } else {
                 // TODO: Make this macos and freebsd compatible by creating a function to get permission bits from
                 // acl in extended attributes
                 let acl_perm_bits = uucore::fsxattr::get_acl_perm_bits_from_xattr(path);
@@ -233,8 +235,6 @@ fn create_dir(
                 } else {
                     mode | acl_perm_bits
                 }
-            } else {
-                mode
             };
             #[cfg(all(unix, not(target_os = "linux")))]
             let new_mode = if is_parent {
