@@ -200,7 +200,7 @@ fn create_dir(
         ));
     }
     if path == Path::new("") {
-        return Ok(false);
+        return Ok(());
     }
 
     if recursive {
