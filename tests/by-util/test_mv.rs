@@ -1323,6 +1323,33 @@ fn test_mv_verbose() {
             "renamed '{file_a}' -> '{file_b}' (backup: '{file_b}~')\n"
         ));
 }
+#[test]
+fn test_verbose_src_symlink() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file_a = "test_mv_verbose_file_a";
+    let ln = "link";
+    at.touch(file_a);
+    at.symlink_file(&file_a, &ln);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg(file_a)
+        .arg(ln)
+        .succeeds()
+        .stdout_only(format!("renamed '{file_a}' -> '{ln}'\n"));
+
+    at.touch(file_a);
+    scene
+        .ucmd()
+        .arg("-vb")
+        .arg(file_a)
+        .arg(ln)
+        .succeeds()
+        .stdout_only(format!(
+            "renamed '{file_a}' -> '{ln}' (backup: '{ln}~')\n"
+        ));
+}
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
@@ -1630,6 +1657,41 @@ mod inter_partition_copying {
     use std::fs::{read_to_string, set_permissions, write};
     use std::os::unix::fs::{symlink, PermissionsExt};
     use tempfile::TempDir;
+    // Ensure that the copying code used in an inter-partition move preserve dir structure.
+    #[test]
+    fn test_inter_partition_copying_folder() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/b/c");
+        at.write("a/b/d", "d");
+        at.write("a/b/c/e", "e");
+
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds();
+
+        // make sure that a got removed.
+        assert!(!at.dir_exists("a"));
+
+        // Ensure that the folder structure is preserved, files are copied, and their contents remain intact.
+        assert_eq!(
+            read_to_string(other_fs_tempdir.path().join("a/b/d"),)
+                .expect("Unable to read other_fs_file"),
+            "d"
+        );
+        assert_eq!(
+            read_to_string(other_fs_tempdir.path().join("a/b/c/e"),)
+                .expect("Unable to read other_fs_file"),
+            "e"
+        );
+    }
 
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[test]

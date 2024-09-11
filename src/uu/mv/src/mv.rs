@@ -20,6 +20,8 @@ use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use unix::fs::FileTypeExt;
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
@@ -30,15 +32,17 @@ use uucore::fs::{
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
 use uucore::update_control;
+use walkdir::WalkDir;
 
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
-use fs_extra::dir::{
-    get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
-    TransitProcess, TransitProcessResult,
+use fs_extra::{
+    dir::{create_all, get_size as dir_get_size, remove},
+    error::Result as FsXResult,
+    file::{self, CopyOptions},
 };
 
 use crate::error::MvError;
@@ -630,13 +634,6 @@ fn rename_with_fallback(
             if to.exists() {
                 fs::remove_dir_all(to)?;
             }
-            let options = DirCopyOptions {
-                // From the `fs_extra` documentation:
-                // "Recursively copy a directory with a new name or place it
-                // inside the destination. (same behaviors like cp -r in Unix)"
-                copy_inside: true,
-                ..DirCopyOptions::new()
-            };
 
             // Calculate total size of directory
             // Silently degrades:
@@ -663,15 +660,7 @@ fn rename_with_fallback(
             let xattrs =
                 fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
 
-            let result = if let Some(ref pb) = progress_bar {
-                move_dir_with_progress(from, to, &options, |process_info: TransitProcess| {
-                    pb.set_position(process_info.copied_bytes);
-                    pb.set_message(process_info.file_name);
-                    TransitProcessResult::ContinueOrAbort
-                })
-            } else {
-                move_dir(from, to, &options)
-            };
+            let result = move_dir(from, to, progress_bar.as_ref());
 
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             fsxattr::apply_xattrs(to, xattrs).unwrap();
@@ -749,5 +738,312 @@ fn is_empty_dir(path: &Path) -> bool {
     match fs::read_dir(path) {
         Ok(contents) => contents.peekable().peek().is_none(),
         Err(_e) => false,
+    }
+}
+
+/// Moves a directory from one location to another with progress tracking.
+/// This function assumes that `from` is a directory and `to` does not exist.
+
+/// Returns:
+/// - `Result<u64>`: The total number of bytes moved if successful.
+fn move_dir(from: &Path, to: &Path, progress_bar: Option<&ProgressBar>) -> FsXResult<u64> {
+    // The return value that represents the number of bytes copied.
+    let mut result: u64 = 0;
+    let mut error_occured = false;
+    for dir_entry_result in WalkDir::new(from) {
+        match dir_entry_result {
+            Ok(dir_entry) => {
+                if dir_entry.file_type().is_dir() {
+                    let path = dir_entry.into_path();
+                    let tmp_to = path.strip_prefix(from)?;
+                    let dir = to.join(tmp_to);
+                    if !dir.exists() {
+                        create_all(&dir, false)?;
+                    }
+                } else {
+                    let file = dir_entry.path();
+                    let tp = file.strip_prefix(from)?;
+                    let to_file = to.join(tp);
+                    let result_file_copy = copy_file(file, &to_file, progress_bar, result)?;
+                    result += result_file_copy;
+                }
+            }
+            Err(_) => {
+                error_occured = true;
+            }
+        }
+    }
+    if !error_occured {
+        remove(from)?;
+    }
+    Ok(result)
+}
+
+/// Copies a file from one path to another, updating the progress bar if provided.
+fn copy_file(
+    from: &Path,
+    to: &Path,
+    progress_bar: Option<&ProgressBar>,
+    progress_bar_start_val: u64,
+) -> FsXResult<u64> {
+    let copy_options: CopyOptions = CopyOptions {
+        // We are overwriting here based on the assumption that the update and
+        // override options are handled by a parent function call.
+        overwrite: true,
+        ..Default::default()
+    };
+    let progress_handler = if let Some(progress_bar) = progress_bar {
+        let display_file_name = from
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .map(|file_name| file_name.to_string())
+            .unwrap_or_default();
+        let _progress_handler = |info: file::TransitProcess| {
+            let copied_bytes = progress_bar_start_val + info.copied_bytes;
+            progress_bar.set_position(copied_bytes);
+        };
+        progress_bar.set_message(display_file_name);
+        Some(_progress_handler)
+    } else {
+        None
+    };
+    let result_file_copy = {
+        let md = from.metadata()?;
+        if cfg!(unix) && FileTypeExt::is_fifo(&md.file_type()) {
+            let file_size = md.len();
+            uucore::fs::copy_fifo(to)?;
+            if let Some(progress_bar) = progress_bar {
+                progress_bar.set_position(file_size + progress_bar_start_val);
+            }
+            Ok(file_size)
+        } else {
+            if let Some(progress_handler) = progress_handler {
+                file::copy_with_progress(from, to, &copy_options, progress_handler)
+            } else {
+                file::copy(from, to, &copy_options)
+            }
+        }
+    };
+    result_file_copy
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    extern crate fs_extra;
+    use super::{copy_file, move_dir};
+    use fs_extra::dir::*;
+    use indicatif::{ProgressBar, ProgressStyle};
+    use tempfile::tempdir;
+
+    // These tests are copied from the `fs_extra`'s repository
+    #[test]
+    fn it_move_work() {
+        for with_progress_bar in [false, true] {
+            let temp_dir = tempdir().unwrap();
+            let mut path_from = PathBuf::from(temp_dir.path());
+            let test_name = "sub";
+            path_from.push("it_move_work");
+            let mut path_to = path_from.clone();
+            path_to.push("out");
+            path_from.push(test_name);
+
+            create_all(&path_from, true).unwrap();
+            assert!(path_from.exists());
+            create_all(&path_to, true).unwrap();
+            assert!(path_to.exists());
+
+            let mut file1_path = path_from.clone();
+            file1_path.push("test1.txt");
+            let content1 = "content1";
+            fs_extra::file::write_all(&file1_path, content1).unwrap();
+            assert!(file1_path.exists());
+
+            let mut sub_dir_path = path_from.clone();
+            sub_dir_path.push("sub");
+            create(&sub_dir_path, true).unwrap();
+            let mut file2_path = sub_dir_path.clone();
+            file2_path.push("test2.txt");
+            let content2 = "content2";
+            fs_extra::file::write_all(&file2_path, content2).unwrap();
+            assert!(file2_path.exists());
+
+            let pb = if with_progress_bar {
+                Some(
+                    ProgressBar::new(16).with_style(
+                        ProgressStyle::with_template(
+                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
+                        )
+                        .unwrap(),
+                    ),
+                )
+            } else {
+                None
+            };
+
+            let result = move_dir(&path_from, &path_to, pb.as_ref()).unwrap();
+
+            assert_eq!(16, result);
+            assert!(path_to.exists());
+            assert!(!path_from.exists());
+            if let Some(pb) = pb {
+                assert_eq!(pb.position(), 16);
+            }
+        }
+    }
+
+    #[test]
+    fn it_move_exist_overwrite() {
+        for with_progress_bar in [false, true] {
+            let temp_dir = tempdir().unwrap();
+            let mut path_from = PathBuf::from(temp_dir.path());
+            let test_name = "sub";
+            path_from.push("it_move_exist_overwrite");
+            let mut path_to = path_from.clone();
+            path_to.push("out");
+            path_from.push(test_name);
+            let same_file = "test.txt";
+
+            create_all(&path_from, true).unwrap();
+            assert!(path_from.exists());
+            create_all(&path_to, true).unwrap();
+            assert!(path_to.exists());
+
+            let mut file1_path = path_from.clone();
+            file1_path.push(same_file);
+            let content1 = "content1";
+            fs_extra::file::write_all(&file1_path, content1).unwrap();
+            assert!(file1_path.exists());
+
+            let mut sub_dir_path = path_from.clone();
+            sub_dir_path.push("sub");
+            create(&sub_dir_path, true).unwrap();
+            let mut file2_path = sub_dir_path.clone();
+            file2_path.push("test2.txt");
+            let content2 = "content2";
+            fs_extra::file::write_all(&file2_path, content2).unwrap();
+            assert!(file2_path.exists());
+
+            let mut exist_path = path_to.clone();
+            exist_path.push(test_name);
+            create(&exist_path, true).unwrap();
+            assert!(exist_path.exists());
+            exist_path.push(same_file);
+            let exist_content = "exist content";
+            assert_ne!(exist_content, content1);
+            fs_extra::file::write_all(&exist_path, exist_content).unwrap();
+            assert!(exist_path.exists());
+
+            let dir_size = get_size(&path_from).expect("failed to get dir size");
+            let pb = if with_progress_bar {
+                Some(
+                    ProgressBar::new(dir_size).with_style(
+                        ProgressStyle::with_template(
+                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
+                        )
+                        .unwrap(),
+                    ),
+                )
+            } else {
+                None
+            };
+            move_dir(&path_from, &path_to, pb.as_ref()).unwrap();
+            assert!(exist_path.exists());
+            assert!(path_to.exists());
+            assert!(!path_from.exists());
+            if let Some(pb) = pb {
+                assert_eq!(pb.position(), dir_size);
+            }
+        }
+    }
+
+    #[test]
+    fn it_move_inside_work_target_dir_not_exist() {
+        for with_progress_bar in [false, true] {
+            let temp_dir = tempdir().unwrap();
+            let path_root = PathBuf::from(temp_dir.path());
+            let root = path_root.join("it_move_inside_work_target_dir_not_exist");
+            let root_dir1 = root.join("dir1");
+            let root_dir1_sub = root_dir1.join("sub");
+            let root_dir2 = root.join("dir2");
+            let file1 = root_dir1.join("file1.txt");
+            let file2 = root_dir1_sub.join("file2.txt");
+
+            create_all(&root_dir1_sub, true).unwrap();
+            fs_extra::file::write_all(&file1, "content1").unwrap();
+            fs_extra::file::write_all(&file2, "content2").unwrap();
+
+            if root_dir2.exists() {
+                remove(&root_dir2).unwrap();
+            }
+
+            assert!(root_dir1.exists());
+            assert!(root_dir1_sub.exists());
+            assert!(!root_dir2.exists());
+            assert!(file1.exists());
+            assert!(file2.exists());
+            let dir_size = get_size(&root_dir1).expect("failed to get dir size");
+            let pb = if with_progress_bar {
+                Some(
+                    ProgressBar::new(dir_size).with_style(
+                        ProgressStyle::with_template(
+                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
+                        )
+                        .unwrap(),
+                    ),
+                )
+            } else {
+                None
+            };
+
+            let result = move_dir(&root_dir1, &root_dir2, pb.as_ref()).unwrap();
+
+            assert_eq!(16, result);
+            assert!(!root_dir1.exists());
+            let root_dir2_sub = root_dir2.join("sub");
+            let root_dir2_file1 = root_dir2.join("file1.txt");
+            let root_dir2_sub_file2 = root_dir2_sub.join("file2.txt");
+            assert!(root_dir2.exists());
+            assert!(root_dir2_sub.exists());
+            assert!(root_dir2_file1.exists());
+            assert!(root_dir2_sub_file2.exists());
+            if let Some(pb) = pb {
+                assert_eq!(pb.position(), dir_size);
+            }
+        }
+    }
+
+    #[test]
+    fn copy_file_test() {
+        for with_progress_bar in [false, true] {
+            let temp_dir = tempdir().unwrap();
+            let temp_dir_path = temp_dir.path();
+
+            let file1_path = temp_dir_path.join("file");
+            let content = "content";
+            fs_extra::file::write_all(&file1_path, content).unwrap();
+            assert!(file1_path.exists());
+            let path_to = temp_dir_path.join("file_out");
+            let pb = if with_progress_bar {
+                Some(
+                    ProgressBar::new(7).with_style(
+                        ProgressStyle::with_template(
+                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
+                        )
+                        .unwrap(),
+                    ),
+                )
+            } else {
+                None
+            };
+
+            let result = copy_file(&file1_path, &path_to, pb.as_ref(), 0).expect("move failed");
+
+            assert_eq!(7, result);
+            assert!(path_to.exists());
+            if let Some(pb) = pb {
+                assert_eq!(pb.position(), 7);
+            }
+        }
     }
 }

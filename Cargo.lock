@@ -2993,7 +2993,9 @@ dependencies = [
  "clap",
  "fs_extra",
  "indicatif",
+ "tempfile",
  "uucore",
+ "walkdir",
 ]
 
 [[package]]
