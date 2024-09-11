@@ -789,6 +789,13 @@ pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
 }
 
+// "Copies" a FIFO by creating a new one. This workaround is because Rust's
+// built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
+#[cfg(unix)]
+pub fn copy_fifo(dest: &Path) -> std::io::Result<()> {
+    nix::unistd::mkfifo(dest, nix::sys::stat::Mode::S_IRUSR).map_err(|err| err.into())
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.

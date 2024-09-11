@@ -20,12 +20,16 @@ path = "src/mv.rs"
 clap = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
+walkdir = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
   "fs",
   "fsxattr",
   "update-control",
 ] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [[bin]]
 name = "mv"
