@@ -534,12 +534,8 @@ fn rename(
     // If `no-target-directory` is specified, we treat the destination as a file.
     // In that case, if there is a trailing forward slash, we remove it.
     let to = if path_ends_with_terminator(to) && opts.no_target_dir {
-        let _to = to.to_string_lossy();
-        if cfg!(windows) {
-            Path::new(_to.trim_end_matches('\\')).to_path_buf()
-        } else {
-            Path::new(_to.trim_end_matches('/')).to_path_buf()
-        }
+    let trimmed_to = to.to_string_lossy().trim_end_matches(MAIN_SEPARATOR.to_string());
+    Path::new(trimmed_to).to_path_buf()
     } else {
         to.to_path_buf()
     };
