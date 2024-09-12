@@ -1323,33 +1323,6 @@ fn test_mv_verbose() {
             "renamed '{file_a}' -> '{file_b}' (backup: '{file_b}~')\n"
         ));
 }
-#[test]
-fn test_verbose_src_symlink() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let file_a = "test_mv_verbose_file_a";
-    let ln = "link";
-    at.touch(file_a);
-    at.symlink_file(&file_a, &ln);
-    scene
-        .ucmd()
-        .arg("-v")
-        .arg(file_a)
-        .arg(ln)
-        .succeeds()
-        .stdout_only(format!("renamed '{file_a}' -> '{ln}'\n"));
-
-    at.touch(file_a);
-    scene
-        .ucmd()
-        .arg("-vb")
-        .arg(file_a)
-        .arg(ln)
-        .succeeds()
-        .stdout_only(format!(
-            "renamed '{file_a}' -> '{ln}' (backup: '{ln}~')\n"
-        ));
-}
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.

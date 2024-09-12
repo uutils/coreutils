@@ -764,7 +764,7 @@ fn is_empty_dir(path: &Path) -> bool {
 fn move_dir(from: &Path, to: &Path, progress_bar: Option<&ProgressBar>) -> FsXResult<u64> {
     // The return value that represents the number of bytes copied.
     let mut result: u64 = 0;
-    let mut error_occured = false;
+    let mut error_occurred = false;
     for dir_entry_result in WalkDir::new(from) {
         match dir_entry_result {
             Ok(dir_entry) => {
@@ -784,11 +784,11 @@ fn move_dir(from: &Path, to: &Path, progress_bar: Option<&ProgressBar>) -> FsXRe
                 }
             }
             Err(_) => {
-                error_occured = true;
+                error_occurred = true;
             }
         }
     }
-    if !error_occured {
+    if !error_occurred {
         remove(from)?;
     }
     Ok(result)
@@ -822,24 +822,20 @@ fn copy_file(
     } else {
         None
     };
-    let result_file_copy = {
-        let md = from.metadata()?;
-        if cfg!(unix) && FileTypeExt::is_fifo(&md.file_type()) {
-            let file_size = md.len();
-            uucore::fs::copy_fifo(to)?;
-            if let Some(progress_bar) = progress_bar {
-                progress_bar.set_position(file_size + progress_bar_start_val);
-            }
-            Ok(file_size)
-        } else {
-            if let Some(progress_handler) = progress_handler {
-                file::copy_with_progress(from, to, &copy_options, progress_handler)
-            } else {
-                file::copy(from, to, &copy_options)
-            }
+
+    let md = from.metadata()?;
+    if cfg!(unix) && FileTypeExt::is_fifo(&md.file_type()) {
+        let file_size = md.len();
+        uucore::fs::copy_fifo(to)?;
+        if let Some(progress_bar) = progress_bar {
+            progress_bar.set_position(file_size + progress_bar_start_val);
         }
-    };
-    result_file_copy
+        Ok(file_size)
+    } else if let Some(progress_handler) = progress_handler {
+        file::copy_with_progress(from, to, &copy_options, progress_handler)
+    } else {
+        file::copy(from, to, &copy_options)
+    }
 }
 
 #[cfg(test)]
