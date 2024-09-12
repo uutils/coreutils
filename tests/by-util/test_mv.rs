@@ -1779,3 +1779,24 @@ mod inter_partition_copying {
             .stderr_contains("Permission denied");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn test_mv_backup_when_dest_has_trailing_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("D");
+    at.mkdir("E");
+    at.touch("D/d_file");
+    at.touch("E/e_file");
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg("--backup=numbered")
+        .arg("D")
+        .arg("E/")
+        .succeeds();
+    assert!(at.dir_exists("E.~1~"), "Backup folder not created");
+    assert!(at.file_exists("E.~1~/e_file"), "Backup file not created");
+    assert!(at.file_exists("E/d_file"), "source file didn't move");
+}

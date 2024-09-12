@@ -531,6 +531,21 @@ fn rename(
 ) -> io::Result<()> {
     let mut backup_path = None;
 
+    // If `no-target-directory` is specified, we treat the destination as a file.
+    // In that case, if there is a trailing forward slash, we remove it.
+    let to = if path_ends_with_terminator(to) && opts.no_target_dir {
+        let _to = to.to_string_lossy();
+        if cfg!(windows) {
+            Path::new(_to.trim_end_matches('\\')).to_path_buf()
+        } else {
+            Path::new(_to.trim_end_matches('/')).to_path_buf()
+        }
+    } else {
+        to.to_path_buf()
+    };
+
+    let to = &to;
+
     if to.exists() {
         if opts.update == UpdateMode::ReplaceIfOlder && opts.overwrite == OverwriteMode::Interactive
         {
