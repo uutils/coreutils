@@ -1,6 +1,6 @@
 [package]
 name = "uu_stdbuf_libstdbuf"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stdbuf/libstdbuf ~ (uutils); dynamic library required for stdbuf"
@@ -20,8 +20,8 @@ crate-type = [
 ] # XXX: note: the rlib is just to prevent Cargo from spitting out a warning
 
 [dependencies]
-cpp = "0.5"
+cpp = "0.5.9"
 libc = { workspace = true }
 
 [build-dependencies]
-cpp_build = "0.5"
+cpp_build = "0.5.9"

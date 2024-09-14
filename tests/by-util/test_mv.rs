@@ -133,7 +133,7 @@ fn test_mv_move_file_between_dirs() {
 
     assert!(at.file_exists(format!("{dir1}/{file}")));
 
-    ucmd.arg(&format!("{dir1}/{file}"))
+    ucmd.arg(format!("{dir1}/{file}"))
         .arg(dir2)
         .succeeds()
         .no_stderr();
@@ -299,9 +299,9 @@ fn test_mv_interactive_no_clobber_force_last_arg_wins() {
 
     scene
         .ucmd()
-        .args(&[file_a, file_b, "-f", "-i", "-n"])
-        .fails()
-        .stderr_is(format!("mv: not replacing '{file_b}'\n"));
+        .args(&[file_a, file_b, "-f", "-i", "-n", "--debug"])
+        .succeeds()
+        .stdout_contains("skipped 'b.txt'");
 
     scene
         .ucmd()
@@ -352,9 +352,9 @@ fn test_mv_no_clobber() {
     ucmd.arg("-n")
         .arg(file_a)
         .arg(file_b)
-        .fails()
-        .code_is(1)
-        .stderr_only(format!("mv: not replacing '{file_b}'\n"));
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'test_mv_no_clobber_file_b");
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -863,14 +863,16 @@ fn test_mv_backup_off() {
 }
 
 #[test]
-fn test_mv_backup_no_clobber_conflicting_options() {
-    new_ucmd!()
-        .arg("--backup")
-        .arg("--no-clobber")
-        .arg("file1")
-        .arg("file2")
-        .fails()
-        .usage_error("options --backup and --no-clobber are mutually exclusive");
+fn test_mv_backup_conflicting_options() {
+    for conflicting_opt in ["--no-clobber", "--update=none-fail", "--update=none"] {
+        new_ucmd!()
+            .arg("--backup")
+            .arg(conflicting_opt)
+            .arg("file1")
+            .arg("file2")
+            .fails()
+            .usage_error("cannot combine --backup with -n/--no-clobber or --update=none-fail");
+    }
 }
 
 #[test]
@@ -1400,10 +1402,9 @@ fn test_mv_arg_interactive_skipped_vin() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    ucmd.args(&["-vin", "a", "b"])
-        .fails()
-        .stderr_is("mv: not replacing 'b'\n")
-        .no_stdout();
+    ucmd.args(&["-vin", "a", "b", "--debug"])
+        .succeeds()
+        .stdout_contains("skipped 'b'");
 }
 
 #[test]
@@ -1569,6 +1570,47 @@ fn test_mv_dir_into_path_slash() {
     assert!(at.dir_exists("f/b"));
 }
 
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
+#[test]
+fn test_acl() {
+    use std::process::Command;
+
+    use crate::common::util::compare_xattrs;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let path1 = "a";
+    let path2 = "b";
+    let file = "a/file";
+    let file_target = "b/file";
+    at.mkdir(path1);
+    at.mkdir(path2);
+    at.touch(file);
+
+    let path = at.plus_as_string(file);
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new("setfacl")
+        .args(["-m", "group::rwx", path1])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {}", e);
+            return;
+        }
+    }
+
+    scene.ucmd().arg(&path).arg(path2).succeeds();
+
+    assert!(compare_xattrs(&file, &file_target));
+}
+
 // Todo:
 
 // $ at.touch a b
@@ -1581,3 +1623,97 @@ fn test_mv_dir_into_path_slash() {
 // $ mv -v a b
 // mv: try to overwrite 'b', overriding mode 0444 (r--r--r--)? y
 // 'a' -> 'b'
+
+#[cfg(target_os = "linux")]
+mod inter_partition_copying {
+    use crate::common::util::TestScenario;
+    use std::fs::{read_to_string, set_permissions, write};
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    use tempfile::TempDir;
+
+    // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
+    #[test]
+    pub(crate) fn test_mv_unlinks_dest_symlink() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        // create a file in the current partition.
+        at.write("src", "src contents");
+
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        // create a file inside that folder.
+        let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
+        write(&other_fs_file_path, "other fs file contents")
+            .expect("Unable to write to other_fs_file");
+
+        // create a symlink to the file inside the same directory.
+        let symlink_path = other_fs_tempdir.path().join("symlink_to_file");
+        symlink(&other_fs_file_path, &symlink_path).expect("Unable to create symlink_to_file");
+
+        // mv src to symlink in another partition
+        scene
+            .ucmd()
+            .arg("src")
+            .arg(symlink_path.to_str().unwrap())
+            .succeeds();
+
+        // make sure that src got removed.
+        assert!(!at.file_exists("src"));
+
+        // make sure symlink got unlinked
+        assert!(!symlink_path.is_symlink());
+
+        // make sure that file contents in other_fs_file didn't change.
+        assert_eq!(
+            read_to_string(&other_fs_file_path,).expect("Unable to read other_fs_file"),
+            "other fs file contents"
+        );
+
+        // make sure that src file contents got copied into new file created in symlink_path
+        assert_eq!(
+            read_to_string(&symlink_path).expect("Unable to read other_fs_file"),
+            "src contents"
+        );
+    }
+
+    // In an inter-partition move if unlinking the destination symlink fails, ensure
+    // that it would output the proper error message.
+    #[test]
+    pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        // create a file in the current partition.
+        at.write("src", "src contents");
+
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        // create a file inside that folder.
+        let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
+        write(&other_fs_file_path, "other fs file contents")
+            .expect("Unable to write to other_fs_file");
+
+        // create a symlink to the file inside the same directory.
+        let symlink_path = other_fs_tempdir.path().join("symlink_to_file");
+        symlink(&other_fs_file_path, &symlink_path).expect("Unable to create symlink_to_file");
+
+        // disable write for the target folder so that when mv tries to remove the
+        // the destination symlink inside the target directory it would fail.
+        set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o555))
+            .expect("Unable to set permissions for temp directory");
+
+        // mv src to symlink in another partition
+        scene
+            .ucmd()
+            .arg("src")
+            .arg(symlink_path.to_str().unwrap())
+            .fails()
+            .stderr_contains("inter-device move failed:")
+            .stderr_contains("Permission denied");
+    }
+}

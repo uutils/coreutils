@@ -2,7 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
+#![allow(
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation
+)]
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -10,6 +15,7 @@ use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
 use regex::Regex;
+#[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::ffi::OsStr;
@@ -27,6 +33,7 @@ const LONG_ARGS: &[&str] = &[
     "-l",
     "--long",
     "--format=long",
+    "--format=lon",
     "--for=long",
     "--format=verbose",
     "--for=verbose",
@@ -35,6 +42,7 @@ const LONG_ARGS: &[&str] = &[
 const ACROSS_ARGS: &[&str] = &[
     "-x",
     "--format=across",
+    "--format=acr",
     "--format=horizontal",
     "--for=across",
     "--for=horizontal",
@@ -45,8 +53,86 @@ const COMMA_ARGS: &[&str] = &["-m", "--format=commas", "--for=commas"];
 const COLUMN_ARGS: &[&str] = &["-C", "--format=columns", "--for=columns"];
 
 #[test]
+fn test_invalid_flag() {
+    new_ucmd!()
+        .arg("--invalid-argument")
+        .fails()
+        .no_stdout()
+        .code_is(2);
+}
+
+#[test]
+fn test_invalid_value_returns_1() {
+    // Invalid values to flags *sometimes* result in error code 1:
+    for flag in [
+        "--classify",
+        "--color",
+        "--format",
+        "--hyperlink",
+        "--indicator-style",
+        "--quoting-style",
+        "--sort",
+        "--time",
+    ] {
+        new_ucmd!()
+            .arg(format!("{flag}=definitely_invalid_value"))
+            .fails()
+            .no_stdout()
+            .code_is(1);
+    }
+}
+
+#[test]
+fn test_invalid_value_returns_2() {
+    // Invalid values to flags *sometimes* result in error code 2:
+    for flag in ["--block-size", "--width", "--tab-size"] {
+        new_ucmd!()
+            .arg(format!("{flag}=definitely_invalid_value"))
+            .fails()
+            .no_stdout()
+            .code_is(2);
+    }
+}
+
+#[test]
+fn test_invalid_value_time_style() {
+    // This is the only flag which does not raise an error if it is invalid but not actually used:
+    new_ucmd!()
+        .arg("--time-style=definitely_invalid_value")
+        .succeeds()
+        .no_stderr()
+        .code_is(0);
+    // If it is used, error:
+    new_ucmd!()
+        .arg("-g")
+        .arg("--time-style=definitely_invalid_value")
+        .fails()
+        .no_stdout()
+        .code_is(2);
+    // If it only looks temporarily like it might be used, no error:
+    new_ucmd!()
+        .arg("-l")
+        .arg("--time-style=definitely_invalid_value")
+        .arg("--format=single-column")
+        .succeeds()
+        .no_stderr()
+        .code_is(0);
+}
+
+#[test]
 fn test_ls_ls() {
     new_ucmd!().succeeds();
+}
+
+#[test]
+fn test_ls_help() {
+    // Because we have to work around a lot of clap's error handling and
+    // modify the exit-code, this is actually non-trivial.
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("--version")
+        .no_stderr();
 }
 
 #[test]
@@ -73,15 +159,35 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
+#[cfg(all(
+    unix,
+    feature = "df",
+    not(any(target_os = "freebsd", target_os = "openbsd"))
+))]
+fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
+    let mut cmd = scene.ccmd("df");
+    cmd.args(&["-PT"]).arg(path);
+    let output = cmd.succeeds();
+    let stdout_str = String::from_utf8_lossy(output.stdout());
+    println!("output of stat call ({cmd:?}):\n{stdout_str}");
+    let regex_str = r"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+";
+    let regex = Regex::new(regex_str).unwrap();
+    let m = regex.captures(&stdout_str).unwrap();
+    let fstype = m["fstype"].to_owned();
+    println!("detected fstype: {}", fstype);
+    fstype
+}
+
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[test] // FIXME: fix this test for FreeBSD
+#[test] // FIXME: fix this test for FreeBSD and OpenBSD
+#[cfg(not(target_os = "openbsd"))]
 fn test_ls_allocation_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("some-dir1");
     at.touch("some-dir1/empty-file");
 
-    #[cfg(unix)]
+    #[cfg(all(unix, feature = "df"))]
     {
         scene
             .ccmd("truncate")
@@ -116,12 +222,23 @@ fn test_ls_allocation_size() {
             .stdout_matches(&Regex::new("[^ ] 2 [^ ]").unwrap());
 
         #[cfg(not(target_os = "freebsd"))]
+        let (zero_file_size_4k, zero_file_size_1k, zero_file_size_8k, zero_file_size_4m) =
+            match get_filesystem_type(&scene, &scene.fixtures.subdir).as_str() {
+                // apparently f2fs (flash friendly fs) accepts small overhead for better performance
+                "f2fs" => (4100, 1025, 8200, "4.1M"),
+                _ => (4096, 1024, 8192, "4.0M"),
+            };
+
+        #[cfg(not(target_os = "freebsd"))]
         scene
             .ucmd()
             .arg("-s1")
             .arg("some-dir1")
             .succeeds()
-            .stdout_is("total 4096\n   0 empty-file\n   0 file-with-holes\n4096 zero-file\n");
+            .stdout_is(format!(
+                "total {zero_file_size_4k}\n   0 empty-file\n   0 file-with-holes\n\
+                {zero_file_size_4k} zero-file\n"
+            ));
 
         scene
             .ucmd()
@@ -138,7 +255,7 @@ fn test_ls_allocation_size() {
             .arg("some-dir1")
             .succeeds()
             .stdout_contains("0 empty-file")
-            .stdout_contains("4096 zero-file");
+            .stdout_contains(format!("{zero_file_size_4k} zero-file"));
 
         // Test alignment of different block sized files
         let res = scene.ucmd().arg("-si1").arg("some-dir1").succeeds();
@@ -185,10 +302,10 @@ fn test_ls_allocation_size() {
             .arg("-s1")
             .arg("some-dir1")
             .succeeds()
-            .stdout_contains("total 1024")
+            .stdout_contains(format!("total {zero_file_size_1k}"))
             .stdout_contains("0 empty-file")
             .stdout_contains("0 file-with-holes")
-            .stdout_contains("1024 zero-file");
+            .stdout_contains(format!("{zero_file_size_1k} zero-file"));
 
         #[cfg(not(target_os = "freebsd"))]
         scene
@@ -210,10 +327,10 @@ fn test_ls_allocation_size() {
             .arg("-s1")
             .arg("some-dir1")
             .succeeds()
-            .stdout_contains("total 1024")
+            .stdout_contains(format!("total {zero_file_size_1k}"))
             .stdout_contains("0 empty-file")
             .stdout_contains("0 file-with-holes")
-            .stdout_contains("1024 zero-file");
+            .stdout_contains(format!("{zero_file_size_1k} zero-file"));
 
         #[cfg(not(target_os = "freebsd"))]
         scene
@@ -222,10 +339,10 @@ fn test_ls_allocation_size() {
             .arg("-s1")
             .arg("some-dir1")
             .succeeds()
-            .stdout_contains("total 8192")
+            .stdout_contains(format!("total {zero_file_size_8k}"))
             .stdout_contains("0 empty-file")
             .stdout_contains("0 file-with-holes")
-            .stdout_contains("8192 zero-file");
+            .stdout_contains(format!("{zero_file_size_8k} zero-file"));
 
         // -k should make 'ls' ignore the env var
         #[cfg(not(target_os = "freebsd"))]
@@ -235,10 +352,10 @@ fn test_ls_allocation_size() {
             .arg("-s1k")
             .arg("some-dir1")
             .succeeds()
-            .stdout_contains("total 4096")
+            .stdout_contains(format!("total {zero_file_size_4k}"))
             .stdout_contains("0 empty-file")
             .stdout_contains("0 file-with-holes")
-            .stdout_contains("4096 zero-file");
+            .stdout_contains(format!("{zero_file_size_4k} zero-file"));
 
         // but manually specified blocksize overrides -k
         #[cfg(not(target_os = "freebsd"))]
@@ -248,10 +365,10 @@ fn test_ls_allocation_size() {
             .arg("--block-size=4K")
             .arg("some-dir1")
             .succeeds()
-            .stdout_contains("total 1024")
+            .stdout_contains(format!("total {zero_file_size_1k}"))
             .stdout_contains("0 empty-file")
             .stdout_contains("0 file-with-holes")
-            .stdout_contains("1024 zero-file");
+            .stdout_contains(format!("{zero_file_size_1k} zero-file"));
 
         #[cfg(not(target_os = "freebsd"))]
         scene
@@ -260,10 +377,10 @@ fn test_ls_allocation_size() {
             .arg("--block-size=4K")
             .arg("some-dir1")
             .succeeds()
-            .stdout_contains("total 1024")
+            .stdout_contains(format!("total {zero_file_size_1k}"))
             .stdout_contains("0 empty-file")
             .stdout_contains("0 file-with-holes")
-            .stdout_contains("1024 zero-file");
+            .stdout_contains(format!("{zero_file_size_1k} zero-file"));
 
         // si option should always trump the human-readable option
         #[cfg(not(target_os = "freebsd"))]
@@ -285,10 +402,10 @@ fn test_ls_allocation_size() {
             .arg("--block-size=human-readable")
             .arg("some-dir1")
             .succeeds()
-            .stdout_contains("total 4.0M")
+            .stdout_contains(format!("total {zero_file_size_4m}"))
             .stdout_contains("0 empty-file")
             .stdout_contains("0 file-with-holes")
-            .stdout_contains("4.0M zero-file");
+            .stdout_contains(format!("{zero_file_size_4m} zero-file"));
 
         #[cfg(not(target_os = "freebsd"))]
         scene
@@ -895,6 +1012,8 @@ fn test_ls_zero() {
         let ignored_opts = [
             "--quoting-style=c",
             "--color=always",
+            "--color=alway",
+            "--color=al",
             "-m",
             "--hide-control-chars",
         ];
@@ -1042,6 +1161,7 @@ fn test_ls_long_padding_of_size_column_with_multiple_files() {
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
 #[test]
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
+#[allow(clippy::items_after_statements)]
 fn test_ls_long_symlink_color() {
     // If you break this test after breaking mkdir, touch, or ln, do not be alarmed!
     // This test is made for ls, but it attempts to run those utils in the process.
@@ -1268,7 +1388,46 @@ fn test_ls_long_symlink_color() {
     }
 }
 
+/// This test is for "ls -l --color=auto|--color=always"
+/// We use "--color=always" as the colors are the same regardless of the color option being "auto" or "always"
+/// tests whether the specific color of the target and the `dangling_symlink` are equal and checks
+/// whether checks whether ls outputs the correct path for the symlink and the file it points to and applies the color code to it.
 #[test]
+fn test_ls_long_dangling_symlink_color() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.symlink_dir("foo", "dir1/dangling_symlink");
+    let result = ts
+        .ucmd()
+        .arg("-l")
+        .arg("--color=always")
+        .arg("dir1/dangling_symlink")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // stdout contains output like in the below sequence. We match for the color i.e. 01;36
+    // \x1b[0m\x1b[01;36mdir1/dangling_symlink\x1b[0m -> \x1b[01;36mfoo\x1b[0m
+    let color_regex = Regex::new(r"(\d\d;)\d\dm").unwrap();
+    // colors_vec[0] contains the symlink color and style and colors_vec[1] contains the color and style of the file the
+    // symlink points to.
+    let colors_vec: Vec<_> = color_regex
+        .find_iter(stdout)
+        .map(|color| color.as_str())
+        .collect();
+
+    assert_eq!(colors_vec[0], colors_vec[1]);
+    // constructs the string of file path with the color code
+    let symlink_color_name = colors_vec[0].to_owned() + "dir1/dangling_symlink\x1b";
+    let target_color_name = colors_vec[1].to_owned() + at.plus_as_string("foo\x1b").as_str();
+
+    assert!(stdout.contains(&symlink_color_name));
+    assert!(stdout.contains(&target_color_name));
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_ls_long_total_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1499,6 +1658,24 @@ fn test_ls_deref() {
 
     let result = scene
         .ucmd()
+        .arg("-l")
+        .arg("--color=neve") // spell-checker:disable-line
+        .arg("test-long")
+        .arg("test-long.link")
+        .succeeds();
+    assert!(re.is_match(result.stdout_str().trim()));
+
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--color=n")
+        .arg("test-long")
+        .arg("test-long.link")
+        .succeeds();
+    assert!(re.is_match(result.stdout_str().trim()));
+
+    let result = scene
+        .ucmd()
         .arg("-L")
         .arg("--color=never")
         .arg("test-long")
@@ -1572,6 +1749,10 @@ fn test_ls_sort_none() {
     // Order is not specified so we just check that it doesn't
     // give any errors.
     scene.ucmd().arg("--sort=none").succeeds();
+    scene.ucmd().arg("--sort=non").succeeds();
+    scene.ucmd().arg("--sort=no").succeeds();
+    // scene.ucmd().arg("--sort=n").succeeds();
+    // We refuse to accept "--sort=n", since this is too confusable with "--sort=name", which is our own extension.
     scene.ucmd().arg("-U").succeeds();
 }
 
@@ -1587,6 +1768,16 @@ fn test_ls_sort_name() {
     scene
         .ucmd()
         .arg("--sort=name")
+        .succeeds()
+        .stdout_is("test-1\ntest-2\ntest-3\n");
+    scene
+        .ucmd()
+        .arg("--sort=nam")
+        .succeeds()
+        .stdout_is("test-1\ntest-2\ntest-3\n");
+    scene
+        .ucmd()
+        .arg("--sort=na")
         .succeeds()
         .stdout_is("test-1\ntest-2\ntest-3\n");
 
@@ -1625,6 +1816,16 @@ fn test_ls_sort_width() {
         .arg("--sort=width")
         .succeeds()
         .stdout_is("d\nzz\nabc\nbbb\neee\ncccc\naaaaa\nbcdef\nfffff\n");
+    scene
+        .ucmd()
+        .arg("--sort=widt") // spell-checker:disable-line
+        .succeeds()
+        .stdout_is("d\nzz\nabc\nbbb\neee\ncccc\naaaaa\nbcdef\nfffff\n");
+    scene
+        .ucmd()
+        .arg("--sort=w")
+        .succeeds()
+        .stdout_is("d\nzz\nabc\nbbb\neee\ncccc\naaaaa\nbcdef\nfffff\n");
 }
 
 #[test]
@@ -1651,6 +1852,12 @@ fn test_ls_order_size() {
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
 
     let result = scene.ucmd().arg("--sort=size").succeeds();
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
+
+    let result = scene.ucmd().arg("--sort=siz").succeeds();
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
+
+    let result = scene.ucmd().arg("--sort=s").succeeds();
     result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
 
     let result = scene.ucmd().arg("--sort=size").arg("-r").succeeds();
@@ -1857,7 +2064,14 @@ fn test_ls_order_time() {
 
     // 3 was accessed last in the read
     // So the order should be 2 3 4 1
-    for arg in ["-u", "--time=atime", "--time=access", "--time=use"] {
+    for arg in [
+        "-u",
+        "--time=atime",
+        "--time=atim", // spell-checker:disable-line
+        "--time=a",
+        "--time=access",
+        "--time=use",
+    ] {
         let result = scene.ucmd().arg("-t").arg(arg).succeeds();
         at.open("test-3").metadata().unwrap().accessed().unwrap();
         at.open("test-4").metadata().unwrap().accessed().unwrap();
@@ -2042,7 +2256,7 @@ fn test_ls_color() {
         .arg("-w=15")
         .arg("-C")
         .succeeds();
-    let expected = format!("{}  test-color\x0ab  {}", a_with_colors, z_with_colors);
+    let expected = format!("{a_with_colors}  test-color\x0ab  {z_with_colors}");
     assert_eq!(
         result.stdout_str().escape_default().to_string(),
         expected.escape_default().to_string()
@@ -2112,12 +2326,16 @@ fn test_ls_indicator_style() {
     for opt in [
         "--indicator-style=classify",
         "--ind=classify",
+        "--indicator-style=clas", // spell-checker:disable-line
+        "--indicator-style=c",
         "--indicator-style=file-type",
         "--ind=file-type",
         "--indicator-style=slash",
         "--ind=slash",
         "--classify",
         "--classify=always",
+        "--classify=alway",
+        "--classify=al",
         "--classify=yes",
         "--classify=force",
         "--class",
@@ -2132,10 +2350,13 @@ fn test_ls_indicator_style() {
     // Classify, Indicator options should not contain any indicators when value is none.
     for opt in [
         "--indicator-style=none",
+        "--indicator-style=n",
         "--ind=none",
         "--classify=none",
         "--classify=never",
+        "--classify=non",
         "--classify=no",
+        "--classify=n",
     ] {
         // Verify that there are no indicators for any of the file types.
         scene
@@ -2226,7 +2447,7 @@ fn test_ls_indicator_style() {
     }
 }
 
-#[cfg(not(any(target_vendor = "apple", target_os = "windows")))] // Truncate not available on mac or win
+#[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))] // Truncate not available on mac or win
 #[test]
 fn test_ls_human_si() {
     let scene = TestScenario::new(util_name!());
@@ -2449,6 +2670,12 @@ fn test_ls_version_sort() {
         expected
     );
 
+    let result = scene.ucmd().arg("-1").arg("--sort=v").succeeds();
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        expected
+    );
+
     let result = scene.ucmd().arg("-a1v").succeeds();
     expected.insert(expected.len() - 1, "..");
     expected.insert(0, ".");
@@ -2472,32 +2699,48 @@ fn test_ls_quoting_style() {
     {
         at.touch("one\ntwo");
         at.touch("one\\two");
-        // Default is literal, when stdout is not a TTY.
-        // Otherwise, it is shell-escape
+
+        // Default is literal, when stdout is not a TTY...
         scene
             .ucmd()
             .arg("--hide-control-chars")
             .arg("one\ntwo")
             .succeeds()
             .stdout_only("one?two\n");
-        // TODO: TTY-expected output, find a way to check this as well
-        // .stdout_only("'one'$'\\n''two'\n");
+
+        // ... Otherwise, it is shell-escape
+        #[cfg(unix)]
+        scene
+            .ucmd()
+            .arg("--hide-control-chars")
+            .arg("one\ntwo")
+            .terminal_simulation(true)
+            .succeeds()
+            .stdout_only("'one'$'\\n''two'\r\n");
 
         for (arg, correct) in [
             ("--quoting-style=literal", "one?two"),
+            ("--quoting-style=litera", "one?two"), // spell-checker:disable-line
+            ("--quoting-style=li", "one?two"),
             ("-N", "one?two"),
             ("--literal", "one?two"),
             ("--l", "one?two"),
             ("--quoting-style=c", "\"one\\ntwo\""),
+            ("--quoting-style=c-", "\"one\\ntwo\""),
+            ("--quoting-style=c-maybe", "\"one\\ntwo\""),
             ("-Q", "\"one\\ntwo\""),
             ("--quote-name", "\"one\\ntwo\""),
             ("--quoting-style=escape", "one\\ntwo"),
+            ("--quoting-style=escap", "one\\ntwo"), // spell-checker:disable-line
             ("-b", "one\\ntwo"),
             ("--escape", "one\\ntwo"),
             ("--quoting-style=shell-escape", "'one'$'\\n''two'"),
             ("--quoting-style=shell-escape-always", "'one'$'\\n''two'"),
+            ("--quoting-style=shell-escape-alway", "'one'$'\\n''two'"),
+            ("--quoting-style=shell-escape-a", "'one'$'\\n''two'"),
             ("--quoting-style=shell", "one?two"),
             ("--quoting-style=shell-always", "'one?two'"),
+            ("--quoting-style=shell-a", "'one?two'"),
         ] {
             scene
                 .ucmd()
@@ -2564,13 +2807,21 @@ fn test_ls_quoting_style() {
         }
     }
 
+    // No-TTY
     scene
         .ucmd()
         .arg("one two")
         .succeeds()
         .stdout_only("one two\n");
-    // TODO: TTY-expected output
-    // .stdout_only("'one two'\n");
+
+    // TTY
+    #[cfg(unix)]
+    scene
+        .ucmd()
+        .arg("one two")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("'one two'\r\n");
 
     for (arg, correct) in [
         ("--quoting-style=literal", "one two"),
@@ -2692,14 +2943,89 @@ fn test_ls_quoting_and_color() {
     let at = &scene.fixtures;
 
     at.touch("one two");
+
+    // No-TTY
     scene
         .ucmd()
         .arg("--color")
         .arg("one two")
         .succeeds()
         .stdout_only("one two\n");
-    // TODO: TTY-expected output
-    // .stdout_only("'one two'\n");
+
+    // TTY
+    #[cfg(unix)]
+    scene
+        .ucmd()
+        .arg("--color")
+        .arg("one two")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("'one two'\r\n");
+}
+
+#[test]
+fn test_ls_align_unquoted() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("elf two");
+    at.touch("foobar");
+    at.touch("CAPS");
+    at.touch("'quoted'");
+
+    // In TTY
+    #[cfg(unix)]
+    scene
+        .ucmd()
+        .arg("--color")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("\"'quoted'\"   CAPS  'elf two'   foobar\r\n");
+    //                              ^      ^          ^
+    //                              space  no-space   space
+
+    // The same should happen with format columns/across
+    // and shell quoting style, except for the `\r` at the end.
+    for format in &["--format=column", "--format=across"] {
+        scene
+            .ucmd()
+            .arg("--color")
+            .arg(format)
+            .arg("--quoting-style=shell")
+            .succeeds()
+            .stdout_only("\"'quoted'\"   CAPS  'elf two'   foobar\n");
+        //                              ^      ^          ^
+        //                              space  no-space   space
+    }
+}
+
+#[test]
+fn test_ls_align_unquoted_multiline() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("one");
+    at.touch("two");
+    at.touch("three_long");
+    at.touch("four_long");
+    at.touch("five");
+    at.touch("s ix");
+    at.touch("s even");
+    at.touch("eight_long_long");
+    at.touch("nine");
+    at.touch("ten");
+
+    // In TTY
+    #[cfg(unix)]
+    scene
+        .ucmd()
+        .arg("--color")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only(concat!(
+            " eight_long_long   four_long   one      's ix'   three_long\r\n",
+            " five              nine       's even'   ten     two\r\n"
+        ));
 }
 
 #[test]
@@ -3604,7 +3930,7 @@ fn test_device_number() {
     let blk_dev_meta = metadata(blk_dev_path.as_path()).unwrap();
     let blk_dev_number = blk_dev_meta.rdev() as dev_t;
     let (major, minor) = unsafe { (major(blk_dev_number), minor(blk_dev_number)) };
-    let major_minor_str = format!("{}, {}", major, minor);
+    let major_minor_str = format!("{major}, {minor}");
 
     let scene = TestScenario::new(util_name!());
     scene
@@ -3645,15 +3971,68 @@ fn test_ls_perm_io_errors() {
 }
 
 #[test]
-fn test_ls_dired_incompatible() {
+fn test_ls_dired_implies_long() {
     let scene = TestScenario::new(util_name!());
 
     scene
         .ucmd()
         .arg("--dired")
-        .fails()
-        .code_is(1)
-        .stderr_contains("--dired requires --format=long");
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//")
+        .stdout_contains("  total 0")
+        .stdout_contains("//DIRED-OPTIONS// --quoting-style");
+}
+
+#[test]
+fn test_ls_dired_hyperlink() {
+    // we will have link but not the DIRED output
+    // note that the order matters
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("--hyperlink")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("file://")
+        .stdout_contains("-rw") // we should have the long output
+        // even if dired isn't actually run
+        .stdout_does_not_contain("//DIRED//");
+    // dired is passed after hyperlink
+    // so we will have DIRED output
+    scene
+        .ucmd()
+        .arg("--hyperlink")
+        .arg("--dired")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("file://")
+        .stdout_contains("//DIRED//");
+}
+
+#[test]
+fn test_ls_dired_order_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("--format=vertical")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//");
+    scene
+        .ucmd()
+        .arg("--format=vertical")
+        .arg("--dired")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("//DIRED//");
 }
 
 #[test]
@@ -3687,6 +4066,42 @@ fn test_ls_dired_recursive() {
 }
 
 #[test]
+fn test_ls_dired_outputs_parent_offset() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkdir("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("dir")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("//DIRED//");
+}
+
+#[test]
+fn test_ls_dired_outputs_same_date_time_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkdir("dir/a");
+    let binding = scene.ucmd().arg("-l").arg("dir").run();
+    let long_output_str = binding.stdout_str();
+    let split_lines: Vec<&str> = long_output_str.split('\n').collect();
+    // the second line should contain the long output which includes date
+    let list_line = split_lines.get(1).unwrap();
+    // should be same as the dired output
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("dir")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains(list_line);
+}
+
+#[test]
 fn test_ls_dired_recursive_multiple() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3716,7 +4131,7 @@ fn test_ls_dired_recursive_multiple() {
         .skip(1)
         .map(|s| s.parse().unwrap())
         .collect();
-    println!("Parsed byte positions: {:?}", positions);
+    println!("Parsed byte positions: {positions:?}");
     assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
 
     let filenames: Vec<String> = positions
@@ -3733,7 +4148,7 @@ fn test_ls_dired_recursive_multiple() {
         })
         .collect();
 
-    println!("Extracted filenames: {:?}", filenames);
+    println!("Extracted filenames: {filenames:?}");
     assert_eq!(filenames, vec!["d1", "d2", "f1", "file-long", "a", "c2"]);
 }
 
@@ -3803,7 +4218,7 @@ fn test_ls_dired_complex() {
     }
 
     let output = result.stdout_str().to_string();
-    println!("Output:\n{}", output);
+    println!("Output:\n{output}");
 
     let dired_line = output
         .lines()
@@ -3887,7 +4302,6 @@ fn test_ls_subdired_complex() {
     assert_eq!(dirnames, vec!["dir1", "dir1\\c2", "dir1\\d"]);
 }
 
-#[ignore = "issue #5396"]
 #[test]
 fn test_ls_cf_output_should_be_delimited_by_tab() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3903,6 +4317,7 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
 
 #[cfg(all(unix, feature = "dd"))]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_posixly_correct_and_block_size_env_vars() {
     let scene = TestScenario::new(util_name!());
 
@@ -3956,6 +4371,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
 
 #[cfg(all(unix, feature = "dd"))]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_posixly_correct_and_block_size_env_vars_with_k() {
     let scene = TestScenario::new(util_name!());
 
@@ -4016,6 +4432,7 @@ fn test_ls_invalid_block_size() {
 
 #[cfg(all(unix, feature = "dd"))]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_ls_invalid_block_size_in_env_var() {
     let scene = TestScenario::new(util_name!());
 
@@ -4054,6 +4471,7 @@ fn test_ls_invalid_block_size_in_env_var() {
 
 #[cfg(all(unix, feature = "dd"))]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_ls_block_size_override() {
     let scene = TestScenario::new(util_name!());
 
@@ -4140,11 +4558,18 @@ fn test_ls_hyperlink() {
         .stdout_str()
         .contains(&format!("{path}{separator}{file}\x07{file}\x1b]8;;\x07")));
 
-    scene
-        .ucmd()
-        .arg("--hyperlink=never")
-        .succeeds()
-        .stdout_is(format!("{file}\n"));
+    for argument in [
+        "--hyperlink=never",
+        "--hyperlink=neve", // spell-checker:disable-line
+        "--hyperlink=ne",
+        "--hyperlink=n",
+    ] {
+        scene
+            .ucmd()
+            .arg(argument)
+            .succeeds()
+            .stdout_is(format!("{file}\n"));
+    }
 }
 
 // spell-checker: disable
@@ -4213,6 +4638,49 @@ fn test_ls_hyperlink_dirs() {
         .nth(2)
         .unwrap()
         .contains(&format!("{path}{separator}{dir_b}\x07{dir_b}\x1b]8;;\x07:")));
+}
+
+#[test]
+fn test_ls_hyperlink_recursive_dirs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let path = at.root_dir_resolved();
+    let separator = std::path::MAIN_SEPARATOR_STR;
+
+    let dir_a = "a";
+    let dir_b = "b";
+    at.mkdir(dir_a);
+    at.mkdir(format!("{dir_a}/{dir_b}"));
+
+    let result = scene
+        .ucmd()
+        .arg("--hyperlink")
+        .arg("--recursive")
+        .arg(dir_a)
+        .succeeds();
+
+    macro_rules! assert_hyperlink {
+        ($line:expr, $expected:expr) => {
+            assert!(matches!($line, Some(l) if l.starts_with("\x1b]8;;file://") && l.ends_with($expected)));
+        };
+    }
+
+    let mut lines = result.stdout_str().lines();
+    assert_hyperlink!(
+        lines.next(),
+        &format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:")
+    );
+    assert_hyperlink!(
+        lines.next(),
+        &format!("{path}{separator}{dir_a}{separator}{dir_b}\x07{dir_b}\x1b]8;;\x07")
+    );
+    assert!(matches!(lines.next(), Some(l) if l.is_empty()));
+    assert_hyperlink!(
+        lines.next(),
+        &format!(
+            "{path}{separator}{dir_a}{separator}{dir_b}\x07{dir_a}{separator}{dir_b}\x1b]8;;\x07:"
+        )
+    );
 }
 
 #[test]
@@ -4328,4 +4796,265 @@ fn test_acl_display() {
         .args(&["-lda", &path])
         .succeeds()
         .stdout_contains("+");
+}
+
+// Make sure that "ls --color" correctly applies color "normal" to text and
+// files. Specifically, it should use the NORMAL setting to format non-file name
+// output and file names that don't have a designated color (unless the FILE
+// setting is also configured).
+#[cfg(unix)]
+#[test]
+fn test_ls_color_norm() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("exe");
+    at.set_mode("exe", 0o755);
+    at.touch("no_color");
+    at.set_mode("no_color", 0o444);
+    let colors = "no=7:ex=01;32";
+    let strip = |input: &str| {
+        let re = Regex::new(r"-r.*norm").unwrap();
+        re.replace_all(input, "norm").to_string()
+    };
+
+    //  Uncolored file names should inherit NORMAL attributes.
+    let expected = "\x1b[0m\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n\x1b[07mnorm no_color\x1b[0m"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("exe")
+        .arg("no_color")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    let expected = "\x1b[0m\x1b[07m\x1b[0m\x1b[01;32mexe\x1b[0m  \x1b[07mno_color\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-xU")
+        .arg("--color")
+        .arg("exe")
+        .arg("no_color")
+        .succeeds()
+        .stdout_contains(expected);
+
+    let expected =
+        "\x1b[0m\x1b[07mnorm no_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    let expected = "\x1b[0m\x1b[07mno_color\x1b[0m  \x1b[07m\x1b[0m\x1b[01;32mexe\x1b[0m"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-xU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_contains(expected);
+
+    //  NORMAL does not override FILE
+    let expected = "\x1b[0m\x1b[07mnorm \x1b[0m\x1b[01mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", format!("{}:fi=1", colors))
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    // uncolored ordinary files that do _not_ inherit from NORMAL.
+    let expected =
+        "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", format!("{}:fi=", colors))
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    let expected =
+        "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", format!("{}:fi=0", colors))
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    //  commas (-m), indicator chars (-F) and the "total" line, do not currently
+    //  use NORMAL attributes
+    let expected = "\x1b[0m\x1b[07mno_color\x1b[0m, \x1b[07m\x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-mU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_contains(expected);
+}
+
+#[test]
+fn test_ls_color_clear_to_eol() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    // we create file with a long name
+    at.touch("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo");
+    let result = scene
+        .ucmd()
+        .env("TERM", "xterm")
+        // set the columns to something small so that the text would wrap around
+        .env("COLUMNS", "80")
+        // set the background to green and text to red
+        .env("LS_COLORS", "*.foo=0;31;42")
+        .env("TIME_STYLE", "+T")
+        .arg("-og")
+        .arg("--color")
+        .arg("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo")
+        .succeeds();
+    // check that the wrapped name contains clear to end of line code
+    // cspell:disable-next-line
+    result.stdout_contains("\x1b[0m\x1b[31;42mzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\x1b[0m\x1b[K");
+}
+
+#[test]
+fn test_suffix_case_sensitivity() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("img1.jpg");
+    at.touch("IMG2.JPG");
+    at.touch("img3.JpG");
+    at.touch("file1.z");
+    at.touch("file2.Z");
+
+    // *.jpg is specified only once so any suffix that has .jpg should match
+    // without caring about the letter case
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.Z=01;31")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("file1.z")
+        .arg("file2.Z")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35mIMG2.JPG\x1b[0m\n\
+                \x1b[01;31mfile1.z\x1b[0m\n\
+                \x1b[01;31mfile2.Z\x1b[0m",
+        /* cSpell:enable */
+    );
+
+    // *.jpg is specified more than once with different cases and style, so
+    // case should matter here
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.JPG=01;35;46")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
+                img3.JpG",
+        /* cSpell:enable */
+    );
+
+    // *.jpg is specified more than once with different cases but style is same, so
+    // case can ignored
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.JPG=01;35")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35mIMG2.JPG\x1b[0m\n\
+                \x1b[01;35mimg3.JpG\x1b[0m",
+        /* cSpell:enable */
+    );
+
+    // last *.jpg gets more priority resulting in same style across
+    // different cases specified, so case can ignored
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.jpg=01;35;46:*.JPG=01;35;46")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35;46mimg1.jpg\x1b[0m\n\
+                \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
+                \x1b[01;35;46mimg3.JpG\x1b[0m",
+        /* cSpell:enable */
+    );
+
+    // last *.jpg gets more priority resulting in different style across
+    // different cases specified, so case matters
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35;46:*.jpg=01;35:*.JPG=01;35;46")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
+                img3.JpG",
+        /* cSpell:enable */
+    );
 }

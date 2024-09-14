@@ -1,7 +1,7 @@
 # spell-checker:ignore uuhelp
 [package]
 name = "uuhelp_parser"
-version = "0.0.23"
+version = "0.0.27"
 edition = "2021"
 license = "MIT"
 description = "A collection of functions to parse the markdown code of help files"

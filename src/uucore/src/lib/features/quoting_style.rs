@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+//! Set of functions for escaping names according to different quoting styles.
+
 use std::char::from_digit;
 use std::ffi::OsStr;
 use std::fmt;
@@ -11,25 +14,44 @@ use std::fmt;
 const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
 const SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
 
+/// The quoting style to use when escaping a name.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuotingStyle {
+    /// Escape the name as a literal string.
     Shell {
+        /// Whether to escape characters in the name.
         escape: bool,
+
+        /// Whether to always quote the name.
         always_quote: bool,
+
+        /// Whether to show control characters.
         show_control: bool,
     },
+
+    /// Escape the name as a C string.
     C {
+        /// The type of quotes to use.
         quotes: Quotes,
     },
+
+    /// Escape the name as a literal string.
     Literal {
+        /// Whether to show control characters.
         show_control: bool,
     },
 }
 
+/// The type of quotes to use when escaping a name as a C string.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Quotes {
+    /// Do not use quotes.
     None,
+
+    /// Use single quotes.
     Single,
+
+    /// Use double quotes.
     Double,
     // TODO: Locale
 }
@@ -262,6 +284,7 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
     (escaped_str, must_quote)
 }
 
+/// Escape a name according to the given quoting style.
 pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {

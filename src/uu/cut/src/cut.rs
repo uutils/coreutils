@@ -6,13 +6,15 @@
 // spell-checker:ignore (ToDO) delim sourcefiles
 
 use bstr::io::BufReadExt;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
+use uucore::os_str_as_bytes;
 
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
@@ -26,27 +28,38 @@ const USAGE: &str = help_usage!("cut.md");
 const ABOUT: &str = help_about!("cut.md");
 const AFTER_HELP: &str = help_section!("after help", "cut.md");
 
-struct Options {
-    out_delim: Option<String>,
+struct Options<'a> {
+    out_delimiter: Option<&'a [u8]>,
     line_ending: LineEnding,
+    field_opts: Option<FieldOptions<'a>>,
 }
 
-enum Delimiter {
+enum Delimiter<'a> {
     Whitespace,
-    String(String), // FIXME: use char?
+    Slice(&'a [u8]),
 }
 
-struct FieldOptions {
-    delimiter: Delimiter,
-    out_delimiter: Option<String>,
+struct FieldOptions<'a> {
+    delimiter: Delimiter<'a>,
     only_delimited: bool,
-    line_ending: LineEnding,
 }
 
-enum Mode {
-    Bytes(Vec<Range>, Options),
-    Characters(Vec<Range>, Options),
-    Fields(Vec<Range>, FieldOptions),
+enum Mode<'a> {
+    Bytes(Vec<Range>, Options<'a>),
+    Characters(Vec<Range>, Options<'a>),
+    Fields(Vec<Range>, Options<'a>),
+}
+
+impl Default for Delimiter<'_> {
+    fn default() -> Self {
+        Self::Slice(b"\t")
+    }
+}
+
+impl<'a> From<&'a OsString> for Delimiter<'a> {
+    fn from(s: &'a OsString) -> Self {
+        Self::Slice(os_str_as_bytes(s).unwrap())
+    }
 }
 
 fn stdout_writer() -> Box<dyn Write> {
@@ -69,11 +82,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()
     let newline_char = opts.line_ending.into();
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
-    let delim = opts
-        .out_delim
-        .as_ref()
-        .map_or("", String::as_str)
-        .as_bytes();
+    let out_delim = opts.out_delimiter.unwrap_or(b"\t");
 
     let result = buf_in.for_byte_record(newline_char, |line| {
         let mut print_delim = false;
@@ -82,8 +91,8 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()
                 break;
             }
             if print_delim {
-                out.write_all(delim)?;
-            } else if opts.out_delim.is_some() {
+                out.write_all(out_delim)?;
+            } else if opts.out_delimiter.is_some() {
                 print_delim = true;
             }
             // change `low` from 1-indexed value to 0-index value
@@ -109,7 +118,7 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
     ranges: &[Range],
     only_delimited: bool,
     newline_char: u8,
-    out_delim: &str,
+    out_delim: &[u8],
 ) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
@@ -145,7 +154,7 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
             for _ in 0..=high - low {
                 // skip printing delimiter if this is the first matching field for this line
                 if print_delim {
-                    out.write_all(out_delim.as_bytes())?;
+                    out.write_all(out_delim)?;
                 } else {
                     print_delim = true;
                 }
@@ -253,17 +262,18 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
     Ok(())
 }
 
-fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> UResult<()> {
+fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
     let newline_char = opts.line_ending.into();
-    match opts.delimiter {
-        Delimiter::String(ref delim) => {
-            let matcher = ExactMatcher::new(delim.as_bytes());
+    let field_opts = opts.field_opts.as_ref().unwrap(); // it is safe to unwrap() here - field_opts will always be Some() for cut_fields() call
+    match field_opts.delimiter {
+        Delimiter::Slice(delim) => {
+            let matcher = ExactMatcher::new(delim);
             match opts.out_delimiter {
-                Some(ref out_delim) => cut_fields_explicit_out_delim(
+                Some(out_delim) => cut_fields_explicit_out_delim(
                     reader,
                     &matcher,
                     ranges,
-                    opts.only_delimited,
+                    field_opts.only_delimited,
                     newline_char,
                     out_delim,
                 ),
@@ -271,21 +281,20 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
                     reader,
                     &matcher,
                     ranges,
-                    opts.only_delimited,
+                    field_opts.only_delimited,
                     newline_char,
                 ),
             }
         }
         Delimiter::Whitespace => {
             let matcher = WhitespaceMatcher {};
-            let out_delim = opts.out_delimiter.as_deref().unwrap_or("\t");
             cut_fields_explicit_out_delim(
                 reader,
                 &matcher,
                 ranges,
-                opts.only_delimited,
+                field_opts.only_delimited,
                 newline_char,
-                out_delim,
+                opts.out_delimiter.unwrap_or(b"\t"),
             )
         }
     }
@@ -316,6 +325,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
 
             if path.is_dir() {
                 show_error!("{}: Is a directory", filename.maybe_quote());
+                set_exit_code(1);
                 continue;
             }
 
@@ -333,6 +343,66 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
     }
 }
 
+// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
+// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
+fn get_delimiters(
+    matches: &ArgMatches,
+    delimiter_is_equal: bool,
+) -> UResult<(Delimiter, Option<&[u8]>)> {
+    let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
+    let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
+    let delim = match delim_opt {
+        Some(_) if whitespace_delimited => {
+            return Err(USimpleError::new(
+                1,
+                "invalid input: Only one of --delimiter (-d) or -w option can be specified",
+            ));
+        }
+        Some(os_string) => {
+            // GNU's `cut` supports `-d=` to set the delimiter to `=`.
+            // Clap parsing is limited in this situation, see:
+            // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+            if delimiter_is_equal {
+                Delimiter::Slice(b"=")
+            } else if os_string == "''" || os_string.is_empty() {
+                // treat `''` as empty delimiter
+                Delimiter::Slice(b"\0")
+            } else {
+                // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
+                // and Non UTF-8 (and not ASCII) single byte "characters", like `b"\xAD"` to align with GNU behavior
+                let bytes = os_str_as_bytes(os_string)?;
+                if os_string.to_str().is_some_and(|s| s.chars().count() > 1)
+                    || os_string.to_str().is_none() && bytes.len() > 1
+                {
+                    return Err(USimpleError::new(
+                        1,
+                        "the delimiter must be a single character",
+                    ));
+                } else {
+                    Delimiter::from(os_string)
+                }
+            }
+        }
+        None => {
+            if whitespace_delimited {
+                Delimiter::Whitespace
+            } else {
+                Delimiter::default()
+            }
+        }
+    };
+    let out_delim = matches
+        .get_one::<OsString>(options::OUTPUT_DELIMITER)
+        .map(|os_string| {
+            if os_string.is_empty() || os_string == "''" {
+                b"\0"
+            } else {
+                os_str_as_bytes(os_string).unwrap()
+            }
+        });
+    Ok((delim, out_delim))
+}
+
 mod options {
     pub const BYTES: &str = "bytes";
     pub const CHARACTERS: &str = "characters";
@@ -348,116 +418,68 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
+    let args = args.collect::<Vec<OsString>>();
 
-    let delimiter_is_equal = args.contains(&"-d=".to_string()); // special case
+    let delimiter_is_equal = args.contains(&OsString::from("-d=")); // special case
     let matches = uu_app().try_get_matches_from(args)?;
 
     let complement = matches.get_flag(options::COMPLEMENT);
+    let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
+
+    let (delimiter, out_delimiter) = get_delimiters(&matches, delimiter_is_equal)?;
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
+
+    // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
+    // is expected. The number of those arguments is used for parsing a cutting
+    // mode and handling the error cases.
+    let mode_args_count = [
+        matches.indices_of(options::BYTES),
+        matches.indices_of(options::CHARACTERS),
+        matches.indices_of(options::FIELDS),
+    ]
+    .into_iter()
+    .map(|indices| indices.unwrap_or_default().count())
+    .sum();
 
     let mode_parse = match (
+        mode_args_count,
         matches.get_one::<String>(options::BYTES),
         matches.get_one::<String>(options::CHARACTERS),
         matches.get_one::<String>(options::FIELDS),
     ) {
-        (Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
+        (1, Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
             Mode::Bytes(
                 ranges,
                 Options {
-                    out_delim: Some(
-                        matches
-                            .get_one::<String>(options::OUTPUT_DELIMITER)
-                            .map(|s| s.as_str())
-                            .unwrap_or_default()
-                            .to_owned(),
-                    ),
-                    line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED)),
+                    out_delimiter,
+                    line_ending,
+                    field_opts: None,
                 },
             )
         }),
-        (None, Some(char_ranges), None) => list_to_ranges(char_ranges, complement).map(|ranges| {
+        (1, None, Some(char_ranges), None) => list_to_ranges(char_ranges, complement).map(|ranges| {
             Mode::Characters(
                 ranges,
                 Options {
-                    out_delim: Some(
-                        matches
-                            .get_one::<String>(options::OUTPUT_DELIMITER)
-                            .map(|s| s.as_str())
-                            .unwrap_or_default()
-                            .to_owned(),
-                    ),
-                    line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED)),
+                    out_delimiter,
+                    line_ending,
+                    field_opts: None,
                 },
             )
         }),
-        (None, None, Some(field_ranges)) => {
-            list_to_ranges(field_ranges, complement).and_then(|ranges| {
-                let out_delim = match matches.get_one::<String>(options::OUTPUT_DELIMITER) {
-                    Some(s) => {
-                        if s.is_empty() {
-                            Some("\0".to_owned())
-                        } else {
-                            Some(s.clone())
-                        }
-                    }
-                    None => None,
-                };
-
-                let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
-                let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
-                let zero_terminated = matches.get_flag(options::ZERO_TERMINATED);
-                let line_ending = LineEnding::from_zero_flag(zero_terminated);
-
-                match matches.get_one::<String>(options::DELIMITER).map(|s| s.as_str()) {
-                    Some(_) if whitespace_delimited => {
-                            Err("invalid input: Only one of --delimiter (-d) or -w option can be specified".into())
-                        }
-                    Some(mut delim) => {
-                        // GNU's `cut` supports `-d=` to set the delimiter to `=`.
-                        // Clap parsing is limited in this situation, see:
-                        // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-                        if delimiter_is_equal {
-                            delim = "=";
-                        } else if delim == "''" {
-                            // treat `''` as empty delimiter
-                            delim = "";
-                        }
-                        if delim.chars().count() > 1 {
-                            Err("the delimiter must be a single character".into())
-                        } else {
-                            let delim = if delim.is_empty() {
-                                "\0".to_owned()
-                            } else {
-                                delim.to_owned()
-                            };
-
-                            Ok(Mode::Fields(
-                                ranges,
-                                FieldOptions {
-                                    delimiter: Delimiter::String(delim),
-                                    out_delimiter: out_delim,
-                                    only_delimited,
-                                    line_ending,
-                                },
-                            ))
-                        }
-                    }
-                    None => Ok(Mode::Fields(
-                        ranges,
-                        FieldOptions {
-                            delimiter: match whitespace_delimited {
-                                true => Delimiter::Whitespace,
-                                false => Delimiter::String("\t".to_owned()),
-                            },
-                            out_delimiter: out_delim,
-                            only_delimited,
-                            line_ending,
-                        },
-                    )),
-                }
-            })
-        }
-        (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => Err(
+        (1, None, None, Some(field_ranges)) => list_to_ranges(field_ranges, complement).map(|ranges| {
+            Mode::Fields(
+                ranges,
+                Options {
+                    out_delimiter,
+                    line_ending,
+                    field_opts: Some(FieldOptions {
+                        only_delimited,
+                        delimiter,
+                })},
+            )
+        }),
+        (2.., _, _, _) => Err(
             "invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)".into()
         ),
         _ => Err("invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)".into()),
@@ -507,6 +529,13 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .infer_long_args(true)
+        // While `args_override_self(true)` for some arguments, such as `-d`
+        // and `--output-delimiter`, is consistent to the behavior of GNU cut,
+        // arguments related to cutting mode, i.e. `-b`, `-c`, `-f`, should
+        // cause an error when there is more than one of them, as described in
+        // the manual of GNU cut: "Use one, and only one of -b, -c or -f".
+        // `ArgAction::Append` is used on `-b`, `-c`, `-f` arguments, so that
+        // the occurrences of those could be counted and be handled accordingly.
         .args_override_self(true)
         .arg(
             Arg::new(options::BYTES)
@@ -514,7 +543,8 @@ pub fn uu_app() -> Command {
                 .long(options::BYTES)
                 .help("filter byte columns from the input source")
                 .allow_hyphen_values(true)
-                .value_name("LIST"),
+                .value_name("LIST")
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::CHARACTERS)
@@ -522,12 +552,14 @@ pub fn uu_app() -> Command {
                 .long(options::CHARACTERS)
                 .help("alias for character mode")
                 .allow_hyphen_values(true)
-                .value_name("LIST"),
+                .value_name("LIST")
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::DELIMITER)
                 .short('d')
                 .long(options::DELIMITER)
+                .value_parser(ValueParser::os_string())
                 .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
                 .value_name("DELIM"),
         )
@@ -544,7 +576,8 @@ pub fn uu_app() -> Command {
                 .long(options::FIELDS)
                 .help("filter field columns from the input source")
                 .allow_hyphen_values(true)
-                .value_name("LIST"),
+                .value_name("LIST")
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::COMPLEMENT)
@@ -569,6 +602,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::OUTPUT_DELIMITER)
                 .long(options::OUTPUT_DELIMITER)
+                .value_parser(ValueParser::os_string())
                 .help("in field mode, replace the delimiter in output lines with this option's argument")
                 .value_name("NEW_DELIM"),
         )

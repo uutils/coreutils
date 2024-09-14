@@ -748,6 +748,18 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
+    // fs::copy fails if destination is a invalid symlink.
+    // so lets just remove all existing files at destination before copy.
+    if let Err(e) = fs::remove_file(to) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            show_error!(
+                "Failed to remove existing file {}. Error: {:?}",
+                to.display(),
+                e
+            );
+        }
+    }
+
     if from.as_os_str() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
@@ -776,27 +788,23 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 ///
 fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
     // Check if the filename starts with a hyphen and adjust the path
-    let to = if to
-        .file_name()
-        .unwrap_or_default()
-        .to_str()
-        .unwrap_or_default()
-        .starts_with('-')
-    {
+    let to_str = to.as_os_str().to_str().unwrap_or_default();
+    let to = if to_str.starts_with('-') {
         let mut new_path = PathBuf::from(".");
         new_path.push(to);
         new_path
     } else {
         to.to_path_buf()
     };
-    match process::Command::new(&b.strip_program).arg(&to).output() {
-        Ok(o) => {
-            if !o.status.success() {
+    match process::Command::new(&b.strip_program).arg(&to).status() {
+        Ok(status) => {
+            if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
                 let _ = fs::remove_file(to);
-                return Err(InstallError::StripProgramFailed(
-                    String::from_utf8(o.stderr).unwrap_or_default(),
-                )
+                return Err(InstallError::StripProgramFailed(format!(
+                    "strip process terminated abnormally - exit code: {}",
+                    status.code().unwrap()
+                ))
                 .into());
             }
         }

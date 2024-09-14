@@ -46,7 +46,9 @@ impl TmpDirWrapper {
             tempfile::Builder::new()
                 .prefix("uutils_sort")
                 .tempdir_in(&self.parent_path)
-                .map_err(|_| SortError::TmpDirCreationFailed)?,
+                .map_err(|_| SortError::TmpFileCreationFailed {
+                    path: self.parent_path.clone(),
+                })?,
         );
 
         let path = self.temp_dir.as_ref().unwrap().path().to_owned();

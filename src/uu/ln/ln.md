@@ -7,7 +7,7 @@ ln [OPTION]... TARGET... DIRECTORY
 ln [OPTION]... -t DIRECTORY TARGET...
 ```
 
-Change file owner and group
+Make links between files.
 
 ## After Help
 

@@ -8,10 +8,11 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "0.4"
-libc = "0.2"
-tempfile = "3"
-rand = { version = "0.8", features = ["small_rng"] }
+libfuzzer-sys = "0.4.7"
+libc = "0.2.153"
+tempfile = "3.11.0"
+rand = { version = "0.8.5", features = ["small_rng"] }
+similar = "2.5.0"
 
 uucore = { path = "../src/uucore/" }
 uu_date = { path = "../src/uu/date/" }
@@ -24,6 +25,8 @@ uu_sort = { path = "../src/uu/sort/" }
 uu_wc = { path = "../src/uu/wc/" }
 uu_cut = { path = "../src/uu/cut/" }
 uu_split = { path = "../src/uu/split/" }
+uu_tr = { path = "../src/uu/tr/" }
+uu_env = { path = "../src/uu/env/" }
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -90,6 +93,12 @@ test = false
 doc = false
 
 [[bin]]
+name = "fuzz_seq_parse_number"
+path = "fuzz_targets/fuzz_seq_parse_number.rs"
+test = false
+doc = false
+
+[[bin]]
 name = "fuzz_parse_glob"
 path = "fuzz_targets/fuzz_parse_glob.rs"
 test = false
@@ -104,5 +113,17 @@ doc = false
 [[bin]]
 name = "fuzz_parse_time"
 path = "fuzz_targets/fuzz_parse_time.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_tr"
+path = "fuzz_targets/fuzz_tr.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_env"
+path = "fuzz_targets/fuzz_env.rs"
 test = false
 doc = false

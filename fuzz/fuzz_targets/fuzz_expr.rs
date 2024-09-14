@@ -22,7 +22,8 @@ static CMD_PATH: &str = "expr";
 fn generate_expr(max_depth: u32) -> String {
     let mut rng = rand::thread_rng();
     let ops = [
-        "+", "-", "*", "/", "%", "<", ">", "=", "&", "|", "!=", "<=", ">=", ":", "index", "length", "substr",
+        "+", "-", "*", "/", "%", "<", ">", "=", "&", "|", "!=", "<=", ">=", ":", "index", "length",
+        "substr",
     ];
 
     let mut expr = String::new();

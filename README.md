@@ -51,11 +51,10 @@ that scripts can be easily transferred between platforms.
 <div class="oranda-hide">
 
 ## Documentation
-
 uutils has both user and developer documentation available:
 
-- [User Manual](https://uutils.github.io/coreutils/book/)
-- [Developer Documentation](https://uutils.github.io/dev/coreutils/) (currently offline, you can use docs.rs in the meantime)
+- [User Manual](https://uutils.github.io/coreutils/docs/)
+- [Developer Documentation](https://docs.rs/crate/coreutils/)
 
 Both can also be generated locally, the instructions for that can be found in
 the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
@@ -303,7 +302,7 @@ make PREFIX=/my/path uninstall
 
 Below is the evolution of how many GNU tests uutils passes. A more detailed
 breakdown of the GNU test results of the main branch can be found
-[in the user manual](https://uutils.github.io/coreutils/book/test_coverage.html).
+[in the user manual](https://uutils.github.io/coreutils/docs/test_coverage.html).
 
 See <https://github.com/orgs/uutils/projects/1> for the main meta bugs
 (many are missing).

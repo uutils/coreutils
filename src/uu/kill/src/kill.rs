@@ -11,7 +11,7 @@ use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
+use uucore::signals::{signal_by_name_or_value, signal_name_by_value, ALL_SIGNALS};
 use uucore::{format_usage, help_about, help_usage, show};
 
 static ABOUT: &str = help_about!("kill.md");
@@ -60,18 +60,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 15_usize //SIGTERM
             };
-            let sig: Signal = (sig as i32)
-                .try_into()
-                .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+
+            let sig_name = signal_name_by_value(sig);
+            // Signal does not support converting from EXIT
+            // Instead, nix::signal::kill expects Option::None to properly handle EXIT
+            let sig: Option<Signal> = if sig_name.is_some_and(|name| name == "EXIT") {
+                None
+            } else {
+                let sig = (sig as i32)
+                    .try_into()
+                    .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+                Some(sig)
+            };
+
             let pids = parse_pids(&pids_or_signals)?;
-            kill(sig, &pids);
-            Ok(())
+            if pids.is_empty() {
+                Err(USimpleError::new(
+                    1,
+                    "no process ID specified\n\
+                     Try --help for more information.",
+                ))
+            } else {
+                kill(sig, &pids);
+                Ok(())
+            }
         }
         Mode::Table => {
             table();
             Ok(())
         }
-        Mode::List => list(pids_or_signals.first()),
+        Mode::List => {
+            list(&pids_or_signals);
+            Ok(())
+        }
     }
 }
 
@@ -131,20 +152,21 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
 }
 
 fn table() {
-    let name_width = ALL_SIGNALS.iter().map(|n| n.len()).max().unwrap();
-
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        print!("{0: >#2} {1: <#2$}", idx, signal, name_width + 2);
-        if (idx + 1) % 7 == 0 {
-            println!();
-        }
+    // GNU kill doesn't list the EXIT signal with --table, so we ignore it, too
+    for (idx, signal) in ALL_SIGNALS
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| **s != "EXIT")
+    {
+        println!("{0: >#2} {1}", idx, signal);
     }
-    println!();
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
-        if signal == signal_name_or_value || (format!("SIG{signal}")) == signal_name_or_value {
+        if signal.eq_ignore_ascii_case(signal_name_or_value)
+            || format!("SIG{signal}").eq_ignore_ascii_case(signal_name_or_value)
+        {
             println!("{value}");
             return Ok(());
         } else if signal_name_or_value == value.to_string() {
@@ -159,21 +181,20 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
 }
 
 fn print_signals() {
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        if idx > 0 {
-            print!(" ");
-        }
-        print!("{signal}");
+    // GNU kill doesn't list the EXIT signal with --list, so we ignore it, too
+    for signal in ALL_SIGNALS.iter().filter(|x| **x != "EXIT") {
+        println!("{signal}");
     }
-    println!();
 }
 
-fn list(arg: Option<&String>) -> UResult<()> {
-    match arg {
-        Some(x) => print_signal(x),
-        None => {
-            print_signals();
-            Ok(())
+fn list(signals: &Vec<String>) {
+    if signals.is_empty() {
+        print_signals();
+    } else {
+        for signal in signals {
+            if let Err(e) = print_signal(signal) {
+                uucore::show!(e);
+            }
         }
     }
 }
@@ -199,7 +220,7 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
         .collect()
 }
 
-fn kill(sig: Signal, pids: &[i32]) {
+fn kill(sig: Option<Signal>, pids: &[i32]) {
     for &pid in pids {
         if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
             show!(Error::from_raw_os_error(e as i32)

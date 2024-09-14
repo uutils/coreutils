@@ -1,7 +1,7 @@
-# spell-checker:ignore bigdecimal
+# spell-checker:ignore bigdecimal cfgs
 [package]
 name = "uu_seq"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "seq ~ (uutils) display a sequence of numbers"
@@ -11,6 +11,8 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uu/seq"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
+
+readme.workspace = true
 
 [lib]
 path = "src/seq.rs"
@@ -25,3 +27,8 @@ uucore = { workspace = true, features = ["format", "quoting-style"] }
 [[bin]]
 name = "seq"
 path = "src/main.rs"
+
+# Allow "fuzzing" as a "cfg" condition name
+# https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

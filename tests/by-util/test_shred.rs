@@ -18,6 +18,11 @@ fn test_invalid_remove_arg() {
 }
 
 #[test]
+fn test_ambiguous_remove_arg() {
+    new_ucmd!().arg("--remove=wip").fails().code_is(1);
+}
+
+#[test]
 fn test_shred() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -49,15 +54,15 @@ fn test_shred_remove() {
 
 #[test]
 fn test_shred_remove_unlink() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    let file = "test_shred_remove_unlink";
-    at.touch(file);
-
-    ucmd.arg("--remove=unlink").arg(file).succeeds();
-
-    // File was deleted
-    assert!(!at.file_exists(file));
+    // spell-checker:disable-next-line
+    for argument in ["--remove=unlink", "--remove=unlin", "--remove=u"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file = "test_shred_remove_unlink";
+        at.touch(file);
+        ucmd.arg(argument).arg(file).succeeds();
+        // File was deleted
+        assert!(!at.file_exists(file));
+    }
 }
 
 #[test]
@@ -75,15 +80,15 @@ fn test_shred_remove_wipe() {
 
 #[test]
 fn test_shred_remove_wipesync() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    let file = "test_shred_remove_wipesync";
-    at.touch(file);
-
-    ucmd.arg("--remove=wipesync").arg(file).succeeds();
-
-    // File was deleted
-    assert!(!at.file_exists(file));
+    // spell-checker:disable-next-line
+    for argument in ["--remove=wipesync", "--remove=wipesyn", "--remove=wipes"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file = "test_shred_remove_wipesync";
+        at.touch(file);
+        ucmd.arg(argument).arg(file).succeeds();
+        // File was deleted
+        assert!(!at.file_exists(file));
+    }
 }
 
 #[test]
@@ -142,4 +147,61 @@ fn test_hex() {
     at.touch(file);
 
     ucmd.arg("--size=0x10").arg(file).succeeds();
+}
+
+#[test]
+fn test_shred_empty() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_shred_remove_a";
+
+    at.touch(file_a);
+
+    // Shred file_a and verify that, as it is empty, it doesn't have "pass 1/3 (random)"
+    scene
+        .ucmd()
+        .arg("-uv")
+        .arg(file_a)
+        .succeeds()
+        .stderr_does_not_contain("1/3 (random)");
+
+    assert!(!at.file_exists(file_a));
+
+    // if the file isn't empty, we should have random
+    at.touch(file_a);
+    at.write(file_a, "1");
+    scene
+        .ucmd()
+        .arg("-uv")
+        .arg(file_a)
+        .succeeds()
+        .stderr_contains("1/3 (random)");
+
+    assert!(!at.file_exists(file_a));
+}
+
+#[test]
+#[cfg(all(unix, feature = "chmod"))]
+fn test_shred_fail_no_perm() {
+    use std::path::Path;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "dir";
+
+    let file = "test_shred_remove_a";
+
+    let binding = Path::new("dir").join(file);
+    let path = binding.to_str().unwrap();
+    at.mkdir(dir);
+    at.touch(path);
+    scene.ccmd("chmod").arg("a-w").arg(dir).succeeds();
+
+    scene
+        .ucmd()
+        .arg("-uv")
+        .arg(path)
+        .fails()
+        .stderr_contains("Couldn't rename to");
 }

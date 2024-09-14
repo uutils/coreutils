@@ -5,10 +5,11 @@
 // spell-checker:ignore (words) helloworld nodir objdump n'source
 
 use crate::common::util::{is_ci, run_ucmd_as_root, TestScenario};
+#[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-#[cfg(not(any(windows, target_os = "freebsd")))]
+#[cfg(not(windows))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
@@ -523,6 +524,7 @@ fn test_install_failing_no_such_file() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_install_copy_then_compare_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -610,13 +612,17 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 }
 
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
-#[cfg(not(any(windows, target_os = "freebsd")))]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
 const SYMBOL_DUMP_PROGRAM: &str = "objdump";
-#[cfg(not(any(windows, target_os = "freebsd")))]
+#[cfg(target_os = "freebsd")]
+const SYMBOL_DUMP_PROGRAM: &str = "llvm-objdump";
+#[cfg(not(windows))]
 const STRIP_SOURCE_FILE_SYMBOL: &str = "main";
 
 fn strip_source_file() -> &'static str {
-    if cfg!(target_os = "macos") {
+    if cfg!(target_os = "freebsd") {
+        "helloworld_freebsd"
+    } else if cfg!(target_os = "macos") {
         "helloworld_macos"
     } else if cfg!(target_arch = "arm") || cfg!(target_arch = "aarch64") {
         "helloworld_android"
@@ -626,8 +632,7 @@ fn strip_source_file() -> &'static str {
 }
 
 #[test]
-// FixME: Freebsd fails on 'No such file or directory'
-#[cfg(not(any(windows, target_os = "freebsd")))]
+#[cfg(not(windows))]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -650,8 +655,7 @@ fn test_install_and_strip() {
 }
 
 #[test]
-// FixME: Freebsd fails on 'No such file or directory'
-#[cfg(not(any(windows, target_os = "freebsd")))]
+#[cfg(not(windows))]
 fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -677,8 +681,6 @@ fn test_install_and_strip_with_program() {
 
 #[cfg(all(unix, feature = "chmod"))]
 #[test]
-// FixME: Freebsd fails on 'No such file or directory'
-#[cfg(not(target_os = "freebsd"))]
 fn test_install_and_strip_with_program_hyphen() {
     let scene = TestScenario::new(util_name!());
 
@@ -699,7 +701,78 @@ fn test_install_and_strip_with_program_hyphen() {
         .arg("src")
         .arg("-dest")
         .succeeds()
-        .no_stderr();
+        .no_stderr()
+        .stdout_is("./-dest\n");
+
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("./no-hyphen")
+        .arg("--")
+        .arg("src")
+        .arg("./-dest")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("./-dest\n");
+}
+
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+fn test_install_on_invalid_link_at_destination() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    at.mkdir("src");
+    at.mkdir("dest");
+    let src_dir = at.plus("src");
+    let dst_dir = at.plus("dest");
+
+    at.touch("test.sh");
+    at.symlink_file(
+        "/opt/FakeDestination",
+        &dst_dir.join("test.sh").to_string_lossy(),
+    );
+    scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
+    at.symlink_file("test.sh", &src_dir.join("test.sh").to_string_lossy());
+
+    scene
+        .ucmd()
+        .current_dir(&src_dir)
+        .arg(src_dir.join("test.sh"))
+        .arg(dst_dir.join("test.sh"))
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    at.mkdir("src");
+    at.mkdir("dest");
+    let src_dir = at.plus("src");
+    let dst_dir = at.plus("dest");
+
+    at.touch("test.sh");
+    at.symlink_file(
+        "/opt/FakeDestination",
+        &dst_dir.join("test.sh").to_string_lossy(),
+    );
+    scene.ccmd("chmod").arg("+x").arg("test.sh").succeeds();
+    at.symlink_file("test.sh", &src_dir.join("test.sh").to_string_lossy());
+
+    scene
+        .ucmd()
+        .current_dir(&src_dir)
+        .arg("/dev/null")
+        .arg(dst_dir.join("test.sh"))
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
 }
 
 #[test]
@@ -889,7 +962,7 @@ fn test_install_dir() {
     at.mkdir(dir);
     ucmd.arg(file1)
         .arg(file2)
-        .arg(&format!("--target-directory={dir}"))
+        .arg(format!("--target-directory={dir}"))
         .succeeds()
         .no_stderr();
 
@@ -1527,6 +1600,7 @@ fn test_install_chown_directory_invalid() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_install_compare_option() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1618,7 +1692,7 @@ fn test_target_file_ends_with_slash() {
 #[test]
 fn test_install_root_combined() {
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = &ts.fixtures;
     at.touch("a");
     at.touch("c");
 

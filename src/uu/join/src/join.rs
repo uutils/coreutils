@@ -9,7 +9,6 @@ use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::{memchr3_iter, memchr_iter};
 use std::cmp::Ordering;
-use std::convert::From;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
@@ -120,12 +119,7 @@ struct Repr<'a> {
 }
 
 impl<'a> Repr<'a> {
-    fn new(
-        line_ending: LineEnding,
-        separator: u8,
-        format: &'a [Spec],
-        empty: &'a [u8],
-    ) -> Repr<'a> {
+    fn new(line_ending: LineEnding, separator: u8, format: &'a [Spec], empty: &'a [u8]) -> Self {
         Repr {
             line_ending,
             separator,
@@ -334,7 +328,7 @@ impl<'a> State<'a> {
         key: usize,
         line_ending: LineEnding,
         print_unpaired: bool,
-    ) -> UResult<State<'a>> {
+    ) -> UResult<Self> {
         let file_buf = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
@@ -660,7 +654,7 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
             settings.autoformat = true;
         } else {
             let mut specs = vec![];
-            for part in format.split(|c| c == ' ' || c == ',' || c == '\t') {
+            for part in format.split([' ', ',', '\t']) {
                 specs.push(Spec::parse(part)?);
             }
             settings.format = specs;

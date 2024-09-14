@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use chrono::{DateTime, Local};
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, ArgMatches, Command};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
@@ -30,6 +30,7 @@ use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
@@ -74,9 +75,6 @@ const ABOUT: &str = help_about!("du.md");
 const AFTER_HELP: &str = help_section!("after help", "du.md");
 const USAGE: &str = help_usage!("du.md");
 
-// TODO: Support Z & Y (currently limited by size of u64)
-const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
-
 struct TraversalOptions {
     all: bool,
     separate_dirs: bool,
@@ -116,7 +114,8 @@ enum Time {
 
 #[derive(Clone)]
 enum SizeFormat {
-    Human(u64),
+    HumanDecimal,
+    HumanBinary,
     BlockSize(u64),
 }
 
@@ -548,18 +547,14 @@ impl StatPrinter {
             return size.to_string();
         }
         match self.size_format {
-            SizeFormat::Human(multiplier) => {
-                if size == 0 {
-                    return "0".to_string();
-                }
-                for &(unit, power) in &UNITS {
-                    let limit = multiplier.pow(power);
-                    if size >= limit {
-                        return format!("{:.1}{}", (size as f64) / (limit as f64), unit);
-                    }
-                }
-                format!("{size}B")
-            }
+            SizeFormat::HumanDecimal => uucore::format::human::human_readable(
+                size,
+                uucore::format::human::SizeFormat::Decimal,
+            ),
+            SizeFormat::HumanBinary => uucore::format::human::human_readable(
+                size,
+                uucore::format::human::SizeFormat::Binary,
+            ),
             SizeFormat::BlockSize(block_size) => div_ceil(size, block_size).to_string(),
         }
     }
@@ -687,9 +682,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     });
 
     let size_format = if matches.get_flag(options::HUMAN_READABLE) {
-        SizeFormat::Human(1024)
+        SizeFormat::HumanBinary
     } else if matches.get_flag(options::SI) {
-        SizeFormat::Human(1000)
+        SizeFormat::HumanDecimal
     } else if matches.get_flag(options::BYTES) {
         SizeFormat::BlockSize(1)
     } else if matches.get_flag(options::BLOCK_SIZE_1K) {
@@ -721,6 +716,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         excludes: build_exclude_patterns(&matches)?,
     };
 
+    let time_format = if time.is_some() {
+        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
+    } else {
+        "%Y-%m-%d %H:%M".to_string()
+    };
+
     let stat_printer = StatPrinter {
         max_depth,
         size_format,
@@ -737,8 +738,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .transpose()?,
         apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
         time,
-        time_format: parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?
-            .to_string(),
+        time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
     };
 
@@ -785,8 +785,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .send(Err(USimpleError::new(
                     1,
                     format!(
-                        "{}: No such file or directory",
-                        path.to_string_lossy().maybe_quote()
+                        "cannot access {}: No such file or directory",
+                        path.to_string_lossy().quote()
                     ),
                 )))
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
@@ -1035,7 +1035,11 @@ pub fn uu_app() -> Command {
                 .value_name("WORD")
                 .require_equals(true)
                 .num_args(0..)
-                .value_parser(["atime", "access", "use", "ctime", "status", "birth", "creation"])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("atime").alias("access").alias("use"),
+                    PossibleValue::new("ctime").alias("status"),
+                    PossibleValue::new("creation").alias("birth"),
+                ]))
                 .help(
                     "show time of the last modification of any file in the \
                     directory, or any of its subdirectories. If WORD is given, show time as WORD instead \

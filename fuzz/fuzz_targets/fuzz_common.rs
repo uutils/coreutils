@@ -7,6 +7,7 @@ use libc::STDIN_FILENO;
 use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
 use rand::prelude::SliceRandom;
 use rand::Rng;
+use similar::TextDiff;
 use std::ffi::OsString;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, RawFd};
@@ -321,12 +322,14 @@ pub fn compare_result(
         discrepancies.push("stdout differs");
         println!("Rust stdout: {}", rust_result.stdout);
         println!("GNU stdout: {}", gnu_result.stdout);
+        print_diff(&rust_result.stdout, &gnu_result.stdout);
         should_panic = true;
     }
     if rust_result.stderr.trim() != gnu_result.stderr.trim() {
         discrepancies.push("stderr differs");
         println!("Rust stderr: {}", rust_result.stderr);
         println!("GNU stderr: {}", gnu_result.stderr);
+        print_diff(&rust_result.stderr, &gnu_result.stderr);
         if fail_on_stderr_diff {
             should_panic = true;
         }
@@ -353,6 +356,16 @@ pub fn compare_result(
     }
 }
 
+/// When we have different outputs, print the diff
+fn print_diff(rust_output: &str, gnu_output: &str) {
+    println!("Diff=");
+    let diff = TextDiff::from_lines(rust_output, gnu_output);
+    for change in diff.iter_all_changes() {
+        print!("{}{}", change.tag(), change);
+    }
+    println!();
+}
+
 pub fn generate_random_string(max_length: usize) -> String {
     let mut rng = rand::thread_rng();
     let valid_utf8: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -361,7 +374,7 @@ pub fn generate_random_string(max_length: usize) -> String {
     let invalid_utf8 = [0xC3, 0x28]; // Invalid UTF-8 sequence
     let mut result = String::new();
 
-    for _ in 0..rng.gen_range(1..=max_length) {
+    for _ in 0..rng.gen_range(0..=max_length) {
         if rng.gen_bool(0.9) {
             let ch = valid_utf8.choose(&mut rng).unwrap();
             result.push(*ch);

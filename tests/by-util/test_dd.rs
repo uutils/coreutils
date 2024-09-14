@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable
 
 #[cfg(unix)]
 use crate::common::util::run_ucmd_as_root_with_stdin_stdout;
@@ -11,6 +11,7 @@ use crate::common::util::TestScenario;
 use crate::common::util::{UCommand, TESTS_BINARY};
 
 use regex::Regex;
+use uucore::io::OwnedFileDescriptorOrHandle;
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
@@ -277,7 +278,7 @@ fn test_final_stats_unspec() {
     new_ucmd!()
         .run()
         .stderr_contains("0+0 records in\n0+0 records out\n0 bytes copied, ")
-        .stderr_matches(&Regex::new(r"\d\.\d+(e-\d\d)? s, ").unwrap())
+        .stderr_matches(&Regex::new(r"\d(\.\d+)?(e-\d\d)? s, ").unwrap())
         .stderr_contains("0.0 B/s")
         .success();
 }
@@ -395,7 +396,7 @@ fn test_null_stats() {
         .arg("if=null.txt")
         .run()
         .stderr_contains("0+0 records in\n0+0 records out\n0 bytes copied, ")
-        .stderr_matches(&Regex::new(r"\d\.\d+(e-\d\d)? s, ").unwrap())
+        .stderr_matches(&Regex::new(r"\d(\.\d+)?(e-\d\d)? s, ").unwrap())
         .stderr_contains("0.0 B/s")
         .success();
 }
@@ -1405,6 +1406,36 @@ fn test_bytes_suffix() {
         .stdout_only("\0\0\0abcdef");
 }
 
+#[test]
+// the recursive nature of the suffix allows any string with a 'B' in it treated as bytes.
+fn test_bytes_suffix_recursive() {
+    new_ucmd!()
+        .args(&["count=2Bx2", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("abcd");
+    new_ucmd!()
+        .args(&["skip=2Bx2", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("ef");
+    new_ucmd!()
+        .args(&["iseek=2Bx2", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("ef");
+    new_ucmd!()
+        .args(&["seek=2Bx2", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("\0\0\0\0abcdef");
+    new_ucmd!()
+        .args(&["oseek=2Bx2", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("\0\0\0\0abcdef");
+}
+
 /// Test for "conv=sync" with a slow reader.
 #[cfg(not(windows))]
 #[test]
@@ -1537,6 +1568,16 @@ fn test_nocache_stdin_error() {
         .stderr_only(format!("dd: failed to discard cache for: 'standard input': {detail}\n0+0 records in\n0+0 records out\n"));
 }
 
+/// Test that dd fails when no number in count.
+#[test]
+fn test_empty_count_number() {
+    new_ucmd!()
+        .args(&["count=B"])
+        .fails()
+        .code_is(1)
+        .stderr_only("dd: invalid number: ‘B’\n");
+}
+
 /// Test for discarding system file cache.
 #[test]
 #[cfg(target_os = "linux")]
@@ -1600,7 +1641,7 @@ fn test_seek_past_dev() {
 fn test_reading_partial_blocks_from_fifo() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = &ts.fixtures;
     at.mkfifo("fifo");
     let fifoname = at.plus_as_string("fifo");
 
@@ -1641,7 +1682,7 @@ fn test_reading_partial_blocks_from_fifo() {
 fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = ts.fixtures;
     at.mkfifo("fifo");
     let fifoname = at.plus_as_string("fifo");
 
@@ -1672,4 +1713,78 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     assert_eq!(output.stdout, b"abcd");
     let expected = b"0+2 records in\n0+2 records out\n4 bytes copied";
     assert!(output.stderr.starts_with(expected));
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.make_file("input");
+    let filename = at.plus_as_string("input");
+    new_ucmd!()
+        .args(&["iflag=directory", "count=0"])
+        .set_stdin(std::process::Stdio::from(File::open(filename).unwrap()))
+        .fails()
+        .stderr_contains("standard input: not a directory");
+}
+
+#[test]
+fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
+    use std::process::Stdio;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("in", "abcde");
+
+    let stdin = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true),
+        at.plus("in").as_path(),
+    )
+    .unwrap();
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().create(true).write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+    let stderr = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().create(true).write(true),
+        at.plus("err").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&["bs=1", "skip=1", "count=1"])
+        .set_stdin(Stdio::from(stdin.try_clone().unwrap()))
+        .set_stdout(Stdio::from(stdout.try_clone().unwrap()))
+        .set_stderr(Stdio::from(stderr.try_clone().unwrap()))
+        .succeeds();
+
+    ts.ucmd()
+        .args(&["bs=1", "skip=1"])
+        .set_stdin(stdin)
+        .set_stdout(stdout)
+        .set_stderr(stderr)
+        .succeeds();
+
+    let err_file_content = std::fs::read_to_string(at.plus_as_string("err")).unwrap();
+    println!("stderr:\n{}", err_file_content);
+
+    let out_file_content = std::fs::read_to_string(at.plus_as_string("out")).unwrap();
+    println!("stdout:\n{}", out_file_content);
+    assert_eq!(out_file_content, "bde");
+}
+
+#[test]
+fn test_wrong_number_err_msg() {
+    new_ucmd!()
+        .args(&["count=kBb"])
+        .fails()
+        .stderr_contains("dd: invalid number: ‘kBb’\n");
+
+    new_ucmd!()
+        .args(&["count=1kBb555"])
+        .fails()
+        .stderr_contains("dd: invalid number: ‘1kBb555’\n");
 }

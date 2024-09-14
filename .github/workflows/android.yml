@@ -17,78 +17,158 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+env:
+  TERMUX: v0.118.0
+  KEY_POSTFIX: nextest+rustc-hash+adb+sshd+upgrade+XGB+inc18
+  COMMON_EMULATOR_OPTIONS: -no-window -noaudio -no-boot-anim -camera-back none -gpu swiftshader_indirect
+  EMULATOR_DISK_SIZE: 12GB
+  EMULATOR_HEAP_SIZE: 2048M
+  EMULATOR_BOOT_TIMEOUT: 1200 # 20min
+
 jobs:
   test_android:
     name: Test builds
-    runs-on: macos-latest
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest] # , macos-latest
+        cores: [4] # , 6
+        ram: [4096, 8192]
         api-level: [28]
-        target: [default]
-        arch: [x86] # , arm64-v8a
+        target: [google_apis_playstore]
+        arch: [x86, x86_64] # , arm64-v8a
+        exclude:
+          - ram: 8192
+            arch: x86
+          - ram: 4096
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
     env:
-      TERMUX: v0.118.0
+      EMULATOR_RAM_SIZE: ${{ matrix.ram }}
+      EMULATOR_CORES: ${{ matrix.cores }}
+      RUNNER_OS: ${{ matrix.os }}
+      AVD_CACHE_KEY: "set later due to limitations of github actions not able to concatenate env variables"
     steps:
+    - name: Concatenate values to environment file
+      run: |
+        echo "AVD_CACHE_KEY=${{ matrix.os }}-${{ matrix.cores }}-${{ matrix.ram }}-${{ matrix.api-level }}-${{ matrix.target }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}+${{ env.KEY_POSTFIX }}" >> $GITHUB_ENV
+    - name: Collect information about runner
+      if: always()
+      continue-on-error: true
+      run: |
+        hostname
+        uname -a
+        free -mh
+        df -Th
+        cat /proc/cpuinfo
+    - name: (Linux) create links from home to data partition
+      if: ${{ runner.os == 'Linux' }}
+      continue-on-error: true
+      run: |
+        ls -lah /mnt/
+        cat /mnt/DATALOSS_WARNING_README.txt
+        sudo mkdir /mnt/data
+        sudo chmod a+rwx /mnt/data
+        mkdir /mnt/data/.android && ln -s /mnt/data/.android ~/.android
+        mkdir /mnt/data/work && ln -s /mnt/data/work ~/work
+    - name: Enable KVM group perms (linux hardware acceleration)
+      if: ${{ runner.os == 'Linux' }}
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
     - uses: actions/checkout@v4
+    - name: Collect information about runner
+      if: always()
+      continue-on-error: true
+      run: |
+        free -mh
+        df -Th
     - name: Restore AVD cache
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       id: avd-cache
+      continue-on-error: true
       with:
         path: |
           ~/.android/avd/*
           ~/.android/avd/*/snapshots/*
           ~/.android/adb*
           ~/__rustc_hash__
-        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}+nextest+rustc-hash
+        key: avd-${{ env.AVD_CACHE_KEY }}
+    - name: Collect information about runner after AVD cache
+      if: always()
+      continue-on-error: true
+      run: |
+        free -mh
+        df -Th
+        ls -lah /mnt/data
+        du -sch /mnt/data
+    - name: Delete AVD Lockfile when run from cache
+      if: steps.avd-cache.outputs.cache-hit == 'true'
+      run: |
+        rm -f \
+          ~/.android/avd/*.avd/*.lock \
+          ~/.android/avd/*/*.lock
     - name: Create and cache emulator image
       if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: reactivecircus/android-emulator-runner@v2
+      uses: reactivecircus/android-emulator-runner@v2.32.0
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
         arch: ${{ matrix.arch }}
-        ram-size: 2048M
-        disk-size: 7GB
+        ram-size: ${{ env.EMULATOR_RAM_SIZE }}
+        heap-size: ${{ env.EMULATOR_HEAP_SIZE }}
+        disk-size: ${{ env.EMULATOR_DISK_SIZE }}
+        cores: ${{ env.EMULATOR_CORES }}
         force-avd-creation: true
-        emulator-options: -no-window -no-snapshot-load -noaudio -no-boot-anim -camera-back none
+        emulator-options: ${{ env.COMMON_EMULATOR_OPTIONS }} -no-snapshot-load
+        emulator-boot-timeout: ${{ env.EMULATOR_BOOT_TIMEOUT }}
         script: |
           util/android-commands.sh init "${{ matrix.arch }}" "${{ matrix.api-level }}" "${{ env.TERMUX }}"
     - name: Save AVD cache
       if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: |
           ~/.android/avd/*
           ~/.android/avd/*/snapshots/*
           ~/.android/adb*
           ~/__rustc_hash__
-        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}+nextest+rustc-hash
+        key: avd-${{ env.AVD_CACHE_KEY }}
     - uses: juliangruber/read-file-action@v1
       id: read_rustc_hash
       with:
         # ~ expansion didn't work
-        path: /Users/runner/__rustc_hash__
+        path: ${{ runner.os == 'Linux' && '/home/runner/__rustc_hash__' || '/Users/runner/__rustc_hash__' }}
         trim: true
     - name: Restore rust cache
       id: rust-cache
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: ~/__rust_cache__
         # The version vX at the end of the key is just a development version to avoid conflicts in
         # the github cache during the development of this workflow
         key: ${{ matrix.arch }}_${{ matrix.target}}_${{ steps.read_rustc_hash.outputs.content }}_${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}_v3
+    - name: Collect information about runner ressources
+      if: always()
+      continue-on-error: true
+      run: |
+        free -mh
+        df -Th
     - name: Build and Test
-      uses: reactivecircus/android-emulator-runner@v2
+      uses: reactivecircus/android-emulator-runner@v2.32.0
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
         arch: ${{ matrix.arch }}
-        ram-size: 2048M
-        disk-size: 7GB
+        ram-size: ${{ env.EMULATOR_RAM_SIZE }}
+        heap-size: ${{ env.EMULATOR_HEAP_SIZE }}
+        disk-size: ${{ env.EMULATOR_DISK_SIZE }}
+        cores: ${{ env.EMULATOR_CORES }}
         force-avd-creation: false
-        emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -snapshot ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
+        emulator-options: ${{ env.COMMON_EMULATOR_OPTIONS }} -no-snapshot-save -snapshot ${{ env.AVD_CACHE_KEY }}
+        emulator-boot-timeout: ${{ env.EMULATOR_BOOT_TIMEOUT }}
         # This is not a usual script. Every line is executed in a separate shell with `sh -c`. If
         # one of the lines returns with error the whole script is failed (like running a script with
         # set -e) and in consequences the other lines (shells) are not executed.
@@ -97,9 +177,27 @@ jobs:
           util/android-commands.sh build
           util/android-commands.sh tests
           if [[ "${{ steps.rust-cache.outputs.cache-hit }}" != 'true' ]]; then util/android-commands.sh sync_image; fi; exit 0
+    - name: Collect information about runner ressources
+      if: always()
+      continue-on-error: true
+      run: |
+        free -mh
+        df -Th
     - name: Save rust cache
       if: steps.rust-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: ~/__rust_cache__
         key: ${{ matrix.arch }}_${{ matrix.target}}_${{ steps.read_rustc_hash.outputs.content }}_${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}_v3
+    - name: archive any output (error screenshots)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test_output_${{ env.AVD_CACHE_KEY }}
+        path: output
+    - name: Collect information about runner ressources
+      if: always()
+      continue-on-error: true
+      run: |
+        free -mh
+        df -Th

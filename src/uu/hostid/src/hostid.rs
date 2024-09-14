@@ -19,7 +19,7 @@ extern "C" {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    uu_app().get_matches_from(args);
+    uu_app().try_get_matches_from(args)?;
     hostid();
     Ok(())
 }

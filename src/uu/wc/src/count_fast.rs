@@ -19,7 +19,7 @@ use nix::sys::stat;
 #[cfg(unix)]
 use std::io::{Seek, SeekFrom};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::io::AsRawFd;
+use std::os::fd::{AsFd, AsRawFd};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
@@ -43,7 +43,7 @@ const SPLICE_SIZE: usize = 128 * 1024;
 /// caller will fall back to a simpler method.
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn count_bytes_using_splice(fd: &impl AsRawFd) -> Result<usize, usize> {
+fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
     let null_file = OpenOptions::new()
         .write(true)
         .open("/dev/null")

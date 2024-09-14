@@ -1,6 +1,6 @@
 [package]
 name = "uu_dd"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "dd ~ (uutils) copy and convert files"
@@ -11,6 +11,8 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/dd.rs"
 
@@ -20,11 +22,9 @@ gcd = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["format", "quoting-style"] }
 
-[target.'cfg(any(target_os = "linux"))'.dependencies]
-nix = { workspace = true, features = ["fs"] }
-
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 signal-hook = { workspace = true }
+nix = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "dd"

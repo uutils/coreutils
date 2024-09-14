@@ -13,7 +13,7 @@ use uucore::error::UResult;
 use uucore::fs::FileInformation;
 
 #[cfg(unix)]
-use std::os::unix::io::AsRawFd;
+use std::os::fd::{AsFd, AsRawFd};
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -125,12 +125,12 @@ struct OutputState {
 }
 
 #[cfg(unix)]
-trait FdReadable: Read + AsRawFd {}
+trait FdReadable: Read + AsFd + AsRawFd {}
 #[cfg(not(unix))]
 trait FdReadable: Read {}
 
 #[cfg(unix)]
-impl<T> FdReadable for T where T: Read + AsRawFd {}
+impl<T> FdReadable for T where T: Read + AsFd + AsRawFd {}
 #[cfg(not(unix))]
 impl<T> FdReadable for T where T: Read {}
 
@@ -170,6 +170,7 @@ mod options {
     pub static SHOW_NONPRINTING_TABS: &str = "t";
     pub static SHOW_TABS: &str = "show-tabs";
     pub static SHOW_NONPRINTING: &str = "show-nonprinting";
+    pub static IGNORED_U: &str = "ignored-u";
 }
 
 #[uucore::main]
@@ -231,6 +232,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
@@ -249,7 +251,8 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::NUMBER_NONBLANK)
                 .help("number nonempty output lines, overrides -n")
-                .overrides_with(options::NUMBER)
+                // Note: This MUST NOT .overrides_with(options::NUMBER)!
+                // In clap, overriding is symmetric, so "-b -n" counts as "-n", which is not what we want.
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -297,6 +300,12 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .long(options::SHOW_NONPRINTING)
                 .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::IGNORED_U)
+                .short('u')
+                .help("(ignored)")
                 .action(ArgAction::SetTrue),
         )
 }
@@ -614,10 +623,10 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             9 => writer.write_all(tab),
             0..=8 | 10..=31 => writer.write_all(&[b'^', byte + 64]),
             32..=126 => writer.write_all(&[byte]),
-            127 => writer.write_all(&[b'^', b'?']),
+            127 => writer.write_all(b"^?"),
             128..=159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
             160..=254 => writer.write_all(&[b'M', b'-', byte - 128]),
-            _ => writer.write_all(&[b'M', b'-', b'^', b'?']),
+            _ => writer.write_all(b"M-^?"),
         }
         .unwrap();
         count += 1;

@@ -1,6 +1,6 @@
 [package]
 name = "uu_ls"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ls ~ (uutils) display directory contents"
@@ -11,13 +11,15 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/ls.rs"
 
 [dependencies]
+ansi-width = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 chrono = { workspace = true }
-unicode-width = { workspace = true }
 number_prefix = { workspace = true }
 uutils_term_grid = { workspace = true }
 terminal_size = { workspace = true }
@@ -26,16 +28,15 @@ lscolors = { workspace = true }
 uucore = { workspace = true, features = [
   "colors",
   "entries",
+  "format",
   "fs",
+  "fsxattr",
   "quoting-style",
   "version-cmp",
 ] }
 once_cell = { workspace = true }
 selinux = { workspace = true, optional = true }
 hostname = { workspace = true }
-
-[target.'cfg(unix)'.dependencies]
-xattr = { workspace = true }
 
 [[bin]]
 name = "ls"

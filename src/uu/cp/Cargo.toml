@@ -1,6 +1,6 @@
 [package]
 name = "uu_cp"
-version = "0.0.23"
+version = "0.0.27"
 authors = [
   "Jordy Dickinson <jordy.dickinson@gmail.com>",
   "Joshua S. Miller <jsmiller@uchicago.edu>",
@@ -14,6 +14,8 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cp"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
+
+readme.workspace = true
 
 [lib]
 path = "src/cp.rs"

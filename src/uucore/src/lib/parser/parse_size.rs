@@ -2,8 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
 // spell-checker:ignore (ToDO) hdsf ghead gtail ACDBK hexdigit
+
+//! Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 
 use std::error::Error;
 use std::fmt;
@@ -16,6 +17,8 @@ use crate::display::Quotable;
 /// The [`Parser::parse`] function performs the parse.
 #[derive(Default)]
 pub struct Parser<'parser> {
+    /// Whether to allow empty numeric strings.
+    pub no_empty_numeric: bool,
     /// Whether to treat the suffix "B" as meaning "bytes".
     pub capital_b_bytes: bool,
     /// Whether to treat "b" as a "byte count" instead of "block"
@@ -33,21 +36,29 @@ enum NumberSystem {
 }
 
 impl<'parser> Parser<'parser> {
+    /// Change allow_list of the parser - whitelist for the suffix
     pub fn with_allow_list(&mut self, allow_list: &'parser [&str]) -> &mut Self {
         self.allow_list = Some(allow_list);
         self
     }
 
+    /// Change default_unit of the parser - when no suffix is provided
     pub fn with_default_unit(&mut self, default_unit: &'parser str) -> &mut Self {
         self.default_unit = Some(default_unit);
         self
     }
 
+    /// Change b_byte_count of the parser - to treat "b" as a "byte count" instead of "block"
     pub fn with_b_byte_count(&mut self, value: bool) -> &mut Self {
         self.b_byte_count = value;
         self
     }
 
+    /// Change no_empty_numeric of the parser - to allow empty numeric strings
+    pub fn with_allow_empty_numeric(&mut self, value: bool) -> &mut Self {
+        self.no_empty_numeric = value;
+        self
+    }
     /// Parse a size string into a number of bytes.
     ///
     /// A size string comprises an integer and an optional unit. The unit
@@ -90,9 +101,9 @@ impl<'parser> Parser<'parser> {
             NumberSystem::Hexadecimal => size
                 .chars()
                 .take(2)
-                .chain(size.chars().skip(2).take_while(|c| c.is_ascii_hexdigit()))
+                .chain(size.chars().skip(2).take_while(char::is_ascii_hexdigit))
                 .collect(),
-            _ => size.chars().take_while(|c| c.is_ascii_digit()).collect(),
+            _ => size.chars().take_while(char::is_ascii_digit).collect(),
         };
         let mut unit: &str = &size[numeric_string.len()..];
 
@@ -160,7 +171,7 @@ impl<'parser> Parser<'parser> {
         // parse string into u128
         let number: u128 = match number_system {
             NumberSystem::Decimal => {
-                if numeric_string.is_empty() {
+                if numeric_string.is_empty() && !self.no_empty_numeric {
                     1
                 } else {
                     Self::parse_number(&numeric_string, 10, size)?
@@ -243,7 +254,7 @@ impl<'parser> Parser<'parser> {
 
         let num_digits: usize = size
             .chars()
-            .take_while(|c| c.is_ascii_digit())
+            .take_while(char::is_ascii_digit)
             .collect::<String>()
             .len();
         let all_zeros = size.chars().all(|c| c == '0');
@@ -287,6 +298,7 @@ pub fn parse_size_u64(size: &str) -> Result<u64, ParseSizeError> {
     Parser::default().parse_u64(size)
 }
 
+/// Same as `parse_size_u64()` - deprecated
 #[deprecated = "Please use parse_size_u64(size: &str) -> Result<u64, ParseSizeError> OR parse_size_u128(size: &str) -> Result<u128, ParseSizeError> instead."]
 pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
     parse_size_u64(size)
@@ -304,11 +316,17 @@ pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse_u128_max(size)
 }
 
+/// Error type for parse_size
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseSizeError {
-    InvalidSuffix(String), // Suffix
-    ParseFailure(String),  // Syntax
-    SizeTooBig(String),    // Overflow
+    /// Suffix
+    InvalidSuffix(String),
+
+    /// Syntax
+    ParseFailure(String),
+
+    /// Overflow
+    SizeTooBig(String),
 }
 
 impl Error for ParseSizeError {
@@ -445,7 +463,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn overflow_x64() {
         assert!(parse_size_u64("10000000000000000000000").is_err());
         assert!(parse_size_u64("1000000000T").is_err());
@@ -476,7 +493,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn overflow_to_max_u64() {
         assert_eq!(Ok(1_099_511_627_776), parse_size_u64_max("1T"));
         assert_eq!(Ok(1_125_899_906_842_624), parse_size_u64_max("1P"));
@@ -488,7 +504,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn overflow_to_max_u128() {
         assert_eq!(
             Ok(12_379_400_392_853_802_748_991_242_240),

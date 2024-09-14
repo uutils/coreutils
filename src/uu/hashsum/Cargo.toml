@@ -1,6 +1,6 @@
 [package]
 name = "uu_hashsum"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "hashsum ~ (uutils) display or check input digests"
@@ -11,12 +11,14 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/hashsum.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["sum"] }
+uucore = { workspace = true, features = ["checksum", "sum"] }
 memchr = { workspace = true }
 regex = { workspace = true }
 hex = { workspace = true }

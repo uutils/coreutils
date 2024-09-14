@@ -31,7 +31,7 @@ pub enum FormatArgument {
 }
 
 pub trait ArgumentIter<'a>: Iterator<Item = &'a FormatArgument> {
-    fn get_char(&mut self) -> char;
+    fn get_char(&mut self) -> u8;
     fn get_i64(&mut self) -> i64;
     fn get_u64(&mut self) -> u64;
     fn get_f64(&mut self) -> f64;
@@ -39,14 +39,14 @@ pub trait ArgumentIter<'a>: Iterator<Item = &'a FormatArgument> {
 }
 
 impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
-    fn get_char(&mut self) -> char {
+    fn get_char(&mut self) -> u8 {
         let Some(next) = self.next() else {
-            return '\0';
+            return b'\0';
         };
         match next {
-            FormatArgument::Char(c) => *c,
-            FormatArgument::Unparsed(s) => s.bytes().next().map_or('\0', char::from),
-            _ => '\0',
+            FormatArgument::Char(c) => *c as u8,
+            FormatArgument::Unparsed(s) => s.bytes().next().unwrap_or(b'\0'),
+            _ => b'\0',
         }
     }
 

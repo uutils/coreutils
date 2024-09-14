@@ -21,7 +21,7 @@ impl ProcessChecker {
         let FALSE: BOOL = 0;
         let h = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, FALSE, process_id) };
         Self {
-            dead: h == 0,
+            dead: h.is_null(),
             handle: h,
         }
     }
