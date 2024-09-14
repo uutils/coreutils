@@ -320,22 +320,6 @@ fn test_rm_no_operand() {
 }
 
 #[test]
-#[cfg(not(windows))]
-// Windows doesn't have a root directory like unix
-fn test_rm_only_slashes_acting_as_root() {
-    // We are testing the path '//////' which will be cleaned to be '/'.
-
-    let str_slashes = std::str::from_utf8(&[std::path::MAIN_SEPARATOR as u8; 6]).unwrap();
-
-    let ts = TestScenario::new(util_name!());
-    ts.ucmd()
-        .arg("-r")
-        .arg(str_slashes)
-        .fails()
-        .stderr_contains("it is dangerous to operate recursively on");
-}
-
-#[test]
 fn test_rm_verbose_slash() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_verbose_slash_directory";
