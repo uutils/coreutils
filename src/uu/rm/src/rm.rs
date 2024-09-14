@@ -336,7 +336,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     let path = clean_trailing_slashes(path);
     if path_is_current_or_parent_directory(path) {
         show_error!(
-            "refusing to remove '.' or '..' directory: skipping '{:}'",
+            "refusing to remove '.' or '..' directory: skipping '{}'",
             path.display()
         );
         return true;
@@ -412,17 +412,12 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
     } else if options.recursive {
-        if is_root || !options.preserve_root {
-            show_error!(
-                "it is dangerous to operate recursively on '{}'",
-                MAIN_SEPARATOR
-            );
-            show_error!("use --no-preserve-root to override this failsafe");
-            had_err = true;
-        } else {
-            show_error!("could not remove directory {}", path.quote());
-            had_err = true;
-        }
+        show_error!(
+            "it is dangerous to operate recursively on '{}'",
+            MAIN_SEPARATOR
+        );
+        show_error!("use --no-preserve-root to override this failsafe");
+        had_err = true;
     } else {
         show_error!(
             "cannot remove {}: Is a directory", // GNU's rm error message does not include help
@@ -584,7 +579,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
         true
     }
 }
-/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g '/.....' , '....' . '../..'
+/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g  '/../..' , '../..'
 fn path_is_current_or_parent_directory(path: &Path) -> bool {
     let path_str = os_str_as_bytes(path.as_os_str());
     let dir_separator = MAIN_SEPARATOR as u8;
@@ -683,4 +678,18 @@ fn is_symlink_dir(metadata: &Metadata) -> bool {
 
     metadata.file_type().is_symlink()
         && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+}
+
+mod tests {
+
+    #[test]
+    // Testing whether path the `/////` collapses to `/`
+    fn test_collapsible_slash_path() {
+        use std::path::Path;
+
+        use crate::clean_trailing_slashes;
+        let path = Path::new("/////");
+
+        assert_eq!(Path::new("/"), clean_trailing_slashes(path));
+    }
 }
