@@ -229,6 +229,61 @@ fn test_recursive_reporting() {
 }
 
 #[test]
+// Windows don't have acl entries
+// TODO Enable and modify this for macos when xattr processing for macos is added.
+// TODO Enable and modify this for freebsd when xattr processing for freebsd is enabled.
+#[cfg(target_os = "linux")]
+fn test_mkdir_acl() {
+    use std::{collections::HashMap, ffi::OsString};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+
+    let mut map: HashMap<OsString, Vec<u8>> = HashMap::new();
+    // posix_acl entries are in the form of
+    // struct posix_acl_entry{
+    //  tag: u16,
+    //  perm: u16,
+    //  id: u32,
+    // }
+    // the fields are serialized in little endian.
+    // The entries are preceded by a header of value of 0x0002
+    // Reference: `<https://github.com/torvalds/linux/blob/master/include/uapi/linux/posix_acl_xattr.h>`
+    // The id is undefined i.e. -1 which in u32 is 0xFFFFFFFF and tag and perm bits as given in the
+    // header file.
+    // Reference: `<https://github.com/torvalds/linux/blob/master/include/uapi/linux/posix_acl.h>`
+    //
+    //
+    // There is a bindgen bug which generates the ACL_OTHER constant whose value is 0x20 into 32.
+    // which when the bug is fixed will need to be changed back to 20 from 32 in the vec 'xattr_val'.
+    //
+    // Reference `<https://github.com/rust-lang/rust-bindgen/issues/2926>`
+    //
+    // The xattr_val vector is the header 0x0002 followed by tag and permissions for user_obj , tag
+    // and permissions and for group_obj and finally the tag and permissions for ACL_OTHER. Each
+    // entry has undefined id as mentioned above.
+    //
+    //
+
+    let xattr_val: Vec<u8> = vec![
+        2, 0, 0, 0, 1, 0, 7, 0, 255, 255, 255, 255, 4, 0, 7, 0, 255, 255, 255, 255, 32, 0, 5, 0,
+        255, 255, 255, 255,
+    ];
+
+    map.insert(OsString::from("system.posix_acl_default"), xattr_val);
+
+    uucore::fsxattr::apply_xattrs(at.plus("a"), map).unwrap();
+
+    ucmd.arg("-p").arg("a/b").umask(0x077).succeeds();
+
+    let perms = at.metadata("a/b").permissions().mode();
+
+    // 0x770 would be user:rwx,group:rwx permissions
+    assert_eq!(perms, 16893);
+}
+
+#[test]
 fn test_mkdir_trailing_dot() {
     new_ucmd!().arg("-p").arg("-v").arg("test_dir").succeeds();
 

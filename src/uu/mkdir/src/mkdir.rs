@@ -164,20 +164,14 @@ pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<
     // std::fs::create_dir("foo/."); fails in pure Rust
     let path_buf = dir_strip_dot_for_creation(path);
     let path = path_buf.as_path();
-
-    if create_dir(path, recursive, verbose, false)? {
-        chmod(path, mode)?;
-    }
-    Ok(())
+    create_dir(path, recursive, verbose, false, mode)
 }
 
 #[cfg(any(unix, target_os = "redox"))]
 fn chmod(path: &Path, mode: u32) -> UResult<()> {
     use std::fs::{set_permissions, Permissions};
     use std::os::unix::fs::PermissionsExt;
-
     let mode = Permissions::from_mode(mode);
-
     set_permissions(path, mode)
         .map_err_context(|| format!("cannot set permissions {}", path.quote()))
 }
@@ -191,27 +185,33 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
 // Return true if the directory at `path` has been created by this call.
 // `is_parent` argument is not used on windows
 #[allow(unused_variables)]
-fn create_dir(path: &Path, recursive: bool, verbose: bool, is_parent: bool) -> UResult<bool> {
-    if path.exists() && !recursive {
+fn create_dir(
+    path: &Path,
+    recursive: bool,
+    verbose: bool,
+    is_parent: bool,
+    mode: u32,
+) -> UResult<()> {
+    let path_exists = path.exists();
+    if path_exists && !recursive {
         return Err(USimpleError::new(
             1,
             format!("{}: File exists", path.display()),
         ));
     }
     if path == Path::new("") {
-        return Ok(false);
+        return Ok(());
     }
 
     if recursive {
         match path.parent() {
-            Some(p) => {
-                create_dir(p, recursive, verbose, true)?;
-            }
+            Some(p) => create_dir(p, recursive, verbose, true, mode)?,
             None => {
                 USimpleError::new(1, "failed to create whole tree");
             }
         }
     }
+
     match std::fs::create_dir(path) {
         Ok(()) => {
             if verbose {
@@ -221,15 +221,35 @@ fn create_dir(path: &Path, recursive: bool, verbose: bool, is_parent: bool) -> U
                     path.quote()
                 );
             }
-            #[cfg(not(windows))]
-            if is_parent {
-                // directories created by -p have permission bits set to '=rwx,u+wx',
-                // which is umask modified by 'u+wx'
-                chmod(path, (!mode::get_umask() & 0o0777) | 0o0300)?;
-            }
-            Ok(true)
+
+            #[cfg(all(unix, target_os = "linux"))]
+            let new_mode = if path_exists {
+                mode
+            } else {
+                // TODO: Make this macos and freebsd compatible by creating a function to get permission bits from
+                // acl in extended attributes
+                let acl_perm_bits = uucore::fsxattr::get_acl_perm_bits_from_xattr(path);
+
+                if is_parent {
+                    (!mode::get_umask() & 0o777) | 0o300 | acl_perm_bits
+                } else {
+                    mode | acl_perm_bits
+                }
+            };
+            #[cfg(all(unix, not(target_os = "linux")))]
+            let new_mode = if is_parent {
+                (!mode::get_umask() & 0o777) | 0o300
+            } else {
+                mode
+            };
+            #[cfg(windows)]
+            let new_mode = mode;
+
+            chmod(path, new_mode)?;
+            Ok(())
         }
-        Err(_) if path.is_dir() => Ok(false),
+
+        Err(_) if path.is_dir() => Ok(()),
         Err(e) => Err(e.into()),
     }
 }
