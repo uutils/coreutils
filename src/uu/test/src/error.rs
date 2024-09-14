@@ -11,6 +11,7 @@ pub enum ParseError {
     MissingArgument(String),
     UnknownOperator(String),
     InvalidInteger(String),
+    UnaryOperatorExpected(String),
 }
 
 /// A Result type for parsing test expressions
@@ -26,6 +27,7 @@ impl std::fmt::Display for ParseError {
             Self::ExtraArgument(s) => write!(f, "extra argument {s}"),
             Self::UnknownOperator(s) => write!(f, "unknown operator {s}"),
             Self::InvalidInteger(s) => write!(f, "invalid integer {s}"),
+            Self::UnaryOperatorExpected(op) => write!(f, "{op}: unary operator expected"),
         }
     }
 }

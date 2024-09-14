@@ -5,7 +5,12 @@
 #[cfg(not(target_os = "windows"))]
 use crate::common::util::TestScenario;
 
-#[cfg(not(target_os = "windows"))]
+#[test]
+fn invalid_input() {
+    new_ucmd!().arg("-/").fails().code_is(125);
+}
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
 #[test]
 fn test_stdbuf_unbuffered_stdout() {
     // This is a basic smoke test
@@ -16,7 +21,7 @@ fn test_stdbuf_unbuffered_stdout() {
         .stdout_is("The quick brown fox jumps over the lazy dog.");
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
 #[test]
 fn test_stdbuf_line_buffered_stdout() {
     new_ucmd!()
@@ -37,7 +42,7 @@ fn test_stdbuf_no_buffer_option_fails() {
         .stderr_contains("the following required arguments were not provided:");
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
 #[test]
 fn test_stdbuf_trailing_var_arg() {
     new_ucmd!()
@@ -66,7 +71,6 @@ fn test_stdbuf_invalid_mode_fails() {
             .fails()
             .code_is(125)
             .usage_error("invalid mode '1024R': Value too large for defined data type");
-        #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
             .args(&[*option, "1Y", "head"])
             .fails()

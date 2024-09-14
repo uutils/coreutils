@@ -25,14 +25,14 @@ pub enum Pattern {
     SkipToMatch(Regex, i32, ExecutePattern),
 }
 
-impl ToString for Pattern {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for Pattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UpToLine(n, _) => n.to_string(),
-            Self::UpToMatch(regex, 0, _) => format!("/{}/", regex.as_str()),
-            Self::UpToMatch(regex, offset, _) => format!("/{}/{:+}", regex.as_str(), offset),
-            Self::SkipToMatch(regex, 0, _) => format!("%{}%", regex.as_str()),
-            Self::SkipToMatch(regex, offset, _) => format!("%{}%{:+}", regex.as_str(), offset),
+            Self::UpToLine(n, _) => write!(f, "{n}"),
+            Self::UpToMatch(regex, 0, _) => write!(f, "/{}/", regex.as_str()),
+            Self::UpToMatch(regex, offset, _) => write!(f, "/{}/{:+}", regex.as_str(), offset),
+            Self::SkipToMatch(regex, 0, _) => write!(f, "%{}%", regex.as_str()),
+            Self::SkipToMatch(regex, offset, _) => write!(f, "%{}%{:+}", regex.as_str(), offset),
         }
     }
 }
@@ -196,7 +196,7 @@ mod tests {
             .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 3);
-        match patterns.get(0) {
+        match patterns.first() {
             Some(Pattern::UpToLine(24, ExecutePattern::Times(1))) => (),
             _ => panic!("expected UpToLine pattern"),
         };
@@ -227,7 +227,7 @@ mod tests {
         .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 5);
-        match patterns.get(0) {
+        match patterns.first() {
             Some(Pattern::UpToMatch(reg, 0, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test1.*end$");
@@ -281,7 +281,7 @@ mod tests {
         .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 5);
-        match patterns.get(0) {
+        match patterns.first() {
             Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test1.*end$");

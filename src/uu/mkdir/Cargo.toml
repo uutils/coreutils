@@ -1,6 +1,6 @@
 [package]
 name = "uu_mkdir"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mkdir ~ (uutils) create DIRECTORY"
@@ -11,12 +11,15 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/mkdir.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "mode"] }
+uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
+
 
 [[bin]]
 name = "mkdir"

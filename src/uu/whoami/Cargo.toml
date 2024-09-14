@@ -1,6 +1,6 @@
 [package]
 name = "uu_whoami"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "whoami ~ (uutils) display user name of current effective user ID"
@@ -11,12 +11,14 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/whoami.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries"] }
+uucore = { workspace = true, features = ["entries", "process"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [

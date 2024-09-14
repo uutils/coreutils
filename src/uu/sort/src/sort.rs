@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim
 
 mod check;
 mod chunks;
@@ -23,6 +23,8 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
+#[cfg(target_os = "linux")]
+use nix::libc::{getrlimit, rlimit, RLIMIT_NOFILE};
 use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
@@ -43,8 +45,9 @@ use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_size::{ParseSizeError, Parser};
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::version_cmp::version_cmp;
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 use crate::tmp_dir::TmpDirWrapper;
 
@@ -145,7 +148,9 @@ enum SortError {
     CompressProgTerminatedAbnormally {
         prog: String,
     },
-    TmpDirCreationFailed,
+    TmpFileCreationFailed {
+        path: PathBuf,
+    },
     Uft8Error {
         error: Utf8Error,
     },
@@ -211,7 +216,9 @@ impl Display for SortError {
             Self::CompressProgTerminatedAbnormally { prog } => {
                 write!(f, "{} terminated abnormally", prog.quote())
             }
-            Self::TmpDirCreationFailed => write!(f, "could not create temporary directory"),
+            Self::TmpFileCreationFailed { path } => {
+                write!(f, "cannot create temporary file in '{}':", path.display())
+            }
             Self::Uft8Error { error } => write!(f, "{error}"),
         }
     }
@@ -251,6 +258,9 @@ impl Output {
         let file = if let Some(name) = name {
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
+            // clippy::suspicious_open_options supported only for Rust >= 1.77.0
+            // Rust version = 1.76 on OpenBSD stable/7.5
+            #[cfg_attr(not(target_os = "openbsd"), allow(clippy::suspicious_open_options))]
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
@@ -985,7 +995,7 @@ impl FieldSelector {
                 let mut range = match to {
                     Some(Resolution::StartOfChar(mut to)) => {
                         // We need to include the character at `to`.
-                        to += line[to..].chars().next().map_or(1, |c| c.len_utf8());
+                        to += line[to..].chars().next().map_or(1, char::len_utf8);
                         from..to
                     }
                     Some(Resolution::EndOfChar(to)) => from..to,
@@ -1024,6 +1034,18 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: &'static str) -> Ar
         }
     }
     arg
+}
+
+#[cfg(target_os = "linux")]
+fn get_rlimit() -> UResult<usize> {
+    let mut limit = rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    match unsafe { getrlimit(RLIMIT_NOFILE, &mut limit) } {
+        0 => Ok(limit.rlim_cur as usize),
+        _ => Err(UUsageError::new(2, "Failed to fetch rlimit")),
+    }
 }
 
 #[uucore::main]
@@ -1154,12 +1176,36 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(String::from);
 
     if let Some(n_merge) = matches.get_one::<String>(options::BATCH_SIZE) {
-        settings.merge_batch_size = n_merge.parse().map_err(|_| {
-            UUsageError::new(
-                2,
-                format!("invalid --batch-size argument {}", n_merge.quote()),
-            )
-        })?;
+        match n_merge.parse::<usize>() {
+            Ok(parsed_value) => {
+                if parsed_value < 2 {
+                    show_error!("invalid --batch-size argument '{}'", n_merge);
+                    return Err(UUsageError::new(2, "minimum --batch-size argument is '2'"));
+                }
+                settings.merge_batch_size = parsed_value;
+            }
+            Err(e) => {
+                let error_message = if *e.kind() == std::num::IntErrorKind::PosOverflow {
+                    #[cfg(target_os = "linux")]
+                    {
+                        show_error!("--batch-size argument {} too large", n_merge.quote());
+
+                        format!(
+                            "maximum --batch-size argument with current rlimit is {}",
+                            get_rlimit()?
+                        )
+                    }
+                    #[cfg(not(target_os = "linux"))]
+                    {
+                        format!("--batch-size argument {} too large", n_merge.quote())
+                    }
+                } else {
+                    format!("invalid --batch-size argument {}", n_merge.quote())
+                };
+
+                return Err(UUsageError::new(2, error_message));
+            }
+        }
     }
 
     settings.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
@@ -1296,14 +1342,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::modes::SORT)
                 .long(options::modes::SORT)
-                .value_parser([
+                .value_parser(ShortcutValueParser::new([
                     "general-numeric",
                     "human-numeric",
                     "month",
                     "numeric",
                     "version",
                     "random",
-                ])
+                ]))
                 .conflicts_with_all(options::modes::ALL_SORT_MODES),
         )
         .arg(make_sort_mode_arg(
@@ -1362,11 +1408,11 @@ pub fn uu_app() -> Command {
                 .long(options::check::CHECK)
                 .require_equals(true)
                 .num_args(0..)
-                .value_parser([
+                .value_parser(ShortcutValueParser::new([
                     options::check::SILENT,
                     options::check::QUIET,
                     options::check::DIAGNOSE_FIRST,
-                ])
+                ]))
                 .conflicts_with(options::OUTPUT)
                 .help("check for sorted input; do not sort"),
         )
@@ -1724,8 +1770,8 @@ fn general_f64_parse(a: &str) -> GeneralF64ParseResult {
     // TODO: Once our minimum supported Rust version is 1.53 or above, we should add tests for those cases.
     match a.parse::<f64>() {
         Ok(a) if a.is_nan() => GeneralF64ParseResult::NaN,
-        Ok(a) if a == std::f64::NEG_INFINITY => GeneralF64ParseResult::NegInfinity,
-        Ok(a) if a == std::f64::INFINITY => GeneralF64ParseResult::Infinity,
+        Ok(a) if a == f64::NEG_INFINITY => GeneralF64ParseResult::NegInfinity,
+        Ok(a) if a == f64::INFINITY => GeneralF64ParseResult::Infinity,
         Ok(a) => GeneralF64ParseResult::Number(a),
         Err(_) => GeneralF64ParseResult::Invalid,
     }
@@ -1983,7 +2029,6 @@ mod tests {
         // SizeTooBig
         let invalid_input = ["500E", "1Y"];
         for input in &invalid_input {
-            #[cfg(not(target_pointer_width = "128"))]
             assert!(GlobalSettings::parse_byte_count(input).is_err());
         }
 

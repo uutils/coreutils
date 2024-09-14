@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // cSpell:disable
 
+//! Provides color handling for `ls` and other utilities.
+
 /// The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the
 /// slackware version of dircolors) are recognized but ignored.
 /// Global config options can be specified before TERM or COLORTERM entries
@@ -223,6 +225,7 @@ pub static FILE_COLORS: &[(&str, &str)] = &[
     (".rpmsave", "00;90"),
 ];
 
+/// Below are the terminal color capabilities
 pub static FILE_ATTRIBUTE_CODES: &[(&str, &str)] = &[
     ("normal", "no"),
     ("norm", "no"),

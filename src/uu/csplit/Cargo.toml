@@ -1,6 +1,6 @@
 [package]
 name = "uu_csplit"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "csplit ~ (uutils) Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output"
@@ -11,6 +11,8 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/csplit.rs"
 
@@ -18,7 +20,7 @@ path = "src/csplit.rs"
 clap = { workspace = true }
 thiserror = { workspace = true }
 regex = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs"] }
+uucore = { workspace = true, features = ["entries", "fs", "format"] }
 
 [[bin]]
 name = "csplit"

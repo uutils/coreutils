@@ -2,10 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use std::io::Write;
 
-// spell-checker:ignore nabcd
+// spell-checker:ignore nabcd badoption schar
 use crate::common::util::TestScenario;
+use uucore::posix::OBSOLETE;
 
 static INPUT: &str = "sorted.txt";
 static OUTPUT: &str = "sorted-output.txt";
@@ -16,6 +16,20 @@ static SORTED_ZERO_TERMINATED: &str = "sorted-zero-terminated.txt";
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
+fn test_help_and_version_on_stdout() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("Usage");
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("uniq");
 }
 
 #[test]
@@ -118,16 +132,31 @@ fn test_stdin_skip_21_fields_obsolete() {
 #[test]
 fn test_stdin_skip_invalid_fields_obsolete() {
     new_ucmd!()
-        .args(&["-5deadbeef"])
+        .args(&["-5q"])
         .run()
         .failure()
-        .stderr_only("uniq: Invalid argument for skip-fields: 5deadbeef\n");
+        .stderr_contains("error: unexpected argument '-q' found\n");
 }
 
 #[test]
 fn test_stdin_all_repeated() {
     new_ucmd!()
         .args(&["--all-repeated"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=none"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=non"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=n"])
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("sorted-all-repeated.expected");
@@ -138,8 +167,7 @@ fn test_all_repeated_followed_by_filename() {
     let filename = "test.txt";
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let mut file = at.make_file(filename);
-    file.write_all(b"a\na\n").unwrap();
+    at.write(filename, "a\na\n");
 
     ucmd.args(&["--all-repeated", filename])
         .run()
@@ -154,12 +182,32 @@ fn test_stdin_all_repeated_separate() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("sorted-all-repeated-separate.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=separat"]) // spell-checker:disable-line
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated-separate.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=s"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated-separate.expected");
 }
 
 #[test]
 fn test_stdin_all_repeated_prepend() {
     new_ucmd!()
         .args(&["--all-repeated=prepend"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated-prepend.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=prepen"]) // spell-checker:disable-line
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated-prepend.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=p"])
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("sorted-all-repeated-prepend.expected");
@@ -202,14 +250,13 @@ fn test_stdin_zero_terminated() {
 }
 
 #[test]
-fn test_invalid_utf8() {
+fn test_gnu_locale_fr_schar() {
     new_ucmd!()
-        .arg("not-utf8-sequence.txt")
+        .args(&["-f1", "locale-fr-schar.txt"])
+        .env("LC_ALL", "C")
         .run()
-        .failure()
-        .stderr_only(
-        "uniq: failed to convert line to utf8: invalid utf-8 sequence of 1 bytes from index 0\n",
-    );
+        .success()
+        .stdout_is_fixture_bytes("locale-fr-schar.txt");
 }
 
 #[test]
@@ -226,8 +273,7 @@ fn test_group_followed_by_filename() {
     let filename = "test.txt";
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let mut file = at.make_file(filename);
-    file.write_all(b"a\na\n").unwrap();
+    at.write(filename, "a\na\n");
 
     ucmd.args(&["--group", filename])
         .run()
@@ -242,12 +288,22 @@ fn test_group_prepend() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("group-prepend.expected");
+    new_ucmd!()
+        .args(&["--group=p"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-prepend.expected");
 }
 
 #[test]
 fn test_group_append() {
     new_ucmd!()
         .args(&["--group=append"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-append.expected");
+    new_ucmd!()
+        .args(&["--group=a"])
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("group-append.expected");
@@ -260,12 +316,27 @@ fn test_group_both() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("group-both.expected");
+    new_ucmd!()
+        .args(&["--group=bot"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-both.expected");
+    new_ucmd!()
+        .args(&["--group=b"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-both.expected");
 }
 
 #[test]
 fn test_group_separate() {
     new_ucmd!()
         .args(&["--group=separate"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group.expected");
+    new_ucmd!()
+        .args(&["--group=s"])
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("group.expected");
@@ -286,6 +357,7 @@ struct TestCase {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn gnu_tests() {
     let cases = [
         TestCase {
@@ -521,23 +593,23 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
-        // // Obsolete syntax for "-s 1"
-        // TestCase {
-        //     name: "obs-plus40",
-        //     args: &["+1"],
-        //     input: "aaa\naaa\n",
-        //     stdout: Some("aaa\n"),
-        //     stderr: None,
-        //     exit: None,
-        // },
-        // TestCase {
-        //     name: "obs-plus41",
-        //     args: &["+1"],
-        //     input: "baa\naaa\n",
-        //     stdout: Some("baa\n"),
-        //     stderr: None,
-        //     exit: None,
-        // },
+        // Obsolete syntax for "-s 1"
+        TestCase {
+            name: "obs-plus40",
+            args: &["+1"],
+            input: "aaa\naaa\n",
+            stdout: Some("aaa\n"),
+            stderr: None,
+            exit: None,
+        },
+        TestCase {
+            name: "obs-plus41",
+            args: &["+1"],
+            input: "baa\naaa\n",
+            stdout: Some("baa\n"),
+            stderr: None,
+            exit: None,
+        },
         TestCase {
             name: "42",
             args: &["-s", "1"],
@@ -554,7 +626,6 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
-        /*
         // Obsolete syntax for "-s 1"
         TestCase {
             name: "obs-plus44",
@@ -572,7 +643,6 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
-        */
         TestCase {
             name: "50",
             args: &["-f", "1", "-s", "1"],
@@ -757,17 +827,17 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
-        /*
-        Disable as it fails too often. See:
-        https://github.com/uutils/coreutils/issues/3509
         TestCase {
             name: "112",
             args: &["-D", "-c"],
-            input: "a a\na b\n",
+            input: "", // Note: Different from GNU test, but should not matter
             stdout: Some(""),
-            stderr: Some("uniq: printing all duplicated lines and repeat counts is meaningless"),
+            stderr: Some(concat!(
+                "uniq: printing all duplicated lines and repeat counts is meaningless\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
             exit: Some(1),
-        },*/
+        },
         TestCase {
             name: "113",
             args: &["--all-repeated=separate"],
@@ -816,6 +886,21 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
+        TestCase {
+            name: "119",
+            args: &["--all-repeated=badoption"],
+            input: "", // Note: Different from GNU test, but should not matter
+            stdout: Some(""),
+            stderr: Some(concat!(
+                "uniq: invalid argument 'badoption' for '--all-repeated'\n",
+                "Valid arguments are:\n",
+                "  - 'none'\n",
+                "  - 'prepend'\n",
+                "  - 'separate'\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
+            exit: Some(1),
+        },
         // \x08 is the backspace char
         TestCase {
             name: "120",
@@ -825,6 +910,16 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
+        // u128::MAX = 340282366920938463463374607431768211455
+        TestCase {
+            name: "121",
+            args: &["-d", "-u", "-w340282366920938463463374607431768211456"],
+            input: "a\na\n\x08",
+            stdout: Some(""),
+            stderr: None,
+            exit: None,
+        },
+        // Test 122 is the same as 121, just different big int overflow number
         TestCase {
             name: "123",
             args: &["--zero-terminated"],
@@ -969,16 +1064,108 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
+        TestCase {
+            name: "141",
+            args: &["--group", "-c"],
+            input: "",
+            stdout: Some(""),
+            stderr: Some(concat!(
+                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
+            exit: Some(1),
+        },
+        TestCase {
+            name: "142",
+            args: &["--group", "-d"],
+            input: "",
+            stdout: Some(""),
+            stderr: Some(concat!(
+                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
+            exit: Some(1),
+        },
+        TestCase {
+            name: "143",
+            args: &["--group", "-u"],
+            input: "",
+            stdout: Some(""),
+            stderr: Some(concat!(
+                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
+            exit: Some(1),
+        },
+        TestCase {
+            name: "144",
+            args: &["--group", "-D"],
+            input: "",
+            stdout: Some(""),
+            stderr: Some(concat!(
+                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
+            exit: Some(1),
+        },
+        TestCase {
+            name: "145",
+            args: &["--group=badoption"],
+            input: "",
+            stdout: Some(""),
+            stderr: Some(concat!(
+                "uniq: invalid argument 'badoption' for '--group'\n",
+                "Valid arguments are:\n",
+                "  - 'prepend'\n",
+                "  - 'append'\n",
+                "  - 'separate'\n",
+                "  - 'both'\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
+            exit: Some(1),
+        },
     ];
 
+    // run regular version of tests with regular file as input
     for case in cases {
+        // prep input file
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("input-file", case.input);
+
+        // first - run a version of tests with regular file as input
         eprintln!("Test {}", case.name);
-        let result = new_ucmd!().args(case.args).run_piped_stdin(case.input);
+        // set environment variable for obsolete skip char option tests
+        if case.name.starts_with("obs-plus") {
+            ucmd.env("_POSIX2_VERSION", OBSOLETE.to_string());
+        }
+        let result = ucmd.args(case.args).arg("input-file").run();
         if let Some(stdout) = case.stdout {
             result.stdout_is(stdout);
         }
         if let Some(stderr) = case.stderr {
-            result.stderr_contains(stderr);
+            result.stderr_is(stderr);
+        }
+        if let Some(exit) = case.exit {
+            result.code_is(exit);
+        }
+
+        // then - ".stdin" version of tests with input piped in
+        // NOTE: GNU has another variant for stdin redirect from a file
+        // as in `uniq < input-file`
+        // For now we treat it as equivalent of piped in stdin variant
+        // as in `cat input-file | uniq`
+        eprintln!("Test {}.stdin", case.name);
+        // set environment variable for obsolete skip char option tests
+        let mut ucmd = new_ucmd!();
+        if case.name.starts_with("obs-plus") {
+            ucmd.env("_POSIX2_VERSION", OBSOLETE.to_string());
+        }
+        let result = ucmd.args(case.args).run_piped_stdin(case.input);
+        if let Some(stdout) = case.stdout {
+            result.stdout_is(stdout);
+        }
+        if let Some(stderr) = case.stderr {
+            result.stderr_is(stderr);
         }
         if let Some(exit) = case.exit {
             result.code_is(exit);

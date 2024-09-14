@@ -1,6 +1,6 @@
 [package]
 name = "uu_uptime"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uptime ~ (uutils) display dynamic system information"
@@ -11,6 +11,8 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/uptime.rs"
 
@@ -18,6 +20,10 @@ path = "src/uptime.rs"
 chrono = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true, features = ["libc", "utmpx"] }
+thiserror = { workspace = true }
+
+[target.'cfg(target_os = "openbsd")'.dependencies]
+utmp-classic = { workspace = true }
 
 [[bin]]
 name = "uptime"

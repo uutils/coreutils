@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-#![crate_name = "uu_csplit"]
 // spell-checker:ignore rustdoc
 #![allow(rustdoc::private_intra_doc_links)]
 
@@ -87,27 +86,26 @@ impl CsplitOptions {
 /// - [`CsplitError::MatchNotFound`] if no line matched a regular expression.
 /// - [`CsplitError::MatchNotFoundOnRepetition`], like previous but after applying the pattern
 ///   more than once.
-pub fn csplit<T>(
-    options: &CsplitOptions,
-    patterns: Vec<patterns::Pattern>,
-    input: T,
-) -> Result<(), CsplitError>
+pub fn csplit<T>(options: &CsplitOptions, patterns: &[String], input: T) -> Result<(), CsplitError>
 where
     T: BufRead,
 {
     let mut input_iter = InputSplitter::new(input.lines().enumerate());
     let mut split_writer = SplitWriter::new(options);
+    let patterns: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
     let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
 
-    // consume the rest
-    input_iter.rewind_buffer();
-    if let Some((_, line)) = input_iter.next() {
-        split_writer.new_writer()?;
-        split_writer.writeln(&line?)?;
-        for (_, line) in input_iter {
+    // consume the rest, unless there was an error
+    if ret.is_ok() {
+        input_iter.rewind_buffer();
+        if let Some((_, line)) = input_iter.next() {
+            split_writer.new_writer()?;
             split_writer.writeln(&line?)?;
+            for (_, line) in input_iter {
+                split_writer.writeln(&line?)?;
+            }
+            split_writer.finish_split();
         }
-        split_writer.finish_split();
     }
     // delete files on error by default
     if ret.is_err() && !options.keep_files {
@@ -353,7 +351,7 @@ impl<'a> SplitWriter<'a> {
     /// In addition to errors reading/writing from/to a file, the following errors may be returned:
     /// - if no line matched, an [`CsplitError::MatchNotFound`].
     /// - if there are not enough lines to accommodate the offset, an
-    /// [`CsplitError::LineOutOfRange`].
+    ///   [`CsplitError::LineOutOfRange`].
     #[allow(clippy::cognitive_complexity)]
     fn do_to_match<I>(
         &mut self,
@@ -563,11 +561,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap()
         .map(|s| s.to_string())
         .collect();
-    let patterns = patterns::get_patterns(&patterns[..])?;
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {
         let stdin = io::stdin();
-        Ok(csplit(&options, patterns, stdin.lock())?)
+        Ok(csplit(&options, &patterns, stdin.lock())?)
     } else {
         let file = File::open(file_name)
             .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
@@ -577,7 +574,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !file_metadata.is_file() {
             return Err(CsplitError::NotRegularFile(file_name.to_string()).into());
         }
-        Ok(csplit(&options, patterns, BufReader::new(file))?)
+        Ok(csplit(&options, &patterns, BufReader::new(file))?)
     }
 }
 
@@ -586,6 +583,7 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .args_override_self(true)
         .infer_long_args(true)
         .arg(
             Arg::new(options::SUFFIX_FORMAT)

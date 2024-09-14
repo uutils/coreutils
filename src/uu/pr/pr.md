@@ -1,7 +1,7 @@
 # pr
 
 ```
-pr [OPTIONS] [files]...
+pr [OPTION]... [FILE]...
 ```
 
 Write content of given file or standard input to standard output with pagination filter

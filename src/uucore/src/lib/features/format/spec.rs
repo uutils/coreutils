@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) intmax ptrdiff
+// spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use crate::quoting_style::{escape_name, QuotingStyle};
 
@@ -14,7 +14,7 @@ use super::{
     },
     parse_escape_only, ArgumentIter, FormatChar, FormatError,
 };
-use std::{fmt::Display, io::Write, ops::ControlFlow};
+use std::{io::Write, ops::ControlFlow};
 
 /// A parsed specification for formatting a value
 ///
@@ -87,6 +87,40 @@ enum Length {
     LongDouble,
 }
 
+#[derive(Default, PartialEq, Eq)]
+struct Flags {
+    minus: bool,
+    plus: bool,
+    space: bool,
+    hash: bool,
+    zero: bool,
+}
+
+impl Flags {
+    pub fn parse(rest: &mut &[u8], index: &mut usize) -> Self {
+        let mut flags = Self::default();
+
+        while let Some(x) = rest.get(*index) {
+            match x {
+                b'-' => flags.minus = true,
+                b'+' => flags.plus = true,
+                b' ' => flags.space = true,
+                b'#' => flags.hash = true,
+                b'0' => flags.zero = true,
+                _ => break,
+            }
+            *index += 1;
+        }
+
+        flags
+    }
+
+    /// Whether any of the flags is set to true
+    fn any(&self) -> bool {
+        self != &Self::default()
+    }
+}
+
 impl Spec {
     pub fn parse<'a>(rest: &mut &'a [u8]) -> Result<Self, &'a [u8]> {
         // Based on the C++ reference, the spec format looks like:
@@ -97,34 +131,12 @@ impl Spec {
         let mut index = 0;
         let start = *rest;
 
-        let mut minus = false;
-        let mut plus = false;
-        let mut space = false;
-        let mut hash = false;
-        let mut zero = false;
+        let flags = Flags::parse(rest, &mut index);
 
-        while let Some(x) = rest.get(index) {
-            match x {
-                b'-' => minus = true,
-                b'+' => plus = true,
-                b' ' => space = true,
-                b'#' => hash = true,
-                b'0' => zero = true,
-                _ => break,
-            }
-            index += 1;
-        }
-
-        let alignment = match (minus, zero) {
-            (true, _) => NumberAlignment::Left,
-            (false, true) => NumberAlignment::RightZero,
-            (false, false) => NumberAlignment::RightSpace,
-        };
-
-        let positive_sign = match (plus, space) {
-            (true, _) => PositiveSign::Plus,
-            (false, true) => PositiveSign::Space,
-            (false, false) => PositiveSign::None,
+        let positive_sign = match flags {
+            Flags { plus: true, .. } => PositiveSign::Plus,
+            Flags { space: true, .. } => PositiveSign::Space,
+            _ => PositiveSign::None,
         };
 
         let width = eat_asterisk_or_number(rest, &mut index);
@@ -134,6 +146,17 @@ impl Spec {
             Some(eat_asterisk_or_number(rest, &mut index).unwrap_or(CanAsterisk::Fixed(0)))
         } else {
             None
+        };
+
+        // The `0` flag is ignored if `-` is given or a precision is specified.
+        // So the only case for RightZero, is when `-` is not given and the
+        // precision is none.
+        let alignment = if flags.minus {
+            NumberAlignment::Left
+        } else if flags.zero && precision.is_none() {
+            NumberAlignment::RightZero
+        } else {
+            NumberAlignment::RightSpace
         };
 
         // We ignore the length. It's not really relevant to printf
@@ -148,38 +171,38 @@ impl Spec {
         Ok(match type_spec {
             // GNU accepts minus, plus and space even though they are not used
             b'c' => {
-                if hash || precision.is_some() {
+                if flags.zero || flags.hash || precision.is_some() {
                     return Err(&start[..index]);
                 }
                 Self::Char {
                     width,
-                    align_left: minus,
+                    align_left: flags.minus,
                 }
             }
             b's' => {
-                if hash {
+                if flags.zero || flags.hash {
                     return Err(&start[..index]);
                 }
                 Self::String {
                     precision,
                     width,
-                    align_left: minus,
+                    align_left: flags.minus,
                 }
             }
             b'b' => {
-                if hash || minus || plus || space || width.is_some() || precision.is_some() {
+                if flags.any() || width.is_some() || precision.is_some() {
                     return Err(&start[..index]);
                 }
                 Self::EscapedString
             }
             b'q' => {
-                if hash || minus || plus || space || width.is_some() || precision.is_some() {
+                if flags.any() || width.is_some() || precision.is_some() {
                     return Err(&start[..index]);
                 }
                 Self::QuotedString
             }
             b'd' | b'i' => {
-                if hash {
+                if flags.hash {
                     return Err(&start[..index]);
                 }
                 Self::SignedInt {
@@ -191,13 +214,10 @@ impl Spec {
             }
             c @ (b'u' | b'o' | b'x' | b'X') => {
                 // Normal unsigned integer cannot have a prefix
-                if *c == b'u' && hash {
+                if *c == b'u' && flags.hash {
                     return Err(&start[..index]);
                 }
-                let prefix = match hash {
-                    false => Prefix::No,
-                    true => Prefix::Yes,
-                };
+                let prefix = if flags.hash { Prefix::Yes } else { Prefix::No };
                 let variant = match c {
                     b'u' => UnsignedIntVariant::Decimal,
                     b'o' => UnsignedIntVariant::Octal(prefix),
@@ -222,15 +242,21 @@ impl Spec {
                     b'a' | b'A' => FloatVariant::Hexadecimal,
                     _ => unreachable!(),
                 },
-                force_decimal: match hash {
-                    false => ForceDecimal::No,
-                    true => ForceDecimal::Yes,
+                force_decimal: if flags.hash {
+                    ForceDecimal::Yes
+                } else {
+                    ForceDecimal::No
                 },
-                case: match c.is_ascii_uppercase() {
-                    false => Case::Lowercase,
-                    true => Case::Uppercase,
+                case: if c.is_ascii_uppercase() {
+                    Case::Uppercase
+                } else {
+                    Case::Lowercase
                 },
-                alignment,
+                alignment: if flags.zero && !flags.minus {
+                    NumberAlignment::RightZero // float should always try to zero pad despite the precision
+                } else {
+                    alignment
+                },
                 positive_sign,
             },
             _ => return Err(&start[..index]),
@@ -289,7 +315,7 @@ impl Spec {
         match self {
             Self::Char { width, align_left } => {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
-                write_padded(writer, args.get_char(), width, false, *align_left)
+                write_padded(writer, &[args.get_char()], width, *align_left)
             }
             Self::String {
                 width,
@@ -310,7 +336,7 @@ impl Spec {
                     Some(p) if p < s.len() => &s[..p],
                     _ => s,
                 };
-                write_padded(writer, truncated, width, false, *align_left)
+                write_padded(writer, truncated.as_bytes(), width, *align_left)
             }
             Self::EscapedString => {
                 let s = args.get_str();
@@ -352,6 +378,10 @@ impl Spec {
                 let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(0);
                 let i = args.get_i64();
 
+                if precision as u64 > i32::MAX as u64 {
+                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                }
+
                 num_format::SignedInt {
                     width,
                     precision,
@@ -370,6 +400,10 @@ impl Spec {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(0);
                 let i = args.get_u64();
+
+                if precision as u64 > i32::MAX as u64 {
+                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                }
 
                 num_format::UnsignedInt {
                     variant: *variant,
@@ -392,6 +426,10 @@ impl Spec {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(6);
                 let f = args.get_f64();
+
+                if precision as u64 > i32::MAX as u64 {
+                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                }
 
                 num_format::Float {
                     width,
@@ -422,16 +460,17 @@ fn resolve_asterisk<'a>(
 
 fn write_padded(
     mut writer: impl Write,
-    text: impl Display,
+    text: &[u8],
     width: usize,
-    pad_zero: bool,
     left: bool,
 ) -> Result<(), FormatError> {
-    match (left, pad_zero) {
-        (false, false) => write!(writer, "{text: >width$}"),
-        (false, true) => write!(writer, "{text:0>width$}"),
-        // 0 is ignored if we pad left.
-        (true, _) => write!(writer, "{text: <width$}"),
+    let padlen = width.saturating_sub(text.len());
+    if left {
+        writer.write_all(text)?;
+        write!(writer, "{: <padlen$}", "")
+    } else {
+        write!(writer, "{: >padlen$}", "")?;
+        writer.write_all(text)
     }
     .map_err(FormatError::IoError)
 }

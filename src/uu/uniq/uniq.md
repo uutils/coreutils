@@ -1,7 +1,7 @@
 # uniq
 
 ```
-uniq [OPTION]... [INPUT [OUTPUT]]...
+uniq [OPTION]... [INPUT [OUTPUT]]
 ```
 
 Report or omit repeated lines.

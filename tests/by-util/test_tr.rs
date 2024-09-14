@@ -2,8 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore aabbaa aabbcc aabc abbb abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn
+// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
 use crate::common::util::TestScenario;
+
+#[cfg(unix)]
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
 #[test]
 fn test_invalid_arg() {
@@ -47,6 +50,32 @@ fn test_delete() {
 }
 
 #[test]
+fn test_delete_afterwards_is_not_flag() {
+    new_ucmd!()
+        .args(&["a-z", "-d"])
+        .pipe_in("aBcD")
+        .succeeds()
+        .stdout_is("-BdD");
+}
+
+#[test]
+fn test_delete_multi() {
+    new_ucmd!()
+        .args(&["-d", "-d", "a-z"])
+        .pipe_in("aBcD")
+        .succeeds()
+        .stdout_is("BD");
+}
+
+#[test]
+fn test_delete_late() {
+    new_ucmd!()
+        .args(&["-d", "a-z", "-d"])
+        .fails()
+        .stderr_contains("extra operand '-d'");
+}
+
+#[test]
 fn test_delete_complement() {
     new_ucmd!()
         .args(&["-d", "-c", "a-z"])
@@ -79,6 +108,14 @@ fn test_complement1() {
 }
 
 #[test]
+fn test_complement_afterwards_is_not_flag() {
+    new_ucmd!()
+        .args(&["a", "X", "-c"])
+        .fails()
+        .stderr_contains("extra operand '-c'");
+}
+
+#[test]
 fn test_complement2() {
     new_ucmd!()
         .args(&["-c", "0-9", "x"])
@@ -90,10 +127,10 @@ fn test_complement2() {
 #[test]
 fn test_complement3() {
     new_ucmd!()
-        .args(&["-c", "abcdefgh", "123"]) // spell-checker:disable-line
+        .args(&["-c", "abcdefgh", "123"])
         .pipe_in("the cat and the bat")
         .run()
-        .stdout_is("3he3ca33a3d33he3ba3"); // spell-checker:disable-line
+        .stdout_is("3he3ca33a3d33he3ba3");
 }
 
 #[test]
@@ -119,11 +156,45 @@ fn test_complement5() {
 }
 
 #[test]
+fn test_complement_multi_early() {
+    new_ucmd!()
+        .args(&["-c", "-c", "a", "X"])
+        .pipe_in("ab")
+        .succeeds()
+        .stdout_is("aX");
+}
+
+#[test]
+fn test_complement_multi_middle() {
+    new_ucmd!()
+        .args(&["-c", "a", "-c", "X"])
+        .fails()
+        .stderr_contains("tr: extra operand 'X'");
+}
+
+#[test]
+fn test_complement_multi_late() {
+    new_ucmd!()
+        .args(&["-c", "a", "X", "-c"])
+        .fails()
+        .stderr_contains("tr: extra operand '-c'");
+}
+
+#[test]
 fn test_squeeze() {
     new_ucmd!()
         .args(&["-s", "a-z"])
         .pipe_in("aaBBcDcc")
-        .run()
+        .succeeds()
+        .stdout_is("aBBcDc");
+}
+
+#[test]
+fn test_squeeze_multi() {
+    new_ucmd!()
+        .args(&["-ss", "-s", "a-z"])
+        .pipe_in("aaBBcDcc")
+        .succeeds()
         .stdout_is("aBBcDc");
 }
 
@@ -132,7 +203,16 @@ fn test_squeeze_complement() {
     new_ucmd!()
         .args(&["-sc", "a-z"])
         .pipe_in("aaBBcDcc")
-        .run()
+        .succeeds()
+        .stdout_is("aaBcDcc");
+}
+
+#[test]
+fn test_squeeze_complement_multi() {
+    new_ucmd!()
+        .args(&["-scsc", "a-z"]) // spell-checker:disable-line
+        .pipe_in("aaBBcDcc")
+        .succeeds()
         .stdout_is("aaBcDcc");
 }
 
@@ -164,6 +244,15 @@ fn test_translate_and_squeeze_multiple_lines() {
 }
 
 #[test]
+fn test_delete_and_squeeze_one_set() {
+    new_ucmd!()
+        .args(&["-ds", "a-z"])
+        .fails()
+        .stderr_contains("missing operand after 'a-z'")
+        .stderr_contains("Two strings must be given when deleting and squeezing.");
+}
+
+#[test]
 fn test_delete_and_squeeze() {
     new_ucmd!()
         .args(&["-ds", "a-z", "A-Z"])
@@ -182,6 +271,15 @@ fn test_delete_and_squeeze_complement() {
 }
 
 #[test]
+fn test_delete_and_squeeze_complement_squeeze_set2() {
+    new_ucmd!()
+        .args(&["-dsc", "abX", "XYZ"])
+        .pipe_in("abbbcdddXXXYYY")
+        .succeeds()
+        .stdout_is("abbbX");
+}
+
+#[test]
 fn test_set1_longer_than_set2() {
     new_ucmd!()
         .args(&["abc", "xy"])
@@ -196,7 +294,7 @@ fn test_set1_shorter_than_set2() {
         .args(&["ab", "xyz"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .stdout_is("xycde");
 }
 
 #[test]
@@ -205,8 +303,17 @@ fn test_truncate() {
     new_ucmd!()
         .args(&["-t", "abc", "xy"])
         .pipe_in("abcde")
-        .run()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .succeeds()
+        .stdout_is("xycde");
+}
+
+#[test]
+fn test_truncate_multi() {
+    new_ucmd!()
+        .args(&["-tt", "-t", "abc", "xy"])
+        .pipe_in("abcde")
+        .succeeds()
+        .stdout_is("xycde");
 }
 
 #[test]
@@ -215,7 +322,7 @@ fn test_truncate_with_set1_shorter_than_set2() {
         .args(&["-t", "ab", "xyz"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .stdout_is("xycde");
 }
 
 #[test]
@@ -1146,4 +1253,195 @@ fn check_against_gnu_tr_tests_no_abort_1() {
         .pipe_in("abc")
         .succeeds()
         .stdout_is("abb");
+}
+
+#[test]
+fn test_delete_flag_takes_only_one_operand() {
+    // gnu tr -d fails with more than 1 argument
+    new_ucmd!().args(&["-d", "a", "p"]).fails().stderr_contains(
+        "extra operand 'p'\nOnly one string may be given when deleting without squeezing repeats.",
+    );
+}
+
+#[test]
+fn test_truncate_flag_fails_with_more_than_two_operand() {
+    new_ucmd!()
+        .args(&["-t", "a", "b", "c"])
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}
+
+#[test]
+fn test_squeeze_flag_fails_with_more_than_two_operand() {
+    new_ucmd!()
+        .args(&["-s", "a", "b", "c"])
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}
+
+#[test]
+fn test_complement_flag_fails_with_more_than_two_operand() {
+    new_ucmd!()
+        .args(&["-c", "a", "b", "c"])
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}
+
+#[test]
+fn check_regression_class_space() {
+    // This invocation checks:
+    // 1. that the [:space:] class has exactly 6 characters,
+    // 2. that the [:space:] class contains at least the given 6 characters (and therefore no other characters), and
+    // 3. that the given characters occur in exactly this order.
+    new_ucmd!()
+        .args(&["[:space:][:upper:]", "123456[:lower:]"])
+        // 0x0B = "\v" ("VERTICAL TAB")
+        // 0x0C = "\f" ("FEED FORWARD")
+        .pipe_in("A\t\n\u{0B}\u{0C}\r B")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("a123456b");
+}
+
+#[test]
+fn check_regression_class_blank() {
+    // This invocation checks:
+    // 1. that the [:blank:] class has exactly 2 characters,
+    // 2. that the [:blank:] class contains at least the given 2 characters (and therefore no other characters), and
+    // 3. that the given characters occur in exactly this order.
+    new_ucmd!()
+        .args(&["[:blank:][:upper:]", "12[:lower:]"])
+        .pipe_in("A\t B")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("a12b");
+}
+
+// Check regression found in https://github.com/uutils/coreutils/issues/6163
+#[test]
+fn check_regression_issue_6163_no_match() {
+    new_ucmd!()
+        .args(&["-c", "-t", "Y", "Z"])
+        .pipe_in("X\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("X\n");
+}
+
+#[test]
+fn check_regression_issue_6163_match() {
+    new_ucmd!()
+        .args(&["-c", "-t", "Y", "Z"])
+        .pipe_in("\0\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("Z\n");
+}
+
+#[test]
+fn check_ignore_truncate_when_deleting_and_squeezing() {
+    new_ucmd!()
+        .args(&["-dts", "asdf", "qwe"])
+        .pipe_in("asdfqqwweerr\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("qwerr\n");
+}
+
+#[test]
+fn check_ignore_truncate_when_deleting() {
+    new_ucmd!()
+        .args(&["-dt", "asdf"])
+        .pipe_in("asdfqwer\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("qwer\n");
+}
+
+#[test]
+fn check_ignore_truncate_when_squeezing() {
+    new_ucmd!()
+        .args(&["-ts", "asdf"])
+        .pipe_in("aassddffqwer\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("asdfqwer\n");
+}
+
+#[test]
+fn check_disallow_blank_in_set2_when_translating() {
+    new_ucmd!().args(&["-t", "1234", "[:blank:]"]).fails();
+}
+
+#[test]
+fn check_class_in_set2_must_be_matched_in_set1() {
+    new_ucmd!().args(&["-t", "1[:upper:]", "[:upper:]"]).fails();
+}
+
+#[test]
+fn check_class_in_set2_must_be_matched_in_set1_right_length_check() {
+    new_ucmd!()
+        .args(&["-t", "a-z[:upper:]", "abcdefghijklmnopqrstuvwxyz[:upper:]"])
+        .succeeds();
+}
+
+#[test]
+fn check_set1_longer_set2_ends_in_class() {
+    new_ucmd!().args(&["[:lower:]a", "[:upper:]"]).fails();
+}
+
+#[test]
+fn check_set1_longer_set2_ends_in_class_with_trunc() {
+    new_ucmd!()
+        .args(&["-t", "[:lower:]a", "[:upper:]"])
+        .succeeds();
+}
+
+#[test]
+fn check_complement_2_unique_in_set2() {
+    let x226 = "x".repeat(226);
+
+    // [y*] is expanded tp "y" here
+    let arg = x226 + "[y*]xxx";
+    new_ucmd!().args(&["-c", "[:upper:]", arg.as_str()]).fails();
+}
+
+#[test]
+fn check_complement_1_unique_in_set2() {
+    let x226 = "x".repeat(226);
+
+    // [y*] is expanded to "" here
+    let arg = x226 + "[y*]xxxx";
+    new_ucmd!()
+        .args(&["-c", "[:upper:]", arg.as_str()])
+        .succeeds();
+}
+
+#[test]
+fn check_complement_set2_too_big() {
+    let x231 = "x".repeat(231);
+    let x230 = &x231[..230];
+
+    // The complement of [:upper:] expands to 230 characters,
+    // putting more characters in set2 should fail.
+    new_ucmd!().args(&["-c", "[:upper:]", x230]).succeeds();
+    new_ucmd!()
+        .args(&["-c", "[:upper:]", x231.as_str()])
+        .fails()
+        .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_truncate_non_utf8_set() {
+    let stdin = b"\x01amp\xfe\xff";
+    let set1 = OsStr::from_bytes(b"a\xfe\xffz"); // spell-checker:disable-line
+    let set2 = OsStr::from_bytes(b"01234");
+
+    new_ucmd!()
+        .arg(set1)
+        .arg(set2)
+        .pipe_in(*stdin)
+        .succeeds()
+        .stdout_is_bytes(b"\x010mp12");
 }

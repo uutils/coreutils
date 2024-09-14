@@ -12,7 +12,7 @@ use uucore::{
 };
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use fundu::{self, DurationParser, ParseError, SaturatingInto};
+use fundu::{DurationParser, ParseError, SaturatingInto};
 
 static ABOUT: &str = help_about!("sleep.md");
 const USAGE: &str = help_usage!("sleep.md");

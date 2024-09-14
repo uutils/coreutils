@@ -29,9 +29,8 @@ fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
         if is_ci() && result.stderr_str().contains(needle) {
             println!("test skipped:");
             return true;
-        } else {
-            result.success();
         }
+        result.success();
     }
     false
 }
@@ -219,7 +218,7 @@ fn test_chown_failed_stdout() {
 
 #[test]
 // FixME: Fails on freebsd because of chown: invalid group: 'root:root'
-#[cfg(not(target_os = "freebsd"))]
+#[cfg(all(not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_chown_owner_group() {
     // test chown username:group file.txt
 
@@ -284,7 +283,7 @@ fn test_chown_owner_group() {
 
 #[test]
 // FixME: Fails on freebsd because of chown: invalid group: 'root:root'
-#[cfg(not(target_os = "freebsd"))]
+#[cfg(all(not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_chown_various_input() {
     // test chown username:group file.txt
 
@@ -347,7 +346,10 @@ fn test_chown_various_input() {
 // FixME: on macos & freebsd group name is not recognized correctly: "chown: invalid group: ':groupname'
 #[cfg(any(
     windows,
-    all(unix, not(any(target_os = "macos", target_os = "freebsd")))
+    all(
+        unix,
+        not(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd"))
+    )
 ))]
 fn test_chown_only_group() {
     // test chown :group file.txt
@@ -471,7 +473,7 @@ fn test_chown_fail_id() {
 #[test]
 fn test_chown_only_user_id_nonexistent_user() {
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = &ts.fixtures;
     at.touch("f");
     if let Ok(result) = run_ucmd_as_root(&ts, &["12345", "f"]) {
         result.success().no_stdout().no_stderr();
@@ -482,7 +484,7 @@ fn test_chown_only_user_id_nonexistent_user() {
 
 #[test]
 // FixME: stderr = chown: ownership of 'test_chown_file1' retained as cuuser:wheel
-#[cfg(not(target_os = "freebsd"))]
+#[cfg(all(not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_chown_only_group_id() {
     // test chown :1111 file.txt
 
@@ -537,7 +539,7 @@ fn test_chown_only_group_id() {
 #[test]
 fn test_chown_only_group_id_nonexistent_group() {
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = &ts.fixtures;
     at.touch("f");
     if let Ok(result) = run_ucmd_as_root(&ts, &[":12345", "f"]) {
         result.success().no_stdout().no_stderr();
@@ -547,6 +549,7 @@ fn test_chown_only_group_id_nonexistent_group() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_chown_owner_group_id() {
     // test chown 1111:1111 file.txt
 
@@ -607,7 +610,7 @@ fn test_chown_owner_group_id() {
 
 #[test]
 // FixME: Fails on freebsd because of chown: invalid group: '0:root'
-#[cfg(not(target_os = "freebsd"))]
+#[cfg(all(not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_chown_owner_group_mix() {
     // test chown 1111:group file.txt
 
@@ -774,6 +777,7 @@ fn test_chown_no_change_to_user() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_chown_no_change_to_group() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -806,6 +810,7 @@ fn test_chown_no_change_to_group() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_chown_no_change_to_user_group() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

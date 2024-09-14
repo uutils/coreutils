@@ -1,6 +1,6 @@
 [package]
 name = "uu_mv"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
@@ -10,6 +10,8 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mv"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
+
+readme.workspace = true
 
 [lib]
 path = "src/mv.rs"
@@ -21,6 +23,7 @@ indicatif = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
   "fs",
+  "fsxattr",
   "update-control",
 ] }
 

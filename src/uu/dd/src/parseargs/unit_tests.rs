@@ -13,6 +13,7 @@ use crate::parseargs::Parser;
 use crate::StatusLevel;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[allow(clippy::useless_vec)]
 #[test]
 fn unimplemented_flags_should_error_non_linux() {
     let mut succeeded = Vec::new();
@@ -55,6 +56,7 @@ fn unimplemented_flags_should_error_non_linux() {
 }
 
 #[test]
+#[allow(clippy::useless_vec)]
 fn unimplemented_flags_should_error() {
     let mut succeeded = Vec::new();
 
@@ -504,14 +506,6 @@ mod test_64bit_arch {
         "6EiB",
         6 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024
     );
-}
-
-#[test]
-#[should_panic]
-fn test_overflow_panic() {
-    let bs_str = format!("{}KiB", u64::MAX);
-
-    parse_bytes_with_opt_multiplier(&bs_str).unwrap();
 }
 
 #[test]

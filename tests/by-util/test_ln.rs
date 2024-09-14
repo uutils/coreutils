@@ -2,9 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#![allow(clippy::similar_names)]
+
 use crate::common::util::TestScenario;
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 #[test]
@@ -752,6 +752,7 @@ fn test_ln_seen_file() {
     assert!(at.plus("a").join("f").exists());
     #[cfg(unix)]
     {
+        use std::os::unix::fs::MetadataExt;
         // Check inode numbers
         let inode_a_f = at.plus("a").join("f").metadata().unwrap().ino();
         let inode_b_f = at.plus("b").join("f").metadata().unwrap().ino();

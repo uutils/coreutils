@@ -20,13 +20,19 @@
 //! make any effort to rescue data from the pipe if splice() fails, we can
 //! just fall back and start over from the beginning.
 
-use std::{io, os::unix::io::AsRawFd};
+use std::{
+    io,
+    os::fd::{AsFd, AsRawFd},
+};
 
 use nix::{errno::Errno, libc::S_IFIFO, sys::stat::fstat};
 
 use uucore::pipes::{pipe, splice_exact, vmsplice};
 
-pub(crate) fn splice_data(bytes: &[u8], out: &impl AsRawFd) -> Result<()> {
+pub(crate) fn splice_data<T>(bytes: &[u8], out: &T) -> Result<()>
+where
+    T: AsRawFd + AsFd,
+{
     let is_pipe = fstat(out.as_raw_fd())?.st_mode as nix::libc::mode_t & S_IFIFO != 0;
 
     if is_pipe {

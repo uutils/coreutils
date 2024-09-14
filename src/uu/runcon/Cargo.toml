@@ -1,6 +1,6 @@
 [package]
 name = "uu_runcon"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "runcon ~ (uutils) run command with specified security context"
@@ -9,6 +9,8 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uu/runcon"
 keywords = ["coreutils", "uutils", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
+
+readme.workspace = true
 
 [lib]
 path = "src/runcon.rs"

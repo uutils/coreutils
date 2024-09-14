@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore contenta
 use crate::common::util::TestScenario;
 
 #[test]
@@ -234,4 +235,35 @@ fn test_tabs_shortcut_with_too_large_size() {
     let expected_error = "tab stop value is too large";
 
     new_ucmd!().arg(arg).fails().stderr_contains(expected_error);
+}
+
+#[test]
+fn test_is_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_name = "dir";
+    at.mkdir(dir_name);
+
+    ucmd.arg(dir_name)
+        .fails()
+        .stderr_contains(format!("unexpand: {dir_name}: Is a directory"));
+}
+
+#[test]
+fn test_multiple_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("file", "content");
+    at.write("file1", "a        b");
+
+    ucmd.args(&["file", "file1"])
+        .succeeds()
+        .stdout_is("contenta        b");
+}
+
+#[test]
+fn test_one_nonexisting_file() {
+    new_ucmd!()
+        .arg("asdf.txt")
+        .fails()
+        .stderr_contains("asdf.txt: No such file or directory");
 }

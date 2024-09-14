@@ -1,6 +1,6 @@
 [package]
 name = "uu_head"
-version = "0.0.23"
+version = "0.0.27"
 authors = ["uutils developers"]
 license = "MIT"
 description = "head ~ (uutils) display the first lines of input"
@@ -11,13 +11,15 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/head.rs"
 
 [dependencies]
 clap = { workspace = true }
 memchr = { workspace = true }
-uucore = { workspace = true, features = ["ringbuffer", "lines"] }
+uucore = { workspace = true, features = ["ringbuffer", "lines", "fs"] }
 
 [[bin]]
 name = "head"

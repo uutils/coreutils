@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) ints
+#![allow(clippy::cast_possible_wrap)]
 
 use std::time::Duration;
 
@@ -38,20 +39,20 @@ fn test_buffer_sizes() {
             .arg("ext_sort.txt")
             .succeeds()
             .stdout_is_fixture("ext_sort.expected");
+    }
 
-        #[cfg(not(target_pointer_width = "32"))]
-        {
-            let buffer_sizes = ["1000G", "10T"];
-            for buffer_size in &buffer_sizes {
-                TestScenario::new(util_name!())
-                    .ucmd()
-                    .arg("-n")
-                    .arg("-S")
-                    .arg(buffer_size)
-                    .arg("ext_sort.txt")
-                    .succeeds()
-                    .stdout_is_fixture("ext_sort.expected");
-            }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let buffer_sizes = ["1000G", "10T"];
+        for buffer_size in &buffer_sizes {
+            TestScenario::new(util_name!())
+                .ucmd()
+                .arg("-n")
+                .arg("-S")
+                .arg(buffer_size)
+                .arg("ext_sort.txt")
+                .succeeds()
+                .stdout_is_fixture("ext_sort.expected");
         }
     }
 }
@@ -72,7 +73,6 @@ fn test_invalid_buffer_size() {
         .code_is(2)
         .stderr_only("sort: invalid suffix in --buffer-size argument '100f'\n");
 
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .arg("-n")
         .arg("-S")
@@ -126,7 +126,16 @@ fn test_ext_sort_zero_terminated() {
 
 #[test]
 fn test_months_whitespace() {
-    test_helper("months-whitespace", &["-M", "--month-sort", "--sort=month"]);
+    test_helper(
+        "months-whitespace",
+        &[
+            "-M",
+            "--month-sort",
+            "--sort=month",
+            "--sort=mont",
+            "--sort=m",
+        ],
+    );
 }
 
 #[test]
@@ -138,6 +147,16 @@ fn test_version_empty_lines() {
 fn test_version_sort_unstable() {
     new_ucmd!()
         .arg("--sort=version")
+        .pipe_in("0.1\n0.02\n0.2\n0.002\n0.3\n")
+        .succeeds()
+        .stdout_is("0.1\n0.002\n0.02\n0.2\n0.3\n");
+    new_ucmd!()
+        .arg("--sort=versio") // spell-checker:disable-line
+        .pipe_in("0.1\n0.02\n0.2\n0.002\n0.3\n")
+        .succeeds()
+        .stdout_is("0.1\n0.002\n0.02\n0.2\n0.3\n");
+    new_ucmd!()
+        .arg("--sort=v")
         .pipe_in("0.1\n0.02\n0.2\n0.002\n0.3\n")
         .succeeds()
         .stdout_is("0.1\n0.002\n0.02\n0.2\n0.3\n");
@@ -157,7 +176,14 @@ fn test_version_sort_stable() {
 fn test_human_numeric_whitespace() {
     test_helper(
         "human-numeric-whitespace",
-        &["-h", "--human-numeric-sort", "--sort=human-numeric"],
+        &[
+            "-h",
+            "--human-numeric-sort",
+            "--sort=human-numeric",
+            "--sort=human-numeri", // spell-checker:disable-line
+            "--sort=human",
+            "--sort=h",
+        ],
     );
 }
 
@@ -177,7 +203,14 @@ fn test_ext_sort_as64_bailout() {
 fn test_multiple_decimals_general() {
     test_helper(
         "multiple_decimals_general",
-        &["-g", "--general-numeric-sort", "--sort=general-numeric"],
+        &[
+            "-g",
+            "--general-numeric-sort",
+            "--sort=general-numeric",
+            "--sort=general-numeri", // spell-checker:disable-line
+            "--sort=general",
+            "--sort=g",
+        ],
     );
 }
 
@@ -185,7 +218,7 @@ fn test_multiple_decimals_general() {
 fn test_multiple_decimals_numeric() {
     test_helper(
         "multiple_decimals_numeric",
-        &["-n", "--numeric-sort", "--sort=numeric"],
+        &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
     );
 }
 
@@ -784,7 +817,13 @@ fn test_pipe() {
 
 #[test]
 fn test_check() {
-    for diagnose_arg in ["-c", "--check", "--check=diagnose-first"] {
+    for diagnose_arg in [
+        "-c",
+        "--check",
+        "--check=diagnose-first",
+        "--check=diagnose",
+        "--check=d",
+    ] {
         new_ucmd!()
             .arg(diagnose_arg)
             .arg("check_fail.txt")
@@ -802,21 +841,42 @@ fn test_check() {
 
 #[test]
 fn test_check_silent() {
-    for silent_arg in ["-C", "--check=silent", "--check=quiet"] {
+    for silent_arg in [
+        "-C",
+        "--check=silent",
+        "--check=quiet",
+        "--check=silen", // spell-checker:disable-line
+        "--check=quie",  // spell-checker:disable-line
+        "--check=s",
+        "--check=q",
+    ] {
         new_ucmd!()
             .arg(silent_arg)
             .arg("check_fail.txt")
             .fails()
             .stdout_is("");
+        new_ucmd!()
+            .arg(silent_arg)
+            .arg("empty.txt")
+            .succeeds()
+            .no_output();
     }
 }
 
 #[test]
 fn test_check_unique() {
-    // Due to a clap bug the combination "-cu" does not work. "-c -u" works.
-    // See https://github.com/clap-rs/clap/issues/2624
     new_ucmd!()
         .args(&["-c", "-u"])
+        .pipe_in("A\nA\n")
+        .fails()
+        .code_is(1)
+        .stderr_only("sort: -:2: disorder: A\n");
+}
+
+#[test]
+fn test_check_unique_combined() {
+    new_ucmd!()
+        .args(&["-cu"])
         .pipe_in("A\nA\n")
         .fails()
         .code_is(1)
@@ -829,7 +889,7 @@ fn test_dictionary_and_nonprinting_conflicts() {
     for restricted_arg in ["d", "i"] {
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
-                .arg(&format!("-{restricted_arg}{conflicting_arg}"))
+                .arg(format!("-{restricted_arg}{conflicting_arg}"))
                 .fails();
         }
         for conflicting_arg in &conflicting_args {
@@ -837,7 +897,7 @@ fn test_dictionary_and_nonprinting_conflicts() {
                 .args(&[
                     format!("-{restricted_arg}").as_str(),
                     "-k",
-                    &format!("1,1{conflicting_arg}"),
+                    format!("1,1{conflicting_arg}").as_str(),
                 ])
                 .succeeds();
         }
@@ -974,6 +1034,38 @@ fn test_merge_batches() {
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");
+}
+
+#[test]
+fn test_batch_size_invalid() {
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg("--batch-size=0")
+        .fails()
+        .code_is(2)
+        .stderr_contains("sort: invalid --batch-size argument '0'")
+        .stderr_contains("sort: minimum --batch-size argument is '2'");
+}
+
+#[test]
+fn test_batch_size_too_large() {
+    let large_batch_size = "18446744073709551616";
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg(format!("--batch-size={}", large_batch_size))
+        .fails()
+        .code_is(2)
+        .stderr_contains(format!(
+            "--batch-size argument '{}' too large",
+            large_batch_size
+        ));
+    #[cfg(target_os = "linux")]
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg(format!("--batch-size={}", large_batch_size))
+        .fails()
+        .code_is(2)
+        .stderr_contains("maximum --batch-size argument with current rlimit is");
 }
 
 #[test]

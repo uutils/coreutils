@@ -5,6 +5,9 @@
 //
 // spell-checker:ignore backticks uuhelp
 
+//! A collection of procedural macros for uutils.
+#![deny(missing_docs)]
+
 use std::{fs::File, io::Read, path::PathBuf};
 
 use proc_macro::{Literal, TokenStream, TokenTree};
@@ -14,6 +17,7 @@ use quote::quote;
 //* ref: <https://dev.to/naufraghi/procedural-macro-in-rust-101-k3f> @@ <http://archive.is/Vbr5e>
 //* ref: [path construction from LitStr](https://oschwald.github.io/maxminddb-rust/syn/struct.LitStr.html) @@ <http://archive.is/8YDua>
 
+/// A procedural macro to define the main function of a uutils binary.
 #[proc_macro_attribute]
 pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
     let stream = proc_macro2::TokenStream::from(stream);
@@ -63,6 +67,9 @@ pub fn help_about(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
     let text: String = uuhelp_parser::parse_about(&read_help(&filename));
+    if text.is_empty() {
+        panic!("About text not found! Make sure the markdown format is correct");
+    }
     TokenTree::Literal(Literal::string(&text)).into()
 }
 
@@ -77,6 +84,9 @@ pub fn help_usage(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
     let text: String = uuhelp_parser::parse_usage(&read_help(&filename));
+    if text.is_empty() {
+        panic!("Usage text not found! Make sure the markdown format is correct");
+    }
     TokenTree::Literal(Literal::string(&text)).into()
 }
 

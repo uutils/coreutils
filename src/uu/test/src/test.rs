@@ -17,6 +17,8 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+#[cfg(not(windows))]
+use uucore::process::{getegid, geteuid};
 use uucore::{format_usage, help_about, help_section};
 
 const ABOUT: &str = help_about!("test.md");
@@ -27,10 +29,11 @@ const ABOUT: &str = help_about!("test.md");
 // So, we use test or [ instead of {} so that the usage string is correct.
 const USAGE: &str = "\
 test EXPRESSION
-test
+[
 [ EXPRESSION ]
 [ ]
-[ OPTION";
+[ OPTION
+]";
 
 // We use after_help so that this comes after the usage string (it would come before if we used about)
 const AFTER_HELP: &str = help_section!("after help", "test.md");
@@ -159,6 +162,10 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
         Some(Symbol::Literal(s)) => Ok(!s.is_empty()),
         Some(Symbol::None) | None => Ok(false),
         Some(Symbol::BoolOp(op)) => {
+            if (op == "-a" || op == "-o") && stack.len() < 2 {
+                return Err(ParseError::UnaryOperatorExpected(op.quote().to_string()));
+            }
+
             let b = eval(stack)?;
             let a = eval(stack)?;
 
@@ -276,7 +283,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
     let geteuid = || {
         #[cfg(not(target_os = "redox"))]
-        let euid = unsafe { libc::geteuid() };
+        let euid = geteuid();
         #[cfg(target_os = "redox")]
         let euid = syscall::geteuid().unwrap() as u32;
 
@@ -285,7 +292,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
     let getegid = || {
         #[cfg(not(target_os = "redox"))]
-        let egid = unsafe { libc::getegid() };
+        let egid = getegid();
         #[cfg(target_os = "redox")]
         let egid = syscall::getegid().unwrap() as u32;
 

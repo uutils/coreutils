@@ -149,11 +149,7 @@ mod tests {
     fn test_read_skipping_huge_number() {
         let mut v = [0; 10];
         // test if it does not eat all memory....
-        let mut sut = PartialReader::new(
-            Cursor::new(&b"abcdefgh"[..]),
-            usize::max_value() as u64,
-            None,
-        );
+        let mut sut = PartialReader::new(Cursor::new(&b"abcdefgh"[..]), u64::MAX, None);
 
         sut.read(v.as_mut()).unwrap_err();
     }

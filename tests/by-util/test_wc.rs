@@ -2,10 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use crate::common::util::{vec_of_size, TestScenario};
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
-
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
@@ -71,7 +71,7 @@ fn test_utf8_words() {
         .arg("-w")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("87\n");
+        .stdout_is("89\n");
 }
 
 #[test]
@@ -80,7 +80,7 @@ fn test_utf8_line_length_words() {
         .arg("-Lw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     87      48\n");
+        .stdout_is("     89      48\n");
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn test_utf8_line_length_chars_words() {
         .arg("-Lmw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     87     442      48\n");
+        .stdout_is("     89     442      48\n");
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn test_utf8_chars_words() {
         .arg("-mw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     87     442\n");
+        .stdout_is("     89     442\n");
 }
 
 #[test]
@@ -161,7 +161,7 @@ fn test_utf8_line_length_lines_words() {
         .arg("-Llw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     25      87      48\n");
+        .stdout_is("     25      89      48\n");
 }
 
 #[test]
@@ -179,7 +179,7 @@ fn test_utf8_lines_words_chars() {
         .arg("-mlw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     25      87     442\n");
+        .stdout_is("     25      89     442\n");
 }
 
 #[test]
@@ -197,7 +197,17 @@ fn test_utf8_all() {
         .arg("-lwmcL")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     25      87     442     513      48\n");
+        .stdout_is("     25      89     442     513      48\n");
+}
+
+#[test]
+fn test_ascii_control() {
+    // GNU coreutils "d1" test
+    new_ucmd!()
+        .arg("-w")
+        .pipe_in(*b"\x01\n")
+        .run()
+        .stdout_is("1\n");
 }
 
 #[test]
@@ -347,6 +357,19 @@ fn test_file_one_long_word() {
 /// bytes are displayed.
 #[test]
 fn test_file_bytes_dictate_width() {
+    // . is a directory, so minimum_width should get set to 7
+    #[cfg(not(windows))]
+    const STDOUT: &str = concat!(
+        "      0       0       0 emptyfile.txt\n",
+        "      0       0       0 .\n",
+        "      0       0       0 total\n",
+    );
+    #[cfg(windows)]
+    const STDOUT: &str = concat!(
+        "      0       0       0 emptyfile.txt\n",
+        "      0       0       0 total\n",
+    );
+
     // This file has 10,001 bytes. Five digits are required to
     // represent that. Even though the number of lines is 1 and the
     // number of words is 0, each of those counts is formatted with
@@ -374,18 +397,6 @@ fn test_file_bytes_dictate_width() {
             "  18  166 1074 total\n",
         ));
 
-    // . is a directory, so minimum_width should get set to 7
-    #[cfg(not(windows))]
-    const STDOUT: &str = concat!(
-        "      0       0       0 emptyfile.txt\n",
-        "      0       0       0 .\n",
-        "      0       0       0 total\n",
-    );
-    #[cfg(windows)]
-    const STDOUT: &str = concat!(
-        "      0       0       0 emptyfile.txt\n",
-        "      0       0       0 total\n",
-    );
     new_ucmd!()
         .args(&["-lwc", "emptyfile.txt", "."])
         .run()
@@ -436,7 +447,7 @@ fn test_files_from_pseudo_filesystem() {
         let actual = at.read("/sys/kernel/profiling").len();
         assert_eq!(
             result.stdout_str(),
-            format!("{} /sys/kernel/profiling\n", actual)
+            format!("{actual} /sys/kernel/profiling\n")
         );
     }
 }
@@ -521,6 +532,10 @@ fn test_total_auto() {
         .args(&["lorem_ipsum.txt", "--total=auto"])
         .run()
         .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--tot=au"])
+        .run()
+        .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
 
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=auto"])
@@ -536,6 +551,13 @@ fn test_total_auto() {
 fn test_total_always() {
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "--total=always"])
+        .run()
+        .stdout_is(concat!(
+            " 13 109 772 lorem_ipsum.txt\n",
+            " 13 109 772 total\n",
+        ));
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--total=al"])
         .run()
         .stdout_is(concat!(
             " 13 109 772 lorem_ipsum.txt\n",
@@ -566,6 +588,13 @@ fn test_total_never() {
             "  13  109  772 lorem_ipsum.txt\n",
             "  18  204 1115 moby_dick.txt\n",
         ));
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=n"])
+        .run()
+        .stdout_is(concat!(
+            "  13  109  772 lorem_ipsum.txt\n",
+            "  18  204 1115 moby_dick.txt\n",
+        ));
 }
 
 #[test]
@@ -577,6 +606,10 @@ fn test_total_only() {
 
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=only"])
+        .run()
+        .stdout_is("31 313 1887\n");
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "moby_dick.txt", "--t=o"])
         .run()
         .stdout_is("31 313 1887\n");
 }
@@ -705,6 +738,10 @@ fn files0_from_dir() {
             concat!("wc: cannot open ", $p, " for reading: Permission denied\n")
         };
     }
+    #[cfg(windows)]
+    const DOT_ERR: &str = dir_err!("'.'");
+    #[cfg(not(windows))]
+    const DOT_ERR: &str = dir_err!(".");
 
     new_ucmd!()
         .args(&["--files0-from=dir with spaces"])
@@ -712,10 +749,6 @@ fn files0_from_dir() {
         .stderr_only(dir_err!("'dir with spaces'"));
 
     // Those contexts have different rules about quoting in errors...
-    #[cfg(windows)]
-    const DOT_ERR: &str = dir_err!("'.'");
-    #[cfg(not(windows))]
-    const DOT_ERR: &str = dir_err!(".");
     new_ucmd!()
         .args(&["--files0-from=."])
         .fails()

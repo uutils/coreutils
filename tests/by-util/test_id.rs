@@ -16,11 +16,12 @@ fn test_invalid_arg() {
 
 #[test]
 #[cfg(unix)]
+#[allow(unused_mut)]
 fn test_id_no_specified_user() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().run();
     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
-    let mut _exp_stdout = exp_result.stdout_str().to_string();
+    let mut exp_stdout = exp_result.stdout_str().to_string();
 
     #[cfg(not(feature = "feat_selinux"))]
     {
@@ -29,12 +30,12 @@ fn test_id_no_specified_user() {
         // uid=1001(runner) gid=121(docker) groups=121(docker),4(adm),101(systemd-journal) \
         // context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
         if let Some(context_offset) = exp_result.stdout_str().find(" context=") {
-            _exp_stdout.replace_range(context_offset.._exp_stdout.len() - 1, "");
+            exp_stdout.replace_range(context_offset..exp_stdout.len() - 1, "");
         }
     }
 
     result
-        .stdout_is(_exp_stdout)
+        .stdout_is(exp_stdout)
         .stderr_is(exp_result.stderr_str())
         .code_is(exp_result.code());
 }
@@ -327,6 +328,11 @@ fn test_id_default_format() {
             .args(&args)
             .succeeds()
             .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
+        let args = [opt2, opt2];
+        ts.ucmd()
+            .args(&args)
+            .succeeds()
+            .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
     }
 }
 
@@ -455,4 +461,17 @@ fn test_id_no_specified_user_posixly() {
             assert!(result.stdout_str().contains("context="));
         }
     }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_id_pretty_print_password_record() {
+    // `-p` is BSD only and not supported on GNU's `id`.
+    // `-P` is our own extension, and not supported by either GNU nor BSD.
+    // These must conflict, because they both set the output format.
+    new_ucmd!()
+        .arg("-p")
+        .arg("-P")
+        .fails()
+        .stderr_contains("the argument '-p' cannot be used with '-P'");
 }

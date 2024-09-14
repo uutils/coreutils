@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) reallylongexecutable
+// spell-checker:ignore (words) reallylongexecutable nbaz
 
 use crate::common::util::TestScenario;
 #[cfg(any(unix, target_os = "redox"))]
@@ -70,7 +70,7 @@ fn test_multiple_param() {
         new_ucmd!()
             .args(&[multiple_param, path, path])
             .succeeds()
-            .stdout_only("baz\nbaz\n"); // spell-checker:disable-line
+            .stdout_only("baz\nbaz\n");
     }
 }
 
@@ -81,7 +81,7 @@ fn test_suffix_param() {
         new_ucmd!()
             .args(&[suffix_param, ".exe", path, path])
             .succeeds()
-            .stdout_only("baz\nbaz\n"); // spell-checker:disable-line
+            .stdout_only("baz\nbaz\n");
     }
 }
 
@@ -200,4 +200,68 @@ fn test_simple_format() {
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
+fn test_repeated_multiple() {
+    new_ucmd!()
+        .args(&["-aa", "-a", "foo"])
+        .succeeds()
+        .stdout_is("foo\n");
+}
+
+#[test]
+fn test_repeated_multiple_many() {
+    new_ucmd!()
+        .args(&["-aa", "-a", "1/foo", "q/bar", "x/y/baz"])
+        .succeeds()
+        .stdout_is("foo\nbar\nbaz\n");
+}
+
+#[test]
+fn test_repeated_suffix_last() {
+    new_ucmd!()
+        .args(&["-s", ".h", "-s", ".c", "foo.c"])
+        .succeeds()
+        .stdout_is("foo\n");
+}
+
+#[test]
+fn test_repeated_suffix_not_first() {
+    new_ucmd!()
+        .args(&["-s", ".h", "-s", ".c", "foo.h"])
+        .succeeds()
+        .stdout_is("foo.h\n");
+}
+
+#[test]
+fn test_repeated_suffix_multiple() {
+    new_ucmd!()
+        .args(&["-as", ".h", "-a", "-s", ".c", "foo.c", "bar.c", "bar.h"])
+        .succeeds()
+        .stdout_is("foo\nbar\nbar.h\n");
+}
+
+#[test]
+fn test_repeated_zero() {
+    new_ucmd!()
+        .args(&["-zz", "-z", "foo/bar"])
+        .succeeds()
+        .stdout_is("bar\0");
+}
+
+#[test]
+fn test_zero_does_not_imply_multiple() {
+    new_ucmd!()
+        .args(&["-z", "foo.c", "c"])
+        .succeeds()
+        .stdout_is("foo.\0");
+}
+
+#[test]
+fn test_suffix_implies_multiple() {
+    new_ucmd!()
+        .args(&["-s", ".c", "foo.c", "o.c"])
+        .succeeds()
+        .stdout_is("foo\no\n");
 }
