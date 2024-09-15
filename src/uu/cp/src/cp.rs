@@ -1412,7 +1412,9 @@ fn copy_source(
 // This fix adds yet another metadata read.
 // Should this metadata be read once and then reused throughout the execution?
 // https://github.com/uutils/coreutils/issues/6658
-fn file_mode_for_interactive_overwrite(path: &Path) -> Option<(String, String)> {
+fn file_mode_for_interactive_overwrite(
+    #[cfg_attr(not(unix), expect(unused_variables))] path: &Path,
+) -> Option<(String, String)> {
     // Retain outer braces to ensure only one branch is included
     {
         #[cfg(unix)]
