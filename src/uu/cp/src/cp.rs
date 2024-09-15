@@ -1422,7 +1422,8 @@ fn file_mode_for_interactive_overwrite(path: &Path) -> Option<(String, String)> 
 
             match path.metadata() {
                 Ok(me) => {
-                    let mode: mode_t = me.mode();
+                    // Cast is necessary on some platforms
+                    let mode: mode_t = me.mode() as mode_t;
 
                     // It looks like this extra information is added to the prompt iff the file's user write bit is 0
                     if uucore::has!(mode, S_IWUSR) {
