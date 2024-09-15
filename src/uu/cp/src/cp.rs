@@ -1729,44 +1729,48 @@ fn handle_existing_dest(
     }
     if !is_dest_removed {
         match options.overwrite {
-            // FIXME: print that the file was removed if --verbose is enabled
-            OverwriteMode::Clobber(ClobberMode::Force) => {
-                if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
-                    fs::remove_file(dest)?;
-                }
-            }
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
-                fs::remove_file(dest)?;
-            }
-            OverwriteMode::Clobber(ClobberMode::Standard) => {
-                // Consider the following files:
-                //
-                // * `src/f` - a regular file
-                // * `src/link` - a hard link to `src/f`
-                // * `dest/src/f` - a different regular file
-                //
-                // In this scenario, if we do `cp -a src/ dest/`, it is
-                // possible that the order of traversal causes `src/link`
-                // to get copied first (to `dest/src/link`). In that case,
-                // in order to make sure `dest/src/link` is a hard link to
-                // `dest/src/f` and `dest/src/f` has the contents of
-                // `src/f`, we delete the existing file to allow the hard
-                // linking.
+            OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
+                match cl {
+                    // FIXME: print that the file was removed if --verbose is enabled
+                    ClobberMode::Force => {
+                        if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
+                            fs::remove_file(dest)?;
+                        }
+                    }
+                    ClobberMode::RemoveDestination => {
+                        fs::remove_file(dest)?;
+                    }
+                    ClobberMode::Standard => {
+                        // Consider the following files:
+                        //
+                        // * `src/f` - a regular file
+                        // * `src/link` - a hard link to `src/f`
+                        // * `dest/src/f` - a different regular file
+                        //
+                        // In this scenario, if we do `cp -a src/ dest/`, it is
+                        // possible that the order of traversal causes `src/link`
+                        // to get copied first (to `dest/src/link`). In that case,
+                        // in order to make sure `dest/src/link` is a hard link to
+                        // `dest/src/f` and `dest/src/f` has the contents of
+                        // `src/f`, we delete the existing file to allow the hard
+                        // linking.
 
-                if options.preserve_hard_links()
-            // only try to remove dest file only if the current source
-            // is hardlink to a file that is already copied
-                && copied_files.contains_key(
-                    &FileInformation::from_path(
-                        source,
-                        options.dereference(source_in_command_line),
-                    )
-                    .context(format!("cannot stat {}", source.quote()))?,
-                ) {
-                    fs::remove_file(dest)?;
+                        if options.preserve_hard_links() &&
+                                // only try to remove dest file only if the current source
+                                // is hardlink to a file that is already copied
+                                copied_files.contains_key(
+                                    &FileInformation::from_path(
+                                        source,
+                                        options.dereference(source_in_command_line)
+                                    ).context(format!("cannot stat {}", source.quote()))?
+                                )
+                        {
+                            fs::remove_file(dest)?;
+                        }
+                    }
                 }
             }
-            _ => (),
+            OverwriteMode::NoClobber => {}
         };
     }
 
