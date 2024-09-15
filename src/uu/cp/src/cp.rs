@@ -1410,7 +1410,56 @@ impl OverwriteMode {
                 Err(Error::Skipped(false))
             }
             Self::Interactive(_) => {
-                if prompt_yes!("overwrite {}?", path.quote()) {
+                // TODO
+                // The destination metadata can be read multiple times in the course of a single execution of `cp`.
+                // This fix adds yet another metadata read.
+                // Should this metadata be read once and then reused throughout the execution?
+                // https://github.com/uutils/coreutils/issues/6658
+                let extra_prompt_information: Option<(String, String)> = {
+                    #[cfg(unix)]
+                    {
+                        use libc::{mode_t, S_IWUSR};
+                        use std::os::unix::prelude::MetadataExt;
+
+                        match path.metadata() {
+                            Ok(me) => {
+                                let mode: mode_t = me.mode();
+
+                                // It looks like this extra information is added to the prompt iff the file's user write bit is 0
+                                if uucore::has!(mode, S_IWUSR) {
+                                    None
+                                } else {
+                                    // Discard leading digits
+                                    let mode_without_leading_digits = mode & 0o7777;
+
+                                    Some((
+                                        format!("{mode_without_leading_digits:04o}"),
+                                        uucore::fs::display_permissions_unix(mode, false),
+                                    ))
+                                }
+                            }
+                            // TODO: How should failure to read the metadata be handled? Ignoring for now.
+                            Err(_) => None,
+                        }
+                    }
+
+                    #[cfg(not(unix))]
+                    {
+                        None
+                    }
+                };
+
+                let prompt_yes_result =
+                    if let Some((octal, human_readable)) = extra_prompt_information {
+                        prompt_yes!(
+                            "replace {}, overriding mode {octal} ({human_readable})?",
+                            path.quote()
+                        )
+                    } else {
+                        prompt_yes!("overwrite {}?", path.quote())
+                    };
+
+                if prompt_yes_result {
                     Ok(())
                 } else {
                     Err(Error::Skipped(true))
