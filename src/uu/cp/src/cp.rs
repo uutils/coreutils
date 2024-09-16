@@ -1428,7 +1428,7 @@ fn file_mode_for_interactive_overwrite(
                     let mode: mode_t = me.mode() as mode_t;
 
                     // It looks like this extra information is added to the prompt iff the file's user write bit is 0
-                    //  write permission, owner 
+                    //  write permission, owner
                     if uucore::has!(mode, S_IWUSR) {
                         None
                     } else {
