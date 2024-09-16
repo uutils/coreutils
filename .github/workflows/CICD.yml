@@ -139,7 +139,7 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v16
+    - uses: DavidAnson/markdownlint-cli2-action@v17
       with:
         fix: "true"
         globs: |
@@ -938,7 +938,8 @@ jobs:
         job:
           - { os: ubuntu-latest  , features: unix, toolchain: nightly }
           - { os: macos-latest   , features: macos, toolchain: nightly }
-          - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
+          # FIXME: Re-enable Code Coverage on windows, which currently fails due to "profiler_builtins". See #6686.
+          # - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master

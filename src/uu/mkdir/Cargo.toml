@@ -18,7 +18,8 @@ path = "src/mkdir.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "mode"] }
+uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
+
 
 [[bin]]
 name = "mkdir"

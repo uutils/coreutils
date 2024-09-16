@@ -174,8 +174,7 @@ grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 
 # Remove tests checking for --version & --help
 # Not really interesting for us and logs are too big
-sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
-    -e '/tests\/help\/help-version.sh/ D' \
+sed -i -e '/tests\/help\/help-version.sh/ D' \
     -e '/tests\/help\/help-version-getopt.sh/ D' \
     Makefile
 

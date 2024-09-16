@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone
 
 use crate::common::util::TestScenario;
 use unindent::unindent;
@@ -577,6 +577,27 @@ fn test_no_offset() {
 #[test]
 fn test_invalid_offset() {
     new_ucmd!().arg("-Ab").fails();
+}
+
+#[test]
+fn test_empty_offset() {
+    new_ucmd!()
+        .arg("-A")
+        .arg("")
+        .fails()
+        .stderr_only("od: Radix cannot be empty, and must be one of [o, d, x, n]\n");
+}
+
+#[test]
+fn test_offset_compatibility() {
+    let input = [0u8; 4];
+    let expected_output = " 000000 000000\n";
+
+    new_ucmd!()
+        .arg("-Anone")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
 }
 
 #[test]

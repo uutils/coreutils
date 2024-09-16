@@ -13,7 +13,7 @@ use uucore::error::UResult;
 use uucore::fs::FileInformation;
 
 #[cfg(unix)]
-use std::os::unix::io::AsRawFd;
+use std::os::fd::{AsFd, AsRawFd};
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -125,12 +125,12 @@ struct OutputState {
 }
 
 #[cfg(unix)]
-trait FdReadable: Read + AsRawFd {}
+trait FdReadable: Read + AsFd + AsRawFd {}
 #[cfg(not(unix))]
 trait FdReadable: Read {}
 
 #[cfg(unix)]
-impl<T> FdReadable for T where T: Read + AsRawFd {}
+impl<T> FdReadable for T where T: Read + AsFd + AsRawFd {}
 #[cfg(not(unix))]
 impl<T> FdReadable for T where T: Read {}
 
