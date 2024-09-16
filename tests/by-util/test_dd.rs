@@ -1775,3 +1775,16 @@ fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
     println!("stdout:\n{}", out_file_content);
     assert_eq!(out_file_content, "bde");
 }
+
+#[test]
+fn test_wrong_number_err_msg() {
+    new_ucmd!()
+        .args(&["count=kBb"])
+        .fails()
+        .stderr_contains("dd: invalid number: ‘kBb’\n");
+
+    new_ucmd!()
+        .args(&["count=1kBb555"])
+        .fails()
+        .stderr_contains("dd: invalid number: ‘1kBb555’\n");
+}

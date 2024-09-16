@@ -5,6 +5,11 @@
 #[cfg(not(target_os = "windows"))]
 use crate::common::util::TestScenario;
 
+#[test]
+fn invalid_input() {
+    new_ucmd!().arg("-/").fails().code_is(125);
+}
+
 #[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
 #[test]
 fn test_stdbuf_unbuffered_stdout() {

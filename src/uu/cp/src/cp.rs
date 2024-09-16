@@ -9,6 +9,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 #[cfg(not(windows))]
 use std::ffi::CString;
+use std::ffi::OsString;
 use std::fs::{self, File, Metadata, OpenOptions, Permissions};
 use std::io;
 #[cfg(unix)]
@@ -38,7 +39,7 @@ use uucore::{backup_control, update_control};
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
     format_usage, help_about, help_section, help_usage, prompt_yes,
-    shortcut_value_parser::ShortcutValueParser, show_error, show_warning, util_name,
+    shortcut_value_parser::ShortcutValueParser, show_error, show_warning,
 };
 
 use crate::copydir::copy_directory;
@@ -78,8 +79,10 @@ quick_error! {
         StripPrefixError(err: StripPrefixError) { from() }
 
         /// Result of a skipped file
-        /// Currently happens when "no" is selected in interactive mode
-        Skipped { }
+        /// Currently happens when "no" is selected in interactive mode or when
+        /// `no-clobber` flag is set and destination is already present.
+        /// `exit with error` is used to determine which exit code should be returned.
+        Skipped(exit_with_error:bool) { }
 
         /// Result of a skipped file
         InvalidArgument(description: String) { display("{}", description) }
@@ -676,8 +679,10 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::PATHS)
                 .action(ArgAction::Append)
+                .num_args(1..)
+                .required(true)
                 .value_hint(clap::ValueHint::AnyPath)
-                .value_parser(ValueParser::path_buf()),
+                .value_parser(ValueParser::os_string()),
         )
 }
 
@@ -707,8 +712,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         let paths: Vec<PathBuf> = matches
-            .remove_many::<PathBuf>(options::PATHS)
-            .map(|v| v.collect())
+            .remove_many::<OsString>(options::PATHS)
+            .map(|v| v.map(PathBuf::from).collect())
             .unwrap_or_default();
 
         let (sources, target) = parse_path_args(paths, &options)?;
@@ -1207,7 +1212,7 @@ fn show_error_if_needed(error: &Error) {
         Error::NotAllFilesCopied => {
             // Need to return an error code
         }
-        Error::Skipped => {
+        Error::Skipped(_) => {
             // touch a b && echo "n"|cp -i a b && echo $?
             // should return an error from GNU 9.2
         }
@@ -1297,7 +1302,9 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 &mut copied_files,
             ) {
                 show_error_if_needed(&error);
-                non_fatal_errors = true;
+                if !matches!(error, Error::Skipped(false)) {
+                    non_fatal_errors = true;
+                }
             } else {
                 copied_destinations.insert(dest.clone());
             }
@@ -1399,17 +1406,19 @@ fn copy_source(
 }
 
 impl OverwriteMode {
-    fn verify(&self, path: &Path) -> CopyResult<()> {
+    fn verify(&self, path: &Path, debug: bool) -> CopyResult<()> {
         match *self {
             Self::NoClobber => {
-                eprintln!("{}: not replacing {}", util_name(), path.quote());
-                Err(Error::NotAllFilesCopied)
+                if debug {
+                    println!("skipped {}", path.quote());
+                }
+                Err(Error::Skipped(false))
             }
             Self::Interactive(_) => {
                 if prompt_yes!("overwrite {}?", path.quote()) {
                     Ok(())
                 } else {
-                    Err(Error::Skipped)
+                    Err(Error::Skipped(true))
                 }
             }
             Self::Clobber(_) => Ok(()),
@@ -1656,7 +1665,7 @@ fn handle_existing_dest(
     }
 
     if options.update != UpdateMode::ReplaceIfOlder {
-        options.overwrite.verify(dest)?;
+        options.overwrite.verify(dest, options.debug)?;
     }
 
     let mut is_dest_removed = false;
@@ -1894,6 +1903,9 @@ fn handle_copy_mode(
 
                         return Ok(());
                     }
+                    update_control::UpdateMode::ReplaceNoneFail => {
+                        return Err(Error::Error(format!("not replacing '{}'", dest.display())));
+                    }
                     update_control::UpdateMode::ReplaceIfOlder => {
                         let dest_metadata = fs::symlink_metadata(dest)?;
 
@@ -1902,7 +1914,7 @@ fn handle_copy_mode(
                         if src_time <= dest_time {
                             return Ok(());
                         } else {
-                            options.overwrite.verify(dest)?;
+                            options.overwrite.verify(dest, options.debug)?;
 
                             copy_helper(
                                 source,
@@ -2264,7 +2276,7 @@ fn copy_helper(
         File::create(dest).context(dest.display().to_string())?;
     } else if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
-        copy_fifo(dest, options.overwrite)?;
+        copy_fifo(dest, options.overwrite, options.debug)?;
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else {
@@ -2289,9 +2301,9 @@ fn copy_helper(
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
 // built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
 #[cfg(unix)]
-fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
+fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<()> {
     if dest.exists() {
-        overwrite.verify(dest)?;
+        overwrite.verify(dest, debug)?;
         fs::remove_file(dest)?;
     }
 

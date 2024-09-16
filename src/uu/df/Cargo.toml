@@ -22,7 +22,7 @@ uucore = { workspace = true, features = ["libc", "fsext"] }
 unicode-width = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.10.1"
+tempfile = { workspace = true }
 
 [[bin]]
 name = "df"

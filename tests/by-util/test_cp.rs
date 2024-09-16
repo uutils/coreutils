@@ -54,7 +54,6 @@ static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
 static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
-#[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 #[cfg(all(
     unix,
@@ -164,6 +163,42 @@ fn test_cp_multiple_files() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
         .succeeds();
+
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
+}
+
+#[test]
+fn test_cp_multiple_files_with_nonexistent_file() {
+    #[cfg(windows)]
+    let error_msg = "The system cannot find the file specified";
+    #[cfg(not(windows))]
+    let error_msg = format!("'{TEST_NONEXISTENT_FILE}': No such file or directory");
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_NONEXISTENT_FILE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .fails()
+        .stderr_contains(error_msg);
+
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
+}
+
+#[test]
+fn test_cp_multiple_files_with_empty_file_name() {
+    #[cfg(windows)]
+    let error_msg = "The system cannot find the path specified";
+    #[cfg(not(windows))]
+    let error_msg = "'': No such file or directory";
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .fails()
+        .stderr_contains(error_msg);
 
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
@@ -289,18 +324,25 @@ fn test_cp_arg_update_interactive_error() {
 
 #[test]
 fn test_cp_arg_update_none() {
-    for argument in ["--update=none", "--update=non", "--update=n"] {
-        let (at, mut ucmd) = at_and_ucmd!();
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--update=none")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+}
 
-        ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-            .arg(TEST_HOW_ARE_YOU_SOURCE)
-            .arg(argument)
-            .succeeds()
-            .no_stderr()
-            .no_stdout();
-
-        assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
-    }
+#[test]
+fn test_cp_arg_update_none_fail() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--update=none-fail")
+        .fails()
+        .stderr_contains(format!("not replacing '{}'", TEST_HOW_ARE_YOU_SOURCE));
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
 #[test]
@@ -553,10 +595,9 @@ fn test_cp_arg_interactive_verbose_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    ucmd.args(&["-vin", "a", "b"])
-        .fails()
-        .stderr_is("cp: not replacing 'b'\n")
-        .no_stdout();
+    ucmd.args(&["-vin", "--debug", "a", "b"])
+        .succeeds()
+        .stdout_contains("skipped 'b'");
 }
 
 #[test]
@@ -655,8 +696,9 @@ fn test_cp_arg_no_clobber() {
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clobber")
-        .fails()
-        .stderr_contains("not replacing");
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'how_are_you.txt'");
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
@@ -667,7 +709,9 @@ fn test_cp_arg_no_clobber_inferred_arg() {
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clob")
-        .fails();
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'how_are_you.txt'");
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
@@ -683,6 +727,7 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
+        .arg("--debug")
         .succeeds()
         .no_stderr();
 
@@ -694,7 +739,9 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
-        .fails();
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'dest.txt'");
 
     assert_eq!(at.read("source.txt"), "some-content");
     // Should be empty as the "no-clobber" should keep
@@ -1738,11 +1785,12 @@ fn test_cp_preserve_links_case_7() {
 
     ucmd.arg("-n")
         .arg("--preserve=links")
+        .arg("--debug")
         .arg("src/f")
         .arg("src/g")
         .arg("dest")
-        .fails()
-        .stderr_contains("not replacing");
+        .succeeds()
+        .stdout_contains("skipped");
 
     assert!(at.dir_exists("dest"));
     assert!(at.plus("dest").join("f").exists());
@@ -5768,4 +5816,21 @@ fn test_cp_with_options_backup_and_rem_when_dest_is_symlink() {
     assert!(at.symlink_exists("inner_dir/sl~"));
     assert!(!at.symlink_exists("inner_dir/sl"));
     assert_eq!(at.read("inner_dir/sl"), "xyz");
+}
+
+#[test]
+fn test_cp_single_file() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .fails()
+        .code_is(1)
+        .stderr_contains("missing destination file");
+}
+
+#[test]
+fn test_cp_no_file() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    ucmd.fails()
+        .code_is(1)
+        .stderr_contains("error: the following required arguments were not provided:");
 }

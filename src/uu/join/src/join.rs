@@ -654,7 +654,7 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
             settings.autoformat = true;
         } else {
             let mut specs = vec![];
-            for part in format.split(|c| c == ' ' || c == ',' || c == '\t') {
+            for part in format.split([' ', ',', '\t']) {
                 specs.push(Spec::parse(part)?);
             }
             settings.format = specs;
