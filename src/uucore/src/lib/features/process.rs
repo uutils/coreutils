@@ -8,6 +8,7 @@
 // spell-checker:ignore pgrep pwait snice
 
 use libc::{gid_t, pid_t, uid_t};
+#[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
 use std::io;
 use std::process::Child;
