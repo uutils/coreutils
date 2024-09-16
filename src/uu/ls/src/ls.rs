@@ -2875,12 +2875,13 @@ fn display_item_long(
         };
 
         if config.dired {
-            let (start, end) = dired::calculate_dired(
+            let (start, end, end_filename) = dired::calculate_dired(
                 &dired.dired_positions,
                 output_display.len(),
                 displayed_item.len(),
+                item.display_name.len(),
             );
-            dired::update_positions(dired, start, end);
+            dired::update_positions(dired, start, end, end_filename);
         }
         write!(output_display, "{}{}", displayed_item, config.line_ending).unwrap();
     } else {
@@ -2979,6 +2980,7 @@ fn display_item_long(
                 dired,
                 output_display.len(),
                 displayed_item.trim().len(),
+                item.display_name.len(),
             );
         }
         write!(output_display, "{}{}", displayed_item, config.line_ending).unwrap();
