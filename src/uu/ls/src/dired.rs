@@ -105,7 +105,11 @@ pub fn calculate_subdired(dired: &mut DiredOutput, path_len: usize) {
     let start = offset_from_previous_line + DIRED_TRAILING_OFFSET + additional_offset;
     let end = start + path_len;
     let end_filename = end;
-    dired.subdired_positions.push(BytePosition { start, end, end_filename});
+    dired.subdired_positions.push(BytePosition {
+        start,
+        end,
+        end_filename,
+    });
 }
 
 /// Prints the dired output based on the given configuration and dired structure.
@@ -204,8 +208,13 @@ mod tests {
         let output_display = "sample_output".to_string();
         let dfn = "sample_file".to_string();
         let dfl = "sample_file@ -> /home/foo/baa.txt".to_string();
-        let dired_positions = vec![BytePosition { start: 5, end: 10, end_filename: 10 }];
-        let (start, end, end_filename) = calculate_dired(&dired_positions, output_display.len(), dfl.len(), dfn.len());
+        let dired_positions = vec![BytePosition {
+            start: 5,
+            end: 10,
+            end_filename: 10,
+        }];
+        let (start, end, end_filename) =
+            calculate_dired(&dired_positions, output_display.len(), dfl.len(), dfn.len());
 
         assert_eq!(start, 24);
         assert_eq!(end, 57);
@@ -215,9 +224,21 @@ mod tests {
     #[test]
     fn test_get_offset_from_previous_line() {
         let positions = vec![
-            BytePosition { start: 0, end: 3, end_filename: 3 },
-            BytePosition { start: 4, end: 7, end_filename: 7 },
-            BytePosition { start: 8, end: 11, end_filename: 11 },
+            BytePosition {
+                start: 0,
+                end: 3,
+                end_filename: 3,
+            },
+            BytePosition {
+                start: 4,
+                end: 7,
+                end_filename: 7,
+            },
+            BytePosition {
+                start: 8,
+                end: 11,
+                end_filename: 11,
+            },
         ];
         assert_eq!(get_offset_from_previous_line(&positions), 12);
     }
@@ -225,9 +246,21 @@ mod tests {
     fn test_calculate_subdired() {
         let mut dired = DiredOutput {
             dired_positions: vec![
-                BytePosition { start: 0, end: 3, end_filename: 3 },
-                BytePosition { start: 4, end: 7, end_filename: 7 },
-                BytePosition { start: 8, end: 11, end_filename: 11 },
+                BytePosition {
+                    start: 0,
+                    end: 3,
+                    end_filename: 3,
+                },
+                BytePosition {
+                    start: 4,
+                    end: 7,
+                    end_filename: 7,
+                },
+                BytePosition {
+                    start: 8,
+                    end: 11,
+                    end_filename: 11,
+                },
             ],
             subdired_positions: vec![],
             padding: 0,
@@ -236,7 +269,11 @@ mod tests {
         calculate_subdired(&mut dired, path_len);
         assert_eq!(
             dired.subdired_positions,
-            vec![BytePosition { start: 14, end: 19, end_filename: 19 }],
+            vec![BytePosition {
+                start: 14,
+                end: 19,
+                end_filename: 19
+            }],
         );
     }
 
@@ -244,9 +281,21 @@ mod tests {
     fn test_add_dir_name() {
         let mut dired = DiredOutput {
             dired_positions: vec![
-                BytePosition { start: 0, end: 3, end_filename: 3 },
-                BytePosition { start: 4, end: 7, end_filename: 7 },
-                BytePosition { start: 8, end: 11, end_filename: 11 },
+                BytePosition {
+                    start: 0,
+                    end: 3,
+                    end_filename: 3,
+                },
+                BytePosition {
+                    start: 4,
+                    end: 7,
+                    end_filename: 7,
+                },
+                BytePosition {
+                    start: 8,
+                    end: 11,
+                    end_filename: 11,
+                },
             ],
             subdired_positions: vec![],
             padding: 0,
@@ -257,9 +306,21 @@ mod tests {
             dired,
             DiredOutput {
                 dired_positions: vec![
-                    BytePosition { start: 0, end: 3, end_filename: 3 },
-                    BytePosition { start: 4, end: 7, end_filename: 7 },
-                    BytePosition { start: 8, end: 11, end_filename: 11 },
+                    BytePosition {
+                        start: 0,
+                        end: 3,
+                        end_filename: 3
+                    },
+                    BytePosition {
+                        start: 4,
+                        end: 7,
+                        end_filename: 7
+                    },
+                    BytePosition {
+                        start: 8,
+                        end: 11,
+                        end_filename: 11
+                    },
                 ],
                 subdired_positions: vec![],
                 // 8 = 1 for the \n + 5 for dir_len + 2 for "  " + 1 for :
@@ -272,9 +333,21 @@ mod tests {
     fn test_add_total() {
         let mut dired = DiredOutput {
             dired_positions: vec![
-                BytePosition { start: 0, end: 3, end_filename: 3 },
-                BytePosition { start: 4, end: 7, end_filename: 7 },
-                BytePosition { start: 8, end: 11, end_filename: 11 },
+                BytePosition {
+                    start: 0,
+                    end: 3,
+                    end_filename: 3,
+                },
+                BytePosition {
+                    start: 4,
+                    end: 7,
+                    end_filename: 7,
+                },
+                BytePosition {
+                    start: 8,
+                    end: 11,
+                    end_filename: 11,
+                },
             ],
             subdired_positions: vec![],
             padding: 0,
@@ -295,9 +368,21 @@ mod tests {
 
         let mut dired = DiredOutput {
             dired_positions: vec![
-                BytePosition { start: 0, end: 3, end_filename: 3 },
-                BytePosition { start: 4, end: 7, end_filename: 7 },
-                BytePosition { start: 8, end: 11, end_filename: 11 },
+                BytePosition {
+                    start: 0,
+                    end: 3,
+                    end_filename: 3,
+                },
+                BytePosition {
+                    start: 4,
+                    end: 7,
+                    end_filename: 7,
+                },
+                BytePosition {
+                    start: 8,
+                    end: 11,
+                    end_filename: 11,
+                },
             ],
             subdired_positions: vec![],
             padding: 0,
@@ -315,7 +400,11 @@ mod tests {
     #[test]
     fn test_dired_update_positions() {
         let mut dired = DiredOutput {
-            dired_positions: vec![BytePosition { start: 5, end: 10, end_filename: 10 }],
+            dired_positions: vec![BytePosition {
+                start: 5,
+                end: 10,
+                end_filename: 10,
+            }],
             subdired_positions: vec![],
             padding: 10,
         };
@@ -337,9 +426,21 @@ mod tests {
     fn test_calculate_and_update_positions() {
         let mut dired = DiredOutput {
             dired_positions: vec![
-                BytePosition { start: 0, end: 3, end_filename: 3 },
-                BytePosition { start: 4, end: 7, end_filename: 7 },
-                BytePosition { start: 8, end: 11, end_filename: 11 },
+                BytePosition {
+                    start: 0,
+                    end: 3,
+                    end_filename: 3,
+                },
+                BytePosition {
+                    start: 4,
+                    end: 7,
+                    end_filename: 7,
+                },
+                BytePosition {
+                    start: 8,
+                    end: 11,
+                    end_filename: 11,
+                },
             ],
             subdired_positions: vec![],
             padding: 5,
@@ -351,10 +452,26 @@ mod tests {
         assert_eq!(
             dired.dired_positions,
             vec![
-                BytePosition { start: 0, end: 3, end_filename: 3 },
-                BytePosition { start: 4, end: 7, end_filename: 7 },
-                BytePosition { start: 8, end: 11, end_filename: 11 },
-                BytePosition { start: 32, end: 37, end_filename: 37 },
+                BytePosition {
+                    start: 0,
+                    end: 3,
+                    end_filename: 3
+                },
+                BytePosition {
+                    start: 4,
+                    end: 7,
+                    end_filename: 7
+                },
+                BytePosition {
+                    start: 8,
+                    end: 11,
+                    end_filename: 11
+                },
+                BytePosition {
+                    start: 32,
+                    end: 37,
+                    end_filename: 37
+                },
             ]
         );
         assert_eq!(dired.padding, 0);
