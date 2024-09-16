@@ -601,6 +601,41 @@ fn test_cp_arg_interactive_verbose_clobber() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_f_i_verbose_non_writeable_destination_y() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    // Non-writeable file
+    at.set_mode("b", 0o0000);
+
+    ucmd.args(&["-f", "-i", "--verbose", "a", "b"])
+        .pipe_in("y")
+        .succeeds()
+        .stderr_is("cp: replace 'b', overriding mode 0000 (---------)? ")
+        .stdout_is("'a' -> 'b'\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_f_i_verbose_non_writeable_destination_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    // Non-writeable file
+    at.set_mode("b", 0o0000);
+
+    ucmd.args(&["-f", "-i", "--verbose", "a", "b"])
+        .pipe_in("")
+        .fails()
+        .stderr_only("cp: replace 'b', overriding mode 0000 (---------)? ");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_cp_arg_link() {
     use std::os::linux::fs::MetadataExt;
