@@ -3,8 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#[cfg(target_os = "openbsd")]
+use crate::common::util::TestScenario;
+#[cfg(not(target_os = "openbsd"))]
 use crate::common::util::{expected_result, TestScenario};
 use pinky::Capitalize;
+#[cfg(not(target_os = "openbsd"))]
 use uucore::entries::{Locate, Passwd};
 
 #[test]
@@ -50,10 +54,7 @@ fn test_long_format_multiple_users() {
     // multiple instances of one account we know exists,
     // the account of the test runner,
     // and an account that (probably) doesn't exist
-    let runner = match std::env::var("USER") {
-        Ok(user) => user,
-        Err(_) => String::new(),
-    };
+    let runner = std::env::var("USER").unwrap_or_default();
     let args = ["-l", "root", "root", "root", &runner, "no_such_user"];
     let ts = TestScenario::new(util_name!());
     let expect = unwrap_or_return!(expected_result(&ts, &args));

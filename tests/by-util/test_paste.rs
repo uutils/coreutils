@@ -167,9 +167,9 @@ fn test_delimiter_list_ending_with_escaped_backslash() {
     for d in ["-d", "--delimiters"] {
         let (at, mut ucmd) = at_and_ucmd!();
         let mut ins = vec![];
-        for (i, _in) in ["a\n", "b\n"].iter().enumerate() {
+        for (i, one_in) in ["a\n", "b\n"].iter().enumerate() {
             let file = format!("in{}", i);
-            at.write(&file, _in);
+            at.write(&file, one_in);
             ins.push(file);
         }
         ucmd.args(&[d, "\\\\"])
@@ -198,9 +198,9 @@ fn test_data() {
     for example in EXAMPLE_DATA {
         let (at, mut ucmd) = at_and_ucmd!();
         let mut ins = vec![];
-        for (i, _in) in example.ins.iter().enumerate() {
+        for (i, one_in) in example.ins.iter().enumerate() {
             let file = format!("in{i}");
-            at.write(&file, _in);
+            at.write(&file, one_in);
             ins.push(file);
         }
         println!("{}", example.name);

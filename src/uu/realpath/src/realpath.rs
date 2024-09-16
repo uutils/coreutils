@@ -266,11 +266,11 @@ fn resolve_path(
 /// Conditionally converts an absolute path to a relative form,
 /// according to the rules:
 /// 1. if only `relative_to` is given, the result is relative to `relative_to`
-/// 1. if only `relative_base` is given, it checks whether given `path` is a descendant
-/// of `relative_base`, on success the result is relative to `relative_base`, otherwise
-/// the result is the given `path`
-/// 1. if both `relative_to` and `relative_base` are given, the result is relative to `relative_to`
-/// if `path` is a descendant of `relative_base`, otherwise the result is `path`
+/// 2. if only `relative_base` is given, it checks whether given `path` is a descendant
+///    of `relative_base`, on success the result is relative to `relative_base`, otherwise
+///    the result is the given `path`
+/// 3. if both `relative_to` and `relative_base` are given, the result is relative to `relative_to`
+///    if `path` is a descendant of `relative_base`, otherwise the result is `path`
 ///
 /// For more information see
 /// <https://www.gnu.org/software/coreutils/manual/html_node/Realpath-usage-examples.html>

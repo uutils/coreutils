@@ -33,6 +33,10 @@ pub enum BadSequence {
     CharRepeatInSet1,
     InvalidRepeatCount(String),
     EmptySet2WhenNotTruncatingSet1,
+    ClassExceptLowerUpperInSet2,
+    ClassInSet2NotMatchedBySet1,
+    Set1LongerSet2EndsInClass,
+    ComplementMoreThanOneUniqueInSet2,
 }
 
 impl Display for BadSequence {
@@ -54,6 +58,18 @@ impl Display for BadSequence {
             Self::EmptySet2WhenNotTruncatingSet1 => {
                 write!(f, "when not truncating set1, string2 must be non-empty")
             }
+            Self::ClassExceptLowerUpperInSet2 => {
+                write!(f, "when translating, the only character classes that may appear in set2 are 'upper' and 'lower'")
+            }
+            Self::ClassInSet2NotMatchedBySet1 => {
+                write!(f, "when translating, every 'upper'/'lower' in set2 must be matched by a 'upper'/'lower' in the same position in set1")
+            }
+            Self::Set1LongerSet2EndsInClass => {
+                write!(f, "when translating with string1 longer than string2,\nthe latter string must not end with a character class")
+            }
+            Self::ComplementMoreThanOneUniqueInSet2 => {
+                write!(f, "when translating with complemented character classes,\nstring2 must map all characters in the domain to one")
+            }
         }
     }
 }
@@ -62,11 +78,7 @@ impl Error for BadSequence {}
 impl UError for BadSequence {}
 
 #[derive(Debug, Clone, Copy)]
-pub enum Sequence {
-    Char(u8),
-    CharRange(u8, u8),
-    CharStar(u8),
-    CharRepeat(u8, usize),
+pub enum Class {
     Alnum,
     Alpha,
     Blank,
@@ -81,6 +93,15 @@ pub enum Sequence {
     Xdigit,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Sequence {
+    Char(u8),
+    CharRange(u8, u8),
+    CharStar(u8),
+    CharRepeat(u8, usize),
+    Class(Class),
+}
+
 impl Sequence {
     pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
         match self {
@@ -88,37 +109,39 @@ impl Sequence {
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
-            Self::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
-            Self::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
-            Self::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
-            Self::Control => Box::new((0..=31).chain(std::iter::once(127))),
-            Self::Digit => Box::new(b'0'..=b'9'),
-            Self::Graph => Box::new(
-                (48..=57) // digit
-                    .chain(65..=90) // uppercase
-                    .chain(97..=122) // lowercase
-                    // punctuations
-                    .chain(33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126)
-                    .chain(std::iter::once(32)), // space
-            ),
-            Self::Lower => Box::new(b'a'..=b'z'),
-            Self::Print => Box::new(
-                (48..=57) // digit
-                    .chain(65..=90) // uppercase
-                    .chain(97..=122) // lowercase
-                    // punctuations
-                    .chain(33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126),
-            ),
-            Self::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
-            Self::Space => Box::new(unicode_table::SPACES.iter().cloned()),
-            Self::Upper => Box::new(b'A'..=b'Z'),
-            Self::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+            Self::Class(class) => match class {
+                Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
+                Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
+                Class::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
+                Class::Control => Box::new((0..=31).chain(std::iter::once(127))),
+                Class::Digit => Box::new(b'0'..=b'9'),
+                Class::Graph => Box::new(
+                    (48..=57) // digit
+                        .chain(65..=90) // uppercase
+                        .chain(97..=122) // lowercase
+                        // punctuations
+                        .chain(33..=47)
+                        .chain(58..=64)
+                        .chain(91..=96)
+                        .chain(123..=126)
+                        .chain(std::iter::once(32)), // space
+                ),
+                Class::Print => Box::new(
+                    (48..=57) // digit
+                        .chain(65..=90) // uppercase
+                        .chain(97..=122) // lowercase
+                        // punctuations
+                        .chain(33..=47)
+                        .chain(58..=64)
+                        .chain(91..=96)
+                        .chain(123..=126),
+                ),
+                Class::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
+                Class::Space => Box::new(unicode_table::SPACES.iter().cloned()),
+                Class::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+                Class::Lower => Box::new(b'a'..=b'z'),
+                Class::Upper => Box::new(b'A'..=b'Z'),
+            },
         }
     }
 
@@ -128,82 +151,119 @@ impl Sequence {
         set2_str: &[u8],
         complement_flag: bool,
         truncate_set1_flag: bool,
+        translating: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
-        let set1 = Self::from_str(set1_str)?;
-
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
-        let set1_star_count = set1.iter().filter(is_char_star).count();
-        if set1_star_count == 0 {
-            let set2 = Self::from_str(set2_str)?;
-            let set2_star_count = set2.iter().filter(is_char_star).count();
-            if set2_star_count < 2 {
-                let char_star = set2.iter().find_map(|s| match s {
-                    Self::CharStar(c) => Some(c),
-                    _ => None,
-                });
-                let mut partition = set2.as_slice().split(|s| matches!(s, Self::CharStar(_)));
-                let set1_len = set1.iter().flat_map(Self::flatten).count();
-                let set2_len = set2
-                    .iter()
-                    .filter_map(|s| match s {
-                        Self::CharStar(_) => None,
-                        r => Some(r),
-                    })
-                    .flat_map(Self::flatten)
-                    .count();
-                let star_compensate_len = set1_len.saturating_sub(set2_len);
-                let (left, right) = (partition.next(), partition.next());
-                let set2_solved: Vec<_> = match (left, right) {
-                    (None, None) => match char_star {
-                        Some(c) => std::iter::repeat(*c).take(star_compensate_len).collect(),
-                        None => std::iter::empty().collect(),
-                    },
-                    (None, Some(set2_b)) => {
-                        if let Some(c) = char_star {
-                            std::iter::repeat(*c)
-                                .take(star_compensate_len)
-                                .chain(set2_b.iter().flat_map(Self::flatten))
-                                .collect()
-                        } else {
-                            set2_b.iter().flat_map(Self::flatten).collect()
+
+        let set1 = Self::from_str(set1_str)?;
+        if set1.iter().filter(is_char_star).count() != 0 {
+            return Err(BadSequence::CharRepeatInSet1);
+        }
+
+        let mut set2 = Self::from_str(set2_str)?;
+        if set2.iter().filter(is_char_star).count() > 1 {
+            return Err(BadSequence::MultipleCharRepeatInSet2);
+        }
+
+        if translating
+            && set2.iter().any(|&x| {
+                matches!(x, Self::Class(_))
+                    && !matches!(x, Self::Class(Class::Upper) | Self::Class(Class::Lower))
+            })
+        {
+            return Err(BadSequence::ClassExceptLowerUpperInSet2);
+        }
+
+        let mut set1_solved: Vec<u8> = set1.iter().flat_map(Self::flatten).collect();
+        if complement_flag {
+            set1_solved = (0..=u8::MAX).filter(|x| !set1_solved.contains(x)).collect();
+        }
+        let set1_len = set1_solved.len();
+
+        let set2_len = set2
+            .iter()
+            .filter_map(|s| match s {
+                Self::CharStar(_) => None,
+                r => Some(r),
+            })
+            .flat_map(Self::flatten)
+            .count();
+
+        let star_compensate_len = set1_len.saturating_sub(set2_len);
+        //Replace CharStar with CharRepeat
+        set2 = set2
+            .iter()
+            .filter_map(|s| match s {
+                Self::CharStar(0) => None,
+                Self::CharStar(c) => Some(Self::CharRepeat(*c, star_compensate_len)),
+                r => Some(*r),
+            })
+            .collect();
+
+        // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets
+        for (set2_pos, set2_item) in set2.iter().enumerate() {
+            if matches!(set2_item, Self::Class(_)) {
+                let mut set2_part_solved_len = 0;
+                if set2_pos >= 1 {
+                    set2_part_solved_len =
+                        set2.iter().take(set2_pos).flat_map(Self::flatten).count();
+                }
+
+                let mut class_matches = false;
+                for (set1_pos, set1_item) in set1.iter().enumerate() {
+                    if matches!(set1_item, Self::Class(_)) {
+                        let mut set1_part_solved_len = 0;
+                        if set1_pos >= 1 {
+                            set1_part_solved_len =
+                                set1.iter().take(set1_pos).flat_map(Self::flatten).count();
+                        }
+
+                        if set1_part_solved_len == set2_part_solved_len {
+                            class_matches = true;
+                            break;
                         }
                     }
-                    (Some(set2_a), None) => match char_star {
-                        Some(c) => set2_a
-                            .iter()
-                            .flat_map(Self::flatten)
-                            .chain(std::iter::repeat(*c).take(star_compensate_len))
-                            .collect(),
-                        None => set2_a.iter().flat_map(Self::flatten).collect(),
-                    },
-                    (Some(set2_a), Some(set2_b)) => match char_star {
-                        Some(c) => set2_a
-                            .iter()
-                            .flat_map(Self::flatten)
-                            .chain(std::iter::repeat(*c).take(star_compensate_len))
-                            .chain(set2_b.iter().flat_map(Self::flatten))
-                            .collect(),
-                        None => set2_a
-                            .iter()
-                            .chain(set2_b.iter())
-                            .flat_map(Self::flatten)
-                            .collect(),
-                    },
-                };
-                let mut set1_solved: Vec<_> = set1.iter().flat_map(Self::flatten).collect();
-                if complement_flag {
-                    set1_solved = (0..=u8::MAX).filter(|x| !set1_solved.contains(x)).collect();
                 }
-                if truncate_set1_flag {
-                    set1_solved.truncate(set2_solved.len());
+
+                if !class_matches {
+                    return Err(BadSequence::ClassInSet2NotMatchedBySet1);
                 }
-                Ok((set1_solved, set2_solved))
-            } else {
-                Err(BadSequence::MultipleCharRepeatInSet2)
             }
-        } else {
-            Err(BadSequence::CharRepeatInSet1)
         }
+
+        let set2_solved: Vec<_> = set2.iter().flat_map(Self::flatten).collect();
+
+        // Calculate the set of unique characters in set2
+        let mut set2_uniques = set2_solved.clone();
+        set2_uniques.sort();
+        set2_uniques.dedup();
+
+        // If the complement flag is used in translate mode, only one unique
+        // character may appear in set2. Validate this with the set of uniques
+        // in set2 that we just generated.
+        // Also, set2 must not overgrow set1, otherwise the mapping can't be 1:1.
+        if set1.iter().any(|x| matches!(x, Self::Class(_)))
+            && translating
+            && complement_flag
+            && (set2_uniques.len() > 1 || set2_solved.len() > set1_len)
+        {
+            return Err(BadSequence::ComplementMoreThanOneUniqueInSet2);
+        }
+
+        if set2_solved.len() < set1_solved.len()
+            && !truncate_set1_flag
+            && matches!(
+                set2.last().copied(),
+                Some(Self::Class(Class::Upper)) | Some(Self::Class(Class::Lower))
+            )
+        {
+            return Err(BadSequence::Set1LongerSet2EndsInClass);
+        }
+        //Truncation is done dead last. It has no influence on the other conversion steps
+        if truncate_set1_flag {
+            set1_solved.truncate(set2_solved.len());
+        }
+        Ok((set1_solved, set2_solved))
     }
 }
 
@@ -305,18 +365,18 @@ impl Sequence {
             alt((
                 map(
                     alt((
-                        value(Self::Alnum, tag("alnum")),
-                        value(Self::Alpha, tag("alpha")),
-                        value(Self::Blank, tag("blank")),
-                        value(Self::Control, tag("cntrl")),
-                        value(Self::Digit, tag("digit")),
-                        value(Self::Graph, tag("graph")),
-                        value(Self::Lower, tag("lower")),
-                        value(Self::Print, tag("print")),
-                        value(Self::Punct, tag("punct")),
-                        value(Self::Space, tag("space")),
-                        value(Self::Upper, tag("upper")),
-                        value(Self::Xdigit, tag("xdigit")),
+                        value(Self::Class(Class::Alnum), tag("alnum")),
+                        value(Self::Class(Class::Alpha), tag("alpha")),
+                        value(Self::Class(Class::Blank), tag("blank")),
+                        value(Self::Class(Class::Control), tag("cntrl")),
+                        value(Self::Class(Class::Digit), tag("digit")),
+                        value(Self::Class(Class::Graph), tag("graph")),
+                        value(Self::Class(Class::Lower), tag("lower")),
+                        value(Self::Class(Class::Print), tag("print")),
+                        value(Self::Class(Class::Punct), tag("punct")),
+                        value(Self::Class(Class::Space), tag("space")),
+                        value(Self::Class(Class::Upper), tag("upper")),
+                        value(Self::Class(Class::Xdigit), tag("xdigit")),
                     )),
                     Ok,
                 ),

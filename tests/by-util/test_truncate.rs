@@ -245,7 +245,6 @@ fn test_truncate_bytes_size() {
         .fails()
         .code_is(1)
         .stderr_only("truncate: Invalid number: '1024R': Value too large for defined data type\n");
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["--size", "1Y", "file"])
         .fails()

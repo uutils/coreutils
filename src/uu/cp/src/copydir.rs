@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore TODO canonicalizes direntry pathbuf symlinked
+// spell-checker:ignore TODO canonicalizes direntry pathbuf symlinked IRWXO IRWXG
 //! Recursively copy the contents of a directory.
 //!
 //! See the [`copy_directory`] function for more information.
@@ -246,12 +246,7 @@ fn copy_direntry(
         if target_is_file {
             return Err("cannot overwrite non-directory with directory".into());
         } else {
-            // TODO Since the calling code is traversing from the root
-            // of the directory structure, I don't think
-            // `create_dir_all()` will have any benefit over
-            // `create_dir()`, since all the ancestor directories
-            // should have already been created.
-            fs::create_dir_all(&local_to_target)?;
+            build_dir(options, &local_to_target, false)?;
             if options.verbose {
                 println!("{}", context_for(&source_relative, &local_to_target));
             }
@@ -337,10 +332,6 @@ pub(crate) fn copy_directory(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if !options.recursive {
-        return Err(format!("-r not specified; omitting directory {}", root.quote()).into());
-    }
-
     // if no-dereference is enabled and this is a symlink, copy it as a file
     if !options.dereference(source_in_command_line) && root.is_symlink() {
         return copy_file(
@@ -353,6 +344,10 @@ pub(crate) fn copy_directory(
             copied_files,
             source_in_command_line,
         );
+    }
+
+    if !options.recursive {
+        return Err(format!("-r not specified; omitting directory {}", root.quote()).into());
     }
 
     // check if root is a prefix of target
@@ -376,8 +371,7 @@ pub(crate) fn copy_directory(
     let tmp = if options.parents {
         if let Some(parent) = root.parent() {
             let new_target = target.join(parent);
-            std::fs::create_dir_all(&new_target)?;
-
+            build_dir(options, &new_target, true)?;
             if options.verbose {
                 // For example, if copying file `a/b/c` and its parents
                 // to directory `d/`, then print
@@ -437,7 +431,9 @@ pub(crate) fn copy_directory(
         let dest = target.join(root.file_name().unwrap());
         copy_attributes(root, dest.as_path(), &options.attributes)?;
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
-            copy_attributes(x, y, &options.attributes)?;
+            if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
+                copy_attributes(&src, y, &options.attributes)?;
+            }
         }
     } else {
         copy_attributes(root, target, &options.attributes)?;
@@ -468,6 +464,42 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
     let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
 
     Ok(pathbuf1.starts_with(pathbuf2))
+}
+
+/// Builds a directory at the specified path with the given options.
+///
+/// # Notes
+/// - It excludes certain permissions if ownership or special mode bits could
+///   potentially change.
+/// - The `recursive` flag determines whether parent directories should be created
+///   if they do not already exist.
+// we need to allow unused_variable since `options` might be unused in non unix systems
+#[allow(unused_variables)]
+fn build_dir(options: &Options, path: &PathBuf, recursive: bool) -> CopyResult<()> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(recursive);
+    // To prevent unauthorized access before the folder is ready,
+    // exclude certain permissions if ownership or special mode bits
+    // could potentially change.
+    #[cfg(unix)]
+    {
+        // we need to allow trivial casts here because some systems like linux have u32 constants in
+        // in libc while others don't.
+        #[allow(clippy::unnecessary_cast)]
+        let mut excluded_perms =
+            if matches!(options.attributes.ownership, crate::Preserve::Yes { .. }) {
+                libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
+            } else if matches!(options.attributes.mode, crate::Preserve::Yes { .. }) {
+                libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
+            } else {
+                0
+            } as u32;
+        excluded_perms |= uucore::mode::get_umask();
+        let mode = !excluded_perms & 0o777; //use only the last three octet bits
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);
+    }
+    builder.create(path)?;
+    Ok(())
 }
 
 #[cfg(test)]

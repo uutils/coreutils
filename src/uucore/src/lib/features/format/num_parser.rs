@@ -7,15 +7,24 @@
 
 // spell-checker:ignore powf copysign prec inity
 
+/// Base for number parsing
 #[derive(Clone, Copy, PartialEq)]
 pub enum Base {
+    /// Binary base
     Binary = 2,
+
+    /// Octal base
     Octal = 8,
+
+    /// Decimal base
     Decimal = 10,
+
+    /// Hexadecimal base
     Hexadecimal = 16,
 }
 
 impl Base {
+    /// Return the digit value of a character in the given base
     pub fn digit(&self, c: char) -> Option<u64> {
         fn from_decimal(c: char) -> u64 {
             u64::from(c) - u64::from('0')

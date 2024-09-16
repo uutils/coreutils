@@ -5,6 +5,9 @@
 // spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
 use crate::common::util::TestScenario;
 
+#[cfg(unix)]
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
@@ -1363,4 +1366,82 @@ fn check_ignore_truncate_when_squeezing() {
         .succeeds()
         .no_stderr()
         .stdout_only("asdfqwer\n");
+}
+
+#[test]
+fn check_disallow_blank_in_set2_when_translating() {
+    new_ucmd!().args(&["-t", "1234", "[:blank:]"]).fails();
+}
+
+#[test]
+fn check_class_in_set2_must_be_matched_in_set1() {
+    new_ucmd!().args(&["-t", "1[:upper:]", "[:upper:]"]).fails();
+}
+
+#[test]
+fn check_class_in_set2_must_be_matched_in_set1_right_length_check() {
+    new_ucmd!()
+        .args(&["-t", "a-z[:upper:]", "abcdefghijklmnopqrstuvwxyz[:upper:]"])
+        .succeeds();
+}
+
+#[test]
+fn check_set1_longer_set2_ends_in_class() {
+    new_ucmd!().args(&["[:lower:]a", "[:upper:]"]).fails();
+}
+
+#[test]
+fn check_set1_longer_set2_ends_in_class_with_trunc() {
+    new_ucmd!()
+        .args(&["-t", "[:lower:]a", "[:upper:]"])
+        .succeeds();
+}
+
+#[test]
+fn check_complement_2_unique_in_set2() {
+    let x226 = "x".repeat(226);
+
+    // [y*] is expanded tp "y" here
+    let arg = x226 + "[y*]xxx";
+    new_ucmd!().args(&["-c", "[:upper:]", arg.as_str()]).fails();
+}
+
+#[test]
+fn check_complement_1_unique_in_set2() {
+    let x226 = "x".repeat(226);
+
+    // [y*] is expanded to "" here
+    let arg = x226 + "[y*]xxxx";
+    new_ucmd!()
+        .args(&["-c", "[:upper:]", arg.as_str()])
+        .succeeds();
+}
+
+#[test]
+fn check_complement_set2_too_big() {
+    let x231 = "x".repeat(231);
+    let x230 = &x231[..230];
+
+    // The complement of [:upper:] expands to 230 characters,
+    // putting more characters in set2 should fail.
+    new_ucmd!().args(&["-c", "[:upper:]", x230]).succeeds();
+    new_ucmd!()
+        .args(&["-c", "[:upper:]", x231.as_str()])
+        .fails()
+        .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_truncate_non_utf8_set() {
+    let stdin = b"\x01amp\xfe\xff";
+    let set1 = OsStr::from_bytes(b"a\xfe\xffz"); // spell-checker:disable-line
+    let set2 = OsStr::from_bytes(b"01234");
+
+    new_ucmd!()
+        .arg(set1)
+        .arg(set2)
+        .pipe_in(*stdin)
+        .succeeds()
+        .stdout_is_bytes(b"\x010mp12");
 }

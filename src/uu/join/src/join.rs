@@ -119,12 +119,7 @@ struct Repr<'a> {
 }
 
 impl<'a> Repr<'a> {
-    fn new(
-        line_ending: LineEnding,
-        separator: u8,
-        format: &'a [Spec],
-        empty: &'a [u8],
-    ) -> Repr<'a> {
+    fn new(line_ending: LineEnding, separator: u8, format: &'a [Spec], empty: &'a [u8]) -> Self {
         Repr {
             line_ending,
             separator,
@@ -333,7 +328,7 @@ impl<'a> State<'a> {
         key: usize,
         line_ending: LineEnding,
         print_unpaired: bool,
-    ) -> UResult<State<'a>> {
+    ) -> UResult<Self> {
         let file_buf = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
@@ -659,7 +654,7 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
             settings.autoformat = true;
         } else {
             let mut specs = vec![];
-            for part in format.split(|c| c == ' ' || c == ',' || c == '\t') {
+            for part in format.split([' ', ',', '\t']) {
                 specs.push(Spec::parse(part)?);
             }
             settings.format = specs;

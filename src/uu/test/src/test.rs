@@ -162,6 +162,10 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
         Some(Symbol::Literal(s)) => Ok(!s.is_empty()),
         Some(Symbol::None) | None => Ok(false),
         Some(Symbol::BoolOp(op)) => {
+            if (op == "-a" || op == "-o") && stack.len() < 2 {
+                return Err(ParseError::UnaryOperatorExpected(op.quote().to_string()));
+            }
+
             let b = eval(stack)?;
             let a = eval(stack)?;
 

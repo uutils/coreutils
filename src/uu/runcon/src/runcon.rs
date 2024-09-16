@@ -5,7 +5,7 @@
 // spell-checker:ignore (vars) RFILE
 
 use clap::builder::ValueParser;
-use uucore::error::{UResult, UUsageError};
+use uucore::error::{UClapError, UError, UResult};
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
@@ -42,20 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
         Err(r) => {
-            if let Error::CommandLine(ref r) = r {
-                match r.kind() {
-                    clap::error::ErrorKind::DisplayHelp
-                    | clap::error::ErrorKind::DisplayVersion => {
-                        println!("{r}");
-                        return Ok(());
-                    }
-                    _ => {}
-                }
-            }
-            return Err(UUsageError::new(
-                error_exit_status::ANOTHER_ERROR,
-                format!("{r}"),
-            ));
+            return Err(r.into());
         }
     };
 
@@ -198,8 +185,8 @@ struct Options {
     arguments: Vec<OsString>,
 }
 
-fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Options> {
-    let matches = config.try_get_matches_from(args)?;
+fn parse_command_line(config: Command, args: impl uucore::Args) -> UResult<Options> {
+    let matches = config.try_get_matches_from(args).with_exit_code(125)?;
 
     let compute_transition_context = matches.get_flag(options::COMPUTE);
 
@@ -233,7 +220,7 @@ fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Option
         // runcon CONTEXT COMMAND [args]
 
         args.next()
-            .ok_or(Error::MissingCommand)
+            .ok_or_else(|| Box::new(Error::MissingCommand) as Box<dyn UError>)
             .map(move |command| Options {
                 mode: CommandLineMode::PlainContext { context, command },
                 arguments: args.collect(),
