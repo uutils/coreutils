@@ -2053,9 +2053,9 @@ checksum = "d369a96f978623eb3dc28807c4852d6cc617fed53da5d3c400feff1ef34a714a"
 
 [[package]]
 name = "selinux"
-version = "0.4.5"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fed598e66584465b1fb0d4b8fdbc24f5827b1b3953aaf199f64ab34a2d4d768c"
+checksum = "0139b2436c81305eb6bda33af151851f75bd62783817b25f44daa371119c30b5"
 dependencies = [
  "bitflags 2.6.0",
  "libc",
@@ -3634,7 +3634,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
