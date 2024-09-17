@@ -211,7 +211,7 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
                     .checked_sub(1)
                     .ok_or(ExprError::UnmatchedClosingBrace)?;
                 let mut repetition = repeating_pattern_text[..repeating_pattern_text.len() - 1]
-                    .splitn(2, |x| x == ',');
+                    .splitn(2, ',');
                 match (
                     repetition
                         .next()
