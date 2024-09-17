@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO unwritable
 
 use quick_error::quick_error;
 use std::cmp::Ordering;
@@ -28,6 +28,8 @@ use quick_error::ResultExt;
 use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
+#[cfg(unix)]
+use uucore::fs::display_permissions;
 use uucore::fs::{
     are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop,
     path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
@@ -704,10 +706,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if let Ok(mut matches) = matches {
         let options = Options::from_matches(&matches)?;
 
-        if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
+        if options.backup != BackupMode::NoBackup
+            && (options.overwrite == OverwriteMode::NoClobber
+                || options.update == UpdateMode::ReplaceNone
+                || options.update == UpdateMode::ReplaceNoneFail)
+        {
             return Err(UUsageError::new(
-                EXIT_ERR,
-                "options --backup and --no-clobber are mutually exclusive",
+                1,
+                "cannot combine --backup with -n/--no-clobber or --update=none-fail",
             ));
         }
 
@@ -1409,8 +1415,34 @@ impl OverwriteMode {
                 }
                 Err(Error::Skipped(false))
             }
-            Self::Interactive(_) => {
-                if prompt_yes!("overwrite {}?", path.quote()) {
+            // allow `unused_variables` because windows doesn't use `clobber_mode`
+            #[allow(unused_variables)]
+            Self::Interactive(clobber_mode) => {
+                #[cfg(unix)]
+                let prompt = {
+                    let path_md = path.metadata()?;
+                    if path_md.permissions().readonly() {
+                        match clobber_mode {
+                            ClobberMode::Force | ClobberMode::RemoveDestination => format!(
+                                "replace {}, overriding mode {:04o} ({})?",
+                                path.quote(),
+                                path_md.permissions().mode() & 0o7777,
+                                display_permissions(&path_md, false)
+                            ),
+                            ClobberMode::Standard => format!(
+                                "unwritable {} (mode {:04o}, {}); try anyway?",
+                                path.quote(),
+                                path_md.permissions().mode() & 0o7777,
+                                display_permissions(&path_md, false)
+                            ),
+                        }
+                    } else {
+                        format!("overwrite {}?", path.quote())
+                    }
+                };
+                #[cfg(not(unix))]
+                let prompt = { format!("overwrite {}?", path.quote()) };
+                if prompt_yes!("{prompt}") {
                     Ok(())
                 } else {
                     Err(Error::Skipped(true))
@@ -1659,7 +1691,9 @@ fn handle_existing_dest(
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
-    if options.update != UpdateMode::ReplaceIfOlder {
+    let is_symlink_loop = is_symlink_loop(dest);
+
+    if !is_symlink_loop && options.update != UpdateMode::ReplaceIfOlder {
         options.overwrite.verify(dest, options.debug)?;
     }
 
@@ -1681,15 +1715,18 @@ fn handle_existing_dest(
     if !is_dest_removed {
         match options.overwrite {
             // FIXME: print that the file was removed if --verbose is enabled
-            OverwriteMode::Clobber(ClobberMode::Force) => {
-                if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
+            OverwriteMode::Clobber(ClobberMode::Force)
+            | OverwriteMode::Interactive(ClobberMode::Force) => {
+                if is_symlink_loop || fs::metadata(dest)?.permissions().readonly() {
                     fs::remove_file(dest)?;
                 }
             }
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+            | OverwriteMode::Interactive(ClobberMode::RemoveDestination) => {
                 fs::remove_file(dest)?;
             }
-            OverwriteMode::Clobber(ClobberMode::Standard) => {
+            OverwriteMode::Clobber(ClobberMode::Standard)
+            | OverwriteMode::Interactive(ClobberMode::Standard) => {
                 // Consider the following files:
                 //
                 // * `src/f` - a regular file
