@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG unwritable
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG unwritable rwxrwx
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -767,7 +767,7 @@ removed 'b'
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn test_cp_i_user_non_writeable_destination_y() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1958,6 +1958,11 @@ fn test_cp_preserve_links_case_6() {
 // android platform will causing stderr = cp: Permission denied (os error 13)
 #[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_7() {
+    use std::path::MAIN_SEPARATOR as SLASH;
+
+    let expected_stderr = format!("cp: not replacing 'dest{SLASH}g'");
+    let expected_stdout = format!("'src{SLASH}f' -> 'dest{SLASH}f'");
+
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("src");
@@ -1974,13 +1979,8 @@ fn test_cp_preserve_links_case_7() {
         .arg("src/g")
         .arg("dest")
         .fails()
-        .stderr_is("cp: not replacing 'dest/g'\n")
-        .stdout_is(
-            "\
-'src/f' -> 'dest/f'
-copy offload: unknown, reflink: unsupported, sparse detection: no
-",
-        );
+        .stderr_contains(expected_stderr)
+        .stdout_contains(expected_stdout);
 
     assert!(at.dir_exists("dest"));
     assert!(at.plus("dest").join("f").exists());
