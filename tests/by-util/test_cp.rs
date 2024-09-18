@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG unwritable
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -632,7 +632,6 @@ fn test_cp_arg_interactive_update_overwrite_older() {
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
 fn test_cp_arg_interactive_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
@@ -645,14 +644,25 @@ fn test_cp_arg_interactive_verbose() {
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
-fn test_cp_arg_interactive_verbose_clobber() {
+fn test_cp_arg_interactive_verbose_no_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
     ucmd.args(&["-vin", "--debug", "a", "b"])
-        .succeeds()
-        .stdout_contains("skipped 'b'");
+        .fails()
+        .stderr_only("cp: not replacing 'b'\n");
+}
+
+#[test]
+fn test_cp_no_clobber_existing_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    ucmd.args(&["--no-clobber", "a", "b"])
+        .fails()
+        .stderr_only("cp: not replacing 'b'\n");
 }
 
 #[test]
@@ -670,7 +680,12 @@ fn test_cp_f_i_verbose_non_writeable_destination_y() {
         .pipe_in("y")
         .succeeds()
         .stderr_is("cp: replace 'b', overriding mode 0000 (---------)? ")
-        .stdout_is("'a' -> 'b'\n");
+        .stdout_is(
+            "\
+'a' -> 'b'
+removed 'b'
+",
+        );
 }
 
 #[test]
@@ -688,6 +703,85 @@ fn test_cp_f_i_verbose_non_writeable_destination_empty() {
         .pipe_in("")
         .fails()
         .stderr_only("cp: replace 'b', overriding mode 0000 (---------)? ");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_f_i_verbose_user_non_writeable_destination_y() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    // User cannot write to file
+    at.set_mode("b", 0o0077);
+
+    ucmd.args(&["-f", "-i", "--verbose", "a", "b"])
+        .pipe_in("y")
+        .succeeds()
+        .stderr_is("cp: replace 'b', overriding mode 0077 (---rwxrwx)? ")
+        .stdout_is(
+            "\
+'a' -> 'b'
+removed 'b'
+",
+        );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_f_i_verbose_user_non_writeable_destination_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    // User cannot write to file
+    at.set_mode("b", 0o0077);
+
+    ucmd.args(&["-f", "-i", "--verbose", "a", "b"])
+        .pipe_in("")
+        .fails()
+        .stderr_only("cp: replace 'b', overriding mode 0077 (---rwxrwx)? ");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_f_verbose_user_non_writeable_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    // User cannot write to file
+    at.set_mode("b", 0o0077);
+
+    ucmd.args(&["-f", "--verbose", "a", "b"])
+        .succeeds()
+        .stdout_only(
+            "\
+'a' -> 'b'
+removed 'b'
+",
+        );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_i_user_non_writeable_destination_y() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    // User cannot write to file
+    at.set_mode("b", 0o0077);
+
+    ucmd.args(&["-i", "a", "b"])
+        .pipe_in("y")
+        .fails()
+        .stderr_contains("cp: unwritable 'b' (mode 0077, ---rwxrwx); try anyway? ")
+        .stderr_contains("Permission denied");
 }
 
 #[test]
@@ -787,8 +881,8 @@ fn test_cp_arg_no_clobber() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clobber")
         .arg("--debug")
-        .succeeds()
-        .stdout_contains("skipped 'how_are_you.txt'");
+        .fails()
+        .stderr_only("cp: not replacing 'how_are_you.txt'\n");
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
@@ -800,8 +894,8 @@ fn test_cp_arg_no_clobber_inferred_arg() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clob")
         .arg("--debug")
-        .succeeds()
-        .stdout_contains("skipped 'how_are_you.txt'");
+        .fails()
+        .stderr_only("cp: not replacing 'how_are_you.txt'\n");
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
@@ -830,8 +924,8 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("source.txt")
         .arg("dest.txt")
         .arg("--debug")
-        .succeeds()
-        .stdout_contains("skipped 'dest.txt'");
+        .fails()
+        .stderr_only("cp: not replacing 'dest.txt'\n");
 
     assert_eq!(at.read("source.txt"), "some-content");
     // Should be empty as the "no-clobber" should keep
@@ -1879,8 +1973,14 @@ fn test_cp_preserve_links_case_7() {
         .arg("src/f")
         .arg("src/g")
         .arg("dest")
-        .succeeds()
-        .stdout_contains("skipped");
+        .fails()
+        .stderr_is("cp: not replacing 'dest/g'\n")
+        .stdout_is(
+            "\
+'src/f' -> 'dest/f'
+copy offload: unknown, reflink: unsupported, sparse detection: no
+",
+        );
 
     assert!(at.dir_exists("dest"));
     assert!(at.plus("dest").join("f").exists());

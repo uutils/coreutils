@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO unwritable
 
 use quick_error::quick_error;
 use std::cmp::Ordering;
@@ -27,13 +27,13 @@ use quick_error::ResultExt;
 
 use platform::copy_on_write;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
+use uucore::error::{set_exit_code, UClapError, UError, UResult, USimpleError, UUsageError};
 use uucore::fs::{
     are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop, normalize_path,
     path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
     ResolveMode,
 };
-use uucore::{backup_control, update_control};
+use uucore::{backup_control, show, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enum.
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
@@ -1441,7 +1441,7 @@ fn file_mode_for_interactive_overwrite(
                     let mode: mode_t = me.mode() as mode_t;
 
                     // It looks like this extra information is added to the prompt iff the file's user write bit is 0
-                    //  write permission, owner
+                    // write permission, owner
                     if uucore::has!(mode, S_IWUSR) {
                         None
                     } else {
@@ -1467,22 +1467,34 @@ fn file_mode_for_interactive_overwrite(
 }
 
 impl OverwriteMode {
-    fn verify(&self, path: &Path, debug: bool) -> CopyResult<()> {
+    fn verify(&self, path: &Path) -> CopyResult<()> {
         match *self {
             Self::NoClobber => {
-                if debug {
-                    println!("skipped {}", path.quote());
-                }
+                show!(USimpleError::new(
+                    1_i32,
+                    format!("not replacing {}", path.quote())
+                ));
+
                 Err(Error::Skipped(false))
             }
-            Self::Interactive(_) => {
+            Self::Interactive(cl) => {
                 let prompt_yes_result = if let Some((octal, human_readable)) =
                     file_mode_for_interactive_overwrite(path)
                 {
-                    prompt_yes!(
-                        "replace {}, overriding mode {octal} ({human_readable})?",
-                        path.quote()
-                    )
+                    match cl {
+                        ClobberMode::Force => {
+                            prompt_yes!(
+                                "replace {}, overriding mode {octal} ({human_readable})?",
+                                path.quote()
+                            )
+                        }
+                        _ => {
+                            prompt_yes!(
+                                "unwritable {} (mode {octal}, {human_readable}); try anyway?",
+                                path.quote()
+                            )
+                        }
+                    }
                 } else {
                     prompt_yes!("overwrite {}?", path.quote())
                 };
@@ -1723,13 +1735,14 @@ fn is_forbidden_to_copy_to_same_file(
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
+/// Returns true if `dest` was deleted.
 fn handle_existing_dest(
     source: &Path,
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
-) -> CopyResult<()> {
+) -> Result<bool, Error> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
     if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
@@ -1737,7 +1750,7 @@ fn handle_existing_dest(
     }
 
     if options.update != UpdateMode::ReplaceIfOlder {
-        options.overwrite.verify(dest, options.debug)?;
+        options.overwrite.verify(dest)?;
     }
 
     let mut is_dest_removed = false;
@@ -1755,17 +1768,44 @@ fn handle_existing_dest(
             backup_dest(dest, &backup_path, is_dest_removed)?;
         }
     }
-    if !is_dest_removed {
+
+    let dest_was_removed = if is_dest_removed {
+        // TODO
+        // Should this be true?
+        false
+    } else {
         delete_dest_if_needed_and_allowed(
             source,
             dest,
             options,
             source_in_command_line,
             copied_files,
-        )?;
-    }
+        )?
+    };
 
-    Ok(())
+    Ok(dest_was_removed)
+}
+
+/// Returns true if `path` is writeable by the current group/user, otherwise returns false
+#[cfg(unix)]
+fn is_file_writeable(path: &Path) -> bool {
+    // 0 indicates that that the call to `access` succeeded, which in this case would mean that `path` is writeable
+    const SUCCESS: libc::c_int = 0;
+
+    // It looks like the pattern in the codebase is to unwrap the return value of `CString::new`
+    let path_cstring = CString::new(path.as_os_str().as_bytes().to_vec()).unwrap();
+
+    let path_pointer: *const libc::c_char = path_cstring.as_ptr().cast::<libc::c_char>();
+
+    let access_result = unsafe {
+        // Check if the current group/user can can write to `path`
+        libc::access(path_pointer, libc::W_OK)
+    };
+
+    // Ensure `path_pointer` remains valid through FFI call
+    drop(path_cstring);
+
+    access_result == SUCCESS
 }
 
 /// Checks if:
@@ -1773,23 +1813,44 @@ fn handle_existing_dest(
 /// * the provided options allow this deletion
 ///
 /// If so, deletes `dest`.
+/// Returns a boolean indicating if `dest` was deleted.
+/// This boolean is needed later for verbose mode.
 fn delete_dest_if_needed_and_allowed(
     source: &Path,
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
     copied_files: &HashMap<FileInformation, PathBuf>,
-) -> CopyResult<()> {
+) -> Result<bool, Error> {
     let delete_dest = match options.overwrite {
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
             match cl {
-                // FIXME: print that the file was removed if --verbose is enabled
                 ClobberMode::Force => {
-                    // TODO
-                    // Using `readonly` here to check if `dest` needs to be deleted is not correct:
-                    // "On Unix-based platforms this checks if any of the owner, group or others write permission bits are set. It does not check if the current user is in the file's assigned group. It also does not check ACLs. Therefore the return value of this function cannot be relied upon to predict whether attempts to read or write the file will actually succeed."
-                    // This results in some copy operations failing, because this necessary deletion is being skipped.
-                    is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly()
+                    // Delete `dest` if there is a symlink loop
+                    if is_symlink_loop(dest) {
+                        true
+                    } else {
+                        // Retain block to ensure only one branch is included
+                        let dest_is_writeable = {
+                            #[cfg(unix)]
+                            {
+                                is_file_writeable(dest)
+                            }
+
+                            #[cfg(not(unix))]
+                            {
+                                // TODO
+                                // `readonly` is probably not correct to use here.
+                                // "Not read-only" (as defined by the Rust Standard Library) does not necessarily mean "writeable by the current group/user".
+                                // Relying on `readonly` may cause necessary deletions to be skipped.
+                                // This would result in the subsequent copy operation failing.
+                                !fs::metadata(dest)?.permissions().readonly()
+                            }
+                        };
+
+                        // Delete `dest` if it is not writeable
+                        !dest_is_writeable
+                    }
                 }
                 ClobberMode::RemoveDestination => true,
                 ClobberMode::Standard => {
@@ -1825,7 +1886,7 @@ fn delete_dest_if_needed_and_allowed(
         fs::remove_file(dest)?;
     }
 
-    Ok(())
+    Ok(delete_dest)
 }
 
 /// Decide whether the given path exists.
@@ -1883,18 +1944,19 @@ fn print_verbose_output(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
     dest: &Path,
+    dest_was_deleted: bool,
 ) {
     if let Some(pb) = progress_bar {
         // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
         pb.suspend(|| {
-            print_paths(parents, source, dest);
+            print_paths(parents, source, dest, dest_was_deleted);
         });
     } else {
-        print_paths(parents, source, dest);
+        print_paths(parents, source, dest, dest_was_deleted);
     }
 }
 
-fn print_paths(parents: bool, source: &Path, dest: &Path) {
+fn print_paths(parents: bool, source: &Path, dest: &Path, dest_was_deleted: bool) {
     if parents {
         // For example, if copying file `a/b/c` and its parents
         // to directory `d/`, then print
@@ -1908,6 +1970,10 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
     }
 
     println!("{}", context_for(source, dest));
+
+    if dest_was_deleted {
+        println!("removed {}", dest.quote());
+    }
 }
 
 /// Handles the copy mode for a file copy operation.
@@ -2013,7 +2079,7 @@ fn handle_copy_mode(
                         if src_time <= dest_time {
                             return Ok(());
                         } else {
-                            options.overwrite.verify(dest, options.debug)?;
+                            options.overwrite.verify(dest)?;
 
                             copy_helper(
                                 source,
@@ -2174,6 +2240,8 @@ fn copy_file(
         fs::remove_file(dest)?;
     }
 
+    let mut dest_was_deleted = false;
+
     if file_or_link_exists(dest)
         && (!options.attributes_only
             || matches!(
@@ -2199,7 +2267,10 @@ fn copy_file(
                 }
             }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+
+        dest_was_deleted =
+            handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+
         if are_hardlinks_to_same_file(source, dest) {
             if options.copy_mode == CopyMode::Copy && options.backup != BackupMode::NoBackup {
                 return Ok(());
@@ -2225,7 +2296,13 @@ fn copy_file(
     }
 
     if options.verbose {
-        print_verbose_output(options.parents, progress_bar, source, dest);
+        print_verbose_output(
+            options.parents,
+            progress_bar,
+            source,
+            dest,
+            dest_was_deleted,
+        );
     }
 
     if options.preserve_hard_links() {
@@ -2375,7 +2452,7 @@ fn copy_helper(
         File::create(dest).context(dest.display().to_string())?;
     } else if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
-        copy_fifo(dest, options.overwrite, options.debug)?;
+        copy_fifo(dest, options.overwrite)?;
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else {
@@ -2400,9 +2477,9 @@ fn copy_helper(
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
 // built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
 #[cfg(unix)]
-fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<()> {
+fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
     if dest.exists() {
-        overwrite.verify(dest, debug)?;
+        overwrite.verify(dest)?;
         fs::remove_file(dest)?;
     }
 
