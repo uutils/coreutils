@@ -1400,6 +1400,59 @@ fn copy_source(
     }
 }
 
+/// If `path` does not have `S_IWUSR` set, returns a tuple of the file's
+/// mode in octal (index 0) and human-readable (index 1) formats.
+///
+/// If the destination of a copy operation is a file that is not writeable to
+/// the owner (bit `S_IWUSR`), extra information needs to be added to the
+/// interactive mode prompt: the mode (permissions) of the file in octal and
+/// human-readable format.
+// TODO
+// The destination metadata can be read multiple times in the course of a single execution of `cp`.
+// This fix adds yet another metadata read.
+// Should this metadata be read once and then reused throughout the execution?
+// https://github.com/uutils/coreutils/issues/6658
+fn file_mode_for_interactive_overwrite(
+    #[cfg_attr(not(unix), allow(unused_variables))] path: &Path,
+) -> Option<(String, String)> {
+    // Retain outer braces to ensure only one branch is included
+    {
+        #[cfg(unix)]
+        {
+            use libc::{mode_t, S_IWUSR};
+            use std::os::unix::prelude::MetadataExt;
+
+            match path.metadata() {
+                Ok(me) => {
+                    // Cast is necessary on some platforms
+                    let mode: mode_t = me.mode() as mode_t;
+
+                    // It looks like this extra information is added to the prompt iff the file's user write bit is 0
+                    //  write permission, owner
+                    if uucore::has!(mode, S_IWUSR) {
+                        None
+                    } else {
+                        // Discard leading digits
+                        let mode_without_leading_digits = mode & 0o7777;
+
+                        Some((
+                            format!("{mode_without_leading_digits:04o}"),
+                            uucore::fs::display_permissions_unix(mode, false),
+                        ))
+                    }
+                }
+                // TODO: How should failure to read the metadata be handled? Ignoring for now.
+                Err(_) => None,
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            None
+        }
+    }
+}
+
 impl OverwriteMode {
     fn verify(&self, path: &Path, debug: bool) -> CopyResult<()> {
         match *self {
@@ -1410,7 +1463,18 @@ impl OverwriteMode {
                 Err(Error::Skipped(false))
             }
             Self::Interactive(_) => {
-                if prompt_yes!("overwrite {}?", path.quote()) {
+                let prompt_yes_result = if let Some((octal, human_readable)) =
+                    file_mode_for_interactive_overwrite(path)
+                {
+                    prompt_yes!(
+                        "replace {}, overriding mode {octal} ({human_readable})?",
+                        path.quote()
+                    )
+                } else {
+                    prompt_yes!("overwrite {}?", path.quote())
+                };
+
+                if prompt_yes_result {
                     Ok(())
                 } else {
                     Err(Error::Skipped(true))
@@ -1651,7 +1715,7 @@ fn handle_existing_dest(
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
-    copied_files: &mut HashMap<FileInformation, PathBuf>,
+    copied_files: &HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
@@ -1679,46 +1743,73 @@ fn handle_existing_dest(
         }
     }
     if !is_dest_removed {
-        match options.overwrite {
-            // FIXME: print that the file was removed if --verbose is enabled
-            OverwriteMode::Clobber(ClobberMode::Force) => {
-                if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
-                    fs::remove_file(dest)?;
-                }
-            }
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
-                fs::remove_file(dest)?;
-            }
-            OverwriteMode::Clobber(ClobberMode::Standard) => {
-                // Consider the following files:
-                //
-                // * `src/f` - a regular file
-                // * `src/link` - a hard link to `src/f`
-                // * `dest/src/f` - a different regular file
-                //
-                // In this scenario, if we do `cp -a src/ dest/`, it is
-                // possible that the order of traversal causes `src/link`
-                // to get copied first (to `dest/src/link`). In that case,
-                // in order to make sure `dest/src/link` is a hard link to
-                // `dest/src/f` and `dest/src/f` has the contents of
-                // `src/f`, we delete the existing file to allow the hard
-                // linking.
+        delete_dest_if_needed_and_allowed(
+            source,
+            dest,
+            options,
+            source_in_command_line,
+            copied_files,
+        )?;
+    }
 
-                if options.preserve_hard_links()
-            // only try to remove dest file only if the current source
-            // is hardlink to a file that is already copied
-                && copied_files.contains_key(
-                    &FileInformation::from_path(
-                        source,
-                        options.dereference(source_in_command_line),
-                    )
-                    .context(format!("cannot stat {}", source.quote()))?,
-                ) {
-                    fs::remove_file(dest)?;
+    Ok(())
+}
+
+/// Checks if:
+/// * `dest` needs to be deleted before the copy operation can proceed
+/// * the provided options allow this deletion
+///
+/// If so, deletes `dest`.
+fn delete_dest_if_needed_and_allowed(
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    source_in_command_line: bool,
+    copied_files: &HashMap<FileInformation, PathBuf>,
+) -> CopyResult<()> {
+    let delete_dest = match options.overwrite {
+        OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
+            match cl {
+                // FIXME: print that the file was removed if --verbose is enabled
+                ClobberMode::Force => {
+                    // TODO
+                    // Using `readonly` here to check if `dest` needs to be deleted is not correct:
+                    // "On Unix-based platforms this checks if any of the owner, group or others write permission bits are set. It does not check if the current user is in the file's assigned group. It also does not check ACLs. Therefore the return value of this function cannot be relied upon to predict whether attempts to read or write the file will actually succeed."
+                    // This results in some copy operations failing, because this necessary deletion is being skipped.
+                    is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly()
+                }
+                ClobberMode::RemoveDestination => true,
+                ClobberMode::Standard => {
+                    // Consider the following files:
+                    //
+                    // * `src/f` - a regular file
+                    // * `src/link` - a hard link to `src/f`
+                    // * `dest/src/f` - a different regular file
+                    //
+                    // In this scenario, if we do `cp -a src/ dest/`, it is
+                    // possible that the order of traversal causes `src/link`
+                    // to get copied first (to `dest/src/link`). In that case,
+                    // in order to make sure `dest/src/link` is a hard link to
+                    // `dest/src/f` and `dest/src/f` has the contents of
+                    // `src/f`, we delete the existing file to allow the hard
+                    // linking.
+                    options.preserve_hard_links() &&
+                            // only try to remove dest file only if the current source
+                            // is hardlink to a file that is already copied
+                            copied_files.contains_key(
+                                &FileInformation::from_path(
+                                    source,
+                                    options.dereference(source_in_command_line)
+                                ).context(format!("cannot stat {}", source.quote()))?
+                            )
                 }
             }
-            _ => (),
-        };
+        }
+        OverwriteMode::NoClobber => false,
+    };
+
+    if delete_dest {
+        fs::remove_file(dest)?;
     }
 
     Ok(())
