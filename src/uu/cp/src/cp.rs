@@ -1470,8 +1470,10 @@ impl OverwriteMode {
     fn verify(&self, path: &Path) -> CopyResult<()> {
         match *self {
             Self::NoClobber => {
+                // TODO
+                // Revert to 1_i32 when "mv/update" is fixed
                 show!(USimpleError::new(
-                    1_i32,
+                    0_i32,
                     format!("not replacing {}", path.quote())
                 ));
 
