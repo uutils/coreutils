@@ -204,9 +204,9 @@ impl Formatter for UnsignedInt {
         };
 
         Ok(Self {
+            variant,
             width,
             precision,
-            variant,
             alignment,
         })
     }

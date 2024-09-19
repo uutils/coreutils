@@ -179,9 +179,9 @@ impl MountInfo {
             dev_id,
             dev_name,
             fs_type,
+            mount_root,
             mount_dir,
             mount_option,
-            mount_root,
             remote,
             dummy,
         })
