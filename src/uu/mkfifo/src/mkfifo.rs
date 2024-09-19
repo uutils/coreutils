@@ -31,12 +31,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(USimpleError::new(1, "-Z is not implemented"));
     }
 
-    let mode = match matches.get_one::<String>(options::MODE) {
-        Some(m) => match usize::from_str_radix(m, 8) {
-            Ok(m) => m,
-            Err(e) => return Err(USimpleError::new(1, format!("invalid mode: {e}"))),
-        },
-        None => 0o666,
+    let mode = match matches.get_one::<String>("mode") {
+        None => Ok(0o666),
+        Some(str_mode) => uucore::mode::parse_mode(str_mode)
+            .map_err(|e| format!("invalid mode ({e})"))
+            .and_then(|mode| {
+                if mode > 0o777 {
+                    Err("mode must specify only file permission bits".to_string())
+                } else {
+                    Ok(mode)
+                }
+            }),
     };
 
     let fifos: Vec<String> = match matches.get_many::<String>(options::FIFO) {
@@ -47,7 +52,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for f in fifos {
         let err = unsafe {
             let name = CString::new(f.as_bytes()).unwrap();
-            mkfifo(name.as_ptr(), mode as libc::mode_t)
+            mkfifo(name.as_ptr(), *mode.as_ref().unwrap() as libc::mode_t)
         };
         if err == -1 {
             show!(USimpleError::new(
