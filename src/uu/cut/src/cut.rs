@@ -476,10 +476,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Options {
                     out_delimiter,
                     line_ending,
-                    field_opts: Some(FieldOptions {
-                        only_delimited,
-                        delimiter,
-                })},
+                    field_opts: Some(FieldOptions { delimiter, only_delimited })},
             )
         }),
         (2.., _, _, _) => Err(
