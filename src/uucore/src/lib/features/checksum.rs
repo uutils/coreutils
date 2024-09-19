@@ -323,7 +323,7 @@ fn determine_regex(lines: &[String]) -> Option<(Regex, bool)> {
 fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes
         .iter()
-        .map(|byte| format!("{:02x}", byte))
+        .map(|byte| format!("{byte:02x}"))
         .collect::<Vec<String>>()
         .join("")
 }
@@ -365,10 +365,7 @@ fn get_file_to_check(
         match File::open(filename) {
             Ok(f) => {
                 if f.metadata().ok()?.is_dir() {
-                    show!(USimpleError::new(
-                        1,
-                        format!("{}: Is a directory", filename)
-                    ));
+                    show!(USimpleError::new(1, format!("{filename}: Is a directory")));
                     None
                 } else {
                     Some(Box::new(f))
@@ -378,7 +375,7 @@ fn get_file_to_check(
                 if !ignore_missing {
                     // yes, we have both stderr and stdout here
                     show!(err.map_err_context(|| filename.to_string()));
-                    println!("{}: FAILED open or read", filename);
+                    println!("{filename}: FAILED open or read");
                 }
                 res.failed_open_file += 1;
                 // we could not open the file but we want to continue

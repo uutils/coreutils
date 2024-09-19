@@ -168,7 +168,7 @@ fn test_delimiter_list_ending_with_escaped_backslash() {
         let (at, mut ucmd) = at_and_ucmd!();
         let mut ins = vec![];
         for (i, one_in) in ["a\n", "b\n"].iter().enumerate() {
-            let file = format!("in{}", i);
+            let file = format!("in{i}");
             at.write(&file, one_in);
             ins.push(file);
         }

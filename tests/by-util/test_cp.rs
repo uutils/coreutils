@@ -341,7 +341,7 @@ fn test_cp_arg_update_none_fail() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--update=none-fail")
         .fails()
-        .stderr_contains(format!("not replacing '{}'", TEST_HOW_ARE_YOU_SOURCE));
+        .stderr_contains(format!("not replacing '{TEST_HOW_ARE_YOU_SOURCE}'"));
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
@@ -3897,7 +3897,7 @@ fn test_acl_preserve() {
             return;
         }
         Err(e) => {
-            println!("test skipped: setfacl failed with {}", e);
+            println!("test skipped: setfacl failed with {e}");
             return;
         }
     }
@@ -5581,7 +5581,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         let child = scene
             .ucmd()
             .args(&[
-                format!("--preserve={}", attr).as_str(),
+                format!("--preserve={attr}").as_str(),
                 "-R",
                 "--copy-contents",
                 "--parents",
@@ -5600,12 +5600,12 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
                 start_time.elapsed() < timeout,
                 "timed out: cp took too long to create destination directory"
             );
-            if at.dir_exists(&format!("{}/{}", DEST_DIR, SRC_DIR)) {
+            if at.dir_exists(&format!("{DEST_DIR}/{SRC_DIR}")) {
                 break;
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        let mode = at.metadata(&format!("{}/{}", DEST_DIR, SRC_DIR)).mode();
+        let mode = at.metadata(&format!("{DEST_DIR}/{SRC_DIR}")).mode();
         #[allow(clippy::unnecessary_cast, clippy::cast_lossless)]
         let mask = if attr == "mode" {
             libc::S_IWGRP | libc::S_IWOTH
@@ -5615,8 +5615,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         assert_eq!(
             (mode & mask),
             0,
-            "unwanted permissions are present - {}",
-            attr
+            "unwanted permissions are present - {attr}"
         );
         at.write(FIFO, "done");
         child.wait().unwrap().succeeded();
@@ -5673,18 +5672,15 @@ fn test_preserve_attrs_overriding_2() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
         at.mkdir(FOLDER);
-        at.make_file(&format!("{}/{}", FOLDER, FILE1));
-        at.set_mode(&format!("{}/{}", FOLDER, FILE1), 0o775);
-        at.hard_link(
-            &format!("{}/{}", FOLDER, FILE1),
-            &format!("{}/{}", FOLDER, FILE2),
-        );
+        at.make_file(&format!("{FOLDER}/{FILE1}"));
+        at.set_mode(&format!("{FOLDER}/{FILE1}"), 0o775);
+        at.hard_link(&format!("{FOLDER}/{FILE1}"), &format!("{FOLDER}/{FILE2}"));
         args.append(&mut vec![FOLDER, DEST]);
-        let src_file1_metadata = at.metadata(&format!("{}/{}", FOLDER, FILE1));
+        let src_file1_metadata = at.metadata(&format!("{FOLDER}/{FILE1}"));
         scene.ucmd().args(&args).succeeds();
         at.dir_exists(DEST);
-        let dest_file1_metadata = at.metadata(&format!("{}/{}", DEST, FILE1));
-        let dest_file2_metadata = at.metadata(&format!("{}/{}", DEST, FILE2));
+        let dest_file1_metadata = at.metadata(&format!("{DEST}/{FILE1}"));
+        let dest_file2_metadata = at.metadata(&format!("{DEST}/{FILE2}"));
         assert_eq!(
             src_file1_metadata.modified().unwrap(),
             dest_file1_metadata.modified().unwrap()

@@ -340,7 +340,7 @@ fn format_float_decimal(f: f64, precision: usize, force_decimal: ForceDecimal) -
     if precision == 0 && force_decimal == ForceDecimal::Yes {
         format!("{f:.0}.")
     } else {
-        format!("{f:.*}", precision)
+        format!("{f:.precision$}")
     }
 }
 
@@ -380,10 +380,7 @@ fn format_float_scientific(
         Case::Uppercase => 'E',
     };
 
-    format!(
-        "{normalized:.*}{additional_dot}{exp_char}{exponent:+03}",
-        precision
-    )
+    format!("{normalized:.precision$}{additional_dot}{exp_char}{exponent:+03}")
 }
 
 fn format_float_shortest(
@@ -427,7 +424,7 @@ fn format_float_shortest(
             ""
         };
 
-        let mut normalized = format!("{normalized:.*}", precision);
+        let mut normalized = format!("{normalized:.precision$}");
 
         if force_decimal == ForceDecimal::No {
             strip_fractional_zeroes_and_dot(&mut normalized);
@@ -449,7 +446,7 @@ fn format_float_shortest(
         let mut formatted = if decimal_places == 0 && force_decimal == ForceDecimal::Yes {
             format!("{f:.0}.")
         } else {
-            format!("{f:.*}", decimal_places)
+            format!("{f:.decimal_places$}")
         };
 
         if force_decimal == ForceDecimal::No {
@@ -514,11 +511,7 @@ fn write_output(
     // Using min() because self.width could be 0, 0usize - 1usize should be avoided
     let remaining_width = width - min(width, sign_indicator.len());
     match alignment {
-        NumberAlignment::Left => write!(
-            writer,
-            "{sign_indicator}{s:<width$}",
-            width = remaining_width
-        ),
+        NumberAlignment::Left => write!(writer, "{sign_indicator}{s:<remaining_width$}"),
         NumberAlignment::RightSpace => {
             let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
             if is_sign && remaining_width > 0 {
@@ -526,19 +519,11 @@ fn write_output(
                 s = sign_indicator + s.as_str();
                 write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
             } else {
-                write!(
-                    writer,
-                    "{sign_indicator}{s:>width$}",
-                    width = remaining_width
-                )
+                write!(writer, "{sign_indicator}{s:>remaining_width$}")
             }
         }
         NumberAlignment::RightZero => {
-            write!(
-                writer,
-                "{sign_indicator}{s:0>width$}",
-                width = remaining_width
-            )
+            write!(writer, "{sign_indicator}{s:0>remaining_width$}")
         }
     }
 }

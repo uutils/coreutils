@@ -237,7 +237,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     None => {
                         return Err(USimpleError::new(
                             1,
-                            format!("invalid date {}", relative_time),
+                            format!("invalid date {relative_time}"),
                         ));
                     }
                 }
