@@ -54,7 +54,7 @@ pub fn human_readable(size: u64, sfmt: SizeFormat) -> String {
 #[test]
 fn test_human_readable() {
     let test_cases = [
-        (133456345, SizeFormat::Binary, "128M"),
+        (133_456_345, SizeFormat::Binary, "128M"),
         (12 * 1024 * 1024, SizeFormat::Binary, "12M"),
         (8500, SizeFormat::Binary, "8.4K"),
     ];
