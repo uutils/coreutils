@@ -831,7 +831,7 @@ impl Config {
                 options::FULL_TIME,
             ]
             .iter()
-            .flat_map(|opt| {
+            .filter_map(|opt| {
                 if options.value_source(opt) == Some(clap::parser::ValueSource::CommandLine) {
                     options.indices_of(opt)
                 } else {
