@@ -9,6 +9,7 @@ use os_display::Quotable;
 use regex::Regex;
 use std::{
     ffi::OsStr,
+    fmt::Write,
     fs::File,
     io::{self, BufReader, Read},
     path::Path,
@@ -321,10 +322,10 @@ fn determine_regex(lines: &[String]) -> Option<(Regex, bool)> {
 
 // Converts bytes to a hexadecimal string
 fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>()
+    bytes.iter().fold(String::new(), |mut output, byte| {
+        let _ = write!(output, "{byte:02x}");
+        output
+    })
 }
 
 fn get_expected_checksum(
