@@ -46,7 +46,7 @@ use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::{sleep, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use std::{env, hint, mem, thread};
 use tempfile::{Builder, TempDir};
 
@@ -972,6 +972,13 @@ impl AtPath {
         let file = file.as_ref();
         log_info("touch", self.plus_as_string(file));
         File::create(self.plus(file)).unwrap();
+    }
+
+    pub fn touch_and_set_modified<P: AsRef<Path>>(&self, file: P, modified: SystemTime) {
+        let file = file.as_ref();
+        log_info("touch", self.plus_as_string(file));
+        let f = File::create(self.plus(file)).unwrap();
+        f.set_modified(modified).unwrap();
     }
 
     #[cfg(not(windows))]

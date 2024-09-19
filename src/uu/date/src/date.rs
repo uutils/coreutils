@@ -91,6 +91,7 @@ enum DateSource {
     Now,
     Custom(String),
     File(PathBuf),
+    Reference(PathBuf),
     Stdin,
     Human(TimeDelta),
 }
@@ -178,11 +179,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             "-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
         }
+    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+        DateSource::Reference(file.into())
     } else {
         DateSource::Now
     };
 
-    let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
+    let set_option = matches.get_one::<String>(OPT_SET);
+
+    // Before parsing an eventual OPT_SET, check if it can't be present.
+    if !matches!(date_source, DateSource::Now) && set_option.is_some() {
+        return Err(USimpleError::new(
+            1,
+            "the options to print and set the time may not be used together",
+        ));
+    }
+
+    let set_to = match set_option.map(parse_date) {
         None => None,
         Some(Err((input, _err))) => {
             return Err(USimpleError::new(
@@ -260,6 +273,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let iter = lines.map_while(Result::ok).map(parse_date);
                 Box::new(iter)
             }
+            DateSource::Reference(ref path) => {
+                let modified_time: std::time::SystemTime = std::fs::metadata(path)?.modified()?;
+                let chrono_time: DateTime<Local> = modified_time.into();
+                Box::new(std::iter::once(Ok(chrono_time.into())))
+            }
             DateSource::Now => {
                 let iter = std::iter::once(Ok(now));
                 Box::new(iter)
@@ -318,7 +336,10 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(OPT_DATE)
                 .value_name("STRING")
-                .help("display time described by STRING, not 'now'"),
+                .action(ArgAction::Set)
+                .overrides_with(OPT_DATE)
+                .help("display time described by STRING, not 'now'")
+                .conflicts_with_all([OPT_FILE, OPT_REFERENCE]),
         )
         .arg(
             Arg::new(OPT_FILE)
@@ -326,7 +347,10 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .help("like --date; once for each line of DATEFILE"),
+                .action(ArgAction::Set)
+                .overrides_with(OPT_FILE) // several -f can be passed, but only the last is kept.
+                .help("like --date; once for each line of DATEFILE")
+                .conflicts_with_all([OPT_REFERENCE]),
         )
         .arg(
             Arg::new(OPT_ISO_8601)
@@ -366,6 +390,8 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
+                .action(ArgAction::Set)
+                .overrides_with(OPT_REFERENCE)
                 .help("display the last modification time of FILE"),
         )
         .arg(
