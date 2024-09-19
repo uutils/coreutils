@@ -1445,3 +1445,26 @@ fn test_truncate_non_utf8_set() {
         .succeeds()
         .stdout_is_bytes(b"\x010mp12");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_unescaped_backslash_warning_false_positive() {
+    // Was erroneously printing this warning (even though the backslash was escaped):
+    // "tr: warning: an unescaped backslash at end of string is not portable"
+    new_ucmd!()
+        .args(&["-d", r"\\"])
+        .pipe_in(r"a\b\c\")
+        .succeeds()
+        .stdout_only("abc");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_trailing_backslash_is_only_input_character() {
+    new_ucmd!()
+        .args(&["-d", r"\"])
+        .pipe_in(r"a\b\c\")
+        .succeeds()
+        .stderr_is("tr: warning: an unescaped backslash at end of string is not portable\n")
+        .stdout_is("abc");
+}
