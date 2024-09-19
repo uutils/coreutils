@@ -11,15 +11,15 @@ use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
-use std::env;
 use std::ffi::OsString;
-use std::fs;
+use std::fs::{self, FileType};
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use std::env;
 #[cfg(unix)]
 use unix::fs::FileTypeExt;
 use uucore::backup_control::{self, source_is_target_backup};
@@ -31,7 +31,7 @@ use uucore::fs::{
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
-use uucore::update_control;
+use uucore::{show_error, update_control};
 use walkdir::WalkDir;
 
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -46,6 +46,8 @@ use fs_extra::{
 };
 
 use crate::error::MvError;
+
+type MvResult<T> = Result<T, MvError>;
 
 /// Options contains all the possible behaviors and flags for mv.
 ///
@@ -162,7 +164,6 @@ impl<'a> VerboseContext<'a> {
     fn remove_folder(&self, from: &Path) {
         println!("removed directory {}", from.quote())
     }
-
 }
 const ABOUT: &str = help_about!("mv.md");
 const USAGE: &str = help_usage!("mv.md");
@@ -731,11 +732,17 @@ fn rename_with_fallback(
             fsxattr::apply_xattrs(to, xattrs).unwrap();
 
             if let Err(err) = result {
-                return match err.kind {
-                    fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
+                return match err {
+                    MvError::FsXError(fs_extra::error::Error {
+                        kind: fs_extra::error::ErrorKind::PermissionDenied,
+                        ..
+                    }) => Err(io::Error::new(
                         io::ErrorKind::PermissionDenied,
                         "Permission denied",
                     )),
+                    MvError::NotAllFilesMoved => {
+                        Err(io::Error::new(io::ErrorKind::Other, format!("")))
+                    }
                     _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
                 };
             }
@@ -845,55 +852,87 @@ fn move_dir(
     to: &Path,
     progress_bar: Option<&ProgressBar>,
     vebose_context: Option<VerboseContext<'_>>,
-) -> FsXResult<u64> {
+) -> MvResult<u64> {
     // The return value that represents the number of bytes copied.
     let mut result: u64 = 0;
     let mut error_occurred = false;
-    let mut moved_entries: Vec<(PathBuf, bool)> = vec![];
+    let mut moved_entries: Vec<(PathBuf, FileType)> = vec![];
     for dir_entry_result in WalkDir::new(from) {
         match dir_entry_result {
             Ok(dir_entry) => {
-                if dir_entry.file_type().is_dir() {
-                    let path = dir_entry.into_path();
-                    let tmp_to = path.strip_prefix(from)?;
-                    let dir = to.join(tmp_to);
-                    create_all(&dir, false)?;
-                    if let Some(vc) = vebose_context.as_ref() {
-                        vc.create_folder(&dir)
+                let file_type = dir_entry.file_type();
+                let dir_entry_path = dir_entry.into_path();
+                //comment why this is okay
+                let tmp_to = dir_entry_path.strip_prefix(&from).unwrap();
+                let dir_entry_to = to.join(tmp_to);
+                if file_type.is_dir() {
+                    // check this create all align with gnu
+                    let res = create_all(&dir_entry_to, false);
+                    if res.is_err() {
+                        error_occurred = true;
+                        show_error!("{:?}", res.unwrap_err());
+                        continue;
                     }
-                    moved_entries.push((path, true))
+                    if let Some(vc) = vebose_context.as_ref() {
+                        vc.create_folder(&dir_entry_to)
+                    }
                 } else {
-                    let file = dir_entry.into_path();
-                    let tp = file.strip_prefix(from)?;
-                    let to_file = to.join(tp);
-                    let result_file_copy = copy_file(&file, &to_file, progress_bar, result)?;
-                    if let Some(vc) = vebose_context.as_ref() {
-                        vc.print_copy_file(&file, &to_file, false);
+                    let result_file_copy =
+                        copy_file(&dir_entry_path, &dir_entry_to, progress_bar, result);
+
+                    match result_file_copy {
+                        Ok(result_file_copy) => {
+                            result += result_file_copy;
+                        }
+                        Err(err) => {
+                            let err_msg = match err.kind {
+                                fs_extra::error::ErrorKind::Io(error) => {
+                                    format!("error writing {}: {}", dir_entry_to.quote(), error)
+                                }
+                                _ => {
+                                    format!("{:?}", err)
+                                }
+                            };
+                            error_occurred = true;
+                            show_error!("{}", err_msg);
+                            continue;
+                        }
                     }
-                    moved_entries.push((file, false));
-                    result += result_file_copy;
+                    if let Some(vc) = vebose_context.as_ref() {
+                        vc.print_copy_file(&dir_entry_path, &dir_entry_to, false);
+                    }
                 }
+                moved_entries.push((dir_entry_path, file_type));
             }
-            Err(_) => {
+            Err(err) => {
+                let err_msg = match (err.io_error(), err.path()) {
+                    (Some(io_error), Some(path)) => {
+                        format!("cannot access {}: {io_error}", path.quote())
+                    }
+                    _ => err.to_string(),
+                };
+                show_error!("{err_msg}");
                 error_occurred = true;
             }
         }
     }
     if !error_occurred {
         while !moved_entries.is_empty() {
-            let (moved_path, is_dir) = moved_entries.pop().unwrap();
-            if is_dir {
+            let (moved_path, file_type) = moved_entries.pop().unwrap();
+            if file_type.is_dir() {
                 remove(&moved_path)?;
                 if let Some(vc) = vebose_context.as_ref() {
-                        vc.remove_folder(&moved_path);
-                    }
+                    vc.remove_folder(&moved_path);
+                }
             } else {
                 file::remove(&moved_path)?;
                 if let Some(vc) = vebose_context.as_ref() {
-                        vc.remove_file(&moved_path);
-                    }
+                    vc.remove_file(&moved_path);
+                }
             }
         }
+    } else {
+        return Err(MvError::NotAllFilesMoved);
     }
     Ok(result)
 }
