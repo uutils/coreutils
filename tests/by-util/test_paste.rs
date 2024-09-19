@@ -194,6 +194,27 @@ fn test_delimiter_list_ending_with_unescaped_backslash() {
 }
 
 #[test]
+fn test_delimiter_list_empty() {
+    for st in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[st, "", "-s", "--", "-"])
+            .pipe_in(
+                "\
+A ALPHA 1 _
+B BRAVO 2 _
+C CHARLIE 3 _
+",
+            )
+            .succeeds()
+            .stdout_only(
+                "\
+A ALPHA 1 _B BRAVO 2 _C CHARLIE 3 _
+",
+            );
+    }
+}
+
+#[test]
 fn test_data() {
     for example in EXAMPLE_DATA {
         let (at, mut ucmd) = at_and_ucmd!();

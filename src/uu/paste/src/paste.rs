@@ -9,6 +9,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
+use std::slice::Iter;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
@@ -115,39 +116,119 @@ fn paste(
         ));
     }
 
-    let delimiters: Vec<char> = unescape(delimiters).chars().collect();
-    let mut delim_count = 0;
-    let mut delim_length = 1;
+    struct DelimiterData<'a> {
+        current_delimiter_length: usize,
+        delimiters_encoded: &'a [Box<[u8]>],
+        delimiters_encoded_iter: Iter<'a, Box<[u8]>>,
+    }
+
+    // Precompute instead of doing this inside the loops
+    let mut delimiters_encoded_option = {
+        let delimiters_unescaped = unescape(delimiters).chars().collect::<Vec<_>>();
+
+        let number_of_delimiters = delimiters_unescaped.len();
+
+        if number_of_delimiters > 0 {
+            let mut vec = Vec::<Box<[u8]>>::with_capacity(number_of_delimiters);
+
+            {
+                // a buffer of length four is large enough to encode any char
+                let mut buffer = [0_u8; 4_usize];
+
+                for ch in delimiters_unescaped {
+                    let delimiter_encoded = ch.encode_utf8(&mut buffer);
+
+                    vec.push(Box::from(delimiter_encoded.as_bytes()));
+                }
+            }
+
+            Some(vec.into_boxed_slice())
+        } else {
+            None
+        }
+    };
+
+    let mut delimiter_data_option = match &mut delimiters_encoded_option {
+        &mut Some(ref mut delimiters_encoded) => {
+            // TODO
+            // Is this initial value correct?
+            let current_delimiter_length = delimiters_encoded.first().unwrap().len();
+
+            Some(DelimiterData {
+                delimiters_encoded,
+                delimiters_encoded_iter: delimiters_encoded.iter(),
+                current_delimiter_length,
+            })
+        }
+        None => None,
+    };
+
     let stdout = stdout();
     let mut stdout = stdout.lock();
 
     let mut output = Vec::new();
+
     if serial {
         for file in &mut files {
             output.clear();
+
             loop {
+                let current_delimiter_option = match &mut delimiter_data_option {
+                    Some(DelimiterData {
+                        current_delimiter_length,
+                        delimiters_encoded,
+                        delimiters_encoded_iter,
+                    }) => {
+                        let current_delimiter = if let Some(delimiter_from_current_iter) =
+                            delimiters_encoded_iter.next()
+                        {
+                            delimiter_from_current_iter
+                        } else {
+                            // Reset iter after hitting the end
+                            *delimiters_encoded_iter = delimiters_encoded.iter();
+
+                            // Unwrapping because:
+                            // 1) `delimiters_encoded` is non-empty
+                            // 2) `delimiters_encoded_iter` is a newly constructed Iter
+                            // So `next` should always return an element
+                            delimiters_encoded_iter.next().unwrap()
+                        };
+
+                        *current_delimiter_length = current_delimiter.len();
+
+                        Some(current_delimiter)
+                    }
+                    None => None,
+                };
+
                 match read_until(file.as_mut(), line_ending as u8, &mut output) {
                     Ok(0) => break,
                     Ok(_) => {
                         if output.ends_with(&[line_ending as u8]) {
                             output.pop();
                         }
-                        // a buffer of length four is large enough to encode any char
-                        let mut buffer = [0; 4];
-                        let ch =
-                            delimiters[delim_count % delimiters.len()].encode_utf8(&mut buffer);
-                        delim_length = ch.len();
 
-                        for byte in buffer.iter().take(delim_length) {
-                            output.push(*byte);
+                        // Write delimiter, if one exists, to output
+                        if let Some(current_delimiter) = current_delimiter_option {
+                            output.extend_from_slice(current_delimiter);
                         }
                     }
                     Err(e) => return Err(e.map_err_context(String::new)),
                 }
-                delim_count += 1;
             }
-            // remove final delimiter
-            output.truncate(output.len() - delim_length);
+
+            if let Some(DelimiterData {
+                current_delimiter_length,
+                ..
+            }) = &mut delimiter_data_option
+            {
+                // Remove trailing delimiter, if there is a delimiter
+                // It's safe to truncate to zero (or to a length greater than the length of the Vec),so as long as
+                // the subtraction didn't panic, this should be fine
+                if let Some(us) = output.len().checked_sub(*current_delimiter_length) {
+                    output.truncate(us);
+                }
+            }
 
             write!(
                 stdout,
@@ -158,10 +239,39 @@ fn paste(
         }
     } else {
         let mut eof = vec![false; files.len()];
+
         loop {
             output.clear();
+
             let mut eof_count = 0;
+
             for (i, file) in files.iter_mut().enumerate() {
+                let current_delimiter_option = if let Some(DelimiterData {
+                    current_delimiter_length,
+                    delimiters_encoded,
+                    delimiters_encoded_iter,
+                }) = &mut delimiter_data_option
+                {
+                    let current_delimiter = if let Some(bo) = delimiters_encoded_iter.next() {
+                        bo
+                    } else {
+                        // Reset iter after hitting the end
+                        *delimiters_encoded_iter = delimiters_encoded.iter();
+
+                        // Unwrapping because:
+                        // 1) `delimiters_encoded` is non-empty
+                        // 2) `delimiters_encoded_iter` is a newly constructed Iter
+                        // So `next` should always return an element
+                        delimiters_encoded_iter.next().unwrap()
+                    };
+
+                    *current_delimiter_length = current_delimiter.len();
+
+                    Some(current_delimiter)
+                } else {
+                    None
+                };
+
                 if eof[i] {
                     eof_count += 1;
                 } else {
@@ -178,22 +288,33 @@ fn paste(
                         Err(e) => return Err(e.map_err_context(String::new)),
                     }
                 }
-                // a buffer of length four is large enough to encode any char
-                let mut buffer = [0; 4];
-                let ch = delimiters[delim_count % delimiters.len()].encode_utf8(&mut buffer);
-                delim_length = ch.len();
 
-                for byte in buffer.iter().take(delim_length) {
-                    output.push(*byte);
+                // Write delimiter, if one exists, to output
+                if let Some(current_delimiter) = current_delimiter_option {
+                    output.extend_from_slice(current_delimiter);
                 }
-
-                delim_count += 1;
             }
+
             if files.len() == eof_count {
                 break;
             }
-            // Remove final delimiter
-            output.truncate(output.len() - delim_length);
+
+            if let Some(DelimiterData {
+                current_delimiter_length,
+                delimiters_encoded,
+                delimiters_encoded_iter,
+            }) = &mut delimiter_data_option
+            {
+                // Reset iter after file is processed
+                *delimiters_encoded_iter = delimiters_encoded.iter();
+
+                // Remove trailing delimiter, if there is a delimiter
+                // It's safe to truncate to zero (or to a length greater than the length of the Vec),so as long as
+                // the subtraction didn't panic, this should be fine
+                if let Some(us) = output.len().checked_sub(*current_delimiter_length) {
+                    output.truncate(us);
+                }
+            }
 
             write!(
                 stdout,
@@ -201,9 +322,9 @@ fn paste(
                 String::from_utf8_lossy(&output),
                 line_ending
             )?;
-            delim_count = 0;
         }
     }
+
     Ok(())
 }
 
