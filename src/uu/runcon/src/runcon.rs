@@ -42,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
         Err(r) => {
-            return Err(r.into());
+            return Err(r);
         }
     };
 
