@@ -314,6 +314,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
+
     if source.symlink_metadata().is_err() {
         return Err(if path_ends_with_terminator(source) {
             MvError::CannotStatNotADirectory(source.quote().to_string()).into()
@@ -334,6 +335,13 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         } else {
             return Err(MvError::SelfSubdirectory(source.display().to_string()).into());
         }
+    }
+
+    if source.parent() == Some(target) {
+        return Err(
+            // use source twice to match GNU's error message
+            MvError::SameFile(source.quote().to_string(), source.quote().to_string()).into(),
+        );
     }
 
     let target_is_dir = target.is_dir();
