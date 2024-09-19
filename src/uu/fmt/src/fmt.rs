@@ -112,7 +112,7 @@ impl FmtOptions {
             }
             (Some(w), None) => {
                 // Only allow a goal of zero if the width is set to be zero
-                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(if w == 0 { 0 } else { 1 });
+                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(usize::from(w != 0));
                 (w, g)
             }
             (None, Some(g)) => {
