@@ -121,13 +121,13 @@ impl Display for RunconError {
 impl UError for Error {
     fn code(&self) -> i32 {
         match self {
-            Error::MissingCommand => error_exit_status::ANOTHER_ERROR,
-            Error::SELinuxNotEnabled => error_exit_status::ANOTHER_ERROR,
-            Error::NotUTF8(_) => error_exit_status::ANOTHER_ERROR,
-            Error::CommandLine(e) => e.exit_code(),
-            Error::SELinux { .. } => error_exit_status::ANOTHER_ERROR,
-            Error::Io { .. } => error_exit_status::ANOTHER_ERROR,
-            Error::Io1 { .. } => error_exit_status::ANOTHER_ERROR,
+            Self::MissingCommand => error_exit_status::ANOTHER_ERROR,
+            Self::SELinuxNotEnabled => error_exit_status::ANOTHER_ERROR,
+            Self::NotUTF8(_) => error_exit_status::ANOTHER_ERROR,
+            Self::CommandLine(e) => e.exit_code(),
+            Self::SELinux { .. } => error_exit_status::ANOTHER_ERROR,
+            Self::Io { .. } => error_exit_status::ANOTHER_ERROR,
+            Self::Io1 { .. } => error_exit_status::ANOTHER_ERROR,
         }
     }
 }
