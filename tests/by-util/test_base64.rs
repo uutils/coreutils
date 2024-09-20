@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 use crate::common::util::TestScenario;
 
+// spell-checker:ignore Bvdm
+
 #[test]
 fn test_encode() {
     let input = "hello, world!";

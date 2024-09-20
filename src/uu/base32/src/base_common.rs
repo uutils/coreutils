@@ -230,13 +230,13 @@ pub fn handle_input<R: Read>(
             }
 
             // For these, use faster, new encoding logic
-            Format::Base16 => (&HEXUPPER, BASE16_ENCODE_IN_CHUNKS_OF_SIZE),
-            Format::Base2Lsbf => (&BASE2LSBF, BASE2_ENCODE_IN_CHUNKS_OF_SIZE),
-            Format::Base2Msbf => (&BASE2MSBF, BASE2_ENCODE_IN_CHUNKS_OF_SIZE),
-            Format::Base32 => (&BASE32, BASE32_ENCODE_IN_CHUNKS_OF_SIZE),
-            Format::Base32Hex => (&BASE32HEX, BASE32_ENCODE_IN_CHUNKS_OF_SIZE),
-            Format::Base64 => (&BASE64, BASE64_ENCODE_IN_CHUNKS_OF_SIZE),
-            Format::Base64Url => (&BASE64URL, BASE64_ENCODE_IN_CHUNKS_OF_SIZE),
+            Format::Base16 => (HEXUPPER, BASE16_ENCODE_IN_CHUNKS_OF_SIZE),
+            Format::Base2Lsbf => (BASE2LSBF, BASE2_ENCODE_IN_CHUNKS_OF_SIZE),
+            Format::Base2Msbf => (BASE2MSBF, BASE2_ENCODE_IN_CHUNKS_OF_SIZE),
+            Format::Base32 => (BASE32, BASE32_ENCODE_IN_CHUNKS_OF_SIZE),
+            Format::Base32Hex => (BASE32HEX, BASE32_ENCODE_IN_CHUNKS_OF_SIZE),
+            Format::Base64 => (BASE64, BASE64_ENCODE_IN_CHUNKS_OF_SIZE),
+            Format::Base64Url => (BASE64URL, BASE64_ENCODE_IN_CHUNKS_OF_SIZE),
         };
 
         fast_encode::fast_encode(input, encoding_and_encode_in_chunks_of_size, wrap)?;
@@ -365,10 +365,12 @@ mod fast_encode {
     // It turns out the crate being used already supports line wrapping:
     // https://docs.rs/data-encoding/latest/data_encoding/struct.Specification.html#wrap-output-when-encoding-1
     // Check if that crate's line wrapping is faster than the wrapping being performed in this function
+    // Update: That crate does not support arbitrary width line wrapping. It only supports certain widths:
+    // https://github.com/ia0/data-encoding/blob/4f42ad7ef242f6d243e4de90cd1b46a57690d00e/lib/src/lib.rs#L1710
     // `encoding` and `encode_in_chunks_of_size` are passed in a tuple to indicate that they are logically tied
     pub fn fast_encode<R: Read>(
         input: &mut R,
-        (encoding, encode_in_chunks_of_size): (&Encoding, usize),
+        (encoding, encode_in_chunks_of_size): (Encoding, usize),
         line_wrap: Option<usize>,
     ) -> UResult<()> {
         /// Rust uses 8 kibibytes
@@ -440,7 +442,7 @@ mod fast_encode {
                             // Encode the old unencoded data and the stolen bytes, and add the result to
                             // `encoded_buffer`
                             encode_append_vec_deque(
-                                encoding,
+                                &encoding,
                                 leftover_buffer.make_contiguous(),
                                 &mut encoded_buffer,
                             );
@@ -461,7 +463,7 @@ mod fast_encode {
                         for sl in chunks_exact {
                             assert!(sl.len() == encode_in_chunks_of_size);
 
-                            encode_append_vec_deque(encoding, sl, &mut encoded_buffer);
+                            encode_append_vec_deque(&encoding, sl, &mut encoded_buffer);
                         }
 
                         leftover_buffer.extend(remainder);
@@ -491,7 +493,7 @@ mod fast_encode {
         {
             // Encode all remaining unencoded bytes, placing it in `encoded_buffer`
             encode_append_vec_deque(
-                encoding,
+                &encoding,
                 leftover_buffer.make_contiguous(),
                 &mut encoded_buffer,
             );
