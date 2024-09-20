@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 use crate::common::util::TestScenario;
 
-// spell-checker:ignore Bvdm
-
 #[test]
 fn test_encode() {
     let input = "hello, world!";
@@ -156,6 +154,7 @@ fn test_no_repeated_trailing_newline() {
         .pipe_in("The quick brown fox jumps over the lazy dog.")
         .succeeds()
         .stdout_only(
+            // cSpell:disable
             "\
 VGhlIHF1aW
 NrIGJyb3du
@@ -164,20 +163,25 @@ IGZveCBqdW
 IHRoZSBsYX
 p5IGRvZy4=
 ",
+            // cSpell:enable
         );
 }
 
 #[test]
 fn test_wrap_default() {
+    const PIPE_IN: &str = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.";
+
     new_ucmd!()
         .args(&["--", "-"])
-        .pipe_in("The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.")
+        .pipe_in(PIPE_IN)
         .succeeds()
         .stdout_only(
+            // cSpell:disable
             "\
 VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJy
 b3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1w
 cyBvdmVyIHRoZSBsYXp5IGRvZy4=
 ",
+            // cSpell:enable
         );
 }
