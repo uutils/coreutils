@@ -287,7 +287,7 @@ mod fast_encode {
         if is_cleanup {
             stdout_lock.write_all(b"\n")?;
         } else {
-            encoded_buffer.truncate(0_usize);
+            encoded_buffer.clear();
         }
 
         Ok(())
@@ -338,7 +338,7 @@ mod fast_encode {
                 stdout_lock.write_all(b"\n")?;
             }
         } else {
-            print_buffer.truncate(0_usize);
+            print_buffer.clear();
         }
 
         Ok(())
@@ -448,7 +448,7 @@ mod fast_encode {
                             );
 
                             // Reset `leftover_buffer`
-                            leftover_buffer.truncate(0_usize);
+                            leftover_buffer.clear();
 
                             rest_of_read_buffer
                         } else {
