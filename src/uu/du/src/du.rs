@@ -641,7 +641,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let max_depth = parse_depth(
         matches
             .get_one::<String>(options::MAX_DEPTH)
-            .map(|s| s.as_str()),
+            .map(std::string::String::as_str),
         summarize,
     )?;
 
@@ -714,7 +714,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let time_format = if time.is_some() {
-        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
+        parse_time_style(
+            matches
+                .get_one::<String>("time-style")
+                .map(std::string::String::as_str),
+        )?
+        .to_string()
     } else {
         "%Y-%m-%d %H:%M".to_string()
     };

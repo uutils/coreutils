@@ -347,7 +347,8 @@ pub fn canonicalize<P: AsRef<Path>>(
     } else {
         original
     };
-    let mut parts: VecDeque<OwningComponent> = path.components().map(|part| part.into()).collect();
+    let mut parts: VecDeque<OwningComponent> =
+        path.components().map(std::convert::Into::into).collect();
     let mut result = PathBuf::new();
     let mut followed_symlinks = 0;
     let mut visited_files = HashSet::new();
@@ -589,7 +590,7 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
     let path_suffix = path
         .components()
         .skip(common_prefix_size)
-        .map(|x| x.as_os_str());
+        .map(std::path::Component::as_os_str);
     let mut components: Vec<_> = to
         .components()
         .skip(common_prefix_size)

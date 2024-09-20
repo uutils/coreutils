@@ -118,7 +118,7 @@ impl Uniq {
             let mut line = line.iter();
             let mut line_after_skipped_field: Vec<u8>;
             for _ in 0..skip_fields {
-                if line.all(|u| u.is_ascii_whitespace()) {
+                if line.all(u8::is_ascii_whitespace) {
                     return Vec::new();
                 }
                 line_after_skipped_field = line
@@ -168,7 +168,7 @@ impl Uniq {
 
             // fast path: avoid skipping
             if self.ignore_case && slice_start == 0 && slice_stop == len {
-                return closure(&mut fields_to_check.iter().map(|u| u.to_ascii_lowercase()));
+                return closure(&mut fields_to_check.iter().map(u8::to_ascii_lowercase));
             }
 
             // fast path: we can avoid mapping chars to lower-case, if we don't want to ignore the case
@@ -187,7 +187,7 @@ impl Uniq {
                     .iter()
                     .skip(slice_start)
                     .take(slice_stop)
-                    .map(|u| u.to_ascii_lowercase()),
+                    .map(u8::to_ascii_lowercase),
             )
         } else {
             closure(&mut fields_to_check.iter().copied())

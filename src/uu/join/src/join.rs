@@ -621,7 +621,9 @@ fn parse_print_settings(matches: &clap::ArgMatches) -> UResult<(bool, bool, bool
 }
 
 fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<Option<usize>> {
-    let value = matches.get_one::<String>(key).map(|s| s.as_str());
+    let value = matches
+        .get_one::<String>(key)
+        .map(std::string::String::as_str);
     parse_field_number_option(value)
 }
 

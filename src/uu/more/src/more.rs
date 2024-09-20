@@ -76,7 +76,7 @@ impl Options {
         };
         let pattern = matches
             .get_one::<String>(options::PATTERN)
-            .map(|s| s.to_owned());
+            .map(std::borrow::ToOwned::to_owned);
         Self {
             clean_print: matches.get_flag(options::CLEAN_PRINT),
             from_line,
@@ -111,7 +111,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut stdout = setup_term();
         let length = files.len();
 
-        let mut files_iter = files.map(|s| s.as_str()).peekable();
+        let mut files_iter = files.map(std::string::String::as_str).peekable();
         while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
             let file = Path::new(file);
             if file.is_dir() {

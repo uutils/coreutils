@@ -172,7 +172,12 @@ impl<'a> Iterator for FileLines<'a> {
         // not truly blank we will not allow mail headers on the
         // following line)
         if pmatch
-            && n[poffset + self.opts.prefix.as_ref().map_or(0, |s| s.len())..]
+            && n[poffset
+                + self
+                    .opts
+                    .prefix
+                    .as_ref()
+                    .map_or(0, std::string::String::len)..]
                 .chars()
                 .all(char::is_whitespace)
         {
@@ -186,7 +191,12 @@ impl<'a> Iterator for FileLines<'a> {
         }
 
         // figure out the indent, prefix, and prefixindent ending points
-        let prefix_end = poffset + self.opts.prefix.as_ref().map_or(0, |s| s.len());
+        let prefix_end = poffset
+            + self
+                .opts
+                .prefix
+                .as_ref()
+                .map_or(0, std::string::String::len);
         let (indent_end, prefix_len, indent_len) = self.compute_indent(&n[..], prefix_end);
 
         Some(Line::FormatLine(FileLine {

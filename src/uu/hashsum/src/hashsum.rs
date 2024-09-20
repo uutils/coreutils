@@ -273,7 +273,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
     // Show the hashsum of the input
     match matches.get_many::<OsString>(options::FILE) {
-        Some(files) => hashsum(opts, files.map(|f| f.as_os_str())),
+        Some(files) => hashsum(opts, files.map(std::ffi::OsString::as_os_str)),
         None => hashsum(opts, iter::once(OsStr::new("-"))),
     }
 }

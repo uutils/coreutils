@@ -559,7 +559,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let patterns: Vec<String> = matches
         .get_many::<String>(options::PATTERN)
         .unwrap()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {

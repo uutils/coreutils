@@ -174,7 +174,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let date = matches
         .get_one::<String>(options::sources::DATE)
-        .map(|date| date.to_owned());
+        .map(std::borrow::ToOwned::to_owned);
 
     let opts = Options {
         no_create: matches.get_flag(options::NO_CREATE),

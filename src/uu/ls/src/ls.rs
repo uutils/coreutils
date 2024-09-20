@@ -2030,7 +2030,7 @@ impl PathData {
 
     fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
+            .get_or_init(|| self.get_metadata(out).map(std::fs::Metadata::file_type))
             .as_ref()
     }
 }
@@ -2166,7 +2166,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map_or(0, |md| md.len())));
+            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map_or(0, std::fs::Metadata::len)));
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),

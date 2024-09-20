@@ -171,6 +171,6 @@ impl<'input> Graph<'input> {
     }
 
     fn is_acyclic(&self) -> bool {
-        self.out_edges.values().all(|edge| edge.is_empty())
+        self.out_edges.values().all(std::vec::Vec::is_empty)
     }
 }

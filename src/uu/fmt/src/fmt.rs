@@ -250,7 +250,7 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
         })
         .collect();
 
-    if files.as_ref().is_ok_and(|f| f.is_empty()) {
+    if files.as_ref().is_ok_and(std::vec::Vec::is_empty) {
         Ok(vec!["-".into()])
     } else {
         files

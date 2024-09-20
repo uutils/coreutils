@@ -69,7 +69,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map_or("\n", |s| s.as_str())
             .to_string(),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
-        format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
+        format: matches
+            .get_one::<String>(OPT_FORMAT)
+            .map(std::string::String::as_str),
     };
 
     let first = if numbers.len() > 1 {

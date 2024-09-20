@@ -47,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let files: Vec<&str> = match matches.get_many::<String>(options::FILE) {
-        Some(v) => v.map(|s| s.as_str()).collect(),
+        Some(v) => v.map(std::string::String::as_str).collect(),
         None => vec!["-"],
     };
 
