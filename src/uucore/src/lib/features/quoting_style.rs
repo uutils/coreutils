@@ -435,7 +435,7 @@ mod tests {
                 .map(|(_, style)| escape_name(name.as_ref(), &get_style(style)))
                 .collect::<Vec<String>>(),
             map.iter()
-                .map(|(correct, _)| correct.to_string())
+                .map(|(correct, _)| (*correct).to_string())
                 .collect::<Vec<String>>()
         );
     }

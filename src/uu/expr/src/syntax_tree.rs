@@ -363,7 +363,7 @@ impl<'a> Parser<'a> {
         }
         let res = self.parse_expression()?;
         if let Some(arg) = self.input.get(self.index) {
-            return Err(ExprError::UnexpectedArgument(arg.to_string()));
+            return Err(ExprError::UnexpectedArgument((*arg).to_string()));
         }
         Ok(res)
     }

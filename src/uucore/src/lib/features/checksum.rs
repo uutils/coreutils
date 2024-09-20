@@ -344,7 +344,7 @@ fn get_expected_checksum(
             }
             Err(_) => Err(Box::new(
                 ChecksumError::NoProperlyFormattedChecksumLinesFound {
-                    filename: (&filename).to_string(),
+                    filename: (filename).to_string(),
                 },
             )),
         }
