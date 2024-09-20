@@ -146,3 +146,36 @@ fn test_base64_file_not_found() {
         .fails()
         .stderr_only("base64: a.txt: No such file or directory\n");
 }
+
+#[test]
+fn test_no_repeated_trailing_newline() {
+    new_ucmd!()
+        .args(&["--wrap", "10", "--", "-"])
+        .pipe_in("The quick brown fox jumps over the lazy dog.")
+        .succeeds()
+        .stdout_only(
+            "\
+VGhlIHF1aW
+NrIGJyb3du
+IGZveCBqdW
+1wcyBvdmVy
+IHRoZSBsYX
+p5IGRvZy4=
+",
+        );
+}
+
+#[test]
+fn test_wrap_default() {
+    new_ucmd!()
+        .args(&["--", "-"])
+        .pipe_in("The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.")
+        .succeeds()
+        .stdout_only(
+            "\
+VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJy
+b3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1w
+cyBvdmVyIHRoZSBsYXp5IGRvZy4=
+",
+        );
+}

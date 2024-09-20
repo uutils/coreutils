@@ -26,7 +26,9 @@ fn test_invalid_input() {
     let error_message = if cfg!(windows) {
         "basenc: .: Permission denied\n"
     } else {
-        "basenc: error: invalid input\n"
+        // TODO
+        // Other implementations do not show " (os error 21)"
+        "basenc: read error: Is a directory (os error 21)\n"
     };
     new_ucmd!()
         .args(&["--base32", "."])

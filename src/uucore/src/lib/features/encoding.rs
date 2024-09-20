@@ -6,12 +6,18 @@
 // spell-checker:ignore (strings) ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUV
 // spell-checker:ignore (encodings) lsbf msbf hexupper
 
-use std::io::{self, Read, Write};
-
+use self::Format::*;
 use data_encoding::{Encoding, BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER};
 use data_encoding_macro::new_encoding;
+use std::io::{self, Read, Write};
+
 #[cfg(feature = "thiserror")]
 use thiserror::Error;
+
+// Re-export for the faster encoding logic
+pub mod for_fast_encode {
+    pub use data_encoding::*;
+}
 
 #[derive(Debug, Error)]
 pub enum DecodeError {
@@ -42,13 +48,12 @@ pub enum Format {
     Base2Msbf,
     Z85,
 }
-use self::Format::*;
 
-const BASE2LSBF: Encoding = new_encoding! {
+pub const BASE2LSBF: Encoding = new_encoding! {
     symbols: "01",
     bit_order: LeastSignificantFirst,
 };
-const BASE2MSBF: Encoding = new_encoding! {
+pub const BASE2MSBF: Encoding = new_encoding! {
     symbols: "01",
     bit_order: MostSignificantFirst,
 };
@@ -96,8 +101,6 @@ pub fn decode(f: Format, input: &[u8]) -> DecodeResult {
 }
 
 pub struct Data<R: Read> {
-    line_wrap: usize,
-    ignore_garbage: bool,
     input: R,
     format: Format,
     alphabet: &'static [u8],
@@ -106,8 +109,6 @@ pub struct Data<R: Read> {
 impl<R: Read> Data<R> {
     pub fn new(input: R, format: Format) -> Self {
         Self {
-            line_wrap: 76,
-            ignore_garbage: false,
             input,
             format,
             alphabet: match format {
@@ -123,22 +124,10 @@ impl<R: Read> Data<R> {
         }
     }
 
-    #[must_use]
-    pub fn line_wrap(mut self, wrap: usize) -> Self {
-        self.line_wrap = wrap;
-        self
-    }
-
-    #[must_use]
-    pub fn ignore_garbage(mut self, ignore: bool) -> Self {
-        self.ignore_garbage = ignore;
-        self
-    }
-
-    pub fn decode(&mut self) -> DecodeResult {
+    pub fn decode(&mut self, ignore_garbage: bool) -> DecodeResult {
         let mut buf = vec![];
         self.input.read_to_end(&mut buf)?;
-        if self.ignore_garbage {
+        if ignore_garbage {
             buf.retain(|c| self.alphabet.contains(c));
         } else {
             buf.retain(|&c| c != b'\r' && c != b'\n');
@@ -155,24 +144,27 @@ impl<R: Read> Data<R> {
     }
 }
 
-// NOTE: this will likely be phased out at some point
-pub fn wrap_print<R: Read>(data: &Data<R>, res: &str) {
+pub fn wrap_print(res: &str, line_wrap: usize) -> io::Result<()> {
     let stdout = io::stdout();
-    wrap_write(stdout.lock(), data.line_wrap, res).unwrap();
-}
 
-pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: &str) -> io::Result<()> {
-    use std::cmp::min;
+    let mut stdout_lock = stdout.lock();
 
     if line_wrap == 0 {
-        return write!(writer, "{res}");
-    }
+        stdout_lock.write_all(res.as_bytes())?;
+    } else {
+        let res_len = res.len();
 
-    let mut start = 0;
-    while start < res.len() {
-        let end = min(start + line_wrap, res.len());
-        writeln!(writer, "{}", &res[start..end])?;
-        start = end;
+        let mut start = 0;
+
+        while start < res_len {
+            let start_plus_line_wrap = start + line_wrap;
+
+            let end = start_plus_line_wrap.min(res_len);
+
+            writeln!(stdout_lock, "{}", &res[start..end])?;
+
+            start = end;
+        }
     }
 
     Ok(())
