@@ -194,6 +194,7 @@ impl Who {
             return false;
 
             #[cfg(target_os = "linux")]
+            #[allow(clippy::used_underscore_binding)]
             return _record == utmpx::RUN_LVL;
         };
 

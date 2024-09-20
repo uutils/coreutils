@@ -472,6 +472,7 @@ impl EnvAppData {
 
         if let Some(_argv0) = opts.argv0 {
             #[cfg(unix)]
+            #[allow(clippy::used_underscore_binding)]
             {
                 cmd.arg0(_argv0);
                 arg0 = Cow::Borrowed(_argv0);

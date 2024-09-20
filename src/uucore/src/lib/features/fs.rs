@@ -749,6 +749,7 @@ pub mod sane_blksize {
     /// of that value is done.
     pub fn sane_blksize_from_metadata(_metadata: &std::fs::Metadata) -> u64 {
         #[cfg(not(target_os = "windows"))]
+        #[allow(clippy::used_underscore_binding)]
         {
             sane_blksize(_metadata.blksize())
         }
