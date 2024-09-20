@@ -90,6 +90,53 @@ pub fn uu_app() -> Command {
         )
 }
 
+struct DelimiterData<'a> {
+    current_delimiter_length: usize,
+    delimiters_encoded: &'a [Box<[u8]>],
+    delimiters_encoded_iter: Iter<'a, Box<[u8]>>,
+}
+
+/// - If there are no delimiters, returns `None`
+/// - If there are delimiters, tries to return the next delimiter
+/// - If the end of the delimiter list was reached, resets the iter to point to the beginning of the delimiter list
+///     - (Technically this is done by creating a new iter)
+/// - Then returns the next delimiter (which will be the first delimiter in the delimiter list)
+fn get_delimiter_to_use_option<'a>(
+    delimiter_data_option: &'a mut Option<DelimiterData>,
+) -> Option<&'a [u8]> {
+    match *delimiter_data_option {
+        Some(ref mut de) => {
+            let &mut DelimiterData {
+                ref mut current_delimiter_length,
+                delimiters_encoded,
+                ref mut delimiters_encoded_iter,
+            } = de;
+
+            let current_delimiter = if let Some(bo) = delimiters_encoded_iter.next() {
+                bo
+            } else {
+                let mut new_delimiters_encoded_iter = delimiters_encoded.iter();
+
+                // Unwrapping because:
+                // 1) `delimiters_encoded` is non-empty
+                // 2) `new_delimiters_encoded_iter` is a newly constructed Iter
+                // So: `next` should always return an element
+                let bo = new_delimiters_encoded_iter.next().unwrap();
+
+                // The old iter hit the end, so assign the new iter
+                *delimiters_encoded_iter = new_delimiters_encoded_iter;
+
+                bo
+            };
+
+            *current_delimiter_length = current_delimiter.len();
+
+            Some(current_delimiter)
+        }
+        None => None,
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn paste(
     filenames: Vec<String>,
@@ -116,19 +163,13 @@ fn paste(
         ));
     }
 
-    struct DelimiterData<'a> {
-        current_delimiter_length: usize,
-        delimiters_encoded: &'a [Box<[u8]>],
-        delimiters_encoded_iter: Iter<'a, Box<[u8]>>,
-    }
-
     // Precompute instead of doing this inside the loops
     let mut delimiters_encoded_option = {
         let delimiters_unescaped = unescape(delimiters).chars().collect::<Vec<_>>();
 
         let number_of_delimiters = delimiters_unescaped.len();
 
-        if number_of_delimiters > 0 {
+        if number_of_delimiters > 0_usize {
             let mut vec = Vec::<Box<[u8]>>::with_capacity(number_of_delimiters);
 
             {
@@ -148,23 +189,13 @@ fn paste(
         }
     };
 
-    let mut delimiter_data_option = match &mut delimiters_encoded_option {
-        &mut Some(ref mut delimiters_encoded) => {
-            // TODO
-            // Is this initial value correct?
-            let current_delimiter_length = delimiters_encoded.first().unwrap().len();
+    let mut delimiter_data_option = delimiters_encoded_option.as_mut().map(|bo| DelimiterData {
+        delimiters_encoded: bo,
+        delimiters_encoded_iter: bo.iter(),
+        current_delimiter_length: 0_usize,
+    });
 
-            Some(DelimiterData {
-                delimiters_encoded,
-                delimiters_encoded_iter: delimiters_encoded.iter(),
-                current_delimiter_length,
-            })
-        }
-        None => None,
-    };
-
-    let stdout = stdout();
-    let mut stdout = stdout.lock();
+    let mut stdout = stdout().lock();
 
     let mut output = Vec::new();
 
@@ -173,43 +204,18 @@ fn paste(
             output.clear();
 
             loop {
-                let current_delimiter_option = match &mut delimiter_data_option {
-                    Some(DelimiterData {
-                        current_delimiter_length,
-                        delimiters_encoded,
-                        delimiters_encoded_iter,
-                    }) => {
-                        let current_delimiter = if let Some(delimiter_from_current_iter) =
-                            delimiters_encoded_iter.next()
-                        {
-                            delimiter_from_current_iter
-                        } else {
-                            // Reset iter after hitting the end
-                            *delimiters_encoded_iter = delimiters_encoded.iter();
-
-                            // Unwrapping because:
-                            // 1) `delimiters_encoded` is non-empty
-                            // 2) `delimiters_encoded_iter` is a newly constructed Iter
-                            // So `next` should always return an element
-                            delimiters_encoded_iter.next().unwrap()
-                        };
-
-                        *current_delimiter_length = current_delimiter.len();
-
-                        Some(current_delimiter)
-                    }
-                    None => None,
-                };
+                let delimiter_to_use_option =
+                    get_delimiter_to_use_option(&mut delimiter_data_option);
 
                 match read_until(file.as_mut(), line_ending as u8, &mut output) {
-                    Ok(0) => break,
+                    Ok(0_usize) => break,
                     Ok(_) => {
                         if output.ends_with(&[line_ending as u8]) {
                             output.pop();
                         }
 
                         // Write delimiter, if one exists, to output
-                        if let Some(current_delimiter) = current_delimiter_option {
+                        if let Some(current_delimiter) = delimiter_to_use_option {
                             output.extend_from_slice(current_delimiter);
                         }
                     }
@@ -217,16 +223,12 @@ fn paste(
                 }
             }
 
-            if let Some(DelimiterData {
-                current_delimiter_length,
-                ..
-            }) = &mut delimiter_data_option
-            {
+            if let Some(ref de) = delimiter_data_option {
                 // Remove trailing delimiter, if there is a delimiter
-                // It's safe to truncate to zero (or to a length greater than the length of the Vec),so as long as
-                // the subtraction didn't panic, this should be fine
-                if let Some(us) = output.len().checked_sub(*current_delimiter_length) {
+                if let Some(us) = output.len().checked_sub(de.current_delimiter_length) {
                     output.truncate(us);
+                } else {
+                    // Subtraction would have resulted in a negative number. This should never happen.
                 }
             }
 
@@ -246,37 +248,14 @@ fn paste(
             let mut eof_count = 0;
 
             for (i, file) in files.iter_mut().enumerate() {
-                let current_delimiter_option = if let Some(DelimiterData {
-                    current_delimiter_length,
-                    delimiters_encoded,
-                    delimiters_encoded_iter,
-                }) = &mut delimiter_data_option
-                {
-                    let current_delimiter = if let Some(bo) = delimiters_encoded_iter.next() {
-                        bo
-                    } else {
-                        // Reset iter after hitting the end
-                        *delimiters_encoded_iter = delimiters_encoded.iter();
-
-                        // Unwrapping because:
-                        // 1) `delimiters_encoded` is non-empty
-                        // 2) `delimiters_encoded_iter` is a newly constructed Iter
-                        // So `next` should always return an element
-                        delimiters_encoded_iter.next().unwrap()
-                    };
-
-                    *current_delimiter_length = current_delimiter.len();
-
-                    Some(current_delimiter)
-                } else {
-                    None
-                };
+                let delimiter_to_use_option =
+                    get_delimiter_to_use_option(&mut delimiter_data_option);
 
                 if eof[i] {
                     eof_count += 1;
                 } else {
                     match read_until(file.as_mut(), line_ending as u8, &mut output) {
-                        Ok(0) => {
+                        Ok(0_usize) => {
                             eof[i] = true;
                             eof_count += 1;
                         }
@@ -290,7 +269,7 @@ fn paste(
                 }
 
                 // Write delimiter, if one exists, to output
-                if let Some(current_delimiter) = current_delimiter_option {
+                if let Some(current_delimiter) = delimiter_to_use_option {
                     output.extend_from_slice(current_delimiter);
                 }
             }
@@ -299,20 +278,21 @@ fn paste(
                 break;
             }
 
-            if let Some(DelimiterData {
-                current_delimiter_length,
-                delimiters_encoded,
-                delimiters_encoded_iter,
-            }) = &mut delimiter_data_option
-            {
+            if let &mut Some(ref mut de) = &mut delimiter_data_option {
+                let &mut DelimiterData {
+                    current_delimiter_length,
+                    delimiters_encoded,
+                    ref mut delimiters_encoded_iter,
+                } = de;
+
                 // Reset iter after file is processed
                 *delimiters_encoded_iter = delimiters_encoded.iter();
 
                 // Remove trailing delimiter, if there is a delimiter
-                // It's safe to truncate to zero (or to a length greater than the length of the Vec),so as long as
-                // the subtraction didn't panic, this should be fine
-                if let Some(us) = output.len().checked_sub(*current_delimiter_length) {
+                if let Some(us) = output.len().checked_sub(current_delimiter_length) {
                     output.truncate(us);
+                } else {
+                    // Subtraction would have resulted in a negative number. This should never happen.
                 }
             }
 
