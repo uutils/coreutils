@@ -102,8 +102,7 @@ impl ParsedNumber {
             Ok(v) => v.into_i64().ok_or(ParseError::Overflow),
             Err(e) => Err(e.map(|v, rest| {
                 v.into_i64()
-                    .map(|v| ParseError::PartialMatch(v, rest))
-                    .unwrap_or(ParseError::Overflow)
+                    .map_or(ParseError::Overflow, |v| ParseError::PartialMatch(v, rest))
             })),
         }
     }

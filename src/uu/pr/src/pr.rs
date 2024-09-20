@@ -507,12 +507,14 @@ fn build_options(
 
     let header = matches
         .get_one::<String>(options::HEADER)
-        .map(|s| s.as_str())
-        .unwrap_or(if is_merge_mode || paths[0] == FILE_STDIN {
-            ""
-        } else {
-            paths[0]
-        })
+        .map_or(
+            if is_merge_mode || paths[0] == FILE_STDIN {
+                ""
+            } else {
+                paths[0]
+            },
+            |s| s.as_str(),
+        )
         .to_string();
 
     let default_first_number = NumberingMode::default().first_number;
@@ -677,8 +679,7 @@ fn build_options(
         Some(x) => Some(x),
         None => matches.get_one::<String>(options::COLUMN_CHAR_SEPARATOR),
     }
-    .map(ToString::to_string)
-    .unwrap_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string());
+    .map_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string(), ToString::to_string);
 
     let default_column_width = if matches.contains_id(options::COLUMN_WIDTH)
         && matches.contains_id(options::COLUMN_CHAR_SEPARATOR)
@@ -739,8 +740,8 @@ fn build_options(
                 .unwrap_or_default()
         });
 
-    let columns_to_print = merge_files_print
-        .unwrap_or_else(|| column_mode_options.as_ref().map(|i| i.columns).unwrap_or(1));
+    let columns_to_print =
+        merge_files_print.unwrap_or_else(|| column_mode_options.as_ref().map_or(1, |i| i.columns));
 
     let line_width = if join_lines {
         None
@@ -748,8 +749,7 @@ fn build_options(
         Some(
             column_mode_options
                 .as_ref()
-                .map(|i| i.width)
-                .unwrap_or(DEFAULT_COLUMN_WIDTH),
+                .map_or(DEFAULT_COLUMN_WIDTH, |i| i.width),
         )
     } else {
         page_width
@@ -1039,8 +1039,7 @@ fn write_columns(
     let across_mode = options
         .column_mode_options
         .as_ref()
-        .map(|i| i.across_mode)
-        .unwrap_or(false);
+        .is_some_and(|i| i.across_mode);
 
     let mut filled_lines = Vec::new();
     if options.merge_files_print.is_some() {
@@ -1235,7 +1234,7 @@ fn trailer_content(options: &OutputOptions) -> Vec<String> {
 /// If -N is specified the first line number changes otherwise
 /// default is 1.
 fn get_start_line_number(opts: &OutputOptions) -> usize {
-    opts.number.as_ref().map(|i| i.first_number).unwrap_or(1)
+    opts.number.as_ref().map_or(1, |i| i.first_number)
 }
 
 /// Returns number of lines to read from input for constructing one page of pr output.
@@ -1253,8 +1252,5 @@ fn lines_to_read_for_page(opts: &OutputOptions) -> usize {
 
 /// Returns number of columns to output
 fn get_columns(opts: &OutputOptions) -> usize {
-    opts.column_mode_options
-        .as_ref()
-        .map(|i| i.columns)
-        .unwrap_or(1)
+    opts.column_mode_options.as_ref().map_or(1, |i| i.columns)
 }

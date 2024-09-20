@@ -62,13 +62,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = SeqOptions {
         separator: matches
             .get_one::<String>(OPT_SEPARATOR)
-            .map(|s| s.as_str())
-            .unwrap_or("\n")
+            .map_or("\n", |s| s.as_str())
             .to_string(),
         terminator: matches
             .get_one::<String>(OPT_TERMINATOR)
-            .map(|s| s.as_str())
-            .unwrap_or("\n")
+            .map_or("\n", |s| s.as_str())
             .to_string(),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),

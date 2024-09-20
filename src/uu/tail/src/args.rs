@@ -288,8 +288,7 @@ impl Settings {
 
         settings.inputs = matches
             .get_many::<OsString>(options::ARG_FILES)
-            .map(|v| v.map(Input::from).collect())
-            .unwrap_or_else(|| vec![Input::default()]);
+            .map_or_else(|| vec![Input::default()], |v| v.map(Input::from).collect());
 
         settings.verbose =
             settings.inputs.len() > 1 && !matches.get_flag(options::verbosity::QUIET);

@@ -148,8 +148,7 @@ impl StringOp {
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
                 Ok(if re.captures_len() > 0 {
                     re.captures(&left)
-                        .map(|captures| captures.at(1).unwrap())
-                        .unwrap_or("")
+                        .map_or("", |captures| captures.at(1).unwrap())
                         .to_string()
                 } else {
                     re.find(&left)

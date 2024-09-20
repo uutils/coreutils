@@ -230,10 +230,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Ok(());
         }
 
-        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or((
-            if state.rflag { getuid() } else { geteuid() },
-            if state.rflag { getgid() } else { getegid() },
-        ));
+        let (uid, gid) = possible_pw.as_ref().map_or(
+            (
+                if state.rflag { getuid() } else { geteuid() },
+                if state.rflag { getgid() } else { getegid() },
+            ),
+            |p| (p.uid, p.gid),
+        );
         state.ids = Some(Ids {
             uid,
             gid,

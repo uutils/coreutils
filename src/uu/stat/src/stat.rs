@@ -563,8 +563,7 @@ impl Stater {
         } else {
             matches
                 .get_one::<String>(options::FORMAT)
-                .map(|s| s.as_str())
-                .unwrap_or("")
+                .map_or("", |s| s.as_str())
         };
 
         let use_printf = matches.contains_id(options::PRINTF);
@@ -813,9 +812,9 @@ impl Stater {
 
                                     // time of file birth, human-readable; - if unknown
                                     'w' => OutputType::Str(
-                                        meta.birth()
-                                            .map(|(sec, nsec)| pretty_time(sec as i64, nsec as i64))
-                                            .unwrap_or(String::from("-")),
+                                        meta.birth().map_or(String::from("-"), |(sec, nsec)| {
+                                            pretty_time(sec as i64, nsec as i64)
+                                        }),
                                     ),
 
                                     // time of file birth, seconds since Epoch; 0 if unknown
