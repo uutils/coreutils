@@ -731,14 +731,14 @@ fn build_options(
     let offset_spaces = " ".repeat(parse_usize(matches, options::INDENT).unwrap_or(Ok(0))?);
     let join_lines = matches.get_flag(options::JOIN_LINES);
 
-    let col_sep_for_printing = column_mode_options
-        .as_ref()
-        .map(|i| i.column_separator.clone())
-        .unwrap_or_else(|| {
+    let col_sep_for_printing = column_mode_options.as_ref().map_or_else(
+        || {
             merge_files_print
                 .map(|_k| DEFAULT_COLUMN_SEPARATOR.to_string())
                 .unwrap_or_default()
-        });
+        },
+        |i| i.column_separator.clone(),
+    );
 
     let columns_to_print =
         merge_files_print.unwrap_or_else(|| column_mode_options.as_ref().map_or(1, |i| i.columns));
@@ -783,8 +783,9 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
         return Ok(Box::new(stdin) as Box<dyn Read>);
     }
 
-    metadata(path)
-        .map(|i| {
+    metadata(path).map_or_else(
+        |_| Err(PrError::NotExists(path.to_string())),
+        |i| {
             let path_string = path.to_string();
             match i.file_type() {
                 #[cfg(unix)]
@@ -801,13 +802,19 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
                 }
                 _ => Err(PrError::UnknownFiletype(path_string)),
             }
-        })
-        .unwrap_or_else(|_| Err(PrError::NotExists(path.to_string())))
+        },
+    )
 }
 
 fn split_lines_if_form_feed(file_content: Result<String, std::io::Error>) -> Vec<FileLine> {
-    file_content
-        .map(|content| {
+    file_content.map_or_else(
+        |e| {
+            vec![FileLine {
+                line_content: Err(e),
+                ..FileLine::default()
+            }]
+        },
+        |content| {
             let mut lines = Vec::new();
             let mut f_occurred = 0;
             let mut chunk = Vec::new();
@@ -836,13 +843,8 @@ fn split_lines_if_form_feed(file_content: Result<String, std::io::Error>) -> Vec
             });
 
             lines
-        })
-        .unwrap_or_else(|e| {
-            vec![FileLine {
-                line_content: Err(e),
-                ..FileLine::default()
-            }]
-        })
+        },
+    )
 }
 
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
