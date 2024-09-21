@@ -13,6 +13,7 @@
 /// restrict following config to systems with matching environment variables.
 pub static TERMS: &[&str] = &[
     "Eterm",
+    "alacritty*",
     "ansi",
     "*color*",
     "con[0-9]*x[0-9]*",
