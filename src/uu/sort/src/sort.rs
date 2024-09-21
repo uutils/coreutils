@@ -375,7 +375,7 @@ impl GlobalSettings {
     fn get_memory_size(percent: usize) -> usize {
         let system = System::new_with_specifics(RefreshKind::new().with_memory());
         let total_memory_size = system.total_memory() as usize;
-        (total_memory_size * percent) / 100
+        total_memory_size * (percent / 100)
     }
 
     /// Precompute some data needed for sorting.
