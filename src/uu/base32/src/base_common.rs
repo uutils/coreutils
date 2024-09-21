@@ -11,11 +11,11 @@ use std::io::{stdout, Read, Write};
 use std::io::{BufReader, Stdin};
 use std::path::Path;
 use uucore::display::Quotable;
+use uucore::encoding::{decode_z_eight_five, encode_z_eight_five, BASE2LSBF, BASE2MSBF};
 use uucore::encoding::{
     for_fast_encode::{BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER},
-    wrap_print, Data, EncodeError, Format,
+    wrap_print, EncodeError, Format,
 };
-use uucore::encoding::{BASE2LSBF, BASE2MSBF};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 
@@ -160,7 +160,7 @@ pub fn handle_input<R: Read>(
     ignore_garbage: bool,
     decode: bool,
 ) -> UResult<()> {
-    const ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE: usize = 1_024_usize;
+    const DECODE_AND_ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE: usize = 1_024_usize;
 
     // These constants indicate that inputs with lengths divisible by these numbers will have no padding characters
     // after encoding.
@@ -174,54 +174,110 @@ pub fn handle_input<R: Read>(
     // "VGhlIHF1aWNrIGJyb3duIGZveA=="
     // The encoding logic in this function depends on these constants being correct, so do not modify
     // them. Performance can be tuned by multiplying these numbers by a different multiple (see
-    // `ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE` above).
+    // `DECODE_AND_ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE` above).
     const BASE16_UN_PADDED_MULTIPLE: usize = 1_usize;
     const BASE2_UN_PADDED_MULTIPLE: usize = 1_usize;
     const BASE32_UN_PADDED_MULTIPLE: usize = 5_usize;
     const BASE64_UN_PADDED_MULTIPLE: usize = 3_usize;
 
     const BASE16_ENCODE_IN_CHUNKS_OF_SIZE: usize =
-        BASE16_UN_PADDED_MULTIPLE * ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+        BASE16_UN_PADDED_MULTIPLE * DECODE_AND_ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
     const BASE2_ENCODE_IN_CHUNKS_OF_SIZE: usize =
-        BASE2_UN_PADDED_MULTIPLE * ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+        BASE2_UN_PADDED_MULTIPLE * DECODE_AND_ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
     const BASE32_ENCODE_IN_CHUNKS_OF_SIZE: usize =
-        BASE32_UN_PADDED_MULTIPLE * ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+        BASE32_UN_PADDED_MULTIPLE * DECODE_AND_ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
     const BASE64_ENCODE_IN_CHUNKS_OF_SIZE: usize =
-        BASE64_UN_PADDED_MULTIPLE * ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+        BASE64_UN_PADDED_MULTIPLE * DECODE_AND_ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+
+    const BASE16_VALID_DECODING_MULTIPLE: usize = 2_usize;
+    const BASE2_VALID_DECODING_MULTIPLE: usize = 8_usize;
+    const BASE32_VALID_DECODING_MULTIPLE: usize = 8_usize;
+    const BASE64_VALID_DECODING_MULTIPLE: usize = 4_usize;
+
+    const BASE16_DECODE_IN_CHUNKS_OF_SIZE: usize =
+        BASE16_VALID_DECODING_MULTIPLE * DECODE_AND_ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+    const BASE2_DECODE_IN_CHUNKS_OF_SIZE: usize =
+        BASE2_VALID_DECODING_MULTIPLE * DECODE_AND_ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+    const BASE32_DECODE_IN_CHUNKS_OF_SIZE: usize =
+        BASE32_VALID_DECODING_MULTIPLE * DECODE_AND_ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
+    const BASE64_DECODE_IN_CHUNKS_OF_SIZE: usize =
+        BASE64_VALID_DECODING_MULTIPLE * DECODE_AND_ENCODE_IN_CHUNKS_OF_SIZE_MULTIPLE;
 
     if decode {
-        let mut data = Data::new(input, format);
+        let encoding_and_decode_in_chunks_of_size_and_alphabet: (_, _, &[u8]) = match format {
+            // Use naive approach for Z85, since the crate being used doesn't have the API needed
+            Format::Z85 => {
+                let result = match decode_z_eight_five(input, ignore_garbage) {
+                    Ok(ve) => {
+                        if stdout().write_all(&ve).is_err() {
+                            // on windows console, writing invalid utf8 returns an error
+                            return Err(USimpleError::new(
+                                1_i32,
+                                "error: cannot write non-utf8 data",
+                            ));
+                        }
 
-        match data.decode(ignore_garbage) {
-            Ok(s) => {
-                // Silent the warning as we want to the error message
-                #[allow(clippy::question_mark)]
-                if stdout().write_all(&s).is_err() {
-                    // on windows console, writing invalid utf8 returns an error
-                    return Err(USimpleError::new(1, "error: cannot write non-utf8 data"));
-                }
-                Ok(())
+                        Ok(())
+                    }
+                    Err(_) => Err(USimpleError::new(1_i32, "error: invalid input")),
+                };
+
+                return result;
             }
-            Err(_) => Err(USimpleError::new(1, "error: invalid input")),
-        }
+
+            // For these, use faster, new decoding logic
+            Format::Base16 => (
+                HEXUPPER,
+                BASE16_DECODE_IN_CHUNKS_OF_SIZE,
+                b"0123456789ABCDEF",
+            ),
+            Format::Base2Lsbf => (BASE2LSBF, BASE2_DECODE_IN_CHUNKS_OF_SIZE, b"01"),
+            Format::Base2Msbf => (BASE2MSBF, BASE2_DECODE_IN_CHUNKS_OF_SIZE, b"01"),
+            Format::Base32 => (
+                BASE32,
+                BASE32_DECODE_IN_CHUNKS_OF_SIZE,
+                b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=",
+            ),
+            Format::Base32Hex => (
+                BASE32HEX,
+                BASE32_DECODE_IN_CHUNKS_OF_SIZE,
+                // spell-checker:disable-next-line
+                b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
+            ),
+            Format::Base64 => (
+                BASE64,
+                BASE64_DECODE_IN_CHUNKS_OF_SIZE,
+                b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=+/",
+            ),
+            Format::Base64Url => (
+                BASE64URL,
+                BASE64_DECODE_IN_CHUNKS_OF_SIZE,
+                b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=_-",
+            ),
+        };
+
+        fast_decode::fast_decode(
+            input,
+            encoding_and_decode_in_chunks_of_size_and_alphabet,
+            ignore_garbage,
+        )?;
+
+        Ok(())
     } else {
-        #[allow(clippy::identity_op)]
         let encoding_and_encode_in_chunks_of_size = match format {
             // Use naive approach for Z85, since the crate being used doesn't have the API needed
             Format::Z85 => {
-                let mut data = Data::new(input, format);
-
-                let result = match data.encode() {
+                let result = match encode_z_eight_five(input) {
                     Ok(st) => {
                         wrap_print(&st, wrap.unwrap_or(WRAP_DEFAULT))?;
 
                         Ok(())
                     }
                     Err(EncodeError::InvalidInput) => {
-                        Err(USimpleError::new(1, "error: invalid input"))
+                        Err(USimpleError::new(1_i32, "error: invalid input"))
                     }
                     Err(_) => Err(USimpleError::new(
-                        1,
+                        1_i32,
                         "error: invalid input (length must be multiple of 4 characters)",
                     )),
                 };
@@ -315,7 +371,7 @@ mod fast_encode {
 
         let mut i = 0_usize;
 
-        for ue in encoded_buffer.drain(0_usize..number_of_bytes_to_drain) {
+        for ue in encoded_buffer.drain(..number_of_bytes_to_drain) {
             print_buffer.push(ue);
 
             if i == line_wrap_size_minus_one {
@@ -367,7 +423,8 @@ mod fast_encode {
     // Check if that crate's line wrapping is faster than the wrapping being performed in this function
     // Update: That crate does not support arbitrary width line wrapping. It only supports certain widths:
     // https://github.com/ia0/data-encoding/blob/4f42ad7ef242f6d243e4de90cd1b46a57690d00e/lib/src/lib.rs#L1710
-    // `encoding` and `encode_in_chunks_of_size` are passed in a tuple to indicate that they are logically tied
+    //
+    /// `encoding` and `encode_in_chunks_of_size` are passed in a tuple to indicate that they are logically tied
     pub fn fast_encode<R: Read>(
         input: &mut R,
         (encoding, encode_in_chunks_of_size): (Encoding, usize),
@@ -416,7 +473,7 @@ mod fast_encode {
                     }
 
                     // The part of `input_buffer` that was actually filled by the call to `read`
-                    let read_buffer = &input_buffer[0_usize..bytes_read_from_input];
+                    let read_buffer = &input_buffer[..bytes_read_from_input];
 
                     // How many bytes to steal from `read_buffer` to get `leftover_buffer` to the right size
                     let bytes_to_steal = encode_in_chunks_of_size - leftover_buffer.len();
@@ -430,7 +487,7 @@ mod fast_encode {
 
                     // Encode data in chunks, then place it in `encoded_buffer`
                     {
-                        let bytes_to_chunk = if bytes_to_steal > 0 {
+                        let bytes_to_chunk = if bytes_to_steal > 0_usize {
                             let (stolen_bytes, rest_of_read_buffer) =
                                 read_buffer.split_at(bytes_to_steal);
 
@@ -491,7 +548,7 @@ mod fast_encode {
         // Cleanup
         // `input` has finished producing data, so the data remaining in the buffers needs to be encoded and printed
         {
-            // Encode all remaining unencoded bytes, placing it in `encoded_buffer`
+            // Encode all remaining unencoded bytes, placing them in `encoded_buffer`
             encode_append_vec_deque(
                 &encoding,
                 leftover_buffer.make_contiguous(),
@@ -506,6 +563,249 @@ mod fast_encode {
                 &mut stdout_lock,
                 true,
             )?;
+        }
+
+        Ok(())
+    }
+}
+
+mod fast_decode {
+    use std::io::{self, ErrorKind, Read, StdoutLock, Write};
+    use uucore::{
+        encoding::{alphabet_to_table, for_fast_encode::Encoding},
+        error::{UResult, USimpleError},
+    };
+
+    struct FilteringData {
+        table: [bool; 256_usize],
+    }
+
+    // Start of helper functions
+    // Adapted from `decode` in the "data-encoding" crate
+    fn decode_into_vec(encoding: &Encoding, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        let decode_len_result = match encoding.decode_len(input.len()) {
+            Ok(us) => us,
+            Err(de) => {
+                return Err(USimpleError::new(1_i32, format!("{de}")));
+            }
+        };
+
+        let output_len = output.len();
+
+        output.resize(output_len + decode_len_result, 0_u8);
+
+        match encoding.decode_mut(input, &mut (output[output_len..])) {
+            Ok(us) => {
+                // See:
+                // https://docs.rs/data-encoding/latest/data_encoding/struct.Encoding.html#method.decode_mut
+                // "Returns the length of the decoded output. This length may be smaller than the output length if the input contained padding or ignored characters. The output bytes after the returned length are not initialized and should not be read."
+                output.truncate(output_len + us);
+            }
+            Err(_de) => {
+                return Err(USimpleError::new(1_i32, "error: invalid input".to_owned()));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_to_stdout(
+        decoded_buffer: &mut Vec<u8>,
+        stdout_lock: &mut StdoutLock,
+    ) -> io::Result<()> {
+        // Write all data in `decoded_buffer` to stdout
+        stdout_lock.write_all(decoded_buffer.as_slice())?;
+
+        decoded_buffer.clear();
+
+        Ok(())
+    }
+    // End of helper functions
+
+    /// `encoding`, `decode_in_chunks_of_size`, and `alphabet` are passed in a tuple to indicate that they are
+    /// logically tied
+    pub fn fast_decode<R: Read>(
+        input: &mut R,
+        (encoding, decode_in_chunks_of_size, alphabet): (Encoding, usize, &[u8]),
+        ignore_garbage: bool,
+    ) -> UResult<()> {
+        /// Rust uses 8 kibibytes
+        ///
+        /// https://github.com/rust-lang/rust/blob/1a5a2240bc1b8cf0bcce7acb946c78d6493a4fd3/library/std/src/sys_common/io.rs#L3
+        const INPUT_BUFFER_SIZE: usize = 8_usize * 1_024_usize;
+
+        // Note that it's not worth using "data-encoding"'s ignore functionality if "ignore_garbage" is true, because
+        // "data-encoding"'s ignore functionality cannot discard non-ASCII bytes. The data has to be filtered before
+        // passing it to "data-encoding", so there is no point in doing any filtering in "data-encoding". This also
+        // allows execution to stay on the happy path in "data-encoding":
+        // https://github.com/ia0/data-encoding/blob/4f42ad7ef242f6d243e4de90cd1b46a57690d00e/lib/src/lib.rs#L754-L756
+        let (encoding_to_use, filter_data_option) = {
+            if ignore_garbage {
+                // Note that the alphabet constants above already include the padding characters
+                // TODO
+                // Precompute this
+                let table = alphabet_to_table(alphabet);
+
+                (encoding, Some(FilteringData { table }))
+            } else {
+                let mut sp = encoding.specification();
+
+                // '\n' and '\r' are always ignored
+                sp.ignore = "\n\r".to_owned();
+
+                let en = match sp.encoding() {
+                    Ok(en) => en,
+                    Err(sp) => {
+                        return Err(USimpleError::new(1_i32, format!("{sp}")));
+                    }
+                };
+
+                (en, None)
+            }
+        };
+
+        // Start of buffers
+        // Data that was read from stdin
+        let mut input_buffer = vec![0_u8; INPUT_BUFFER_SIZE];
+
+        assert!(!input_buffer.is_empty());
+
+        // Data that was read from stdin but has not been decoded yet
+        let mut leftover_buffer = Vec::<u8>::new();
+
+        // Decoded data that needs to be written to stdout
+        let mut decoded_buffer = Vec::<u8>::new();
+
+        // Buffer that will be used when "ignore_garbage" is true, and the chunk read from "input" contains garbage
+        // data
+        let mut non_garbage_buffer = Vec::<u8>::new();
+        // End of buffers
+
+        let mut stdout_lock = io::stdout().lock();
+
+        loop {
+            match input.read(&mut input_buffer) {
+                Ok(bytes_read_from_input) => {
+                    if bytes_read_from_input == 0_usize {
+                        break;
+                    }
+
+                    let read_buffer_filtered = {
+                        // The part of `input_buffer` that was actually filled by the call to `read`
+                        let read_buffer = &input_buffer[..bytes_read_from_input];
+
+                        if let Some(fi) = &filter_data_option {
+                            let FilteringData { table } = fi;
+
+                            let table_to_owned = table.to_owned();
+
+                            // First just scan the data for the happy path
+                            // Note: this happy path check has not been validated with performance testing
+                            let mut found_garbage = false;
+
+                            for ue in read_buffer {
+                                if table_to_owned[usize::from(*ue)] {
+                                    // Not garbage, since it was found in the table
+                                    continue;
+                                } else {
+                                    found_garbage = true;
+
+                                    break;
+                                }
+                            }
+
+                            if found_garbage {
+                                non_garbage_buffer.clear();
+
+                                for ue in read_buffer {
+                                    if table_to_owned[usize::from(*ue)] {
+                                        // Not garbage, since it was found in the table
+                                        non_garbage_buffer.push(*ue);
+                                    }
+                                }
+
+                                non_garbage_buffer.as_slice()
+                            } else {
+                                read_buffer
+                            }
+                        } else {
+                            read_buffer
+                        }
+                    };
+
+                    // How many bytes to steal from `read_buffer` to get `leftover_buffer` to the right size
+                    let bytes_to_steal = decode_in_chunks_of_size - leftover_buffer.len();
+
+                    if bytes_to_steal > bytes_read_from_input {
+                        // Do not have enough data to decode a chunk, so copy data to `leftover_buffer` and read more
+                        leftover_buffer.extend(read_buffer_filtered);
+
+                        continue;
+                    }
+
+                    // Decode data in chunks, then place it in `decoded_buffer`
+                    {
+                        let bytes_to_chunk = if bytes_to_steal > 0_usize {
+                            let (stolen_bytes, rest_of_read_buffer_filtered) =
+                                read_buffer_filtered.split_at(bytes_to_steal);
+
+                            leftover_buffer.extend(stolen_bytes);
+
+                            // After appending the stolen bytes to `leftover_buffer`, it should be the right size
+                            assert!(leftover_buffer.len() == decode_in_chunks_of_size);
+
+                            // Decode the old un-decoded data and the stolen bytes, and add the result to
+                            // `decoded_buffer`
+                            decode_into_vec(
+                                &encoding_to_use,
+                                &leftover_buffer,
+                                &mut decoded_buffer,
+                            )?;
+
+                            // Reset `leftover_buffer`
+                            leftover_buffer.clear();
+
+                            rest_of_read_buffer_filtered
+                        } else {
+                            // Do not need to steal bytes from `read_buffer`
+                            read_buffer_filtered
+                        };
+
+                        let chunks_exact = bytes_to_chunk.chunks_exact(decode_in_chunks_of_size);
+
+                        let remainder = chunks_exact.remainder();
+
+                        for sl in chunks_exact {
+                            assert!(sl.len() == decode_in_chunks_of_size);
+
+                            decode_into_vec(&encoding_to_use, sl, &mut decoded_buffer)?;
+                        }
+
+                        leftover_buffer.extend(remainder);
+                    }
+
+                    // Write all data in `decoded_buffer` to stdout
+                    write_to_stdout(&mut decoded_buffer, &mut stdout_lock)?;
+                }
+                Err(er) => {
+                    if er.kind() == ErrorKind::Interrupted {
+                        // TODO
+                        // Retry reading?
+                    }
+
+                    return Err(USimpleError::new(1_i32, format!("read error: {er}")));
+                }
+            }
+        }
+
+        // Cleanup
+        // `input` has finished producing data, so the data remaining in the buffers needs to be decoded and printed
+        {
+            // Decode all remaining encoded bytes, placing them in `decoded_buffer`
+            decode_into_vec(&encoding_to_use, &leftover_buffer, &mut decoded_buffer)?;
+
+            // Write all data in `decoded_buffer` to stdout
+            write_to_stdout(&mut decoded_buffer, &mut stdout_lock)?;
         }
 
         Ok(())
