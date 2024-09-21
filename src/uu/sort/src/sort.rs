@@ -342,7 +342,7 @@ impl GlobalSettings {
         let input = input.trim();
         if let Some(number) = input.strip_suffix('%') {
             let percent = Self::parse_percentage(number)?;
-            return Self::get_memory_size(percent);
+            return Ok(Self::get_memory_size(percent));
         }
         let size = Parser::default()
             .with_allow_list(&[
@@ -359,24 +359,24 @@ impl GlobalSettings {
 
     /// Parses percentage input from input string.
     fn parse_percentage(number_str: &str) -> Result<usize, ParseSizeError> {
-        let Ok(percent) = number_str.parse::<u64>() else {
+        let Ok(percent) = number_str.parse::<usize>() else {
             return Err(ParseSizeError::ParseFailure(format!(
                 "Invalid Buffer Percentage: {number_str}"
             )));
         };
         match percent {
-            0..=100 => Ok(percent as usize),
+            0..=100 => Ok(percent),
             _ => Err(ParseSizeError::ParseFailure(format!(
                 "Invalid Buffer Percentage: {number_str}"
             ))),
         }
     }
     /// get memory size from percent
-    fn get_memory_size(percent: usize) -> Result<usize, ParseSizeError> {
+    fn get_memory_size(percent: usize) -> usize {
         let system = System::new_with_specifics(RefreshKind::new().with_memory());
         let total_memory_size = system.total_memory() as usize;
         let size = (total_memory_size * percent) / 100;
-        Ok(size)
+        size
     }
 
     /// Precompute some data needed for sorting.
