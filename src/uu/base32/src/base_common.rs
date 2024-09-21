@@ -362,28 +362,24 @@ mod fast_encode {
 
         assert!(line_length_usize > 0_usize);
 
-        let number_of_lines = encoded_buffer.len() / line_length_usize;
+        let make_contiguous_result = encoded_buffer.make_contiguous();
 
         // How many bytes to take from the front of `encoded_buffer` and then write to stdout
-        let number_of_bytes_to_drain = number_of_lines * line_length_usize;
+        // (Number of whole lines times the line length)
+        let number_of_bytes_to_drain =
+            (make_contiguous_result.len() / line_length_usize) * line_length_usize;
 
-        let line_wrap_size_minus_one = line_length_usize - 1_usize;
+        let chunks_exact = make_contiguous_result.chunks_exact(line_length_usize);
 
-        let mut i = 0_usize;
-
-        for ue in encoded_buffer.drain(..number_of_bytes_to_drain) {
-            print_buffer.push(ue);
-
-            if i == line_wrap_size_minus_one {
-                print_buffer.push(b'\n');
-
-                i = 0_usize;
-            } else {
-                i += 1_usize;
-            }
+        for sl in chunks_exact {
+            print_buffer.extend_from_slice(sl);
+            print_buffer.push(b'\n');
         }
 
         stdout_lock.write_all(print_buffer)?;
+
+        // Remove the bytes that were just printed from `encoded_buffer`
+        drop(encoded_buffer.drain(..number_of_bytes_to_drain));
 
         if is_cleanup {
             if encoded_buffer.is_empty() {
