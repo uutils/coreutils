@@ -195,9 +195,9 @@ fn test_delimiter_list_ending_with_unescaped_backslash() {
 
 #[test]
 fn test_delimiter_list_empty() {
-    for st in ["-d", "--delimiters"] {
+    for option_style in ["-d", "--delimiters"] {
         new_ucmd!()
-            .args(&[st, "", "-s", "--", "-"])
+            .args(&[option_style, "", "-s"])
             .pipe_in(
                 "\
 A ALPHA 1 _
@@ -209,6 +209,33 @@ C CHARLIE 3 _
             .stdout_only(
                 "\
 A ALPHA 1 _B BRAVO 2 _C CHARLIE 3 _
+",
+            );
+    }
+}
+
+// Was panicking (usize subtraction that would have resulted in a negative number)
+// Not observable in release builds, since integer overflow checking is not enabled
+#[test]
+fn test_delimiter_truncation() {
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[option_style, "!@#", "-s", "-", "-", "-"])
+            .pipe_in(
+                "\
+FIRST
+SECOND
+THIRD
+FOURTH
+ABCDEFG
+",
+            )
+            .succeeds()
+            .stdout_only(
+                "\
+FIRST!SECOND@THIRD#FOURTH!ABCDEFG
+
+
 ",
             );
     }

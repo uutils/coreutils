@@ -8,6 +8,7 @@
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
+use std::iter::Cycle;
 use std::path::Path;
 use std::slice::Iter;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -90,53 +91,6 @@ pub fn uu_app() -> Command {
         )
 }
 
-struct DelimiterData<'a> {
-    current_delimiter_length: usize,
-    delimiters_encoded: &'a [Box<[u8]>],
-    delimiters_encoded_iter: Iter<'a, Box<[u8]>>,
-}
-
-/// - If there are no delimiters, returns `None`
-/// - If there are delimiters, tries to return the next delimiter
-/// - If the end of the delimiter list was reached, resets the iter to point to the beginning of the delimiter list
-///     - (Technically this is done by creating a new iter)
-/// - Then returns the next delimiter (which will be the first delimiter in the delimiter list)
-fn get_delimiter_to_use_option<'a>(
-    delimiter_data_option: &'a mut Option<DelimiterData>,
-) -> Option<&'a [u8]> {
-    match *delimiter_data_option {
-        Some(ref mut de) => {
-            let &mut DelimiterData {
-                ref mut current_delimiter_length,
-                delimiters_encoded,
-                ref mut delimiters_encoded_iter,
-            } = de;
-
-            let current_delimiter = if let Some(bo) = delimiters_encoded_iter.next() {
-                bo
-            } else {
-                let mut new_delimiters_encoded_iter = delimiters_encoded.iter();
-
-                // Unwrapping because:
-                // 1) `delimiters_encoded` is non-empty
-                // 2) `new_delimiters_encoded_iter` is a newly constructed Iter
-                // So: `next` should always return an element
-                let bo = new_delimiters_encoded_iter.next().unwrap();
-
-                // The old iter hit the end, so assign the new iter
-                *delimiters_encoded_iter = new_delimiters_encoded_iter;
-
-                bo
-            };
-
-            *current_delimiter_length = current_delimiter.len();
-
-            Some(current_delimiter)
-        }
-        None => None,
-    }
-}
-
 #[allow(clippy::cognitive_complexity)]
 fn paste(
     filenames: Vec<String>,
@@ -150,8 +104,10 @@ fn paste(
             None
         } else {
             let path = Path::new(&name);
-            let r = File::open(path).map_err_context(String::new)?;
-            Some(BufReader::new(r))
+            // TODO
+            // Is `map_err_context` correct here?
+            let file = File::open(path).map_err_context(String::new)?;
+            Some(BufReader::new(file))
         };
         files.push(file);
     }
@@ -163,37 +119,19 @@ fn paste(
         ));
     }
 
-    // Precompute instead of doing this inside the loops
-    let mut delimiters_encoded_option = {
-        let delimiters_unescaped = unescape(delimiters).chars().collect::<Vec<_>>();
+    let unescaped_and_encoded_delimiters = parse_delimiters(delimiters);
 
-        let number_of_delimiters = delimiters_unescaped.len();
-
-        if number_of_delimiters > 0_usize {
-            let mut vec = Vec::<Box<[u8]>>::with_capacity(number_of_delimiters);
-
-            {
-                // a buffer of length four is large enough to encode any char
-                let mut buffer = [0_u8; 4_usize];
-
-                for ch in delimiters_unescaped {
-                    let delimiter_encoded = ch.encode_utf8(&mut buffer);
-
-                    vec.push(Box::from(delimiter_encoded.as_bytes()));
-                }
-            }
-
-            Some(vec.into_boxed_slice())
-        } else {
-            None
-        }
+    let mut delimiter_state = match unescaped_and_encoded_delimiters.as_ref() {
+        [] => DelimiterState::NoDelimiters,
+        [only_delimiter] => DelimiterState::OneDelimiter {
+            delimiter: only_delimiter,
+        },
+        [first_delimiter, ..] => DelimiterState::MultipleDelimiters {
+            current_delimiter: first_delimiter,
+            delimiters: &unescaped_and_encoded_delimiters,
+            delimiters_iter: unescaped_and_encoded_delimiters.iter().cycle(),
+        },
     };
-
-    let mut delimiter_data_option = delimiters_encoded_option.as_mut().map(|bo| DelimiterData {
-        delimiters_encoded: bo,
-        delimiters_encoded_iter: bo.iter(),
-        current_delimiter_length: 0_usize,
-    });
 
     let mut stdout = stdout().lock();
 
@@ -204,34 +142,27 @@ fn paste(
             output.clear();
 
             loop {
-                let delimiter_to_use_option =
-                    get_delimiter_to_use_option(&mut delimiter_data_option);
+                delimiter_state.advance_to_next_delimiter();
 
                 match read_until(file.as_mut(), line_ending as u8, &mut output) {
-                    Ok(0_usize) => break,
+                    Ok(0) => break,
                     Ok(_) => {
                         if output.ends_with(&[line_ending as u8]) {
                             output.pop();
                         }
 
-                        // Write delimiter, if one exists, to output
-                        if let Some(current_delimiter) = delimiter_to_use_option {
-                            output.extend_from_slice(current_delimiter);
-                        }
+                        delimiter_state.write_delimiter(&mut output);
                     }
+                    // TODO
+                    // Is `map_err_context` correct here?
                     Err(e) => return Err(e.map_err_context(String::new)),
                 }
             }
 
-            if let Some(ref de) = delimiter_data_option {
-                // Remove trailing delimiter, if there is a delimiter
-                if let Some(us) = output.len().checked_sub(de.current_delimiter_length) {
-                    output.truncate(us);
-                } else {
-                    // Subtraction would have resulted in a negative number. This should never happen.
-                }
-            }
+            delimiter_state.remove_trailing_delimiter(&mut output);
 
+            // TODO
+            // Should the output be converted to UTF-8?
             write!(
                 stdout,
                 "{}{}",
@@ -248,14 +179,13 @@ fn paste(
             let mut eof_count = 0;
 
             for (i, file) in files.iter_mut().enumerate() {
-                let delimiter_to_use_option =
-                    get_delimiter_to_use_option(&mut delimiter_data_option);
+                delimiter_state.advance_to_next_delimiter();
 
                 if eof[i] {
                     eof_count += 1;
                 } else {
                     match read_until(file.as_mut(), line_ending as u8, &mut output) {
-                        Ok(0_usize) => {
+                        Ok(0) => {
                             eof[i] = true;
                             eof_count += 1;
                         }
@@ -264,38 +194,30 @@ fn paste(
                                 output.pop();
                             }
                         }
+                        // TODO
+                        // Is `map_err_context` correct here?
                         Err(e) => return Err(e.map_err_context(String::new)),
                     }
                 }
 
-                // Write delimiter, if one exists, to output
-                if let Some(current_delimiter) = delimiter_to_use_option {
-                    output.extend_from_slice(current_delimiter);
-                }
+                delimiter_state.write_delimiter(&mut output);
             }
 
             if files.len() == eof_count {
                 break;
             }
 
-            if let &mut Some(ref mut de) = &mut delimiter_data_option {
-                let &mut DelimiterData {
-                    current_delimiter_length,
-                    delimiters_encoded,
-                    ref mut delimiters_encoded_iter,
-                } = de;
+            // Quote:
+            //     When the -s option is not specified:
+            //     [...]
+            //     The delimiter shall be reset to the first element of list after each file operand is processed.
+            // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+            delimiter_state.reset_to_first_delimiter();
 
-                // Reset iter after file is processed
-                *delimiters_encoded_iter = delimiters_encoded.iter();
+            delimiter_state.remove_trailing_delimiter(&mut output);
 
-                // Remove trailing delimiter, if there is a delimiter
-                if let Some(us) = output.len().checked_sub(current_delimiter_length) {
-                    output.truncate(us);
-                } else {
-                    // Subtraction would have resulted in a negative number. This should never happen.
-                }
-            }
-
+            // TODO
+            // Should the output be converted to UTF-8?
             write!(
                 stdout,
                 "{}{}",
@@ -308,9 +230,114 @@ fn paste(
     Ok(())
 }
 
-// Unescape all special characters
+/// Unescape all special characters
 fn unescape(s: &str) -> String {
     s.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\\\", "\\")
+}
+
+fn parse_delimiters(delimiters: &str) -> Box<[Box<[u8]>]> {
+    let delimiters_unescaped = unescape(delimiters).chars().collect::<Vec<_>>();
+
+    let delimiters_unescaped_len = delimiters_unescaped.len();
+
+    if delimiters_unescaped_len > 0 {
+        let mut vec = Vec::<Box<[u8]>>::with_capacity(delimiters_unescaped_len);
+
+        // a buffer of length four is large enough to encode any char
+        let mut buffer = [0; 4];
+
+        for delimiter in delimiters_unescaped {
+            let delimiter_encoded = delimiter.encode_utf8(&mut buffer);
+
+            vec.push(Box::from(delimiter_encoded.as_bytes()));
+        }
+
+        vec.into_boxed_slice()
+    } else {
+        Box::new([])
+    }
+}
+
+enum DelimiterState<'a> {
+    NoDelimiters,
+    OneDelimiter {
+        delimiter: &'a [u8],
+    },
+    MultipleDelimiters {
+        current_delimiter: &'a [u8],
+        delimiters: &'a [Box<[u8]>],
+        delimiters_iter: Cycle<Iter<'a, Box<[u8]>>>,
+    },
+}
+
+impl<'a> DelimiterState<'a> {
+    /// If there are multiple delimiters, advance the iterator over the delimiter list.
+    /// This is a no-op unless there are multiple delimiters.
+    fn advance_to_next_delimiter(&mut self) {
+        if let DelimiterState::MultipleDelimiters {
+            current_delimiter,
+            delimiters_iter,
+            ..
+        } = self
+        {
+            // Unwrap because "delimiters_encoded_iter" is a cycle iter and was created from a non-empty slice
+            *current_delimiter = delimiters_iter.next().unwrap();
+        }
+    }
+
+    /// This should only be used to return to the start of the delimiter list after a file has been processed.
+    /// This should only be used when the "serial" option is disabled.
+    /// This is a no-op unless there are multiple delimiters.
+    fn reset_to_first_delimiter(&mut self) {
+        if let DelimiterState::MultipleDelimiters {
+            delimiters_iter,
+            delimiters,
+            ..
+        } = self
+        {
+            *delimiters_iter = delimiters.iter().cycle();
+        }
+    }
+
+    /// Remove the trailing delimiter.
+    /// If there are no delimiters, this is a no-op.
+    fn remove_trailing_delimiter(&mut self, output: &mut Vec<u8>) {
+        let delimiter_length = match self {
+            DelimiterState::OneDelimiter { delimiter } => delimiter.len(),
+            DelimiterState::MultipleDelimiters {
+                current_delimiter, ..
+            } => current_delimiter.len(),
+            _ => {
+                return;
+            }
+        };
+
+        let output_len = output.len();
+
+        if let Some(output_without_delimiter_length) = output_len.checked_sub(delimiter_length) {
+            output.truncate(output_without_delimiter_length);
+        } else {
+            // This branch is NOT unreachable, must be skipped
+            // "output" should be empty in this case
+            assert!(output_len == 0);
+        }
+    }
+
+    /// Append the current delimiter to `output`.
+    /// If there are no delimiters, this is a no-op.
+    fn write_delimiter(&mut self, output: &mut Vec<u8>) {
+        match self {
+            DelimiterState::OneDelimiter { delimiter } => {
+                output.extend_from_slice(delimiter);
+            }
+            DelimiterState::MultipleDelimiters {
+                current_delimiter, ..
+            } => {
+                output.extend_from_slice(current_delimiter);
+            }
+            _ => {}
+        }
+    }
 }
