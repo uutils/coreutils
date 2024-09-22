@@ -1628,8 +1628,9 @@ fn test_acl() {
 mod inter_partition_copying {
     use crate::common::util::TestScenario;
     use std::fs::{read_to_string, set_permissions, write};
-    use std::os::unix::fs::{symlink, PermissionsExt};
+    use std::os::unix::fs::{symlink, FileTypeExt, PermissionsExt};
     use tempfile::TempDir;
+    use uucore::display::Quotable;
     // Ensure that the copying code used in an inter-partition move preserve dir structure.
     #[test]
     fn test_inter_partition_copying_folder() {
@@ -1750,6 +1751,196 @@ mod inter_partition_copying {
             .fails()
             .stderr_contains("inter-device move failed:")
             .stderr_contains("Permission denied");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_inter_partition_copying_folder_with_fifo() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/b/c");
+        at.write("a/b/d", "d");
+        at.write("a/b/c/e", "e");
+        at.mkfifo("a/b/c/f");
+
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds();
+
+        // make sure that a got removed.
+        assert!(!at.dir_exists("a"));
+
+        // Ensure that the folder structure is preserved, files are copied, and their contents remain intact.
+        assert_eq!(
+            read_to_string(other_fs_tempdir.path().join("a/b/d"),)
+                .expect("Unable to read other_fs_file"),
+            "d"
+        );
+        assert_eq!(
+            read_to_string(other_fs_tempdir.path().join("a/b/c/e"),)
+                .expect("Unable to read other_fs_file"),
+            "e"
+        );
+        assert!(other_fs_tempdir
+            .path()
+            .join("a/b/c/f")
+            .metadata()
+            .expect("")
+            .file_type()
+            .is_fifo())
+    }
+
+    #[test]
+    fn test_inter_partition_copying_folder_with_verbose() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/b/c");
+        at.write("a/b/d", "d");
+        at.write("a/b/c/e", "e");
+
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .stdout_contains(format!(
+                "created directory {}",
+                other_fs_tempdir.path().join("a").to_string_lossy().quote()
+            ))
+            .stdout_contains(format!(
+                "created directory {}",
+                other_fs_tempdir
+                    .path()
+                    .join("a/b/c")
+                    .to_string_lossy()
+                    .quote()
+            ))
+            .stdout_contains(format!(
+                "copied 'a/b/d' -> {}",
+                other_fs_tempdir
+                    .path()
+                    .join("a/b/d")
+                    .to_string_lossy()
+                    .quote()
+            ))
+            .stdout_contains("removed 'a/b/c/e'")
+            .stdout_contains("removed directory 'a/b'");
+    }
+    #[test]
+    fn test_inter_partition_copying_file_with_verbose() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.write("a", "file_contents");
+
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .stdout_contains(format!(
+                "copied 'a' -> {}",
+                other_fs_tempdir.path().join("a").to_string_lossy().quote()
+            ))
+            .stdout_contains("removed 'a'");
+
+        at.write("a", "file_contents");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-vb")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .stdout_contains(format!(
+                "copied 'a' -> {} (backup: {})",
+                other_fs_tempdir.path().join("a").to_string_lossy().quote(),
+                other_fs_tempdir.path().join("a~").to_string_lossy().quote()
+            ))
+            .stdout_contains("removed 'a'");
+    }
+
+    #[test]
+    fn test_inter_partition_copying_folder_without_read_permission_to_subfolders() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/b/c");
+        at.write("a/b/d", "d");
+        at.write("a/b/c/e", "e");
+        at.mkdir_all("a/b/f");
+        at.write("a/b/f/g", "g");
+        at.write("a/b/h", "h");
+        at.set_mode("a/b/f", 0);
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            // check erorr occured
+            .stderr_contains(format!("cannot access 'a/b/f': Permission denied"));
+
+        // make sure mv kept on going after error
+        assert_eq!(
+            read_to_string(other_fs_tempdir.path().join("a/b/h"),)
+                .expect("Unable to read other_fs_file"),
+            "h"
+        );
+
+        // make sure mv didn't remove src because an error occured
+        at.dir_exists("a");
+        at.file_exists("a/b/h");
+    }
+
+    #[test]
+    fn test_inter_partition_copying_folder_without_write_permission_to_subfolders() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/b/c");
+        at.write("a/b/d", "d");
+        at.write("a/b/c/e", "e");
+        at.mkdir_all("a/b/f");
+        at.write("a/b/f/g", "g");
+        at.write("a/b/h", "h");
+        at.set_mode("a/b/f",0o555 );
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            // check erorr occured
+            .stderr_contains(format!("mv: cannot remove 'a': Permission denied"));
+
     }
 }
 
