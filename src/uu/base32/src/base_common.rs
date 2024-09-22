@@ -308,7 +308,7 @@ mod fast_encode {
     use std::{
         collections::VecDeque,
         io::{self, ErrorKind, Read, StdoutLock, Write},
-        num::{NonZero, NonZeroUsize},
+        num::NonZeroUsize,
     };
     use uucore::{
         encoding::SupportsFastEncode,
@@ -424,12 +424,12 @@ mod fast_encode {
             Some(0_usize) => None,
             // A custom line wrapping value was passed
             Some(an) => Some(LineWrapping {
-                line_length: NonZero::new(an).unwrap(),
+                line_length: NonZeroUsize::new(an).unwrap(),
                 print_buffer: Vec::<u8>::new(),
             }),
             // Line wrapping was not set, so the default is used
             None => Some(LineWrapping {
-                line_length: NonZero::new(WRAP_DEFAULT).unwrap(),
+                line_length: NonZeroUsize::new(WRAP_DEFAULT).unwrap(),
                 print_buffer: Vec::<u8>::new(),
             }),
         };
@@ -579,7 +579,7 @@ mod fast_decode {
             // Note: "true" here
             let mut table = [true; 256_usize];
 
-            // Pass through all characters except '\n' and '\r' to
+            // Pass through all characters except '\n' and '\r'
             for ue in [b'\n', b'\r'] {
                 let us = usize::from(ue);
 
