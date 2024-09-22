@@ -7,13 +7,18 @@
 use crate::common::util::TestScenario;
 
 #[test]
-fn test_z85_not_padded() {
+fn test_z85_not_padded_decode() {
     // The z85 crate deviates from the standard in some cases; we have to catch those
     new_ucmd!()
         .args(&["--z85", "-d"])
         .pipe_in("##########")
         .fails()
         .stderr_only("basenc: error: invalid input\n");
+}
+
+#[test]
+fn test_z85_not_padded_encode() {
+    // The z85 crate deviates from the standard in some cases; we have to catch those
     new_ucmd!()
         .args(&["--z85"])
         .pipe_in("123")

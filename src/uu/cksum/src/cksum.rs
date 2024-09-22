@@ -111,7 +111,7 @@ where
             OutputFormat::Hexadecimal => sum_hex,
             OutputFormat::Base64 => match options.algo_name {
                 ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => sum_hex,
-                _ => encoding::encode_base_six_four(&hex::decode(sum_hex).unwrap()),
+                _ => encoding::for_cksum::BASE64.encode(&hex::decode(sum_hex).unwrap()),
             },
         };
         // The BSD checksum output is 5 digit integer
