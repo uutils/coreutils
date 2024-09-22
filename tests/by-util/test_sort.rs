@@ -82,6 +82,13 @@ fn test_invalid_buffer_size() {
         .code_is(2)
         .stderr_only("sort: --buffer-size argument '1Y' too large\n");
 
+    new_ucmd!()
+        .arg("-S")
+        .arg("102%")
+        .fails()
+        .code_is(2)
+        .stderr_only("sort: invalid --buffer-size argument '102%'\n");
+
     #[cfg(target_pointer_width = "32")]
     {
         let buffer_sizes = ["1000G", "10T"];
