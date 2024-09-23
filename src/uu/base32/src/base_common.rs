@@ -7,7 +7,7 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{BufReader, Read, Stdin};
+use std::io::{Read, Stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -141,13 +141,12 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
 pub fn get_input<'a>(config: &Config, stdin_ref: &'a Stdin) -> UResult<Box<dyn Read + 'a>> {
     match &config.to_read {
         Some(name) => {
+            // Do not buffer input, because buffering is handled by `fast_decode` and `fast_encode`
             let file_buf =
                 File::open(Path::new(name)).map_err_context(|| name.maybe_quote().to_string())?;
-            Ok(Box::new(BufReader::new(file_buf))) // as Box<dyn Read>
+            Ok(Box::new(file_buf))
         }
-        None => {
-            Ok(Box::new(stdin_ref.lock())) // as Box<dyn Read>
-        }
+        None => Ok(Box::new(stdin_ref.lock())),
     }
 }
 
@@ -414,10 +413,8 @@ mod fast_encode {
         (supports_fast_encode, encode_in_chunks_of_size): (S, usize),
         line_wrap: Option<usize>,
     ) -> UResult<()> {
-        /// Rust uses 8 kibibytes
-        ///
-        /// https://github.com/rust-lang/rust/blob/1a5a2240bc1b8cf0bcce7acb946c78d6493a4fd3/library/std/src/sys_common/io.rs#L3
-        const INPUT_BUFFER_SIZE: usize = 8_usize * 1_024_usize;
+        // Based on performance testing
+        const INPUT_BUFFER_SIZE: usize = 32_usize * 1_024_usize;
 
         let mut line_wrapping_option = match line_wrap {
             // Line wrapping is disabled because "-w"/"--wrap" was passed with "0"
@@ -613,10 +610,8 @@ mod fast_decode {
         (supports_fast_decode, decode_in_chunks_of_size, alphabet): (S, usize, &[u8]),
         ignore_garbage: bool,
     ) -> UResult<()> {
-        /// Rust uses 8 kibibytes
-        ///
-        /// https://github.com/rust-lang/rust/blob/1a5a2240bc1b8cf0bcce7acb946c78d6493a4fd3/library/std/src/sys_common/io.rs#L3
-        const INPUT_BUFFER_SIZE: usize = 8_usize * 1_024_usize;
+        // Based on performance testing
+        const INPUT_BUFFER_SIZE: usize = 32_usize * 1_024_usize;
 
         // Note that it's not worth using "data-encoding"'s ignore functionality if "ignore_garbage" is true, because
         // "data-encoding"'s ignore functionality cannot discard non-ASCII bytes. The data has to be filtered before
@@ -661,7 +656,7 @@ mod fast_decode {
                         let read_buffer = &input_buffer[..bytes_read_from_input];
 
                         // First just scan the data for the happy path
-                        // Note: this happy path check has not been validated with performance testing
+                        // Yields significant speedup when the input does not contain line endings
                         let found_garbage = read_buffer.iter().any(|ue| {
                             // Garbage, since it was not found in the table
                             !table[usize::from(*ue)]
