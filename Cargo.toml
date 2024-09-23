@@ -337,7 +337,6 @@ thiserror = "1.0.59"
 time = { version = "0.3.36" }
 unicode-segmentation = "1.11.0"
 unicode-width = "0.1.12"
-utf-8 = "0.7.6"
 utmp-classic = "0.1.6"
 walkdir = "2.5"
 winapi-util = "0.1.8"
