@@ -1271,7 +1271,12 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             let dest = construct_dest_path(source, target, target_type, options)
                 .unwrap_or_else(|_| target.to_path_buf());
 
-            if fs::metadata(&dest).is_ok() && !fs::symlink_metadata(&dest)?.file_type().is_symlink()
+            if fs::metadata(&dest).is_ok()
+                && !fs::symlink_metadata(&dest)?.file_type().is_symlink()
+                // if both `source` and `dest` are symlinks, it should be considered as an overwrite.
+                || fs::metadata(source).is_ok()
+                    && fs::symlink_metadata(source)?.file_type().is_symlink()
+                || matches!(options.copy_mode, CopyMode::SymLink)
             {
                 // There is already a file and it isn't a symlink (managed in a different place)
                 if copied_destinations.contains(&dest)
