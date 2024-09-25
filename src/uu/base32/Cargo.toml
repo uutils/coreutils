@@ -1,3 +1,5 @@
+# spell-checker:ignore proptest
+
 [package]
 name = "uu_base32"
 version = "0.0.27"
