@@ -740,16 +740,17 @@ fn format_read_error(kind: ErrorKind) -> String {
     let kind_string = kind.to_string();
 
     // e.g. "is a directory" -> "Is a directory"
-    let kind_string_capitalized = kind_string
-        .char_indices()
-        .map(|(index, character)| {
-            if index == 0 {
-                character.to_uppercase().collect::<String>()
-            } else {
-                character.to_string()
+    let mut kind_string_capitalized = String::with_capacity(kind_string.len());
+
+    for (index, ch) in kind_string.char_indices() {
+        if index == 0 {
+            for cha in ch.to_uppercase() {
+                kind_string_capitalized.push(cha);
             }
-        })
-        .collect::<String>();
+        } else {
+            kind_string_capitalized.push(ch);
+        }
+    }
 
     format!("read error: {kind_string_capitalized}")
 }

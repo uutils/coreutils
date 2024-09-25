@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (encodings) lsbf msbf unpadded
+// spell-checker:ignore (encodings) lsbf msbf
+// spell-checker:ignore unpadded
 
 use crate::error::{UResult, USimpleError};
 use data_encoding::Encoding;
