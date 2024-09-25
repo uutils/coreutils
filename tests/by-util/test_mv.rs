@@ -1794,7 +1794,7 @@ mod inter_partition_copying {
             .metadata()
             .expect("")
             .file_type()
-            .is_fifo())
+            .is_fifo());
     }
 
     #[test]
@@ -1902,7 +1902,7 @@ mod inter_partition_copying {
             .arg(other_fs_tempdir.path().to_str().unwrap())
             .fails()
             // check erorr occured
-            .stderr_contains(format!("cannot access 'a/b/f': Permission denied"));
+            .stderr_contains("cannot access 'a/b/f': Permission denied");
 
         // make sure mv kept on going after error
         assert_eq!(
@@ -1926,7 +1926,7 @@ mod inter_partition_copying {
         at.mkdir_all("a/b/f");
         at.write("a/b/f/g", "g");
         at.write("a/b/h", "h");
-        at.set_mode("a/b/f",0o555 );
+        at.set_mode("a/b/f", 0o555);
         // create a folder in another partition.
         let other_fs_tempdir =
             TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
@@ -1939,8 +1939,7 @@ mod inter_partition_copying {
             .arg(other_fs_tempdir.path().to_str().unwrap())
             .fails()
             // check erorr occured
-            .stderr_contains(format!("mv: cannot remove 'a': Permission denied"));
-
+            .stderr_contains("mv: cannot remove 'a': Permission denied");
     }
 }
 
