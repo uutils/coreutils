@@ -7,7 +7,7 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{ErrorKind, Read, Stdin};
+use std::io::{self, ErrorKind, Read, Stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::encoding::{
@@ -25,7 +25,7 @@ pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 /// Other implementations default to 76
 ///
 /// This default is only used if no "-w"/"--wrap" argument is passed
-const WRAP_DEFAULT: usize = 76;
+pub const WRAP_DEFAULT: usize = 76;
 
 pub struct Config {
     pub decode: bool,
@@ -158,6 +158,28 @@ pub fn handle_input<R: Read>(
     ignore_garbage: bool,
     decode: bool,
 ) -> UResult<()> {
+    let supports_fast_decode_and_encode = get_supports_fast_decode_and_encode(format);
+
+    let mut stdout_lock = io::stdout().lock();
+
+    if decode {
+        fast_decode::fast_decode(
+            input,
+            &mut stdout_lock,
+            supports_fast_decode_and_encode.as_ref(),
+            ignore_garbage,
+        )
+    } else {
+        fast_encode::fast_encode(
+            input,
+            &mut stdout_lock,
+            supports_fast_decode_and_encode.as_ref(),
+            wrap,
+        )
+    }
+}
+
+pub fn get_supports_fast_decode_and_encode(format: Format) -> Box<dyn SupportsFastDecodeAndEncode> {
     const BASE16_VALID_DECODING_MULTIPLE: usize = 2;
     const BASE2_VALID_DECODING_MULTIPLE: usize = 8;
     const BASE32_VALID_DECODING_MULTIPLE: usize = 8;
@@ -168,7 +190,7 @@ pub fn handle_input<R: Read>(
     const BASE32_UNPADDED_MULTIPLE: usize = 5;
     const BASE64_UNPADDED_MULTIPLE: usize = 3;
 
-    let supports_fast_decode_and_encode: Box<dyn SupportsFastDecodeAndEncode> = match format {
+    match format {
         Format::Base16 => Box::from(EncodingWrapper::new(
             HEXUPPER,
             BASE16_VALID_DECODING_MULTIPLE,
@@ -219,26 +241,14 @@ pub fn handle_input<R: Read>(
             b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=_-",
         )),
         Format::Z85 => Box::from(Z85Wrapper {}),
-    };
-
-    if decode {
-        fast_decode::fast_decode(
-            input,
-            supports_fast_decode_and_encode.as_ref(),
-            ignore_garbage,
-        )?;
-    } else {
-        fast_encode::fast_encode(input, supports_fast_decode_and_encode.as_ref(), wrap)?;
     }
-
-    Ok(())
 }
 
-mod fast_encode {
+pub mod fast_encode {
     use crate::base_common::{format_read_error, WRAP_DEFAULT};
     use std::{
         collections::VecDeque,
-        io::{self, ErrorKind, Read, StdoutLock, Write},
+        io::{self, ErrorKind, Read, Write},
         num::NonZeroUsize,
     };
     use uucore::{
@@ -299,17 +309,17 @@ mod fast_encode {
 
     fn write_without_line_breaks(
         encoded_buffer: &mut VecDeque<u8>,
-        stdout_lock: &mut StdoutLock,
+        output: &mut dyn Write,
         is_cleanup: bool,
     ) -> io::Result<()> {
         // TODO
         // `encoded_buffer` only has to be a VecDeque if line wrapping is enabled
         // (`make_contiguous` should be a no-op here)
         // Refactoring could avoid this call
-        stdout_lock.write_all(encoded_buffer.make_contiguous())?;
+        output.write_all(encoded_buffer.make_contiguous())?;
 
         if is_cleanup {
-            stdout_lock.write_all(b"\n")?;
+            output.write_all(b"\n")?;
         } else {
             encoded_buffer.clear();
         }
@@ -323,7 +333,7 @@ mod fast_encode {
             ref mut print_buffer,
         }: &mut LineWrapping,
         encoded_buffer: &mut VecDeque<u8>,
-        stdout_lock: &mut StdoutLock,
+        output: &mut dyn Write,
         is_cleanup: bool,
     ) -> io::Result<()> {
         let line_length = line_length.get();
@@ -341,7 +351,7 @@ mod fast_encode {
             print_buffer.push(b'\n');
         }
 
-        stdout_lock.write_all(print_buffer)?;
+        output.write_all(print_buffer)?;
 
         // Remove the bytes that were just printed from `encoded_buffer`
         drop(encoded_buffer.drain(..bytes_added_to_print_buffer));
@@ -351,8 +361,8 @@ mod fast_encode {
                 // Do not write a newline in this case, because two trailing newlines should never be printed
             } else {
                 // Print the partial line, since this is cleanup and no more data is coming
-                stdout_lock.write_all(encoded_buffer.make_contiguous())?;
-                stdout_lock.write_all(b"\n")?;
+                output.write_all(encoded_buffer.make_contiguous())?;
+                output.write_all(b"\n")?;
             }
         } else {
             print_buffer.clear();
@@ -361,27 +371,28 @@ mod fast_encode {
         Ok(())
     }
 
-    fn write_to_stdout(
+    fn write_to_output(
         line_wrapping_option: &mut Option<LineWrapping>,
         encoded_buffer: &mut VecDeque<u8>,
-        stdout_lock: &mut StdoutLock,
+        output: &mut dyn Write,
         is_cleanup: bool,
     ) -> io::Result<()> {
-        // Write all data in `encoded_buffer` to stdout
+        // Write all data in `encoded_buffer` to `output`
         if let &mut Some(ref mut li) = line_wrapping_option {
-            write_with_line_breaks(li, encoded_buffer, stdout_lock, is_cleanup)?;
+            write_with_line_breaks(li, encoded_buffer, output, is_cleanup)?;
         } else {
-            write_without_line_breaks(encoded_buffer, stdout_lock, is_cleanup)?;
+            write_without_line_breaks(encoded_buffer, output, is_cleanup)?;
         }
 
         Ok(())
     }
     // End of helper functions
 
-    pub fn fast_encode<R: Read>(
+    pub fn fast_encode<R: Read, W: Write>(
         input: &mut R,
+        mut output: W,
         supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
-        line_wrap: Option<usize>,
+        wrap: Option<usize>,
     ) -> UResult<()> {
         // Based on performance testing
         const INPUT_BUFFER_SIZE: usize = 32 * 1_024;
@@ -393,10 +404,10 @@ mod fast_encode {
 
         assert!(encode_in_chunks_of_size > 0);
 
-        // "data-encoding" supports line wrapping, but not arbitrary line wrapping, only certain widths, so line
-        // wrapping must be implemented here.
+        // The "data-encoding" crate supports line wrapping, but not arbitrary line wrapping, only certain widths, so
+        // line wrapping must be handled here.
         // https://github.com/ia0/data-encoding/blob/4f42ad7ef242f6d243e4de90cd1b46a57690d00e/lib/src/lib.rs#L1710
-        let mut line_wrapping_option = match line_wrap {
+        let mut line_wrapping = match wrap {
             // Line wrapping is disabled because "-w"/"--wrap" was passed with "0"
             Some(0) => None,
             // A custom line wrapping value was passed
@@ -420,11 +431,9 @@ mod fast_encode {
         // Data that was read from stdin but has not been encoded yet
         let mut leftover_buffer = VecDeque::<u8>::new();
 
-        // Encoded data that needs to be written to stdout
+        // Encoded data that needs to be written to output
         let mut encoded_buffer = VecDeque::<u8>::new();
         // End of buffers
-
-        let mut stdout_lock = io::stdout().lock();
 
         loop {
             match input.read(&mut input_buffer) {
@@ -443,6 +452,8 @@ mod fast_encode {
                         // Do not have enough data to encode a chunk, so copy data to `leftover_buffer` and read more
                         leftover_buffer.extend(read_buffer);
 
+                        assert!(leftover_buffer.len() < encode_in_chunks_of_size);
+
                         continue;
                     }
 
@@ -456,13 +467,10 @@ mod fast_encode {
                         &mut leftover_buffer,
                     )?;
 
-                    // Write all data in `encoded_buffer` to stdout
-                    write_to_stdout(
-                        &mut line_wrapping_option,
-                        &mut encoded_buffer,
-                        &mut stdout_lock,
-                        false,
-                    )?;
+                    assert!(leftover_buffer.len() < encode_in_chunks_of_size);
+
+                    // Write all data in `encoded_buffer` to output
+                    write_to_output(&mut line_wrapping, &mut encoded_buffer, &mut output, false)?;
                 }
                 Err(er) => {
                     let kind = er.kind();
@@ -484,23 +492,18 @@ mod fast_encode {
             supports_fast_decode_and_encode
                 .encode_to_vec_deque(leftover_buffer.make_contiguous(), &mut encoded_buffer)?;
 
-            // Write all data in `encoded_buffer` to stdout
+            // Write all data in `encoded_buffer` to output
             // `is_cleanup` triggers special cleanup-only logic
-            write_to_stdout(
-                &mut line_wrapping_option,
-                &mut encoded_buffer,
-                &mut stdout_lock,
-                true,
-            )?;
+            write_to_output(&mut line_wrapping, &mut encoded_buffer, &mut output, true)?;
         }
 
         Ok(())
     }
 }
 
-mod fast_decode {
+pub mod fast_decode {
     use crate::base_common::format_read_error;
-    use std::io::{self, ErrorKind, Read, StdoutLock, Write};
+    use std::io::{self, ErrorKind, Read, Write};
     use uucore::{
         encoding::SupportsFastDecodeAndEncode,
         error::{UResult, USimpleError},
@@ -588,12 +591,9 @@ mod fast_decode {
         Ok(())
     }
 
-    fn write_to_stdout(
-        decoded_buffer: &mut Vec<u8>,
-        stdout_lock: &mut StdoutLock,
-    ) -> io::Result<()> {
-        // Write all data in `decoded_buffer` to stdout
-        stdout_lock.write_all(decoded_buffer.as_slice())?;
+    fn write_to_output(decoded_buffer: &mut Vec<u8>, output: &mut dyn Write) -> io::Result<()> {
+        // Write all data in `decoded_buffer` to `output`
+        output.write_all(decoded_buffer.as_slice())?;
 
         decoded_buffer.clear();
 
@@ -601,10 +601,9 @@ mod fast_decode {
     }
     // End of helper functions
 
-    /// `encoding`, `decode_in_chunks_of_size`, and `alphabet` are passed in a tuple to indicate that they are
-    /// logically tied
-    pub fn fast_decode<R: Read>(
+    pub fn fast_decode<R: Read, W: Write>(
         input: &mut R,
+        mut output: &mut W,
         supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
         ignore_garbage: bool,
     ) -> UResult<()> {
@@ -640,15 +639,13 @@ mod fast_decode {
         // Data that was read from stdin but has not been decoded yet
         let mut leftover_buffer = Vec::<u8>::new();
 
-        // Decoded data that needs to be written to stdout
+        // Decoded data that needs to be written to `output`
         let mut decoded_buffer = Vec::<u8>::new();
 
         // Buffer that will be used when "ignore_garbage" is true, and the chunk read from "input" contains garbage
         // data
         let mut non_garbage_buffer = Vec::<u8>::new();
         // End of buffers
-
-        let mut stdout_lock = io::stdout().lock();
 
         loop {
             match input.read(&mut input_buffer) {
@@ -687,9 +684,11 @@ mod fast_decode {
                     // How many bytes to steal from `read_buffer` to get `leftover_buffer` to the right size
                     let bytes_to_steal = decode_in_chunks_of_size - leftover_buffer.len();
 
-                    if bytes_to_steal > bytes_read_from_input {
+                    if bytes_to_steal > read_buffer_filtered.len() {
                         // Do not have enough data to decode a chunk, so copy data to `leftover_buffer` and read more
                         leftover_buffer.extend(read_buffer_filtered);
+
+                        assert!(leftover_buffer.len() < decode_in_chunks_of_size);
 
                         continue;
                     }
@@ -700,12 +699,14 @@ mod fast_decode {
                         decode_in_chunks_of_size,
                         bytes_to_steal,
                         read_buffer_filtered,
-                        &mut leftover_buffer,
                         &mut decoded_buffer,
+                        &mut leftover_buffer,
                     )?;
 
-                    // Write all data in `decoded_buffer` to stdout
-                    write_to_stdout(&mut decoded_buffer, &mut stdout_lock)?;
+                    assert!(leftover_buffer.len() < decode_in_chunks_of_size);
+
+                    // Write all data in `decoded_buffer` to `output`
+                    write_to_output(&mut decoded_buffer, &mut output)?;
                 }
                 Err(er) => {
                     let kind = er.kind();
@@ -727,8 +728,8 @@ mod fast_decode {
             supports_fast_decode_and_encode
                 .decode_into_vec(&leftover_buffer, &mut decoded_buffer)?;
 
-            // Write all data in `decoded_buffer` to stdout
-            write_to_stdout(&mut decoded_buffer, &mut stdout_lock)?;
+            // Write all data in `decoded_buffer` to `output`
+            write_to_output(&mut decoded_buffer, &mut output)?;
         }
 
         Ok(())
@@ -739,7 +740,7 @@ fn format_read_error(kind: ErrorKind) -> String {
     let kind_string = kind.to_string();
 
     // e.g. "is a directory" -> "Is a directory"
-    let kind_string_uncapitalized = kind_string
+    let kind_string_capitalized = kind_string
         .char_indices()
         .map(|(index, character)| {
             if index == 0 {
@@ -750,5 +751,5 @@ fn format_read_error(kind: ErrorKind) -> String {
         })
         .collect::<String>();
 
-    format!("read error: {kind_string_uncapitalized}")
+    format!("read error: {kind_string_capitalized}")
 }

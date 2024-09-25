@@ -19,7 +19,7 @@ pub mod for_cksum {
     pub use data_encoding::BASE64;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Format {
     Base64,
     Base64Url,
@@ -57,6 +57,12 @@ impl EncodingWrapper {
         unpadded_multiple: usize,
         alphabet: &'static [u8],
     ) -> Self {
+        assert!(valid_decoding_multiple > 0);
+
+        assert!(unpadded_multiple > 0);
+
+        assert!(!alphabet.is_empty());
+
         Self {
             alphabet,
             encoding,
@@ -109,15 +115,6 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
         if input.first() == Some(&b'#') {
             return Err(USimpleError::new(1, "error: invalid input".to_owned()));
         }
-
-        // According to the spec we should not accept inputs whose len is not a multiple of 4.
-        // However, the z85 crate implements a padded encoding and accepts such inputs. We have to manually check for them.
-        if input.len() % 4 != 0 {
-            return Err(USimpleError::new(
-                1,
-                "error: invalid input (length must be multiple of 4 characters)".to_owned(),
-            ));
-        };
 
         let decode_result = match z85::decode(input) {
             Ok(ve) => ve,
