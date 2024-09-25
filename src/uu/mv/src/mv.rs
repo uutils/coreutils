@@ -40,8 +40,8 @@ pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
 use fs_extra::{
-    dir::{create_all, get_size as dir_get_size, remove},
-    error::Result as FsXResult,
+    dir::{get_size as dir_get_size, remove},
+    error::{ErrorKind as FsXErrorKind, Result as FsXResult},
     file::{self, CopyOptions},
 };
 
@@ -110,8 +110,17 @@ struct VerboseContext<'a> {
 }
 
 impl<'a> VerboseContext<'a> {
-    fn new(backup: Option<&'a Path>, pb: Option<&'a MultiProgress>) -> VerboseContext<'a> {
+    fn new(backup: Option<&'a Path>, pb: Option<&'a MultiProgress>) -> Self {
         VerboseContext { backup, pb }
+    }
+
+    fn hide_pb_and_print(&self, msg: &str) {
+        match self.pb {
+            Some(pb) => pb.suspend(|| {
+                println!("{msg}");
+            }),
+            None => println!("{msg}"),
+        };
     }
 
     fn print_move_file(&self, from: &Path, to: &Path) {
@@ -124,13 +133,7 @@ impl<'a> VerboseContext<'a> {
             ),
             None => format!("renamed {} -> {}", from.quote(), to.quote()),
         };
-
-        match self.pb {
-            Some(pb) => pb.suspend(|| {
-                println!("{message}");
-            }),
-            None => println!("{message}"),
-        };
+        self.hide_pb_and_print(&message);
     }
 
     fn print_copy_file(&self, from: &Path, to: &Path, with_backup_message: bool) {
@@ -143,28 +146,27 @@ impl<'a> VerboseContext<'a> {
             ),
             _ => format!("copied {} -> {}", from.quote(), to.quote()),
         };
-
-        match self.pb {
-            Some(pb) => pb.suspend(|| {
-                println!("{message}");
-            }),
-            None => println!("{message}"),
-        };
+        self.hide_pb_and_print(&message);
     }
 
     fn create_folder(&self, path: &Path) {
-        println!(
+        let message = format!(
             "created directory {}",
-            path.to_string_lossy().trim_end_matches("/").quote()
+            path.to_string_lossy()
+                .trim_end_matches(MAIN_SEPARATOR)
+                .quote()
         );
+        self.hide_pb_and_print(&message);
     }
 
     fn remove_file(&self, from: &Path) {
-        println!("removed {}", from.quote())
+        let message = format!("removed {}", from.quote());
+        self.hide_pb_and_print(&message);
     }
 
     fn remove_folder(&self, from: &Path) {
-        println!("removed directory {}", from.quote())
+        let message = format!("removed directory {}", from.quote());
+        self.hide_pb_and_print(&message);
     }
 }
 const ABOUT: &str = help_about!("mv.md");
@@ -672,9 +674,7 @@ fn rename(
         None
     };
 
-    rename_with_fallback(from, to, multi_progress, verbose_context)?;
-
-    Ok(())
+    rename_with_fallback(from, to, multi_progress, verbose_context.as_ref())
 }
 
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
@@ -683,7 +683,7 @@ fn rename_with_fallback(
     from: &Path,
     to: &Path,
     multi_progress: Option<&MultiProgress>,
-    vebose_context: Option<VerboseContext<'_>>,
+    vebose_context: Option<&VerboseContext<'_>>,
 ) -> io::Result<()> {
     if fs::rename(from, to).is_err() {
         // Get metadata without following symlinks
@@ -735,15 +735,8 @@ fn rename_with_fallback(
 
             if let Err(err) = result {
                 return match err {
-                    MvError::FsXError(fs_extra::error::Error {
-                        kind: fs_extra::error::ErrorKind::PermissionDenied,
-                        ..
-                    }) => Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "Permission denied",
-                    )),
                     MvError::NotAllFilesMoved => {
-                        Err(io::Error::new(io::ErrorKind::Other, format!("")))
+                        Err(io::Error::new(io::ErrorKind::Other, String::new()))
                     }
                     _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
                 };
@@ -765,41 +758,26 @@ fn rename_with_fallback(
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             fs::copy(from, to)
                 .map(|v| {
-                    if let Some(vc) = vebose_context.as_ref() {
+                    if let Some(vc) = vebose_context {
                         vc.print_copy_file(from, to, true);
                     }
                     v
                 })
-                .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-                .and_then(|_| {
-                    let res = fs::remove_file(from);
-                    if let Some(vc) = vebose_context {
-                        if res.is_ok() {
-                            vc.remove_file(from);
-                        }
-                    }
-                    res
-                })?;
+                .and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
             #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-            fs::copy(from, to)
-                .map(|v| {
-                    if let Some(vc) = vebose_context.as_ref() {
-                        vc.print_copy_file(from, to, true);
-                    }
-                    v
-                })
-                .and_then(|_| {
-                    let res = fs::remove_file(from);
-                    if let Some(vc) = vebose_context {
-                        vc.remove_file(from);
-                    }
-                    res
-                })?;
+            fs::copy(from, to).map(|v| {
+                if let Some(vc) = vebose_context {
+                    vc.print_copy_file(from, to, true);
+                }
+                v
+            })?;
+            fs::remove_file(from)?;
+            if let Some(vc) = vebose_context {
+                vc.remove_file(from);
+            }
         }
-    } else {
-        if let Some(vb) = vebose_context {
-            vb.print_move_file(from, to);
-        }
+    } else if let Some(vb) = vebose_context {
+        vb.print_move_file(from, to);
     }
     Ok(())
 }
@@ -855,7 +833,7 @@ fn move_dir(
     from: &Path,
     to: &Path,
     progress_bar: Option<&ProgressBar>,
-    vebose_context: Option<VerboseContext<'_>>,
+    verbose_context: Option<&VerboseContext<'_>>,
 ) -> MvResult<u64> {
     // The return value that represents the number of bytes copied.
     let mut result: u64 = 0;
@@ -867,43 +845,44 @@ fn move_dir(
                 let file_type = dir_entry.file_type();
                 let dir_entry_path = dir_entry.into_path();
                 //comment why this is okay
-                let tmp_to = dir_entry_path.strip_prefix(&from).unwrap();
+                let tmp_to = dir_entry_path.strip_prefix(from).unwrap();
                 let dir_entry_to = to.join(tmp_to);
                 if file_type.is_dir() {
                     // check this create all align with gnu
-                    let res = create_all(&dir_entry_to, false);
-                    if res.is_err() {
+                    let res = fs_extra::dir::create(&dir_entry_to, false);
+                    if let Err(err) = res {
+                        if let FsXErrorKind::NotFound = err.kind {
+                            return Err(err.into());
+                        }
                         error_occurred = true;
-                        show_error!("{:?}", res.unwrap_err());
+                        show_error!("{:?}", err);
                         continue;
                     }
-                    if let Some(vc) = vebose_context.as_ref() {
-                        vc.create_folder(&dir_entry_to)
+                    if let Some(vc) = verbose_context {
+                        vc.create_folder(&dir_entry_to);
                     }
                 } else {
-                    let result_file_copy =
-                        copy_file(&dir_entry_path, &dir_entry_to, progress_bar, result);
-
-                    match result_file_copy {
-                        Ok(result_file_copy) => {
-                            result += result_file_copy;
+                    let res = copy_file(&dir_entry_path, &dir_entry_to, progress_bar, result);
+                    match res {
+                        Ok(copied_bytes) => {
+                            result += copied_bytes;
+                            if let Some(vc) = verbose_context {
+                                vc.print_copy_file(&dir_entry_path, &dir_entry_to, false);
+                            }
                         }
                         Err(err) => {
                             let err_msg = match err.kind {
-                                fs_extra::error::ErrorKind::Io(error) => {
+                                FsXErrorKind::Io(error) => {
                                     format!("error writing {}: {}", dir_entry_to.quote(), error)
                                 }
                                 _ => {
                                     format!("{:?}", err)
                                 }
                             };
-                            error_occurred = true;
                             show_error!("{}", err_msg);
+                            error_occurred = true;
                             continue;
                         }
-                    }
-                    if let Some(vc) = vebose_context.as_ref() {
-                        vc.print_copy_file(&dir_entry_path, &dir_entry_to, false);
                     }
                 }
                 moved_entries.push((dir_entry_path, file_type));
@@ -921,8 +900,7 @@ fn move_dir(
         }
     }
     if !error_occurred {
-        while !moved_entries.is_empty() {
-            let (moved_path, file_type) = moved_entries.pop().unwrap();
+        while let Some((moved_path, file_type)) = moved_entries.pop() {
             let res = if file_type.is_dir() {
                 remove(&moved_path)
             } else {
@@ -931,13 +909,11 @@ fn move_dir(
             if let Err(err) = res {
                 error_occurred = true;
                 show_error!("cannot remove {}: {}", moved_path.quote(), err);
-            } else {
-                if let Some(vc) = vebose_context.as_ref() {
-                    if file_type.is_dir() {
-                        vc.remove_folder(&moved_path);
-                    } else {
-                        vc.remove_file(&moved_path);
-                    }
+            } else if let Some(vc) = verbose_context {
+                if file_type.is_dir() {
+                    vc.remove_folder(&moved_path);
+                } else {
+                    vc.remove_file(&moved_path);
                 }
             }
         }
@@ -994,221 +970,183 @@ fn copy_file(
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-    extern crate fs_extra;
-    use super::{copy_file, move_dir};
-    use fs_extra::dir::*;
-    use indicatif::{ProgressBar, ProgressStyle};
+    use crate::copy_file;
+    use crate::error::MvError;
+
+    use super::move_dir;
+    use super::MvResult;
+    use fs_extra::dir::get_size;
+    use indicatif::ProgressBar;
+    use std::fs;
+    use std::fs::metadata;
+    use std::fs::set_permissions;
+    use std::fs::{create_dir_all, File};
+    use std::io::Write;
+    use std::os::unix::fs::FileTypeExt;
     use tempfile::tempdir;
+    use uucore::fs::copy_fifo;
 
-    // These tests are copied from the `fs_extra`'s repository
     #[test]
-    fn it_move_work() {
-        for with_progress_bar in [false, true] {
-            let temp_dir = tempdir().unwrap();
-            let mut path_from = PathBuf::from(temp_dir.path());
-            let test_name = "sub";
-            path_from.push("it_move_work");
-            let mut path_to = path_from.clone();
-            path_to.push("out");
-            path_from.push(test_name);
+    fn move_all_files_and_directories() {
+        let tempdir = tempdir().expect("couldn't create tempdir");
+        let tempdir_path = tempdir.path();
+        let mut from = tempdir_path.to_path_buf();
+        from.push("test_src");
+        let mut to = tempdir_path.to_path_buf();
+        to.push("test_dest");
 
-            create_all(&path_from, true).unwrap();
-            assert!(path_from.exists());
-            create_all(&path_to, true).unwrap();
-            assert!(path_to.exists());
+        // Setup source directory with files and subdirectories
+        create_dir_all(from.join("subdir")).expect("couldn't create subdir");
+        let mut file = File::create(from.join("file1.txt")).expect("couldn't create file1.txt");
+        writeln!(file, "Hello, world!").expect("couldn't write to file1.txt");
+        let mut file =
+            File::create(from.join("subdir/file2.txt")).expect("couldn't create subdir/file2.txt");
+        writeln!(file, "Hello, subdir!").expect("couldn't write to subdir/file2.txt");
 
-            let mut file1_path = path_from.clone();
-            file1_path.push("test1.txt");
-            let content1 = "content1";
-            fs_extra::file::write_all(&file1_path, content1).unwrap();
-            assert!(file1_path.exists());
+        // Call the function
+        let result: MvResult<u64> = move_dir(&from, &to, None, None);
 
-            let mut sub_dir_path = path_from.clone();
-            sub_dir_path.push("sub");
-            create(&sub_dir_path, true).unwrap();
-            let mut file2_path = sub_dir_path.clone();
-            file2_path.push("test2.txt");
-            let content2 = "content2";
-            fs_extra::file::write_all(&file2_path, content2).unwrap();
-            assert!(file2_path.exists());
-
-            let pb = if with_progress_bar {
-                Some(
-                    ProgressBar::new(16).with_style(
-                        ProgressStyle::with_template(
-                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
-                        )
-                        .unwrap(),
-                    ),
-                )
-            } else {
-                None
-            };
-
-            let result = move_dir(&path_from, &path_to, pb.as_ref(), None).unwrap();
-
-            assert_eq!(16, result);
-            assert!(path_to.exists());
-            assert!(!path_from.exists());
-            if let Some(pb) = pb {
-                assert_eq!(pb.position(), 16);
-            }
-        }
+        // Assert the result
+        assert!(result.is_ok());
+        assert!(to.join("file1.txt").exists());
+        assert!(to.join("subdir/file2.txt").exists());
+        assert!(!from.join("file1.txt").exists());
+        assert!(!from.join("subdir/file2.txt").exists());
+        assert!(!from.exists());
     }
 
     #[test]
-    fn it_move_exist_overwrite() {
-        for with_progress_bar in [false, true] {
-            let temp_dir = tempdir().unwrap();
-            let mut path_from = PathBuf::from(temp_dir.path());
-            let test_name = "sub";
-            path_from.push("it_move_exist_overwrite");
-            let mut path_to = path_from.clone();
-            path_to.push("out");
-            path_from.push(test_name);
-            let same_file = "test.txt";
+    fn move_dir_tracks_progress() {
+        // Create a temporary directory for testing
+        let tempdir = tempdir().expect("couldn't create tempdir");
+        let tempdir_path = tempdir.path();
+        let mut from = tempdir_path.to_path_buf();
+        from.push("test_src");
+        let mut to = tempdir_path.to_path_buf();
+        to.push("test_dest");
 
-            create_all(&path_from, true).unwrap();
-            assert!(path_from.exists());
-            create_all(&path_to, true).unwrap();
-            assert!(path_to.exists());
+        // Setup source directory with files and subdirectories
+        create_dir_all(from.join("subdir")).expect("couldn't create subdir");
+        let mut file = File::create(from.join("file1.txt")).expect("couldn't create file1.txt");
+        writeln!(file, "Hello, world!").expect("couldn't write to file1.txt");
+        let mut file =
+            File::create(from.join("subdir/file2.txt")).expect("couldn't create subdir/file2.txt");
+        writeln!(file, "Hello, subdir!").expect("couldn't write to subdir/file2.txt");
 
-            let mut file1_path = path_from.clone();
-            file1_path.push(same_file);
-            let content1 = "content1";
-            fs_extra::file::write_all(&file1_path, content1).unwrap();
-            assert!(file1_path.exists());
+        let len = get_size(&from).expect("couldn't get the size of source dir");
+        let pb = ProgressBar::new(len);
 
-            let mut sub_dir_path = path_from.clone();
-            sub_dir_path.push("sub");
-            create(&sub_dir_path, true).unwrap();
-            let mut file2_path = sub_dir_path.clone();
-            file2_path.push("test2.txt");
-            let content2 = "content2";
-            fs_extra::file::write_all(&file2_path, content2).unwrap();
-            assert!(file2_path.exists());
+        // Call the function
+        let result: MvResult<u64> = move_dir(&from, &to, Some(&pb), None);
 
-            let mut exist_path = path_to.clone();
-            exist_path.push(test_name);
-            create(&exist_path, true).unwrap();
-            assert!(exist_path.exists());
-            exist_path.push(same_file);
-            let exist_content = "exist content";
-            assert_ne!(exist_content, content1);
-            fs_extra::file::write_all(&exist_path, exist_content).unwrap();
-            assert!(exist_path.exists());
-
-            let dir_size = get_size(&path_from).expect("failed to get dir size");
-            let pb = if with_progress_bar {
-                Some(
-                    ProgressBar::new(dir_size).with_style(
-                        ProgressStyle::with_template(
-                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
-                        )
-                        .unwrap(),
-                    ),
-                )
-            } else {
-                None
-            };
-            move_dir(&path_from, &path_to, pb.as_ref(), None).unwrap();
-            assert!(exist_path.exists());
-            assert!(path_to.exists());
-            assert!(!path_from.exists());
-            if let Some(pb) = pb {
-                assert_eq!(pb.position(), dir_size);
-            }
-        }
+        // Assert the result
+        assert!(result.is_ok());
+        assert!(to.join("file1.txt").exists());
+        assert!(to.join("subdir/file2.txt").exists());
+        assert!(!from.join("file1.txt").exists());
+        assert!(!from.join("subdir/file2.txt").exists());
+        assert!(!from.exists());
+        assert_eq!(pb.position(), len)
     }
 
     #[test]
-    fn it_move_inside_work_target_dir_not_exist() {
-        for with_progress_bar in [false, true] {
-            let temp_dir = tempdir().unwrap();
-            let path_root = PathBuf::from(temp_dir.path());
-            let root = path_root.join("it_move_inside_work_target_dir_not_exist");
-            let root_dir1 = root.join("dir1");
-            let root_dir1_sub = root_dir1.join("sub");
-            let root_dir2 = root.join("dir2");
-            let file1 = root_dir1.join("file1.txt");
-            let file2 = root_dir1_sub.join("file2.txt");
+    fn move_all_files_and_directories_without_src_permission() {
+        let tempdir = tempdir().expect("couldn't create tempdir");
+        let tempdir_path = tempdir.path();
+        let mut from = tempdir_path.to_path_buf();
+        from.push("test_src");
+        let mut to = tempdir_path.to_path_buf();
+        to.push("test_dest");
 
-            create_all(&root_dir1_sub, true).unwrap();
-            fs_extra::file::write_all(&file1, "content1").unwrap();
-            fs_extra::file::write_all(&file2, "content2").unwrap();
+        // Setup source directory with files and subdirectories
+        create_dir_all(from.join("subdir")).expect("couldn't create subdir");
 
-            if root_dir2.exists() {
-                remove(&root_dir2).unwrap();
-            }
+        let mut file = File::create(from.join("file1.txt")).expect("couldn't create file1.txt");
+        writeln!(file, "Hello, world!").expect("couldn't write to file1.txt");
+        let mut file =
+            File::create(from.join("subdir/file2.txt")).expect("couldn't create subdir/file2.txt");
+        writeln!(file, "Hello, subdir!").expect("couldn't write to subdir/file2.txt");
 
-            assert!(root_dir1.exists());
-            assert!(root_dir1_sub.exists());
-            assert!(!root_dir2.exists());
-            assert!(file1.exists());
-            assert!(file2.exists());
-            let dir_size = get_size(&root_dir1).expect("failed to get dir size");
-            let pb = if with_progress_bar {
-                Some(
-                    ProgressBar::new(dir_size).with_style(
-                        ProgressStyle::with_template(
-                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
-                        )
-                        .unwrap(),
-                    ),
-                )
-            } else {
-                None
-            };
+        let metadata = metadata(&from).expect("failed to get metadata");
+        let mut permissions = metadata.permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o222);
+        set_permissions(&from, permissions).expect("failed to set permissions");
 
-            let result = move_dir(&root_dir1, &root_dir2, pb.as_ref(), None).unwrap();
-
-            assert_eq!(16, result);
-            assert!(!root_dir1.exists());
-            let root_dir2_sub = root_dir2.join("sub");
-            let root_dir2_file1 = root_dir2.join("file1.txt");
-            let root_dir2_sub_file2 = root_dir2_sub.join("file2.txt");
-            assert!(root_dir2.exists());
-            assert!(root_dir2_sub.exists());
-            assert!(root_dir2_file1.exists());
-            assert!(root_dir2_sub_file2.exists());
-            if let Some(pb) = pb {
-                assert_eq!(pb.position(), dir_size);
-            }
-        }
+        // Call the function
+        let result: MvResult<u64> = move_dir(&from, &to, None, None);
+        assert!(matches!(result, Err(MvError::NotAllFilesMoved)));
+        assert!(from.exists());
     }
 
     #[test]
-    fn copy_file_test() {
-        for with_progress_bar in [false, true] {
-            let temp_dir = tempdir().unwrap();
-            let temp_dir_path = temp_dir.path();
+    fn test_copy_file() {
+        let temp_dir = tempdir().expect("couldn't create tempdir");
+        let from = temp_dir.path().join("test_source.txt");
+        let to = temp_dir.path().join("test_destination.txt");
 
-            let file1_path = temp_dir_path.join("file");
-            let content = "content";
-            fs_extra::file::write_all(&file1_path, content).unwrap();
-            assert!(file1_path.exists());
-            let path_to = temp_dir_path.join("file_out");
-            let pb = if with_progress_bar {
-                Some(
-                    ProgressBar::new(7).with_style(
-                        ProgressStyle::with_template(
-                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
-                        )
-                        .unwrap(),
-                    ),
-                )
-            } else {
-                None
-            };
+        // Create a test source file
+        let mut file = File::create(&from).expect("couldn't create file1.txt");
+        write!(file, "Hello, world!").expect("couldn't write to file1.txt");
 
-            let result = copy_file(&file1_path, &path_to, pb.as_ref(), 0).expect("move failed");
+        // Call the function
+        let result = copy_file(&from, &to, None, 0);
 
-            assert_eq!(7, result);
-            assert!(path_to.exists());
-            if let Some(pb) = pb {
-                assert_eq!(pb.position(), 7);
-            }
-        }
+        // Assert the result is Ok and the file was copied
+        assert!(result.is_ok());
+        assert!(to.exists());
+        assert_eq!(
+            fs::read_to_string(to).expect("couldn't read from to"),
+            "Hello, world!"
+        );
+    }
+    #[test]
+    fn test_copy_file_with_progress() {
+        let temp_dir = tempdir().expect("couldn't create tempdir");
+        let from = temp_dir.path().join("test_source.txt");
+        let to = temp_dir.path().join("test_destination.txt");
+
+        // Create a test source file
+        let mut file = File::create(&from).expect("couldn't create file1.txt");
+        write!(file, "Hello, world!").expect("couldn't write to file1.txt");
+
+        let len = file
+            .metadata()
+            .expect("couldn't get source file metadata")
+            .len();
+        let pb = ProgressBar::new(len);
+
+        // Call the function
+        let result = copy_file(&from, &to, Some(&pb), 0);
+
+        // Assert the result is Ok and the file was copied
+        assert_eq!(pb.position(), len);
+        assert!(result.is_ok());
+        assert!(to.exists());
+        assert_eq!(
+            fs::read_to_string(to).expect("couldn't read from to"),
+            "Hello, world!"
+        );
+    }
+
+    #[test]
+    fn test_copy_file_with_fifo() {
+        let temp_dir = tempdir().expect("couldn't create tempdir");
+        let from = temp_dir.path().join("test_source.txt");
+        let to = temp_dir.path().join("test_destination.txt");
+
+        // Create a test source file
+        copy_fifo(&from).expect("couldn't create fifo");
+
+        // Call the function
+        let result = copy_file(&from, &to, None, 0);
+
+        // Assert the result is Ok and the fifo was copied
+        assert!(result.is_ok());
+        assert!(to.exists());
+        assert!(to
+            .metadata()
+            .expect("couldn't get metadata")
+            .file_type()
+            .is_fifo())
     }
 }
