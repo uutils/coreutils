@@ -55,7 +55,7 @@ The following options can have a non-trivial impact on performance:
 
 - `-a`/`-v` if one of the two files has significantly more lines than the other
 - `-j`/`-1`/`-2` cause work to be done to grab the appropriate field
-- `-i` adds a call to `to_ascii_lowercase()` that adds some time for allocating and dropping memory for the lowercase key
+- `-i` uses our custom code for case-insensitive text comparisons
 - `--nocheck-order` causes some calls of `Input::compare` to be skipped
 
 The content of the files being joined has a very significant impact on the performance.

@@ -288,6 +288,40 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
     }
 }
 
+/// Byte slice wrapper whose Ord implementation is case-insensitive on ASCII.
+#[derive(Eq)]
+struct CaseInsensitiveSlice<'a> {
+    v: &'a [u8],
+}
+
+impl Ord for CaseInsensitiveSlice<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if let Some((s, o)) =
+            std::iter::zip(self.v.iter(), other.v.iter()).find(|(s, o)| !s.eq_ignore_ascii_case(o))
+        {
+            // first characters that differ, return the case-insensitive comparison
+            let s = s.to_ascii_lowercase();
+            let o = o.to_ascii_lowercase();
+            s.cmp(&o)
+        } else {
+            // one of the strings is a substring or equal of the other
+            self.v.len().cmp(&other.v.len())
+        }
+    }
+}
+
+impl PartialOrd for CaseInsensitiveSlice<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for CaseInsensitiveSlice<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.v.eq_ignore_ascii_case(other.v)
+    }
+}
+
 /// Input processing parameters.
 struct Input<Sep: Separator> {
     separator: Sep,
@@ -307,9 +341,9 @@ impl<Sep: Separator> Input<Sep> {
     fn compare(&self, field1: Option<&[u8]>, field2: Option<&[u8]>) -> Ordering {
         if let (Some(field1), Some(field2)) = (field1, field2) {
             if self.ignore_case {
-                field1
-                    .to_ascii_lowercase()
-                    .cmp(&field2.to_ascii_lowercase())
+                let field1 = CaseInsensitiveSlice { v: field1 };
+                let field2 = CaseInsensitiveSlice { v: field2 };
+                field1.cmp(&field2)
             } else {
                 field1.cmp(field2)
             }
