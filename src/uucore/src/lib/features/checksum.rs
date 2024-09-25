@@ -23,6 +23,7 @@ use crate::{
     },
     util_name,
 };
+use std::fmt::Write;
 use std::io::stdin;
 use std::io::BufRead;
 use thiserror::Error;
@@ -321,10 +322,10 @@ fn determine_regex(lines: &[String]) -> Option<(Regex, bool)> {
 
 // Converts bytes to a hexadecimal string
 fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>()
+    bytes.iter().fold(String::new(), |mut bytes, byte| {
+        write!(bytes, "{byte:02x}").unwrap();
+        bytes
+    })
 }
 
 fn get_expected_checksum(
