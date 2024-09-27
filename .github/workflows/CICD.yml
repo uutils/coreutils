@@ -112,7 +112,7 @@ jobs:
         components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -166,7 +166,7 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -254,7 +254,7 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     - name: "`make build`"
       shell: bash
       run: |
@@ -308,7 +308,7 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -335,7 +335,7 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -358,7 +358,7 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     - name: Install dependencies
       shell: bash
       run: |
@@ -493,7 +493,7 @@ jobs:
       with:
         key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -781,7 +781,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -865,7 +865,7 @@ jobs:
         components: rustfmt
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     - name: Build coreutils as multiple binaries
       shell: bash
       run: |
@@ -950,7 +950,7 @@ jobs:
     - uses: taiki-e/install-action@grcov
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables

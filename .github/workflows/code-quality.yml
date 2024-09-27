@@ -81,7 +81,7 @@ jobs:
         components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.6
     - name: Initialize workflow variables
       id: vars
       shell: bash
