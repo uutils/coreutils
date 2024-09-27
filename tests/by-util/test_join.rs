@@ -59,6 +59,25 @@ fn default_arguments() {
 }
 
 #[test]
+fn only_whitespace_separators_merge() {
+    new_ucmd!()
+        .arg("contiguous_separators.txt")
+        .arg("-")
+        .pipe_in(" a  ,c ")
+        .succeeds()
+        .stdout_only("a ,,,b ,c \n");
+
+    new_ucmd!()
+        .arg("contiguous_separators.txt")
+        .arg("-t")
+        .arg(",")
+        .arg("-")
+        .pipe_in(" a  ,c ")
+        .succeeds()
+        .stdout_only(" a  ,,,b,c \n");
+}
+
+#[test]
 fn different_fields() {
     new_ucmd!()
         .arg("fields_2.txt")
