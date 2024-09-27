@@ -10,14 +10,6 @@ the "--base32" and "--base64" options, respectively. For that reason, it is only
 To compare the runtime performance of the uutils implementation with the GNU Core Utilities implementation, you can
 use a benchmarking tool like [hyperfine][0].
 
-You can install hyperfine from source with Cargo:
-
-```Shell
-cargo install --locked --hyperfine
-```
-
-See the hyperfine repository for [alternative installation methods][1].
-
 hyperfine currently does not measure maximum memory usage. Memory usage can be benchmarked using [poop][2], or
 [toybox][3]'s "time" subcommand (both are Linux only).
 
