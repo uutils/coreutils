@@ -230,10 +230,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Ok(());
         }
 
-        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or((
-            if state.rflag { getuid() } else { geteuid() },
-            if state.rflag { getgid() } else { getegid() },
-        ));
+        let (uid, gid) = possible_pw.as_ref().map_or(
+            (
+                if state.rflag { getuid() } else { geteuid() },
+                if state.rflag { getgid() } else { getegid() },
+            ),
+            |p| (p.uid, p.gid),
+        );
         state.ids = Some(Ids {
             uid,
             gid,
@@ -273,7 +276,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let groups = entries::get_groups_gnu(Some(gid)).unwrap();
         let groups = if state.user_specified {
-            possible_pw.as_ref().map(|p| p.belongs_to()).unwrap()
+            possible_pw
+                .as_ref()
+                .map(uucore::entries::Passwd::belongs_to)
+                .unwrap()
         } else {
             groups.clone()
         };

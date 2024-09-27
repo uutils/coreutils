@@ -79,8 +79,7 @@ fn add_ambiguous_value_tip(
     err.insert(
         ContextKind::Suggested,
         ContextValue::StyledStrs(vec![format!(
-            "It looks like '{}' could match several values. Did you mean {}?",
-            value, formatted_possible_values
+            "It looks like '{value}' could match several values. Did you mean {formatted_possible_values}?"
         )
         .into()]),
     );
@@ -129,7 +128,7 @@ where
     T: Into<PossibleValue>,
 {
     fn from(values: I) -> Self {
-        Self(values.into_iter().map(|t| t.into()).collect())
+        Self(values.into_iter().map(std::convert::Into::into).collect())
     }
 }
 
@@ -175,8 +174,7 @@ mod tests {
             let result = parser.parse_ref(&cmd, None, OsStr::new(ambiguous_value));
             assert_eq!(ErrorKind::InvalidValue, result.as_ref().unwrap_err().kind());
             assert!(result.unwrap_err().to_string().contains(&format!(
-                "It looks like '{}' could match several values. Did you mean 'abcd' or 'abef'?",
-                ambiguous_value
+                "It looks like '{ambiguous_value}' could match several values. Did you mean 'abcd' or 'abef'?"
             )));
         }
 

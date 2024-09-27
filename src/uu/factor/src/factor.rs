@@ -66,12 +66,12 @@ fn write_result(
     for (factor, n) in factorization {
         if print_exponents {
             if n > 1 {
-                write!(w, " {}^{}", factor, n)?;
+                write!(w, " {factor}^{n}")?;
             } else {
-                write!(w, " {}", factor)?;
+                write!(w, " {factor}")?;
             }
         } else {
-            w.write_all(format!(" {}", factor).repeat(n).as_bytes())?;
+            w.write_all(format!(" {factor}").repeat(n).as_bytes())?;
         }
     }
     writeln!(w)?;

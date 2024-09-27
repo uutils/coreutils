@@ -78,14 +78,14 @@ pub fn generate_type_output(fmt: &OutputFmt) -> String {
     match fmt {
         OutputFmt::Display => FILE_TYPES
             .iter()
-            .map(|&(_, key, val)| format!("\x1b[{}m{}\t{}\x1b[0m", val, key, val))
+            .map(|&(_, key, val)| format!("\x1b[{val}m{key}\t{val}\x1b[0m"))
             .collect::<Vec<String>>()
             .join("\n"),
         _ => {
             // Existing logic for other formats
             FILE_TYPES
                 .iter()
-                .map(|&(_, v1, v2)| format!("{}={}", v1, v2))
+                .map(|&(_, v1, v2)| format!("{v1}={v2}"))
                 .collect::<Vec<String>>()
                 .join(":")
         }
@@ -100,8 +100,7 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
             display_parts.push(type_output);
             for &(extension, code) in FILE_COLORS {
                 let prefix = if extension.starts_with('*') { "" } else { "*" };
-                let formatted_extension =
-                    format!("\x1b[{}m{}{}\t{}\x1b[0m", code, prefix, extension, code);
+                let formatted_extension = format!("\x1b[{code}m{prefix}{extension}\t{code}\x1b[0m");
                 display_parts.push(formatted_extension);
             }
             display_parts.join("\n")
@@ -111,8 +110,8 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
             let mut parts = vec![];
             for &(extension, code) in FILE_COLORS {
                 let prefix = if extension.starts_with('*') { "" } else { "*" };
-                let formatted_extension = format!("{}{}", prefix, extension);
-                parts.push(format!("{}={}", formatted_extension, code));
+                let formatted_extension = format!("{prefix}{extension}");
+                parts.push(format!("{formatted_extension}={code}"));
             }
             let (prefix, suffix) = get_colors_format_strings(fmt);
             let ls_colors = parts.join(sep);
@@ -133,7 +132,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let files = matches
         .get_many::<String>(options::FILE)
-        .map_or(vec![], |file_values| file_values.collect());
+        .map_or(vec![], std::iter::Iterator::collect);
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
     // manually handle conflicts so we can match the output of GNU coreutils
@@ -493,7 +492,7 @@ pub fn generate_dircolors_config() -> String {
     );
     config.push_str("COLORTERM ?*\n");
     for term in TERMS {
-        config.push_str(&format!("TERM {}\n", term));
+        config.push_str(&format!("TERM {term}\n"));
     }
 
     config.push_str(
@@ -514,14 +513,14 @@ pub fn generate_dircolors_config() -> String {
     );
 
     for (name, _, code) in FILE_TYPES {
-        config.push_str(&format!("{} {}\n", name, code));
+        config.push_str(&format!("{name} {code}\n"));
     }
 
     config.push_str("# List any file extensions like '.gz' or '.tar' that you would like ls\n");
     config.push_str("# to color below. Put the extension, a space, and the color init string.\n");
 
     for (ext, color) in FILE_COLORS {
-        config.push_str(&format!("{} {}\n", ext, color));
+        config.push_str(&format!("{ext} {color}\n"));
     }
     config.push_str("# Subsequent TERM or COLORTERM entries, can be used to add / override\n");
     config.push_str("# config specific to those matching environment variables.");

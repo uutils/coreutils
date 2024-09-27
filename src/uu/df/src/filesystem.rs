@@ -107,13 +107,15 @@ impl Filesystem {
             mount_info.mount_dir.clone()
         };
         #[cfg(unix)]
+        #[allow(clippy::used_underscore_binding)]
         let usage = FsUsage::new(statfs(_stat_path).ok()?);
         #[cfg(windows)]
+        #[allow(clippy::used_underscore_binding)]
         let usage = FsUsage::new(Path::new(&_stat_path)).ok()?;
         Some(Self {
+            file,
             mount_info,
             usage,
-            file,
         })
     }
 

@@ -23,7 +23,6 @@ use itertools::Itertools;
 use uucore::error::UResult;
 
 use crate::chunks::RecycledChunk;
-use crate::merge::ClosedTmpFile;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
@@ -99,7 +98,9 @@ fn reader_writer<
     match read_result {
         ReadResult::WroteChunksToFile { tmp_files } => {
             let merger = merge::merge_with_file_limit::<_, _, Tmp>(
-                tmp_files.into_iter().map(|c| c.reopen()),
+                tmp_files
+                    .into_iter()
+                    .map(super::merge::ClosedTmpFile::reopen),
                 settings,
                 tmp_dir,
             )?;

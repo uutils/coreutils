@@ -204,9 +204,9 @@ impl Formatter for UnsignedInt {
         };
 
         Ok(Self {
+            variant,
             width,
             precision,
-            variant,
             alignment,
         })
     }
@@ -340,7 +340,7 @@ fn format_float_decimal(f: f64, precision: usize, force_decimal: ForceDecimal) -
     if precision == 0 && force_decimal == ForceDecimal::Yes {
         format!("{f:.0}.")
     } else {
-        format!("{f:.*}", precision)
+        format!("{f:.precision$}")
     }
 }
 
@@ -380,10 +380,7 @@ fn format_float_scientific(
         Case::Uppercase => 'E',
     };
 
-    format!(
-        "{normalized:.*}{additional_dot}{exp_char}{exponent:+03}",
-        precision
-    )
+    format!("{normalized:.precision$}{additional_dot}{exp_char}{exponent:+03}")
 }
 
 fn format_float_shortest(
@@ -427,7 +424,7 @@ fn format_float_shortest(
             ""
         };
 
-        let mut normalized = format!("{normalized:.*}", precision);
+        let mut normalized = format!("{normalized:.precision$}");
 
         if force_decimal == ForceDecimal::No {
             strip_fractional_zeroes_and_dot(&mut normalized);
@@ -449,7 +446,7 @@ fn format_float_shortest(
         let mut formatted = if decimal_places == 0 && force_decimal == ForceDecimal::Yes {
             format!("{f:.0}.")
         } else {
-            format!("{f:.*}", decimal_places)
+            format!("{f:.decimal_places$}")
         };
 
         if force_decimal == ForceDecimal::No {
@@ -514,11 +511,7 @@ fn write_output(
     // Using min() because self.width could be 0, 0usize - 1usize should be avoided
     let remaining_width = width - min(width, sign_indicator.len());
     match alignment {
-        NumberAlignment::Left => write!(
-            writer,
-            "{sign_indicator}{s:<width$}",
-            width = remaining_width
-        ),
+        NumberAlignment::Left => write!(writer, "{sign_indicator}{s:<remaining_width$}"),
         NumberAlignment::RightSpace => {
             let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
             if is_sign && remaining_width > 0 {
@@ -526,19 +519,11 @@ fn write_output(
                 s = sign_indicator + s.as_str();
                 write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
             } else {
-                write!(
-                    writer,
-                    "{sign_indicator}{s:>width$}",
-                    width = remaining_width
-                )
+                write!(writer, "{sign_indicator}{s:>remaining_width$}")
             }
         }
         NumberAlignment::RightZero => {
-            write!(
-                writer,
-                "{sign_indicator}{s:0>width$}",
-                width = remaining_width
-            )
+            write!(writer, "{sign_indicator}{s:0>remaining_width$}")
         }
     }
 }
@@ -575,12 +560,12 @@ mod test {
         assert_eq!(f(0.0), "0.000000");
         assert_eq!(f(1.0), "1.000000");
         assert_eq!(f(100.0), "100.000000");
-        assert_eq!(f(123456.789), "123456.789000");
-        assert_eq!(f(12.3456789), "12.345679");
-        assert_eq!(f(1000000.0), "1000000.000000");
-        assert_eq!(f(99999999.0), "99999999.000000");
-        assert_eq!(f(1.9999995), "1.999999");
-        assert_eq!(f(1.9999996), "2.000000");
+        assert_eq!(f(123_456.789), "123456.789000");
+        assert_eq!(f(12.345_678_9), "12.345679");
+        assert_eq!(f(1_000_000.0), "1000000.000000");
+        assert_eq!(f(99_999_999.0), "99999999.000000");
+        assert_eq!(f(1.999_999_5), "1.999999");
+        assert_eq!(f(1.999_999_6), "2.000000");
     }
 
     #[test]
@@ -590,10 +575,10 @@ mod test {
         assert_eq!(f(0.0), "0.000000e+00");
         assert_eq!(f(1.0), "1.000000e+00");
         assert_eq!(f(100.0), "1.000000e+02");
-        assert_eq!(f(123456.789), "1.234568e+05");
-        assert_eq!(f(12.3456789), "1.234568e+01");
-        assert_eq!(f(1000000.0), "1.000000e+06");
-        assert_eq!(f(99999999.0), "1.000000e+08");
+        assert_eq!(f(123_456.789), "1.234568e+05");
+        assert_eq!(f(12.345_678_9), "1.234568e+01");
+        assert_eq!(f(1_000_000.0), "1.000000e+06");
+        assert_eq!(f(99_999_999.0), "1.000000e+08");
     }
 
     #[test]
@@ -604,19 +589,19 @@ mod test {
         assert_eq!(f(0.0), "0e+00");
         assert_eq!(f(1.0), "1e+00");
         assert_eq!(f(100.0), "1e+02");
-        assert_eq!(f(123456.789), "1e+05");
-        assert_eq!(f(12.3456789), "1e+01");
-        assert_eq!(f(1000000.0), "1e+06");
-        assert_eq!(f(99999999.0), "1e+08");
+        assert_eq!(f(123_456.789), "1e+05");
+        assert_eq!(f(12.345_678_9), "1e+01");
+        assert_eq!(f(1_000_000.0), "1e+06");
+        assert_eq!(f(99_999_999.0), "1e+08");
 
         let f = |x| format_float_scientific(x, 0, Case::Lowercase, ForceDecimal::Yes);
         assert_eq!(f(0.0), "0.e+00");
         assert_eq!(f(1.0), "1.e+00");
         assert_eq!(f(100.0), "1.e+02");
-        assert_eq!(f(123456.789), "1.e+05");
-        assert_eq!(f(12.3456789), "1.e+01");
-        assert_eq!(f(1000000.0), "1.e+06");
-        assert_eq!(f(99999999.0), "1.e+08");
+        assert_eq!(f(123_456.789), "1.e+05");
+        assert_eq!(f(12.345_678_9), "1.e+01");
+        assert_eq!(f(1_000_000.0), "1.e+06");
+        assert_eq!(f(99_999_999.0), "1.e+08");
     }
 
     #[test]
@@ -626,10 +611,10 @@ mod test {
         assert_eq!(f(0.0), "0");
         assert_eq!(f(1.0), "1");
         assert_eq!(f(100.0), "100");
-        assert_eq!(f(123456.789), "123457");
-        assert_eq!(f(12.3456789), "12.3457");
-        assert_eq!(f(1000000.0), "1e+06");
-        assert_eq!(f(99999999.0), "1e+08");
+        assert_eq!(f(123_456.789), "123457");
+        assert_eq!(f(12.345_678_9), "12.3457");
+        assert_eq!(f(1_000_000.0), "1e+06");
+        assert_eq!(f(99_999_999.0), "1e+08");
     }
 
     #[test]
@@ -639,10 +624,10 @@ mod test {
         assert_eq!(f(0.0), "0.00000");
         assert_eq!(f(1.0), "1.00000");
         assert_eq!(f(100.0), "100.000");
-        assert_eq!(f(123456.789), "123457.");
-        assert_eq!(f(12.3456789), "12.3457");
-        assert_eq!(f(1000000.0), "1.00000e+06");
-        assert_eq!(f(99999999.0), "1.00000e+08");
+        assert_eq!(f(123_456.789), "123457.");
+        assert_eq!(f(12.345_678_9), "12.3457");
+        assert_eq!(f(1_000_000.0), "1.00000e+06");
+        assert_eq!(f(99_999_999.0), "1.00000e+08");
     }
 
     #[test]
@@ -652,19 +637,19 @@ mod test {
         assert_eq!(f(0.0), "0");
         assert_eq!(f(1.0), "1");
         assert_eq!(f(100.0), "1e+02");
-        assert_eq!(f(123456.789), "1e+05");
-        assert_eq!(f(12.3456789), "1e+01");
-        assert_eq!(f(1000000.0), "1e+06");
-        assert_eq!(f(99999999.0), "1e+08");
+        assert_eq!(f(123_456.789), "1e+05");
+        assert_eq!(f(12.345_678_9), "1e+01");
+        assert_eq!(f(1_000_000.0), "1e+06");
+        assert_eq!(f(99_999_999.0), "1e+08");
 
         let f = |x| format_float_shortest(x, 0, Case::Lowercase, ForceDecimal::Yes);
         assert_eq!(f(0.0), "0.");
         assert_eq!(f(1.0), "1.");
         assert_eq!(f(100.0), "1.e+02");
-        assert_eq!(f(123456.789), "1.e+05");
-        assert_eq!(f(12.3456789), "1.e+01");
-        assert_eq!(f(1000000.0), "1.e+06");
-        assert_eq!(f(99999999.0), "1.e+08");
+        assert_eq!(f(123_456.789), "1.e+05");
+        assert_eq!(f(12.345_678_9), "1.e+01");
+        assert_eq!(f(1_000_000.0), "1.e+06");
+        assert_eq!(f(99_999_999.0), "1.e+08");
     }
 
     #[test]

@@ -435,7 +435,7 @@ mod tests {
                 .map(|(_, style)| escape_name(name.as_ref(), &get_style(style)))
                 .collect::<Vec<String>>(),
             map.iter()
-                .map(|(correct, _)| correct.to_string())
+                .map(|(correct, _)| (*correct).to_string())
                 .collect::<Vec<String>>()
         );
     }
@@ -801,31 +801,31 @@ mod tests {
             always_quote: false,
             show_control: false,
         };
-        assert_eq!(format!("{}", style), "shell-escape");
+        assert_eq!(format!("{style}"), "shell-escape");
 
         let style = QuotingStyle::Shell {
             escape: false,
             always_quote: true,
             show_control: false,
         };
-        assert_eq!(format!("{}", style), "shell-always-quote");
+        assert_eq!(format!("{style}"), "shell-always-quote");
 
         let style = QuotingStyle::Shell {
             escape: false,
             always_quote: false,
             show_control: true,
         };
-        assert_eq!(format!("{}", style), "shell-show-control");
+        assert_eq!(format!("{style}"), "shell-show-control");
 
         let style = QuotingStyle::C {
             quotes: Quotes::Double,
         };
-        assert_eq!(format!("{}", style), "C");
+        assert_eq!(format!("{style}"), "C");
 
         let style = QuotingStyle::Literal {
             show_control: false,
         };
-        assert_eq!(format!("{}", style), "literal");
+        assert_eq!(format!("{style}"), "literal");
     }
 
     #[test]

@@ -103,7 +103,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
     let token_strings: Vec<&str> = matches
         .get_many::<String>(options::EXPRESSION)
-        .map(|v| v.into_iter().map(|s| s.as_ref()).collect::<Vec<_>>())
+        .map(|v| {
+            v.into_iter()
+                .map(std::convert::AsRef::as_ref)
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
 
     let res: String = AstNode::parse(&token_strings)?.eval()?.eval_as_string();

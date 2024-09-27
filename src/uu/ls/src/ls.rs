@@ -831,7 +831,7 @@ impl Config {
                 options::FULL_TIME,
             ]
             .iter()
-            .flat_map(|opt| {
+            .filter_map(|opt| {
                 if options.value_source(opt) == Some(clap::parser::ValueSource::CommandLine) {
                     options.indices_of(opt)
                 } else {
@@ -1184,8 +1184,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)
-        .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
+        .map_or_else(|| vec![Path::new(".")], |v| v.map(Path::new).collect());
 
     list(locs, &config)
 }
@@ -2031,7 +2030,7 @@ impl PathData {
 
     fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
+            .get_or_init(|| self.get_metadata(out).map(std::fs::Metadata::file_type))
             .as_ref()
     }
 }
@@ -2040,7 +2039,7 @@ fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Con
     if config.hyperlink && !config.dired {
         let name = escape_name(path_data.p_buf.as_os_str(), &config.quoting_style);
         let hyperlink = create_hyperlink(&name, path_data);
-        write!(out, "{}:", hyperlink).unwrap();
+        write!(out, "{hyperlink}:").unwrap();
     } else {
         write!(out, "{}:", path_data.p_buf.display()).unwrap();
     }
@@ -2091,7 +2090,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // color is given
         if style_manager.get_normal_style().is_some() {
             let to_write = style_manager.reset(true);
-            write!(out, "{}", to_write)?;
+            write!(out, "{to_write}")?;
         }
     }
 
@@ -2167,7 +2166,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map(|md| md.len()).unwrap_or(0)));
+            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map_or(0, std::fs::Metadata::len)));
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
@@ -2230,8 +2229,7 @@ fn is_hidden(file_path: &DirEntry) -> bool {
         file_path
             .file_name()
             .to_str()
-            .map(|res| res.starts_with('.'))
-            .unwrap_or(false)
+            .is_some_and(|res| res.starts_with('.'))
     }
 }
 
@@ -2574,7 +2572,7 @@ fn display_items(
             Format::Commas => {
                 let mut current_col = 0;
                 if let Some(name) = names.next() {
-                    write!(out, "{}", name)?;
+                    write!(out, "{name}")?;
                     current_col = ansi_width(&name) as u16 + 2;
                 }
                 for name in names {
@@ -2582,10 +2580,10 @@ fn display_items(
                     // If the width is 0 we print one single line
                     if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
-                        write!(out, ",\n{}", name)?;
+                        write!(out, ",\n{name}")?;
                     } else {
                         current_col += name_width + 2;
-                        write!(out, ", {}", name)?;
+                        write!(out, ", {name}")?;
                     }
                 }
                 // Current col is never zero again if names have been printed.
@@ -2855,7 +2853,7 @@ fn display_item_long(
         );
 
         let displayed_item = if quoted && !item_name.starts_with('\'') {
-            format!(" {}", item_name)
+            format!(" {item_name}")
         } else {
             item_name
         };
@@ -2969,7 +2967,7 @@ fn display_item_long(
         }
         write!(output_display, "{}{}", displayed_item, config.line_ending).unwrap();
     }
-    write!(out, "{}", output_display)?;
+    write!(out, "{output_display}")?;
 
     Ok(())
 }

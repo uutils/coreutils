@@ -1100,42 +1100,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.mode = if matches.get_flag(options::modes::HUMAN_NUMERIC)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             == Some("human-numeric")
     {
         SortMode::HumanNumeric
     } else if matches.get_flag(options::modes::MONTH)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             == Some("month")
     {
         SortMode::Month
     } else if matches.get_flag(options::modes::GENERAL_NUMERIC)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             == Some("general-numeric")
     {
         SortMode::GeneralNumeric
     } else if matches.get_flag(options::modes::NUMERIC)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             == Some("numeric")
     {
         SortMode::Numeric
     } else if matches.get_flag(options::modes::VERSION)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             == Some("version")
     {
         SortMode::Version
     } else if matches.get_flag(options::modes::RANDOM)
         || matches
             .get_one::<String>(options::modes::SORT)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             == Some("random")
     {
         settings.salt = Some(get_rand_string());
@@ -1150,8 +1150,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // "0" is default - threads = num of cores
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
-            .map(String::from)
-            .unwrap_or_else(|| "0".to_string());
+            .map_or_else(|| "0".to_string(), String::from);
         env::set_var("RAYON_NUM_THREADS", &settings.threads);
     }
 
@@ -1167,8 +1166,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut tmp_dir = TmpDirWrapper::new(
         matches
             .get_one::<String>(options::TMP_DIR)
-            .map(PathBuf::from)
-            .unwrap_or_else(env::temp_dir),
+            .map_or_else(env::temp_dir, PathBuf::from),
     );
 
     settings.compress_prog = matches
@@ -1216,7 +1214,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         || matches!(
             matches
                 .get_one::<String>(options::check::CHECK)
-                .map(|s| s.as_str()),
+                .map(std::string::String::as_str),
             Some(options::check::SILENT | options::check::QUIET)
         )
     {
@@ -1305,7 +1303,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let output = Output::new(
         matches
             .get_one::<String>(options::OUTPUT)
-            .map(|s| s.as_str()),
+            .map(std::string::String::as_str),
     )?;
 
     settings.init_precomputed();

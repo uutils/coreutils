@@ -99,7 +99,7 @@ impl<'a> Context<'a> {
         let current_dir = env::current_dir()?;
         let root_path = current_dir.join(root);
         let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
-            root_path.parent().map(|p| p.to_path_buf())
+            root_path.parent().map(std::path::Path::to_path_buf)
         } else {
             Some(root_path)
         };
@@ -175,7 +175,7 @@ impl Entry {
             let source_is_dir = direntry.path().is_dir();
             if path_ends_with_terminator(context.target) && source_is_dir {
                 if let Err(e) = std::fs::create_dir_all(context.target) {
-                    eprintln!("Failed to create directory: {}", e);
+                    eprintln!("Failed to create directory: {e}");
                 }
             } else {
                 descendant = descendant.strip_prefix(context.root)?.to_path_buf();

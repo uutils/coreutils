@@ -82,17 +82,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let op = sets[1].quote();
             let msg = if sets_len == 2 {
                 format!(
-                    "{} {}\nOnly one string may be given when deleting without squeezing repeats.",
-                    start, op,
+                    "{start} {op}\nOnly one string may be given when deleting without squeezing repeats.",
                 )
             } else {
-                format!("{} {}", start, op,)
+                format!("{start} {op}",)
             };
             return Err(UUsageError::new(1, msg));
         }
         if sets_len > 2 {
             let op = sets[2].quote();
-            let msg = format!("{} {}", start, op);
+            let msg = format!("{start} {op}");
             return Err(UUsageError::new(1, msg));
         }
     }
@@ -117,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
-    let mut sets_iter = sets.iter().map(|c| c.as_os_str());
+    let mut sets_iter = sets.iter().map(std::ffi::OsString::as_os_str);
     let (set1, set2) = Sequence::solve_set_characters(
         os_str_as_bytes(sets_iter.next().unwrap_or_default())?,
         os_str_as_bytes(sets_iter.next().unwrap_or_default())?,

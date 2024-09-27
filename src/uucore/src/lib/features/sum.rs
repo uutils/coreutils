@@ -193,8 +193,8 @@ impl Digest for CRC {
     }
 
     fn result_str(&mut self) -> String {
-        let mut _out: Vec<u8> = vec![0; 4];
-        self.hash_finalize(&mut _out);
+        let mut out: Vec<u8> = vec![0; 4];
+        self.hash_finalize(&mut out);
         format!("{}", self.state)
     }
 
@@ -234,8 +234,8 @@ impl Digest for BSD {
     }
 
     fn result_str(&mut self) -> String {
-        let mut _out: Vec<u8> = vec![0; 2];
-        self.hash_finalize(&mut _out);
+        let mut out: Vec<u8> = vec![0; 2];
+        self.hash_finalize(&mut out);
         format!("{}", self.state)
     }
 
@@ -269,8 +269,8 @@ impl Digest for SYSV {
     }
 
     fn result_str(&mut self) -> String {
-        let mut _out: Vec<u8> = vec![0; 2];
-        self.hash_finalize(&mut _out);
+        let mut out: Vec<u8> = vec![0; 2];
+        self.hash_finalize(&mut out);
         format!("{}", self.state)
     }
 

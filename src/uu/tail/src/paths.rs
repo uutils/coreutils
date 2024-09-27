@@ -189,6 +189,7 @@ impl MetadataExtTail for Metadata {
 
     fn file_id_eq(&self, _other: &Metadata) -> bool {
         #[cfg(unix)]
+        #[allow(clippy::used_underscore_binding)]
         {
             self.ino().eq(&_other.ino())
         }

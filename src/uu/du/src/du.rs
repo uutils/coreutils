@@ -594,7 +594,7 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
         if path.is_dir() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("{}: read error: Is a directory", file_name),
+                format!("{file_name}: read error: Is a directory"),
             ));
         }
 
@@ -604,10 +604,7 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!(
-                        "cannot open '{}' for reading: No such file or directory",
-                        file_name
-                    ),
+                    format!("cannot open '{file_name}' for reading: No such file or directory"),
                 ))
             }
             Err(e) => return Err(e),
@@ -644,7 +641,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let max_depth = parse_depth(
         matches
             .get_one::<String>(options::MAX_DEPTH)
-            .map(|s| s.as_str()),
+            .map(std::string::String::as_str),
         summarize,
     )?;
 
@@ -717,7 +714,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let time_format = if time.is_some() {
-        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
+        parse_time_style(
+            matches
+                .get_one::<String>("time-style")
+                .map(std::string::String::as_str),
+        )?
+        .to_string()
     } else {
         "%Y-%m-%d %H:%M".to_string()
     };

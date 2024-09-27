@@ -841,12 +841,12 @@ mod tests {
             },
             usage: crate::table::FsUsage {
                 blocksize: 4096,
-                blocks: 244029695,
-                bfree: 125085030,
-                bavail: 125085030,
+                blocks: 244_029_695,
+                bfree: 125_085_030,
+                bavail: 125_085_030,
                 bavail_top_bit_set: false,
                 files: 999,
-                ffree: 1000000,
+                ffree: 1_000_000,
             },
         };
 
@@ -871,12 +871,12 @@ mod tests {
             },
             usage: crate::table::FsUsage {
                 blocksize: 4096,
-                blocks: 244029695,
-                bfree: 125085030,
-                bavail: 125085030,
+                blocks: 244_029_695,
+                bfree: 125_085_030,
+                bavail: 125_085_030,
                 bavail_top_bit_set: false,
-                files: 99999999999,
-                ffree: 999999,
+                files: 99_999_999_999,
+                ffree: 999_999,
             },
         };
 

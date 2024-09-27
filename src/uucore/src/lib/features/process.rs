@@ -151,6 +151,6 @@ mod tests {
         assert!(getsid(getpid()).expect("getsid(getpid)") > 0);
 
         // This might caused tests failure but the probability is low.
-        assert!(getsid(999999).is_err());
+        assert!(getsid(999_999).is_err());
     }
 }

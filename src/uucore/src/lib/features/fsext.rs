@@ -179,9 +179,9 @@ impl MountInfo {
             dev_id,
             dev_name,
             fs_type,
+            mount_root,
             mount_dir,
             mount_option,
-            mount_root,
             remote,
             dummy,
         })
@@ -907,7 +907,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x0187 => "autofs".into(),
         0x4246_5331 => "befs".into(),
         0x6264_6576 => "bdevfs".into(),
-        0xCA451A4E => "bcachefs".into(),
+        0xCA45_1A4E => "bcachefs".into(),
         0x1BAD_FACE => "bfs".into(),
         0xCAFE_4A11 => "bpf_fs".into(),
         0x4249_4E4D => "binfmt_misc".into(),
@@ -1037,12 +1037,12 @@ mod tests {
     fn test_fs_type() {
         // spell-checker:disable
         assert_eq!("ext2/ext3", pretty_fstype(0xEF53));
-        assert_eq!("tmpfs", pretty_fstype(0x01021994));
+        assert_eq!("tmpfs", pretty_fstype(0x0102_1994));
         assert_eq!("nfs", pretty_fstype(0x6969));
-        assert_eq!("btrfs", pretty_fstype(0x9123683e));
-        assert_eq!("xfs", pretty_fstype(0x58465342));
-        assert_eq!("zfs", pretty_fstype(0x2FC12FC1));
-        assert_eq!("ntfs", pretty_fstype(0x5346544e));
+        assert_eq!("btrfs", pretty_fstype(0x9123_683e));
+        assert_eq!("xfs", pretty_fstype(0x5846_5342));
+        assert_eq!("zfs", pretty_fstype(0x2FC1_2FC1));
+        assert_eq!("ntfs", pretty_fstype(0x5346_544e));
         assert_eq!("fat", pretty_fstype(0x4006));
         assert_eq!("UNKNOWN (0x1234)", pretty_fstype(0x1234));
         // spell-checker:enable

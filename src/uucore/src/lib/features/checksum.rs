@@ -9,6 +9,7 @@ use os_display::Quotable;
 use regex::Regex;
 use std::{
     ffi::OsStr,
+    fmt::Write,
     fs::File,
     io::{self, BufReader, Read},
     path::Path,
@@ -321,11 +322,10 @@ fn determine_regex(lines: &[String]) -> Option<(Regex, bool)> {
 
 // Converts bytes to a hexadecimal string
 fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|byte| format!("{:02x}", byte))
-        .collect::<Vec<String>>()
-        .join("")
+    bytes.iter().fold(String::new(), |mut output, byte| {
+        let _ = write!(output, "{byte:02x}");
+        output
+    })
 }
 
 fn get_expected_checksum(
@@ -344,7 +344,7 @@ fn get_expected_checksum(
             }
             Err(_) => Err(Box::new(
                 ChecksumError::NoProperlyFormattedChecksumLinesFound {
-                    filename: (&filename).to_string(),
+                    filename: (filename).to_string(),
                 },
             )),
         }
@@ -365,10 +365,7 @@ fn get_file_to_check(
         match File::open(filename) {
             Ok(f) => {
                 if f.metadata().ok()?.is_dir() {
-                    show!(USimpleError::new(
-                        1,
-                        format!("{}: Is a directory", filename)
-                    ));
+                    show!(USimpleError::new(1, format!("{filename}: Is a directory")));
                     None
                 } else {
                     Some(Box::new(f))
@@ -378,7 +375,7 @@ fn get_file_to_check(
                 if !ignore_missing {
                     // yes, we have both stderr and stdout here
                     show!(err.map_err_context(|| filename.to_string()));
-                    println!("{}: FAILED open or read", filename);
+                    println!("{filename}: FAILED open or read");
                 }
                 res.failed_open_file += 1;
                 // we could not open the file but we want to continue

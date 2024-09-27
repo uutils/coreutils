@@ -33,8 +33,7 @@ fn get_long_usage() -> String {
     let default_path: &str = OPENBSD_UTMP_FILE;
     format!(
         "Output who is currently logged in according to FILE.
-If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.",
-        default_path
+If FILE is not specified, use {default_path}.  /var/log/wtmp as FILE is common."
     )
 }
 

@@ -231,7 +231,7 @@ pub enum ResolveMode {
 /// replace this once that lands
 pub fn normalize_path(path: &Path) -> PathBuf {
     let mut components = path.components().peekable();
-    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().copied() {
         components.next();
         PathBuf::from(c.as_os_str())
     } else {
@@ -347,7 +347,8 @@ pub fn canonicalize<P: AsRef<Path>>(
     } else {
         original
     };
-    let mut parts: VecDeque<OwningComponent> = path.components().map(|part| part.into()).collect();
+    let mut parts: VecDeque<OwningComponent> =
+        path.components().map(std::convert::Into::into).collect();
     let mut result = PathBuf::new();
     let mut followed_symlinks = 0;
     let mut visited_files = HashSet::new();
@@ -589,7 +590,7 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
     let path_suffix = path
         .components()
         .skip(common_prefix_size)
-        .map(|x| x.as_os_str());
+        .map(std::path::Component::as_os_str);
     let mut components: Vec<_> = to
         .components()
         .skip(common_prefix_size)
@@ -748,6 +749,7 @@ pub mod sane_blksize {
     /// of that value is done.
     pub fn sane_blksize_from_metadata(_metadata: &std::fs::Metadata) -> u64 {
         #[cfg(not(target_os = "windows"))]
+        #[allow(clippy::used_underscore_binding)]
         {
             sane_blksize(_metadata.blksize())
         }

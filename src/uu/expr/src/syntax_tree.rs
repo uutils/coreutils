@@ -139,7 +139,7 @@ impl StringOp {
             Self::Match => {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
-                let re_string = format!("^{}", right);
+                let re_string = format!("^{right}");
                 let re = Regex::with_options(
                     &re_string,
                     RegexOptions::REGEX_OPTION_NONE,
@@ -148,8 +148,7 @@ impl StringOp {
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
                 Ok(if re.captures_len() > 0 {
                     re.captures(&left)
-                        .map(|captures| captures.at(1).unwrap())
-                        .unwrap_or("")
+                        .map_or("", |captures| captures.at(1).unwrap())
                         .to_string()
                 } else {
                     re.find(&left)
@@ -363,7 +362,7 @@ impl<'a> Parser<'a> {
         }
         let res = self.parse_expression()?;
         if let Some(arg) = self.input.get(self.index) {
-            return Err(ExprError::UnexpectedArgument(arg.to_string()));
+            return Err(ExprError::UnexpectedArgument((*arg).to_string()));
         }
         Ok(res)
     }

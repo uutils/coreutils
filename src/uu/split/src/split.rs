@@ -658,7 +658,7 @@ where
         // Most likely continuous/infinite input stream
         return Err(io::Error::new(
             ErrorKind::Other,
-            format!("{}: cannot determine input size", input),
+            format!("{input}: cannot determine input size"),
         ));
     } else {
         // Could be that file size is larger than set read limit
@@ -684,7 +684,7 @@ where
                 // to address all possible file types and edge cases
                 return Err(io::Error::new(
                     ErrorKind::Other,
-                    format!("{}: cannot determine file size", input),
+                    format!("{input}: cannot determine file size"),
                 ));
             }
         }

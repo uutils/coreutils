@@ -390,7 +390,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut files = matches
         .get_many::<String>(options::FILES)
-        .map(|v| v.map(|s| s.as_str()).collect::<Vec<_>>())
+        .map(|v| v.map(std::string::String::as_str).collect::<Vec<_>>())
         .unwrap_or_default()
         .clone();
     if files.is_empty() {
@@ -507,12 +507,14 @@ fn build_options(
 
     let header = matches
         .get_one::<String>(options::HEADER)
-        .map(|s| s.as_str())
-        .unwrap_or(if is_merge_mode || paths[0] == FILE_STDIN {
-            ""
-        } else {
-            paths[0]
-        })
+        .map_or(
+            if is_merge_mode || paths[0] == FILE_STDIN {
+                ""
+            } else {
+                paths[0]
+            },
+            |s| s.as_str(),
+        )
         .to_string();
 
     let default_first_number = NumberingMode::default().first_number;
@@ -677,8 +679,7 @@ fn build_options(
         Some(x) => Some(x),
         None => matches.get_one::<String>(options::COLUMN_CHAR_SEPARATOR),
     }
-    .map(ToString::to_string)
-    .unwrap_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string());
+    .map_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string(), ToString::to_string);
 
     let default_column_width = if matches.contains_id(options::COLUMN_WIDTH)
         && matches.contains_id(options::COLUMN_CHAR_SEPARATOR)
@@ -730,17 +731,17 @@ fn build_options(
     let offset_spaces = " ".repeat(parse_usize(matches, options::INDENT).unwrap_or(Ok(0))?);
     let join_lines = matches.get_flag(options::JOIN_LINES);
 
-    let col_sep_for_printing = column_mode_options
-        .as_ref()
-        .map(|i| i.column_separator.clone())
-        .unwrap_or_else(|| {
+    let col_sep_for_printing = column_mode_options.as_ref().map_or_else(
+        || {
             merge_files_print
                 .map(|_k| DEFAULT_COLUMN_SEPARATOR.to_string())
                 .unwrap_or_default()
-        });
+        },
+        |i| i.column_separator.clone(),
+    );
 
-    let columns_to_print = merge_files_print
-        .unwrap_or_else(|| column_mode_options.as_ref().map(|i| i.columns).unwrap_or(1));
+    let columns_to_print =
+        merge_files_print.unwrap_or_else(|| column_mode_options.as_ref().map_or(1, |i| i.columns));
 
     let line_width = if join_lines {
         None
@@ -748,8 +749,7 @@ fn build_options(
         Some(
             column_mode_options
                 .as_ref()
-                .map(|i| i.width)
-                .unwrap_or(DEFAULT_COLUMN_WIDTH),
+                .map_or(DEFAULT_COLUMN_WIDTH, |i| i.width),
         )
     } else {
         page_width
@@ -783,8 +783,9 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
         return Ok(Box::new(stdin) as Box<dyn Read>);
     }
 
-    metadata(path)
-        .map(|i| {
+    metadata(path).map_or_else(
+        |_| Err(PrError::NotExists(path.to_string())),
+        |i| {
             let path_string = path.to_string();
             match i.file_type() {
                 #[cfg(unix)]
@@ -801,13 +802,19 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
                 }
                 _ => Err(PrError::UnknownFiletype(path_string)),
             }
-        })
-        .unwrap_or_else(|_| Err(PrError::NotExists(path.to_string())))
+        },
+    )
 }
 
 fn split_lines_if_form_feed(file_content: Result<String, std::io::Error>) -> Vec<FileLine> {
-    file_content
-        .map(|content| {
+    file_content.map_or_else(
+        |e| {
+            vec![FileLine {
+                line_content: Err(e),
+                ..FileLine::default()
+            }]
+        },
+        |content| {
             let mut lines = Vec::new();
             let mut f_occurred = 0;
             let mut chunk = Vec::new();
@@ -836,13 +843,8 @@ fn split_lines_if_form_feed(file_content: Result<String, std::io::Error>) -> Vec
             });
 
             lines
-        })
-        .unwrap_or_else(|e| {
-            vec![FileLine {
-                line_content: Err(e),
-                ..FileLine::default()
-            }]
-        })
+        },
+    )
 }
 
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
@@ -1039,8 +1041,7 @@ fn write_columns(
     let across_mode = options
         .column_mode_options
         .as_ref()
-        .map(|i| i.across_mode)
-        .unwrap_or(false);
+        .is_some_and(|i| i.across_mode);
 
     let mut filled_lines = Vec::new();
     if options.merge_files_print.is_some() {
@@ -1235,7 +1236,7 @@ fn trailer_content(options: &OutputOptions) -> Vec<String> {
 /// If -N is specified the first line number changes otherwise
 /// default is 1.
 fn get_start_line_number(opts: &OutputOptions) -> usize {
-    opts.number.as_ref().map(|i| i.first_number).unwrap_or(1)
+    opts.number.as_ref().map_or(1, |i| i.first_number)
 }
 
 /// Returns number of lines to read from input for constructing one page of pr output.
@@ -1253,8 +1254,5 @@ fn lines_to_read_for_page(opts: &OutputOptions) -> usize {
 
 /// Returns number of columns to output
 fn get_columns(opts: &OutputOptions) -> usize {
-    opts.column_mode_options
-        .as_ref()
-        .map(|i| i.columns)
-        .unwrap_or(1)
+    opts.column_mode_options.as_ref().map_or(1, |i| i.columns)
 }

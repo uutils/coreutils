@@ -168,13 +168,13 @@ where
                 }
             }
         };
-        print!("{}", before_filename);
+        print!("{before_filename}");
         if should_print_filename {
             // The filename might not be valid UTF-8, and filename.display() would mangle the names.
             // Therefore, emit the bytes directly to stdout, without any attempt at encoding them.
             let _dropped_result = stdout().write_all(os_str_as_bytes(filename.as_os_str())?);
         }
-        println!("{}", after_filename);
+        println!("{after_filename}");
     }
 
     Ok(())

@@ -195,7 +195,7 @@ impl Settings {
             follow_retry,
             matches
                 .get_one::<String>(options::FOLLOW)
-                .map(|s| s.as_str()),
+                .map(std::string::String::as_str),
         ) {
             // -F and --follow if -F is specified after --follow. We don't need to care about the
             // value of --follow.
@@ -288,8 +288,7 @@ impl Settings {
 
         settings.inputs = matches
             .get_many::<OsString>(options::ARG_FILES)
-            .map(|v| v.map(Input::from).collect())
-            .unwrap_or_else(|| vec![Input::default()]);
+            .map_or_else(|| vec![Input::default()], |v| v.map(Input::from).collect());
 
         settings.verbose =
             settings.inputs.len() > 1 && !matches.get_flag(options::verbosity::QUIET);
@@ -298,11 +297,11 @@ impl Settings {
     }
 
     pub fn has_only_stdin(&self) -> bool {
-        self.inputs.iter().all(|input| input.is_stdin())
+        self.inputs.iter().all(super::paths::Input::is_stdin)
     }
 
     pub fn has_stdin(&self) -> bool {
-        self.inputs.iter().any(|input| input.is_stdin())
+        self.inputs.iter().any(super::paths::Input::is_stdin)
     }
 
     pub fn num_inputs(&self) -> usize {
@@ -355,7 +354,9 @@ impl Settings {
     /// process.
     pub fn verify(&self) -> VerificationResult {
         // Mimic GNU's tail for `tail -F`
-        if self.inputs.iter().any(|i| i.is_stdin()) && self.follow == Some(FollowMode::Name) {
+        if self.inputs.iter().any(super::paths::Input::is_stdin)
+            && self.follow == Some(FollowMode::Name)
+        {
             return VerificationResult::CannotFollowStdinByName;
         }
 

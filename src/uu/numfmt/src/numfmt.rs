@@ -67,7 +67,7 @@ fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UR
             }
             InvalidModes::Ignore => {}
         };
-        println!("{}", input_line);
+        println!("{input_line}");
     }
 
     Ok(())
@@ -237,7 +237,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
     let result = match matches.get_many::<String>(options::NUMBER) {
-        Some(values) => handle_args(values.map(|s| s.as_str()), &options),
+        Some(values) => handle_args(values.map(std::string::String::as_str), &options),
         None => {
             let stdin = std::io::stdin();
             let mut locked_stdin = stdin.lock();
@@ -428,8 +428,8 @@ mod tests {
         options.header = 0;
         let result = handle_buffer(BufReader::new(mock_buffer), &options)
             .expect_err("returned Ok after receiving IO error");
-        let result_debug = format!("{:?}", result);
-        let result_display = format!("{}", result);
+        let result_debug = format!("{result:?}");
+        let result_display = format!("{result}");
         assert_eq!(result_debug, "IoError(\"broken pipe\")");
         assert_eq!(result_display, "broken pipe");
         assert_eq!(result.code(), 1);

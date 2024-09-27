@@ -102,8 +102,7 @@ impl ParsedNumber {
             Ok(v) => v.into_i64().ok_or(ParseError::Overflow),
             Err(e) => Err(e.map(|v, rest| {
                 v.into_i64()
-                    .map(|v| ParseError::PartialMatch(v, rest))
-                    .unwrap_or(ParseError::Overflow)
+                    .map_or(ParseError::Overflow, |v| ParseError::PartialMatch(v, rest))
             })),
         }
     }
@@ -356,7 +355,7 @@ mod tests {
 
         assert_eq!(Ok(0.5), ParsedNumber::parse_f64("0x.8"));
         assert_eq!(Ok(0.0625), ParsedNumber::parse_f64("0x.1"));
-        assert_eq!(Ok(15.0078125), ParsedNumber::parse_f64("0xf.02"));
+        assert_eq!(Ok(15.007_812_5), ParsedNumber::parse_f64("0xf.02"));
     }
 
     #[test]

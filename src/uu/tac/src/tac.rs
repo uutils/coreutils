@@ -39,8 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let regex = matches.get_flag(options::REGEX);
     let raw_separator = matches
         .get_one::<String>(options::SEPARATOR)
-        .map(|s| s.as_str())
-        .unwrap_or("\n");
+        .map_or("\n", |s| s.as_str());
     let separator = if raw_separator.is_empty() {
         "\0"
     } else {
@@ -48,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let files: Vec<&str> = match matches.get_many::<String>(options::FILE) {
-        Some(v) => v.map(|s| s.as_str()).collect(),
+        Some(v) => v.map(std::string::String::as_str).collect(),
         None => vec!["-"],
     };
 

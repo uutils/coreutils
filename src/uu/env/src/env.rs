@@ -65,7 +65,7 @@ fn print_env(line_ending: LineEnding) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
     for (n, v) in env::vars() {
-        write!(stdout, "{}={}{}", n, v, line_ending).unwrap();
+        write!(stdout, "{n}={v}{line_ending}").unwrap();
     }
 }
 
@@ -281,15 +281,15 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
             USimpleError::new(125, "invalid backslash at end of string in -S")
         }
         parse_error::ParseError::InvalidSequenceBackslashXInMinusS { pos: _, c } => {
-            USimpleError::new(125, format!("invalid sequence '\\{}' in -S", c))
+            USimpleError::new(125, format!("invalid sequence '\\{c}' in -S"))
         }
         parse_error::ParseError::MissingClosingQuote { pos: _, c: _ } => {
             USimpleError::new(125, "no terminating quote in -S string")
         }
         parse_error::ParseError::ParsingOfVariableNameFailed { pos, msg } => {
-            USimpleError::new(125, format!("variable name issue (at {}): {}", pos, msg,))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {msg}",))
         }
-        _ => USimpleError::new(125, format!("Error: {:?}", e)),
+        _ => USimpleError::new(125, format!("Error: {e:?}")),
     })
 }
 
@@ -393,7 +393,7 @@ impl EnvAppData {
                     | clap::error::ErrorKind::DisplayVersion => e.into(),
                     _ => {
                         // extent any real issue with parameter parsing by the ERROR_MSG_S_SHEBANG
-                        let s = format!("{}", e);
+                        let s = format!("{e}");
                         if !s.is_empty() {
                             let s = s.trim_end();
                             uucore::show_error!("{}", s);
@@ -472,6 +472,7 @@ impl EnvAppData {
 
         if let Some(_argv0) = opts.argv0 {
             #[cfg(unix)]
+            #[allow(clippy::used_underscore_binding)]
             {
                 cmd.arg0(_argv0);
                 arg0 = Cow::Borrowed(_argv0);
@@ -554,16 +555,20 @@ fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
 fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
     let ignore_env = matches.get_flag("ignore-environment");
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
-    let running_directory = matches.get_one::<OsString>("chdir").map(|s| s.as_os_str());
+    let running_directory = matches
+        .get_one::<OsString>("chdir")
+        .map(std::ffi::OsString::as_os_str);
     let files = match matches.get_many::<OsString>("file") {
-        Some(v) => v.map(|s| s.as_os_str()).collect(),
+        Some(v) => v.map(std::ffi::OsString::as_os_str).collect(),
         None => Vec::with_capacity(0),
     };
     let unsets = match matches.get_many::<OsString>("unset") {
-        Some(v) => v.map(|s| s.as_os_str()).collect(),
+        Some(v) => v.map(std::ffi::OsString::as_os_str).collect(),
         None => Vec::with_capacity(0),
     };
-    let argv0 = matches.get_one::<OsString>("argv0").map(|s| s.as_os_str());
+    let argv0 = matches
+        .get_one::<OsString>("argv0")
+        .map(std::ffi::OsString::as_os_str);
 
     let mut opts = Options {
         ignore_env,

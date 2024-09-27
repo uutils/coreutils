@@ -935,7 +935,7 @@ mod tests_split_iterator {
         // minimal amount of quoting in typical cases.
         match escape_style(s) {
             EscapeStyle::None => s.into(),
-            EscapeStyle::SingleQuoted => format!("'{}'", s).into(),
+            EscapeStyle::SingleQuoted => format!("'{s}'").into(),
             EscapeStyle::Mixed => {
                 let mut quoted = String::new();
                 quoted.push('\'');
@@ -1015,17 +1015,13 @@ mod tests_split_iterator {
             match split(input) {
                 Err(actual) => {
                     panic!(
-                        "[{i}] calling split({:?}):\nexpected: Ok({:?})\n  actual: Err({:?})\n",
-                        input, expected, actual
+                        "[{i}] calling split({input:?}):\nexpected: Ok({expected:?})\n  actual: Err({actual:?})\n"
                     );
                 }
                 Ok(actual) => {
                     assert!(
                         expected == actual.as_slice(),
-                        "[{i}] After split({:?}).unwrap()\nexpected: {:?}\n  actual: {:?}\n",
-                        input,
-                        expected,
-                        actual
+                        "[{i}] After split({input:?}).unwrap()\nexpected: {expected:?}\n  actual: {actual:?}\n"
                     );
                 }
             }

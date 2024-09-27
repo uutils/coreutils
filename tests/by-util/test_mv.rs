@@ -1448,7 +1448,7 @@ fn test_mv_directory_into_subdirectory_of_itself_fails() {
     // check that it also errors out with /
     scene
         .ucmd()
-        .arg(format!("{}/", dir1))
+        .arg(format!("{dir1}/"))
         .arg(dir2)
         .fails()
         .stderr_contains(
@@ -1601,7 +1601,7 @@ fn test_acl() {
             return;
         }
         Err(e) => {
-            println!("test skipped: setfacl failed with {}", e);
+            println!("test skipped: setfacl failed with {e}");
             return;
         }
     }
