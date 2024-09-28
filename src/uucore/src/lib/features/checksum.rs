@@ -322,10 +322,12 @@ fn determine_regex(lines: &[String]) -> Option<(Regex, bool)> {
 
 // Converts bytes to a hexadecimal string
 fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes.iter().fold(String::new(), |mut bytes, byte| {
-        write!(bytes, "{byte:02x}").unwrap();
-        bytes
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut hex, byte| {
+            write!(hex, "{byte:02x}").unwrap();
+            hex
+        })
 }
 
 fn get_expected_checksum(
