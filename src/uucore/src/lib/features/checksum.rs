@@ -322,7 +322,7 @@ fn determine_regex(lines: &[String]) -> Option<(Regex, bool)> {
 
 // Converts bytes to a hexadecimal string
 fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes.iter().fold(String::new(), |mut bytes, byte| {
+    bytes.iter().fold(String::new(), |mut hex, byte| {
         write!(bytes, "{byte:02x}").unwrap();
         bytes
     })
