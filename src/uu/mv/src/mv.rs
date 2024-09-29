@@ -9,6 +9,7 @@ mod error;
 
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
+use filetime::set_symlink_file_times;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
@@ -21,16 +22,17 @@ use std::os::unix;
 use std::os::windows;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 #[cfg(unix)]
-use unix::fs::FileTypeExt;
+use unix::fs::{FileTypeExt, MetadataExt};
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{
-    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
+    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file, disk_usage,
     path_ends_with_terminator,
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
+use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 use uucore::{show_error, update_control};
 use walkdir::WalkDir;
 
@@ -40,7 +42,7 @@ pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
 use fs_extra::{
-    dir::{get_size as dir_get_size, remove},
+    dir::remove,
     error::{ErrorKind as FsXErrorKind, Result as FsXResult},
     file::{self, CopyOptions},
 };
@@ -708,30 +710,28 @@ fn rename_with_fallback(
             //    If finding the total size fails for whatever reason,
             //    the progress bar wont be shown for this file / dir.
             //    (Move will probably fail due to permission error later?)
-            let total_size = dir_get_size(from).ok();
-
-            let progress_bar =
-                if let (Some(multi_progress), Some(total_size)) = (multi_progress, total_size) {
+            // let total_size = disk_usage(&[from],true).ok();
+            // let total_size = None;
+            let mut progress_bar = None;
+            if let Some(multi_progress) = multi_progress {
+                if let Ok(total_size) = disk_usage(&[from], true) {
                     let bar = ProgressBar::new(total_size).with_style(
                         ProgressStyle::with_template(
                             "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
                         )
                         .unwrap(),
                     );
-
-                    Some(multi_progress.add(bar))
-                } else {
-                    None
-                };
+                    progress_bar = Some(multi_progress.add(bar));
+                }
+            }
 
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            let xattrs =
-                fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
-
+            // let xattrs =
+            //     fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
             let result = move_dir(from, to, progress_bar.as_ref(), vebose_context);
 
-            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            fsxattr::apply_xattrs(to, xattrs).unwrap();
+            // #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+            // fsxattr::apply_xattrs(to, xattrs).unwrap();
 
             if let Err(err) = result {
                 return match err {
@@ -826,7 +826,7 @@ fn is_empty_dir(path: &Path) -> bool {
 
 /// Moves a directory from one location to another with progress tracking.
 /// This function assumes that `from` is a directory and `to` does not exist.
-
+///
 /// Returns:
 /// - `Result<u64>`: The total number of bytes moved if successful.
 fn move_dir(
@@ -838,11 +838,12 @@ fn move_dir(
     // The return value that represents the number of bytes copied.
     let mut result: u64 = 0;
     let mut error_occurred = false;
-    let mut moved_entries: Vec<(PathBuf, FileType)> = vec![];
+    let mut moved_entries: Vec<(PathBuf, FileType, PathBuf, Option<fs::Metadata>)> = vec![];
     for dir_entry_result in WalkDir::new(from) {
         match dir_entry_result {
             Ok(dir_entry) => {
                 let file_type = dir_entry.file_type();
+                let dir_entry_md = dir_entry.metadata().ok();
                 let dir_entry_path = dir_entry.into_path();
                 //comment why this is okay
                 let tmp_to = dir_entry_path.strip_prefix(from).unwrap();
@@ -885,7 +886,8 @@ fn move_dir(
                         }
                     }
                 }
-                moved_entries.push((dir_entry_path, file_type));
+
+                moved_entries.push((dir_entry_path, file_type, dir_entry_to, dir_entry_md));
             }
             Err(err) => {
                 let err_msg = match (err.io_error(), err.path()) {
@@ -900,20 +902,23 @@ fn move_dir(
         }
     }
     if !error_occurred {
-        while let Some((moved_path, file_type)) = moved_entries.pop() {
-            let res = if file_type.is_dir() {
-                remove(&moved_path)
+        while let Some((src_path, file_type, dest_path, src_md)) = moved_entries.pop() {
+            if let Some(src_metadata) = src_md {
+                copy_metadata(&src_path, &dest_path, &src_metadata).ok();
+            }
+            let res = if src_path.is_dir() {
+                remove(&src_path)
             } else {
-                file::remove(&moved_path)
+                file::remove(&src_path)
             };
             if let Err(err) = res {
                 error_occurred = true;
-                show_error!("cannot remove {}: {}", moved_path.quote(), err);
+                show_error!("cannot remove {}: {}", src_path.quote(), err);
             } else if let Some(vc) = verbose_context {
                 if file_type.is_dir() {
-                    vc.remove_folder(&moved_path);
+                    vc.remove_folder(&src_path);
                 } else {
-                    vc.remove_file(&moved_path);
+                    vc.remove_file(&src_path);
                 }
             }
         }
@@ -943,12 +948,12 @@ fn copy_file(
             .and_then(|file_name| file_name.to_str())
             .map(|file_name| file_name.to_string())
             .unwrap_or_default();
-        let _progress_handler = |info: file::TransitProcess| {
+        let progress_handler = |info: file::TransitProcess| {
             let copied_bytes = progress_bar_start_val + info.copied_bytes;
             progress_bar.set_position(copied_bytes);
         };
         progress_bar.set_message(display_file_name);
-        Some(_progress_handler)
+        Some(progress_handler)
     } else {
         None
     };
@@ -966,6 +971,44 @@ fn copy_file(
     } else {
         file::copy(from, to, &copy_options)
     }
+}
+
+fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) -> io::Result<()> {
+    // Get metadata of the dest file
+    let dest_metadata = fs::symlink_metadata(dest)?;
+
+    // Copy file permissions
+    let permissions = src_metadata.permissions();
+    fs::set_permissions(dest, permissions)?;
+
+    // Copy xattrs
+    fsxattr::copy_xattrs(src, dest)?;
+
+    // Copy the modified and accessed timestamps
+    let modified_time = src_metadata.modified()?;
+    let accessed_time = src_metadata.accessed()?;
+    set_symlink_file_times(dest, accessed_time.into(), modified_time.into())?;
+
+    // Copy ownership (if on Unix-like system)
+    #[cfg(unix)]
+    {
+        let uid = MetadataExt::uid(src_metadata);
+        let gid = MetadataExt::gid(src_metadata);
+        wrap_chown(
+            dest,
+            &dest_metadata,
+            Some(uid),
+            Some(gid),
+            false,
+            Verbosity {
+                groups_only: false,
+                level: VerbosityLevel::Silent,
+            },
+        )
+        .map_err(|err| io::Error::other(err))?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1148,5 +1191,114 @@ mod tests {
             .expect("couldn't get metadata")
             .file_type()
             .is_fifo())
+    }
+}
+
+// Successfully copies file permissions from source to destination
+#[cfg(test)]
+mod tests2 {
+    use super::*;
+    use fsxattr::{apply_xattrs, retrieve_xattrs};
+    use std::collections::HashMap;
+    use std::fs::{self, File};
+    use std::os::unix::fs::PermissionsExt;
+    use std::thread::sleep;
+    use std::time::Duration;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_copy_metadata_copies_permissions() {
+        let temp_dir = tempdir().unwrap();
+        let src_path = temp_dir.path().join("src_file");
+        let dest_path = temp_dir.path().join("dest_file");
+
+        // Create source and destination files
+        File::create(&src_path).unwrap();
+        File::create(&dest_path).unwrap();
+
+        // Set permissions for the source file
+        let src_md = fs::metadata(&src_path).unwrap();
+        let mut permissions = src_md.permissions();
+        permissions.set_mode(0o100000);
+        fs::set_permissions(&src_path, permissions.clone()).unwrap();
+        let src_md = fs::metadata(&src_path).unwrap();
+
+        // Call the function under test
+        copy_metadata(&src_path, &dest_path, &src_md).unwrap();
+
+        // Verify that the permissions were copied
+        let dest_permissions = fs::metadata(&dest_path).unwrap().permissions();
+        assert_eq!(permissions.mode(), dest_permissions.mode());
+    }
+
+    #[test]
+    fn test_copy_metadata_copies_filetimes() {
+        let temp_dir = tempdir().expect("couldn't create tempdir");
+        let src_path = temp_dir.path().join("src_file");
+        let dest_path = temp_dir.path().join("dest_file");
+
+        // Create source and destination files
+        File::create(&src_path).expect("couldn't create source file");
+        // Wait for a second so that file times are different
+        sleep(Duration::from_secs(1));
+        File::create(&dest_path).expect("couldn't create dest file");
+
+        // Get file times for the source file
+        let src_metadata = fs::metadata(&src_path).expect("couldn't get metadata for source file");
+        let modified_time = src_metadata
+            .modified()
+            .expect("couldn't get modified time for src file");
+        let accessed_time = src_metadata
+            .accessed()
+            .expect("couldn't get accesssed time for src file");
+
+        //Try to copy metadata
+        copy_metadata(&src_path, &dest_path, &src_metadata).unwrap();
+
+        // Get file times for the dest file
+        let dest_metadata = fs::metadata(&dest_path).expect("couldn't get metadata for dest file");
+        let dest_modified_time = dest_metadata
+            .modified()
+            .expect("couldn't get modified time for src file");
+        let dest_accessed_time = dest_metadata
+            .accessed()
+            .expect("couldn't get accesssed time for src file");
+
+        // Verify that the file times were copied
+        assert_eq!(modified_time, dest_modified_time);
+        assert_eq!(dest_accessed_time, accessed_time);
+    }
+
+    #[test]
+    fn test_copy_metadata_copies_xattr() {
+        let temp_dir = tempdir().expect("couldn't create tempdir");
+        let src_path = temp_dir.path().join("src_file");
+        let dest_path = temp_dir.path().join("dest_file");
+
+        // Create source and destination files
+        File::create(&src_path).expect("couldn't create source file");
+        File::create(&dest_path).expect("couldn't create dest file");
+
+        let src_metadata = fs::metadata(&src_path).unwrap();
+
+        // Set xattrs for the source file
+        let mut test_xattrs = HashMap::new();
+        let test_attr = "user.test_attr";
+        let test_value = b"test value";
+        test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());
+        apply_xattrs(&src_path, test_xattrs).expect("couldn't apply xattr to the destination file");
+
+        //Try to copy metadata
+        copy_metadata(&src_path, &dest_path, &src_metadata).expect("couldn't copy metadata");
+
+        // Verify that the xattrs were copied
+        let retrieved_xattrs = retrieve_xattrs(&dest_path).unwrap();
+        assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+        assert_eq!(
+            retrieved_xattrs
+                .get(OsString::from(test_attr).as_os_str())
+                .expect("couldn't find xattr with name user.test_attr"),
+            test_value
+        );
     }
 }

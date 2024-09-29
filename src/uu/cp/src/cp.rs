@@ -29,9 +29,7 @@ use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop,
-    path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
-    ResolveMode,
+    are_hardlinks_to_same_file, canonicalize, disk_usage, get_filename, is_symlink_loop, path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -2450,42 +2448,6 @@ pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult
 pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResult<PathBuf> {
     let local_to_root = source.strip_prefix(root)?;
     Ok(target.join(local_to_root))
-}
-
-/// Get the total size of a slice of files and directories.
-///
-/// This function is much like the `du` utility, by recursively getting the sizes of files in directories.
-/// Files are not deduplicated when appearing in multiple sources. If `recursive` is set to `false`, the
-/// directories in `paths` will be ignored.
-fn disk_usage(paths: &[PathBuf], recursive: bool) -> io::Result<u64> {
-    let mut total = 0;
-    for p in paths {
-        let md = fs::metadata(p)?;
-        if md.file_type().is_dir() {
-            if recursive {
-                total += disk_usage_directory(p)?;
-            }
-        } else {
-            total += md.len();
-        }
-    }
-    Ok(total)
-}
-
-/// A helper for `disk_usage` specialized for directories.
-fn disk_usage_directory(p: &Path) -> io::Result<u64> {
-    let mut total = 0;
-
-    for entry in fs::read_dir(p)? {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            total += disk_usage_directory(&entry.path())?;
-        } else {
-            total += entry.metadata()?.len();
-        }
-    }
-
-    Ok(total)
 }
 
 #[cfg(test)]
