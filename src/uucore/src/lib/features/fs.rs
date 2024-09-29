@@ -796,6 +796,42 @@ pub fn copy_fifo(dest: &Path) -> std::io::Result<()> {
     nix::unistd::mkfifo(dest, nix::sys::stat::Mode::S_IRUSR).map_err(|err| err.into())
 }
 
+/// Get the total size of a slice of files and directories.
+///
+/// This function is much like the `du` utility, by recursively getting the sizes of files in directories.
+/// Files are not deduplicated when appearing in multiple sources. If `recursive` is set to `false`, the
+/// directories in `paths` will be ignored.
+pub fn disk_usage<P:AsRef<Path>>(paths: &[P], recursive: bool) -> IOResult<u64> {
+    let mut total = 0;
+    for p in paths {
+        let md = fs::metadata(p)?;
+        if md.file_type().is_dir() {
+            if recursive {
+                total += disk_usage_directory(p)?;
+            }
+        } else {
+            total += md.len();
+        }
+    }
+    Ok(total)
+}
+
+/// A helper for `disk_usage` specialized for directories.
+fn disk_usage_directory<P:AsRef<Path>>(p: P) -> IOResult<u64>  {
+    let mut total = 0;
+
+    for entry in fs::read_dir(p)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            total += disk_usage_directory(&entry.path())?;
+        } else {
+            total += entry.metadata()?.len();
+        }
+    }
+
+    Ok(total)
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.

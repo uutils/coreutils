@@ -1626,11 +1626,15 @@ fn test_acl() {
 
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
+    use super::*;
     use crate::common::util::TestScenario;
+    use std::ffi::OsString;
     use std::fs::{read_to_string, set_permissions, write};
-    use std::os::unix::fs::{symlink, FileTypeExt, PermissionsExt};
+    use std::os::unix::fs::{symlink, FileTypeExt, MetadataExt, PermissionsExt};
     use tempfile::TempDir;
     use uucore::display::Quotable;
+    use uucore::fsxattr::retrieve_xattrs;
+    use xattr::FileExt;
     // Ensure that the copying code used in an inter-partition move preserve dir structure.
     #[test]
     fn test_inter_partition_copying_folder() {
@@ -1940,6 +1944,145 @@ mod inter_partition_copying {
             .fails()
             // check erorr occured
             .stderr_contains("mv: cannot remove 'a': Permission denied");
+    }
+
+    #[test]
+    fn test_inter_partition_copying_directory_metadata_for_file() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("dir");
+        let file = at.make_file("dir/file");
+        at.set_mode("dir/file", 0o100700);
+
+        // Set xattrs for the source file
+        let test_attr = "user.test_attr";
+        let test_value = b"test value";
+        file.set_xattr(test_attr, test_value)
+            .expect("couldn't set xattr for src file");
+
+        // Get file times for the source file
+        let src_metadata = file
+            .metadata()
+            .expect("couldn't get metadata for source file");
+        let modified_time = src_metadata
+            .modified()
+            .expect("couldn't get modified time for src file");
+        let accessed_time = src_metadata
+            .accessed()
+            .expect("couldn't get accesssed time for src file");
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        // make sure to wait for a second so that when the dest file is created, it
+        // would have a different filetime so that the only way the dest file
+        // would have a same timestamp is by copying the timestamp of src file.
+        sleep(Duration::from_secs(1));
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("dir")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds();
+
+        let dest_metadata = other_fs_tempdir
+            .path()
+            .join("dir/file")
+            .metadata()
+            .expect("couldn't get metadata of dest file");
+        let mode = dest_metadata.mode();
+        assert_eq!(mode, 0o100700, "permission doesn't match");
+        assert_eq!(
+            dest_metadata
+                .modified()
+                .expect("couldn't get modified time for dest file"),
+            modified_time
+        );
+        assert_eq!(
+            dest_metadata
+                .accessed()
+                .expect("couldn't get accessed time for dest file"),
+            accessed_time
+        );
+
+        // Verify that the xattrs were copied
+        let retrieved_xattrs = retrieve_xattrs(&other_fs_tempdir.path().join("dir/file")).unwrap();
+        assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+        assert_eq!(
+            retrieved_xattrs
+                .get(OsString::from(test_attr).as_os_str())
+                .expect("couldn't find xattr with name user.test_attr"),
+            test_value
+        );
+    }
+
+    #[test]
+    fn test_inter_partition_copying_directory_metadata_for_directory() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("dir");
+        at.make_file("dir/file");
+        at.set_mode("dir", 0o40700);
+
+        // Set xattrs for the source file
+        let test_attr = "user.test_attr";
+        let test_value = b"test value";
+        xattr::set(at.plus("dir"), test_attr, test_value).expect("couldn't set xattr for src file");
+
+        // Get file times for the source dir
+        let src_metadata = at.plus("dir")
+            .metadata()
+            .expect("couldn't get metadata for source file");
+        let modified_time = src_metadata
+            .modified()
+            .expect("couldn't get modified time for src file");
+        let accessed_time = src_metadata
+            .accessed()
+            .expect("couldn't get accesssed time for src file");
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        // make sure to wait for a second so that when the dest file is created, it
+        // would have a different filetime so that the only way the dest file
+        // would have a same timestamp is by copying the timestamp of src file.
+        sleep(Duration::from_secs(1));
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("dir")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds();
+
+        let dest_metadata = other_fs_tempdir
+            .path()
+            .join("dir")
+            .metadata()
+            .expect("couldn't get metadata of dest file");
+        let mode = dest_metadata.mode();
+        assert_eq!(mode, 0o40700, "permission doesn't match");
+        assert_eq!(
+            dest_metadata
+                .modified()
+                .expect("couldn't get modified time for dest file"),
+            modified_time
+        );
+        assert_eq!(
+            dest_metadata
+                .accessed()
+                .expect("couldn't get accessed time for dest file"),
+            accessed_time
+        );
+
+        // Verify that the xattrs were copied
+        let retrieved_xattrs = retrieve_xattrs(&other_fs_tempdir.path().join("dir")).unwrap();
+        assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+        assert_eq!(
+            retrieved_xattrs
+                .get(OsString::from(test_attr).as_os_str())
+                .expect("couldn't find xattr with name user.test_attr"),
+            test_value
+        );
     }
 }
 
