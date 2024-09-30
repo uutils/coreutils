@@ -211,6 +211,12 @@ jobs:
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
         RUSTUP_TOOLCHAIN=stable cargo tree --no-dedupe --locked -e=no-dev --prefix=none ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
+    - name: Build
+      # We must restrict the feature-set for running the tests, but we must also ensure that all code *compiles*, even the code that cannot be run on this platform.
+      run: cargo build --all-features -p uucore -p coreutils --quiet
+      env:
+        RUSTFLAGS: "-Awarnings"
+        RUST_BACKTRACE: "1"
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
