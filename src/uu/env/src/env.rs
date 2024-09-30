@@ -346,6 +346,7 @@ impl EnvAppData {
         original_args: &Vec<OsString>,
     ) -> UResult<Vec<std::ffi::OsString>> {
         let mut all_args: Vec<std::ffi::OsString> = Vec::new();
+
         for arg in original_args {
             match arg {
                 b if check_and_handle_string_args(b, "--split-string", &mut all_args, None)? => {
@@ -370,6 +371,19 @@ impl EnvAppData {
                     self.had_string_argument = true;
                 }
                 _ => {
+                    let arg_str = arg.to_string_lossy();
+
+                    // Only long option is allowed to contain '='
+                    if arg_str.contains('=')
+                        && arg_str.starts_with('-')
+                        && !arg_str.starts_with("--")
+                    {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("cannot unset '{}': Invalid argument", &arg_str[2..]),
+                        ));
+                    }
+
                     all_args.push(arg.clone());
                 }
             }
@@ -750,5 +764,74 @@ mod tests {
             NCvt::convert(vec!["-i", "A=B ' C"]),
             parse_args_from_str(&NCvt::convert(r#"-i A='B \' C'"#)).unwrap()
         );
+    }
+
+    #[test]
+    fn test_apply_unset_env_vars_invalid_equal_sign() {
+        let opts = Options {
+            ignore_env: false,
+            line_ending: uucore::line_ending::LineEnding::Newline,
+            running_directory: None,
+            files: vec![],
+            unsets: vec![OsStr::new("INVALID=VAR")],
+            sets: vec![],
+            program: vec![],
+            argv0: None,
+            #[cfg(unix)]
+            ignore_signal: vec![],
+        };
+
+        let result = apply_unset_env_vars(&opts);
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), 125);
+        assert_eq!(
+            err.to_string(),
+            "cannot unset 'INVALID=VAR': Invalid argument"
+        );
+    }
+
+    #[test]
+    fn test_process_all_string_arguments() {
+        // Define test cases with expected outcomes
+        let test_cases = vec![
+            // Argument with short option and '=' (should fail)
+            (
+                vec![OsString::from("-u=o")],
+                Err("cannot unset '=o': Invalid argument".to_string()),
+            ),
+            // Argument with long option and '=' (should succeed)
+            (vec![OsString::from("--unset=o")], Ok(())),
+            // Argument with short option and no '=' (should succeed)
+            (vec![OsString::from("-u o")], Ok(())),
+            // Set env variable (should succeed)
+            (vec![OsString::from("u=o")], Ok(())),
+            // Empty assignment (should succeed)
+            (vec![OsString::from("=")], Ok(())),
+            // Argument ends with '='
+            (vec![OsString::from("--split-string=X=Y=")], Ok(())),
+            // No argument (should succeed)
+            (vec![OsString::from("")], Ok(())),
+            // TODO: implement handling of empty parameter value
+            // (vec![OsString::from("--unset=")], Err("env: cannot unset ‘’: Invalid argument".to_string())),
+        ];
+
+        for (input_args, expected) in test_cases {
+            let mut env_app_data = EnvAppData::default();
+
+            let result = env_app_data.process_all_string_arguments(&input_args);
+
+            match expected {
+                Ok(()) => {
+                    assert!(result.is_ok());
+                }
+                Err(expected_err) => {
+                    assert!(result.is_err());
+                    let err = result.unwrap_err();
+                    assert_eq!(err.to_string(), expected_err);
+                }
+            }
+        }
     }
 }
