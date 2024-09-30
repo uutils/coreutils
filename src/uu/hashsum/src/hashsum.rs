@@ -96,7 +96,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
         set_or_err(detect_algo("b3sum", None)?)?;
     }
     if matches.get_flag("sha3") {
-        let bits = matches.get_one::<usize>("bits").cloned();
+        let bits = matches.get_one::<usize>("bits").copied();
         set_or_err(create_sha3(bits)?)?;
     }
     if matches.get_flag("sha3-224") {

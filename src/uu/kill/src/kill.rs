@@ -158,7 +158,7 @@ fn table() {
         .enumerate()
         .filter(|(_, s)| **s != "EXIT")
     {
-        println!("{0: >#2} {1}", idx, signal);
+        println!("{idx: >#2} {signal}");
     }
 }
 
