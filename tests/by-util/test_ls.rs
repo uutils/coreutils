@@ -5736,3 +5736,23 @@ fn test_ls_invalid_file_name() {
         )
         .code_is(2);
 }
+
+#[cfg(windows)]
+#[test]
+fn test_ls_reserved_file_name() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("CON")
+        .fails()
+        .stderr_contains("'CON': The parameter is incorrect.")
+        .code_is(2);
+
+    scene
+        .ucmd()
+        .arg("NUL")
+        .fails()
+        .stderr_contains("'NUL': Incorrect function.")
+        .code_is(2);
+}
