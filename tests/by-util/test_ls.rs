@@ -5516,3 +5516,223 @@ fn test_suffix_case_sensitivity() {
         /* cSpell:enable */
     );
 }
+
+#[test]
+fn test_ls_trailing_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("existing_dir");
+    at.touch("existing_file");
+
+    #[cfg(unix)]
+    {
+        scene
+            .ucmd()
+            .arg("non_existing")
+            .fails()
+            .stderr_contains("'non_existing': No such file or directory")
+            .code_is(2);
+
+        scene
+            .ucmd()
+            .arg("non_existing/")
+            .fails()
+            .stderr_contains("'non_existing/': No such file or directory")
+            .code_is(2);
+
+        scene
+            .ucmd()
+            .arg("existing_dir")
+            .succeeds()
+            .no_stderr()
+            .code_is(0);
+
+        scene
+            .ucmd()
+            .arg("existing_dir/")
+            .succeeds()
+            .no_stderr()
+            .code_is(0);
+
+        scene
+            .ucmd()
+            .arg("existing_file")
+            .succeeds()
+            .no_stderr()
+            .code_is(0);
+
+        scene
+            .ucmd()
+            .arg("existing_file/")
+            .fails()
+            .stderr_contains("'existing_file/': Not a directory")
+            .code_is(2);
+    }
+
+    #[cfg(windows)]
+    {
+        scene
+            .ucmd()
+            .arg("non_existing")
+            .fails()
+            .stderr_contains("'non_existing': No such file or directory")
+            .code_is(2);
+
+        scene
+            .ucmd()
+            .arg("non_existing/")
+            .fails()
+            .stderr_contains("'non_existing/': No such file or directory")
+            .code_is(2);
+
+        scene
+            .ucmd()
+            .arg("non_existing\\")
+            .fails()
+            .stderr_contains("'non_existing\\': No such file or directory")
+            .code_is(2);
+
+        scene
+            .ucmd()
+            .arg("existing_dir")
+            .succeeds()
+            .no_stderr()
+            .code_is(0);
+
+        scene
+            .ucmd()
+            .arg("existing_dir/")
+            .succeeds()
+            .no_stderr()
+            .code_is(0);
+
+        scene
+            .ucmd()
+            .arg("existing_dir\\")
+            .succeeds()
+            .no_stderr()
+            .code_is(0);
+
+        scene
+            .ucmd()
+            .arg("existing_file")
+            .succeeds()
+            .no_stderr()
+            .code_is(0);
+
+        scene.ucmd().arg("existing_file/").fails().stderr_contains(
+            "'existing_file/': The filename, directory name, or volume label syntax is incorrect",
+        ).code_is(2);
+
+        scene.ucmd().arg("existing_file\\").fails().stderr_contains(
+            "'existing_file\\': The filename, directory name, or volume label syntax is incorrect",
+        ).code_is(2);
+    }
+}
+
+#[test]
+fn test_ls_long_file_name() {
+    let scene = TestScenario::new(util_name!());
+    let long_file_name = "long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name_long_file_name";
+
+    #[cfg(unix)]
+    {
+        scene
+            .ucmd()
+            .arg(long_file_name)
+            .fails()
+            .stderr_contains(format!("'{}': File name too long", long_file_name))
+            .code_is(2);
+    }
+
+    #[cfg(windows)]
+    {
+        scene
+            .ucmd()
+            .arg(long_file_name)
+            .fails()
+            .stderr_contains(format!(
+                "'{}': The filename, directory name, or volume label syntax is incorrect",
+                long_file_name
+            ))
+            .code_is(2);
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn test_ls_invalid_file_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("existing_file");
+
+    scene
+        .ucmd()
+        .arg("existing_file*")
+        .succeeds()
+        .no_stderr()
+        .code_is(0);
+
+    scene
+        .ucmd()
+        .arg("non_existing*")
+        .fails()
+        .stderr_contains(
+            "'non_existing*': The filename, directory name, or volume label syntax is incorrect",
+        )
+        .code_is(2);
+
+    scene
+        .ucmd()
+        .arg("non_existing?")
+        .fails()
+        .stderr_contains(
+            "'non_existing?': The filename, directory name, or volume label syntax is incorrect",
+        )
+        .code_is(2);
+
+    scene
+        .ucmd()
+        .arg("non_existing<")
+        .fails()
+        .stderr_contains(
+            "'non_existing<': The filename, directory name, or volume label syntax is incorrect",
+        )
+        .code_is(2);
+
+    scene
+        .ucmd()
+        .arg("non_existing>")
+        .fails()
+        .stderr_contains(
+            "'non_existing>': The filename, directory name, or volume label syntax is incorrect",
+        )
+        .code_is(2);
+
+    scene
+        .ucmd()
+        .arg("non_existing:")
+        .fails()
+        .stderr_contains(
+            "'non_existing:': The filename, directory name, or volume label syntax is incorrect",
+        )
+        .code_is(2);
+
+    scene
+        .ucmd()
+        .arg("non_existing|")
+        .fails()
+        .stderr_contains(
+            "'non_existing|': The filename, directory name, or volume label syntax is incorrect",
+        )
+        .code_is(2);
+
+    scene
+        .ucmd()
+        .arg("non_existing\n")
+        .fails()
+        .stderr_contains(
+            "'non_existing\n': The filename, directory name, or volume label syntax is incorrect",
+        )
+        .code_is(2);
+}
