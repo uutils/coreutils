@@ -75,7 +75,16 @@ jobs:
         repository: 'coreutils/coreutils'
         path: '${{ steps.vars.outputs.path_GNU }}'
         ref: ${{ steps.vars.outputs.repo_GNU_ref }}
-        submodules: recursive
+        submodules: false
+
+    - name: Override submodule URL and initialize submodules
+      # Use github instead of upstream git server
+      run: |
+        git submodule sync --recursive
+        git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
+        git submodule update --init --recursive --depth 1
+      working-directory: ${{ steps.vars.outputs.path_GNU }}
+
     - name: Retrieve reference artifacts
       uses: dawidd6/action-download-artifact@v6
       # ref: <https://github.com/dawidd6/action-download-artifact>
