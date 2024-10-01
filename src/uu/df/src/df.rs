@@ -444,7 +444,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => {
             let filesystems = get_all_filesystems(&opt).map_err(|e| {
                 let context = "cannot read table of mounted file systems";
-                USimpleError::new(e.code(), format!("{}: {}", context, e))
+                USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
             if filesystems.is_empty() {
@@ -457,7 +457,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let paths: Vec<_> = paths.collect();
             let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
                 let context = "cannot read table of mounted file systems";
-                USimpleError::new(e.code(), format!("{}: {}", context, e))
+                USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
             // This can happen if paths are given as command-line arguments

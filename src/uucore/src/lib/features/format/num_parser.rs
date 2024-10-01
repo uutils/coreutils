@@ -356,7 +356,7 @@ mod tests {
 
         assert_eq!(Ok(0.5), ParsedNumber::parse_f64("0x.8"));
         assert_eq!(Ok(0.0625), ParsedNumber::parse_f64("0x.1"));
-        assert_eq!(Ok(15.0078125), ParsedNumber::parse_f64("0xf.02"));
+        assert_eq!(Ok(15.007_812_5), ParsedNumber::parse_f64("0xf.02"));
     }
 
     #[test]

@@ -62,8 +62,7 @@ pub fn parse_usage(content: &str) -> String {
                 "{}\n".to_string()
             }
         })
-        .collect::<Vec<_>>()
-        .join("")
+        .collect::<String>()
         .trim()
         .to_string()
 }

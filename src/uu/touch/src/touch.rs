@@ -585,8 +585,8 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         15 => (YYYYMMDDHHMM_DOT_SS, s.to_owned()),
         12 => (YYYYMMDDHHMM, s.to_owned()),
         // If we don't add "20", we have insufficient information to parse
-        13 => (YYYYMMDDHHMM_DOT_SS, format!("20{}", s)),
-        10 => (YYYYMMDDHHMM, format!("20{}", s)),
+        13 => (YYYYMMDDHHMM_DOT_SS, format!("20{s}")),
+        10 => (YYYYMMDDHHMM, format!("20{s}")),
         11 => (YYYYMMDDHHMM_DOT_SS, format!("{}{}", current_year(), s)),
         8 => (YYYYMMDDHHMM, format!("{}{}", current_year(), s)),
         _ => {
@@ -766,7 +766,7 @@ mod tests {
             },
         ) {
             Err(TouchError::InvalidFiletime(filetime)) => assert_eq!(filetime, invalid_filetime),
-            Err(e) => panic!("Expected TouchError::InvalidFiletime, got {}", e),
+            Err(e) => panic!("Expected TouchError::InvalidFiletime, got {e}"),
             Ok(_) => panic!("Expected to error with TouchError::InvalidFiletime but succeeded"),
         };
     }

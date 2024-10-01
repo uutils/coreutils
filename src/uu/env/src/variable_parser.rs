@@ -21,7 +21,7 @@ impl<'a, 'b> VariableParser<'a, 'b> {
             if c.is_ascii_digit() {
                 return Err(ParseError::ParsingOfVariableNameFailed {
                     pos: self.parser.get_peek_position(),
-                    msg: format!("Unexpected character: '{}', expected variable name must not start with 0..9", c) });
+                    msg: format!("Unexpected character: '{c}', expected variable name must not start with 0..9") });
             }
         }
         Ok(())
@@ -79,7 +79,7 @@ impl<'a, 'b> VariableParser<'a, 'b> {
                 Some(c) => {
                     return Err(ParseError::ParsingOfVariableNameFailed {
                         pos: self.parser.get_peek_position(),
-                        msg: format!("Unexpected character: '{}', expected a closing brace ('}}') or colon (':')", c)
+                        msg: format!("Unexpected character: '{c}', expected a closing brace ('}}') or colon (':')")
                     })
                 },
             };

@@ -40,7 +40,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
             let buff_size: usize = match input.parse() {
                 Ok(num) => num,
                 Err(_) => {
-                    eprintln!("failed to allocate a {} byte stdio buffer", value);
+                    eprintln!("failed to allocate a {value} byte stdio buffer");
                     std::process::exit(1);
                 }
             };

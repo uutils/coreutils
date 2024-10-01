@@ -139,7 +139,7 @@ impl StringOp {
             Self::Match => {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
-                let re_string = format!("^{}", right);
+                let re_string = format!("^{right}");
                 let re = Regex::with_options(
                     &re_string,
                     RegexOptions::REGEX_OPTION_NONE,

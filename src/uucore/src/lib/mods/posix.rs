@@ -21,13 +21,13 @@
 use std::env;
 
 /// '199209' for POSIX 1003.2-1992, which would define Obsolete mode
-pub const OBSOLETE: usize = 199209;
+pub const OBSOLETE: usize = 199_209;
 
 /// '200112' for POSIX 1003.1-2001, which is the minimum version for Traditional mode
-pub const TRADITIONAL: usize = 200112;
+pub const TRADITIONAL: usize = 200_112;
 
 /// '200809' for POSIX 1003.1-2008, which is the minimum version for Modern mode
-pub const MODERN: usize = 200809;
+pub const MODERN: usize = 200_809;
 
 /// Returns the value of the `_POSIX2_VERSION` environment variable if it is defined
 pub fn posix_version() -> Option<usize> {

@@ -82,17 +82,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let op = sets[1].quote();
             let msg = if sets_len == 2 {
                 format!(
-                    "{} {}\nOnly one string may be given when deleting without squeezing repeats.",
-                    start, op,
+                    "{start} {op}\nOnly one string may be given when deleting without squeezing repeats.",
                 )
             } else {
-                format!("{} {}", start, op,)
+                format!("{start} {op}",)
             };
             return Err(UUsageError::new(1, msg));
         }
         if sets_len > 2 {
             let op = sets[2].quote();
-            let msg = format!("{} {}", start, op);
+            let msg = format!("{start} {op}");
             return Err(UUsageError::new(1, msg));
         }
     }

@@ -42,7 +42,7 @@ struct LineReader {
 
 impl LineReader {
     fn new(input: Input, line_ending: LineEnding) -> Self {
-        Self { input, line_ending }
+        Self { line_ending, input }
     }
 
     fn read_line(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {

@@ -20,7 +20,7 @@ concurrency:
 env:
   TERMUX: v0.118.0
   KEY_POSTFIX: nextest+rustc-hash+adb+sshd+upgrade+XGB+inc18
-  COMMON_EMULATOR_OPTIONS: -no-window -noaudio -no-boot-anim -camera-back none -gpu swiftshader_indirect
+  COMMON_EMULATOR_OPTIONS: -no-window -noaudio -no-boot-anim -camera-back none -gpu swiftshader_indirect -metrics-collection
   EMULATOR_DISK_SIZE: 12GB
   EMULATOR_HEAP_SIZE: 2048M
   EMULATOR_BOOT_TIMEOUT: 1200 # 20min

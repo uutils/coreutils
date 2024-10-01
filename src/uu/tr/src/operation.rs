@@ -112,7 +112,7 @@ impl Sequence {
             Self::Class(class) => match class {
                 Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
                 Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
-                Class::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
+                Class::Blank => Box::new(unicode_table::BLANK.iter().copied()),
                 Class::Control => Box::new((0..=31).chain(std::iter::once(127))),
                 Class::Digit => Box::new(b'0'..=b'9'),
                 Class::Graph => Box::new(
@@ -137,7 +137,7 @@ impl Sequence {
                         .chain(123..=126),
                 ),
                 Class::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
-                Class::Space => Box::new(unicode_table::SPACES.iter().cloned()),
+                Class::Space => Box::new(unicode_table::SPACES.iter().copied()),
                 Class::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
                 Class::Lower => Box::new(b'a'..=b'z'),
                 Class::Upper => Box::new(b'A'..=b'Z'),

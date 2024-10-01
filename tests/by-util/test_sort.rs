@@ -1052,17 +1052,16 @@ fn test_batch_size_too_large() {
     let large_batch_size = "18446744073709551616";
     TestScenario::new(util_name!())
         .ucmd()
-        .arg(format!("--batch-size={}", large_batch_size))
+        .arg(format!("--batch-size={large_batch_size}"))
         .fails()
         .code_is(2)
         .stderr_contains(format!(
-            "--batch-size argument '{}' too large",
-            large_batch_size
+            "--batch-size argument '{large_batch_size}' too large"
         ));
     #[cfg(target_os = "linux")]
     TestScenario::new(util_name!())
         .ucmd()
-        .arg(format!("--batch-size={}", large_batch_size))
+        .arg(format!("--batch-size={large_batch_size}"))
         .fails()
         .code_is(2)
         .stderr_contains("maximum --batch-size argument with current rlimit is");

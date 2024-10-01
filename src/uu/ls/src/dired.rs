@@ -122,9 +122,9 @@ pub fn print_dired_output(
 
 /// Helper function to print positions with a given prefix.
 fn print_positions(prefix: &str, positions: &Vec<BytePosition>) {
-    print!("{}", prefix);
+    print!("{prefix}");
     for c in positions {
-        print!(" {}", c);
+        print!(" {c}");
     }
     println!();
 }

@@ -111,10 +111,7 @@ fn paste(
     if delimiters.ends_with('\\') && !delimiters.ends_with("\\\\") {
         return Err(USimpleError::new(
             1,
-            format!(
-                "delimiter list ends with an unescaped backslash: {}",
-                delimiters
-            ),
+            format!("delimiter list ends with an unescaped backslash: {delimiters}"),
         ));
     }
 

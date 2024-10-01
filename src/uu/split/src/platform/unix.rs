@@ -104,7 +104,7 @@ impl Drop for FilterWriter {
             if return_code != 0 {
                 show!(USimpleError::new(
                     1,
-                    format!("Shell process returned {}", return_code)
+                    format!("Shell process returned {return_code}")
                 ));
             }
         } else {

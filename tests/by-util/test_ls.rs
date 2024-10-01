@@ -174,7 +174,7 @@ fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
     let regex = Regex::new(regex_str).unwrap();
     let m = regex.captures(&stdout_str).unwrap();
     let fstype = m["fstype"].to_owned();
-    println!("detected fstype: {}", fstype);
+    println!("detected fstype: {fstype}");
     fstype
 }
 
@@ -4120,7 +4120,7 @@ fn test_ls_dired_recursive_multiple() {
     let result = cmd.succeeds();
 
     let output = result.stdout_str().to_string();
-    println!("Output:\n{}", output);
+    println!("Output:\n{output}");
 
     let dired_line = output
         .lines()
@@ -4143,7 +4143,7 @@ fn test_ls_dired_recursive_multiple() {
                 .unwrap()
                 .trim()
                 .to_string();
-            println!("Extracted filename: {}", filename);
+            println!("Extracted filename: {filename}");
             filename
         })
         .collect();
@@ -4229,8 +4229,8 @@ fn test_ls_dired_complex() {
         .skip(1)
         .map(|s| s.parse().unwrap())
         .collect();
-    println!("{:?}", positions);
-    println!("Parsed byte positions: {:?}", positions);
+    println!("{positions:?}");
+    println!("Parsed byte positions: {positions:?}");
     assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
 
     let filenames: Vec<String> = positions
@@ -4242,12 +4242,12 @@ fn test_ls_dired_complex() {
                 .unwrap()
                 .trim()
                 .to_string();
-            println!("Extracted filename: {}", filename);
+            println!("Extracted filename: {filename}");
             filename
         })
         .collect();
 
-    println!("Extracted filenames: {:?}", filenames);
+    println!("Extracted filenames: {filenames:?}");
     assert_eq!(filenames, vec!["a1", "a22", "a333", "a4444", "d"]);
 }
 
@@ -4269,7 +4269,7 @@ fn test_ls_subdired_complex() {
     let result = cmd.succeeds();
 
     let output = result.stdout_str().to_string();
-    println!("Output:\n{}", output);
+    println!("Output:\n{output}");
 
     let dired_line = output
         .lines()
@@ -4280,7 +4280,7 @@ fn test_ls_subdired_complex() {
         .skip(1)
         .map(|s| s.parse().unwrap())
         .collect();
-    println!("Parsed byte positions: {:?}", positions);
+    println!("Parsed byte positions: {positions:?}");
     assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
 
     let dirnames: Vec<String> = positions
@@ -4290,12 +4290,12 @@ fn test_ls_subdired_complex() {
             let end_pos = chunk[1];
             let dirname =
                 String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec()).unwrap();
-            println!("Extracted dirname: {}", dirname);
+            println!("Extracted dirname: {dirname}");
             dirname
         })
         .collect();
 
-    println!("Extracted dirnames: {:?}", dirnames);
+    println!("Extracted dirnames: {dirnames:?}");
     #[cfg(unix)]
     assert_eq!(dirnames, vec!["dir1", "dir1/c2", "dir1/d"]);
     #[cfg(windows)]
@@ -4786,7 +4786,7 @@ fn test_acl_display() {
             return;
         }
         Err(e) => {
-            println!("test skipped: setfacl failed with {}", e);
+            println!("test skipped: setfacl failed with {e}");
             return;
         }
     }
@@ -4874,7 +4874,7 @@ fn test_ls_color_norm() {
     let expected = "\x1b[0m\x1b[07mnorm \x1b[0m\x1b[01mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
     scene
         .ucmd()
-        .env("LS_COLORS", format!("{}:fi=1", colors))
+        .env("LS_COLORS", format!("{colors}:fi=1"))
         .env("TIME_STYLE", "+norm")
         .arg("-gGU")
         .arg("--color")
@@ -4889,7 +4889,7 @@ fn test_ls_color_norm() {
         "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
     scene
         .ucmd()
-        .env("LS_COLORS", format!("{}:fi=", colors))
+        .env("LS_COLORS", format!("{colors}:fi="))
         .env("TIME_STYLE", "+norm")
         .arg("-gGU")
         .arg("--color")
@@ -4903,7 +4903,7 @@ fn test_ls_color_norm() {
         "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
     scene
         .ucmd()
-        .env("LS_COLORS", format!("{}:fi=0", colors))
+        .env("LS_COLORS", format!("{colors}:fi=0"))
         .env("TIME_STYLE", "+norm")
         .arg("-gGU")
         .arg("--color")
