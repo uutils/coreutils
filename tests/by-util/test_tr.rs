@@ -641,7 +641,6 @@ fn check_against_gnu_tr_tests_d() {
 }
 
 #[test]
-#[ignore = "I cannot tell if this means that tr preserve the octal representation?"]
 fn check_against_gnu_tr_tests_e() {
     // ['e', qw(-s '[\0-\5]'), {IN=>"\0\0a\1\1b\2\2\2c\3\3\3d\4\4\4\4e\5\5"}, {OUT=>"\0a\1b\2c\3d\4e\5"}],
     new_ucmd!()
@@ -1042,7 +1041,6 @@ fn check_against_gnu_tr_tests_bs_at_end() {
 }
 
 #[test]
-#[ignore = "not sure why GNU bails here. `[Y*]` should be able to generate all the mapping"]
 fn check_against_gnu_tr_tests_ross_0a() {
     // # From Ross
     // ['ross-0a', qw(-cs '[:upper:]' 'X[Y*]'), {IN=>''}, {OUT=>''}, {EXIT=>1},
@@ -1055,7 +1053,6 @@ fn check_against_gnu_tr_tests_ross_0a() {
 }
 
 #[test]
-#[ignore = "not sure why GNU bails here. `[Y*]` should be able to generate all the mapping"]
 fn check_against_gnu_tr_tests_ross_0b() {
     // ['ross-0b', qw(-cs '[:cntrl:]' 'X[Y*]'), {IN=>''}, {OUT=>''}, {EXIT=>1},
     //  {ERR=>$map_all_to_1}],
@@ -1063,7 +1060,7 @@ fn check_against_gnu_tr_tests_ross_0b() {
         .args(&["-cs", "[:cntrl:]", "X[Y*]"])
         .pipe_in("")
         .fails()
-        .stderr_is("tr: when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
+        .stderr_is("tr: when translating with complemented character classes,\nstring2 must map all characters in the domain to one\n");
 }
 
 #[test]
@@ -1234,7 +1231,6 @@ fn check_against_gnu_tr_tests_repeat_x_c() {
 }
 
 #[test]
-#[ignore = "I think either clap-rs or uutils is parsing the '-H' as an argument..."]
 fn check_against_gnu_tr_tests_fowler_1() {
     // # From Glenn Fowler.
     // ['fowler-1', qw(ah -H), {IN=>'aha'}, {OUT=>'-H-'}],
