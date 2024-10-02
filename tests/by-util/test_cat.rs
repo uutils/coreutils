@@ -289,6 +289,15 @@ fn test_numbered_lines_no_trailing_newline() {
 }
 
 #[test]
+fn test_numbered_lines_with_crlf() {
+    new_ucmd!()
+        .args(&["-n"])
+        .pipe_in("Hello\r\nWorld")
+        .succeeds()
+        .stdout_only("     1\tHello\r\n     2\tWorld");
+}
+
+#[test]
 fn test_stdin_show_nonprinting() {
     for same_param in ["-v", "-vv", "--show-nonprinting", "--show-non"] {
         new_ucmd!()
