@@ -540,9 +540,16 @@ fn write_new_line<W: Write>(
     state: &mut OutputState,
     is_interactive: bool,
 ) -> CatResult<()> {
-    if state.skipped_carriage_return && options.show_ends {
-        writer.write_all(b"^M")?;
+    if state.skipped_carriage_return {
+        if options.show_ends {
+            writer.write_all(b"^M")?;
+        } else {
+            writer.write_all(b"\r")?;
+        }
         state.skipped_carriage_return = false;
+
+        write_end_of_line(writer, options.end_of_line().as_bytes(), is_interactive)?;
+        return Ok(());
     }
     if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
         state.one_blank_kept = true;
