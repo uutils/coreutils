@@ -24,7 +24,7 @@ const USAGE: &str = help_usage!("users.md");
 #[cfg(target_os = "openbsd")]
 const OPENBSD_UTMP_FILE: &str = "/var/run/utmp";
 
-static ARG_FILES: &str = "files";
+static ARG_FILE: &str = "file";
 
 fn get_long_usage() -> String {
     #[cfg(not(target_os = "openbsd"))]
@@ -43,21 +43,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .after_help(get_long_usage())
         .try_get_matches_from(args)?;
 
-    let files: Vec<&Path> = matches
-        .get_many::<OsString>(ARG_FILES)
-        .map(|v| v.map(AsRef::as_ref).collect())
-        .unwrap_or_default();
+    let maybe_file: Option<&Path> = matches.get_one::<OsString>(ARG_FILE).map(AsRef::as_ref);
 
     let mut users: Vec<String>;
 
     // OpenBSD uses the Unix version 1 UTMP, all other Unixes use the newer UTMPX
     #[cfg(target_os = "openbsd")]
     {
-        let filename = if files.is_empty() {
-            Path::new(OPENBSD_UTMP_FILE)
-        } else {
-            files[0]
-        };
+        let filename = maybe_file.unwrap_or(Path::new(OPENBSD_UTMP_FILE));
         let entries = parse_from_path(filename).unwrap_or(Vec::new());
         users = Vec::new();
         for entry in entries {
@@ -76,11 +69,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
     #[cfg(not(target_os = "openbsd"))]
     {
-        let filename = if files.is_empty() {
-            utmpx::DEFAULT_FILE.as_ref()
-        } else {
-            files[0]
-        };
+        let filename = maybe_file.unwrap_or(utmpx::DEFAULT_FILE.as_ref());
 
         users = Utmpx::iter_all_records_from(filename)
             .filter(Utmpx::is_user_process)
@@ -103,7 +92,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
-            Arg::new(ARG_FILES)
+            Arg::new(ARG_FILE)
                 .num_args(1)
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(ValueParser::os_string()),
