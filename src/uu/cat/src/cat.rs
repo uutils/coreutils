@@ -557,10 +557,7 @@ fn write_new_line<W: Write>(
             write!(writer, "{0:6}\t", state.line_number)?;
             state.line_number += 1;
         }
-        writer.write_all(options.end_of_line().as_bytes())?;
-        if is_interactive {
-            writer.flush()?;
-        }
+        write_end_of_line(writer, options.end_of_line().as_bytes(), is_interactive)?;
     }
     Ok(())
 }
