@@ -536,11 +536,12 @@ fn test_dev_full_show_all() {
 #[cfg(target_os = "linux")]
 fn test_write_fast_fallthrough_uses_flush() {
     const PROC_INIT_CMDLINE: &str = "/proc/1/cmdline";
+    let cmdline = std::fs::read_to_string(PROC_INIT_CMDLINE).unwrap();
 
     new_ucmd!()
         .args(&[PROC_INIT_CMDLINE, "alpha.txt"])
         .succeeds()
-        .stdout_only("/sbin/init\0abcde\nfghij\nklmno\npqrst\nuvwxyz\n"); // spell-checker:disable-line
+        .stdout_only(format!("{cmdline}abcde\nfghij\nklmno\npqrst\nuvwxyz\n")); // spell-checker:disable-line
 }
 
 #[test]
