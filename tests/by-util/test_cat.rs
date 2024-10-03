@@ -529,9 +529,9 @@ fn test_dev_full_show_all() {
     proc.kill();
 }
 
-/// For some reason splice() on first of those files fails, resulting in
-/// fallback inside `write_fast`, the other splice succeeds, in effect
-/// without additional flush output gets reversed.
+// For some reason splice() on first of those files fails, resulting in
+// fallback inside `write_fast`, the other splice succeeds, in effect
+// without additional flush output gets reversed.
 #[test]
 #[cfg(target_os = "linux")]
 fn test_write_fast_fallthrough_uses_flush() {
