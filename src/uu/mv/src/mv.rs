@@ -151,7 +151,7 @@ impl<'a> VerboseContext<'a> {
         self.hide_pb_and_print(&message);
     }
 
-    fn create_folder(&self, path: &Path) {
+    fn create_directory(&self, path: &Path) {
         let message = format!(
             "created directory {}",
             path.to_string_lossy()
@@ -166,7 +166,7 @@ impl<'a> VerboseContext<'a> {
         self.hide_pb_and_print(&message);
     }
 
-    fn remove_folder(&self, from: &Path) {
+    fn remove_directory(&self, from: &Path) {
         let message = format!("removed directory {}", from.quote());
         self.hide_pb_and_print(&message);
     }
@@ -726,17 +726,19 @@ fn rename_with_fallback(
             }
 
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            // let xattrs =
-            //     fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
             let result = move_dir(from, to, progress_bar.as_ref(), vebose_context);
-
-            // #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            // fsxattr::apply_xattrs(to, xattrs).unwrap();
 
             if let Err(err) = result {
                 return match err {
+                    MvError::FsXError(fs_extra::error::Error {
+                        kind: fs_extra::error::ErrorKind::PermissionDenied,
+                        ..
+                    }) => Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "Permission denied",
+                    )),
                     MvError::NotAllFilesMoved => {
-                        Err(io::Error::new(io::ErrorKind::Other, String::new()))
+                        Err(io::Error::new(io::ErrorKind::Other, format!("")))
                     }
                     _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
                 };
@@ -845,11 +847,9 @@ fn move_dir(
                 let file_type = dir_entry.file_type();
                 let dir_entry_md = dir_entry.metadata().ok();
                 let dir_entry_path = dir_entry.into_path();
-                //comment why this is okay
                 let tmp_to = dir_entry_path.strip_prefix(from).unwrap();
                 let dir_entry_to = to.join(tmp_to);
                 if file_type.is_dir() {
-                    // check this create all align with gnu
                     let res = fs_extra::dir::create(&dir_entry_to, false);
                     if let Err(err) = res {
                         if let FsXErrorKind::NotFound = err.kind {
@@ -860,7 +860,7 @@ fn move_dir(
                         continue;
                     }
                     if let Some(vc) = verbose_context {
-                        vc.create_folder(&dir_entry_to);
+                        vc.create_directory(&dir_entry_to);
                     }
                 } else {
                     let res = copy_file(&dir_entry_path, &dir_entry_to, progress_bar, result);
@@ -916,7 +916,7 @@ fn move_dir(
                 show_error!("cannot remove {}: {}", src_path.quote(), err);
             } else if let Some(vc) = verbose_context {
                 if file_type.is_dir() {
-                    vc.remove_folder(&src_path);
+                    vc.remove_directory(&src_path);
                 } else {
                     vc.remove_file(&src_path);
                 }
@@ -961,7 +961,7 @@ fn copy_file(
     let md = from.metadata()?;
     if cfg!(unix) && FileTypeExt::is_fifo(&md.file_type()) {
         let file_size = md.len();
-        uucore::fs::copy_fifo(to)?;
+        uucore::fs::create_fifo(to)?;
         if let Some(progress_bar) = progress_bar {
             progress_bar.set_position(file_size + progress_bar_start_val);
         }
@@ -1027,7 +1027,7 @@ mod tests {
     use std::io::Write;
     use std::os::unix::fs::FileTypeExt;
     use tempfile::tempdir;
-    use uucore::fs::copy_fifo;
+    use uucore::fs::create_fifo;
 
     #[test]
     fn move_all_files_and_directories() {
@@ -1178,7 +1178,7 @@ mod tests {
         let to = temp_dir.path().join("test_destination.txt");
 
         // Create a test source file
-        copy_fifo(&from).expect("couldn't create fifo");
+        create_fifo(&from).expect("couldn't create fifo");
 
         // Call the function
         let result = copy_file(&from, &to, None, 0);

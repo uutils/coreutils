@@ -2016,6 +2016,9 @@ mod inter_partition_copying {
         );
     }
 
+    // this test would fail if progress bar flag is set to true because we need
+    // to traverse directory inorder to find the size that would change the
+    // access time.
     #[test]
     fn test_inter_partition_copying_directory_metadata_for_directory() {
         let scene = TestScenario::new(util_name!());
