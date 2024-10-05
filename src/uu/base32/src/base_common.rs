@@ -7,11 +7,11 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{self, ErrorKind, Read, Stdin};
-use std::path::Path;
+use std::io::{self, ErrorKind, Read};
+use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
-    for_fast_encode::{BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER},
+    for_base_common::{BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER},
     Format, Z85Wrapper, BASE2LSBF, BASE2MSBF,
 };
 use uucore::encoding::{EncodingWrapper, SupportsFastDecodeAndEncode};
@@ -31,7 +31,7 @@ pub struct Config {
     pub decode: bool,
     pub ignore_garbage: bool,
     pub wrap_cols: Option<usize>,
-    pub to_read: Option<String>,
+    pub to_read: Option<PathBuf>,
 }
 
 pub mod options {
@@ -43,9 +43,10 @@ pub mod options {
 
 impl Config {
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
-        let file: Option<String> = match options.get_many::<String>(options::FILE) {
+        let to_read = match options.get_many::<String>(options::FILE) {
             Some(mut values) => {
                 let name = values.next().unwrap();
+
                 if let Some(extra_op) = values.next() {
                     return Err(UUsageError::new(
                         BASE_CMD_PARSE_ERROR,
@@ -56,19 +57,22 @@ impl Config {
                 if name == "-" {
                     None
                 } else {
-                    if !Path::exists(Path::new(name)) {
+                    let path = Path::new(name);
+
+                    if !path.exists() {
                         return Err(USimpleError::new(
                             BASE_CMD_PARSE_ERROR,
-                            format!("{}: No such file or directory", name.maybe_quote()),
+                            format!("{}: No such file or directory", path.maybe_quote()),
                         ));
                     }
-                    Some(name.clone())
+
+                    Some(path.to_owned())
                 }
             }
             None => None,
         };
 
-        let cols = options
+        let wrap_cols = options
             .get_one::<String>(options::WRAP)
             .map(|num| {
                 num.parse::<usize>().map_err(|_| {
@@ -83,8 +87,8 @@ impl Config {
         Ok(Self {
             decode: options.get_flag(options::DECODE),
             ignore_garbage: options.get_flag(options::IGNORE_GARBAGE),
-            wrap_cols: cols,
-            to_read: file,
+            wrap_cols,
+            to_read,
         })
     }
 }
@@ -139,42 +143,43 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
         )
 }
 
-pub fn get_input<'a>(config: &Config, stdin_ref: &'a Stdin) -> UResult<Box<dyn Read + 'a>> {
+pub fn get_input(config: &Config) -> UResult<Box<dyn Read>> {
     match &config.to_read {
-        Some(name) => {
+        Some(path_buf) => {
             // Do not buffer input, because buffering is handled by `fast_decode` and `fast_encode`
-            let file_buf =
-                File::open(Path::new(name)).map_err_context(|| name.maybe_quote().to_string())?;
-            Ok(Box::new(file_buf))
+            let file =
+                File::open(path_buf).map_err_context(|| path_buf.maybe_quote().to_string())?;
+
+            Ok(Box::new(file))
         }
-        None => Ok(Box::new(stdin_ref.lock())),
+        None => {
+            let stdin_lock = io::stdin().lock();
+
+            Ok(Box::new(stdin_lock))
+        }
     }
 }
 
-pub fn handle_input<R: Read>(
-    input: &mut R,
-    format: Format,
-    wrap: Option<usize>,
-    ignore_garbage: bool,
-    decode: bool,
-) -> UResult<()> {
+pub fn handle_input<R: Read>(input: &mut R, format: Format, config: Config) -> UResult<()> {
     let supports_fast_decode_and_encode = get_supports_fast_decode_and_encode(format);
+
+    let supports_fast_decode_and_encode_ref = supports_fast_decode_and_encode.as_ref();
 
     let mut stdout_lock = io::stdout().lock();
 
-    if decode {
+    if config.decode {
         fast_decode::fast_decode(
             input,
             &mut stdout_lock,
-            supports_fast_decode_and_encode.as_ref(),
-            ignore_garbage,
+            supports_fast_decode_and_encode_ref,
+            config.ignore_garbage,
         )
     } else {
         fast_encode::fast_encode(
             input,
             &mut stdout_lock,
-            supports_fast_decode_and_encode.as_ref(),
-            wrap,
+            supports_fast_decode_and_encode_ref,
+            config.wrap_cols,
         )
     }
 }
@@ -423,15 +428,15 @@ pub mod fast_encode {
         };
 
         // Start of buffers
-        // Data that was read from stdin
+        // Data that was read from `input`
         let mut input_buffer = vec![0; INPUT_BUFFER_SIZE];
 
         assert!(!input_buffer.is_empty());
 
-        // Data that was read from stdin but has not been encoded yet
+        // Data that was read from `input` but has not been encoded yet
         let mut leftover_buffer = VecDeque::<u8>::new();
 
-        // Encoded data that needs to be written to output
+        // Encoded data that needs to be written to `output`
         let mut encoded_buffer = VecDeque::<u8>::new();
         // End of buffers
 
@@ -469,7 +474,7 @@ pub mod fast_encode {
 
                     assert!(leftover_buffer.len() < encode_in_chunks_of_size);
 
-                    // Write all data in `encoded_buffer` to output
+                    // Write all data in `encoded_buffer` to `output`
                     write_to_output(&mut line_wrapping, &mut encoded_buffer, &mut output, false)?;
                 }
                 Err(er) => {
@@ -511,7 +516,7 @@ pub mod fast_decode {
 
     // Start of helper functions
     fn alphabet_to_table(alphabet: &[u8], ignore_garbage: bool) -> [bool; 256] {
-        // If "ignore_garbage" is enabled, all characters outside the alphabet are ignored
+        // If `ignore_garbage` is enabled, all characters outside the alphabet are ignored
         // If it is not enabled, only '\n' and '\r' are ignored
         if ignore_garbage {
             // Note: "false" here
@@ -618,12 +623,12 @@ pub mod fast_decode {
 
         assert!(decode_in_chunks_of_size > 0);
 
-        // Note that it's not worth using "data-encoding"'s ignore functionality if "ignore_garbage" is true, because
+        // Note that it's not worth using "data-encoding"'s ignore functionality if `ignore_garbage` is true, because
         // "data-encoding"'s ignore functionality cannot discard non-ASCII bytes. The data has to be filtered before
         // passing it to "data-encoding", so there is no point in doing any filtering in "data-encoding". This also
         // allows execution to stay on the happy path in "data-encoding":
         // https://github.com/ia0/data-encoding/blob/4f42ad7ef242f6d243e4de90cd1b46a57690d00e/lib/src/lib.rs#L754-L756
-        // Update: it is not even worth it to use "data-encoding"'s ignore functionality when "ignore_garbage" is
+        // It is also not worth using "data-encoding"'s ignore functionality when `ignore_garbage` is
         // false.
         // Note that the alphabet constants above already include the padding characters
         // TODO
@@ -631,18 +636,18 @@ pub mod fast_decode {
         let table = alphabet_to_table(alphabet, ignore_garbage);
 
         // Start of buffers
-        // Data that was read from stdin
+        // Data that was read from `input`
         let mut input_buffer = vec![0; INPUT_BUFFER_SIZE];
 
         assert!(!input_buffer.is_empty());
 
-        // Data that was read from stdin but has not been decoded yet
+        // Data that was read from `input` but has not been decoded yet
         let mut leftover_buffer = Vec::<u8>::new();
 
         // Decoded data that needs to be written to `output`
         let mut decoded_buffer = Vec::<u8>::new();
 
-        // Buffer that will be used when "ignore_garbage" is true, and the chunk read from "input" contains garbage
+        // Buffer that will be used when `ignore_garbage` is true, and the chunk read from `input` contains garbage
         // data
         let mut non_garbage_buffer = Vec::<u8>::new();
         // End of buffers

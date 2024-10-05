@@ -11,8 +11,8 @@ use data_encoding::Encoding;
 use data_encoding_macro::new_encoding;
 use std::collections::VecDeque;
 
-// Re-export for the faster encoding logic
-pub mod for_fast_encode {
+// Re-export for the faster decoding/encoding logic
+pub mod for_base_common {
     pub use data_encoding::*;
 }
 

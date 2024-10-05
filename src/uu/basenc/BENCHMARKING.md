@@ -13,7 +13,7 @@ use a benchmarking tool like [hyperfine][0].
 hyperfine currently does not measure maximum memory usage. Memory usage can be benchmarked using [poop][2], or
 [toybox][3]'s "time" subcommand (both are Linux only).
 
-Next, build the `basenc` binary using the release profile:
+Build the `basenc` binary using the release profile:
 
 ```Shell
 cargo build --package uu_basenc --profile release
