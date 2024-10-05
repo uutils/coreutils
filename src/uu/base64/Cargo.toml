@@ -17,6 +17,7 @@ readme.workspace = true
 path = "src/base64.rs"
 
 [dependencies]
+clap = { workspace = true }
 uucore = { workspace = true, features = ["encoding"] }
 uu_base32 = { workspace = true }
 
