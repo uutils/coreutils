@@ -42,7 +42,6 @@ pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
 use fs_extra::{
-    dir::remove,
     error::{ErrorKind as FsXErrorKind, Result as FsXResult},
     file::{self, CopyOptions},
 };
@@ -840,12 +839,13 @@ fn move_dir(
     // The return value that represents the number of bytes copied.
     let mut result: u64 = 0;
     let mut error_occurred = false;
-    let mut moved_entries: Vec<(PathBuf, FileType, PathBuf, Option<fs::Metadata>)> = vec![];
+    let mut moved_entries: Vec<(PathBuf, FileType, PathBuf, Option<fs::Metadata>, usize)> = vec![];
     for dir_entry_result in WalkDir::new(from) {
         match dir_entry_result {
             Ok(dir_entry) => {
                 let file_type = dir_entry.file_type();
                 let dir_entry_md = dir_entry.metadata().ok();
+                let depth = dir_entry.depth();
                 let dir_entry_path = dir_entry.into_path();
                 let tmp_to = dir_entry_path.strip_prefix(from).unwrap();
                 let dir_entry_to = to.join(tmp_to);
@@ -886,8 +886,7 @@ fn move_dir(
                         }
                     }
                 }
-
-                moved_entries.push((dir_entry_path, file_type, dir_entry_to, dir_entry_md));
+                moved_entries.push((dir_entry_path, file_type, dir_entry_to, dir_entry_md, depth));
             }
             Err(err) => {
                 let err_msg = match (err.io_error(), err.path()) {
@@ -902,18 +901,24 @@ fn move_dir(
         }
     }
     if !error_occurred {
-        while let Some((src_path, file_type, dest_path, src_md)) = moved_entries.pop() {
+        let mut last_rem_err_depth: Option<usize> = None;
+        while let Some((src_path, file_type, dest_path, src_md, depth)) = moved_entries.pop() {
             if let Some(src_metadata) = src_md {
                 copy_metadata(&src_path, &dest_path, &src_metadata).ok();
             }
+            if matches!(last_rem_err_depth,Some(lred)if lred > depth) {
+                last_rem_err_depth = Some(depth);
+                continue;
+            }
             let res = if src_path.is_dir() {
-                remove(&src_path)
+                fs::remove_dir(&src_path)
             } else {
-                file::remove(&src_path)
+                fs::remove_file(&src_path)
             };
             if let Err(err) = res {
                 error_occurred = true;
                 show_error!("cannot remove {}: {}", src_path.quote(), err);
+                last_rem_err_depth = Some(depth);
             } else if let Some(vc) = verbose_context {
                 if file_type.is_dir() {
                     vc.remove_directory(&src_path);

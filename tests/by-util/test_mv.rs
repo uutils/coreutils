@@ -1921,32 +1921,6 @@ mod inter_partition_copying {
     }
 
     #[test]
-    fn test_inter_partition_copying_folder_without_write_permission_to_subfolders() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
-        at.mkdir_all("a/b/c");
-        at.write("a/b/d", "d");
-        at.write("a/b/c/e", "e");
-        at.mkdir_all("a/b/f");
-        at.write("a/b/f/g", "g");
-        at.write("a/b/h", "h");
-        at.set_mode("a/b/f", 0o555);
-        // create a folder in another partition.
-        let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
-
-        // mv to other partition
-        scene
-            .ucmd()
-            .arg("-v")
-            .arg("a")
-            .arg(other_fs_tempdir.path().to_str().unwrap())
-            .fails()
-            // check erorr occured
-            .stderr_contains("mv: cannot remove 'a': Permission denied");
-    }
-
-    #[test]
     fn test_inter_partition_copying_directory_metadata_for_file() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -2033,7 +2007,8 @@ mod inter_partition_copying {
         xattr::set(at.plus("dir"), test_attr, test_value).expect("couldn't set xattr for src file");
 
         // Get file times for the source dir
-        let src_metadata = at.plus("dir")
+        let src_metadata = at
+            .plus("dir")
             .metadata()
             .expect("couldn't get metadata for source file");
         let modified_time = src_metadata
@@ -2086,6 +2061,116 @@ mod inter_partition_copying {
                 .expect("couldn't find xattr with name user.test_attr"),
             test_value
         );
+    }
+
+    #[test]
+    fn test_inter_partition_removing_source_without_permission() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/aa/");
+        at.write("a/aa/aa1", "filecontents");
+        //remove write permssion for the subdir
+        at.set_mode("a/aa/", 0o555);
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            // check erorr occured
+            .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied")
+            //make sure mv doesn't print errors for the parent directories
+            .stderr_does_not_contain("'a/aa'");
+        assert!(at.file_exists("a/aa/aa1"));
+        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists())
+    }
+
+    #[test]
+    fn test_inter_partition_removing_source_without_permission_2() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/aa/");
+        at.mkdir_all("a/aa/aaa");
+        at.write("a/aa/aa1", "filecontents");
+        at.write("a/aa/aa2", "filecontents");
+        //remove write permssion for the subdir
+        at.set_mode("a/aa/", 0o555);
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            // make sure mv prints error message for each entry where error occurs
+            .stderr_contains("mv: cannot remove 'a/aa/aaa': Permission denied")
+            .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied")
+            .stderr_contains("mv: cannot remove 'a/aa/aa2': Permission denied");
+        assert!(at.file_exists("a/aa/aa1"));
+        assert!(at.file_exists("a/aa/aa2"));
+        assert!(at.dir_exists("a/aa/aaa"));
+        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists())
+    }
+
+    #[test]
+    fn test_inter_partition_removing_source_without_permission_3() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/aa/");
+        at.write("a/a1", "filecontents");
+        at.write("a/aa/aa1", "filecontents");
+        //remove write permssion for the subdir
+        at.set_mode("a/aa/", 0o555);
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied");
+        assert!(at.file_exists("a/aa/aa1"));
+        // file that doesn't belong to the branch that error occured didn't got removed
+        assert!(!at.file_exists("a/a1"));
+        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists())
+    }
+
+    #[test]
+    fn test_inter_partition_removing_source_without_permission_4() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/aa/");
+        at.mkdir_all("a/ab/");
+        at.write("a/aa/aa1", "filecontents");
+        at.write("a/ab/ab1", "filecontents");
+        
+        //remove write permssion for the subdir
+        at.set_mode("a/aa/", 0o555);
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied");
+        assert!(at.file_exists("a/aa/aa1"));
+        // folder that doesn't belong to the branch that error occured didn't got removed
+        assert!(!at.dir_exists("a/ab"));
+        assert!(other_fs_tempdir.path().join("a/ab/ab1").exists())
     }
 }
 
