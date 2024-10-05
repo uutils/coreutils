@@ -1926,7 +1926,7 @@ mod inter_partition_copying {
         let at = &scene.fixtures;
         at.mkdir_all("dir");
         let file = at.make_file("dir/file");
-        at.set_mode("dir/file", 0o100700);
+        at.set_mode("dir/file", 0o100_700);
 
         // Set xattrs for the source file
         let test_attr = "user.test_attr";
@@ -1965,7 +1965,7 @@ mod inter_partition_copying {
             .metadata()
             .expect("couldn't get metadata of dest file");
         let mode = dest_metadata.mode();
-        assert_eq!(mode, 0o100700, "permission doesn't match");
+        assert_eq!(mode, 0o100_700, "permission doesn't match");
         assert_eq!(
             dest_metadata
                 .modified()
@@ -1980,7 +1980,7 @@ mod inter_partition_copying {
         );
 
         // Verify that the xattrs were copied
-        let retrieved_xattrs = retrieve_xattrs(&other_fs_tempdir.path().join("dir/file")).unwrap();
+        let retrieved_xattrs = retrieve_xattrs(other_fs_tempdir.path().join("dir/file")).unwrap();
         assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
         assert_eq!(
             retrieved_xattrs
@@ -2053,7 +2053,7 @@ mod inter_partition_copying {
         );
 
         // Verify that the xattrs were copied
-        let retrieved_xattrs = retrieve_xattrs(&other_fs_tempdir.path().join("dir")).unwrap();
+        let retrieved_xattrs = retrieve_xattrs(other_fs_tempdir.path().join("dir")).unwrap();
         assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
         assert_eq!(
             retrieved_xattrs
@@ -2086,7 +2086,7 @@ mod inter_partition_copying {
             //make sure mv doesn't print errors for the parent directories
             .stderr_does_not_contain("'a/aa'");
         assert!(at.file_exists("a/aa/aa1"));
-        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists())
+        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists());
     }
 
     #[test]
@@ -2116,7 +2116,7 @@ mod inter_partition_copying {
         assert!(at.file_exists("a/aa/aa1"));
         assert!(at.file_exists("a/aa/aa2"));
         assert!(at.dir_exists("a/aa/aaa"));
-        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists())
+        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists());
     }
 
     #[test]
@@ -2142,7 +2142,7 @@ mod inter_partition_copying {
         assert!(at.file_exists("a/aa/aa1"));
         // file that doesn't belong to the branch that error occured didn't got removed
         assert!(!at.file_exists("a/a1"));
-        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists())
+        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists());
     }
 
     #[test]
@@ -2153,7 +2153,7 @@ mod inter_partition_copying {
         at.mkdir_all("a/ab/");
         at.write("a/aa/aa1", "filecontents");
         at.write("a/ab/ab1", "filecontents");
-        
+
         //remove write permssion for the subdir
         at.set_mode("a/aa/", 0o555);
         // create a folder in another partition.
@@ -2170,7 +2170,7 @@ mod inter_partition_copying {
         assert!(at.file_exists("a/aa/aa1"));
         // folder that doesn't belong to the branch that error occured didn't got removed
         assert!(!at.dir_exists("a/ab"));
-        assert!(other_fs_tempdir.path().join("a/ab/ab1").exists())
+        assert!(other_fs_tempdir.path().join("a/ab/ab1").exists());
     }
 }
 
