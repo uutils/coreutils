@@ -823,7 +823,7 @@ fn disk_usage_directory<P: AsRef<Path>>(p: P) -> IOResult<u64> {
     for entry in fs::read_dir(p)? {
         let entry = entry?;
         if entry.file_type()?.is_dir() {
-            total += disk_usage_directory(&entry.path())?;
+            total += disk_usage_directory(entry.path())?;
         } else {
             total += entry.metadata()?.len();
         }
@@ -1091,20 +1091,23 @@ mod tests {
     #[test]
     fn calculates_total_size_of_single_file() {
         let dir = tempdir().unwrap();
-        let file_path1 = dir.path().join("file1.txt");    
+        let file_path1 = dir.path().join("file1.txt");
 
         let mut file1 = fs::File::create(&file_path1).unwrap();
         writeln!(file1, "Hello, world!").unwrap();
 
         let paths = vec![file_path1];
 
-        let actual_len = file1.metadata().expect("couldn't get metadata for file1").len();
-        
+        let actual_len = file1
+            .metadata()
+            .expect("couldn't get metadata for file1")
+            .len();
+
         let total_size = disk_usage(&paths, false).unwrap();
-        
+
         assert_eq!(total_size, actual_len);
     }
-     #[test]
+    #[test]
     fn calculates_total_size_of_files() {
         let dir = tempdir().unwrap();
         let file_path1 = dir.path().join("file1.txt");
@@ -1118,15 +1121,21 @@ mod tests {
 
         let paths = vec![file_path1, file_path2];
 
-        let file_1_len = file1.metadata().expect("couldn't get metadata for file1").len();
-        let file_2_len = file2.metadata().expect("couldn't get metadata for file1").len();
-        let actual_len = file_1_len+file_2_len;
-        
+        let file_1_len = file1
+            .metadata()
+            .expect("couldn't get metadata for file1")
+            .len();
+        let file_2_len = file2
+            .metadata()
+            .expect("couldn't get metadata for file1")
+            .len();
+        let actual_len = file_1_len + file_2_len;
+
         let total_size = disk_usage(&paths, false).unwrap();
-        
-        assert_eq!(total_size, actual_len); 
+
+        assert_eq!(total_size, actual_len);
     }
-     #[test]
+    #[test]
     fn test_disk_usage_recursive() {
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("file1.txt");
@@ -1142,6 +1151,9 @@ mod tests {
         let paths: Vec<PathBuf> = vec![dir.path().to_path_buf()];
         let total_size = disk_usage(&paths, true).unwrap();
 
-        assert_eq!(total_size, file_path.metadata().unwrap().len() + subfile_path.metadata().unwrap().len());
+        assert_eq!(
+            total_size,
+            file_path.metadata().unwrap().len() + subfile_path.metadata().unwrap().len()
+        );
     }
 }

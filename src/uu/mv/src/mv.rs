@@ -14,7 +14,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
-use std::fs::{self, FileType};
+use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
@@ -105,6 +105,8 @@ pub enum OverwriteMode {
     ///'-f' '--force'         overwrite without prompt
     Force,
 }
+
+/// a context for handling verbose output during file operations.
 struct VerboseContext<'a> {
     backup: Option<&'a Path>,
     pb: Option<&'a MultiProgress>,
@@ -170,6 +172,7 @@ impl<'a> VerboseContext<'a> {
         self.hide_pb_and_print(&message);
     }
 }
+
 const ABOUT: &str = help_about!("mv.md");
 const USAGE: &str = help_usage!("mv.md");
 const AFTER_HELP: &str = help_section!("after help", "mv.md");
@@ -684,7 +687,7 @@ fn rename_with_fallback(
     from: &Path,
     to: &Path,
     multi_progress: Option<&MultiProgress>,
-    vebose_context: Option<&VerboseContext<'_>>,
+    verbose_context: Option<&VerboseContext<'_>>,
 ) -> io::Result<()> {
     if fs::rename(from, to).is_err() {
         // Get metadata without following symlinks
@@ -693,7 +696,7 @@ fn rename_with_fallback(
 
         if file_type.is_symlink() {
             rename_symlink_fallback(from, to)?;
-            if let Some(vc) = vebose_context {
+            if let Some(vc) = verbose_context {
                 vc.print_move_file(from, to);
             }
         } else if file_type.is_dir() {
@@ -709,8 +712,6 @@ fn rename_with_fallback(
             //    If finding the total size fails for whatever reason,
             //    the progress bar wont be shown for this file / dir.
             //    (Move will probably fail due to permission error later?)
-            // let total_size = disk_usage(&[from],true).ok();
-            // let total_size = None;
             let mut progress_bar = None;
             if let Some(multi_progress) = multi_progress {
                 if let Ok(total_size) = disk_usage(&[from], true) {
@@ -725,7 +726,7 @@ fn rename_with_fallback(
             }
 
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            let result = move_dir(from, to, progress_bar.as_ref(), vebose_context);
+            let result = move_dir(from, to, progress_bar.as_ref(), verbose_context);
 
             if let Err(err) = result {
                 return match err {
@@ -737,7 +738,7 @@ fn rename_with_fallback(
                         "Permission denied",
                     )),
                     MvError::NotAllFilesMoved => {
-                        Err(io::Error::new(io::ErrorKind::Other, format!("")))
+                        Err(io::Error::new(io::ErrorKind::Other, String::new()))
                     }
                     _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
                 };
@@ -759,7 +760,7 @@ fn rename_with_fallback(
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             fs::copy(from, to)
                 .map(|v| {
-                    if let Some(vc) = vebose_context {
+                    if let Some(vc) = verbose_context {
                         vc.print_copy_file(from, to, true);
                     }
                     v
@@ -767,17 +768,17 @@ fn rename_with_fallback(
                 .and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
             #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
             fs::copy(from, to).map(|v| {
-                if let Some(vc) = vebose_context {
+                if let Some(vc) = verbose_context {
                     vc.print_copy_file(from, to, true);
                 }
                 v
             })?;
             fs::remove_file(from)?;
-            if let Some(vc) = vebose_context {
+            if let Some(vc) = verbose_context {
                 vc.remove_file(from);
             }
         }
-    } else if let Some(vb) = vebose_context {
+    } else if let Some(vb) = verbose_context {
         vb.print_move_file(from, to);
     }
     Ok(())
@@ -839,7 +840,8 @@ fn move_dir(
     // The return value that represents the number of bytes copied.
     let mut result: u64 = 0;
     let mut error_occurred = false;
-    let mut moved_entries: Vec<(PathBuf, FileType, PathBuf, Option<fs::Metadata>, usize)> = vec![];
+    let mut moved_entries: Vec<(PathBuf, fs::FileType, PathBuf, Option<fs::Metadata>, usize)> =
+        vec![];
     for dir_entry_result in WalkDir::new(from) {
         match dir_entry_result {
             Ok(dir_entry) => {
@@ -853,6 +855,9 @@ fn move_dir(
                     let res = fs_extra::dir::create(&dir_entry_to, false);
                     if let Err(err) = res {
                         if let FsXErrorKind::NotFound = err.kind {
+                            // This error would be thrown in the first iteration
+                            // if the destination parent directory doesn't
+                            // exist.
                             return Err(err.into());
                         }
                         error_occurred = true;
@@ -1010,7 +1015,7 @@ fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) -> io::Re
                 level: VerbosityLevel::Silent,
             },
         )
-        .map_err(|err| io::Error::other(err))?;
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     }
 
     Ok(())
