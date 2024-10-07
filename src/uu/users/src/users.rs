@@ -51,7 +51,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[cfg(target_os = "openbsd")]
     {
         let filename = maybe_file.unwrap_or(Path::new(OPENBSD_UTMP_FILE));
-        let entries = parse_from_path(filename).unwrap_or(Vec::new());
+        let entries = parse_from_path(filename).unwrap_or_default();
         users = Vec::new();
         for entry in entries {
             if let UtmpEntry::UTMP {
