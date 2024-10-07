@@ -76,14 +76,14 @@ fn get_offset_from_previous_line(dired_positions: &[BytePosition]) -> usize {
 pub fn calculate_dired(
     dired_positions: &[BytePosition],
     output_display_len: usize,
-    dfl_len: usize,
-    dfn_len: usize,
+    end_line_len: usize,
+    end_filename_len: usize,
 ) -> (usize, usize, usize) {
     let offset_from_previous_line = get_offset_from_previous_line(dired_positions);
 
     let start = output_display_len + offset_from_previous_line;
-    let end = start + dfl_len;
-    let end_filename = start + dfn_len;
+    let end = start + end_line_len;
+    let end_filename = start + end_filename_len;
     (start, end, end_filename)
 }
 
@@ -104,11 +104,10 @@ pub fn calculate_subdired(dired: &mut DiredOutput, path_len: usize) {
 
     let start = offset_from_previous_line + DIRED_TRAILING_OFFSET + additional_offset;
     let end = start + path_len;
-    let end_filename = end;
     dired.subdired_positions.push(BytePosition {
         start,
         end,
-        end_filename,
+        end_filename: end,
     });
 }
 
@@ -162,8 +161,8 @@ pub fn add_dir_name(dired: &mut DiredOutput, dir_len: usize) {
 pub fn calculate_and_update_positions(
     dired: &mut DiredOutput,
     output_display_len: usize,
-    dfl_len: usize,
-    dfn_len: usize,
+    end_line_len: usize,
+    end_filename_len: usize,
 ) {
     let offset = dired
         .dired_positions
@@ -172,8 +171,8 @@ pub fn calculate_and_update_positions(
             last_position.start + DIRED_TRAILING_OFFSET
         });
     let start = output_display_len + offset + DIRED_TRAILING_OFFSET;
-    let end = start + dfl_len;
-    let end_filename = start + dfn_len;
+    let end = start + end_line_len;
+    let end_filename = start + end_filename_len;
     update_positions(dired, start, end, end_filename);
 }
 
@@ -207,18 +206,45 @@ mod tests {
     fn test_calculate_dired() {
         let output_display = "sample_output".to_string();
         let dfn = "sample_file".to_string();
-        let dfl = "sample_file@ -> /home/foo/baa.txt".to_string();
         let dired_positions = vec![BytePosition {
             start: 5,
             end: 10,
             end_filename: 10,
         }];
         let (start, end, end_filename) =
-            calculate_dired(&dired_positions, output_display.len(), dfl.len(), dfn.len());
+            calculate_dired(&dired_positions, output_display.len(), dfn.len(), dfn.len());
 
         assert_eq!(start, 24);
-        assert_eq!(end, 57);
+        assert_eq!(end, 35);
         assert_eq!(end_filename, 35);
+    }
+
+    #[test]
+    fn test_calculate_dired_end_line_diff_end_filename() {
+        // test when we have
+        // ls -lF
+
+        // total 0
+        // lrwxrwxrwx 1 somebody somegroup 0 Sep 15 22:29 aaa@ -> d:\test\dir\aaa
+        // drwxrwxrwx 1 somebody somegroup 0 Sep 15 22:29 dir/
+        let output_display = "sample_output".to_string();
+        let end_line = "aaa@ -> d:\\test\\dir\\aaa".to_string();
+        let end_filename = "aaa".to_string();
+        let dired_positions = vec![BytePosition {
+            start: 5,
+            end: 10,
+            end_filename: 10,
+        }];
+        let (start, end, end_filename) = calculate_dired(
+            &dired_positions,
+            output_display.len(),
+            end_line.len(),
+            end_filename.len(),
+        );
+
+        assert_eq!(start, 24);
+        assert_eq!(end, 47);
+        assert_eq!(end_filename, 27);
     }
 
     #[test]
@@ -446,9 +472,14 @@ mod tests {
             padding: 5,
         };
         let output_display_len = 15;
-        let dfl_len = 5;
-        let dfn_len = 5;
-        calculate_and_update_positions(&mut dired, output_display_len, dfl_len, dfn_len);
+        let end_line_len = 5;
+        let end_filename_len = 5;
+        calculate_and_update_positions(
+            &mut dired,
+            output_display_len,
+            end_line_len,
+            end_filename_len,
+        );
         assert_eq!(
             dired.dired_positions,
             vec![
