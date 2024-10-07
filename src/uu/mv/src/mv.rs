@@ -176,6 +176,11 @@ impl<'a> VerboseContext<'a> {
 const ABOUT: &str = help_about!("mv.md");
 const USAGE: &str = help_usage!("mv.md");
 const AFTER_HELP: &str = help_section!("after help", "mv.md");
+// os error code for when rename operation crosses devices.
+#[cfg(unix)]
+const CROSSES_DEVICES_ERROR_CODE: i32 = 18;
+#[cfg(target_os = "windows")]
+const CROSSES_DEVICES_ERROR_CODE: i32 = 17;
 
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
@@ -689,7 +694,7 @@ fn rename_with_fallback(
     multi_progress: Option<&MultiProgress>,
     verbose_context: Option<&VerboseContext<'_>>,
 ) -> io::Result<()> {
-    if fs::rename(from, to).is_err() {
+    if let Err(err) = fs::rename(from, to) {
         // Get metadata without following symlinks
         let metadata = from.symlink_metadata()?;
         let file_type = metadata.file_type();
@@ -699,6 +704,9 @@ fn rename_with_fallback(
             if let Some(vc) = verbose_context {
                 vc.print_move_file(from, to);
             }
+        } else if !matches!(err.raw_os_error(),Some(err_code)if err_code ==  CROSSES_DEVICES_ERROR_CODE)
+        {
+            return Err(err);
         } else if file_type.is_dir() {
             // We remove the destination directory if it exists to match the
             // behavior of `fs::rename`. As far as I can tell, `fs_extra`'s
@@ -1023,19 +1031,22 @@ fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) -> io::Re
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::copy_file;
     use crate::error::MvError;
-
-    use super::move_dir;
-    use super::MvResult;
     use fs_extra::dir::get_size;
+    use fsxattr::{apply_xattrs, retrieve_xattrs};
     use indicatif::ProgressBar;
+    use std::collections::HashMap;
     use std::fs;
     use std::fs::metadata;
     use std::fs::set_permissions;
     use std::fs::{create_dir_all, File};
     use std::io::Write;
     use std::os::unix::fs::FileTypeExt;
+    use std::os::unix::fs::PermissionsExt;
+    use std::thread::sleep;
+    use std::time::Duration;
     use tempfile::tempdir;
     use uucore::fs::create_fifo;
 
@@ -1202,19 +1213,6 @@ mod tests {
             .file_type()
             .is_fifo())
     }
-}
-
-// Successfully copies file permissions from source to destination
-#[cfg(test)]
-mod tests2 {
-    use super::*;
-    use fsxattr::{apply_xattrs, retrieve_xattrs};
-    use std::collections::HashMap;
-    use std::fs::{self, File};
-    use std::os::unix::fs::PermissionsExt;
-    use std::thread::sleep;
-    use std::time::Duration;
-    use tempfile::tempdir;
 
     #[test]
     fn test_copy_metadata_copies_permissions() {
