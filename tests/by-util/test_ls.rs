@@ -4102,6 +4102,37 @@ fn test_ls_dired_outputs_same_date_time_format() {
 }
 
 #[test]
+fn test_ls_dired_outputs_classify_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/foo");
+    at.symlink_file("dir/foo", "foo");
+
+    let mut cmd = scene.ucmd();
+    cmd.arg("--dired").arg("-l").arg("-F");
+
+    let result = cmd.succeeds();
+
+    let output = result.stdout_str().to_string();
+    println!("Output:\n{}", output);
+
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    println!("Parsed byte positions: {positions:?}");
+
+    assert_eq!(positions[1] - positions[0], 3);
+    assert_eq!(positions[3] - positions[2], 3);
+}
+
+#[test]
 fn test_ls_dired_recursive_multiple() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
