@@ -3,13 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized lred
 
 mod error;
 
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
-use filetime::set_symlink_file_times;
+use filetime::{set_file_times, set_symlink_file_times};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
@@ -32,6 +32,7 @@ use uucore::fs::{
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
+#[cfg(unix)]
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 use uucore::{show_error, update_control};
 use walkdir::WalkDir;
@@ -706,6 +707,7 @@ fn rename_with_fallback(
             }
         } else if !matches!(err.raw_os_error(),Some(err_code)if err_code ==  CROSSES_DEVICES_ERROR_CODE)
         {
+            // only try to copy if os reports an crosses devices error.
             return Err(err);
         } else if file_type.is_dir() {
             // We remove the destination directory if it exists to match the
@@ -733,7 +735,6 @@ fn rename_with_fallback(
                 }
             }
 
-            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             let result = move_dir(from, to, progress_bar.as_ref(), verbose_context);
 
             if let Err(err) = result {
@@ -913,14 +914,26 @@ fn move_dir(
             }
         }
     }
+    // if no error occurred try to remove source and copy metadata
     if !error_occurred {
+        // GNU's `mv` only reports an error when it fails to remove a directory
+        // entry. It doesn't print anything if it fails to remove the parent
+        // directory of that entry.
+        // in order to mimic that behavior, we need to remember where the last error occurred.
         let mut last_rem_err_depth: Option<usize> = None;
         while let Some((src_path, file_type, dest_path, src_md, depth)) = moved_entries.pop() {
             if let Some(src_metadata) = src_md {
                 copy_metadata(&src_path, &dest_path, &src_metadata).ok();
             }
             if matches!(last_rem_err_depth,Some(lred)if lred > depth) {
+                // This means current dir entry is parent directory of a child
+                // dir entry that couldn't be removed.
+
+                // We mark current depth as the depth last error was occurred, this
+                // would ensure that we won't ignore sibling dir entries of the
+                // parent directory.
                 last_rem_err_depth = Some(depth);
+                // there's no point trying to remove a non empty directory.
                 continue;
             }
             let res = if src_path.is_dir() {
@@ -976,36 +989,36 @@ fn copy_file(
         None
     };
 
-    let md = from.metadata()?;
-    if cfg!(unix) && FileTypeExt::is_fifo(&md.file_type()) {
-        let file_size = md.len();
-        uucore::fs::create_fifo(to)?;
-        if let Some(progress_bar) = progress_bar {
-            progress_bar.set_position(file_size + progress_bar_start_val);
+    #[cfg(all(unix, not(target_os = "redox")))]
+    {
+        let md = from.metadata()?;
+        if FileTypeExt::is_fifo(&md.file_type()) {
+            let file_size = md.len();
+            uucore::fs::create_fifo(to)?;
+            if let Some(progress_bar) = progress_bar {
+                progress_bar.set_position(file_size + progress_bar_start_val);
+            }
+            return Ok(file_size);
         }
-        Ok(file_size)
-    } else if let Some(progress_handler) = progress_handler {
+    }
+    if let Some(progress_handler) = progress_handler {
         file::copy_with_progress(from, to, &copy_options, progress_handler)
     } else {
         file::copy(from, to, &copy_options)
     }
 }
 
+#[allow(unused_variables)]
 fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) -> io::Result<()> {
     // Get metadata of the dest file
     let dest_metadata = fs::symlink_metadata(dest)?;
-
     // Copy file permissions
     let permissions = src_metadata.permissions();
     fs::set_permissions(dest, permissions)?;
 
     // Copy xattrs
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     fsxattr::copy_xattrs(src, dest)?;
-
-    // Copy the modified and accessed timestamps
-    let modified_time = src_metadata.modified()?;
-    let accessed_time = src_metadata.accessed()?;
-    set_symlink_file_times(dest, accessed_time.into(), modified_time.into())?;
 
     // Copy ownership (if on Unix-like system)
     #[cfg(unix)]
@@ -1026,6 +1039,15 @@ fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) -> io::Re
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     }
 
+    // Copy the modified and accessed timestamps
+    let modified_time = src_metadata.modified()?;
+    let accessed_time = src_metadata.accessed()?;
+    if dest_metadata.is_symlink() {
+        set_symlink_file_times(dest, accessed_time.into(), modified_time.into())?;
+    } else {
+        set_file_times(dest, accessed_time.into(), modified_time.into())?;
+    }
+
     Ok(())
 }
 
@@ -1033,22 +1055,19 @@ fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) -> io::Re
 mod tests {
     use super::*;
     use crate::copy_file;
-    use crate::error::MvError;
-    use fs_extra::dir::get_size;
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     use fsxattr::{apply_xattrs, retrieve_xattrs};
     use indicatif::ProgressBar;
-    use std::collections::HashMap;
-    use std::fs;
-    use std::fs::metadata;
-    use std::fs::set_permissions;
-    use std::fs::{create_dir_all, File};
+    use std::fs::{self, create_dir_all, File};
     use std::io::Write;
-    use std::os::unix::fs::FileTypeExt;
-    use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
     use std::thread::sleep;
     use std::time::Duration;
     use tempfile::tempdir;
+    #[cfg(unix)]
     use uucore::fs::create_fifo;
+    use uucore::fs::disk_usage;
 
     #[test]
     fn move_all_files_and_directories() {
@@ -1091,13 +1110,19 @@ mod tests {
 
         // Setup source directory with files and subdirectories
         create_dir_all(from.join("subdir")).expect("couldn't create subdir");
-        let mut file = File::create(from.join("file1.txt")).expect("couldn't create file1.txt");
-        writeln!(file, "Hello, world!").expect("couldn't write to file1.txt");
-        let mut file =
-            File::create(from.join("subdir/file2.txt")).expect("couldn't create subdir/file2.txt");
-        writeln!(file, "Hello, subdir!").expect("couldn't write to subdir/file2.txt");
+        {
+            let mut file = File::create(from.join("file1.txt")).expect("couldn't create file1.txt");
+            writeln!(file, "Hello, world!").expect("couldn't write to file1.txt");
+            file.sync_all().unwrap();
+        }
+        {
+            let mut file = File::create(from.join("subdir/file2.txt"))
+                .expect("couldn't create subdir/file2.txt");
+            writeln!(file, "Hello, subdir!").expect("couldn't write to subdir/file2.txt");
+            file.sync_all().unwrap();
+        }
 
-        let len = get_size(&from).expect("couldn't get the size of source dir");
+        let len = disk_usage(&[&from], true).expect("couldn't get the size of source dir");
         let pb = ProgressBar::new(len);
 
         // Call the function
@@ -1113,6 +1138,7 @@ mod tests {
         assert_eq!(pb.position(), len)
     }
 
+    #[cfg(unix)]
     #[test]
     fn move_all_files_and_directories_without_src_permission() {
         let tempdir = tempdir().expect("couldn't create tempdir");
@@ -1131,10 +1157,10 @@ mod tests {
             File::create(from.join("subdir/file2.txt")).expect("couldn't create subdir/file2.txt");
         writeln!(file, "Hello, subdir!").expect("couldn't write to subdir/file2.txt");
 
-        let metadata = metadata(&from).expect("failed to get metadata");
+        let metadata = fs::metadata(&from).expect("failed to get metadata");
         let mut permissions = metadata.permissions();
         std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o222);
-        set_permissions(&from, permissions).expect("failed to set permissions");
+        fs::set_permissions(&from, permissions).expect("failed to set permissions");
 
         // Call the function
         let result: MvResult<u64> = move_dir(&from, &to, None, None);
@@ -1192,6 +1218,7 @@ mod tests {
         );
     }
 
+    #[cfg(all(unix, not(target_os = "redox")))]
     #[test]
     fn test_copy_file_with_fifo() {
         let temp_dir = tempdir().expect("couldn't create tempdir");
@@ -1214,6 +1241,7 @@ mod tests {
             .is_fifo())
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_copy_metadata_copies_permissions() {
         let temp_dir = tempdir().unwrap();
@@ -1240,7 +1268,7 @@ mod tests {
     }
 
     #[test]
-    fn test_copy_metadata_copies_filetimes() {
+    fn test_copy_metadata_copies_file_times() {
         let temp_dir = tempdir().expect("couldn't create tempdir");
         let src_path = temp_dir.path().join("src_file");
         let dest_path = temp_dir.path().join("dest_file");
@@ -1258,7 +1286,7 @@ mod tests {
             .expect("couldn't get modified time for src file");
         let accessed_time = src_metadata
             .accessed()
-            .expect("couldn't get accesssed time for src file");
+            .expect("couldn't get accessed time for src file");
 
         //Try to copy metadata
         copy_metadata(&src_path, &dest_path, &src_metadata).unwrap();
@@ -1270,13 +1298,14 @@ mod tests {
             .expect("couldn't get modified time for src file");
         let dest_accessed_time = dest_metadata
             .accessed()
-            .expect("couldn't get accesssed time for src file");
+            .expect("couldn't get accessed time for src file");
 
         // Verify that the file times were copied
         assert_eq!(modified_time, dest_modified_time);
         assert_eq!(dest_accessed_time, accessed_time);
     }
 
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     #[test]
     fn test_copy_metadata_copies_xattr() {
         let temp_dir = tempdir().expect("couldn't create tempdir");
@@ -1290,7 +1319,7 @@ mod tests {
         let src_metadata = fs::metadata(&src_path).unwrap();
 
         // Set xattrs for the source file
-        let mut test_xattrs = HashMap::new();
+        let mut test_xattrs = std::collections::HashMap::new();
         let test_attr = "user.test_attr";
         let test_value = b"test value";
         test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());
