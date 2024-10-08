@@ -98,6 +98,9 @@ fn paste(
     delimiters: &str,
     line_ending: LineEnding,
 ) -> UResult<()> {
+    let line_ending_byte = u8::from(line_ending);
+    let line_ending_byte_array_ref = &[line_ending_byte];
+
     let mut files = Vec::with_capacity(filenames.len());
     for name in filenames {
         let file = if name == "-" {
@@ -112,7 +115,13 @@ fn paste(
         files.push(file);
     }
 
-    if delimiters.ends_with('\\') && !delimiters.ends_with("\\\\") {
+    let trailing_backslashes_count = delimiters
+        .chars()
+        .rev()
+        .take_while(|&ch| ch == '\\')
+        .count();
+
+    if trailing_backslashes_count % 2 != 0 {
         return Err(USimpleError::new(
             1,
             format!("delimiter list ends with an unescaped backslash: {delimiters}"),
@@ -129,7 +138,7 @@ fn paste(
         [first_delimiter, ..] => DelimiterState::MultipleDelimiters {
             current_delimiter: first_delimiter,
             delimiters: &unescaped_and_encoded_delimiters,
-            delimiters_iter: unescaped_and_encoded_delimiters.iter().cycle(),
+            delimiters_iterator: unescaped_and_encoded_delimiters.iter().cycle(),
         },
     };
 
@@ -144,10 +153,10 @@ fn paste(
             loop {
                 delimiter_state.advance_to_next_delimiter();
 
-                match read_until(file.as_mut(), line_ending as u8, &mut output) {
+                match read_until(file.as_mut(), line_ending_byte, &mut output) {
                     Ok(0) => break,
                     Ok(_) => {
-                        if output.ends_with(&[line_ending as u8]) {
+                        if output.ends_with(line_ending_byte_array_ref) {
                             output.pop();
                         }
 
@@ -161,14 +170,8 @@ fn paste(
 
             delimiter_state.remove_trailing_delimiter(&mut output);
 
-            // TODO
-            // Should the output be converted to UTF-8?
-            write!(
-                stdout,
-                "{}{}",
-                String::from_utf8_lossy(&output),
-                line_ending
-            )?;
+            stdout.write_all(&output)?;
+            stdout.write_all(line_ending_byte_array_ref)?;
         }
     } else {
         let mut eof = vec![false; files.len()];
@@ -184,13 +187,13 @@ fn paste(
                 if eof[i] {
                     eof_count += 1;
                 } else {
-                    match read_until(file.as_mut(), line_ending as u8, &mut output) {
+                    match read_until(file.as_mut(), line_ending_byte, &mut output) {
                         Ok(0) => {
                             eof[i] = true;
                             eof_count += 1;
                         }
                         Ok(_) => {
-                            if output.ends_with(&[line_ending as u8]) {
+                            if output.ends_with(line_ending_byte_array_ref) {
                                 output.pop();
                             }
                         }
@@ -216,14 +219,8 @@ fn paste(
 
             delimiter_state.remove_trailing_delimiter(&mut output);
 
-            // TODO
-            // Should the output be converted to UTF-8?
-            write!(
-                stdout,
-                "{}{}",
-                String::from_utf8_lossy(&output),
-                line_ending
-            )?;
+            stdout.write_all(&output)?;
+            stdout.write_all(line_ending_byte_array_ref)?;
         }
     }
 
@@ -231,10 +228,42 @@ fn paste(
 }
 
 /// Unescape all special characters
-fn unescape(s: &str) -> String {
-    s.replace("\\n", "\n")
-        .replace("\\t", "\t")
-        .replace("\\\\", "\\")
+fn unescape(input: &str) -> String {
+    /// A single backslash char
+    const BACKSLASH: char = '\\';
+
+    let mut string = String::with_capacity(input.len());
+
+    let mut chars = input.chars();
+
+    while let Some(char) = chars.next() {
+        match char {
+            BACKSLASH => match chars.next() {
+                // Keep "\" if it is the last char
+                // "\\" to "\"
+                None | Some(BACKSLASH) => {
+                    string.push(BACKSLASH);
+                }
+                // "\n" to U+000A
+                Some('n') => {
+                    string.push('\n');
+                }
+                // "\t" to U+0009
+                Some('t') => {
+                    string.push('\t');
+                }
+                Some(other_char) => {
+                    string.push(BACKSLASH);
+                    string.push(other_char);
+                }
+            },
+            non_backslash_char => {
+                string.push(non_backslash_char);
+            }
+        }
+    }
+
+    string
 }
 
 fn parse_delimiters(delimiters: &str) -> Box<[Box<[u8]>]> {
@@ -268,7 +297,7 @@ enum DelimiterState<'a> {
     MultipleDelimiters {
         current_delimiter: &'a [u8],
         delimiters: &'a [Box<[u8]>],
-        delimiters_iter: Cycle<Iter<'a, Box<[u8]>>>,
+        delimiters_iterator: Cycle<Iter<'a, Box<[u8]>>>,
     },
 }
 
@@ -278,12 +307,12 @@ impl<'a> DelimiterState<'a> {
     fn advance_to_next_delimiter(&mut self) {
         if let DelimiterState::MultipleDelimiters {
             current_delimiter,
-            delimiters_iter,
+            delimiters_iterator,
             ..
         } = self
         {
-            // Unwrap because "delimiters_encoded_iter" is a cycle iter and was created from a non-empty slice
-            *current_delimiter = delimiters_iter.next().unwrap();
+            // Unwrap because `delimiters_iterator` is a cycle iter and was created from a non-empty slice
+            *current_delimiter = delimiters_iterator.next().unwrap();
         }
     }
 
@@ -292,12 +321,12 @@ impl<'a> DelimiterState<'a> {
     /// This is a no-op unless there are multiple delimiters.
     fn reset_to_first_delimiter(&mut self) {
         if let DelimiterState::MultipleDelimiters {
-            delimiters_iter,
+            delimiters_iterator,
             delimiters,
             ..
         } = self
         {
-            *delimiters_iter = delimiters.iter().cycle();
+            *delimiters_iterator = delimiters.iter().cycle();
         }
     }
 
@@ -320,7 +349,7 @@ impl<'a> DelimiterState<'a> {
             output.truncate(output_without_delimiter_length);
         } else {
             // This branch is NOT unreachable, must be skipped
-            // "output" should be empty in this case
+            // `output` should be empty in this case
             assert!(output_len == 0);
         }
     }

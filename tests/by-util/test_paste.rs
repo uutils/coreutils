@@ -242,6 +242,54 @@ FIRST!SECOND@THIRD#FOURTH!ABCDEFG
 }
 
 #[test]
+fn test_non_utf8_input() {
+    const PREFIX_LEN: usize = 16;
+    const MIDDLE_LEN: usize = 3;
+    const SUFFIX_LEN: usize = 2;
+
+    const TOTAL_LEN: usize = PREFIX_LEN + MIDDLE_LEN + SUFFIX_LEN;
+
+    const PREFIX: &[u8; PREFIX_LEN] = b"Non-UTF-8 test: ";
+    // 0xC0 is not valid UTF-8
+    const MIDDLE: &[u8; MIDDLE_LEN] = &[0xC0, 0x00, 0xC0];
+    const SUFFIX: &[u8; SUFFIX_LEN] = b".\n";
+
+    let mut input = Vec::<u8>::with_capacity(TOTAL_LEN);
+
+    input.extend_from_slice(PREFIX);
+
+    input.extend_from_slice(MIDDLE);
+
+    input.extend_from_slice(SUFFIX);
+
+    let input_clone = input.clone();
+
+    new_ucmd!()
+        .pipe_in(input_clone)
+        .succeeds()
+        .stdout_only_bytes(input);
+}
+
+#[test]
+fn test_three_trailing_backslashes_delimiter() {
+    const ONE_BACKSLASH_STR: &str = "\\";
+
+    let three_backslashes_string = ONE_BACKSLASH_STR.repeat(3);
+
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[option_style, &three_backslashes_string])
+            .fails()
+            .no_stdout()
+            .stderr_str_check(|st| {
+                st.ends_with(&format!(
+                    ": delimiter list ends with an unescaped backslash: {three_backslashes_string}\n"
+                ))
+            });
+    }
+}
+
+#[test]
 fn test_data() {
     for example in EXAMPLE_DATA {
         let (at, mut ucmd) = at_and_ucmd!();
