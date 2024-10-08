@@ -289,6 +289,59 @@ fn test_three_trailing_backslashes_delimiter() {
     }
 }
 
+// "If any other characters follow the <backslash>, the results are unspecified."
+// https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+// However, other implementations remove the backslash
+#[test]
+fn test_posix_unspecified_delimiter() {
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            // This is not "\\z", but "\z"
+            .args(&[option_style, "\\z", "-s"])
+            .pipe_in(
+                "\
+1
+2
+3
+4
+",
+            )
+            .succeeds()
+            .stdout_only(
+                "\
+1z2z3z4
+",
+            );
+    }
+}
+
+// "Empty string (not a null character)"
+// https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+#[test]
+fn test_backslash_zero_delimiter() {
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            // This is "\0z\0"
+            .args(&[option_style, "\\0z\\0", "-s"])
+            .pipe_in(
+                "\
+1
+2
+3
+4
+5
+6
+",
+            )
+            .succeeds()
+            .stdout_only(
+                "\
+12z345z6
+",
+            );
+    }
+}
+
 #[test]
 fn test_data() {
     for example in EXAMPLE_DATA {

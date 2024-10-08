@@ -227,66 +227,67 @@ fn paste(
     Ok(())
 }
 
-/// Unescape all special characters
-fn unescape(input: &str) -> String {
+fn parse_delimiters(delimiters: &str) -> Box<[Box<[u8]>]> {
     /// A single backslash char
     const BACKSLASH: char = '\\';
 
-    let mut string = String::with_capacity(input.len());
+    fn add_one_byte_single_char_delimiter(vec: &mut Vec<Box<[u8]>>, byte: u8) {
+        vec.push(Box::new([byte]));
+    }
 
-    let mut chars = input.chars();
+    // a buffer of length four is large enough to encode any char
+    let mut buffer = [0; 4];
 
+    let mut add_single_char_delimiter = |vec: &mut Vec<Box<[u8]>>, ch: char| {
+        let delimiter_encoded = ch.encode_utf8(&mut buffer);
+
+        vec.push(Box::from(delimiter_encoded.as_bytes()));
+    };
+
+    let mut vec = Vec::<Box<[u8]>>::with_capacity(delimiters.len());
+
+    let mut chars = delimiters.chars();
+
+    // Unescape all special characters
     while let Some(char) = chars.next() {
         match char {
+            // Empty string (not a null character)
             BACKSLASH => match chars.next() {
-                // Keep "\" if it is the last char
+                // "Empty string (not a null character)"
+                // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+                Some('0') => {
+                    vec.push(Box::<[u8; 0]>::new([]));
+                }
                 // "\\" to "\"
-                None | Some(BACKSLASH) => {
-                    string.push(BACKSLASH);
+                Some(BACKSLASH) => {
+                    add_one_byte_single_char_delimiter(&mut vec, b'\\');
                 }
                 // "\n" to U+000A
                 Some('n') => {
-                    string.push('\n');
+                    add_one_byte_single_char_delimiter(&mut vec, b'\n');
                 }
                 // "\t" to U+0009
                 Some('t') => {
-                    string.push('\t');
+                    add_one_byte_single_char_delimiter(&mut vec, b'\t');
                 }
                 Some(other_char) => {
-                    string.push(BACKSLASH);
-                    string.push(other_char);
+                    // "If any other characters follow the <backslash>, the results are unspecified."
+                    // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+                    // However, other implementations remove the backslash
+                    // See "test_posix_unspecified_delimiter"
+                    add_single_char_delimiter(&mut vec, other_char);
+                }
+                None => {
+                    unreachable!("Delimiter list cannot end with an unescaped backslash");
                 }
             },
             non_backslash_char => {
-                string.push(non_backslash_char);
+                add_single_char_delimiter(&mut vec, non_backslash_char);
             }
         }
     }
 
-    string
-}
-
-fn parse_delimiters(delimiters: &str) -> Box<[Box<[u8]>]> {
-    let delimiters_unescaped = unescape(delimiters).chars().collect::<Vec<_>>();
-
-    let delimiters_unescaped_len = delimiters_unescaped.len();
-
-    if delimiters_unescaped_len > 0 {
-        let mut vec = Vec::<Box<[u8]>>::with_capacity(delimiters_unescaped_len);
-
-        // a buffer of length four is large enough to encode any char
-        let mut buffer = [0; 4];
-
-        for delimiter in delimiters_unescaped {
-            let delimiter_encoded = delimiter.encode_utf8(&mut buffer);
-
-            vec.push(Box::from(delimiter_encoded.as_bytes()));
-        }
-
-        vec.into_boxed_slice()
-    } else {
-        Box::new([])
-    }
+    vec.into_boxed_slice()
 }
 
 enum DelimiterState<'a> {
