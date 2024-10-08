@@ -1884,7 +1884,7 @@ mod inter_partition_copying {
     }
 
     #[test]
-    fn test_inter_partition_copying_folder_without_read_permission_to_subfolders() {
+    fn test_inter_partition_copying_dir_without_read_permission_to_sub_dir() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
         at.mkdir_all("a/b/c");
@@ -1905,7 +1905,7 @@ mod inter_partition_copying {
             .arg("a")
             .arg(other_fs_tempdir.path().to_str().unwrap())
             .fails()
-            // check erorr occured
+            // check error occurred
             .stderr_contains("cannot access 'a/b/f': Permission denied");
 
         // make sure mv kept on going after error
@@ -1915,7 +1915,7 @@ mod inter_partition_copying {
             "h"
         );
 
-        // make sure mv didn't remove src because an error occured
+        // make sure mv didn't remove src because an error occurred
         at.dir_exists("a");
         at.file_exists("a/b/h");
     }
@@ -1943,7 +1943,7 @@ mod inter_partition_copying {
             .expect("couldn't get modified time for src file");
         let accessed_time = src_metadata
             .accessed()
-            .expect("couldn't get accesssed time for src file");
+            .expect("couldn't get accessed time for src file");
         // create a folder in another partition.
         let other_fs_tempdir =
             TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
@@ -1991,7 +1991,7 @@ mod inter_partition_copying {
     }
 
     // this test would fail if progress bar flag is set to true because we need
-    // to traverse directory inorder to find the size that would change the
+    // to traverse directory in order to find the size that would change the
     // access time.
     #[test]
     fn test_inter_partition_copying_directory_metadata_for_directory() {
@@ -2016,7 +2016,7 @@ mod inter_partition_copying {
             .expect("couldn't get modified time for src file");
         let accessed_time = src_metadata
             .accessed()
-            .expect("couldn't get accesssed time for src file");
+            .expect("couldn't get accessed time for src file");
         // create a folder in another partition.
         let other_fs_tempdir =
             TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
@@ -2068,8 +2068,8 @@ mod inter_partition_copying {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
         at.mkdir_all("a/aa/");
-        at.write("a/aa/aa1", "filecontents");
-        //remove write permssion for the subdir
+        at.write("a/aa/aa1", "file contents");
+        //remove write permission for the subdir
         at.set_mode("a/aa/", 0o555);
         // create a folder in another partition.
         let other_fs_tempdir =
@@ -2081,7 +2081,7 @@ mod inter_partition_copying {
             .arg("a")
             .arg(other_fs_tempdir.path().to_str().unwrap())
             .fails()
-            // check erorr occured
+            // check error occurred
             .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied")
             //make sure mv doesn't print errors for the parent directories
             .stderr_does_not_contain("'a/aa'");
@@ -2095,9 +2095,9 @@ mod inter_partition_copying {
         let at = &scene.fixtures;
         at.mkdir_all("a/aa/");
         at.mkdir_all("a/aa/aaa");
-        at.write("a/aa/aa1", "filecontents");
-        at.write("a/aa/aa2", "filecontents");
-        //remove write permssion for the subdir
+        at.write("a/aa/aa1", "file contents");
+        at.write("a/aa/aa2", "file contents");
+        //remove write permission for the subdir
         at.set_mode("a/aa/", 0o555);
         // create a folder in another partition.
         let other_fs_tempdir =
@@ -2124,9 +2124,9 @@ mod inter_partition_copying {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
         at.mkdir_all("a/aa/");
-        at.write("a/a1", "filecontents");
-        at.write("a/aa/aa1", "filecontents");
-        //remove write permssion for the subdir
+        at.write("a/a1", "file contents");
+        at.write("a/aa/aa1", "file contents");
+        //remove write permission for the subdir
         at.set_mode("a/aa/", 0o555);
         // create a folder in another partition.
         let other_fs_tempdir =
@@ -2140,7 +2140,7 @@ mod inter_partition_copying {
             .fails()
             .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied");
         assert!(at.file_exists("a/aa/aa1"));
-        // file that doesn't belong to the branch that error occured didn't got removed
+        // file that doesn't belong to the branch that error occurred didn't got removed
         assert!(!at.file_exists("a/a1"));
         assert!(other_fs_tempdir.path().join("a/aa/aa1").exists());
     }
@@ -2151,10 +2151,10 @@ mod inter_partition_copying {
         let at = &scene.fixtures;
         at.mkdir_all("a/aa/");
         at.mkdir_all("a/ab/");
-        at.write("a/aa/aa1", "filecontents");
-        at.write("a/ab/ab1", "filecontents");
+        at.write("a/aa/aa1", "file contents");
+        at.write("a/ab/ab1", "file contents");
 
-        //remove write permssion for the subdir
+        //remove write permission for the subdir
         at.set_mode("a/aa/", 0o555);
         // create a folder in another partition.
         let other_fs_tempdir =
@@ -2168,7 +2168,7 @@ mod inter_partition_copying {
             .fails()
             .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied");
         assert!(at.file_exists("a/aa/aa1"));
-        // folder that doesn't belong to the branch that error occured didn't got removed
+        // folder that doesn't belong to the branch that error occurred didn't got removed
         assert!(!at.dir_exists("a/ab"));
         assert!(other_fs_tempdir.path().join("a/ab/ab1").exists());
     }

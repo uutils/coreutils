@@ -28,7 +28,7 @@ uucore = { workspace = true, features = [
   "fsxattr",
   "update-control",
   "perms",
-  "entries"
+  "entries",
 ] }
 
 [dev-dependencies]

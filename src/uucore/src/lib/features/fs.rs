@@ -791,7 +791,7 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
 // built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 pub fn create_fifo(dest: &Path) -> std::io::Result<()> {
     nix::unistd::mkfifo(dest, nix::sys::stat::Mode::S_IRUSR).map_err(|err| err.into())
 }
@@ -1074,7 +1074,7 @@ mod tests {
         assert!(matches!(get_filename(&file_path), Some("foo.txt")));
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "redox")))]
     #[test]
     fn test_create_fifo_success() {
         let dir = tempdir().unwrap();
@@ -1144,16 +1144,16 @@ mod tests {
 
         let subdir_path = dir.path().join("subdir");
         fs::create_dir(&subdir_path).unwrap();
-        let subfile_path = subdir_path.join("file2.txt");
-        let mut subfile = fs::File::create(&subfile_path).unwrap();
-        writeln!(subfile, "Hello, again!").unwrap();
+        let sub_file_path = subdir_path.join("file2.txt");
+        let mut sub_file = fs::File::create(&sub_file_path).unwrap();
+        writeln!(sub_file, "Hello, again!").unwrap();
 
         let paths: Vec<PathBuf> = vec![dir.path().to_path_buf()];
         let total_size = disk_usage(&paths, true).unwrap();
 
         assert_eq!(
             total_size,
-            file_path.metadata().unwrap().len() + subfile_path.metadata().unwrap().len()
+            file_path.metadata().unwrap().len() + sub_file_path.metadata().unwrap().len()
         );
     }
 }
