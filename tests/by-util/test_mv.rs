@@ -1629,7 +1629,7 @@ mod inter_partition_copying {
     use super::*;
     use crate::common::util::TestScenario;
     use std::ffi::OsString;
-    use std::fs::{read_to_string, set_permissions, write};
+    use std::fs::{read_to_string, set_permissions, write, File};
     use std::os::unix::fs::{symlink, FileTypeExt, MetadataExt, PermissionsExt};
     use tempfile::TempDir;
     use uucore::display::Quotable;
@@ -1947,6 +1947,16 @@ mod inter_partition_copying {
         // create a folder in another partition.
         let other_fs_tempdir =
             TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+
+        // https://github.com/Stebalien/xattr/issues/24#issuecomment-1279682009
+        let mut dest_fs_xattr_support = true;
+        let tempfile_path = other_fs_tempdir.path().join("temp_file");
+        let tf = File::create(&tempfile_path).expect("couldn't create tempfile");
+        if let Err(err) = tf.set_xattr(test_attr, test_value) {
+            dest_fs_xattr_support = false;
+            println!("no fs xattr support: {err}");
+        }
+
         // make sure to wait for a second so that when the dest file is created, it
         // would have a different filetime so that the only way the dest file
         // would have a same timestamp is by copying the timestamp of src file.
@@ -1979,15 +1989,18 @@ mod inter_partition_copying {
             accessed_time
         );
 
-        // Verify that the xattrs were copied
-        let retrieved_xattrs = retrieve_xattrs(other_fs_tempdir.path().join("dir/file")).unwrap();
-        assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
-        assert_eq!(
-            retrieved_xattrs
-                .get(OsString::from(test_attr).as_os_str())
-                .expect("couldn't find xattr with name user.test_attr"),
-            test_value
-        );
+        if dest_fs_xattr_support {
+            // Verify that the xattrs were copied
+            let retrieved_xattrs =
+                retrieve_xattrs(other_fs_tempdir.path().join("dir/file")).unwrap();
+            assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+            assert_eq!(
+                retrieved_xattrs
+                    .get(OsString::from(test_attr).as_os_str())
+                    .expect("couldn't find xattr with name user.test_attr"),
+                test_value
+            );
+        }
     }
 
     // this test would fail if progress bar flag is set to true because we need
@@ -2023,6 +2036,16 @@ mod inter_partition_copying {
         // make sure to wait for a second so that when the dest file is created, it
         // would have a different filetime so that the only way the dest file
         // would have a same timestamp is by copying the timestamp of src file.
+
+        // https://github.com/Stebalien/xattr/issues/24#issuecomment-1279682009
+        let mut dest_fs_xattr_support = true;
+        let tempfile_path = other_fs_tempdir.path().join("temp_file");
+        let tf = File::create(&tempfile_path).expect("couldn't create tempfile");
+        if let Err(err) = tf.set_xattr(test_attr, test_value) {
+            dest_fs_xattr_support = false;
+            println!("no fs xattr support: {err}");
+        }
+
         sleep(Duration::from_secs(1));
         // mv to other partition
         scene
@@ -2052,15 +2075,17 @@ mod inter_partition_copying {
             accessed_time
         );
 
-        // Verify that the xattrs were copied
-        let retrieved_xattrs = retrieve_xattrs(other_fs_tempdir.path().join("dir")).unwrap();
-        assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
-        assert_eq!(
-            retrieved_xattrs
-                .get(OsString::from(test_attr).as_os_str())
-                .expect("couldn't find xattr with name user.test_attr"),
-            test_value
-        );
+        if dest_fs_xattr_support {
+            // Verify that the xattrs were copied
+            let retrieved_xattrs = retrieve_xattrs(other_fs_tempdir.path().join("dir")).unwrap();
+            assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+            assert_eq!(
+                retrieved_xattrs
+                    .get(OsString::from(test_attr).as_os_str())
+                    .expect("couldn't find xattr with name user.test_attr"),
+                test_value
+            );
+        }
     }
 
     #[test]
