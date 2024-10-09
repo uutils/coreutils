@@ -3,15 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) delim
-
 use clap::{crate_version, Arg, ArgAction, Command};
+use std::cell::{OnceCell, RefCell};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Stdin, Write};
 use std::iter::Cycle;
-use std::path::Path;
+use std::rc::Rc;
 use std::slice::Iter;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
 
@@ -23,18 +22,6 @@ mod options {
     pub const SERIAL: &str = "serial";
     pub const FILE: &str = "file";
     pub const ZERO_TERMINATED: &str = "zero-terminated";
-}
-
-// Wraps BufReader and stdin
-fn read_until<R: Read>(
-    reader: Option<&mut BufReader<R>>,
-    byte: u8,
-    buf: &mut Vec<u8>,
-) -> std::io::Result<usize> {
-    match reader {
-        Some(reader) => reader.read_until(byte, buf),
-        None => stdin().lock().read_until(byte, buf),
-    }
 }
 
 #[uucore::main]
@@ -98,73 +85,52 @@ fn paste(
     delimiters: &str,
     line_ending: LineEnding,
 ) -> UResult<()> {
+    let unescaped_and_encoded_delimiters = parse_delimiters(delimiters)?;
+
+    let stdin_once_cell = OnceCell::<Rc<RefCell<Stdin>>>::new();
+
+    let mut input_source_vec = Vec::with_capacity(filenames.len());
+
+    for filename in filenames {
+        let input_source = match filename.as_str() {
+            "-" => InputSource::StandardInput(
+                stdin_once_cell
+                    .get_or_init(|| Rc::new(RefCell::new(stdin())))
+                    .clone(),
+            ),
+            st => {
+                let file = File::open(st)?;
+
+                InputSource::File(BufReader::new(file))
+            }
+        };
+
+        input_source_vec.push(input_source);
+    }
+
+    let mut stdout = stdout().lock();
+
     let line_ending_byte = u8::from(line_ending);
     let line_ending_byte_array_ref = &[line_ending_byte];
 
-    let mut files = Vec::with_capacity(filenames.len());
-    for name in filenames {
-        let file = if name == "-" {
-            None
-        } else {
-            let path = Path::new(&name);
-            // TODO
-            // Is `map_err_context` correct here?
-            let file = File::open(path).map_err_context(String::new)?;
-            Some(BufReader::new(file))
-        };
-        files.push(file);
-    }
+    let input_source_vec_len = input_source_vec.len();
 
-    let trailing_backslashes_count = delimiters
-        .chars()
-        .rev()
-        .take_while(|&ch| ch == '\\')
-        .count();
-
-    if trailing_backslashes_count % 2 != 0 {
-        return Err(USimpleError::new(
-            1,
-            format!("delimiter list ends with an unescaped backslash: {delimiters}"),
-        ));
-    }
-
-    let unescaped_and_encoded_delimiters = parse_delimiters(delimiters);
-
-    let mut delimiter_state = match unescaped_and_encoded_delimiters.as_ref() {
-        [] => DelimiterState::NoDelimiters,
-        [only_delimiter] => DelimiterState::OneDelimiter {
-            delimiter: only_delimiter,
-        },
-        [first_delimiter, ..] => DelimiterState::MultipleDelimiters {
-            current_delimiter: first_delimiter,
-            delimiters: &unescaped_and_encoded_delimiters,
-            delimiters_iterator: unescaped_and_encoded_delimiters.iter().cycle(),
-        },
-    };
-
-    let mut stdout = stdout().lock();
+    let mut delimiter_state = DelimiterState::new(&unescaped_and_encoded_delimiters);
 
     let mut output = Vec::new();
 
     if serial {
-        for file in &mut files {
+        for input_source in &mut input_source_vec {
             output.clear();
 
             loop {
-                delimiter_state.advance_to_next_delimiter();
-
-                match read_until(file.as_mut(), line_ending_byte, &mut output) {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        if output.ends_with(line_ending_byte_array_ref) {
-                            output.pop();
-                        }
+                match input_source.read_until(line_ending_byte, &mut output)? {
+                    0 => break,
+                    _ => {
+                        remove_trailing_line_ending_byte(line_ending_byte, &mut output);
 
                         delimiter_state.write_delimiter(&mut output);
                     }
-                    // TODO
-                    // Is `map_err_context` correct here?
-                    Err(e) => return Err(e.map_err_context(String::new)),
                 }
             }
 
@@ -174,41 +140,39 @@ fn paste(
             stdout.write_all(line_ending_byte_array_ref)?;
         }
     } else {
-        let mut eof = vec![false; files.len()];
+        let mut eof = vec![false; input_source_vec_len];
 
         loop {
             output.clear();
 
             let mut eof_count = 0;
 
-            for (i, file) in files.iter_mut().enumerate() {
-                delimiter_state.advance_to_next_delimiter();
-
+            for (i, input_source) in input_source_vec.iter_mut().enumerate() {
                 if eof[i] {
                     eof_count += 1;
                 } else {
-                    match read_until(file.as_mut(), line_ending_byte, &mut output) {
-                        Ok(0) => {
+                    match input_source.read_until(line_ending_byte, &mut output)? {
+                        0 => {
                             eof[i] = true;
                             eof_count += 1;
                         }
-                        Ok(_) => {
-                            if output.ends_with(line_ending_byte_array_ref) {
-                                output.pop();
-                            }
+                        _ => {
+                            remove_trailing_line_ending_byte(line_ending_byte, &mut output);
                         }
-                        // TODO
-                        // Is `map_err_context` correct here?
-                        Err(e) => return Err(e.map_err_context(String::new)),
                     }
                 }
 
                 delimiter_state.write_delimiter(&mut output);
             }
 
-            if files.len() == eof_count {
+            if eof_count == input_source_vec_len {
                 break;
             }
+
+            delimiter_state.remove_trailing_delimiter(&mut output);
+
+            stdout.write_all(&output)?;
+            stdout.write_all(line_ending_byte_array_ref)?;
 
             // Quote:
             //     When the -s option is not specified:
@@ -216,18 +180,13 @@ fn paste(
             //     The delimiter shall be reset to the first element of list after each file operand is processed.
             // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
             delimiter_state.reset_to_first_delimiter();
-
-            delimiter_state.remove_trailing_delimiter(&mut output);
-
-            stdout.write_all(&output)?;
-            stdout.write_all(line_ending_byte_array_ref)?;
         }
     }
 
     Ok(())
 }
 
-fn parse_delimiters(delimiters: &str) -> Box<[Box<[u8]>]> {
+fn parse_delimiters(delimiters: &str) -> UResult<Box<[Box<[u8]>]>> {
     /// A single backslash char
     const BACKSLASH: char = '\\';
 
@@ -251,14 +210,13 @@ fn parse_delimiters(delimiters: &str) -> Box<[Box<[u8]>]> {
     // Unescape all special characters
     while let Some(char) = chars.next() {
         match char {
-            // Empty string (not a null character)
             BACKSLASH => match chars.next() {
                 // "Empty string (not a null character)"
                 // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
                 Some('0') => {
                     vec.push(Box::<[u8; 0]>::new([]));
                 }
-                // "\\" to "\"
+                // "\\" to "\" (U+005C)
                 Some(BACKSLASH) => {
                     add_one_byte_single_char_delimiter(&mut vec, b'\\');
                 }
@@ -278,7 +236,10 @@ fn parse_delimiters(delimiters: &str) -> Box<[Box<[u8]>]> {
                     add_single_char_delimiter(&mut vec, other_char);
                 }
                 None => {
-                    unreachable!("Delimiter list cannot end with an unescaped backslash");
+                    return Err(USimpleError::new(
+                        1,
+                        format!("delimiter list ends with an unescaped backslash: {delimiters}"),
+                    ));
                 }
             },
             non_backslash_char => {
@@ -287,14 +248,20 @@ fn parse_delimiters(delimiters: &str) -> Box<[Box<[u8]>]> {
         }
     }
 
-    vec.into_boxed_slice()
+    Ok(vec.into_boxed_slice())
+}
+
+fn remove_trailing_line_ending_byte(line_ending_byte: u8, output: &mut Vec<u8>) {
+    if let Some(&byte) = output.last() {
+        if byte == line_ending_byte {
+            assert!(output.pop() == Some(line_ending_byte));
+        }
+    }
 }
 
 enum DelimiterState<'a> {
     NoDelimiters,
-    OneDelimiter {
-        delimiter: &'a [u8],
-    },
+    OneDelimiter(&'a [u8]),
     MultipleDelimiters {
         current_delimiter: &'a [u8],
         delimiters: &'a [Box<[u8]>],
@@ -303,17 +270,22 @@ enum DelimiterState<'a> {
 }
 
 impl<'a> DelimiterState<'a> {
-    /// If there are multiple delimiters, advance the iterator over the delimiter list.
-    /// This is a no-op unless there are multiple delimiters.
-    fn advance_to_next_delimiter(&mut self) {
-        if let DelimiterState::MultipleDelimiters {
-            current_delimiter,
-            delimiters_iterator,
-            ..
-        } = self
-        {
-            // Unwrap because `delimiters_iterator` is a cycle iter and was created from a non-empty slice
-            *current_delimiter = delimiters_iterator.next().unwrap();
+    fn new(unescaped_and_encoded_delimiters: &'a [Box<[u8]>]) -> DelimiterState<'a> {
+        match unescaped_and_encoded_delimiters {
+            [] => DelimiterState::NoDelimiters,
+            [only_delimiter] => {
+                // -d '\0' is equivalent to -d ''
+                if only_delimiter.is_empty() {
+                    DelimiterState::NoDelimiters
+                } else {
+                    DelimiterState::OneDelimiter(only_delimiter)
+                }
+            }
+            [first_delimiter, ..] => DelimiterState::MultipleDelimiters {
+                current_delimiter: first_delimiter,
+                delimiters: unescaped_and_encoded_delimiters,
+                delimiters_iterator: unescaped_and_encoded_delimiters.iter().cycle(),
+            },
         }
     }
 
@@ -335,7 +307,7 @@ impl<'a> DelimiterState<'a> {
     /// If there are no delimiters, this is a no-op.
     fn remove_trailing_delimiter(&mut self, output: &mut Vec<u8>) {
         let delimiter_length = match self {
-            DelimiterState::OneDelimiter { delimiter } => delimiter.len(),
+            DelimiterState::OneDelimiter(only_delimiter) => only_delimiter.len(),
             DelimiterState::MultipleDelimiters {
                 current_delimiter, ..
             } => current_delimiter.len(),
@@ -344,14 +316,18 @@ impl<'a> DelimiterState<'a> {
             }
         };
 
-        let output_len = output.len();
+        // `delimiter_length` will be zero if the current delimiter is a "\0" delimiter
+        if delimiter_length > 0 {
+            let output_len = output.len();
 
-        if let Some(output_without_delimiter_length) = output_len.checked_sub(delimiter_length) {
-            output.truncate(output_without_delimiter_length);
-        } else {
-            // This branch is NOT unreachable, must be skipped
-            // `output` should be empty in this case
-            assert!(output_len == 0);
+            if let Some(output_without_delimiter_length) = output_len.checked_sub(delimiter_length)
+            {
+                output.truncate(output_without_delimiter_length);
+            } else {
+                // This branch is NOT unreachable, must be skipped
+                // `output` should be empty in this case
+                assert!(output_len == 0);
+            }
         }
     }
 
@@ -359,15 +335,42 @@ impl<'a> DelimiterState<'a> {
     /// If there are no delimiters, this is a no-op.
     fn write_delimiter(&mut self, output: &mut Vec<u8>) {
         match self {
-            DelimiterState::OneDelimiter { delimiter } => {
-                output.extend_from_slice(delimiter);
+            DelimiterState::OneDelimiter(only_delimiter) => {
+                output.extend_from_slice(only_delimiter);
             }
             DelimiterState::MultipleDelimiters {
-                current_delimiter, ..
+                current_delimiter,
+                delimiters_iterator,
+                ..
             } => {
-                output.extend_from_slice(current_delimiter);
+                // Unwrap because `delimiters_iterator` is a cycle iter and was created from a non-empty slice
+                let bo = delimiters_iterator.next().unwrap();
+
+                output.extend_from_slice(bo);
+
+                *current_delimiter = bo;
             }
             _ => {}
         }
+    }
+}
+
+enum InputSource {
+    File(BufReader<File>),
+    StandardInput(Rc<RefCell<Stdin>>),
+}
+
+impl InputSource {
+    fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
+        let us = match self {
+            Self::File(bu) => bu.read_until(byte, buf)?,
+            Self::StandardInput(rc) => rc
+                .try_borrow()
+                .map_err(|bo| USimpleError::new(1, format!("{bo}")))?
+                .lock()
+                .read_until(byte, buf)?,
+        };
+
+        Ok(us)
     }
 }

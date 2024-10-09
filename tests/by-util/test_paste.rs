@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use crate::common::util::TestScenario;
 
 struct TestData<'b> {
@@ -11,7 +12,7 @@ struct TestData<'b> {
     out: &'b str,
 }
 
-static EXAMPLE_DATA: &[TestData] = &[
+const EXAMPLE_DATA: &[TestData] = &[
     // Ensure that paste properly handles files lacking a final newline.
     TestData {
         name: "no-nl-1",
@@ -172,7 +173,7 @@ fn test_delimiter_list_ending_with_escaped_backslash() {
             at.write(&file, one_in);
             ins.push(file);
         }
-        ucmd.args(&[d, "\\\\"])
+        ucmd.args(&[d, r#"\\"#])
             .args(&ins)
             .succeeds()
             .stdout_is("a\\b\n");
@@ -183,13 +184,14 @@ fn test_delimiter_list_ending_with_escaped_backslash() {
 fn test_delimiter_list_ending_with_unescaped_backslash() {
     for d in ["-d", "--delimiters"] {
         new_ucmd!()
-            .args(&[d, "\\"])
+            .args(&[d, r#"\"#])
             .fails()
-            .stderr_contains("delimiter list ends with an unescaped backslash: \\");
+            .stderr_contains(r#"delimiter list ends with an unescaped backslash: \"#);
+
         new_ucmd!()
-            .args(&[d, "_\\"])
+            .args(&[d, r#"_\"#])
             .fails()
-            .stderr_contains("delimiter list ends with an unescaped backslash: _\\");
+            .stderr_contains(r#"delimiter list ends with an unescaped backslash: _\"#);
     }
 }
 
@@ -243,36 +245,18 @@ FIRST!SECOND@THIRD#FOURTH!ABCDEFG
 
 #[test]
 fn test_non_utf8_input() {
-    const PREFIX_LEN: usize = 16;
-    const MIDDLE_LEN: usize = 3;
-    const SUFFIX_LEN: usize = 2;
-
-    const TOTAL_LEN: usize = PREFIX_LEN + MIDDLE_LEN + SUFFIX_LEN;
-
-    const PREFIX: &[u8; PREFIX_LEN] = b"Non-UTF-8 test: ";
     // 0xC0 is not valid UTF-8
-    const MIDDLE: &[u8; MIDDLE_LEN] = &[0xC0, 0x00, 0xC0];
-    const SUFFIX: &[u8; SUFFIX_LEN] = b".\n";
-
-    let mut input = Vec::<u8>::with_capacity(TOTAL_LEN);
-
-    input.extend_from_slice(PREFIX);
-
-    input.extend_from_slice(MIDDLE);
-
-    input.extend_from_slice(SUFFIX);
-
-    let input_clone = input.clone();
+    const INPUT: &[u8] = b"Non-UTF-8 test: \xC0\x00\xC0.\n";
 
     new_ucmd!()
-        .pipe_in(input_clone)
+        .pipe_in(INPUT)
         .succeeds()
-        .stdout_only_bytes(input);
+        .stdout_only_bytes(INPUT);
 }
 
 #[test]
 fn test_three_trailing_backslashes_delimiter() {
-    const ONE_BACKSLASH_STR: &str = "\\";
+    const ONE_BACKSLASH_STR: &str = r#"\"#;
 
     let three_backslashes_string = ONE_BACKSLASH_STR.repeat(3);
 
@@ -296,8 +280,7 @@ fn test_three_trailing_backslashes_delimiter() {
 fn test_posix_unspecified_delimiter() {
     for option_style in ["-d", "--delimiters"] {
         new_ucmd!()
-            // This is not "\\z", but "\z"
-            .args(&[option_style, "\\z", "-s"])
+            .args(&[option_style, r#"\z"#, "-s"])
             .pipe_in(
                 "\
 1
@@ -321,8 +304,7 @@ fn test_posix_unspecified_delimiter() {
 fn test_backslash_zero_delimiter() {
     for option_style in ["-d", "--delimiters"] {
         new_ucmd!()
-            // This is "\0z\0"
-            .args(&[option_style, "\\0z\\0", "-s"])
+            .args(&[option_style, r#"\0z\0"#, "-s"])
             .pipe_in(
                 "\
 1
@@ -337,6 +319,32 @@ fn test_backslash_zero_delimiter() {
             .stdout_only(
                 "\
 12z345z6
+",
+            );
+    }
+}
+
+// As of 2024-10-09, only bsdutils (https://github.com/dcantrell/bsdutils, derived from FreeBSD) and toybox handle
+// multibyte delimiter characters in the way a user would likely expect. BusyBox and GNU Core Utilities do not.
+#[test]
+fn test_multi_byte_delimiter() {
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[option_style, "!ß@", "-s"])
+            .pipe_in(
+                "\
+1
+2
+3
+4
+5
+6
+",
+            )
+            .succeeds()
+            .stdout_only(
+                "\
+1!2ß3@4!5ß6
 ",
             );
     }
