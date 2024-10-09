@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore bsdutils toybox
+
 use crate::common::util::TestScenario;
 
 struct TestData<'b> {
@@ -173,7 +175,7 @@ fn test_delimiter_list_ending_with_escaped_backslash() {
             at.write(&file, one_in);
             ins.push(file);
         }
-        ucmd.args(&[d, r#"\\"#])
+        ucmd.args(&[d, r"\\"])
             .args(&ins)
             .succeeds()
             .stdout_is("a\\b\n");
@@ -184,14 +186,19 @@ fn test_delimiter_list_ending_with_escaped_backslash() {
 fn test_delimiter_list_ending_with_unescaped_backslash() {
     for d in ["-d", "--delimiters"] {
         new_ucmd!()
-            .args(&[d, r#"\"#])
+            .args(&[d, r"\"])
             .fails()
-            .stderr_contains(r#"delimiter list ends with an unescaped backslash: \"#);
+            .stderr_contains(r"delimiter list ends with an unescaped backslash: \");
 
         new_ucmd!()
-            .args(&[d, r#"_\"#])
+            .args(&[d, r"\\\"])
             .fails()
-            .stderr_contains(r#"delimiter list ends with an unescaped backslash: _\"#);
+            .stderr_contains(r"delimiter list ends with an unescaped backslash: \\\");
+
+        new_ucmd!()
+            .args(&[d, r"_\"])
+            .fails()
+            .stderr_contains(r"delimiter list ends with an unescaped backslash: _\");
     }
 }
 
@@ -256,7 +263,7 @@ fn test_non_utf8_input() {
 
 #[test]
 fn test_three_trailing_backslashes_delimiter() {
-    const ONE_BACKSLASH_STR: &str = r#"\"#;
+    const ONE_BACKSLASH_STR: &str = r"\";
 
     let three_backslashes_string = ONE_BACKSLASH_STR.repeat(3);
 
@@ -280,7 +287,7 @@ fn test_three_trailing_backslashes_delimiter() {
 fn test_posix_unspecified_delimiter() {
     for option_style in ["-d", "--delimiters"] {
         new_ucmd!()
-            .args(&[option_style, r#"\z"#, "-s"])
+            .args(&[option_style, r"\z", "-s"])
             .pipe_in(
                 "\
 1
@@ -304,7 +311,7 @@ fn test_posix_unspecified_delimiter() {
 fn test_backslash_zero_delimiter() {
     for option_style in ["-d", "--delimiters"] {
         new_ucmd!()
-            .args(&[option_style, r#"\0z\0"#, "-s"])
+            .args(&[option_style, r"\0z\0", "-s"])
             .pipe_in(
                 "\
 1
