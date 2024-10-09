@@ -9,7 +9,7 @@ mod error;
 
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
-use filetime::{set_file_times, set_symlink_file_times};
+use filetime::set_symlink_file_times;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
@@ -923,7 +923,7 @@ fn move_dir(
         let mut last_rem_err_depth: Option<usize> = None;
         while let Some((src_path, file_type, dest_path, src_md, depth)) = moved_entries.pop() {
             if let Some(src_metadata) = src_md {
-                copy_metadata(&src_path, &dest_path, &src_metadata).ok();
+                copy_metadata(&src_path, &dest_path, &src_metadata);
             }
             if matches!(last_rem_err_depth,Some(lred)if lred > depth) {
                 // This means current dir entry is parent directory of a child
@@ -1008,47 +1008,44 @@ fn copy_file(
     }
 }
 
+// For GNU compatibility, this function does not report any errors that occur within it.
 #[allow(unused_variables)]
-fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) -> io::Result<()> {
-    // Get metadata of the dest file
-    let dest_metadata = fs::symlink_metadata(dest)?;
+fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) {
     // Copy file permissions
     let permissions = src_metadata.permissions();
-    fs::set_permissions(dest, permissions)?;
-
-    // Copy xattrs
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    fsxattr::copy_xattrs(src, dest)?;
+    fs::set_permissions(dest, permissions).ok();
 
     // Copy ownership (if on Unix-like system)
     #[cfg(unix)]
     {
         let uid = MetadataExt::uid(src_metadata);
         let gid = MetadataExt::gid(src_metadata);
-        wrap_chown(
-            dest,
-            &dest_metadata,
-            Some(uid),
-            Some(gid),
-            false,
-            Verbosity {
-                groups_only: false,
-                level: VerbosityLevel::Silent,
-            },
-        )
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        if let Ok(dest_md) = fs::symlink_metadata(dest).as_ref() {
+            wrap_chown(
+                dest,
+                dest_md,
+                Some(uid),
+                Some(gid),
+                false,
+                Verbosity {
+                    groups_only: false,
+                    level: VerbosityLevel::Silent,
+                },
+            )
+            .ok();
+        }
     }
 
     // Copy the modified and accessed timestamps
-    let modified_time = src_metadata.modified()?;
-    let accessed_time = src_metadata.accessed()?;
-    if dest_metadata.is_symlink() {
-        set_symlink_file_times(dest, accessed_time.into(), modified_time.into())?;
-    } else {
-        set_file_times(dest, accessed_time.into(), modified_time.into())?;
+    let modified_time = src_metadata.modified();
+    let accessed_time = src_metadata.accessed();
+    if let (Ok(modified_time), Ok(accessed_time)) = (modified_time, accessed_time) {
+        set_symlink_file_times(dest, accessed_time.into(), modified_time.into()).ok();
     }
 
-    Ok(())
+    // Copy xattrs.
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    fsxattr::copy_xattrs(src, dest).ok();
 }
 
 #[cfg(test)]
@@ -1260,7 +1257,7 @@ mod tests {
         let src_md = fs::metadata(&src_path).unwrap();
 
         // Call the function under test
-        copy_metadata(&src_path, &dest_path, &src_md).unwrap();
+        copy_metadata(&src_path, &dest_path, &src_md);
 
         // Verify that the permissions were copied
         let dest_permissions = fs::metadata(&dest_path).unwrap().permissions();
@@ -1289,7 +1286,7 @@ mod tests {
             .expect("couldn't get accessed time for src file");
 
         //Try to copy metadata
-        copy_metadata(&src_path, &dest_path, &src_metadata).unwrap();
+        copy_metadata(&src_path, &dest_path, &src_metadata);
 
         // Get file times for the dest file
         let dest_metadata = fs::metadata(&dest_path).expect("couldn't get metadata for dest file");
@@ -1326,7 +1323,7 @@ mod tests {
         apply_xattrs(&src_path, test_xattrs).expect("couldn't apply xattr to the destination file");
 
         //Try to copy metadata
-        copy_metadata(&src_path, &dest_path, &src_metadata).expect("couldn't copy metadata");
+        copy_metadata(&src_path, &dest_path, &src_metadata);
 
         // Verify that the xattrs were copied
         let retrieved_xattrs = retrieve_xattrs(&dest_path).unwrap();
