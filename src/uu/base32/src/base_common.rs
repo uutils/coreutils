@@ -160,7 +160,7 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn Read>> {
     }
 }
 
-pub fn handle_input<R: Read>(input: &mut R, format: Format, config: Config) -> UResult<()> {
+pub fn handle_input(input: &mut dyn Read, format: Format, config: Config) -> UResult<()> {
     let supports_fast_decode_and_encode = get_supports_fast_decode_and_encode(format);
 
     let supports_fast_decode_and_encode_ref = supports_fast_decode_and_encode.as_ref();
@@ -377,13 +377,13 @@ pub mod fast_encode {
     }
 
     fn write_to_output(
-        line_wrapping_option: &mut Option<LineWrapping>,
+        line_wrapping: &mut Option<LineWrapping>,
         encoded_buffer: &mut VecDeque<u8>,
         output: &mut dyn Write,
         is_cleanup: bool,
     ) -> io::Result<()> {
         // Write all data in `encoded_buffer` to `output`
-        if let &mut Some(ref mut li) = line_wrapping_option {
+        if let &mut Some(ref mut li) = line_wrapping {
             write_with_line_breaks(li, encoded_buffer, output, is_cleanup)?;
         } else {
             write_without_line_breaks(encoded_buffer, output, is_cleanup)?;
@@ -393,9 +393,9 @@ pub mod fast_encode {
     }
     // End of helper functions
 
-    pub fn fast_encode<R: Read, W: Write>(
-        input: &mut R,
-        mut output: W,
+    pub fn fast_encode(
+        input: &mut dyn Read,
+        output: &mut dyn Write,
         supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
         wrap: Option<usize>,
     ) -> UResult<()> {
@@ -475,14 +475,14 @@ pub mod fast_encode {
                     assert!(leftover_buffer.len() < encode_in_chunks_of_size);
 
                     // Write all data in `encoded_buffer` to `output`
-                    write_to_output(&mut line_wrapping, &mut encoded_buffer, &mut output, false)?;
+                    write_to_output(&mut line_wrapping, &mut encoded_buffer, output, false)?;
                 }
                 Err(er) => {
                     let kind = er.kind();
 
                     if kind == ErrorKind::Interrupted {
-                        // TODO
-                        // Retry reading?
+                        // Retry reading
+                        continue;
                     }
 
                     return Err(USimpleError::new(1, format_read_error(kind)));
@@ -499,7 +499,7 @@ pub mod fast_encode {
 
             // Write all data in `encoded_buffer` to output
             // `is_cleanup` triggers special cleanup-only logic
-            write_to_output(&mut line_wrapping, &mut encoded_buffer, &mut output, true)?;
+            write_to_output(&mut line_wrapping, &mut encoded_buffer, output, true)?;
         }
 
         Ok(())
@@ -606,9 +606,9 @@ pub mod fast_decode {
     }
     // End of helper functions
 
-    pub fn fast_decode<R: Read, W: Write>(
-        input: &mut R,
-        mut output: &mut W,
+    pub fn fast_decode(
+        input: &mut dyn Read,
+        output: &mut dyn Write,
         supports_fast_decode_and_encode: &dyn SupportsFastDecodeAndEncode,
         ignore_garbage: bool,
     ) -> UResult<()> {
@@ -711,14 +711,14 @@ pub mod fast_decode {
                     assert!(leftover_buffer.len() < decode_in_chunks_of_size);
 
                     // Write all data in `decoded_buffer` to `output`
-                    write_to_output(&mut decoded_buffer, &mut output)?;
+                    write_to_output(&mut decoded_buffer, output)?;
                 }
                 Err(er) => {
                     let kind = er.kind();
 
                     if kind == ErrorKind::Interrupted {
-                        // TODO
-                        // Retry reading?
+                        // Retry reading
+                        continue;
                     }
 
                     return Err(USimpleError::new(1, format_read_error(kind)));
@@ -734,7 +734,7 @@ pub mod fast_decode {
                 .decode_into_vec(&leftover_buffer, &mut decoded_buffer)?;
 
             // Write all data in `decoded_buffer` to `output`
-            write_to_output(&mut decoded_buffer, &mut output)?;
+            write_to_output(&mut decoded_buffer, output)?;
         }
 
         Ok(())
