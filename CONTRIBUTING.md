@@ -257,8 +257,7 @@ CI. However, you can use `#[cfg(...)]` attributes to create platform dependent
 features.
 
 **Tip:** For Windows, Microsoft provides some images (VMWare, Hyper-V,
-VirtualBox and Parallels) for development:
-<https://developer.microsoft.com/windows/downloads/virtual-machines/>
+VirtualBox and Parallels) for development [here](https://developer.microsoft.com/windows/downloads/virtual-machines/).
 
 ## Improving the GNU compatibility
 
