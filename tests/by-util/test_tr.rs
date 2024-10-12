@@ -1500,3 +1500,15 @@ fn test_multibyte_octal_sequence() {
         // ")
         .stdout_is("Ł)");
 }
+
+#[test]
+fn test_backwards_range() {
+    new_ucmd!()
+        .args(&["-d", r"\046-\048"])
+        .pipe_in("")
+        .fails()
+        .stderr_only(
+            r"tr: range-endpoints of '&-\004' are in reverse collating sequence order
+",
+        );
+}
