@@ -1512,3 +1512,12 @@ fn test_backwards_range() {
 ",
         );
 }
+
+#[test]
+fn test_non_digit_repeat() {
+    new_ucmd!()
+        .args(&["a", "[b*c]"])
+        .pipe_in("")
+        .fails()
+        .stderr_only("tr: invalid repeat count 'c' in [c*n] construct\n");
+}
