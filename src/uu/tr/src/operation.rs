@@ -3,8 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl boop
+// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl
 
+use crate::unicode_table;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take},
@@ -22,8 +23,6 @@ use std::{
     ops::Not,
 };
 use uucore::error::UError;
-
-use crate::unicode_table;
 
 #[derive(Debug, Clone)]
 pub enum BadSequence {
@@ -285,9 +284,52 @@ impl Sequence {
     }
 
     fn parse_octal(input: &[u8]) -> IResult<&[u8], u8> {
+        preceded(
+            tag("\\"),
+            alt((
+                Self::parse_octal_up_to_three_digits,
+                // Fallback for if the three digit octal escape is greater than \377 (0xFF), and therefore can't be
+                // parsed as as a byte
+                // See test `test_multibyte_octal_sequence`
+                Self::parse_octal_two_digits,
+            )),
+        )(input)
+    }
+
+    fn parse_octal_up_to_three_digits(input: &[u8]) -> IResult<&[u8], u8> {
         map_opt(
-            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
-            |out: &[u8]| u8::from_str_radix(std::str::from_utf8(out).expect("boop"), 8).ok(),
+            recognize(many_m_n(1, 3, one_of("01234567"))),
+            |out: &[u8]| {
+                let str_to_parse = std::str::from_utf8(out).unwrap();
+
+                match u8::from_str_radix(str_to_parse, 8) {
+                    Ok(ue) => Some(ue),
+                    Err(_pa) => {
+                        // TODO
+                        // Cannot log here, because this closure is executed multiple times
+
+                        // let mut last_char = str_to_parse.chars();
+
+                        // let second_number = last_char.next_back().unwrap();
+
+                        // let first_number = last_char.as_str();
+
+                        // show!(USimpleError::new(
+                        //     0,
+                        //     format!("warning: the ambiguous octal escape \\{str_to_parse} is being interpreted as the 2-byte sequence \\{first_number}, {second_number}")
+                        // ));
+
+                        None
+                    }
+                }
+            },
+        )(input)
+    }
+
+    fn parse_octal_two_digits(input: &[u8]) -> IResult<&[u8], u8> {
+        map_opt(
+            recognize(many_m_n(2, 2, one_of("01234567"))),
+            |out: &[u8]| u8::from_str_radix(std::str::from_utf8(out).unwrap(), 8).ok(),
         )(input)
     }
 
