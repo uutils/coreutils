@@ -8,8 +8,8 @@
 use crate::unicode_table;
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take},
-    character::complete::{digit1, one_of},
+    bytes::complete::{tag, take, take_till},
+    character::complete::one_of,
     combinator::{map, map_opt, peek, recognize, value},
     multi::{many0, many_m_n},
     sequence::{delimited, preceded, separated_pair},
@@ -404,7 +404,14 @@ impl Sequence {
     fn parse_char_repeat(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         delimited(
             tag("["),
-            separated_pair(Self::parse_backslash_or_char, tag("*"), digit1),
+            separated_pair(
+                Self::parse_backslash_or_char,
+                tag("*"),
+                // TODO
+                // Why are the opening and closing tags not sufficient?
+                // Backslash check is a workaround for `check_against_gnu_tr_tests_repeat_bs_9`
+                take_till(|ue| matches!(ue, b']' | b'\\')),
+            ),
             tag("]"),
         )(input)
         .map(|(l, (c, cnt_str))| {
