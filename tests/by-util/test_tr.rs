@@ -1487,3 +1487,16 @@ fn test_trailing_backslash() {
         .stderr_is("tr: warning: an unescaped backslash at end of string is not portable\n")
         .stdout_is("abc");
 }
+
+#[test]
+fn test_multibyte_octal_sequence() {
+    new_ucmd!()
+        .args(&["-d", r"\501"])
+        .pipe_in("(1Ł)")
+        .succeeds()
+        // TODO
+        // Cannot log warning because of how nom is parsing the arguments
+        //         .stderr_is(r"tr: warning: the ambiguous octal escape \501 is being interpreted as the 2-byte sequence \50, 1
+        // ")
+        .stdout_is("Ł)");
+}
