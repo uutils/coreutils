@@ -36,6 +36,7 @@ pub enum BadSequence {
     ClassInSet2NotMatchedBySet1,
     Set1LongerSet2EndsInClass,
     ComplementMoreThanOneUniqueInSet2,
+    BackwardsRange { end: u32, start: u32 },
 }
 
 impl Display for BadSequence {
@@ -68,6 +69,23 @@ impl Display for BadSequence {
             }
             Self::ComplementMoreThanOneUniqueInSet2 => {
                 write!(f, "when translating with complemented character classes,\nstring2 must map all characters in the domain to one")
+            }
+            Self::BackwardsRange { end, start } => {
+                fn end_or_start_to_string(ut: &u32) -> String {
+                    match char::from_u32(*ut) {
+                        Some(ch @ '\x20'..='\x7E') => ch.escape_default().to_string(),
+                        _ => {
+                            format!("\\{ut:03o}")
+                        }
+                    }
+                }
+
+                write!(
+                    f,
+                    "range-endpoints of '{}-{}' are in reverse collating sequence order",
+                    end_or_start_to_string(start),
+                    end_or_start_to_string(end)
+                )
             }
         }
     }
@@ -366,7 +384,14 @@ impl Sequence {
         .map(|(l, (a, b))| {
             (l, {
                 let (start, end) = (u32::from(a), u32::from(b));
-                Ok(Self::CharRange(start as u8, end as u8))
+
+                let range = start..=end;
+
+                if range.is_empty() {
+                    Err(BadSequence::BackwardsRange { end, start })
+                } else {
+                    Ok(Self::CharRange(start as u8, end as u8))
+                }
             })
         })
     }
