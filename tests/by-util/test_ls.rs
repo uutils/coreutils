@@ -2197,6 +2197,464 @@ fn test_ls_recursive_1() {
         .stdout_is(out);
 }
 
+/// The quoting module regroups tests that check the behavior of ls when
+/// quoting and escaping special characters with different quoting styles.
+#[cfg(unix)]
+mod quoting {
+    use super::TestScenario;
+
+    /// Create a directory with "dirname", then for each check, assert that the
+    /// output is correct.
+    fn check_quoting_dirname(dirname: &str, checks: &[(&str, &str, &str)], extra_args: &[&str]) {
+        for (qt_style, regular_mode, dir_mode) in checks {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.mkdir(dirname);
+
+            let expected = format!(
+                "{}:\n{}\n\n{}:\n",
+                match *qt_style {
+                    "shell-always" | "shell-escape-always" => "'.'",
+                    "c" => "\".\"",
+                    _ => ".",
+                },
+                regular_mode,
+                dir_mode
+            );
+
+            scene
+                .ucmd()
+                .arg("-R")
+                .arg(format!("--quoting-style={qt_style}"))
+                .args(extra_args)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+
+    #[test]
+    fn test_ls_quoting_simple() {
+        check_quoting_dirname(
+            // Control case
+            "dirname",
+            &[
+                ("literal", "dirname", "./dirname"),
+                ("shell", "dirname", "./dirname"),
+                ("shell-always", "'dirname'", "'./dirname'"),
+                ("shell-escape", "dirname", "./dirname"),
+                ("shell-escape-always", "'dirname'", "'./dirname'"),
+                ("c", "\"dirname\"", "\"./dirname\""),
+                ("escape", "dirname", "./dirname"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_space() {
+        check_quoting_dirname(
+            // Space character
+            "dir name",
+            &[
+                ("literal", "dir name", "./dir name"),
+                ("shell", "'dir name'", "'./dir name'"),
+                ("shell-always", "'dir name'", "'./dir name'"),
+                ("shell-escape", "'dir name'", "'./dir name'"),
+                ("shell-escape-always", "'dir name'", "'./dir name'"),
+                ("c", "\"dir name\"", "\"./dir name\""),
+                ("escape", "dir\\ name", "./dir name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_dollar() {
+        check_quoting_dirname(
+            // Dollar character
+            "dir$name",
+            &[
+                ("literal", "dir$name", "./dir$name"),
+                ("shell", "'dir$name'", "'./dir$name'"),
+                ("shell-always", "'dir$name'", "'./dir$name'"),
+                ("shell-escape", "'dir$name'", "'./dir$name'"),
+                ("shell-escape-always", "'dir$name'", "'./dir$name'"),
+                ("c", "\"dir$name\"", "\"./dir$name\""),
+                ("escape", "dir$name", "./dir$name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_single_quote() {
+        check_quoting_dirname(
+            // Single quote character
+            "dir'name",
+            &[
+                ("literal", "dir'name", "./dir'name"),
+                ("shell", "\"dir'name\"", "\"./dir'name\""),
+                ("shell-always", "\"dir'name\"", "\"./dir'name\""),
+                ("shell-escape", "\"dir'name\"", "\"./dir'name\""),
+                ("shell-escape-always", "\"dir'name\"", "\"./dir'name\""),
+                ("c", "\"dir'name\"", "\"./dir'name\""),
+                ("escape", "dir'name", "./dir'name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_double_quote() {
+        check_quoting_dirname(
+            // Double quote character
+            "dir\"name",
+            &[
+                ("literal", "dir\"name", "./dir\"name"),
+                ("shell", "'dir\"name'", "'./dir\"name'"),
+                ("shell-always", "'dir\"name'", "'./dir\"name'"),
+                ("shell-escape", "'dir\"name'", "'./dir\"name'"),
+                ("shell-escape-always", "'dir\"name'", "'./dir\"name'"),
+                ("c", "\"dir\\\"name\"", "\"./dir\\\"name\""),
+                ("escape", "dir\"name", "./dir\"name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_colon() {
+        check_quoting_dirname(
+            // Colon character
+            "dir:name",
+            &[
+                ("literal", "dir:name", "./dir:name"),
+                ("shell", "dir:name", "'./dir:name'"),
+                ("shell-always", "'dir:name'", "'./dir:name'"),
+                ("shell-escape", "dir:name", "'./dir:name'"),
+                ("shell-escape-always", "'dir:name'", "'./dir:name'"),
+                ("c", "\"dir:name\"", "\"./dir\\:name\""),
+                ("escape", "dir:name", "./dir\\:name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_backslash() {
+        check_quoting_dirname(
+            // Backslash character
+            "dir\\name",
+            &[
+                ("literal", "dir\\name", "./dir\\name"),
+                ("shell", "'dir\\name'", "'./dir\\name'"),
+                ("shell-always", "'dir\\name'", "'./dir\\name'"),
+                ("shell-escape", "'dir\\name'", "'./dir\\name'"),
+                ("shell-escape-always", "'dir\\name'", "'./dir\\name'"),
+                ("c", "\"dir\\\\name\"", "\"./dir\\\\name\""),
+                ("escape", "dir\\\\name", "./dir\\\\name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_linefeed() {
+        check_quoting_dirname(
+            // Linefeed character
+            "dir\nname",
+            &[
+                ("literal", "dir\nname", "./dir\nname"),
+                ("shell", "'dir\nname'", "'./dir\nname'"),
+                ("shell-always", "'dir\nname'", "'./dir\nname'"),
+                ("shell-escape", "'dir'$'\\n''name'", "'./dir'$'\\n''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\n''name'",
+                    "'./dir'$'\\n''name'",
+                ),
+                ("c", "\"dir\\nname\"", "\"./dir\\nname\""),
+                ("escape", "dir\\nname", "./dir\\nname"),
+            ],
+            &[],
+        );
+
+        check_quoting_dirname(
+            // Linefeed character WITH hide-control-chars
+            "dir\nname",
+            &[
+                ("literal", "dir?name", "./dir?name"),
+                ("shell", "'dir?name'", "'./dir?name'"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\n''name'", "'./dir'$'\\n''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\n''name'",
+                    "'./dir'$'\\n''name'",
+                ),
+                ("c", "\"dir\\nname\"", "\"./dir\\nname\""),
+                ("escape", "dir\\nname", "./dir\\nname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_tabulation() {
+        check_quoting_dirname(
+            // Tabulation character
+            "dir\tname",
+            &[
+                ("literal", "dir\tname", "./dir\tname"),
+                ("shell", "'dir\tname'", "'./dir\tname'"),
+                ("shell-always", "'dir\tname'", "'./dir\tname'"),
+                ("shell-escape", "'dir'$'\\t''name'", "'./dir'$'\\t''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\t''name'",
+                    "'./dir'$'\\t''name'",
+                ),
+                ("c", "\"dir\\tname\"", "\"./dir\\tname\""),
+                ("escape", "dir\\tname", "./dir\\tname"),
+            ],
+            &[],
+        );
+
+        check_quoting_dirname(
+            // Tabulation character
+            "dir\tname",
+            &[
+                ("literal", "dir?name", "./dir?name"),
+                ("shell", "'dir?name'", "'./dir?name'"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\t''name'", "'./dir'$'\\t''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\t''name'",
+                    "'./dir'$'\\t''name'",
+                ),
+                ("c", "\"dir\\tname\"", "\"./dir\\tname\""),
+                ("escape", "dir\\tname", "./dir\\tname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_carriage_return() {
+        check_quoting_dirname(
+            // Carriage return character
+            "dir\rname",
+            &[
+                ("literal", "dir?name", "./dir?name"),
+                ("shell", "'dir?name'", "'./dir?name'"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\r''name'", "'./dir'$'\\r''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\r''name'",
+                    "'./dir'$'\\r''name'",
+                ),
+                ("c", "\"dir\\rname\"", "\"./dir\\rname\""),
+                ("escape", "dir\\rname", "./dir\\rname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_bell() {
+        check_quoting_dirname(
+            // Bell character
+            "dir\x07name",
+            &[
+                ("shell", "dir?name", "./dir?name"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\a''name'", "'./dir'$'\\a''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\a''name'",
+                    "'./dir'$'\\a''name'",
+                ),
+                ("c", "\"dir\\aname\"", "\"./dir\\aname\""),
+                ("escape", "dir\\aname", "./dir\\aname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_backspace() {
+        check_quoting_dirname(
+            // Backspace character
+            "dir\x08name",
+            &[
+                ("shell", "dir?name", "./dir?name"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\b''name'", "'./dir'$'\\b''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\b''name'",
+                    "'./dir'$'\\b''name'",
+                ),
+                ("c", "\"dir\\bname\"", "\"./dir\\bname\""),
+                ("escape", "dir\\bname", "./dir\\bname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_vertical_tab() {
+        check_quoting_dirname(
+            // Vertical tab character
+            "dir\x0bname",
+            &[
+                ("shell", "dir?name", "./dir?name"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\v''name'", "'./dir'$'\\v''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\v''name'",
+                    "'./dir'$'\\v''name'",
+                ),
+                ("c", "\"dir\\vname\"", "\"./dir\\vname\""),
+                ("escape", "dir\\vname", "./dir\\vname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_formfeed() {
+        check_quoting_dirname(
+            // Form feed character
+            "dir\x0cname",
+            &[
+                ("shell", "dir?name", "./dir?name"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\f''name'", "'./dir'$'\\f''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\f''name'",
+                    "'./dir'$'\\f''name'",
+                ),
+                ("c", "\"dir\\fname\"", "\"./dir\\fname\""),
+                ("escape", "dir\\fname", "./dir\\fname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_open_bracket() {
+        check_quoting_dirname(
+            "[-open_bracket",
+            &[
+                ("shell", "'[-open_bracket'", "'./[-open_bracket'"),
+                ("shell-always", "'[-open_bracket'", "'./[-open_bracket'"),
+                ("shell-escape", "'[-open_bracket'", "'./[-open_bracket'"),
+                (
+                    "shell-escape-always",
+                    "'[-open_bracket'",
+                    "'./[-open_bracket'",
+                ),
+                ("c", "\"[-open_bracket\"", "\"./[-open_bracket\""),
+                ("escape", "[-open_bracket", "./[-open_bracket"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_close_bracket() {
+        check_quoting_dirname(
+            "]-close_bracket",
+            &[
+                ("shell", "]-close_bracket", "./]-close_bracket"),
+                ("shell-always", "']-close_bracket'", "'./]-close_bracket'"),
+                ("shell-escape", "]-close_bracket", "./]-close_bracket"),
+                (
+                    "shell-escape-always",
+                    "']-close_bracket'",
+                    "'./]-close_bracket'",
+                ),
+                ("c", "\"]-close_bracket\"", "\"./]-close_bracket\""),
+                ("escape", "]-close_bracket", "./]-close_bracket"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_open_brace() {
+        check_quoting_dirname(
+            "{-open_brace",
+            &[
+                ("shell", "{-open_brace", "./{-open_brace"),
+                ("shell-always", "'{-open_brace'", "'./{-open_brace'"),
+                ("shell-escape", "{-open_brace", "./{-open_brace"),
+                ("shell-escape-always", "'{-open_brace'", "'./{-open_brace'"),
+                ("c", "\"{-open_brace\"", "\"./{-open_brace\""),
+                ("escape", "{-open_brace", "./{-open_brace"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_close_brace() {
+        check_quoting_dirname(
+            "}-close_brace",
+            &[
+                ("shell", "}-close_brace", "./}-close_brace"),
+                ("shell-always", "'}-close_brace'", "'./}-close_brace'"),
+                ("shell-escape", "}-close_brace", "./}-close_brace"),
+                (
+                    "shell-escape-always",
+                    "'}-close_brace'",
+                    "'./}-close_brace'",
+                ),
+                ("c", "\"}-close_brace\"", "\"./}-close_brace\""),
+                ("escape", "}-close_brace", "./}-close_brace"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_caret() {
+        check_quoting_dirname(
+            "^-caret",
+            &[
+                ("shell", "'^-caret'", "'./^-caret'"),
+                ("shell-always", "'^-caret'", "'./^-caret'"),
+                ("shell-escape", "'^-caret'", "'./^-caret'"),
+                ("shell-escape-always", "'^-caret'", "'./^-caret'"),
+                ("c", "\"^-caret\"", "\"./^-caret\""),
+                ("escape", "^-caret", "./^-caret"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_equal() {
+        check_quoting_dirname(
+            "=-equal",
+            &[
+                ("shell", "'=-equal'", "'./=-equal'"),
+                ("shell-always", "'=-equal'", "'./=-equal'"),
+                ("shell-escape", "'=-equal'", "'./=-equal'"),
+                ("shell-escape-always", "'=-equal'", "'./=-equal'"),
+                ("c", "\"=-equal\"", "\"./=-equal\""),
+                ("escape", "=-equal", "./=-equal"),
+            ],
+            &[],
+        );
+    }
+}
+
 #[test]
 fn test_ls_color() {
     let scene = TestScenario::new(util_name!());
@@ -2738,7 +3196,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=shell-escape-always", "'one'$'\\n''two'"),
             ("--quoting-style=shell-escape-alway", "'one'$'\\n''two'"),
             ("--quoting-style=shell-escape-a", "'one'$'\\n''two'"),
-            ("--quoting-style=shell", "one?two"),
+            ("--quoting-style=shell", "'one?two'"),
             ("--quoting-style=shell-always", "'one?two'"),
             ("--quoting-style=shell-a", "'one?two'"),
         ] {
@@ -2756,7 +3214,7 @@ fn test_ls_quoting_style() {
             ("-N", "one\ntwo"),
             ("--literal", "one\ntwo"),
             ("--l", "one\ntwo"),
-            ("--quoting-style=shell", "one\ntwo"), // FIXME: GNU ls quotes this case
+            ("--quoting-style=shell", "'one\ntwo'"),
             ("--quoting-style=shell-always", "'one\ntwo'"),
         ] {
             scene
@@ -2981,8 +3439,8 @@ fn test_ls_align_unquoted() {
         .terminal_simulation(true)
         .succeeds()
         .stdout_only("\"'quoted'\"   CAPS  'elf two'   foobar\r\n");
-    //                              ^      ^          ^
-    //                              space  no-space   space
+    //                                  ^      ^          ^
+    //                                  space  no-space   space
 
     // The same should happen with format columns/across
     // and shell quoting style, except for the `\r` at the end.
@@ -2994,8 +3452,8 @@ fn test_ls_align_unquoted() {
             .arg("--quoting-style=shell")
             .succeeds()
             .stdout_only("\"'quoted'\"   CAPS  'elf two'   foobar\n");
-        //                              ^      ^          ^
-        //                              space  no-space   space
+        //                                  ^      ^          ^
+        //                                  space  no-space   space
     }
 }
 

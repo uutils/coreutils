@@ -55,7 +55,7 @@ use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
-use uucore::quoting_style::{escape_name, QuotingStyle};
+use uucore::quoting_style::{escape_dir_name, escape_name, QuotingStyle};
 use uucore::{
     display::Quotable,
     error::{set_exit_code, UError, UResult},
@@ -2036,14 +2036,27 @@ impl PathData {
     }
 }
 
+/// Show the directory name in the case where several arguments are given to ls
+/// or the recursive flag is passed.
+///
+/// ```no-exec
+/// $ ls -R
+/// .:                  <- This is printed by this function
+/// dir1 file1 file2
+///
+/// dir1:               <- This as well
+/// file11
+/// ```
 fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
-    if config.hyperlink && !config.dired {
-        let name = escape_name(path_data.p_buf.as_os_str(), &config.quoting_style);
-        let hyperlink = create_hyperlink(&name, path_data);
-        write!(out, "{hyperlink}:").unwrap();
+    let escaped_name = escape_dir_name(path_data.p_buf.as_os_str(), &config.quoting_style);
+
+    let name = if config.hyperlink && !config.dired {
+        create_hyperlink(&escaped_name, path_data)
     } else {
-        write!(out, "{}:", path_data.p_buf.display()).unwrap();
-    }
+        escaped_name
+    };
+
+    write!(out, "{name}:").unwrap();
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2327,9 +2340,10 @@ fn enter_directory(
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| p.ft.get().is_some())
-            .filter(|p| p.ft.get().unwrap().is_some())
-            .filter(|p| p.ft.get().unwrap().unwrap().is_dir())
+            .filter(|p| {
+                p.ft.get()
+                    .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
+            })
         {
             match fs::read_dir(&e.p_buf) {
                 Err(err) => {
