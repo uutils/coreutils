@@ -1277,3 +1277,70 @@ fn test_non_utf8_filename() {
         .stdout_is_bytes(b"SHA256 (funky\xffname) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n")
         .no_stderr();
 }
+
+#[test]
+fn test_check_comment_line() {
+    // A comment in a checksum file shall be discarded unnoticed.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write(
+        "CHECKSUM-sha1",
+        "\
+        # This is a comment\n\
+        SHA1 (foo) = 058ab38dd3603703b3a7063cf95dc51a4286b6fe\n\
+        # next comment is empty\n#",
+    );
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM-sha1")
+        .succeeds()
+        .stdout_contains("foo: OK")
+        .no_stderr();
+}
+
+#[test]
+fn test_check_comment_only() {
+    // A file only filled with comments is equivalent to an empty file,
+    // and therefore produces an error.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("CHECKSUM", "# This is a comment\n");
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .fails()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_check_comment_leading_space() {
+    // A comment must have its '#' in first position on the line.
+    // A space before it will raise a warning for improperly formatted line.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write(
+        "CHECKSUM-sha1",
+        " # This is a comment\n\
+        SHA1 (foo) = 058ab38dd3603703b3a7063cf95dc51a4286b6fe\n",
+    );
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM-sha1")
+        .succeeds()
+        .stdout_contains("foo: OK")
+        .stderr_contains("WARNING: 1 line is improperly formatted");
+}
