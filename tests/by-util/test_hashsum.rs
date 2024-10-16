@@ -939,3 +939,71 @@ fn test_check_b2sum_strict_check() {
         .succeeds()
         .stdout_only(&output);
 }
+
+#[test]
+fn test_check_md5_comment_line() {
+    // A comment in a checksum file shall be discarded unnoticed.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write(
+        "MD5SUM",
+        "\
+        # This is a comment\n\
+        8411029f3f5b781026a93db636aca721  foo\n\
+        # next comment is empty\n#",
+    );
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("MD5SUM")
+        .succeeds()
+        .stdout_contains("foo: OK")
+        .no_stderr();
+}
+
+#[test]
+fn test_check_md5_comment_only() {
+    // A file only filled with comments is equivalent to an empty file,
+    // and therefore produces an error.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write("MD5SUM", "# This is a comment\n");
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("MD5SUM")
+        .fails()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_check_md5_comment_leading_space() {
+    // A file only filled with comments is equivalent to an empty file,
+    // and therefore produces an error.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write(
+        "MD5SUM",
+        " # This is a comment\n\
+        8411029f3f5b781026a93db636aca721  foo\n",
+    );
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("MD5SUM")
+        .succeeds()
+        .stdout_contains("foo: OK")
+        .stderr_contains("WARNING: 1 line is improperly formatted");
+}
