@@ -5776,6 +5776,59 @@ fn test_cp_parents_absolute_path() {
     at.file_exists(res);
 }
 
+#[test]
+fn test_copy_symlink_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+
+    at.write("t", "hello");
+    at.relative_symlink_file("../t", "a/1");
+    at.relative_symlink_file("../t", "b/1");
+
+    ucmd.arg("--no-dereference")
+        .arg("a/1")
+        .arg("b/1")
+        .arg("c")
+        .fails()
+        .stderr_only(if cfg!(not(target_os = "windows")) {
+            "cp: will not overwrite just-created 'c/1' with 'b/1'\n"
+        } else {
+            "cp: will not overwrite just-created 'c\\1' with 'b/1'\n"
+        });
+}
+
+#[test]
+fn test_symlink_mode_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+
+    at.write("a/t", "hello");
+    at.write("b/t", "hello");
+
+    if cfg!(not(target_os = "windows")) {
+        ucmd.arg("-s")
+            .arg("a/t")
+            .arg("b/t")
+            .arg(".")
+            .fails()
+            .stderr_only("cp: will not overwrite just-created './t' with 'b/t'\n");
+
+        assert_eq!(at.read("./t"), "hello");
+    } else {
+        ucmd.arg("-s")
+            .arg("a\\t")
+            .arg("b\\t")
+            .arg(".")
+            .fails()
+            .stderr_only("cp: will not overwrite just-created '.\\t' with 'b\\t'\n");
+
+        assert_eq!(at.read(".\\t"), "hello");
+    }
+}
+
 // make sure that cp backup dest symlink before removing it.
 #[test]
 fn test_cp_with_options_backup_and_rem_when_dest_is_symlink() {
