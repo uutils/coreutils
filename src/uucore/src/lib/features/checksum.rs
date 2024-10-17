@@ -575,8 +575,8 @@ where
                     res.failed_cksum += 1;
                 }
             } else {
-                if line.is_empty() {
-                    // Don't show any warning for empty lines
+                if line.is_empty() || line.starts_with("#") {
+                    // Don't show any warning for empty or commented lines.
                     continue;
                 }
                 if warn {
