@@ -21,9 +21,6 @@ clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["process"] }
 
-[target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = { workspace = true }
-
 [[bin]]
 name = "test"
 path = "src/main.rs"
