@@ -1314,9 +1314,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.159"
+version = "0.2.160"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "561d97a539a36e26a9a5fad1ea11a3039a67714694aaa379433e580854bc3dc5"
+checksum = "f0b21006cd1874ae9e650973c565615676dc4a274c965bb0a73796dac838ce4f"
 
 [[package]]
 name = "libloading"
