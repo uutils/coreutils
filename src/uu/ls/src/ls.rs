@@ -35,7 +35,7 @@ use std::{
     time::Duration,
 };
 use term_grid::{Direction, Filling, Grid, GridOptions};
-use uucore::error::USimpleError;
+use uucore::error::{strip_errno, USimpleError};
 use uucore::format::human::{human_readable, SizeFormat};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
@@ -271,9 +271,9 @@ impl Display for LsError {
                         _ => {
                             write!(
                                 f,
-                                "unknown io error: '{:?}', '{:?}'",
+                                "cannot access '{}': {}",
                                 p.to_string_lossy(),
-                                e
+                                strip_errno(e),
                             )
                         }
                     },
