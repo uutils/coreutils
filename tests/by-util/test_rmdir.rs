@@ -30,6 +30,14 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_no_arg() {
+    new_ucmd!()
+        .fails()
+        .code_is(1)
+        .stderr_contains("error: the following required arguments were not provided:");
+}
+
+#[test]
 fn test_rmdir_empty_directory_no_parents() {
     let (at, mut ucmd) = at_and_ucmd!();
 
