@@ -991,6 +991,19 @@ mod tests {
         // Test invalid checksum line
         let lines_invalid = vec!["invalid checksum line".to_string()];
         assert!(determine_regex(&lines_invalid).is_none());
+
+        // Test leading space before checksum line
+        let lines_algo_based_leading_space =
+            vec!["   MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e".to_string()];
+        let res = determine_regex(&lines_algo_based_leading_space);
+        assert!(res.is_some());
+        assert_eq!(res.unwrap().0.as_str(), ALGO_BASED_REGEX);
+
+        // Test trailing space after checksum line (should fail)
+        let lines_algo_based_leading_space =
+            vec!["MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e ".to_string()];
+        let res = determine_regex(&lines_algo_based_leading_space);
+        assert!(res.is_none());
     }
 
     #[test]

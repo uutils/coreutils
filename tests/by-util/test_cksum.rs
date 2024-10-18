@@ -1402,3 +1402,26 @@ fn test_zero_single_file() {
         .succeeds()
         .stdout_is_fixture("zero_single_file.expected");
 }
+
+#[test]
+fn test_check_trailing_space_fails() {
+    // If a checksum line has trailing spaces after the digest,
+    // it shall be considered improperly formatted.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write(
+        "CHECKSUM",
+        "SHA1 (foo) = 058ab38dd3603703b3a7063cf95dc51a4286b6fe    \n",
+    );
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .fails()
+        .no_stdout()
+        .stderr_contains("CHECKSUM: no properly formatted checksum lines found");
+}
