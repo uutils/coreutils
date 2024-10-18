@@ -136,12 +136,29 @@ pub fn uu_app() -> Command {
  * Create the list of new directories
  */
 fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+    let mut dirs_is_empty = true;
+
     for dir in dirs {
+        dirs_is_empty = false;
+
         let path_buf = PathBuf::from(dir);
         let path = path_buf.as_path();
 
         show_if_err!(mkdir(path, recursive, mode, verbose));
     }
+
+    if dirs_is_empty {
+        return Err(USimpleError::new(
+            1,
+            format!(
+                "\
+missing operand
+Try '{} --help' for more information.",
+                uucore::execution_phrase()
+            ),
+        ));
+    }
+
     Ok(())
 }
 
@@ -159,6 +176,13 @@ fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) ->
 /// To match the GNU behavior, a path with the last directory being a single dot
 /// (like `some/path/to/.`) is created (with the dot stripped).
 pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+    if path.as_os_str().is_empty() {
+        return Err(USimpleError::new(
+            1,
+            "cannot create directory ‘’: No such file or directory".to_owned(),
+        ));
+    }
+
     // Special case to match GNU's behavior:
     // mkdir -p foo/. should work and just create foo/
     // std::fs::create_dir("foo/."); fails in pure Rust
