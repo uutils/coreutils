@@ -1367,3 +1367,56 @@ fn test_check_trailing_space_fails() {
         .no_stdout()
         .stderr_contains("CHECKSUM: no properly formatted checksum lines found");
 }
+
+/// Regroup tests related to the handling of non-utf-8 conrent
+/// in checksum files
+mod check_utf8 {
+    use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_check_non_utf8_comment() {
+        let hashes =
+        b"MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\n\
+        # Comment with a non utf8 char: >>\xff<<\n\
+        SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\n\
+        BLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n"
+    ;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.touch("empty");
+        at.write_bytes("check", hashes);
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg(at.subdir.join("check"))
+            .succeeds()
+            .stdout_is("empty: OK\nempty: OK\nempty: OK\n")
+            .no_stderr();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_check_non_utf8_filename() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let filename: OsString = OsStringExt::from_vec(b"funky\xffname".to_vec());
+
+        at.touch(&filename);
+        at.write_bytes("check", b"SHA256 (funky\xffname) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n");
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg(at.subdir.join("check"))
+            .succeeds()
+            .stdout_is_bytes(b"funky\xffname: OK\n")
+            .no_stderr();
+    }
+}
