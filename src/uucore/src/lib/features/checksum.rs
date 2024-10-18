@@ -307,9 +307,8 @@ fn determine_regex(lines: &[String]) -> Option<(Regex, bool)> {
     ];
 
     for line in lines {
-        let line_trim = line.trim();
         for (regex, is_algo_based) in &regexes {
-            if regex.is_match(line_trim) {
+            if regex.is_match(line) {
                 return Some((regex.clone(), *is_algo_based));
             }
         }
