@@ -2,15 +2,16 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore anotherfile invalidchecksum regexes JWZG FFFD
+// spell-checker:ignore anotherfile invalidchecksum regexes JWZG FFFD xffname prefixfilename
 
 use data_encoding::BASE64;
 use os_display::Quotable;
 use regex::bytes::{Captures, Regex};
 use std::{
     ffi::{OsStr, OsString},
+    fmt::Display,
     fs::File,
-    io::{self, stdin, BufReader, Read},
+    io::{self, stdin, BufReader, Read, Write},
     path::Path,
     str,
 };
@@ -24,7 +25,6 @@ use crate::{
     },
     util_name,
 };
-use std::fmt::Write;
 use thiserror::Error;
 
 pub const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
@@ -174,6 +174,36 @@ fn cksum_output(res: &ChecksumResult, status: bool) {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum FileChecksumResult {
+    Ok,
+    Failed,
+    CantOpen,
+}
+
+impl Display for FileChecksumResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileChecksumResult::Ok => write!(f, "OK"),
+            FileChecksumResult::Failed => write!(f, "FAILED"),
+            FileChecksumResult::CantOpen => write!(f, "FAILED open or read"),
+        }
+    }
+}
+
+/// Print to the given buffer the checksum validation status of a file which
+/// name might contain non-utf-8 characters.
+fn print_file_report<W: Write>(
+    mut w: W,
+    filename: &[u8],
+    result: FileChecksumResult,
+    prefix: &str,
+) {
+    let _ = write!(w, "{prefix}");
+    let _ = w.write_all(filename);
+    let _ = writeln!(w, ": {result}");
+}
+
 pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> {
     match algo {
         ALGORITHM_OPTIONS_SYSV => Ok(HashAlgorithm {
@@ -306,7 +336,7 @@ fn determine_regex(lines: &[OsString]) -> Option<(Regex, bool)> {
     ];
 
     for line in lines {
-        let line_bytes = os_str_as_bytes(&line).expect("UTF-8 decoding failed");
+        let line_bytes = os_str_as_bytes(line).expect("UTF-8 decoding failed");
         for (regex, is_algo_based) in &regexes {
             if regex.is_match(line_bytes) {
                 return Some((regex.clone(), *is_algo_based));
@@ -319,6 +349,7 @@ fn determine_regex(lines: &[OsString]) -> Option<(Regex, bool)> {
 
 // Converts bytes to a hexadecimal string
 fn bytes_to_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
     bytes
         .iter()
         .fold(String::with_capacity(bytes.len() * 2), |mut hex, byte| {
@@ -327,7 +358,11 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
         })
 }
 
-fn get_expected_checksum(filename: &str, caps: &Captures, chosen_regex: &Regex) -> UResult<String> {
+fn get_expected_checksum(
+    filename: &[u8],
+    caps: &Captures,
+    chosen_regex: &Regex,
+) -> UResult<String> {
     if chosen_regex.as_str() == ALGO_BASED_REGEX_BASE64 {
         // Unwrap is safe, ensured by regex
         let ck = caps.name("checksum").unwrap().as_bytes();
@@ -340,7 +375,7 @@ fn get_expected_checksum(filename: &str, caps: &Captures, chosen_regex: &Regex) 
             }
             Err(_) => Err(Box::new(
                 ChecksumError::NoProperlyFormattedChecksumLinesFound {
-                    filename: (&filename).to_string(),
+                    filename: String::from_utf8_lossy(filename).to_string(),
                 },
             )),
         }
@@ -358,12 +393,18 @@ fn get_file_to_check(
     ignore_missing: bool,
     res: &mut ChecksumResult,
 ) -> Option<Box<dyn Read>> {
-    let filename_lossy = String::from_utf8_lossy(os_str_as_bytes(filename).expect("UTF-8 error"));
+    let filename_bytes = os_str_as_bytes(filename).expect("UTF-8 error");
+    let filename_lossy = String::from_utf8_lossy(filename_bytes);
     if filename == "-" {
         Some(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
         let mut failed_open = || {
-            println!("{filename_lossy}: FAILED open or read");
+            print_file_report(
+                std::io::stdout(),
+                filename_bytes,
+                FileChecksumResult::CantOpen,
+                "",
+            );
             res.failed_open_file += 1;
         };
         match File::open(filename) {
@@ -528,10 +569,8 @@ where
                     filename_to_check = &filename_to_check[1..];
                 }
 
-                let filename_lossy =
-                    String::from_utf8_lossy(filename_to_check).replace("\u{FFFD}", "");
                 let expected_checksum =
-                    get_expected_checksum(&filename_lossy, &caps, &chosen_regex)?;
+                    get_expected_checksum(filename_to_check, &caps, &chosen_regex)?;
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
                 let (algo_name, length) = if is_algo_based_format {
@@ -585,12 +624,22 @@ where
                 // Do the checksum validation
                 if expected_checksum == calculated_checksum {
                     if !quiet && !status {
-                        println!("{prefix}{filename_lossy}: OK");
+                        print_file_report(
+                            std::io::stdout(),
+                            filename_to_check,
+                            FileChecksumResult::Ok,
+                            prefix,
+                        );
                     }
                     correct_format += 1;
                 } else {
                     if !status {
-                        println!("{prefix}{filename_lossy}: FAILED");
+                        print_file_report(
+                            std::io::stdout(),
+                            filename_to_check,
+                            FileChecksumResult::Failed,
+                            prefix,
+                        );
                     }
                     res.failed_cksum += 1;
                 }
@@ -1068,7 +1117,7 @@ mod tests {
             .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=")
             .unwrap();
 
-        let result = get_expected_checksum("filename", &caps, &re);
+        let result = get_expected_checksum(b"filename", &caps, &re);
 
         assert_eq!(
             result.unwrap(),
@@ -1083,8 +1132,45 @@ mod tests {
             .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU")
             .unwrap();
 
-        let result = get_expected_checksum("filename", &caps, &re);
+        let result = get_expected_checksum(b"filename", &caps, &re);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_print_file_report() {
+        let cases: &[(&[u8], FileChecksumResult, &str, &[u8])] = &[
+            (b"filename", FileChecksumResult::Ok, "", b"filename: OK\n"),
+            (
+                b"filename",
+                FileChecksumResult::Failed,
+                "",
+                b"filename: FAILED\n",
+            ),
+            (
+                b"filename",
+                FileChecksumResult::CantOpen,
+                "",
+                b"filename: FAILED open or read\n",
+            ),
+            (
+                b"filename",
+                FileChecksumResult::Ok,
+                "prefix",
+                b"prefixfilename: OK\n",
+            ),
+            (
+                b"funky\xffname",
+                FileChecksumResult::Ok,
+                "",
+                b"funky\xffname: OK\n",
+            ),
+        ];
+
+        for (filename, result, prefix, expected) in cases {
+            let mut buffer: Vec<u8> = vec![];
+            print_file_report(&mut buffer, filename, *result, prefix);
+            assert_eq!(&buffer, expected)
+        }
     }
 }
