@@ -340,5 +340,5 @@ fn test_empty_argument() {
     new_ucmd!()
         .arg("")
         .fails()
-        .stderr_only("mkdir: cannot create directory ‘’: No such file or directory\n");
+        .stderr_only("mkdir: cannot create directory '': No such file or directory\n");
 }
