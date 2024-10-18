@@ -16,6 +16,14 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_no_arg() {
+    new_ucmd!()
+        .fails()
+        .code_is(1)
+        .stderr_contains("error: the following required arguments were not provided:");
+}
+
+#[test]
 fn test_mkdir_mkdir() {
     new_ucmd!().arg("test_dir").succeeds();
 }

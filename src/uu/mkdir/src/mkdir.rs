@@ -127,6 +127,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::DIRS)
                 .action(ArgAction::Append)
                 .num_args(1..)
+                .required(true)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath),
         )
