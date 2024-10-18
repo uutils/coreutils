@@ -179,7 +179,7 @@ pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<
     if path.as_os_str().is_empty() {
         return Err(USimpleError::new(
             1,
-            "cannot create directory ‘’: No such file or directory".to_owned(),
+            "cannot create directory '': No such file or directory".to_owned(),
         ));
     }
 
