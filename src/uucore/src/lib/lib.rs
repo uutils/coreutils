@@ -102,8 +102,11 @@ pub use crate::features::fsxattr;
 
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::iter;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
@@ -223,8 +226,10 @@ pub fn read_yes() -> bool {
 }
 
 /// Helper function for processing delimiter values (which could be non UTF-8)
-/// It converts OsString to &[u8] for unix targets only
+/// It converts OsStr to &[u8] for unix targets only
 /// On non-unix (i.e. Windows) it will just return an error if delimiter value is not UTF-8
+///
+/// Shall be replaced with `OsStr::as_encoded_bytes` once MSRV reaches 1.74.
 pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
     #[cfg(unix)]
     let bytes = os_string.as_bytes();
@@ -238,6 +243,67 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
         .as_bytes();
 
     Ok(bytes)
+}
+
+/// Helper function for making an OsString from a byte field
+/// It converts Vec<u8> to OsString for unix targets only.
+/// On non-unix (i.e. Windows) it may fail if the bytes are not valid UTF-8
+pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
+    #[cfg(unix)]
+    let s = OsString::from_vec(vec);
+    #[cfg(not(unix))]
+    let s = OsString::from(String::from_utf8(vec).map_err(|_| {
+        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+    })?);
+
+    Ok(s)
+}
+
+/// Equivalent to `std::BufRead::lines` which doesn't panic
+/// upon non UTF-8 characters.
+pub fn read_os_string_lines<R: std::io::Read>(
+    mut buf_reader: BufReader<R>,
+) -> impl Iterator<Item = OsString> {
+    iter::from_fn(move || {
+        let mut buf = Vec::with_capacity(256);
+        let size = buf_reader.read_until(b'\n', &mut buf).ok()?;
+
+        if size == 0 {
+            return None;
+        }
+
+        // Trim (\r)\n
+        if buf.ends_with(b"\n") {
+            buf.pop();
+            if buf.ends_with(b"\r") {
+                buf.pop();
+            }
+        }
+
+        let s = os_string_from_vec(buf).expect("UTF-8 error");
+
+        Some(s)
+    })
+}
+
+/// Helper function for triming ascii white spaces from the beginning and the end of a slice.
+///
+/// Shall be replaced with `[u8]::trim_ascii` once MSRV reaches 1.80.
+pub fn bytes_trim_ascii(mut bytes: &[u8]) -> &[u8] {
+    while let Some(first) = bytes.first() {
+        if !first.is_ascii_whitespace() {
+            break;
+        }
+        bytes = &bytes[1..];
+    }
+    while let Some(last) = bytes.last() {
+        if !last.is_ascii_whitespace() {
+            break;
+        }
+        bytes = &bytes[..bytes.len() - 1];
+    }
+
+    bytes
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`
