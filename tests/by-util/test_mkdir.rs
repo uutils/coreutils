@@ -331,7 +331,7 @@ fn test_umask_compliance() {
 #[test]
 fn test_no_arguments() {
     new_ucmd!().fails().no_stdout().stderr_str_check(|st| {
-        st.starts_with("mkdir: missing operand\n") && st.ends_with("for more information\n")
+        st.starts_with("mkdir: missing operand\n") && st.ends_with("for more information.\n")
     });
 }
 
