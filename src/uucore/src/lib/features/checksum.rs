@@ -2,21 +2,24 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore anotherfile invalidchecksum regexes JWZG
+// spell-checker:ignore anotherfile invalidchecksum regexes JWZG FFFD
 
 use data_encoding::BASE64;
 use os_display::Quotable;
-use regex::Regex;
+use regex::bytes::{Captures, Regex};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::{
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     fs::File,
-    io::{self, BufReader, Read},
+    io::{self, stdin, BufReader, Read},
     path::Path,
+    str,
 };
 
 use crate::{
     error::{set_exit_code, FromIo, UError, UResult, USimpleError},
-    show, show_error, show_warning_caps,
+    os_str_as_bytes, read_os_string_lines, show, show_error, show_warning_caps,
     sum::{
         Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224,
         Sha3_256, Sha3_384, Sha3_512, Sha512, Shake128, Shake256, Sm3, BSD, CRC, SYSV,
@@ -24,8 +27,6 @@ use crate::{
     util_name,
 };
 use std::fmt::Write;
-use std::io::stdin;
-use std::io::BufRead;
 use thiserror::Error;
 
 pub const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
@@ -281,13 +282,13 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
 //    algo must be uppercase or b (for blake2b)
 // 2. <checksum> [* ]<filename>
 // 3. <checksum> [*]<filename> (only one space)
-const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>.*)\)\s*=\s*(?P<checksum>[a-fA-F0-9]+)$";
-const ALGO_BASED_REGEX_BASE64: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>.*)\)\s*=\s*(?P<checksum>[A-Za-z0-9+/]+={0,2})$";
+const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>(?-u:.*))\)\s*=\s*(?P<checksum>[a-fA-F0-9]+)$";
+const ALGO_BASED_REGEX_BASE64: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>(?-u:.*))\)\s*=\s*(?P<checksum>[A-Za-z0-9+/]+={0,2})$";
 
-const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>.*)$";
+const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>(?-u:.*))$";
 
 // In this case, we ignore the *
-const SINGLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s(?P<filename>\*?.*)$";
+const SINGLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s(?P<filename>\*?(?-u:.*))$";
 
 fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
     if input_is_stdin {
@@ -300,7 +301,7 @@ fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
 }
 
 /// Determines the appropriate regular expression to use based on the provided lines.
-fn determine_regex(lines: &[String]) -> Option<(Regex, bool)> {
+fn determine_regex(lines: &[OsString]) -> Option<(Regex, bool)> {
     let regexes = [
         (Regex::new(ALGO_BASED_REGEX).unwrap(), true),
         (Regex::new(DOUBLE_SPACE_REGEX).unwrap(), false),
@@ -309,7 +310,21 @@ fn determine_regex(lines: &[String]) -> Option<(Regex, bool)> {
     ];
 
     for line in lines {
-        let line_trim = line.trim();
+        let mut line_trim = os_str_as_bytes(line).expect("UTF-8 decoding failed");
+        // FIXME: Replace this with `.trim_ascii()` when MSRV is 1.80
+        while let Some(first) = line_trim.first() {
+            if !first.is_ascii_whitespace() {
+                break;
+            }
+            line_trim = &line_trim[1..];
+        }
+        while let Some(last) = line_trim.last() {
+            if !last.is_ascii_whitespace() {
+                break;
+            }
+            line_trim = &line_trim[..line_trim.len() - 1];
+        }
+
         for (regex, is_algo_based) in &regexes {
             if regex.is_match(line_trim) {
                 return Some((regex.clone(), *is_algo_based));
@@ -330,14 +345,10 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
         })
 }
 
-fn get_expected_checksum(
-    filename: &str,
-    caps: &regex::Captures,
-    chosen_regex: &Regex,
-) -> UResult<String> {
+fn get_expected_checksum(filename: &str, caps: &Captures, chosen_regex: &Regex) -> UResult<String> {
     if chosen_regex.as_str() == ALGO_BASED_REGEX_BASE64 {
-        let ck = caps.name("checksum").unwrap().as_str();
-        match BASE64.decode(ck.as_bytes()) {
+        let ck = caps.name("checksum").unwrap().as_bytes();
+        match BASE64.decode(ck) {
             Ok(decoded_bytes) => {
                 match std::str::from_utf8(&decoded_bytes) {
                     Ok(decoded_str) => Ok(decoded_str.to_string()),
@@ -351,23 +362,29 @@ fn get_expected_checksum(
             )),
         }
     } else {
-        Ok(caps.name("checksum").unwrap().as_str().to_string())
+        Ok(str::from_utf8(caps.name("checksum").unwrap().as_bytes())
+            .unwrap()
+            .to_string())
     }
 }
 
 /// Returns a reader that reads from the specified file, or from stdin if `filename_to_check` is "-".
 fn get_file_to_check(
-    filename: &str,
+    filename: &OsStr,
     ignore_missing: bool,
     res: &mut ChecksumResult,
 ) -> Option<Box<dyn Read>> {
+    let filename_lossy = String::from_utf8_lossy(os_str_as_bytes(filename).expect("UTF-8 error"));
     if filename == "-" {
         Some(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
         match File::open(filename) {
             Ok(f) => {
                 if f.metadata().ok()?.is_dir() {
-                    show!(USimpleError::new(1, format!("{filename}: Is a directory")));
+                    show!(USimpleError::new(
+                        1,
+                        format!("{filename_lossy}: Is a directory")
+                    ));
                     None
                 } else {
                     Some(Box::new(f))
@@ -376,8 +393,8 @@ fn get_file_to_check(
             Err(err) => {
                 if !ignore_missing {
                     // yes, we have both stderr and stdout here
-                    show!(err.map_err_context(|| filename.to_string()));
-                    println!("{filename}: FAILED open or read");
+                    show!(err.map_err_context(|| filename_lossy.to_string()));
+                    println!("{filename_lossy}: FAILED open or read");
                 }
                 res.failed_open_file += 1;
                 // we could not open the file but we want to continue
@@ -411,13 +428,18 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
 
 /// Extracts the algorithm name and length from the regex captures if the algo-based format is matched.
 fn identify_algo_name_and_length(
-    caps: &regex::Captures,
+    caps: &Captures,
     algo_name_input: Option<&str>,
     res: &mut ChecksumResult,
     properly_formatted: &mut bool,
 ) -> Option<(String, Option<usize>)> {
     // When the algo-based format is matched, extract details from regex captures
-    let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
+    let algorithm = caps
+        .name("algo")
+        .map_or(String::new(), |m| {
+            String::from_utf8(m.as_bytes().into()).unwrap()
+        })
+        .to_lowercase();
 
     // check if we are called with XXXsum (example: md5sum) but we detected a different algo parsing the file
     // (for example SHA1 (f) = d...)
@@ -435,7 +457,10 @@ fn identify_algo_name_and_length(
     }
 
     let bits = caps.name("bits").map_or(Some(None), |m| {
-        let bits_value = m.as_str().parse::<usize>().unwrap();
+        let bits_value = String::from_utf8(m.as_bytes().into())
+            .unwrap()
+            .parse::<usize>()
+            .unwrap();
         if bits_value % 8 == 0 {
             Some(Some(bits_value / 8))
         } else {
@@ -488,7 +513,8 @@ where
         };
 
         let reader = BufReader::new(file);
-        let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
+        let lines = read_os_string_lines(reader).collect::<Vec<_>>();
+
         let Some((chosen_regex, is_algo_based_format)) = determine_regex(&lines) else {
             let e = ChecksumError::NoProperlyFormattedChecksumLinesFound {
                 filename: get_filename_for_output(filename_input, input_is_stdin),
@@ -499,11 +525,13 @@ where
         };
 
         for (i, line) in lines.iter().enumerate() {
-            if let Some(caps) = chosen_regex.captures(line) {
+            let line_bytes = os_str_as_bytes(line).expect("UTF-8 decoding failure");
+            if let Some(caps) = chosen_regex.captures(line_bytes) {
                 properly_formatted = true;
 
-                let mut filename_to_check = caps.name("filename").unwrap().as_str();
-                if filename_to_check.starts_with('*')
+                let mut filename_to_check = caps.name("filename").unwrap().as_bytes();
+
+                if filename_to_check.starts_with(b"*")
                     && i == 0
                     && chosen_regex.as_str() == SINGLE_SPACE_REGEX
                 {
@@ -511,8 +539,17 @@ where
                     filename_to_check = &filename_to_check[1..];
                 }
 
+                // `filename_lossy` is `filename_to_check` minus the non-UTF8 characters,
+                // which are omitted.
+                // A corner case that is not handled by the use of `replace` is
+                // that '\U{FFFD}' cars originally present in the filename will
+                // disappear, but this case is really unlikely to happen, and
+                // fixing it would require a consequent code duplication of
+                // `std::String`'s internals.
+                let filename_lossy =
+                    String::from_utf8_lossy(filename_to_check).replace("\u{FFFD}", "");
                 let expected_checksum =
-                    get_expected_checksum(filename_to_check, &caps, &chosen_regex)?;
+                    get_expected_checksum(&filename_lossy, &caps, &chosen_regex)?;
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
                 let (algo_name, length) = if is_algo_based_format {
@@ -548,10 +585,15 @@ where
 
                 let (filename_to_check_unescaped, prefix) = unescape_filename(filename_to_check);
 
+                #[cfg(unix)]
+                let real_filename_to_check = OsStr::from_bytes(&filename_to_check_unescaped);
+                #[cfg(not(unix))]
+                let real_filename_to_check =
+                    &OsString::from(String::from_utf8(filename_to_check_unescaped).unwrap());
+
                 // manage the input file
                 let file_to_check =
-                    match get_file_to_check(&filename_to_check_unescaped, ignore_missing, &mut res)
-                    {
+                    match get_file_to_check(real_filename_to_check, ignore_missing, &mut res) {
                         Some(file) => file,
                         None => continue,
                     };
@@ -565,18 +607,18 @@ where
                 // Do the checksum validation
                 if expected_checksum == calculated_checksum {
                     if !quiet && !status {
-                        println!("{prefix}{filename_to_check}: OK");
+                        println!("{prefix}{filename_lossy}: OK");
                     }
                     correct_format += 1;
                 } else {
                     if !status {
-                        println!("{prefix}{filename_to_check}: FAILED");
+                        println!("{prefix}{filename_lossy}: FAILED");
                     }
                     res.failed_cksum += 1;
                 }
             } else {
-                if line.is_empty() {
-                    // Don't show any warning for empty lines
+                if line.is_empty() || line_bytes.starts_with(b"#") {
+                    // Don't show any warning for empty or commented lines
                     continue;
                 }
                 if warn {
@@ -704,11 +746,28 @@ pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
     }
 }
 
-pub fn unescape_filename(filename: &str) -> (String, &'static str) {
-    let unescaped = filename
-        .replace("\\\\", "\\")
-        .replace("\\n", "\n")
-        .replace("\\r", "\r");
+pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
+    let mut unescaped = Vec::with_capacity(filename.len());
+    let mut byte_iter = filename.iter().peekable();
+    loop {
+        let Some(byte) = byte_iter.next() else {
+            break;
+        };
+        if *byte == b'\\' {
+            match byte_iter.next() {
+                Some(b'\\') => unescaped.push(b'\\'),
+                Some(b'n') => unescaped.push(b'\n'),
+                Some(b'r') => unescaped.push(b'\r'),
+                Some(x) => {
+                    unescaped.push(b'\\');
+                    unescaped.push(*x);
+                }
+                _ => {}
+            }
+        } else {
+            unescaped.push(*byte);
+        }
+    }
     let prefix = if unescaped == filename { "" } else { "\\" };
     (unescaped, prefix)
 }
@@ -729,19 +788,19 @@ mod tests {
 
     #[test]
     fn test_unescape_filename() {
-        let (unescaped, prefix) = unescape_filename("test\\nfile.txt");
-        assert_eq!(unescaped, "test\nfile.txt");
+        let (unescaped, prefix) = unescape_filename(b"test\\nfile.txt");
+        assert_eq!(unescaped, b"test\nfile.txt");
         assert_eq!(prefix, "\\");
-        let (unescaped, prefix) = unescape_filename("test\\nfile.txt");
-        assert_eq!(unescaped, "test\nfile.txt");
-        assert_eq!(prefix, "\\");
-
-        let (unescaped, prefix) = unescape_filename("test\\rfile.txt");
-        assert_eq!(unescaped, "test\rfile.txt");
+        let (unescaped, prefix) = unescape_filename(b"test\\nfile.txt");
+        assert_eq!(unescaped, b"test\nfile.txt");
         assert_eq!(prefix, "\\");
 
-        let (unescaped, prefix) = unescape_filename("test\\\\file.txt");
-        assert_eq!(unescaped, "test\\file.txt");
+        let (unescaped, prefix) = unescape_filename(b"test\\rfile.txt");
+        assert_eq!(unescaped, b"test\rfile.txt");
+        assert_eq!(prefix, "\\");
+
+        let (unescaped, prefix) = unescape_filename(b"test\\\\file.txt");
+        assert_eq!(unescaped, b"test\\file.txt");
         assert_eq!(prefix, "\\");
     }
 
@@ -846,24 +905,25 @@ mod tests {
     #[test]
     fn test_algo_based_regex() {
         let algo_based_regex = Regex::new(ALGO_BASED_REGEX).unwrap();
-        let test_cases = vec![
-            ("SHA256 (example.txt) = d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Some(("SHA256", None, "example.txt", "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"))),
+        #[allow(clippy::type_complexity)]
+        let test_cases: &[(&[u8], Option<(&[u8], Option<&[u8]>, &[u8], &[u8])>)] = &[
+            (b"SHA256 (example.txt) = d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Some((b"SHA256", None, b"example.txt", b"d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"))),
             // cspell:disable-next-line
-            ("BLAKE2b-512 (file) = abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef", Some(("BLAKE2b", Some("512"), "file", "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef"))),
-            (" MD5 (test) = 9e107d9d372bb6826bd81d3542a419d6", Some(("MD5", None, "test", "9e107d9d372bb6826bd81d3542a419d6"))),
-            ("SHA-1 (anotherfile) = a9993e364706816aba3e25717850c26c9cd0d89d", Some(("SHA", Some("1"), "anotherfile", "a9993e364706816aba3e25717850c26c9cd0d89d"))),
+            (b"BLAKE2b-512 (file) = abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef", Some((b"BLAKE2b", Some(b"512"), b"file", b"abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef"))),
+            (b" MD5 (test) = 9e107d9d372bb6826bd81d3542a419d6", Some((b"MD5", None, b"test", b"9e107d9d372bb6826bd81d3542a419d6"))),
+            (b"SHA-1 (anotherfile) = a9993e364706816aba3e25717850c26c9cd0d89d", Some((b"SHA", Some(b"1"), b"anotherfile", b"a9993e364706816aba3e25717850c26c9cd0d89d"))),
         ];
 
         for (input, expected) in test_cases {
-            let captures = algo_based_regex.captures(input);
+            let captures = algo_based_regex.captures(*input);
             match expected {
                 Some((algo, bits, filename, checksum)) => {
                     assert!(captures.is_some());
                     let captures = captures.unwrap();
-                    assert_eq!(captures.name("algo").unwrap().as_str(), algo);
-                    assert_eq!(captures.name("bits").map(|m| m.as_str()), bits);
-                    assert_eq!(captures.name("filename").unwrap().as_str(), filename);
-                    assert_eq!(captures.name("checksum").unwrap().as_str(), checksum);
+                    assert_eq!(&captures.name("algo").unwrap().as_bytes(), algo);
+                    assert_eq!(&captures.name("bits").map(|m| m.as_bytes()), bits);
+                    assert_eq!(&captures.name("filename").unwrap().as_bytes(), filename);
+                    assert_eq!(&captures.name("checksum").unwrap().as_bytes(), checksum);
                 }
                 None => {
                     assert!(captures.is_none());
@@ -876,28 +936,29 @@ mod tests {
     fn test_double_space_regex() {
         let double_space_regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
 
-        let test_cases = vec![
+        #[allow(clippy::type_complexity)]
+        let test_cases: &[(&[u8], Option<(&[u8], &[u8])>)] = &[
             (
-                "60b725f10c9c85c70d97880dfe8191b3  a",
-                Some(("60b725f10c9c85c70d97880dfe8191b3", "a")),
+                b"60b725f10c9c85c70d97880dfe8191b3  a",
+                Some((b"60b725f10c9c85c70d97880dfe8191b3", b"a")),
             ),
             (
-                "bf35d7536c785cf06730d5a40301eba2   b",
-                Some(("bf35d7536c785cf06730d5a40301eba2", " b")),
+                b"bf35d7536c785cf06730d5a40301eba2   b",
+                Some((b"bf35d7536c785cf06730d5a40301eba2", b" b")),
             ),
             (
-                "f5b61709718c1ecf8db1aea8547d4698  *c",
-                Some(("f5b61709718c1ecf8db1aea8547d4698", "*c")),
+                b"f5b61709718c1ecf8db1aea8547d4698  *c",
+                Some((b"f5b61709718c1ecf8db1aea8547d4698", b"*c")),
             ),
             (
-                "b064a020db8018f18ff5ae367d01b212  dd",
-                Some(("b064a020db8018f18ff5ae367d01b212", "dd")),
+                b"b064a020db8018f18ff5ae367d01b212  dd",
+                Some((b"b064a020db8018f18ff5ae367d01b212", b"dd")),
             ),
             (
-                "b064a020db8018f18ff5ae367d01b212   ",
-                Some(("b064a020db8018f18ff5ae367d01b212", " ")),
+                b"b064a020db8018f18ff5ae367d01b212   ",
+                Some((b"b064a020db8018f18ff5ae367d01b212", b" ")),
             ),
-            ("invalidchecksum  test", None),
+            (b"invalidchecksum  test", None),
         ];
 
         for (input, expected) in test_cases {
@@ -906,8 +967,8 @@ mod tests {
                 Some((checksum, filename)) => {
                     assert!(captures.is_some());
                     let captures = captures.unwrap();
-                    assert_eq!(captures.name("checksum").unwrap().as_str(), checksum);
-                    assert_eq!(captures.name("filename").unwrap().as_str(), filename);
+                    assert_eq!(&captures.name("checksum").unwrap().as_bytes(), checksum);
+                    assert_eq!(&captures.name("filename").unwrap().as_bytes(), filename);
                 }
                 None => {
                     assert!(captures.is_none());
@@ -919,24 +980,25 @@ mod tests {
     #[test]
     fn test_single_space_regex() {
         let single_space_regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
-        let test_cases = vec![
+        #[allow(clippy::type_complexity)]
+        let test_cases: &[(&[u8], Option<(&[u8], &[u8])>)] = &[
             (
-                "60b725f10c9c85c70d97880dfe8191b3 a",
-                Some(("60b725f10c9c85c70d97880dfe8191b3", "a")),
+                b"60b725f10c9c85c70d97880dfe8191b3 a",
+                Some((b"60b725f10c9c85c70d97880dfe8191b3", b"a")),
             ),
             (
-                "bf35d7536c785cf06730d5a40301eba2 b",
-                Some(("bf35d7536c785cf06730d5a40301eba2", "b")),
+                b"bf35d7536c785cf06730d5a40301eba2 b",
+                Some((b"bf35d7536c785cf06730d5a40301eba2", b"b")),
             ),
             (
-                "f5b61709718c1ecf8db1aea8547d4698 *c",
-                Some(("f5b61709718c1ecf8db1aea8547d4698", "*c")),
+                b"f5b61709718c1ecf8db1aea8547d4698 *c",
+                Some((b"f5b61709718c1ecf8db1aea8547d4698", b"*c")),
             ),
             (
-                "b064a020db8018f18ff5ae367d01b212 dd",
-                Some(("b064a020db8018f18ff5ae367d01b212", "dd")),
+                b"b064a020db8018f18ff5ae367d01b212 dd",
+                Some((b"b064a020db8018f18ff5ae367d01b212", b"dd")),
             ),
-            ("invalidchecksum test", None),
+            (b"invalidchecksum test", None),
         ];
 
         for (input, expected) in test_cases {
@@ -945,8 +1007,8 @@ mod tests {
                 Some((checksum, filename)) => {
                     assert!(captures.is_some());
                     let captures = captures.unwrap();
-                    assert_eq!(captures.name("checksum").unwrap().as_str(), checksum);
-                    assert_eq!(captures.name("filename").unwrap().as_str(), filename);
+                    assert_eq!(&captures.name("checksum").unwrap().as_bytes(), checksum);
+                    assert_eq!(&captures.name("filename").unwrap().as_bytes(), filename);
                 }
                 None => {
                     assert!(captures.is_none());
@@ -958,36 +1020,47 @@ mod tests {
     #[test]
     fn test_determine_regex() {
         // Test algo-based regex
-        let lines_algo_based =
-            vec!["MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e".to_string()];
+        let lines_algo_based = ["MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e"]
+            .iter()
+            .map(|s| OsString::from(s.to_string()))
+            .collect::<Vec<_>>();
         let (regex, algo_based) = determine_regex(&lines_algo_based).unwrap();
         assert!(algo_based);
-        assert!(regex.is_match(&lines_algo_based[0]));
+        assert!(regex.is_match(os_str_as_bytes(&lines_algo_based[0]).unwrap()));
 
         // Test double-space regex
-        let lines_double_space = vec!["d41d8cd98f00b204e9800998ecf8427e  example.txt".to_string()];
+        let lines_double_space = ["d41d8cd98f00b204e9800998ecf8427e  example.txt"]
+            .iter()
+            .map(|s| OsString::from(s.to_string()))
+            .collect::<Vec<_>>();
         let (regex, algo_based) = determine_regex(&lines_double_space).unwrap();
         assert!(!algo_based);
-        assert!(regex.is_match(&lines_double_space[0]));
+        assert!(regex.is_match(os_str_as_bytes(&lines_double_space[0]).unwrap()));
 
         // Test single-space regex
-        let lines_single_space = vec!["d41d8cd98f00b204e9800998ecf8427e example.txt".to_string()];
+        let lines_single_space = ["d41d8cd98f00b204e9800998ecf8427e example.txt"]
+            .iter()
+            .map(|s| OsString::from(s.to_string()))
+            .collect::<Vec<_>>();
         let (regex, algo_based) = determine_regex(&lines_single_space).unwrap();
         assert!(!algo_based);
-        assert!(regex.is_match(&lines_single_space[0]));
+        assert!(regex.is_match(os_str_as_bytes(&lines_single_space[0]).unwrap()));
 
         // Test double-space regex start with invalid
-        let lines_double_space = vec![
-            "ERR".to_string(),
-            "d41d8cd98f00b204e9800998ecf8427e  example.txt".to_string(),
-        ];
+        let lines_double_space = ["ERR", "d41d8cd98f00b204e9800998ecf8427e  example.txt"]
+            .iter()
+            .map(|s| OsString::from(s.to_string()))
+            .collect::<Vec<_>>();
         let (regex, algo_based) = determine_regex(&lines_double_space).unwrap();
         assert!(!algo_based);
-        assert!(!regex.is_match(&lines_double_space[0]));
-        assert!(regex.is_match(&lines_double_space[1]));
+        assert!(!regex.is_match(os_str_as_bytes(&lines_double_space[0]).unwrap()));
+        assert!(regex.is_match(os_str_as_bytes(&lines_double_space[1]).unwrap()));
 
         // Test invalid checksum line
-        let lines_invalid = vec!["invalid checksum line".to_string()];
+        let lines_invalid = ["invalid checksum line"]
+            .iter()
+            .map(|s| OsString::from(s.to_string()))
+            .collect::<Vec<_>>();
         assert!(determine_regex(&lines_invalid).is_none());
     }
 
@@ -995,7 +1068,7 @@ mod tests {
     fn test_get_expected_checksum() {
         let re = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
         let caps = re
-            .captures("SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=")
+            .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=")
             .unwrap();
 
         let result = get_expected_checksum("filename", &caps, &re);
@@ -1010,7 +1083,7 @@ mod tests {
     fn test_get_expected_checksum_invalid() {
         let re = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
         let caps = re
-            .captures("SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU")
+            .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU")
             .unwrap();
 
         let result = get_expected_checksum("filename", &caps, &re);
