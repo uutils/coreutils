@@ -12,7 +12,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::{
     ffi::{OsStr, OsString},
     fs::File,
-    io::{self, stdin, BufReader, Read},
+    io::{self, stdin, BufReader, Read, Write},
     path::Path,
     str,
 };
@@ -26,7 +26,6 @@ use crate::{
     },
     util_name,
 };
-use std::fmt::Write;
 use thiserror::Error;
 
 pub const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
@@ -178,6 +177,14 @@ fn cksum_output(res: &ChecksumResult, ignore_missing: bool, status: bool) {
     }
 }
 
+/// Print to STDOUT the checsum validation status of a file which
+/// name might contain non-utf-8 characters.
+fn print_file_report(filename: &[u8], result: &str, prefix: &str) {
+    print!("{prefix}");
+    let _ = std::io::stdout().write_all(filename);
+    println!("{result}");
+}
+
 pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> {
     match algo {
         ALGORITHM_OPTIONS_SYSV => Ok(HashAlgorithm {
@@ -323,6 +330,7 @@ fn determine_regex(lines: &[OsString]) -> Option<(Regex, bool)> {
 
 // Converts bytes to a hexadecimal string
 fn bytes_to_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
     bytes
         .iter()
         .fold(String::with_capacity(bytes.len() * 2), |mut hex, byte| {
@@ -331,7 +339,11 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
         })
 }
 
-fn get_expected_checksum(filename: &str, caps: &Captures, chosen_regex: &Regex) -> UResult<String> {
+fn get_expected_checksum(
+    filename: &[u8],
+    caps: &Captures,
+    chosen_regex: &Regex,
+) -> UResult<String> {
     if chosen_regex.as_str() == ALGO_BASED_REGEX_BASE64 {
         // Unwrap is safe, ensured by regex
         let ck = caps.name("checksum").unwrap().as_bytes();
@@ -344,7 +356,7 @@ fn get_expected_checksum(filename: &str, caps: &Captures, chosen_regex: &Regex) 
             }
             Err(_) => Err(Box::new(
                 ChecksumError::NoProperlyFormattedChecksumLinesFound {
-                    filename: (&filename).to_string(),
+                    filename: String::from_utf8_lossy(filename).to_string(),
                 },
             )),
         }
@@ -362,7 +374,8 @@ fn get_file_to_check(
     ignore_missing: bool,
     res: &mut ChecksumResult,
 ) -> Option<Box<dyn Read>> {
-    let filename_lossy = String::from_utf8_lossy(os_str_as_bytes(filename).expect("UTF-8 error"));
+    let filename_bytes = os_str_as_bytes(filename).expect("UTF-8 error");
+    let filename_lossy = String::from_utf8_lossy(filename_bytes);
     if filename == "-" {
         Some(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
@@ -382,7 +395,7 @@ fn get_file_to_check(
                 if !ignore_missing {
                     // yes, we have both stderr and stdout here
                     show!(err.map_err_context(|| filename_lossy.to_string()));
-                    println!("{filename_lossy}: FAILED open or read");
+                    print_file_report(filename_bytes, ": FAILED open or read", "");
                 }
                 res.failed_open_file += 1;
                 // we could not open the file but we want to continue
@@ -527,10 +540,8 @@ where
                     filename_to_check = &filename_to_check[1..];
                 }
 
-                let filename_lossy =
-                    String::from_utf8_lossy(filename_to_check).replace("\u{FFFD}", "");
                 let expected_checksum =
-                    get_expected_checksum(&filename_lossy, &caps, &chosen_regex)?;
+                    get_expected_checksum(&filename_to_check, &caps, &chosen_regex)?;
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
                 let (algo_name, length) = if is_algo_based_format {
@@ -588,12 +599,12 @@ where
                 // Do the checksum validation
                 if expected_checksum == calculated_checksum {
                     if !quiet && !status {
-                        println!("{prefix}{filename_lossy}: OK");
+                        print_file_report(filename_to_check, ": OK", prefix);
                     }
                     correct_format += 1;
                 } else {
                     if !status {
-                        println!("{prefix}{filename_lossy}: FAILED");
+                        print_file_report(filename_to_check, ": FAILED", prefix);
                     }
                     res.failed_cksum += 1;
                 }
