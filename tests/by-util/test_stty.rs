@@ -40,10 +40,19 @@ impl UCommand {
 
         self.set_stdin(stdio)
     }
+
+    fn conditional_set_stdin_to_dev_tty_stdio(&mut self, set_stdin: bool) -> &mut Self {
+        if set_stdin {
+            self.set_stdin_to_dev_tty_stdio()
+        } else {
+            self
+        }
+    }
 }
 
 #[test]
 #[cfg(not(target_os = "android"))]
+#[ignore = "These tests should work locally, but /dev/tty isn't configured when running in CI"]
 fn test_invalid_arg() {
     new_ucmd!()
         .arg("--definitely-invalid")
@@ -54,12 +63,14 @@ fn test_invalid_arg() {
 
 #[test]
 #[cfg(not(target_os = "android"))]
+#[ignore = "These tests should work locally, but /dev/tty isn't configured when running in CI"]
 fn runs() {
     new_ucmd!().set_stdin_to_dev_tty_stdio().succeeds();
 }
 
 #[test]
 #[cfg(not(target_os = "android"))]
+#[ignore = "These tests should work locally, but /dev/tty isn't configured when running in CI"]
 fn print_all() {
     let cmd_result = new_ucmd!()
         .arg("-a")
@@ -115,6 +126,7 @@ fn save_and_all() {
 // Make sure the "allow_hyphen_values" clap function has been called with true
 #[test]
 #[cfg(not(target_os = "android"))]
+#[ignore = "These tests should work locally, but /dev/tty isn't configured when running in CI"]
 fn negation() {
     new_ucmd!()
         .arg("-ixon")
@@ -124,10 +136,10 @@ fn negation() {
         .stderr_is_bytes([]);
 }
 
-fn run_and_check_print_should_succeed(args: &[&str], stdout_regex: &Regex) {
+fn run_and_check_print_should_succeed(args: &[&str], stdout_regex: &Regex, set_stdin: bool) {
     new_ucmd!()
         .args(args)
-        .set_stdin_to_dev_tty_stdio()
+        .conditional_set_stdin_to_dev_tty_stdio(set_stdin)
         .succeeds()
         .stdout_str_check(|st| {
             let Some(str) = st.lines().next() else {
@@ -142,6 +154,7 @@ fn run_and_check_print_should_succeed(args: &[&str], stdout_regex: &Regex) {
 // The end of options delimiter ("--") and everything after must be ignored
 #[test]
 #[cfg(not(target_os = "android"))]
+#[ignore = "These tests should work locally, but /dev/tty isn't configured when running in CI"]
 fn ignore_end_of_options_and_after() {
     {
         // "stty -a -- -ixon" should behave like "stty -a"
@@ -149,6 +162,7 @@ fn ignore_end_of_options_and_after() {
         run_and_check_print_should_succeed(
             &["-a", "--", "-ixon"],
             get_print_dash_a_first_line_regex(),
+            true,
         );
     }
 
@@ -158,12 +172,14 @@ fn ignore_end_of_options_and_after() {
         run_and_check_print_should_succeed(
             &["--", "non-existent-option-that-must-be-ignored"],
             get_print_first_line_regex(),
+            true,
         );
     }
 }
 
 #[test]
 #[cfg(not(target_os = "android"))]
+#[ignore = "These tests should work locally, but /dev/tty isn't configured when running in CI"]
 fn f_file_option() {
     for st in ["-F", "--file"] {
         for bo in [false, true] {
@@ -180,7 +196,7 @@ fn f_file_option() {
                 (&arr, get_print_first_line_regex())
             };
 
-            run_and_check_print_should_succeed(args, regex);
+            run_and_check_print_should_succeed(args, regex, false);
         }
     }
 }
@@ -188,6 +204,7 @@ fn f_file_option() {
 // Make sure stty is using stdin to look up terminal attributes, not stdout
 #[test]
 #[cfg(not(target_os = "android"))]
+#[ignore = "These tests should work locally, but /dev/tty isn't configured when running in CI"]
 fn correct_file_descriptor_output_piped() {
     const PIPE_STDOUT_TO: &str = "pipe_stdout_to";
     const PIPE_STDERR_TO: &str = "pipe_stderr_to";
