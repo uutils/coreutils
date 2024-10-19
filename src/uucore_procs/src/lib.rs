@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore backticks uuhelp
+// spell-checker:ignore backticks uuhelp SIGBUS SIGSEGV
 
 //! A collection of procedural macros for uutils.
 #![deny(missing_docs)]
@@ -24,6 +24,12 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
 
     let new = quote!(
         pub fn uumain(args: impl uucore::Args) -> i32 {
+            // Disables the custom signal handlers installed by Rust for stack-overflow handling.
+            // With those custom signal handlers processes ignore the first SIGBUS/SIGSEGV signal they receive
+            // instead of dumping core.
+            #[cfg(unix)]
+            uucore::signals::disable_rust_signal_handlers().expect("Disabling rust signal handlers failed");
+
             #stream
             let result = uumain(args);
             match result {
