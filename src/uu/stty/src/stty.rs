@@ -520,6 +520,16 @@ fn apply_flag<T: TermiosFlag>(
 }
 
 fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<UResult<bool>> {
+    fn map_cfsetospeed_result(result: nix::Result<()>) -> UResult<bool> {
+        match result {
+            Ok(()) => Ok(true),
+            Err(er) => Err(USimpleError::new(
+                1,
+                format!("failed to set baud rate: errno {er}"),
+            )),
+        }
+    }
+
     // BSDs use a u32 for the baud rate, so any decimal number applies.
     #[cfg(any(
         target_os = "freebsd",
@@ -530,14 +540,9 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<UResu
         target_os = "openbsd"
     ))]
     if let Ok(n) = input.parse::<u32>() {
-        if let Err(er) = cfsetospeed(termios, n) {
-            return Err(USimpleError::new(
-                1,
-                format!("failed to set baud rate: errno {er}"),
-            ));
-        }
+        let result = map_cfsetospeed_result(cfsetospeed(termios, n));
 
-        return ControlFlow::Break(Ok(true));
+        return ControlFlow::Break(result);
     }
 
     // Other platforms use an enum.
@@ -551,14 +556,9 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<UResu
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *text == input {
-            if let Err(er) = cfsetospeed(termios, *baud_rate) {
-                return ControlFlow::Break(Err(USimpleError::new(
-                    1,
-                    format!("failed to set baud rate: errno {er}"),
-                )));
-            }
+            let result = map_cfsetospeed_result(cfsetospeed(termios, *baud_rate));
 
-            return ControlFlow::Break(Ok(true));
+            return ControlFlow::Break(result);
         }
     }
 
