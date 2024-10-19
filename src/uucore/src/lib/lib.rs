@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
+//
+// spell-checker:ignore sigaction SIGBUS SIGSEGV
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -100,6 +102,12 @@ pub use crate::features::fsxattr;
 
 //## core functions
 
+#[cfg(unix)]
+use nix::errno::Errno;
+#[cfg(unix)]
+use nix::sys::signal::{
+    sigaction, SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV,
+};
 use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::ffi::OsString;
@@ -111,6 +119,25 @@ use std::str;
 use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
+
+/// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
+/// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
+#[cfg(unix)]
+pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
+    unsafe {
+        sigaction(
+            SIGSEGV,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    unsafe {
+        sigaction(
+            SIGBUS,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    Ok(())
+}
 
 /// Execute utility code for `util`.
 ///
