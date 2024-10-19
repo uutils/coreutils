@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime
+// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime ixon
 
 mod flags;
 
@@ -14,8 +14,10 @@ use nix::sys::termios::{
     OutputFlags, SpecialCharacterIndices, Termios,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
+use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{self, stdout, Stdout};
+use std::io::Write;
+use std::io::{self, Stdin, StdoutLock};
 use std::ops::ControlFlow;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
@@ -99,14 +101,14 @@ struct Options<'a> {
 
 enum Device {
     File(File),
-    Stdout(Stdout),
+    Stdin(Stdin),
 }
 
 impl AsFd for Device {
     fn as_fd(&self) -> BorrowedFd<'_> {
         match self {
             Self::File(f) => f.as_fd(),
-            Self::Stdout(stdout) => stdout.as_fd(),
+            Self::Stdin(stdin) => stdin.as_fd(),
         }
     }
 }
@@ -115,7 +117,7 @@ impl AsRawFd for Device {
     fn as_raw_fd(&self) -> RawFd {
         match self {
             Self::File(f) => f.as_raw_fd(),
-            Self::Stdout(stdout) => stdout.as_raw_fd(),
+            Self::Stdin(stdin) => stdin.as_raw_fd(),
         }
     }
 }
@@ -141,7 +143,7 @@ impl<'a> Options<'a> {
                         .custom_flags(O_NONBLOCK)
                         .open(f)?,
                 ),
-                None => Device::Stdout(stdout()),
+                None => Device::Stdin(io::stdin()),
             },
             settings: matches
                 .get_many::<String>(options::SETTINGS)
@@ -176,7 +178,15 @@ ioctl_write_ptr_bad!(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    // Manually fix this edge case:
+    //
+    // stty -- -ixon
+    let end_of_options_os_str = OsStr::new("--");
+
+    // Ignore the end of options delimiter ("--") and everything after, as GNU Core Utilities does
+    let fixed_args = args.take_while(|os| os.as_os_str() != end_of_options_os_str);
+
+    let matches = uu_app().try_get_matches_from(fixed_args)?;
 
     let opts = Options::from(&matches)?;
 
@@ -199,31 +209,67 @@ fn stty(opts: &Options) -> UResult<()> {
     }
 
     // TODO: Figure out the right error message for when tcgetattr fails
-    let mut termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
+    let mut termios = match tcgetattr(opts.file.as_fd()) {
+        Ok(te) => te,
+        Err(er) => {
+            return Err(USimpleError::new(
+                1,
+                format!("could not get terminal attributes: errno {er}"),
+            ));
+        }
+    };
 
     if let Some(settings) = &opts.settings {
         for setting in settings {
-            if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
-                return Err(USimpleError::new(
-                    1,
-                    format!("invalid argument '{setting}'"),
-                ));
+            match apply_setting(&mut termios, setting) {
+                ControlFlow::Break(re) => {
+                    if re? {
+                        // The setting was successfully applied
+                        continue;
+                    } else {
+                        // All attempts to apply the setting failed
+                        return Err(USimpleError::new(
+                            1,
+                            format!("invalid argument '{setting}'"),
+                        ));
+                    }
+                }
+                ControlFlow::Continue(()) => {
+                    // Should be unreachable
+                    debug_assert!(false);
+                }
             }
         }
 
-        tcsetattr(
+        if let Err(er) = tcsetattr(
             opts.file.as_fd(),
             nix::sys::termios::SetArg::TCSANOW,
             &termios,
-        )
-        .expect("Could not write terminal attributes");
+        ) {
+            return Err(USimpleError::new(
+                1,
+                format!("Could not write terminal attributes: errno {er}"),
+            ));
+        }
     } else {
-        print_settings(&termios, opts).expect("TODO: make proper error here from nix error");
+        //
+        #[allow(clippy::collapsible_else_if)]
+        if let Err(bo) = print_settings(&termios, opts) {
+            return Err(USimpleError::new(
+                1,
+                format!("failed to print settings: {bo}"),
+            ));
+        }
     }
+
     Ok(())
 }
 
-fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
+fn print_terminal_size(
+    stdout_lock: &mut StdoutLock,
+    termios: &Termios,
+    opts: &Options,
+) -> UResult<()> {
     let speed = cfgetospeed(termios);
 
     // BSDs use a u32 for the baud rate, so we can simply print it.
@@ -235,7 +281,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    print!("speed {speed} baud; ");
+    write!(stdout_lock, "speed {speed} baud; ")?;
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
@@ -249,15 +295,22 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
-            print!("speed {text} baud; ");
+            write!(stdout_lock, "speed {text} baud; ")?;
+
             break;
         }
     }
 
     if opts.all {
         let mut size = TermSize::default();
+
         unsafe { tiocgwinsz(opts.file.as_raw_fd(), &mut size as *mut _)? };
-        print!("rows {}; columns {}; ", size.rows, size.columns);
+
+        write!(
+            stdout_lock,
+            "rows {}; columns {}; ",
+            size.rows, size.columns
+        )?;
     }
 
     #[cfg(any(target_os = "linux", target_os = "redox"))]
@@ -266,10 +319,12 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         // so we get the underlying libc::termios struct to get that information.
         let libc_termios: nix::libc::termios = termios.clone().into();
         let line = libc_termios.c_line;
-        print!("line = {line};");
+
+        write!(stdout_lock, "line = {line};")?;
     }
 
-    println!();
+    writeln!(stdout_lock)?;
+
     Ok(())
 }
 
@@ -299,56 +354,78 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
     Ok(format!("{meta_prefix}{ctrl_prefix}{character}"))
 }
 
-fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
+fn print_control_chars(
+    stdout_lock: &mut StdoutLock,
+    termios: &Termios,
+    opts: &Options,
+) -> UResult<()> {
     if !opts.all {
         // TODO: this branch should print values that differ from defaults
         return Ok(());
     }
 
     for (text, cc_index) in CONTROL_CHARS {
-        print!(
+        write!(
+            stdout_lock,
             "{text} = {}; ",
             control_char_to_string(termios.control_chars[*cc_index as usize])?
-        );
+        )?;
     }
-    println!(
+
+    writeln!(
+        stdout_lock,
         "min = {}; time = {};",
         termios.control_chars[SpecialCharacterIndices::VMIN as usize],
         termios.control_chars[SpecialCharacterIndices::VTIME as usize]
-    );
+    )?;
+
     Ok(())
 }
 
-fn print_in_save_format(termios: &Termios) {
-    print!(
+fn print_in_save_format(stdout_lock: &mut StdoutLock, termios: &Termios) -> UResult<()> {
+    write!(
+        stdout_lock,
         "{:x}:{:x}:{:x}:{:x}",
         termios.input_flags.bits(),
         termios.output_flags.bits(),
         termios.control_flags.bits(),
         termios.local_flags.bits()
-    );
-    for cc in termios.control_chars {
-        print!(":{cc:x}");
-    }
-    println!();
-}
+    )?;
 
-fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
-    if opts.save {
-        print_in_save_format(termios);
-    } else {
-        print_terminal_size(termios, opts)?;
-        print_control_chars(termios, opts)?;
-        print_flags(termios, opts, CONTROL_FLAGS);
-        print_flags(termios, opts, INPUT_FLAGS);
-        print_flags(termios, opts, OUTPUT_FLAGS);
-        print_flags(termios, opts, LOCAL_FLAGS);
+    for cc in termios.control_chars {
+        write!(stdout_lock, ":{cc:x}")?;
     }
+
+    writeln!(stdout_lock)?;
+
     Ok(())
 }
 
-fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<T>]) {
+fn print_settings(termios: &Termios, opts: &Options) -> UResult<()> {
+    let mut stdout_lock = io::stdout().lock();
+
+    if opts.save {
+        print_in_save_format(&mut stdout_lock, termios)?;
+    } else {
+        print_terminal_size(&mut stdout_lock, termios, opts)?;
+        print_control_chars(&mut stdout_lock, termios, opts)?;
+        print_flags(&mut stdout_lock, termios, opts, CONTROL_FLAGS)?;
+        print_flags(&mut stdout_lock, termios, opts, INPUT_FLAGS)?;
+        print_flags(&mut stdout_lock, termios, opts, OUTPUT_FLAGS)?;
+        print_flags(&mut stdout_lock, termios, opts, LOCAL_FLAGS)?;
+    }
+
+    Ok(())
+}
+
+fn print_flags<T: TermiosFlag>(
+    stdout_lock: &mut StdoutLock,
+    termios: &Termios,
+    opts: &Options,
+    flags: &[Flag<T>],
+) -> UResult<()> {
     let mut printed = false;
+
     for &Flag {
         name,
         flag,
@@ -360,41 +437,51 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
         if !show {
             continue;
         }
+
         let val = flag.is_in(termios, group);
+
         if group.is_some() {
             if val && (!sane || opts.all) {
-                print!("{name} ");
+                write!(stdout_lock, "{name} ")?;
+
                 printed = true;
             }
         } else if opts.all || val != sane {
             if !val {
-                print!("-");
+                write!(stdout_lock, "-")?;
             }
-            print!("{name} ");
+
+            write!(stdout_lock, "{name} ")?;
+
             printed = true;
         }
     }
+
     if printed {
-        println!();
+        writeln!(stdout_lock)?;
     }
+
+    Ok(())
 }
 
 /// Apply a single setting
 ///
 /// The value inside the `Break` variant of the `ControlFlow` indicates whether
 /// the setting has been applied.
-fn apply_setting(termios: &mut Termios, s: &str) -> ControlFlow<bool> {
-    apply_baud_rate_flag(termios, s)?;
+fn apply_setting(termios: &mut Termios, setting: &str) -> ControlFlow<UResult<bool>> {
+    apply_baud_rate_flag(termios, setting)?;
 
-    let (remove, name) = match s.strip_prefix('-') {
-        Some(s) => (true, s),
-        None => (false, s),
+    let (remove, name) = match setting.strip_prefix('-') {
+        Some(st) => (true, st),
+        None => (false, setting),
     };
+
     apply_flag(termios, CONTROL_FLAGS, name, remove)?;
     apply_flag(termios, INPUT_FLAGS, name, remove)?;
     apply_flag(termios, OUTPUT_FLAGS, name, remove)?;
     apply_flag(termios, LOCAL_FLAGS, name, remove)?;
-    ControlFlow::Break(false)
+
+    ControlFlow::Break(Ok(false))
 }
 
 /// Apply a flag to a slice of flags
@@ -406,7 +493,7 @@ fn apply_flag<T: TermiosFlag>(
     flags: &[Flag<T>],
     input: &str,
     remove: bool,
-) -> ControlFlow<bool> {
+) -> ControlFlow<UResult<bool>> {
     for Flag {
         name, flag, group, ..
     } in flags
@@ -415,20 +502,24 @@ fn apply_flag<T: TermiosFlag>(
             // Flags with groups cannot be removed
             // Since the name matches, we can short circuit and don't have to check the other flags.
             if remove && group.is_some() {
-                return ControlFlow::Break(false);
+                return ControlFlow::Break(Ok(false));
             }
+
             // If there is a group, the bits for that group should be cleared before applying the flag
             if let Some(group) = group {
                 group.apply(termios, false);
             }
+
             flag.apply(termios, !remove);
-            return ControlFlow::Break(true);
+
+            return ControlFlow::Break(Ok(true));
         }
     }
+
     ControlFlow::Continue(())
 }
 
-fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool> {
+fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<UResult<bool>> {
     // BSDs use a u32 for the baud rate, so any decimal number applies.
     #[cfg(any(
         target_os = "freebsd",
@@ -439,8 +530,14 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
         target_os = "openbsd"
     ))]
     if let Ok(n) = input.parse::<u32>() {
-        cfsetospeed(termios, n).expect("Failed to set baud rate");
-        return ControlFlow::Break(true);
+        if let Err(er) = cfsetospeed(termios, n) {
+            return Err(USimpleError::new(
+                1,
+                format!("failed to set baud rate: errno {er}"),
+            ));
+        }
+
+        return ControlFlow::Break(Ok(true));
     }
 
     // Other platforms use an enum.
@@ -454,10 +551,17 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *text == input {
-            cfsetospeed(termios, *baud_rate).expect("Failed to set baud rate");
-            return ControlFlow::Break(true);
+            if let Err(er) = cfsetospeed(termios, *baud_rate) {
+                return ControlFlow::Break(Err(USimpleError::new(
+                    1,
+                    format!("failed to set baud rate: errno {er}"),
+                )));
+            }
+
+            return ControlFlow::Break(Ok(true));
         }
     }
+
     ControlFlow::Continue(())
 }
 
@@ -492,6 +596,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SETTINGS)
                 .action(ArgAction::Append)
+                // Allows e.g. "stty -ixon" to work
+                .allow_hyphen_values(true)
                 .help("settings to change"),
         )
 }
