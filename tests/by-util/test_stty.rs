@@ -167,10 +167,17 @@ fn ignore_end_of_options_and_after() {
 fn f_file_option() {
     for st in ["-F", "--file"] {
         for bo in [false, true] {
+            let ar: [&str; 3];
+            let arr: [&str; 2];
+
             let (args, regex): (&[&str], &'static Regex) = if bo {
-                (&[st, DEV_TTY, "-a"], get_print_dash_a_first_line_regex())
+                ar = [st, DEV_TTY, "-a"];
+
+                (&ar, get_print_dash_a_first_line_regex())
             } else {
-                (&[st, DEV_TTY], get_print_first_line_regex())
+                arr = [st, DEV_TTY];
+
+                (&arr, get_print_first_line_regex())
             };
 
             run_and_check_print_should_succeed(args, regex);
