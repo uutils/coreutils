@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+//spell-checker:ignore TAOCP
 use clap::{crate_version, Arg, Command};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt::Write;
 use std::fs::File;
 use std::io::{stdin, BufReader, Read};
 use std::path::Path;
@@ -45,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut input_buffer = String::new();
     reader.read_to_string(&mut input_buffer)?;
-    let mut g = Graph::new();
+    let mut g = Graph::default();
 
     for line in input_buffer.lines() {
         let tokens: Vec<_> = line.split_whitespace().collect();
@@ -68,22 +70,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    g.run_tsort();
-
-    if !g.is_acyclic() {
-        return Err(USimpleError::new(
-            1,
-            format!("{input}, input contains a loop:"),
-        ));
+    match g.run_tsort() {
+        Err(cycle) => {
+            let mut error_message = format!(
+                "{}: {}: input contains a loop:\n",
+                uucore::util_name(),
+                input
+            );
+            for node in &cycle {
+                writeln!(error_message, "{}: {}", uucore::util_name(), node).unwrap();
+            }
+            eprint!("{}", error_message);
+            println!("{}", cycle.join("\n"));
+            Err(USimpleError::new(1, ""))
+        }
+        Ok(ordering) => {
+            println!("{}", ordering.join("\n"));
+            Ok(())
+        }
     }
-
-    for x in &g.result {
-        println!("{x}");
-    }
-
-    Ok(())
 }
-
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
@@ -100,77 +106,125 @@ pub fn uu_app() -> Command {
 
 // We use String as a representation of node here
 // but using integer may improve performance.
+
+struct Node<'input> {
+    successor_names: Vec<&'input str>,
+    predecessor_count: usize,
+}
+
+impl<'input> Node<'input> {
+    fn new() -> Self {
+        Node {
+            successor_names: Vec::new(),
+            predecessor_count: 0,
+        }
+    }
+
+    fn add_successor(&mut self, successor_name: &'input str) {
+        self.successor_names.push(successor_name);
+    }
+}
 #[derive(Default)]
 struct Graph<'input> {
-    in_edges: BTreeMap<&'input str, BTreeSet<&'input str>>,
-    out_edges: BTreeMap<&'input str, Vec<&'input str>>,
-    result: Vec<&'input str>,
+    nodes: HashMap<&'input str, Node<'input>>,
 }
 
 impl<'input> Graph<'input> {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn has_node(&self, n: &str) -> bool {
-        self.in_edges.contains_key(n)
-    }
-
-    fn has_edge(&self, from: &str, to: &str) -> bool {
-        self.in_edges[to].contains(from)
-    }
-
-    fn init_node(&mut self, n: &'input str) {
-        self.in_edges.insert(n, BTreeSet::new());
-        self.out_edges.insert(n, vec![]);
+    fn add_node(&mut self, name: &'input str) {
+        self.nodes.entry(name).or_insert_with(Node::new);
     }
 
     fn add_edge(&mut self, from: &'input str, to: &'input str) {
-        if !self.has_node(to) {
-            self.init_node(to);
-        }
+        self.add_node(from);
+        if from != to {
+            self.add_node(to);
 
-        if !self.has_node(from) {
-            self.init_node(from);
-        }
+            let from_node = self.nodes.get_mut(from).unwrap();
+            from_node.add_successor(to);
 
-        if from != to && !self.has_edge(from, to) {
-            self.in_edges.get_mut(to).unwrap().insert(from);
-            self.out_edges.get_mut(from).unwrap().push(to);
+            let to_node = self.nodes.get_mut(to).unwrap();
+            to_node.predecessor_count += 1;
         }
     }
+    /// Implementation of algorithm T from TAOCP (Don. Knuth), vol. 1.
+    fn run_tsort(&mut self) -> Result<Vec<&'input str>, Vec<&'input str>> {
+        let mut result = Vec::with_capacity(self.nodes.len());
+        // First, we find a node that have no prerequisites (independent nodes)
+        // If no such node exists, then there is a cycle.
+        let mut independent_nodes_queue: VecDeque<&'input str> = self
+            .nodes
+            .iter()
+            .filter_map(|(&name, node)| {
+                if node.predecessor_count == 0 {
+                    Some(name)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        independent_nodes_queue.make_contiguous().sort_unstable(); // to make sure the resulting ordering is deterministic we need to order independent nodes
+                                                                   // FIXME: this doesn't comply entirely with the GNU coreutils implementation.
 
-    // Kahn's algorithm
-    // O(|V|+|E|)
-    fn run_tsort(&mut self) {
-        let mut start_nodes = vec![];
-        for (n, edges) in &self.in_edges {
-            if edges.is_empty() {
-                start_nodes.push(*n);
-            }
-        }
-
-        while !start_nodes.is_empty() {
-            let n = start_nodes.remove(0);
-
-            self.result.push(n);
-
-            let n_out_edges = self.out_edges.get_mut(&n).unwrap();
-            #[allow(clippy::explicit_iter_loop)]
-            for m in n_out_edges.iter() {
-                let m_in_edges = self.in_edges.get_mut(m).unwrap();
-                m_in_edges.remove(&n);
-
-                // If m doesn't have other in-coming edges add it to start_nodes
-                if m_in_edges.is_empty() {
-                    start_nodes.push(m);
+        // we remove each independent node, from the graph, updating each successor predecessor_count variable as we do.
+        while let Some(name_of_next_node_to_process) = independent_nodes_queue.pop_front() {
+            result.push(name_of_next_node_to_process);
+            if let Some(node_to_process) = self.nodes.remove(name_of_next_node_to_process) {
+                for successor_name in node_to_process.successor_names {
+                    let successor_node = self.nodes.get_mut(successor_name).unwrap();
+                    successor_node.predecessor_count -= 1;
+                    if successor_node.predecessor_count == 0 {
+                        // if we find nodes without any other prerequisites, we add them to the queue.
+                        independent_nodes_queue.push_back(successor_name);
+                    }
                 }
             }
-            n_out_edges.clear();
+        }
+
+        // if the graph has no cycle (it's a dependency tree), the graph should be empty now, as all nodes have been deleted.
+        if self.nodes.is_empty() {
+            Ok(result)
+        } else {
+            // otherwise, we detect and show a cycle to the user (as the GNU coreutils implementation does)
+            Err(self.detect_cycle())
         }
     }
 
-    fn is_acyclic(&self) -> bool {
-        self.out_edges.values().all(|edge| edge.is_empty())
+    fn detect_cycle(&self) -> Vec<&'input str> {
+        let mut visited = HashSet::new();
+        let mut stack = Vec::with_capacity(self.nodes.len());
+        for &node in self.nodes.keys() {
+            if !visited.contains(node) && self.dfs(node, &mut visited, &mut stack) {
+                return stack;
+            }
+        }
+        unreachable!();
+    }
+
+    fn dfs(
+        &self,
+        node: &'input str,
+        visited: &mut HashSet<&'input str>,
+        stack: &mut Vec<&'input str>,
+    ) -> bool {
+        if stack.contains(&node) {
+            return true;
+        }
+        if visited.contains(&node) {
+            return false;
+        }
+
+        visited.insert(node);
+        stack.push(node);
+
+        if let Some(successor_names) = self.nodes.get(node).map(|n| &n.successor_names) {
+            for &successor in successor_names {
+                if self.dfs(successor, visited, stack) {
+                    return true;
+                }
+            }
+        }
+
+        stack.pop();
+        false
     }
 }
