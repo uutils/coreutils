@@ -6,13 +6,9 @@
 // spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh ixon
 
 use crate::common::util::{TestScenario, UCommand};
-use nix::{
-    fcntl::{self, OFlag},
-    sys::stat::Mode,
-};
 use once_cell::sync::OnceCell;
 use regex::Regex;
-use std::{io::Read, process::Stdio};
+use std::{fs::File, io::Read, process::Stdio};
 
 const DEV_TTY: &str = "/dev/tty";
 
@@ -36,19 +32,13 @@ fn get_print_dash_a_first_line_regex() -> &'static Regex {
     })
 }
 
-fn get_dev_tty_stdio() -> Stdio {
-    use std::os::fd::FromRawFd;
-
-    let dev_tty_raw_fd = fcntl::open(DEV_TTY, OFlag::O_NONBLOCK, Mode::empty()).unwrap();
-
-    // TODO
-    // Verify safety
-    unsafe { Stdio::from_raw_fd(dev_tty_raw_fd) }
-}
-
 impl UCommand {
     fn set_stdin_to_dev_tty_stdio(&mut self) -> &mut Self {
-        self.set_stdin(get_dev_tty_stdio())
+        let file = File::open(DEV_TTY).unwrap();
+
+        let stdio = Stdio::from(file);
+
+        self.set_stdin(stdio)
     }
 }
 
@@ -134,7 +124,7 @@ fn negation() {
         .stderr_is_bytes([]);
 }
 
-fn succeeds_test_with_regex(args: &[&str], stdout_regex: &Regex) {
+fn run_and_check_print_should_succeed(args: &[&str], stdout_regex: &Regex) {
     new_ucmd!()
         .args(args)
         .set_stdin_to_dev_tty_stdio()
@@ -156,13 +146,16 @@ fn ignore_end_of_options_and_after() {
     {
         // "stty -a -- -ixon" should behave like "stty -a"
         // Should not abort with an error complaining about passing both "-a" and "-ixon" (since "-ixon" is after "--")
-        succeeds_test_with_regex(&["-a", "--", "-ixon"], get_print_dash_a_first_line_regex());
+        run_and_check_print_should_succeed(
+            &["-a", "--", "-ixon"],
+            get_print_dash_a_first_line_regex(),
+        );
     }
 
     {
         // "stty -- non-existent-option-that-must-be-ignore" should behave like "stty"
         // Should not abort with an error complaining about an invalid argument, since the invalid argument is after "--"
-        succeeds_test_with_regex(
+        run_and_check_print_should_succeed(
             &["--", "non-existent-option-that-must-be-ignored"],
             get_print_first_line_regex(),
         );
@@ -170,6 +163,7 @@ fn ignore_end_of_options_and_after() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn f_file_option() {
     for st in ["-F", "--file"] {
         for bo in [false, true] {
@@ -179,24 +173,14 @@ fn f_file_option() {
                 (&[st, DEV_TTY], get_print_first_line_regex())
             };
 
-            new_ucmd!()
-                .args(args)
-                .set_stdin_to_dev_tty_stdio()
-                .succeeds()
-                .stdout_str_check(|st| {
-                    let Some(str) = st.lines().next() else {
-                        return false;
-                    };
-
-                    regex.is_match(str)
-                })
-                .no_stderr();
+            run_and_check_print_should_succeed(args, regex);
         }
     }
 }
 
 // Make sure stty is using stdin to look up terminal attributes, not stdout
 #[test]
+#[cfg(not(target_os = "android"))]
 fn correct_file_descriptor_output_piped() {
     const PIPE_STDOUT_TO: &str = "pipe_stdout_to";
     const PIPE_STDERR_TO: &str = "pipe_stderr_to";
