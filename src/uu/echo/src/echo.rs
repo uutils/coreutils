@@ -87,6 +87,7 @@ fn print_escaped(input: &str, output: &mut StdoutLock) -> io::Result<ControlFlow
         if let Some(next) = iter.next() {
             // For extending lifetime
             let sl: [u8; 1_usize];
+            let sli: [u8; 1_usize];
 
             let unescaped: &[u8] = match next {
                 '\\' => br"\",
@@ -108,7 +109,11 @@ fn print_escaped(input: &str, output: &mut StdoutLock) -> io::Result<ControlFlow
                         br"\x"
                     }
                 }
-                '0' => &[parse_code(&mut iter, Base::Oct).unwrap_or(b'\0')],
+                '0' => {
+                    sli = [parse_code(&mut iter, Base::Oct).unwrap_or(b'\0')];
+
+                    &sli
+                }
                 c => {
                     write!(output, "\\{c}")?;
 
