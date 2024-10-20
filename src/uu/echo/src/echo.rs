@@ -279,10 +279,8 @@ fn bytes_from_os_string(input: &OsStr) -> Option<&[u8]> {
         #[cfg(not(target_family = "unix"))]
         {
             // TODO
-            match input.to_str() {
-                Some(st) => Some(st.as_bytes()),
-                None => None,
-            }
+            // Verify that this works correctly on these platforms
+            input.to_str().map(|st| st.as_bytes())
         }
     };
 
