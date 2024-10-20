@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use std::io::{self, Write};
+use std::io::{self, StdoutLock, Write};
 use std::iter::Peekable;
 use std::ops::ControlFlow;
 use std::str::Chars;
@@ -63,7 +63,7 @@ fn parse_code(input: &mut Peekable<Chars>, base: Base) -> Option<u8> {
     Some(ret)
 }
 
-fn print_escaped(input: &str, mut output: impl Write) -> io::Result<ControlFlow<()>> {
+fn print_escaped(input: &str, output: &mut StdoutLock) -> io::Result<ControlFlow<()>> {
     let mut iter = input.chars().peekable();
 
     while let Some(c) = iter.next() {
