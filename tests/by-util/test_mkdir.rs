@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore bindgen
+
 #![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 
 use crate::common::util::TestScenario;
@@ -331,4 +334,12 @@ fn test_umask_compliance() {
         // tests all permission combinations
         test_single_case(i as mode_t);
     }
+}
+
+#[test]
+fn test_empty_argument() {
+    new_ucmd!()
+        .arg("")
+        .fails()
+        .stderr_only("mkdir: cannot create directory '': No such file or directory\n");
 }
