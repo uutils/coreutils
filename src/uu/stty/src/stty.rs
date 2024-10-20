@@ -829,7 +829,9 @@ fn get_special_character_indices_hash_map() -> HashMap<&'static str, SpecialChar
     let mut hash_map = HashMap::<&'static str, SpecialCharacterIndices>::with_capacity(18_usize);
 
     let mut insert = |key: &'static str, value: SpecialCharacterIndices| {
-        debug_assert!(hash_map.insert(key, value).is_none());
+        let op = hash_map.insert(key, value);
+
+        debug_assert!(op.is_none());
     };
 
     /* #region POSIX */
