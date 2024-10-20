@@ -303,3 +303,38 @@ fn partial_version_argument() {
 fn partial_help_argument() {
     new_ucmd!().arg("--he").succeeds().stdout_is("--he\n");
 }
+
+#[test]
+fn multibyte_escape_unicode() {
+    // spell-checker:disable-next-line
+    // Tests suggested by kkew3
+    // https://github.com/uutils/coreutils/issues/6741
+
+    // \u{1F602} is:
+    //
+    // "Face with Tears of Joy"
+    // U+1F602
+    // "😂"
+
+    new_ucmd!()
+        .args(&["-e", r"\xf0\x9f\x98\x82"])
+        .succeeds()
+        .stdout_only("\u{1F602}\n");
+
+    new_ucmd!()
+        .args(&["-e", r"\x41\xf0\x9f\x98\x82\x42"])
+        .succeeds()
+        .stdout_only("A\u{1F602}B\n");
+
+    new_ucmd!()
+        .args(&["-e", r"\xf0\x41\x9f\x98\x82"])
+        .succeeds()
+        .stdout_is_bytes(b"\xF0A\x9F\x98\x82\n")
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["-e", r"\x41\xf0\c\x9f\x98\x82"])
+        .succeeds()
+        .stdout_is_bytes(b"A\xF0")
+        .no_stderr();
+}

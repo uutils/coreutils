@@ -39,7 +39,7 @@ impl Base {
 }
 
 /// Parse the numeric part of the `\xHHH` and `\0NNN` escape sequences
-fn parse_code(input: &mut Peekable<Chars>, base: Base) -> Option<char> {
+fn parse_code(input: &mut Peekable<Chars>, base: Base) -> Option<u8> {
     // All arithmetic on `ret` needs to be wrapping, because octal input can
     // take 3 digits, which is 9 bits, and therefore more than what fits in a
     // `u8`. GNU just seems to wrap these values.
@@ -60,14 +60,16 @@ fn parse_code(input: &mut Peekable<Chars>, base: Base) -> Option<char> {
         let _ = input.next();
     }
 
-    Some(ret.into())
+    Some(ret)
 }
 
 fn print_escaped(input: &str, mut output: impl Write) -> io::Result<ControlFlow<()>> {
     let mut iter = input.chars().peekable();
+
     while let Some(c) = iter.next() {
         if c != '\\' {
             write!(output, "{c}")?;
+
             continue;
         }
 
@@ -76,40 +78,47 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<ControlFlow<
         // would be the \0NNN syntax.
         if let Some('1'..='8') = iter.peek() {
             if let Some(parsed) = parse_code(&mut iter, Base::Oct) {
-                write!(output, "{parsed}")?;
+                output.write_all(&[parsed])?;
+
                 continue;
             }
         }
 
         if let Some(next) = iter.next() {
-            let unescaped = match next {
-                '\\' => '\\',
-                'a' => '\x07',
-                'b' => '\x08',
+            // For extending lifetime
+            let sl: [u8; 1_usize];
+
+            let unescaped: &[u8] = match next {
+                '\\' => br"\",
+                'a' => b"\x07",
+                'b' => b"\x08",
                 'c' => return Ok(ControlFlow::Break(())),
-                'e' => '\x1b',
-                'f' => '\x0c',
-                'n' => '\n',
-                'r' => '\r',
-                't' => '\t',
-                'v' => '\x0b',
+                'e' => b"\x1b",
+                'f' => b"\x0c",
+                'n' => b"\n",
+                'r' => b"\r",
+                't' => b"\t",
+                'v' => b"\x0b",
                 'x' => {
-                    if let Some(c) = parse_code(&mut iter, Base::Hex) {
-                        c
+                    if let Some(ue) = parse_code(&mut iter, Base::Hex) {
+                        sl = [ue];
+
+                        &sl
                     } else {
-                        write!(output, "\\")?;
-                        'x'
+                        br"\x"
                     }
                 }
-                '0' => parse_code(&mut iter, Base::Oct).unwrap_or('\0'),
+                '0' => &[parse_code(&mut iter, Base::Oct).unwrap_or(b'\0')],
                 c => {
-                    write!(output, "\\")?;
-                    c
+                    write!(output, "\\{c}")?;
+
+                    continue;
                 }
             };
-            write!(output, "{unescaped}")?;
+
+            output.write_all(unescaped)?;
         } else {
-            write!(output, "\\")?;
+            output.write_all(br"\")?;
         }
     }
 
