@@ -11,7 +11,7 @@ use std::io::{self, StdoutLock, Write};
 use std::iter::Peekable;
 use std::ops::ControlFlow;
 use std::slice::Iter;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("echo.md");
@@ -179,8 +179,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match matches.get_many::<OsString>(options::STRING) {
         Some(va) => {
-            execute(&mut stdout_lock, no_newline, escaped, va)
-                .map_err_context(|| "could not write to stdout".to_string())?;
+            execute(&mut stdout_lock, no_newline, escaped, va)?;
         }
         None => {
             // No strings to print, so just handle newline setting
@@ -239,9 +238,14 @@ fn execute(
     no_newline: bool,
     escaped: bool,
     non_option_arguments: ValuesRef<'_, OsString>,
-) -> io::Result<()> {
+) -> UResult<()> {
     for (i, input) in non_option_arguments.into_iter().enumerate() {
-        let bytes = bytes_from_os_string(input.as_os_str());
+        let Some(bytes) = bytes_from_os_string(input.as_os_str()) else {
+            return Err(USimpleError::new(
+                1,
+                "Non-UTF-8 arguments provided, but this platform does not support them",
+            ));
+        };
 
         if i > 0 {
             stdout_lock.write_all(b" ")?;
@@ -263,22 +267,24 @@ fn execute(
     Ok(())
 }
 
-fn bytes_from_os_string(input: &OsStr) -> &[u8] {
-    let bytes = {
+fn bytes_from_os_string(input: &OsStr) -> Option<&[u8]> {
+    let option = {
         #[cfg(target_family = "unix")]
         {
             use std::os::unix::ffi::OsStrExt;
 
-            input.as_bytes()
+            Some(input.as_bytes())
         }
 
         #[cfg(not(target_family = "unix"))]
         {
             // TODO
-            // Verify
-            input.as_encoded_bytes()
+            match input.to_str() {
+                Some(st) => Some(st.as_bytes()),
+                None => None,
+            }
         }
     };
 
-    bytes
+    option
 }
