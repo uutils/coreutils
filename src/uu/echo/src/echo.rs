@@ -3,11 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use clap::builder::ValueParser;
+use clap::parser::ValuesRef;
 use clap::{crate_version, Arg, ArgAction, Command};
+use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
 use std::iter::Peekable;
 use std::ops::ControlFlow;
-use std::str::Chars;
+use std::slice::Iter;
 use uucore::error::{FromIo, UResult};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -22,14 +25,19 @@ mod options {
     pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
 }
 
-#[repr(u8)]
-#[derive(Clone, Copy)]
 enum Base {
-    Oct = 8,
-    Hex = 16,
+    Oct,
+    Hex,
 }
 
 impl Base {
+    fn radix(&self) -> u8 {
+        match self {
+            Self::Oct => 8,
+            Self::Hex => 16,
+        }
+    }
+
     fn max_digits(&self) -> u8 {
         match self {
             Self::Oct => 3,
@@ -39,36 +47,58 @@ impl Base {
 }
 
 /// Parse the numeric part of the `\xHHH` and `\0NNN` escape sequences
-fn parse_code(input: &mut Peekable<Chars>, base: Base) -> Option<u8> {
-    // All arithmetic on `ret` needs to be wrapping, because octal input can
+fn parse_code(input: &mut Peekable<Iter<u8>>, base: Base) -> Option<u8> {
+    // All arithmetic on `sum` needs to be wrapping, because octal input can
     // take 3 digits, which is 9 bits, and therefore more than what fits in a
     // `u8`. GNU just seems to wrap these values.
-    // Note that if we instead make `ret` a `u32` and use `char::from_u32` will
-    // yield incorrect results because it will interpret values larger than
-    // `u8::MAX` as unicode.
-    let mut ret = input.peek().and_then(|c| c.to_digit(base as u32))? as u8;
+    let radix = base.radix();
+    let radix_u_three_two = u32::from(radix);
+
+    let mut sum = match input.peek() {
+        Some(&&ue) => match char::from(ue).to_digit(radix_u_three_two) {
+            // A u8 interpreted as a hexadecimal or octal digit is never more than 16
+            Some(ut) => u8::try_from(ut).unwrap(),
+            None => {
+                return None;
+            }
+        },
+        None => {
+            return None;
+        }
+    };
 
     // We can safely ignore the None case because we just peeked it.
     let _ = input.next();
 
     for _ in 1..base.max_digits() {
-        match input.peek().and_then(|c| c.to_digit(base as u32)) {
-            Some(n) => ret = ret.wrapping_mul(base as u8).wrapping_add(n as u8),
-            None => break,
+        match input
+            .peek()
+            .and_then(|&&ue| char::from(ue).to_digit(radix_u_three_two))
+        {
+            Some(ut) => {
+                // A u8 interpreted as a hexadecimal or octal digit is never more than 16
+                let ue = u8::try_from(ut).unwrap();
+
+                sum = sum.wrapping_mul(radix).wrapping_add(ue)
+            }
+            None => {
+                break;
+            }
         }
+
         // We can safely ignore the None case because we just peeked it.
         let _ = input.next();
     }
 
-    Some(ret)
+    Some(sum)
 }
 
-fn print_escaped(input: &str, output: &mut StdoutLock) -> io::Result<ControlFlow<()>> {
-    let mut iter = input.chars().peekable();
+fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlow<()>> {
+    let mut iter = input.iter().peekable();
 
-    while let Some(c) = iter.next() {
-        if c != '\\' {
-            write!(output, "{c}")?;
+    while let Some(&current_byte) = iter.next() {
+        if current_byte != b'\\' {
+            output.write_all(&[current_byte])?;
 
             continue;
         }
@@ -76,7 +106,7 @@ fn print_escaped(input: &str, output: &mut StdoutLock) -> io::Result<ControlFlow
         // This is for the \NNN syntax for octal sequences.
         // Note that '0' is intentionally omitted because that
         // would be the \0NNN syntax.
-        if let Some('1'..='8') = iter.peek() {
+        if let Some(b'1'..=b'8') = iter.peek() {
             if let Some(parsed) = parse_code(&mut iter, Base::Oct) {
                 output.write_all(&[parsed])?;
 
@@ -87,20 +117,20 @@ fn print_escaped(input: &str, output: &mut StdoutLock) -> io::Result<ControlFlow
         if let Some(next) = iter.next() {
             // For extending lifetime
             let sl: [u8; 1_usize];
-            let sli: [u8; 1_usize];
+            let sli: [u8; 2_usize];
 
-            let unescaped: &[u8] = match next {
-                '\\' => br"\",
-                'a' => b"\x07",
-                'b' => b"\x08",
-                'c' => return Ok(ControlFlow::Break(())),
-                'e' => b"\x1b",
-                'f' => b"\x0c",
-                'n' => b"\n",
-                'r' => b"\r",
-                't' => b"\t",
-                'v' => b"\x0b",
-                'x' => {
+            let unescaped: &[u8] = match *next {
+                b'\\' => br"\",
+                b'a' => b"\x07",
+                b'b' => b"\x08",
+                b'c' => return Ok(ControlFlow::Break(())),
+                b'e' => b"\x1b",
+                b'f' => b"\x0c",
+                b'n' => b"\n",
+                b'r' => b"\r",
+                b't' => b"\t",
+                b'v' => b"\x0b",
+                b'x' => {
                     if let Some(ue) = parse_code(&mut iter, Base::Hex) {
                         sl = [ue];
 
@@ -109,15 +139,19 @@ fn print_escaped(input: &str, output: &mut StdoutLock) -> io::Result<ControlFlow
                         br"\x"
                     }
                 }
-                '0' => {
-                    sli = [parse_code(&mut iter, Base::Oct).unwrap_or(b'\0')];
+                b'0' => {
+                    // \0 with any non-octal digit after it is 0
+                    let parsed_octal_number_or_zero =
+                        parse_code(&mut iter, Base::Oct).unwrap_or(b'\0');
+
+                    sl = [parsed_octal_number_or_zero];
+
+                    &sl
+                }
+                ue => {
+                    sli = [b'\\', ue];
 
                     &sli
-                }
-                c => {
-                    write!(output, "\\{c}")?;
-
-                    continue;
                 }
             };
 
@@ -134,15 +168,29 @@ fn print_escaped(input: &str, output: &mut StdoutLock) -> io::Result<ControlFlow
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
+    // TODO
+    // "If the POSIXLY_CORRECT environment variable is set, then when echo’s first argument is not -n it outputs option-like arguments instead of treating them as options."
+    // https://www.gnu.org/software/coreutils/manual/html_node/echo-invocation.html
+
     let no_newline = matches.get_flag(options::NO_NEWLINE);
     let escaped = matches.get_flag(options::ENABLE_BACKSLASH_ESCAPE);
-    let values: Vec<String> = match matches.get_many::<String>(options::STRING) {
-        Some(s) => s.map(|s| s.to_string()).collect(),
-        None => vec![String::new()],
-    };
 
-    execute(no_newline, escaped, &values)
-        .map_err_context(|| "could not write to stdout".to_string())
+    let mut stdout_lock = io::stdout().lock();
+
+    match matches.get_many::<OsString>(options::STRING) {
+        Some(va) => {
+            execute(&mut stdout_lock, no_newline, escaped, va)
+                .map_err_context(|| "could not write to stdout".to_string())?;
+        }
+        None => {
+            // No strings to print, so just handle newline setting
+            if !no_newline {
+                stdout_lock.write_all(b"\n")?;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -179,29 +227,58 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ENABLE_BACKSLASH_ESCAPE),
         )
-        .arg(Arg::new(options::STRING).action(ArgAction::Append))
+        .arg(
+            Arg::new(options::STRING)
+                .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string()),
+        )
 }
 
-fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
-    let stdout = io::stdout();
-    let mut output = stdout.lock();
+fn execute(
+    stdout_lock: &mut StdoutLock,
+    no_newline: bool,
+    escaped: bool,
+    non_option_arguments: ValuesRef<'_, OsString>,
+) -> io::Result<()> {
+    for (i, input) in non_option_arguments.into_iter().enumerate() {
+        let bytes = bytes_from_os_string(input.as_os_str());
 
-    for (i, input) in free.iter().enumerate() {
         if i > 0 {
-            write!(output, " ")?;
+            stdout_lock.write_all(b" ")?;
         }
+
         if escaped {
-            if print_escaped(input, &mut output)?.is_break() {
+            if print_escaped(bytes, stdout_lock)?.is_break() {
                 return Ok(());
             }
         } else {
-            write!(output, "{input}")?;
+            stdout_lock.write_all(bytes)?;
         }
     }
 
     if !no_newline {
-        writeln!(output)?;
+        stdout_lock.write_all(b"\n")?;
     }
 
     Ok(())
+}
+
+fn bytes_from_os_string(input: &OsStr) -> &[u8] {
+    let bytes = {
+        #[cfg(target_family = "unix")]
+        {
+            use std::os::unix::ffi::OsStrExt;
+
+            input.as_bytes()
+        }
+
+        #[cfg(not(target_family = "unix"))]
+        {
+            // TODO
+            // Verify
+            input.as_encoded_bytes()
+        }
+    };
+
+    bytes
 }

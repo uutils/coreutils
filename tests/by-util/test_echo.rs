@@ -5,6 +5,7 @@
 // spell-checker:ignore (words) araba merci
 
 use crate::common::util::TestScenario;
+use std::ffi::OsStr;
 
 #[test]
 fn test_default() {
@@ -336,5 +337,52 @@ fn multibyte_escape_unicode() {
         .args(&["-e", r"\x41\xf0\c\x9f\x98\x82"])
         .succeeds()
         .stdout_is_bytes(b"A\xF0")
+        .no_stderr();
+}
+
+#[test]
+fn non_utf_8_hex_round_trip() {
+    new_ucmd!()
+        .args(&["-e", r"\xFF"])
+        .succeeds()
+        .stdout_is_bytes(b"\xFF\n")
+        .no_stderr();
+}
+
+#[test]
+fn nine_bit_octal() {
+    const RESULT: &[u8] = b"\xFF\n";
+
+    new_ucmd!()
+        .args(&["-e", r"\0777"])
+        .succeeds()
+        .stdout_is_bytes(RESULT)
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["-e", r"\777"])
+        .succeeds()
+        .stdout_is_bytes(RESULT)
+        .no_stderr();
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn non_utf_8() {
+    use std::os::unix::ffi::OsStrExt;
+
+    // ISO-8859-1 encoded text
+    // spell-checker:disable
+    const INPUT_AND_OUTPUT: &[u8] =
+        b"Swer an rehte g\xFCete wendet s\xEEn gem\xFCete, dem volget s\xE6lde und \xEAre.";
+    // spell-checker:enable
+
+    let os_str = OsStr::from_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("-n")
+        .arg(os_str)
+        .succeeds()
+        .stdout_is_bytes(INPUT_AND_OUTPUT)
         .no_stderr();
 }
