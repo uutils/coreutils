@@ -18,8 +18,13 @@ path = "src/stty.rs"
 
 [dependencies]
 clap = { workspace = true }
+nix = { workspace = true, features = ["feature", "fs", "term", "ioctl"] }
+phf = { workspace = true }
 uucore = { workspace = true }
-nix = { workspace = true, features = ["term", "ioctl"] }
+
+[build-dependencies]
+phf_codegen = { workspace = true }
+unicode_names2 = "1.3.0"
 
 [[bin]]
 name = "stty"
