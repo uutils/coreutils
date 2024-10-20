@@ -1345,6 +1345,7 @@ fn test_check_comment_leading_space() {
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_check_error_handling() {
     // check `cksum`'s behavior when encountering directories or non existing files
@@ -1364,7 +1365,7 @@ fn test_check_error_handling() {
         .arg("--check")
         .arg("CHECKSUM")
         .fails()
-        .stdout_contains(
+        .stdout_is(
             "dir: FAILED open or read\n\
             not-file: FAILED open or read\n",
         )
@@ -1377,6 +1378,6 @@ fn test_check_error_handling() {
         .arg("CHECKSUM")
         .arg("--ignore-missing")
         .fails()
-        .stdout_contains("dir: FAILED open or read\n")
+        .stdout_is("dir: FAILED open or read\n")
         .stderr_contains("cksum: WARNING: 1 listed file could not be read");
 }
