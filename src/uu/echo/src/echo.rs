@@ -211,6 +211,7 @@ fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlo
             // For extending lifetime
             // Unnecessary when using Rust >= 1.79.0
             // https://github.com/rust-lang/rust/pull/121346
+            // TODO: when we have a MSRV >= 1.79.0, delete these "hold" bindings
             let hold_one_byte_outside_of_match: [u8; 1_usize];
             let hold_two_bytes_outside_of_match: [u8; 2_usize];
 
@@ -229,8 +230,11 @@ fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlo
                     if let Some(parsed_hexadecimal_number) =
                         parse_backslash_number(&mut iter, BackslashNumberType::Hexadecimal)
                     {
+                        // TODO: remove when we have a MSRV >= 1.79.0
                         hold_one_byte_outside_of_match = [parsed_hexadecimal_number];
 
+                        // TODO: when we have a MSRV >= 1.79.0, return reference to a temporary array:
+                        // &[parsed_hexadecimal_number]
                         &hold_one_byte_outside_of_match
                     } else {
                         // "\x" with any non-hexadecimal digit after means "\x" is treated literally
@@ -242,8 +246,11 @@ fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlo
                         &mut iter,
                         BackslashNumberType::OctalStartingWithZero,
                     ) {
+                        // TODO: remove when we have a MSRV >= 1.79.0
                         hold_one_byte_outside_of_match = [parsed_octal_number];
 
+                        // TODO: when we have a MSRV >= 1.79.0, return reference to a temporary array:
+                        // &[parsed_octal_number]
                         &hold_one_byte_outside_of_match
                     } else {
                         // "\0" with any non-octal digit after it means "\0" is treated as ASCII '\0' (NUL), 0x00
