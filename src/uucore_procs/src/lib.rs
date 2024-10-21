@@ -24,6 +24,9 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
 
     let new = quote!(
         pub fn uumain(args: impl uucore::Args) -> i32 {
+            #[cfg(unix)]
+            uucore::signals::disable_rust_signal_handlers().expect("Disabling rust signal handlers failed");
+
             #stream
             let result = uumain(args);
             match result {
