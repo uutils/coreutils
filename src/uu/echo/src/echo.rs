@@ -25,69 +25,158 @@ mod options {
     pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
 }
 
+enum BackslashNumberType {
+    OctalStartingWithNonZero(u8),
+    OctalStartingWithZero,
+    Hexadecimal,
+}
+
+impl BackslashNumberType {
+    fn base(&self) -> Base {
+        match self {
+            BackslashNumberType::OctalStartingWithZero
+            | BackslashNumberType::OctalStartingWithNonZero(_) => Base::Octal,
+            BackslashNumberType::Hexadecimal => Base::Hexadecimal,
+        }
+    }
+}
+
 enum Base {
-    Oct,
-    Hex,
+    Octal,
+    Hexadecimal,
 }
 
 impl Base {
-    fn radix(&self) -> u8 {
+    fn ascii_to_number(&self, digit: u8) -> Option<u8> {
+        fn octal_ascii_digit_to_number(digit: u8) -> Option<u8> {
+            let number = match digit {
+                b'0' => 0,
+                b'1' => 1,
+                b'2' => 2,
+                b'3' => 3,
+                b'4' => 4,
+                b'5' => 5,
+                b'6' => 6,
+                b'7' => 7,
+                _ => {
+                    return None;
+                }
+            };
+
+            Some(number)
+        }
+
+        fn hexadecimal_ascii_digit_to_number(digit: u8) -> Option<u8> {
+            let number = match digit {
+                b'0' => 0,
+                b'1' => 1,
+                b'2' => 2,
+                b'3' => 3,
+                b'4' => 4,
+                b'5' => 5,
+                b'6' => 6,
+                b'7' => 7,
+                b'8' => 8,
+                b'9' => 9,
+                b'A' | b'a' => 10,
+                b'B' | b'b' => 11,
+                b'C' | b'c' => 12,
+                b'D' | b'd' => 13,
+                b'E' | b'e' => 14,
+                b'F' | b'f' => 15,
+                _ => {
+                    return None;
+                }
+            };
+
+            Some(number)
+        }
+
         match self {
-            Self::Oct => 8,
-            Self::Hex => 16,
+            Self::Octal => octal_ascii_digit_to_number(digit),
+            Self::Hexadecimal => hexadecimal_ascii_digit_to_number(digit),
         }
     }
 
-    fn max_digits(&self) -> u8 {
+    fn maximum_number_of_digits(&self) -> u8 {
         match self {
-            Self::Oct => 3,
-            Self::Hex => 2,
+            Self::Octal => 3,
+            Self::Hexadecimal => 2,
+        }
+    }
+
+    fn radix(&self) -> u8 {
+        match self {
+            Self::Octal => 8,
+            Self::Hexadecimal => 16,
         }
     }
 }
 
-/// Parse the numeric part of the `\xHHH` and `\0NNN` escape sequences
-fn parse_code(input: &mut Peekable<Iter<u8>>, base: Base) -> Option<u8> {
-    // All arithmetic on `sum` needs to be wrapping, because octal input can
-    // take 3 digits, which is 9 bits, and therefore more than what fits in a
-    // `u8`. GNU just seems to wrap these values.
-    let radix = base.radix();
-    let radix_u_three_two = u32::from(radix);
-
-    let mut sum = match input.peek() {
-        Some(&&ue) => match char::from(ue).to_digit(radix_u_three_two) {
-            // A u8 interpreted as a hexadecimal or octal digit is never more than 16
-            Some(ut) => u8::try_from(ut).unwrap(),
-            None => {
-                return None;
+/// Parse the numeric part of `\xHHH`, `\0NNN`, and `\NNN` escape sequences
+fn parse_backslash_number(
+    input: &mut Peekable<Iter<u8>>,
+    backslash_number_type: BackslashNumberType,
+) -> Option<u8> {
+    let first_digit_ascii = match backslash_number_type {
+        BackslashNumberType::OctalStartingWithZero | BackslashNumberType::Hexadecimal => {
+            match input.peek() {
+                Some(&&digit_ascii) => digit_ascii,
+                None => {
+                    // One of the following cases: argument ends with "\0" or "\x"
+                    // If "\0" (octal): caller will print not ASCII '0', 0x30, but ASCII '\0' (NUL), 0x00
+                    // If "\x" (hexadecimal): caller will print literal "\x"
+                    return None;
+                }
             }
-        },
+        }
+        // Never returns early when backslash number starts with "\1" through "\7", because caller provides the
+        // first digit
+        BackslashNumberType::OctalStartingWithNonZero(digit_ascii) => digit_ascii,
+    };
+
+    let base = backslash_number_type.base();
+
+    let first_digit_number = match base.ascii_to_number(first_digit_ascii) {
+        Some(digit_number) => {
+            // Move past byte, since it was successfully parsed
+            let _ = input.next();
+
+            digit_number
+        }
         None => {
+            // The first digit was not a valid octal or hexadecimal digit
+            // This should never be the case when the backslash number starts with "\1" through "\7"
+            // (caller unwraps to verify this)
             return None;
         }
     };
 
-    // We can safely ignore the None case because we just peeked it.
-    let _ = input.next();
+    let radix = base.radix();
 
-    for _ in 1..base.max_digits() {
+    let mut sum = first_digit_number;
+
+    for _ in 1..(base.maximum_number_of_digits()) {
         match input
             .peek()
-            .and_then(|&&ue| char::from(ue).to_digit(radix_u_three_two))
+            .and_then(|&&digit_ascii| base.ascii_to_number(digit_ascii))
         {
-            Some(ut) => {
-                // A u8 interpreted as a hexadecimal or octal digit is never more than 16
-                let ue = u8::try_from(ut).unwrap();
+            Some(digit_number) => {
+                // Move past byte, since it was successfully parsed
+                let _ = input.next();
 
-                sum = sum.wrapping_mul(radix).wrapping_add(ue)
+                // All arithmetic on `sum` needs to be wrapping, because octal input can
+                // take 3 digits, which is 9 bits, and therefore more than what fits in a
+                // `u8`.
+                //
+                // GNU Core Utilities: "if nnn is a nine-bit value, the ninth bit is ignored"
+                // https://www.gnu.org/software/coreutils/manual/html_node/echo-invocation.html
+                sum = sum.wrapping_mul(radix).wrapping_add(digit_number);
             }
             None => {
                 break;
             }
         }
-
-        // We can safely ignore the None case because we just peeked it.
-        let _ = input.next();
     }
 
     Some(sum)
@@ -103,55 +192,69 @@ fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlo
             continue;
         }
 
-        // This is for the \NNN syntax for octal sequences.
-        // Note that '0' is intentionally omitted because that
-        // would be the \0NNN syntax.
-        if let Some(b'1'..=b'8') = iter.peek() {
-            if let Some(parsed) = parse_code(&mut iter, Base::Oct) {
-                output.write_all(&[parsed])?;
+        // This is for the \NNN syntax for octal sequences
+        // Note that '0' is intentionally omitted, because the \0NNN syntax is handled below
+        if let Some(&&first_digit @ b'1'..=b'7') = iter.peek() {
+            // Unwrap because anything starting with "\1" through "\7" can be successfully parsed
+            let parsed_octal_number = parse_backslash_number(
+                &mut iter,
+                BackslashNumberType::OctalStartingWithNonZero(first_digit),
+            )
+            .unwrap();
 
-                continue;
-            }
+            output.write_all(&[parsed_octal_number])?;
+
+            continue;
         }
 
         if let Some(next) = iter.next() {
             // For extending lifetime
-            let sl: [u8; 1_usize];
-            let sli: [u8; 2_usize];
+            // Unnecessary when using Rust >= 1.79.0
+            // https://github.com/rust-lang/rust/pull/121346
+            let hold_one_byte_outside_of_match: [u8; 1_usize];
+            let hold_two_bytes_outside_of_match: [u8; 2_usize];
 
             let unescaped: &[u8] = match *next {
                 b'\\' => br"\",
                 b'a' => b"\x07",
                 b'b' => b"\x08",
                 b'c' => return Ok(ControlFlow::Break(())),
-                b'e' => b"\x1b",
-                b'f' => b"\x0c",
+                b'e' => b"\x1B",
+                b'f' => b"\x0C",
                 b'n' => b"\n",
                 b'r' => b"\r",
                 b't' => b"\t",
-                b'v' => b"\x0b",
+                b'v' => b"\x0B",
                 b'x' => {
-                    if let Some(ue) = parse_code(&mut iter, Base::Hex) {
-                        sl = [ue];
+                    if let Some(parsed_hexadecimal_number) =
+                        parse_backslash_number(&mut iter, BackslashNumberType::Hexadecimal)
+                    {
+                        hold_one_byte_outside_of_match = [parsed_hexadecimal_number];
 
-                        &sl
+                        &hold_one_byte_outside_of_match
                     } else {
+                        // "\x" with any non-hexadecimal digit after means "\x" is treated literally
                         br"\x"
                     }
                 }
                 b'0' => {
-                    // \0 with any non-octal digit after it is 0
-                    let parsed_octal_number_or_zero =
-                        parse_code(&mut iter, Base::Oct).unwrap_or(b'\0');
+                    if let Some(parsed_octal_number) = parse_backslash_number(
+                        &mut iter,
+                        BackslashNumberType::OctalStartingWithZero,
+                    ) {
+                        hold_one_byte_outside_of_match = [parsed_octal_number];
 
-                    sl = [parsed_octal_number_or_zero];
-
-                    &sl
+                        &hold_one_byte_outside_of_match
+                    } else {
+                        // "\0" with any non-octal digit after it means "\0" is treated as ASCII '\0' (NUL), 0x00
+                        b"\0"
+                    }
                 }
-                ue => {
-                    sli = [b'\\', ue];
+                other_byte => {
+                    // Backslash and the following byte are treated literally
+                    hold_two_bytes_outside_of_match = [b'\\', other_byte];
 
-                    &sli
+                    &hold_two_bytes_outside_of_match
                 }
             };
 
@@ -178,8 +281,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut stdout_lock = io::stdout().lock();
 
     match matches.get_many::<OsString>(options::STRING) {
-        Some(va) => {
-            execute(&mut stdout_lock, no_newline, escaped, va)?;
+        Some(arguments_after_options) => {
+            execute(
+                &mut stdout_lock,
+                no_newline,
+                escaped,
+                arguments_after_options,
+            )?;
         }
         None => {
             // No strings to print, so just handle newline setting
@@ -237,9 +345,9 @@ fn execute(
     stdout_lock: &mut StdoutLock,
     no_newline: bool,
     escaped: bool,
-    non_option_arguments: ValuesRef<'_, OsString>,
+    arguments_after_options: ValuesRef<'_, OsString>,
 ) -> UResult<()> {
-    for (i, input) in non_option_arguments.into_iter().enumerate() {
+    for (i, input) in arguments_after_options.enumerate() {
         let Some(bytes) = bytes_from_os_string(input.as_os_str()) else {
             return Err(USimpleError::new(
                 1,

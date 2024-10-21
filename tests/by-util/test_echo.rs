@@ -383,6 +383,13 @@ fn non_utf_8() {
         .arg("-n")
         .arg(os_str)
         .succeeds()
-        .stdout_is_bytes(INPUT_AND_OUTPUT)
-        .no_stderr();
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+}
+
+#[test]
+fn slash_eight_off_by_one() {
+    new_ucmd!()
+        .args(&["-e", "-n", r"\8"])
+        .succeeds()
+        .stdout_only(r"\8");
 }
