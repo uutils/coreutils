@@ -4,9 +4,11 @@
 // file that was distributed with this source code.
 use rstest::rstest;
 
-// spell-checker:ignore dont
+// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus
 use crate::common::util::TestScenario;
 
+#[cfg(unix)]
+use nix::sys::signal::Signal::{SIGBUS, SIGSEGV};
 use std::time::{Duration, Instant};
 
 #[test]
@@ -133,6 +135,40 @@ fn test_sleep_sum_duration_many() {
 #[test]
 fn test_sleep_wrong_time() {
     new_ucmd!().args(&["0.1s", "abc"]).fails();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_sleep_stops_after_sigsegv() {
+    let mut child = new_ucmd!()
+        .arg("100")
+        .timeout(Duration::from_secs(10))
+        .run_no_wait();
+
+    child
+        .delay(100)
+        .kill_with_custom_signal(SIGSEGV)
+        .make_assertion()
+        .with_current_output()
+        .signal_is(SIGSEGV as i32) // make sure it was us who terminated the process
+        .no_output();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_sleep_stops_after_sigbus() {
+    let mut child = new_ucmd!()
+        .arg("100")
+        .timeout(Duration::from_secs(10))
+        .run_no_wait();
+
+    child
+        .delay(100)
+        .kill_with_custom_signal(SIGBUS)
+        .make_assertion()
+        .with_current_output()
+        .signal_is(SIGBUS as i32) // make sure it was us who terminated the process
+        .no_output();
 }
 
 #[test]
