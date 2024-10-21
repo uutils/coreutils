@@ -1345,6 +1345,8 @@ fn test_check_comment_leading_space() {
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
+/// This test checks alignment with GNU's error handling.
+/// Windows has a different logic and is guarded by [`test_check_directory_error`].
 #[cfg(not(windows))]
 #[test]
 fn test_check_error_handling() {
