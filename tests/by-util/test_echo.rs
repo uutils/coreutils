@@ -5,7 +5,6 @@
 // spell-checker:ignore (words) araba merci
 
 use crate::common::util::TestScenario;
-use std::ffi::OsStr;
 
 #[test]
 fn test_default() {
@@ -369,6 +368,7 @@ fn nine_bit_octal() {
 #[test]
 #[cfg(target_family = "unix")]
 fn non_utf_8() {
+    use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
     // ISO-8859-1 encoded text
