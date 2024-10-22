@@ -11,7 +11,9 @@ use std::ffi::OsString;
 use std::io::stdout;
 use std::ops::ControlFlow;
 use uucore::error::{UResult, UUsageError};
-use uucore::format::{bytes_from_os_str, parse_spec_and_escape, FormatArgument, FormatItem};
+use uucore::format::{
+    parse_spec_and_escape, try_get_bytes_from_os_str, FormatArgument, FormatItem,
+};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const VERSION: &str = "version";
@@ -33,7 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<OsString>(options::FORMAT)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
 
-    let format_bytes = bytes_from_os_str(format)?;
+    let format_bytes = try_get_bytes_from_os_str(format)?;
 
     let values = match matches.get_many::<OsString>(options::ARGUMENT) {
         Some(os_string) => os_string

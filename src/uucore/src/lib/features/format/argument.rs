@@ -3,14 +3,19 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use super::FormatError;
 use crate::{
-    error::{set_exit_code, UResult, USimpleError},
+    error::{set_exit_code, UError},
     features::format::num_parser::{ParseError, ParsedNumber},
     quoting_style::{escape_name, Quotes, QuotingStyle},
-    show, show_error, show_warning,
+    show_error, show_warning,
 };
 use os_display::Quotable;
-use std::ffi::{OsStr, OsString};
+use std::{
+    error::Error,
+    ffi::{OsStr, OsString},
+    fmt::Display,
+};
 
 /// An argument for formatting
 ///
@@ -31,70 +36,70 @@ pub enum FormatArgument {
 }
 
 pub trait ArgumentIter<'a>: Iterator<Item = &'a FormatArgument> {
-    fn get_char(&mut self) -> u8;
-    fn get_i64(&mut self) -> i64;
-    fn get_u64(&mut self) -> u64;
-    fn get_f64(&mut self) -> f64;
+    fn get_char(&mut self) -> Result<u8, FormatError>;
+    fn get_i64(&mut self) -> Result<i64, FormatError>;
+    fn get_u64(&mut self) -> Result<u64, FormatError>;
+    fn get_f64(&mut self) -> Result<f64, FormatError>;
     fn get_str(&mut self) -> &'a OsStr;
 }
 
 impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
-    fn get_char(&mut self) -> u8 {
+    fn get_char(&mut self) -> Result<u8, FormatError> {
         let Some(next) = self.next() else {
-            return b'\0';
+            return Ok(b'\0');
         };
         match next {
-            FormatArgument::Char(c) => *c as u8,
-            FormatArgument::Unparsed(os) => match bytes_from_os_str(os).unwrap().first() {
-                Some(&byte) => byte,
-                None => b'\0',
+            FormatArgument::Char(c) => Ok(*c as u8),
+            FormatArgument::Unparsed(os) => match try_get_bytes_from_os_str(os)?.first() {
+                Some(&byte) => Ok(byte),
+                None => Ok(b'\0'),
             },
-            _ => b'\0',
+            _ => Ok(b'\0'),
         }
     }
 
-    fn get_u64(&mut self) -> u64 {
+    fn get_u64(&mut self) -> Result<u64, FormatError> {
         let Some(next) = self.next() else {
-            return 0;
+            return Ok(0);
         };
         match next {
-            FormatArgument::UnsignedInt(n) => *n,
+            FormatArgument::UnsignedInt(n) => Ok(*n),
             FormatArgument::Unparsed(os) => {
-                let str = get_str_or_exit_with_error(os);
+                let str = try_get_str_from_os_str(os)?;
 
-                extract_value(ParsedNumber::parse_u64(str), str)
+                Ok(extract_value(ParsedNumber::parse_u64(str), str))
             }
-            _ => 0,
+            _ => Ok(0),
         }
     }
 
-    fn get_i64(&mut self) -> i64 {
+    fn get_i64(&mut self) -> Result<i64, FormatError> {
         let Some(next) = self.next() else {
-            return 0;
+            return Ok(0);
         };
         match next {
-            FormatArgument::SignedInt(n) => *n,
+            FormatArgument::SignedInt(n) => Ok(*n),
             FormatArgument::Unparsed(os) => {
-                let str = get_str_or_exit_with_error(os);
+                let str = try_get_str_from_os_str(os)?;
 
-                extract_value(ParsedNumber::parse_i64(str), str)
+                Ok(extract_value(ParsedNumber::parse_i64(str), str))
             }
-            _ => 0,
+            _ => Ok(0),
         }
     }
 
-    fn get_f64(&mut self) -> f64 {
+    fn get_f64(&mut self) -> Result<f64, FormatError> {
         let Some(next) = self.next() else {
-            return 0.0;
+            return Ok(0.0);
         };
         match next {
-            FormatArgument::Float(n) => *n,
+            FormatArgument::Float(n) => Ok(*n),
             FormatArgument::Unparsed(os) => {
-                let str = get_str_or_exit_with_error(os);
+                let str = try_get_str_from_os_str(os)?;
 
-                extract_value(ParsedNumber::parse_f64(str), str)
+                Ok(extract_value(ParsedNumber::parse_f64(str), str))
             }
-            _ => 0.0,
+            _ => Ok(0.0),
         }
     }
 
@@ -135,6 +140,7 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
                     } else {
                         show_error!("{}: value not completely converted", input.quote());
                     }
+
                     v
                 }
             }
@@ -142,7 +148,33 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
     }
 }
 
-pub fn bytes_from_os_str(input: &OsStr) -> UResult<&[u8]> {
+#[derive(Debug)]
+pub struct NonUtf8OsStr(pub String);
+
+impl Display for NonUtf8OsStr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "invalid (non-UTF-8) string like {} encountered",
+            self.0.quote(),
+        ))
+    }
+}
+
+impl Error for NonUtf8OsStr {}
+impl UError for NonUtf8OsStr {}
+
+pub fn try_get_str_from_os_str(os_str: &OsStr) -> Result<&str, NonUtf8OsStr> {
+    match os_str.to_str() {
+        Some(st) => Ok(st),
+        None => {
+            let cow = os_str.to_string_lossy();
+
+            Err(NonUtf8OsStr(cow.to_string()))
+        }
+    }
+}
+
+pub fn try_get_bytes_from_os_str(input: &OsStr) -> Result<&[u8], NonUtf8OsStr> {
     let result = {
         #[cfg(target_family = "unix")]
         {
@@ -153,38 +185,18 @@ pub fn bytes_from_os_str(input: &OsStr) -> UResult<&[u8]> {
 
         #[cfg(not(target_family = "unix"))]
         {
-            use crate::error::USimpleError;
-
             // TODO
             // Verify that this works correctly on these platforms
             match input.to_str().map(|st| st.as_bytes()) {
                 Some(sl) => Ok(sl),
-                None => Err(USimpleError::new(
-                    1,
-                    "non-UTF-8 string encountered when not allowed",
-                )),
+                None => {
+                    let cow = input.to_string_lossy();
+
+                    Err(NonUtf8OsStr(cow.to_string()))
+                }
             }
         }
     };
 
     result
-}
-
-fn get_str_or_exit_with_error(os_str: &OsStr) -> &str {
-    match os_str.to_str() {
-        Some(st) => st,
-        None => {
-            let cow = os_str.to_string_lossy();
-
-            let quoted = cow.quote();
-
-            let error = format!(
-                "argument like {quoted} is not a valid UTF-8 string, and could not be parsed as an integer",
-            );
-
-            show!(USimpleError::new(1, error.clone()));
-
-            panic!("{error}");
-        }
-    }
 }
