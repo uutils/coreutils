@@ -278,21 +278,32 @@ pub fn read_yes() -> bool {
     }
 }
 
+fn os_str_as_bytes_core(os_string: &OsStr) -> Option<&[u8]> {
+    // Using a block like this prevents accidental shadowing if the #[cfg] attributes are accidentally not mutually
+    // exclusive
+    let option = {
+        #[cfg(unix)]
+        {
+            Some(os_string.as_bytes())
+        }
+
+        #[cfg(not(unix))]
+        {
+            os_string.to_str().map(|op| op.as_bytes())
+        }
+    };
+
+    option
+}
+
 /// Converts an `OsStr` to a UTF-8 `&[u8]`.
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the string can't be coerced to UTF-8.
 pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
-    #[cfg(unix)]
-    let bytes = os_string.as_bytes();
-
-    #[cfg(not(unix))]
-    let bytes = os_string
-        .to_str()
-        .ok_or_else(|| {
-            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
-        })?
-        .as_bytes();
+    let bytes = os_str_as_bytes_core(os_string).ok_or_else(|| {
+        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+    })?;
 
     Ok(bytes)
 }
@@ -314,18 +325,76 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<[u8]> {
     bytes
 }
 
+#[derive(Debug)]
+enum OsStrConversionType {
+    ToBytes,
+    ToString,
+}
+
+#[derive(Debug)]
+pub struct NonUtf8OsStrError {
+    conversion_type: OsStrConversionType,
+    input_lossy_string: String,
+}
+
+impl std::fmt::Display for NonUtf8OsStrError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use os_display::Quotable;
+
+        let quoted = self.input_lossy_string.quote();
+
+        match self.conversion_type {
+            OsStrConversionType::ToBytes => f.write_fmt(format_args!(
+                "invalid (non-UTF-8) input like {quoted} encountered when converting input to bytes on a platform that doesn't use UTF-8",
+            )),
+            OsStrConversionType::ToString => f.write_fmt(format_args!(
+                "invalid (non-UTF-8) string like {quoted} encountered",
+            )),
+        }
+    }
+}
+
+impl std::error::Error for NonUtf8OsStrError {}
+impl error::UError for NonUtf8OsStrError {}
+
+pub fn os_str_as_bytes_verbose(input: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
+    os_str_as_bytes_core(input).ok_or_else(|| NonUtf8OsStrError {
+        conversion_type: OsStrConversionType::ToBytes,
+        input_lossy_string: input.to_string_lossy().into_owned(),
+    })
+}
+
+pub fn os_str_as_str_verbose(os_str: &OsStr) -> Result<&str, NonUtf8OsStrError> {
+    match os_str.to_str() {
+        Some(st) => Ok(st),
+        None => Err(NonUtf8OsStrError {
+            conversion_type: OsStrConversionType::ToString,
+            input_lossy_string: os_str.to_string_lossy().into_owned(),
+        }),
+    }
+}
+
 /// Converts a `&[u8]` to an `&OsStr`,
 /// or parses it as UTF-8 into an [`OsString`] on non-unix platforms.
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
 pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
-    #[cfg(unix)]
-    let os_str = Cow::Borrowed(OsStr::from_bytes(bytes));
-    #[cfg(not(unix))]
-    let os_str = Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(|_| {
-        mods::error::UUsageError::new(1, "Unable to transform bytes into OsStr")
-    })?));
+    // Using a block like this prevents accidental shadowing if the #[cfg] attributes are accidentally not mutually
+    // exclusive
+    let os_str = {
+        #[cfg(unix)]
+        {
+            Cow::Borrowed(OsStr::from_bytes(bytes))
+        }
+
+        #[cfg(not(unix))]
+        {
+            Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(|_| {
+                mods::error::UUsageError::new(1, "Unable to transform bytes into OsStr")
+            })?))
+        }
+    };
 
     Ok(os_str)
 }
@@ -335,12 +404,24 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
 pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
-    #[cfg(unix)]
-    let s = OsString::from_vec(vec);
-    #[cfg(not(unix))]
-    let s = OsString::from(String::from_utf8(vec).map_err(|_| {
-        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
-    })?);
+    // Using a block like this prevents accidental shadowing if the #[cfg] attributes are accidentally not mutually
+    // exclusive
+    let s = {
+        #[cfg(unix)]
+        {
+            OsString::from_vec(vec)
+        }
+
+        #[cfg(not(unix))]
+        {
+            OsString::from(String::from_utf8(vec).map_err(|_| {
+                mods::error::UUsageError::new(
+                    1,
+                    "invalid UTF-8 was detected in one or more arguments",
+                )
+            })?)
+        }
+    };
 
     Ok(s)
 }
