@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::io::stdout;
 use std::ops::ControlFlow;
 use uucore::error::{UResult, UUsageError};
@@ -18,21 +19,19 @@ mod options {
     pub const FORMAT: &str = "FORMAT";
     pub const ARGUMENT: &str = "ARGUMENT";
 }
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let format = matches
-        .get_one::<std::ffi::OsString>(options::FORMAT)
+        .get_one::<OsString>(options::FORMAT)
         .ok_or_else(|| UUsageError::new(1, get_message("printf-error-missing-operand")))?;
     let format = os_str_as_bytes(format)?;
 
-    let values: Vec<_> = match matches.get_many::<std::ffi::OsString>(options::ARGUMENT) {
-        // FIXME: use os_str_as_bytes once FormatArgument supports Vec<u8>
+    let values: Vec<_> = match matches.get_many::<OsString>(options::ARGUMENT) {
         Some(s) => s
-            .map(|os_string| {
-                FormatArgument::Unparsed(std::ffi::OsStr::to_string_lossy(os_string).to_string())
-            })
+            .map(|os_string| FormatArgument::Unparsed(os_string.to_owned()))
             .collect(),
         None => vec![],
     };
@@ -62,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 "{}",
                 get_message_with_args(
                     "printf-warning-ignoring-excess-arguments",
-                    HashMap::from([("arg".to_string(), arg_str.to_string())])
+                    HashMap::from([("arg".to_string(), arg_str.to_string_lossy().to_string())])
                 )
             );
         }
@@ -103,10 +102,10 @@ pub fn uu_app() -> Command {
                 .help(get_message("printf-help-version"))
                 .action(ArgAction::Version),
         )
-        .arg(Arg::new(options::FORMAT).value_parser(clap::value_parser!(std::ffi::OsString)))
+        .arg(Arg::new(options::FORMAT).value_parser(clap::value_parser!(OsString)))
         .arg(
             Arg::new(options::ARGUMENT)
                 .action(ArgAction::Append)
-                .value_parser(clap::value_parser!(std::ffi::OsString)),
+                .value_parser(clap::value_parser!(OsString)),
         )
 }

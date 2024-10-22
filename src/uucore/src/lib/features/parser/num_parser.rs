@@ -546,21 +546,6 @@ pub(crate) fn parse<'a>(
     target: ParseTarget,
     allowed_suffixes: &[(char, u32)],
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
-    // Parse the " and ' prefixes separately
-    if target != ParseTarget::Duration {
-        if let Some(rest) = input.strip_prefix(['\'', '"']) {
-            let mut chars = rest.char_indices().fuse();
-            let v = chars
-                .next()
-                .map(|(_, c)| ExtendedBigDecimal::BigDecimal(u32::from(c).into()));
-            return match (v, chars.next()) {
-                (Some(v), None) => Ok(v),
-                (Some(v), Some((i, _))) => Err(ExtendedParserError::PartialMatch(v, &rest[i..])),
-                (None, _) => Err(ExtendedParserError::NotNumeric),
-            };
-        }
-    }
-
     let trimmed_input = input.trim_ascii_start();
 
     // Initial minus/plus sign

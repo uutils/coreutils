@@ -101,6 +101,18 @@ impl From<f64> for ExtendedBigDecimal {
     }
 }
 
+impl From<u8> for ExtendedBigDecimal {
+    fn from(val: u8) -> Self {
+        Self::BigDecimal(val.into())
+    }
+}
+
+impl From<u32> for ExtendedBigDecimal {
+    fn from(val: u32) -> Self {
+        Self::BigDecimal(val.into())
+    }
+}
+
 impl ExtendedBigDecimal {
     pub fn zero() -> Self {
         Self::BigDecimal(0.into())
