@@ -946,6 +946,8 @@ fn non_utf_8_input() {
         .arg("%d")
         .arg(os_str)
         .fails()
+        // spell-checker:disable
         .stderr_only("printf: invalid (non-UTF-8) argument like 'Swer an rehte g�ete wendet s�n gem�ete, dem volget s�lde und �re.' encountered
 ");
+    // spell-checker:enable
 }
