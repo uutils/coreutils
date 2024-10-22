@@ -6,12 +6,11 @@
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use super::{
-    bytes_from_os_str,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
-    parse_escape_only, ArgumentIter, FormatChar, FormatError,
+    parse_escape_only, try_get_bytes_from_os_str, ArgumentIter, FormatChar, FormatError,
 };
 use crate::quoting_style::{escape_name, QuotingStyle};
 use std::{io::Write, ops::ControlFlow};
@@ -315,7 +314,7 @@ impl Spec {
         match self {
             Self::Char { width, align_left } => {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
-                write_padded(writer, &[args.get_char()], width, *align_left)
+                write_padded(writer, &[args.get_char()?], width, *align_left)
             }
             Self::String {
                 width,
@@ -334,7 +333,7 @@ impl Spec {
 
                 let os_str = args.get_str();
 
-                let bytes = bytes_from_os_str(os_str).unwrap();
+                let bytes = try_get_bytes_from_os_str(os_str).unwrap();
 
                 let truncated = match precision {
                     Some(p) if p < os_str.len() => &bytes[..p],
@@ -346,7 +345,7 @@ impl Spec {
             Self::EscapedString => {
                 let os_str = args.get_str();
 
-                let bytes = bytes_from_os_str(os_str).unwrap();
+                let bytes = try_get_bytes_from_os_str(os_str).unwrap();
 
                 let mut parsed = Vec::<u8>::new();
 
@@ -386,7 +385,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(0);
-                let i = args.get_i64();
+                let i = args.get_i64()?;
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -409,7 +408,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(0);
-                let i = args.get_u64();
+                let i = args.get_u64()?;
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -435,7 +434,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(6);
-                let f = args.get_f64();
+                let f = args.get_f64()?;
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -463,7 +462,7 @@ fn resolve_asterisk<'a>(
 ) -> Result<Option<usize>, FormatError> {
     Ok(match option {
         None => None,
-        Some(CanAsterisk::Asterisk) => Some(usize::try_from(args.get_u64()).ok().unwrap_or(0)),
+        Some(CanAsterisk::Asterisk) => Some(usize::try_from(args.get_u64()?).ok().unwrap_or(0)),
         Some(CanAsterisk::Fixed(w)) => Some(w),
     })
 }

@@ -38,6 +38,7 @@ pub mod num_parser;
 mod spec;
 
 pub use argument::*;
+use os_display::Quotable;
 use spec::Spec;
 use std::{
     error::Error,
@@ -63,6 +64,7 @@ pub enum FormatError {
     NeedAtLeastOneSpec(Vec<u8>),
     WrongSpecType,
     InvalidPrecision(String),
+    InvalidEncoding(NonUtf8OsStr),
 }
 
 impl Error for FormatError {}
@@ -71,6 +73,12 @@ impl UError for FormatError {}
 impl From<std::io::Error> for FormatError {
     fn from(value: std::io::Error) -> Self {
         Self::IoError(value)
+    }
+}
+
+impl From<NonUtf8OsStr> for FormatError {
+    fn from(value: NonUtf8OsStr) -> FormatError {
+        FormatError::InvalidEncoding(value)
     }
 }
 
@@ -98,6 +106,13 @@ impl Display for FormatError {
             Self::IoError(_) => write!(f, "io error"),
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
+            Self::InvalidEncoding(no) => {
+                write!(
+                    f,
+                    "invalid (non-UTF-8) argument like {} encountered",
+                    no.0.quote()
+                )
+            }
         }
     }
 }
