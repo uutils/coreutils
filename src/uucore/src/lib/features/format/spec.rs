@@ -5,8 +5,6 @@
 
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
-use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
-
 use super::{
     ExtendedBigDecimal, FormatChar, FormatError, OctalParsing,
     num_format::{
@@ -15,7 +13,11 @@ use super::{
     },
     parse_escape_only,
 };
-use crate::format::FormatArguments;
+use crate::{
+    format::FormatArguments,
+    os_str_as_bytes,
+    quoting_style::{QuotingStyle, locale_aware_escape_name},
+};
 use std::{io::Write, num::NonZero, ops::ControlFlow};
 
 /// A parsed specification for formatting a value
@@ -355,7 +357,7 @@ impl Spec {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or_default();
                 write_padded(
                     writer,
-                    &[args.next_char(position)],
+                    &[args.next_char(position)?],
                     width,
                     *align_left || neg_width,
                 )
@@ -375,22 +377,21 @@ impl Spec {
                 // TODO: We need to not use Rust's formatting for aligning the output,
                 // so that we can just write bytes to stdout without panicking.
                 let precision = resolve_asterisk_precision(*precision, args);
-                let s = args.next_string(position);
+                let os_str = args.next_string(position);
+                let bytes = os_str_as_bytes(os_str)?;
+
                 let truncated = match precision {
-                    Some(p) if p < s.len() => &s[..p],
-                    _ => s,
+                    Some(p) if p < os_str.len() => &bytes[..p],
+                    _ => bytes,
                 };
-                write_padded(
-                    writer,
-                    truncated.as_bytes(),
-                    width,
-                    *align_left || neg_width,
-                )
+                write_padded(writer, truncated, width, *align_left || neg_width)
             }
             Self::EscapedString { position } => {
-                let s = args.next_string(position);
-                let mut parsed = Vec::new();
-                for c in parse_escape_only(s.as_bytes(), OctalParsing::ThreeDigits) {
+                let os_str = args.next_string(position);
+                let bytes = os_str_as_bytes(os_str)?;
+                let mut parsed = Vec::<u8>::new();
+
+                for c in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
@@ -403,15 +404,11 @@ impl Spec {
             }
             Self::QuotedString { position } => {
                 let s = locale_aware_escape_name(
-                    args.next_string(position).as_ref(),
+                    args.next_string(position),
                     QuotingStyle::SHELL_ESCAPE,
                 );
-                #[cfg(unix)]
-                let bytes = std::os::unix::ffi::OsStringExt::into_vec(s);
-                #[cfg(not(unix))]
-                let bytes = s.to_string_lossy().as_bytes().to_owned();
-
-                writer.write_all(&bytes).map_err(FormatError::IoError)
+                let bytes = os_str_as_bytes(&s)?;
+                writer.write_all(bytes).map_err(FormatError::IoError)
             }
             Self::SignedInt {
                 width,
@@ -422,7 +419,7 @@ impl Spec {
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
                 let precision = resolve_asterisk_precision(*precision, args).unwrap_or_default();
-                let i = args.next_i64(position);
+                let i = args.next_i64(position)?;
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -450,7 +447,7 @@ impl Spec {
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
                 let precision = resolve_asterisk_precision(*precision, args).unwrap_or_default();
-                let i = args.next_u64(position);
+                let i = args.next_u64(position)?;
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -481,7 +478,7 @@ impl Spec {
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
                 let precision = resolve_asterisk_precision(*precision, args);
-                let f: ExtendedBigDecimal = args.next_extended_big_decimal(position);
+                let f: ExtendedBigDecimal = args.next_extended_big_decimal(position)?;
 
                 if precision.is_some_and(|p| p as u64 > i32::MAX as u64) {
                     return Err(FormatError::InvalidPrecision(
@@ -518,7 +515,7 @@ fn resolve_asterisk_width(
     match option {
         None => None,
         Some(CanAsterisk::Asterisk(loc)) => {
-            let nb = args.next_i64(&loc);
+            let nb = args.next_i64(&loc).unwrap_or(0);
             if nb < 0 {
                 Some((usize::try_from(-(nb as isize)).ok().unwrap_or(0), true))
             } else {
@@ -537,7 +534,7 @@ fn resolve_asterisk_precision(
 ) -> Option<usize> {
     match option {
         None => None,
-        Some(CanAsterisk::Asterisk(loc)) => match args.next_i64(&loc) {
+        Some(CanAsterisk::Asterisk(loc)) => match args.next_i64(&loc).unwrap_or(0) {
             v if v >= 0 => usize::try_from(v).ok(),
             v if v < 0 => Some(0usize),
             _ => None,
@@ -646,7 +643,7 @@ mod tests {
                 Some((42, false)),
                 resolve_asterisk_width(
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
-                    &mut FormatArguments::new(&[FormatArgument::Unparsed("42".to_string())]),
+                    &mut FormatArguments::new(&[FormatArgument::Unparsed("42".into())]),
                 )
             );
 
@@ -661,7 +658,7 @@ mod tests {
                 Some((42, true)),
                 resolve_asterisk_width(
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
-                    &mut FormatArguments::new(&[FormatArgument::Unparsed("-42".to_string())]),
+                    &mut FormatArguments::new(&[FormatArgument::Unparsed("-42".into())]),
                 )
             );
 
@@ -672,9 +669,9 @@ mod tests {
                         NonZero::new(2).unwrap()
                     ))),
                     &mut FormatArguments::new(&[
-                        FormatArgument::Unparsed("1".to_string()),
-                        FormatArgument::Unparsed("2".to_string()),
-                        FormatArgument::Unparsed("3".to_string())
+                        FormatArgument::Unparsed("1".into()),
+                        FormatArgument::Unparsed("2".into()),
+                        FormatArgument::Unparsed("3".into())
                     ]),
                 )
             );
@@ -717,7 +714,7 @@ mod tests {
                 Some(42),
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
-                    &mut FormatArguments::new(&[FormatArgument::Unparsed("42".to_string())]),
+                    &mut FormatArguments::new(&[FormatArgument::Unparsed("42".into())]),
                 )
             );
 
@@ -732,7 +729,7 @@ mod tests {
                 Some(0),
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
-                    &mut FormatArguments::new(&[FormatArgument::Unparsed("-42".to_string())]),
+                    &mut FormatArguments::new(&[FormatArgument::Unparsed("-42".into())]),
                 )
             );
             assert_eq!(
@@ -742,9 +739,9 @@ mod tests {
                         NonZero::new(2).unwrap()
                     ))),
                     &mut FormatArguments::new(&[
-                        FormatArgument::Unparsed("1".to_string()),
-                        FormatArgument::Unparsed("2".to_string()),
-                        FormatArgument::Unparsed("3".to_string())
+                        FormatArgument::Unparsed("1".into()),
+                        FormatArgument::Unparsed("2".into()),
+                        FormatArgument::Unparsed("3".into())
                     ]),
                 )
             );
