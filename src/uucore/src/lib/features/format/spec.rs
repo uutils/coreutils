@@ -5,15 +5,15 @@
 
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
-use crate::quoting_style::{escape_name, QuotingStyle};
-
 use super::{
+    bytes_from_os_str,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
     parse_escape_only, ArgumentIter, FormatChar, FormatError,
 };
+use crate::quoting_style::{escape_name, QuotingStyle};
 use std::{io::Write, ops::ControlFlow};
 
 /// A parsed specification for formatting a value
@@ -333,22 +333,30 @@ impl Spec {
                 // TODO: We need to not use Rust's formatting for aligning the output,
                 // so that we can just write bytes to stdout without panicking.
                 let precision = resolve_asterisk(*precision, &mut args);
-                let s = args.get_str();
+
+                let os_str = args.get_str();
+
+                let bytes = bytes_from_os_str(os_str).unwrap();
+
                 let truncated = match precision {
-                    Some(p) if p < s.len() => &s[..p],
-                    _ => s,
+                    Some(p) if p < os_str.len() => &bytes[..p],
+                    _ => bytes,
                 };
                 write_padded(
                     writer,
-                    truncated.as_bytes(),
+                    truncated,
                     width,
                     *align_left || neg_width,
                 )
             }
             Self::EscapedString => {
-                let s = args.get_str();
-                let mut parsed = Vec::new();
-                for c in parse_escape_only(s.as_bytes()) {
+                let os_str = args.get_str();
+
+                let bytes = bytes_from_os_str(os_str).unwrap();
+
+                let mut parsed = Vec::<u8>::new();
+
+                for c in parse_escape_only(bytes) {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
@@ -361,19 +369,15 @@ impl Spec {
             }
             Self::QuotedString => {
                 let s = escape_name(
-                    args.get_str().as_ref(),
+                    args.get_str(),
                     &QuotingStyle::Shell {
                         escape: true,
                         always_quote: false,
                         show_control: false,
                     },
                 );
-                #[cfg(unix)]
-                let bytes = std::os::unix::ffi::OsStringExt::into_vec(s);
-                #[cfg(not(unix))]
-                let bytes = s.to_string_lossy().as_bytes().to_owned();
-
-                writer.write_all(&bytes).map_err(FormatError::IoError)
+                let bytes = bytes_from_os_str(&s).unwrap();
+                writer.write_all(bytes).map_err(FormatError::IoError)
             }
             Self::SignedInt {
                 width,

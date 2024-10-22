@@ -3,11 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use clap::{crate_version, Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::io::stdout;
 use std::ops::ControlFlow;
 use uucore::error::{UResult, UUsageError};
-use uucore::format::{parse_spec_and_escape, FormatArgument, FormatItem};
-use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show_warning};
+use uucore::format::{bytes_from_os_str, parse_spec_and_escape, FormatArgument, FormatItem};
+use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
@@ -19,21 +20,19 @@ mod options {
     pub const FORMAT: &str = "FORMAT";
     pub const ARGUMENT: &str = "ARGUMENT";
 }
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let format = matches
-        .get_one::<std::ffi::OsString>(options::FORMAT)
+        .get_one::<OsString>(options::FORMAT)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
-    let format = os_str_as_bytes(format)?;
+    let format = bytes_from_os_str(format)?;
 
-    let values: Vec<_> = match matches.get_many::<std::ffi::OsString>(options::ARGUMENT) {
-        // FIXME: use os_str_as_bytes once FormatArgument supports Vec<u8>
+    let values: Vec<_> = match matches.get_many::<OsString>(options::ARGUMENT) {
         Some(s) => s
-            .map(|os_string| {
-                FormatArgument::Unparsed(std::ffi::OsStr::to_string_lossy(os_string).to_string())
-            })
+            .map(|os_string| FormatArgument::Unparsed(os_string.to_owned()))
             .collect(),
         None => vec![],
     };
@@ -60,7 +59,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let Unparsed(arg_str) = arg else {
                 unreachable!("All args are transformed to Unparsed")
             };
-            show_warning!("ignoring excess arguments, starting with '{arg_str}'");
+            show_warning!(
+                "ignoring excess arguments, starting with '{}'",
+                arg_str.to_string_lossy()
+            );
         }
         return Ok(());
     }
@@ -98,10 +100,10 @@ pub fn uu_app() -> Command {
                 .help("Print version information")
                 .action(ArgAction::Version),
         )
-        .arg(Arg::new(options::FORMAT).value_parser(clap::value_parser!(std::ffi::OsString)))
+        .arg(Arg::new(options::FORMAT).value_parser(clap::value_parser!(OsString)))
         .arg(
             Arg::new(options::ARGUMENT)
                 .action(ArgAction::Append)
-                .value_parser(clap::value_parser!(std::ffi::OsString)),
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
