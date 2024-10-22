@@ -5,15 +5,15 @@
 
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
-use crate::quoting_style::{escape_name, QuotingStyle};
-
 use super::{
+    bytes_from_os_str,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
     parse_escape_only, ArgumentIter, FormatChar, FormatError,
 };
+use crate::quoting_style::{escape_name, QuotingStyle};
 use std::{io::Write, ops::ControlFlow};
 
 /// A parsed specification for formatting a value
@@ -331,17 +331,26 @@ impl Spec {
                 // TODO: We need to not use Rust's formatting for aligning the output,
                 // so that we can just write bytes to stdout without panicking.
                 let precision = resolve_asterisk(*precision, &mut args)?;
-                let s = args.get_str();
+
+                let os_str = args.get_str();
+
+                let bytes = bytes_from_os_str(os_str).unwrap();
+
                 let truncated = match precision {
-                    Some(p) if p < s.len() => &s[..p],
-                    _ => s,
+                    Some(p) if p < os_str.len() => &bytes[..p],
+                    _ => bytes,
                 };
-                write_padded(writer, truncated.as_bytes(), width, *align_left)
+
+                write_padded(writer, truncated, width, *align_left)
             }
             Self::EscapedString => {
-                let s = args.get_str();
-                let mut parsed = Vec::new();
-                for c in parse_escape_only(s.as_bytes()) {
+                let os_str = args.get_str();
+
+                let bytes = bytes_from_os_str(os_str).unwrap();
+
+                let mut parsed = Vec::<u8>::new();
+
+                for c in parse_escape_only(bytes) {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
@@ -353,11 +362,12 @@ impl Spec {
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
             Self::QuotedString => {
-                let s = args.get_str();
+                let os = args.get_str();
+
                 writer
                     .write_all(
                         escape_name(
-                            s.as_ref(),
+                            os,
                             &QuotingStyle::Shell {
                                 escape: true,
                                 always_quote: false,

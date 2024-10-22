@@ -6,12 +6,12 @@
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{crate_version, Arg, ArgAction, Command};
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::io::{self, StdoutLock, Write};
 use std::iter::Peekable;
 use std::ops::ControlFlow;
 use std::slice::Iter;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::UResult;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("echo.md");
@@ -355,12 +355,7 @@ fn execute(
     arguments_after_options: ValuesRef<'_, OsString>,
 ) -> UResult<()> {
     for (i, input) in arguments_after_options.enumerate() {
-        let Some(bytes) = bytes_from_os_string(input.as_os_str()) else {
-            return Err(USimpleError::new(
-                1,
-                "Non-UTF-8 arguments provided, but this platform does not support them",
-            ));
-        };
+        let bytes = uucore::format::bytes_from_os_str(input)?;
 
         if i > 0 {
             stdout_lock.write_all(b" ")?;
@@ -380,24 +375,4 @@ fn execute(
     }
 
     Ok(())
-}
-
-fn bytes_from_os_string(input: &OsStr) -> Option<&[u8]> {
-    let option = {
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::ffi::OsStrExt;
-
-            Some(input.as_bytes())
-        }
-
-        #[cfg(not(target_family = "unix"))]
-        {
-            // TODO
-            // Verify that this works correctly on these platforms
-            input.to_str().map(|st| st.as_bytes())
-        }
-    };
-
-    option
 }
