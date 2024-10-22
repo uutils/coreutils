@@ -69,6 +69,7 @@ pub enum FormatError {
     EndsWithPercent(Vec<u8>),
     /// The escape sequence `\x` appears without a literal hexadecimal value.
     MissingHex,
+    InvalidEncoding(NonUtf8OsStr),
 }
 
 impl Error for FormatError {}
@@ -77,6 +78,12 @@ impl UError for FormatError {}
 impl From<std::io::Error> for FormatError {
     fn from(value: std::io::Error) -> Self {
         Self::IoError(value)
+    }
+}
+
+impl From<NonUtf8OsStr> for FormatError {
+    fn from(value: NonUtf8OsStr) -> FormatError {
+        FormatError::InvalidEncoding(value)
     }
 }
 
@@ -108,6 +115,13 @@ impl Display for FormatError {
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
             Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
+            Self::InvalidEncoding(no) => {
+                write!(
+                    f,
+                    "invalid (non-UTF-8) argument like {} encountered",
+                    no.0.quote()
+                )
+            }
         }
     }
 }

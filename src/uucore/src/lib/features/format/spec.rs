@@ -6,12 +6,11 @@
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use super::{
-    bytes_from_os_str,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
-    parse_escape_only, ArgumentIter, FormatChar, FormatError,
+    parse_escape_only, try_get_bytes_from_os_str, ArgumentIter, FormatChar, FormatError,
 };
 use crate::quoting_style::{escape_name, QuotingStyle};
 use std::{io::Write, ops::ControlFlow};
@@ -316,7 +315,7 @@ impl Spec {
             Self::Char { width, align_left } => {
                 let (width, neg_width) =
                     resolve_asterisk_maybe_negative(*width, &mut args).unwrap_or_default();
-                write_padded(writer, &[args.get_char()], width, *align_left || neg_width)
+                write_padded(writer, &[args.get_char()?], width, *align_left || neg_width)
             }
             Self::String {
                 width,
@@ -336,23 +335,18 @@ impl Spec {
 
                 let os_str = args.get_str();
 
-                let bytes = bytes_from_os_str(os_str).unwrap();
+                let bytes = try_get_bytes_from_os_str(os_str).unwrap();
 
                 let truncated = match precision {
                     Some(p) if p < os_str.len() => &bytes[..p],
                     _ => bytes,
                 };
-                write_padded(
-                    writer,
-                    truncated,
-                    width,
-                    *align_left || neg_width,
-                )
+                write_padded(writer, truncated, width, *align_left || neg_width)
             }
             Self::EscapedString => {
                 let os_str = args.get_str();
 
-                let bytes = bytes_from_os_str(os_str).unwrap();
+                let bytes = try_get_bytes_from_os_str(os_str).unwrap();
 
                 let mut parsed = Vec::<u8>::new();
 
@@ -376,7 +370,7 @@ impl Spec {
                         show_control: false,
                     },
                 );
-                let bytes = bytes_from_os_str(&s).unwrap();
+                let bytes = try_get_bytes_from_os_str(&s)?;
                 writer.write_all(bytes).map_err(FormatError::IoError)
             }
             Self::SignedInt {
@@ -387,7 +381,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args).unwrap_or(0);
-                let i = args.get_i64();
+                let i = args.get_i64()?;
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -410,7 +404,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args).unwrap_or(0);
-                let i = args.get_u64();
+                let i = args.get_u64()?;
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -436,7 +430,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args).unwrap_or(6);
-                let f = args.get_f64();
+                let f = args.get_f64()?;
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -464,7 +458,11 @@ fn resolve_asterisk<'a>(
 ) -> Option<usize> {
     match option {
         None => None,
-        Some(CanAsterisk::Asterisk) => Some(usize::try_from(args.get_u64()).ok().unwrap_or(0)),
+        Some(CanAsterisk::Asterisk) => Some(
+            usize::try_from(args.get_u64().unwrap_or(0))
+                .ok()
+                .unwrap_or(0),
+        ),
         Some(CanAsterisk::Fixed(w)) => Some(w),
     }
 }
@@ -476,7 +474,7 @@ fn resolve_asterisk_maybe_negative<'a>(
     match option {
         None => None,
         Some(CanAsterisk::Asterisk) => {
-            let nb = args.get_i64();
+            let nb = args.get_i64().unwrap_or(0);
             if nb < 0 {
                 Some((usize::try_from(-(nb as isize)).ok().unwrap_or(0), true))
             } else {

@@ -996,4 +996,11 @@ fn non_utf_8_input() {
         .arg(os_str)
         .succeeds()
         .stdout_only_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("%d")
+        .arg(os_str)
+        .fails()
+        .stderr_only("printf: invalid (non-UTF-8) argument like 'Swer an rehte g�ete wendet s�n gem�ete, dem volget s�lde und �re.' encountered
+");
 }

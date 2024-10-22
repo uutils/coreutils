@@ -123,7 +123,7 @@ fn execute(
     escaped: bool,
 ) -> UResult<()> {
     for (i, input) in arguments_after_options.into_iter().enumerate() {
-        let bytes = uucore::format::bytes_from_os_str(&input)?;
+        let bytes = uucore::format::try_get_bytes_from_os_str(&input)?;
 
         if i > 0 {
             stdout_lock.write_all(b" ")?;
