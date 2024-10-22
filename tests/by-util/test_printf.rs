@@ -916,3 +916,29 @@ fn float_flag_position_space_padding() {
         .succeeds()
         .stdout_only(" +1.0");
 }
+
+#[test]
+#[cfg(target_family = "unix")]
+fn non_utf_8_input() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // ISO-8859-1 encoded text
+    // spell-checker:disable
+    const INPUT_AND_OUTPUT: &[u8] =
+        b"Swer an rehte g\xFCete wendet s\xEEn gem\xFCete, dem volget s\xE6lde und \xEAre.";
+    // spell-checker:enable
+
+    let os_str = OsStr::from_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("%s")
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+}
