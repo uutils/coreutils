@@ -329,14 +329,12 @@ fn multibyte_escape_unicode() {
     new_ucmd!()
         .args(&["-e", r"\xf0\x41\x9f\x98\x82"])
         .succeeds()
-        .stdout_is_bytes(b"\xF0A\x9F\x98\x82\n")
-        .no_stderr();
+        .stdout_only_bytes(b"\xF0A\x9F\x98\x82\n");
 
     new_ucmd!()
         .args(&["-e", r"\x41\xf0\c\x9f\x98\x82"])
         .succeeds()
-        .stdout_is_bytes(b"A\xF0")
-        .no_stderr();
+        .stdout_only_bytes(b"A\xF0");
 }
 
 #[test]
@@ -344,8 +342,7 @@ fn non_utf_8_hex_round_trip() {
     new_ucmd!()
         .args(&["-e", r"\xFF"])
         .succeeds()
-        .stdout_is_bytes(b"\xFF\n")
-        .no_stderr();
+        .stdout_only_bytes(b"\xFF\n");
 }
 
 #[test]
@@ -355,14 +352,12 @@ fn nine_bit_octal() {
     new_ucmd!()
         .args(&["-e", r"\0777"])
         .succeeds()
-        .stdout_is_bytes(RESULT)
-        .no_stderr();
+        .stdout_only_bytes(RESULT);
 
     new_ucmd!()
         .args(&["-e", r"\777"])
         .succeeds()
-        .stdout_is_bytes(RESULT)
-        .no_stderr();
+        .stdout_only_bytes(RESULT);
 }
 
 #[test]
