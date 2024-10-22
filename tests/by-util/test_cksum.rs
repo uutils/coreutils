@@ -1344,3 +1344,42 @@ fn test_check_comment_leading_space() {
         .stdout_contains("foo: OK")
         .stderr_contains("WARNING: 1 line is improperly formatted");
 }
+
+/// This test checks alignment with GNU's error handling.
+/// Windows has a different logic and is guarded by [`test_check_directory_error`].
+#[cfg(not(windows))]
+#[test]
+fn test_check_failed_to_read() {
+    // check `cksum`'s behavior when encountering directories or non existing files
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write(
+        "CHECKSUM",
+        "SHA1 (dir) = ffffffffffffffffffffffffffffffffffffffff\n\
+        SHA1 (not-file) = ffffffffffffffffffffffffffffffffffffffff\n",
+    );
+    at.mkdir("dir");
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .fails()
+        .stdout_is(
+            "dir: FAILED open or read\n\
+            not-file: FAILED open or read\n",
+        )
+        .stderr_contains("cksum: WARNING: 2 listed files could not be read");
+
+    // check with `--ignore-missing`
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .arg("--ignore-missing")
+        .fails()
+        .stdout_is("dir: FAILED open or read\n")
+        .stderr_contains("cksum: WARNING: 1 listed file could not be read");
+}

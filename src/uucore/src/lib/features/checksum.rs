@@ -154,7 +154,7 @@ pub fn create_sha3(bits: Option<usize>) -> UResult<HashAlgorithm> {
 }
 
 #[allow(clippy::comparison_chain)]
-fn cksum_output(res: &ChecksumResult, ignore_missing: bool, status: bool) {
+fn cksum_output(res: &ChecksumResult, status: bool) {
     if res.bad_format == 1 {
         show_warning_caps!("{} line is improperly formatted", res.bad_format);
     } else if res.bad_format > 1 {
@@ -168,12 +168,10 @@ fn cksum_output(res: &ChecksumResult, ignore_missing: bool, status: bool) {
             show_warning_caps!("{} computed checksums did NOT match", res.failed_cksum);
         }
     }
-    if !ignore_missing {
-        if res.failed_open_file == 1 {
-            show_warning_caps!("{} listed file could not be read", res.failed_open_file);
-        } else if res.failed_open_file > 1 {
-            show_warning_caps!("{} listed files could not be read", res.failed_open_file);
-        }
+    if res.failed_open_file == 1 {
+        show_warning_caps!("{} listed file could not be read", res.failed_open_file);
+    } else if res.failed_open_file > 1 {
+        show_warning_caps!("{} listed files could not be read", res.failed_open_file);
     }
 }
 
@@ -364,10 +362,16 @@ fn get_file_to_check(
     if filename == "-" {
         Some(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
+        let mut failed_open = || {
+            println!("{filename}: FAILED open or read");
+            res.failed_open_file += 1;
+        };
         match File::open(filename) {
             Ok(f) => {
                 if f.metadata().ok()?.is_dir() {
                     show!(USimpleError::new(1, format!("{filename}: Is a directory")));
+                    // also regarded as a failed open
+                    failed_open();
                     None
                 } else {
                     Some(Box::new(f))
@@ -377,9 +381,8 @@ fn get_file_to_check(
                 if !ignore_missing {
                     // yes, we have both stderr and stdout here
                     show!(err.map_err_context(|| filename.to_string()));
-                    println!("{filename}: FAILED open or read");
+                    failed_open();
                 }
-                res.failed_open_file += 1;
                 // we could not open the file but we want to continue
                 None
             }
@@ -612,6 +615,9 @@ where
             return Ok(());
         }
 
+        // if any incorrectly formatted line, show it
+        cksum_output(&res, status);
+
         if ignore_missing && correct_format == 0 {
             // we have only bad format
             // and we had ignore-missing
@@ -633,9 +639,6 @@ where
         if (res.failed_cksum > 0 || res.failed_open_file > 0) && !ignore_missing {
             set_exit_code(1);
         }
-
-        // if any incorrectly formatted line, show it
-        cksum_output(&res, ignore_missing, status);
     }
 
     Ok(())
