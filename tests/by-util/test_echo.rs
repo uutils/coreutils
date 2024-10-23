@@ -13,12 +13,7 @@ fn test_default() {
 
 #[test]
 fn test_no_trailing_newline() {
-    new_ucmd!()
-        .arg("-n")
-        .arg("hi")
-        .succeeds()
-        .no_stderr()
-        .stdout_only("hi");
+    new_ucmd!().arg("-n").arg("hi").succeeds().stdout_only("hi");
 }
 
 #[test]

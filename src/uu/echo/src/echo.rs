@@ -282,7 +282,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // "If the POSIXLY_CORRECT environment variable is set, then when echo’s first argument is not -n it outputs option-like arguments instead of treating them as options."
     // https://www.gnu.org/software/coreutils/manual/html_node/echo-invocation.html
 
-    let no_newline = matches.get_flag(options::NO_NEWLINE);
+    let trailing_newline = !matches.get_flag(options::NO_NEWLINE);
     let escaped = matches.get_flag(options::ENABLE_BACKSLASH_ESCAPE);
 
     let mut stdout_lock = io::stdout().lock();
@@ -291,14 +291,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(arguments_after_options) => {
             execute(
                 &mut stdout_lock,
-                no_newline,
+                trailing_newline,
                 escaped,
                 arguments_after_options,
             )?;
         }
         None => {
             // No strings to print, so just handle newline setting
-            if !no_newline {
+            if trailing_newline {
                 stdout_lock.write_all(b"\n")?;
             }
         }
@@ -350,7 +350,7 @@ pub fn uu_app() -> Command {
 
 fn execute(
     stdout_lock: &mut StdoutLock,
-    no_newline: bool,
+    trailing_newline: bool,
     escaped: bool,
     arguments_after_options: ValuesRef<'_, OsString>,
 ) -> UResult<()> {
@@ -375,7 +375,7 @@ fn execute(
         }
     }
 
-    if !no_newline {
+    if trailing_newline {
         stdout_lock.write_all(b"\n")?;
     }
 
