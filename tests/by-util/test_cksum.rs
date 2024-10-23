@@ -1383,3 +1383,22 @@ fn test_check_failed_to_read() {
         .stdout_is("dir: FAILED open or read\n")
         .stderr_contains("cksum: WARNING: 1 listed file could not be read");
 }
+
+#[test]
+fn test_zero_multiple_file() {
+    new_ucmd!()
+        .arg("-z")
+        .arg("alice_in_wonderland.txt")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("zero_multiple_file.expected");
+}
+
+#[test]
+fn test_zero_single_file() {
+    new_ucmd!()
+        .arg("--zero")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_is_fixture("zero_single_file.expected");
+}
