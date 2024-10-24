@@ -307,7 +307,7 @@ nix = { version = "0.29", default-features = false }
 nom = "7.1.3"
 notify = { version = "=6.0.1", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
-num-prime = "0.4.4"
+num-prime = "0.4.3"
 num-traits = "0.2.19"
 number_prefix = "0.4"
 once_cell = "1.19.0"
@@ -320,6 +320,7 @@ quick-error = "2.0.1"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_core = "0.6.4"
 rayon = "1.10"
+redox_syscall = "0.5.1"
 regex = "1.10.4"
 rstest = "0.23.0"
 rust-ini = "0.21.0"
