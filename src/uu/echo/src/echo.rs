@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::io::{self, StdoutLock, Write};
 use uucore::error::UResult;
 use uucore::format::{parse_escape_only, EscapedChar, FormatChar};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes_verbose};
 
 const ABOUT: &str = help_about!("echo.md");
 const USAGE: &str = help_usage!("echo.md");
@@ -123,8 +123,9 @@ fn execute(
     escaped: bool,
 ) -> UResult<()> {
     for (i, input) in arguments_after_options.into_iter().enumerate() {
-        let bytes = uucore::format::try_get_bytes_from_os_str(&input)?;
+        let bytes = os_str_as_bytes_verbose(&input)?;
 
+        // Don't print a space before the first argument
         if i > 0 {
             stdout_lock.write_all(b" ")?;
         }

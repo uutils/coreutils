@@ -37,7 +37,11 @@ pub mod num_format;
 pub mod num_parser;
 mod spec;
 
-pub use argument::*;
+pub use self::escape::EscapedChar;
+pub use argument::FormatArgument;
+
+use self::{escape::parse_escape_code, num_format::Formatter};
+use crate::{error::UError, NonUtf8OsStrError, OsStrConversionType};
 pub use spec::Spec;
 use std::{
     error::Error,
@@ -47,13 +51,6 @@ use std::{
 };
 
 use os_display::Quotable;
-
-use crate::error::UError;
-
-pub use self::{
-    escape::{parse_escape_code, EscapedChar},
-    num_format::Formatter,
-};
 
 #[derive(Debug)]
 pub enum FormatError {
@@ -69,7 +66,7 @@ pub enum FormatError {
     EndsWithPercent(Vec<u8>),
     /// The escape sequence `\x` appears without a literal hexadecimal value.
     MissingHex,
-    InvalidEncoding(NonUtf8OsStr),
+    InvalidEncoding(NonUtf8OsStrError),
 }
 
 impl Error for FormatError {}
@@ -81,8 +78,8 @@ impl From<std::io::Error> for FormatError {
     }
 }
 
-impl From<NonUtf8OsStr> for FormatError {
-    fn from(value: NonUtf8OsStr) -> FormatError {
+impl From<NonUtf8OsStrError> for FormatError {
+    fn from(value: NonUtf8OsStrError) -> FormatError {
         FormatError::InvalidEncoding(value)
     }
 }
@@ -116,11 +113,18 @@ impl Display for FormatError {
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
             Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
             Self::InvalidEncoding(no) => {
-                write!(
-                    f,
-                    "invalid (non-UTF-8) argument like {} encountered",
-                    no.0.quote()
-                )
+                use os_display::Quotable;
+
+                let quoted = no.input_lossy_string.quote();
+
+                match no.conversion_type {
+                    OsStrConversionType::ToBytes => f.write_fmt(format_args!(
+                        "invalid (non-UTF-8) argument like {quoted} encountered when converting argument to bytes on a platform that doesn't use UTF-8",
+                    )),
+                    OsStrConversionType::ToString => f.write_fmt(format_args!(
+                        "invalid (non-UTF-8) argument like {quoted} encountered",
+                    )),
+                }
             }
         }
     }
