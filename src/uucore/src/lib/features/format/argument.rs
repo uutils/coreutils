@@ -5,17 +5,14 @@
 
 use super::FormatError;
 use crate::{
-    error::{set_exit_code, UError},
+    error::set_exit_code,
     features::format::num_parser::{ParseError, ParsedNumber},
+    os_str_as_bytes_verbose, os_str_as_str_verbose,
     quoting_style::{escape_name, Quotes, QuotingStyle},
     show_error, show_warning,
 };
 use os_display::Quotable;
-use std::{
-    error::Error,
-    ffi::{OsStr, OsString},
-    fmt::Display,
-};
+use std::ffi::{OsStr, OsString};
 
 /// An argument for formatting
 ///
@@ -50,7 +47,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::Char(c) => Ok(*c as u8),
-            FormatArgument::Unparsed(os) => match try_get_bytes_from_os_str(os)?.first() {
+            FormatArgument::Unparsed(os) => match os_str_as_bytes_verbose(os)?.first() {
                 Some(&byte) => Ok(byte),
                 None => Ok(b'\0'),
             },
@@ -65,7 +62,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         match next {
             FormatArgument::UnsignedInt(n) => Ok(*n),
             FormatArgument::Unparsed(os) => {
-                let str = try_get_str_from_os_str(os)?;
+                let str = os_str_as_str_verbose(os)?;
 
                 Ok(extract_value(ParsedNumber::parse_u64(str), str))
             }
@@ -80,7 +77,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         match next {
             FormatArgument::SignedInt(n) => Ok(*n),
             FormatArgument::Unparsed(os) => {
-                let str = try_get_str_from_os_str(os)?;
+                let str = os_str_as_str_verbose(os)?;
 
                 Ok(extract_value(ParsedNumber::parse_i64(str), str))
             }
@@ -95,7 +92,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         match next {
             FormatArgument::Float(n) => Ok(*n),
             FormatArgument::Unparsed(os) => {
-                let str = try_get_str_from_os_str(os)?;
+                let str = os_str_as_str_verbose(os)?;
 
                 Ok(extract_value(ParsedNumber::parse_f64(str), str))
             }
@@ -146,57 +143,4 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
             }
         }
     }
-}
-
-#[derive(Debug)]
-pub struct NonUtf8OsStr(pub String);
-
-impl Display for NonUtf8OsStr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "invalid (non-UTF-8) string like {} encountered",
-            self.0.quote(),
-        ))
-    }
-}
-
-impl Error for NonUtf8OsStr {}
-impl UError for NonUtf8OsStr {}
-
-pub fn try_get_str_from_os_str(os_str: &OsStr) -> Result<&str, NonUtf8OsStr> {
-    match os_str.to_str() {
-        Some(st) => Ok(st),
-        None => {
-            let cow = os_str.to_string_lossy();
-
-            Err(NonUtf8OsStr(cow.to_string()))
-        }
-    }
-}
-
-pub fn try_get_bytes_from_os_str(input: &OsStr) -> Result<&[u8], NonUtf8OsStr> {
-    let result = {
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::ffi::OsStrExt;
-
-            Ok(input.as_bytes())
-        }
-
-        #[cfg(not(target_family = "unix"))]
-        {
-            // TODO
-            // Verify that this works correctly on these platforms
-            match input.to_str().map(|st| st.as_bytes()) {
-                Some(sl) => Ok(sl),
-                None => {
-                    let cow = input.to_string_lossy();
-
-                    Err(NonUtf8OsStr(cow.to_string()))
-                }
-            }
-        }
-    };
-
-    result
 }

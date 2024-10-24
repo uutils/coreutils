@@ -6,13 +6,17 @@
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use super::{
+    argument::ArgumentIter,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
-    parse_escape_only, try_get_bytes_from_os_str, ArgumentIter, FormatChar, FormatError,
+    parse_escape_only, FormatChar, FormatError,
 };
-use crate::quoting_style::{escape_name, QuotingStyle};
+use crate::{
+    os_str_as_bytes_verbose,
+    quoting_style::{escape_name, QuotingStyle},
+};
 use std::{io::Write, ops::ControlFlow};
 
 /// A parsed specification for formatting a value
@@ -333,7 +337,7 @@ impl Spec {
 
                 let os_str = args.get_str();
 
-                let bytes = try_get_bytes_from_os_str(os_str).unwrap();
+                let bytes = os_str_as_bytes_verbose(os_str)?;
 
                 let truncated = match precision {
                     Some(p) if p < os_str.len() => &bytes[..p],
@@ -345,7 +349,7 @@ impl Spec {
             Self::EscapedString => {
                 let os_str = args.get_str();
 
-                let bytes = try_get_bytes_from_os_str(os_str).unwrap();
+                let bytes = os_str_as_bytes_verbose(os_str)?;
 
                 let mut parsed = Vec::<u8>::new();
 

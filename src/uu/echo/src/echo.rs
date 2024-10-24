@@ -12,7 +12,7 @@ use std::iter::Peekable;
 use std::ops::ControlFlow;
 use std::slice::Iter;
 use uucore::error::UResult;
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes_verbose};
 
 const ABOUT: &str = help_about!("echo.md");
 const USAGE: &str = help_usage!("echo.md");
@@ -355,8 +355,9 @@ fn execute(
     arguments_after_options: ValuesRef<'_, OsString>,
 ) -> UResult<()> {
     for (i, input) in arguments_after_options.enumerate() {
-        let bytes = uucore::format::try_get_bytes_from_os_str(input)?;
+        let bytes = os_str_as_bytes_verbose(input)?;
 
+        // Don't print a space before the first argument
         if i > 0 {
             stdout_lock.write_all(b" ")?;
         }
