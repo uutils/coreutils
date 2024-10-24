@@ -3,12 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl boop
+// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl
 
+use crate::unicode_table;
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take},
-    character::complete::{digit1, one_of},
+    bytes::complete::{tag, take, take_till},
+    character::complete::one_of,
     combinator::{map, map_opt, peek, recognize, value},
     multi::{many0, many_m_n},
     sequence::{delimited, preceded, separated_pair},
@@ -23,8 +24,6 @@ use std::{
 };
 use uucore::error::UError;
 
-use crate::unicode_table;
-
 #[derive(Debug, Clone)]
 pub enum BadSequence {
     MissingCharClassName,
@@ -37,6 +36,7 @@ pub enum BadSequence {
     ClassInSet2NotMatchedBySet1,
     Set1LongerSet2EndsInClass,
     ComplementMoreThanOneUniqueInSet2,
+    BackwardsRange { end: u32, start: u32 },
 }
 
 impl Display for BadSequence {
@@ -69,6 +69,23 @@ impl Display for BadSequence {
             }
             Self::ComplementMoreThanOneUniqueInSet2 => {
                 write!(f, "when translating with complemented character classes,\nstring2 must map all characters in the domain to one")
+            }
+            Self::BackwardsRange { end, start } => {
+                fn end_or_start_to_string(ut: &u32) -> String {
+                    match char::from_u32(*ut) {
+                        Some(ch @ '\x20'..='\x7E') => ch.escape_default().to_string(),
+                        _ => {
+                            format!("\\{ut:03o}")
+                        }
+                    }
+                }
+
+                write!(
+                    f,
+                    "range-endpoints of '{}-{}' are in reverse collating sequence order",
+                    end_or_start_to_string(start),
+                    end_or_start_to_string(end)
+                )
             }
         }
     }
@@ -285,9 +302,41 @@ impl Sequence {
     }
 
     fn parse_octal(input: &[u8]) -> IResult<&[u8], u8> {
+        preceded(
+            tag("\\"),
+            alt((
+                Self::parse_octal_up_to_three_digits,
+                // Fallback for if the three digit octal escape is greater than \377 (0xFF), and therefore can't be
+                // parsed as as a byte
+                // See test `test_multibyte_octal_sequence`
+                Self::parse_octal_two_digits,
+            )),
+        )(input)
+    }
+
+    fn parse_octal_up_to_three_digits(input: &[u8]) -> IResult<&[u8], u8> {
         map_opt(
-            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
-            |out: &[u8]| u8::from_str_radix(std::str::from_utf8(out).expect("boop"), 8).ok(),
+            recognize(many_m_n(1, 3, one_of("01234567"))),
+            |out: &[u8]| {
+                let str_to_parse = std::str::from_utf8(out).unwrap();
+
+                match u8::from_str_radix(str_to_parse, 8) {
+                    Ok(ue) => Some(ue),
+                    Err(_pa) => {
+                        // TODO
+                        // A warning needs to be printed here
+                        // See https://github.com/uutils/coreutils/issues/6821
+                        None
+                    }
+                }
+            },
+        )(input)
+    }
+
+    fn parse_octal_two_digits(input: &[u8]) -> IResult<&[u8], u8> {
+        map_opt(
+            recognize(many_m_n(2, 2, one_of("01234567"))),
+            |out: &[u8]| u8::from_str_radix(std::str::from_utf8(out).unwrap(), 8).ok(),
         )(input)
     }
 
@@ -324,7 +373,14 @@ impl Sequence {
         .map(|(l, (a, b))| {
             (l, {
                 let (start, end) = (u32::from(a), u32::from(b));
-                Ok(Self::CharRange(start as u8, end as u8))
+
+                let range = start..=end;
+
+                if range.is_empty() {
+                    Err(BadSequence::BackwardsRange { end, start })
+                } else {
+                    Ok(Self::CharRange(start as u8, end as u8))
+                }
             })
         })
     }
@@ -337,7 +393,14 @@ impl Sequence {
     fn parse_char_repeat(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         delimited(
             tag("["),
-            separated_pair(Self::parse_backslash_or_char, tag("*"), digit1),
+            separated_pair(
+                Self::parse_backslash_or_char,
+                tag("*"),
+                // TODO
+                // Why are the opening and closing tags not sufficient?
+                // Backslash check is a workaround for `check_against_gnu_tr_tests_repeat_bs_9`
+                take_till(|ue| matches!(ue, b']' | b'\\')),
+            ),
             tag("]"),
         )(input)
         .map(|(l, (c, cnt_str))| {
