@@ -7,10 +7,8 @@ use std::ffi::OsString;
 use std::io::stdout;
 use std::ops::ControlFlow;
 use uucore::error::{UResult, UUsageError};
-use uucore::format::{
-    parse_spec_and_escape, try_get_bytes_from_os_str, FormatArgument, FormatItem,
-};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::format::{parse_spec_and_escape, FormatArgument, FormatError, FormatItem};
+use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes_verbose};
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
@@ -30,7 +28,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format = matches
         .get_one::<OsString>(options::FORMAT)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
-    let format = try_get_bytes_from_os_str(format)?;
+    let format = os_str_as_bytes_verbose(format).map_err(FormatError::from)?;
 
     let values: Vec<_> = match matches.get_many::<OsString>(options::ARGUMENT) {
         Some(s) => s
