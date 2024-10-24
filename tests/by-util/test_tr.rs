@@ -1495,9 +1495,8 @@ fn test_multibyte_octal_sequence() {
         .pipe_in("(1Ł)")
         .succeeds()
         // TODO
-        // Cannot log warning because of how nom is parsing the arguments
-        //         .stderr_is(r"tr: warning: the ambiguous octal escape \501 is being interpreted as the 2-byte sequence \50, 1
-        // ")
+        // A warning needs to be printed here
+        // See https://github.com/uutils/coreutils/issues/6821
         .stdout_is("Ł)");
 }
 

@@ -324,19 +324,8 @@ impl Sequence {
                     Ok(ue) => Some(ue),
                     Err(_pa) => {
                         // TODO
-                        // Cannot log here, because this closure is executed multiple times
-
-                        // let mut last_char = str_to_parse.chars();
-
-                        // let second_number = last_char.next_back().unwrap();
-
-                        // let first_number = last_char.as_str();
-
-                        // show!(USimpleError::new(
-                        //     0,
-                        //     format!("warning: the ambiguous octal escape \\{str_to_parse} is being interpreted as the 2-byte sequence \\{first_number}, {second_number}")
-                        // ));
-
+                        // A warning needs to be printed here
+                        // See https://github.com/uutils/coreutils/issues/6821
                         None
                     }
                 }
