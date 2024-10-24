@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus
 
 #![allow(dead_code)]
 #![allow(
@@ -17,6 +17,8 @@
 use libc::mode_t;
 #[cfg(unix)]
 use nix::pty::OpenptyResult;
+#[cfg(unix)]
+use nix::sys;
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use rlimit::setrlimit;
@@ -2095,7 +2097,7 @@ impl UChild {
         self.delay(millis).make_assertion()
     }
 
-    /// Try to kill the child process and wait for it's termination.
+    /// Try to kill the child process and wait for its termination.
     ///
     /// This method blocks until the child process is killed, but returns an error if `self.timeout`
     /// or the default of 60s was reached. If no such error happened, the process resources are
@@ -2143,6 +2145,75 @@ impl UChild {
     /// If the child process could not be terminated within `self.timeout` or the default of 60s.
     pub fn kill(&mut self) -> &mut Self {
         self.try_kill()
+            .or_else(|error| {
+                // We still throw the error on timeout in the `try_kill` function
+                if error.kind() == io::ErrorKind::Other {
+                    Err(error)
+                } else {
+                    Ok(())
+                }
+            })
+            .unwrap();
+        self
+    }
+
+    /// Try to kill the child process and wait for its termination.
+    ///
+    /// This method blocks until the child process is killed, but returns an error if `self.timeout`
+    /// or the default of 60s was reached. If no such error happened, the process resources are
+    /// released, so there is usually no need to call `wait` or alike on unix systems although it's
+    /// still possible to do so.
+    ///
+    /// # Platform specific behavior
+    ///
+    /// On unix systems the child process resources will be released like a call to [`Child::wait`]
+    /// or alike would do.
+    ///
+    /// # Error
+    ///
+    /// If [`Child::kill`] returned an error or if the child process could not be terminated within
+    /// `self.timeout` or the default of 60s.
+    #[cfg(unix)]
+    pub fn try_kill_with_custom_signal(
+        &mut self,
+        signal_name: sys::signal::Signal,
+    ) -> io::Result<()> {
+        let start = Instant::now();
+        sys::signal::kill(
+            nix::unistd::Pid::from_raw(self.raw.id().try_into().unwrap()),
+            signal_name,
+        )
+        .unwrap();
+
+        let timeout = self.timeout.unwrap_or(Duration::from_secs(60));
+        // As a side effect, we're cleaning up the killed child process with the implicit call to
+        // `Child::try_wait` in `self.is_alive`, which reaps the process id on unix systems. We
+        // always fail with error on timeout if `self.timeout` is set to zero.
+        while self.is_alive() || timeout == Duration::ZERO {
+            if start.elapsed() < timeout {
+                self.delay(10);
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("kill: Timeout of '{}s' reached", timeout.as_secs_f64()),
+                ));
+            }
+            hint::spin_loop();
+        }
+
+        Ok(())
+    }
+
+    /// Terminate the child process using custom signal parameter and wait for the termination.
+    ///
+    /// Ignores any errors happening during [`Child::kill`] (i.e. child process already exited) but
+    /// still panics on timeout.
+    ///
+    /// # Panics
+    /// If the child process could not be terminated within `self.timeout` or the default of 60s.
+    #[cfg(unix)]
+    pub fn kill_with_custom_signal(&mut self, signal_name: sys::signal::Signal) -> &mut Self {
+        self.try_kill_with_custom_signal(signal_name)
             .or_else(|error| {
                 // We still throw the error on timeout in the `try_kill` function
                 if error.kind() == io::ErrorKind::Other {
