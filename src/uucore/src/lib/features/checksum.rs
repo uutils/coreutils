@@ -79,6 +79,9 @@ enum LineCheckError {
     UError(Box<dyn UError>),
     Skipped,
     ImproperlyFormatted,
+    CantOpenFile,
+    FileNotFound,
+    FileIsDirectory,
 }
 
 impl From<Box<dyn UError>> for LineCheckError {
@@ -459,16 +462,14 @@ fn get_expected_checksum(
 /// Returns a reader that reads from the specified file, or from stdin if `filename_to_check` is "-".
 fn get_file_to_check(
     filename: &OsStr,
-    ignore_missing: bool,
-    res: &mut ChecksumResult,
     opts: ChecksumOptions,
-) -> Option<Box<dyn Read>> {
+) -> Result<Box<dyn Read>, LineCheckError> {
     let filename_bytes = os_str_as_bytes(filename).expect("UTF-8 error");
     let filename_lossy = String::from_utf8_lossy(filename_bytes);
     if filename == "-" {
-        Some(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
+        Ok(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
-        let mut failed_open = || {
+        let failed_open = || {
             print_file_report(
                 std::io::stdout(),
                 filename_bytes,
@@ -476,30 +477,32 @@ fn get_file_to_check(
                 "",
                 opts,
             );
-            res.failed_open_file += 1;
         };
         match File::open(filename) {
             Ok(f) => {
-                if f.metadata().ok()?.is_dir() {
+                if f.metadata()
+                    .map_err(|_| LineCheckError::CantOpenFile)?
+                    .is_dir()
+                {
                     show!(USimpleError::new(
                         1,
                         format!("{filename_lossy}: Is a directory")
                     ));
                     // also regarded as a failed open
                     failed_open();
-                    None
+                    Err(LineCheckError::FileIsDirectory)
                 } else {
-                    Some(Box::new(f))
+                    Ok(Box::new(f))
                 }
             }
             Err(err) => {
-                if !ignore_missing {
+                if !opts.ignore_missing {
                     // yes, we have both stderr and stdout here
                     show!(err.map_err_context(|| filename_lossy.to_string()));
                     failed_open();
                 }
                 // we could not open the file but we want to continue
-                None
+                Err(LineCheckError::FileNotFound)
             }
         }
     }
@@ -642,13 +645,9 @@ fn process_checksum_line(
         let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
 
         // manage the input file
-        let file_to_check =
-            match get_file_to_check(&real_filename_to_check, opts.ignore_missing, res, opts) {
-                Some(file) => file,
-                // TODO: return error?
-                None => return Err(LineCheckError::ImproperlyFormatted),
-            };
+        let file_to_check = get_file_to_check(&real_filename_to_check, opts)?;
         let mut file_reader = BufReader::new(file_to_check);
+
         // Read the file and calculate the checksum
         let create_fn = &mut algo.create_fn;
         let mut digest = create_fn();
@@ -743,9 +742,17 @@ fn process_checksum_file(
         ) {
             Ok(true) => correct_format += 1,
             Ok(false) => res.failed_cksum += 1,
-            Err(LineCheckError::ImproperlyFormatted) => (),
-            Err(LineCheckError::Skipped) => continue,
             Err(LineCheckError::UError(e)) => return Err(e.into()),
+            Err(LineCheckError::Skipped) => continue,
+            Err(LineCheckError::ImproperlyFormatted) => (),
+            Err(LineCheckError::CantOpenFile | LineCheckError::FileIsDirectory) => {
+                res.failed_open_file += 1
+            }
+            Err(LineCheckError::FileNotFound) => {
+                if !opts.ignore_missing {
+                    res.failed_open_file += 1
+                }
+            }
         };
     }
 
