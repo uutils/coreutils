@@ -75,6 +75,23 @@ struct ChecksumResult {
     pub failed_open_file: i32,
 }
 
+enum LineCheckError {
+    UError(Box<dyn UError>),
+    // ImproperlyFormatted,
+}
+
+impl From<Box<dyn UError>> for LineCheckError {
+    fn from(value: Box<dyn UError>) -> Self {
+        Self::UError(value)
+    }
+}
+
+impl From<ChecksumError> for LineCheckError {
+    fn from(value: ChecksumError) -> Self {
+        Self::UError(Box::new(value))
+    }
+}
+
 /// This struct regroups CLI flags.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ChecksumOptions {
@@ -513,6 +530,132 @@ fn identify_algo_name_and_length(
     Some((algorithm, bits))
 }
 
+#[allow(clippy::too_many_arguments)]
+fn process_checksum_line(
+    filename_input: &OsStr,
+    line: &OsStr,
+    i: usize,
+    chosen_regex: &Regex,
+    is_algo_based_format: bool,
+    res: &mut ChecksumResult,
+    cli_algo_name: Option<&str>,
+    cli_algo_length: Option<usize>,
+    properly_formatted: &mut bool,
+    correct_format: &mut usize,
+    opts: ChecksumOptions,
+) -> Result<(), LineCheckError> {
+    let line_bytes = os_str_as_bytes(line)?;
+    if let Some(caps) = chosen_regex.captures(line_bytes) {
+        *properly_formatted = true;
+
+        let mut filename_to_check = caps.name("filename").unwrap().as_bytes();
+
+        if filename_to_check.starts_with(b"*")
+            && i == 0
+            && chosen_regex.as_str() == SINGLE_SPACE_REGEX
+        {
+            // Remove the leading asterisk if present - only for the first line
+            filename_to_check = &filename_to_check[1..];
+        }
+
+        let expected_checksum = get_expected_checksum(filename_to_check, &caps, chosen_regex)?;
+
+        // If the algo_name is provided, we use it, otherwise we try to detect it
+        let (algo_name, length) = if is_algo_based_format {
+            identify_algo_name_and_length(&caps, cli_algo_name, res, properly_formatted)
+                .unwrap_or((String::new(), None))
+        } else if let Some(a) = cli_algo_name {
+            // When a specific algorithm name is input, use it and use the provided bits
+            // except when dealing with blake2b, where we will detect the length
+            if cli_algo_name == Some(ALGORITHM_OPTIONS_BLAKE2B) {
+                // division by 2 converts the length of the Blake2b checksum from hexadecimal
+                // characters to bytes, as each byte is represented by two hexadecimal characters.
+                let length = Some(expected_checksum.len() / 2);
+                (ALGORITHM_OPTIONS_BLAKE2B.to_string(), length)
+            } else {
+                (a.to_lowercase(), cli_algo_length)
+            }
+        } else {
+            // Default case if no algorithm is specified and non-algo based format is matched
+            (String::new(), None)
+        };
+
+        if algo_name.is_empty() {
+            // we haven't been able to detect the algo name. No point to continue
+            *properly_formatted = false;
+
+            // TODO: return error?
+            return Ok(());
+        }
+        let mut algo = detect_algo(&algo_name, length)?;
+
+        let (filename_to_check_unescaped, prefix) = unescape_filename(filename_to_check);
+
+        let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
+
+        // manage the input file
+        let file_to_check =
+            match get_file_to_check(&real_filename_to_check, opts.ignore_missing, res) {
+                Some(file) => file,
+                // TODO: return error?
+                None => return Ok(()),
+            };
+        let mut file_reader = BufReader::new(file_to_check);
+        // Read the file and calculate the checksum
+        let create_fn = &mut algo.create_fn;
+        let mut digest = create_fn();
+        let (calculated_checksum, _) =
+            digest_reader(&mut digest, &mut file_reader, opts.binary, algo.bits).unwrap();
+
+        // Do the checksum validation
+        if expected_checksum == calculated_checksum {
+            if !opts.quiet && !opts.status {
+                print_file_report(
+                    std::io::stdout(),
+                    filename_to_check,
+                    FileChecksumResult::Ok,
+                    prefix,
+                );
+            }
+            *correct_format += 1;
+        } else {
+            if !opts.status {
+                print_file_report(
+                    std::io::stdout(),
+                    filename_to_check,
+                    FileChecksumResult::Failed,
+                    prefix,
+                );
+            }
+            res.failed_cksum += 1;
+        }
+    } else {
+        if line.is_empty() || line_bytes.starts_with(b"#") {
+            // Don't show any warning for empty or commented lines.
+
+            // TODO: return error?
+            return Ok(());
+        }
+        if opts.warn {
+            let algo = if let Some(algo_name_input) = cli_algo_name {
+                algo_name_input.to_uppercase()
+            } else {
+                "Unknown algorithm".to_string()
+            };
+            eprintln!(
+                "{}: {}: {}: improperly formatted {} checksum line",
+                util_name(),
+                &filename_input.maybe_quote(),
+                i + 1,
+                algo
+            );
+        }
+
+        res.bad_format += 1;
+    }
+    Ok(())
+}
+
 /***
  * Do the checksum validation (can be strict or not)
 */
@@ -560,117 +703,22 @@ where
         };
 
         for (i, line) in lines.iter().enumerate() {
-            let line_bytes = os_str_as_bytes(line)?;
-            if let Some(caps) = chosen_regex.captures(line_bytes) {
-                properly_formatted = true;
-
-                let mut filename_to_check = caps.name("filename").unwrap().as_bytes();
-
-                if filename_to_check.starts_with(b"*")
-                    && i == 0
-                    && chosen_regex.as_str() == SINGLE_SPACE_REGEX
-                {
-                    // Remove the leading asterisk if present - only for the first line
-                    filename_to_check = &filename_to_check[1..];
-                }
-
-                let expected_checksum =
-                    get_expected_checksum(filename_to_check, &caps, &chosen_regex)?;
-
-                // If the algo_name is provided, we use it, otherwise we try to detect it
-                let (algo_name, length) = if is_algo_based_format {
-                    identify_algo_name_and_length(
-                        &caps,
-                        algo_name_input,
-                        &mut res,
-                        &mut properly_formatted,
-                    )
-                    .unwrap_or((String::new(), None))
-                } else if let Some(a) = algo_name_input {
-                    // When a specific algorithm name is input, use it and use the provided bits
-                    // except when dealing with blake2b, where we will detect the length
-                    if algo_name_input == Some(ALGORITHM_OPTIONS_BLAKE2B) {
-                        // division by 2 converts the length of the Blake2b checksum from hexadecimal
-                        // characters to bytes, as each byte is represented by two hexadecimal characters.
-                        let length = Some(expected_checksum.len() / 2);
-                        (ALGORITHM_OPTIONS_BLAKE2B.to_string(), length)
-                    } else {
-                        (a.to_lowercase(), length_input)
-                    }
-                } else {
-                    // Default case if no algorithm is specified and non-algo based format is matched
-                    (String::new(), None)
-                };
-
-                if algo_name.is_empty() {
-                    // we haven't been able to detect the algo name. No point to continue
-                    properly_formatted = false;
-                    continue;
-                }
-                let mut algo = detect_algo(&algo_name, length)?;
-
-                let (filename_to_check_unescaped, prefix) = unescape_filename(filename_to_check);
-
-                let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
-
-                // manage the input file
-                let file_to_check =
-                    match get_file_to_check(&real_filename_to_check, opts.ignore_missing, &mut res)
-                    {
-                        Some(file) => file,
-                        None => continue,
-                    };
-                let mut file_reader = BufReader::new(file_to_check);
-                // Read the file and calculate the checksum
-                let create_fn = &mut algo.create_fn;
-                let mut digest = create_fn();
-                let (calculated_checksum, _) =
-                    digest_reader(&mut digest, &mut file_reader, opts.binary, algo.bits).unwrap();
-
-                // Do the checksum validation
-                if expected_checksum == calculated_checksum {
-                    if !opts.quiet && !opts.status {
-                        print_file_report(
-                            std::io::stdout(),
-                            filename_to_check,
-                            FileChecksumResult::Ok,
-                            prefix,
-                        );
-                    }
-                    correct_format += 1;
-                } else {
-                    if !opts.status {
-                        print_file_report(
-                            std::io::stdout(),
-                            filename_to_check,
-                            FileChecksumResult::Failed,
-                            prefix,
-                        );
-                    }
-                    res.failed_cksum += 1;
-                }
-            } else {
-                if line.is_empty() || line_bytes.starts_with(b"#") {
-                    // Don't show any warning for empty or commented lines.
-                    continue;
-                }
-                if opts.warn {
-                    let algo = if let Some(algo_name_input) = algo_name_input {
-                        algo_name_input.to_uppercase()
-                    } else {
-                        "Unknown algorithm".to_string()
-                    };
-                    eprintln!(
-                        "{}: {}: {}: improperly formatted {} checksum line",
-                        util_name(),
-                        &filename_input.maybe_quote(),
-                        i + 1,
-                        algo
-                    );
-                }
-
-                res.bad_format += 1;
-            }
+            match process_checksum_line(
+                filename_input,
+                line,
+                i,
+                &chosen_regex,
+                is_algo_based_format,
+                &mut res,
+                algo_name_input,
+                length_input,
+                &mut properly_formatted,
+                &mut correct_format,
+                opts,
+            ) {
+                Ok(_) => (),
+                Err(LineCheckError::UError(e)) => return Err(e),
+            };
         }
 
         // not a single line correctly formatted found
