@@ -77,7 +77,8 @@ struct ChecksumResult {
 
 enum LineCheckError {
     UError(Box<dyn UError>),
-    // ImproperlyFormatted,
+    Skipped,
+    ImproperlyFormatted,
 }
 
 impl From<Box<dyn UError>> for LineCheckError {
@@ -228,6 +229,24 @@ enum FileChecksumResult {
     CantOpen,
 }
 
+impl FileChecksumResult {
+    fn from_bool(checksum_correct: bool) -> Self {
+        if checksum_correct {
+            FileChecksumResult::Ok
+        } else {
+            FileChecksumResult::Failed
+        }
+    }
+
+    fn can_display(&self, opts: ChecksumOptions) -> bool {
+        match self {
+            FileChecksumResult::Ok => !opts.status && !opts.quiet,
+            FileChecksumResult::Failed => !opts.status,
+            FileChecksumResult::CantOpen => true,
+        }
+    }
+}
+
 impl Display for FileChecksumResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -245,10 +264,13 @@ fn print_file_report<W: Write>(
     filename: &[u8],
     result: FileChecksumResult,
     prefix: &str,
+    opts: ChecksumOptions,
 ) {
-    let _ = write!(w, "{prefix}");
-    let _ = w.write_all(filename);
-    let _ = writeln!(w, ": {result}");
+    if result.can_display(opts) {
+        let _ = write!(w, "{prefix}");
+        let _ = w.write_all(filename);
+        let _ = writeln!(w, ": {result}");
+    }
 }
 
 pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> {
@@ -439,6 +461,7 @@ fn get_file_to_check(
     filename: &OsStr,
     ignore_missing: bool,
     res: &mut ChecksumResult,
+    opts: ChecksumOptions,
 ) -> Option<Box<dyn Read>> {
     let filename_bytes = os_str_as_bytes(filename).expect("UTF-8 error");
     let filename_lossy = String::from_utf8_lossy(filename_bytes);
@@ -451,6 +474,7 @@ fn get_file_to_check(
                 filename_bytes,
                 FileChecksumResult::CantOpen,
                 "",
+                opts,
             );
             res.failed_open_file += 1;
         };
@@ -549,6 +573,12 @@ fn identify_algo_name_and_length(
     Some((algorithm, bits))
 }
 
+/// Parses a checksum line, detect the algorithm to use, read the file and produce
+/// its digest, and compare it to the expected value.
+///
+/// Returns `Ok(bool)` if the comparison happened, bool indicates if the digest
+/// matched the expected.
+/// If the comparison didn't happen, return a `LineChecksumError`.
 #[allow(clippy::too_many_arguments)]
 fn process_checksum_line(
     filename_input: &OsStr,
@@ -560,9 +590,8 @@ fn process_checksum_line(
     cli_algo_name: Option<&str>,
     cli_algo_length: Option<usize>,
     properly_formatted: &mut bool,
-    correct_format: &mut usize,
     opts: ChecksumOptions,
-) -> Result<(), LineCheckError> {
+) -> Result<bool, LineCheckError> {
     let line_bytes = os_str_as_bytes(line)?;
     if let Some(caps) = chosen_regex.captures(line_bytes) {
         *properly_formatted = true;
@@ -604,7 +633,7 @@ fn process_checksum_line(
             *properly_formatted = false;
 
             // TODO: return error?
-            return Ok(());
+            return Err(LineCheckError::ImproperlyFormatted);
         }
         let mut algo = detect_algo(&algo_name, length)?;
 
@@ -614,10 +643,10 @@ fn process_checksum_line(
 
         // manage the input file
         let file_to_check =
-            match get_file_to_check(&real_filename_to_check, opts.ignore_missing, res) {
+            match get_file_to_check(&real_filename_to_check, opts.ignore_missing, res, opts) {
                 Some(file) => file,
                 // TODO: return error?
-                None => return Ok(()),
+                None => return Err(LineCheckError::ImproperlyFormatted),
             };
         let mut file_reader = BufReader::new(file_to_check);
         // Read the file and calculate the checksum
@@ -627,33 +656,19 @@ fn process_checksum_line(
             digest_reader(&mut digest, &mut file_reader, opts.binary, algo.bits).unwrap();
 
         // Do the checksum validation
-        if expected_checksum == calculated_checksum {
-            if !opts.quiet && !opts.status {
-                print_file_report(
-                    std::io::stdout(),
-                    filename_to_check,
-                    FileChecksumResult::Ok,
-                    prefix,
-                );
-            }
-            *correct_format += 1;
-        } else {
-            if !opts.status {
-                print_file_report(
-                    std::io::stdout(),
-                    filename_to_check,
-                    FileChecksumResult::Failed,
-                    prefix,
-                );
-            }
-            res.failed_cksum += 1;
-        }
+        let checksum_correct = expected_checksum == calculated_checksum;
+        print_file_report(
+            std::io::stdout(),
+            filename_to_check,
+            FileChecksumResult::from_bool(checksum_correct),
+            prefix,
+            opts,
+        );
+        Ok(checksum_correct)
     } else {
         if line.is_empty() || line_bytes.starts_with(b"#") {
             // Don't show any warning for empty or commented lines.
-
-            // TODO: return error?
-            return Ok(());
+            return Err(LineCheckError::Skipped);
         }
         if opts.warn {
             let algo = if let Some(algo_name_input) = cli_algo_name {
@@ -671,8 +686,8 @@ fn process_checksum_line(
         }
 
         res.bad_format += 1;
+        Err(LineCheckError::ImproperlyFormatted)
     }
-    Ok(())
 }
 
 fn process_checksum_file(
@@ -724,10 +739,12 @@ fn process_checksum_file(
             cli_algo_name,
             cli_algo_length,
             &mut properly_formatted,
-            &mut correct_format,
             opts,
         ) {
-            Ok(_) => (),
+            Ok(true) => correct_format += 1,
+            Ok(false) => res.failed_cksum += 1,
+            Err(LineCheckError::ImproperlyFormatted) => (),
+            Err(LineCheckError::Skipped) => continue,
             Err(LineCheckError::UError(e)) => return Err(e.into()),
         };
     }
@@ -1227,6 +1244,8 @@ mod tests {
 
     #[test]
     fn test_print_file_report() {
+        let opts = ChecksumOptions::default();
+
         let cases: &[(&[u8], FileChecksumResult, &str, &[u8])] = &[
             (b"filename", FileChecksumResult::Ok, "", b"filename: OK\n"),
             (
@@ -1257,7 +1276,7 @@ mod tests {
 
         for (filename, result, prefix, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
-            print_file_report(&mut buffer, filename, *result, prefix);
+            print_file_report(&mut buffer, filename, *result, prefix, opts);
             assert_eq!(&buffer, expected)
         }
     }
