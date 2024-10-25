@@ -75,13 +75,22 @@ struct ChecksumResult {
     pub failed_open_file: i32,
 }
 
+/// Represents a reason for which the processing of a checksum line
+/// could not proceed to digest comparison.
 enum LineCheckError {
+    /// a generic UError was encountered in sub-functions
     UError(Box<dyn UError>),
+    /// the computed checksum digest differs from the expected one
     DigestMismatch,
+    /// the line is empty or is a comment
     Skipped,
+    /// the line has a formatting error
     ImproperlyFormatted,
+    /// file exists but is impossible to read
     CantOpenFile,
+    /// there is nothing at the given path
     FileNotFound,
+    /// the given path leads to a directory
     FileIsDirectory,
 }
 
@@ -97,10 +106,14 @@ impl From<ChecksumError> for LineCheckError {
     }
 }
 
+/// Represents an error that was encountered when processing a checksum file.
 #[allow(clippy::enum_variant_names)]
 enum FileCheckError {
+    /// a generic UError was encountered in sub-functions
     UError(Box<dyn UError>),
+    /// the error does not stop the processing of next files
     NonCriticalError,
+    /// the error must stop the run of the program
     CriticalError,
 }
 
@@ -226,6 +239,8 @@ fn cksum_output(res: &ChecksumResult, status: bool) {
     }
 }
 
+/// Represents the different outcomes that can happen to a file
+/// that is being checked.
 #[derive(Debug, Clone, Copy)]
 enum FileChecksumResult {
     Ok,
@@ -234,6 +249,8 @@ enum FileChecksumResult {
 }
 
 impl FileChecksumResult {
+    /// Creates a `FileChecksumResult` from a digest comparison that
+    /// either succeeded or failed.
     fn from_bool(checksum_correct: bool) -> Self {
         if checksum_correct {
             FileChecksumResult::Ok
@@ -242,6 +259,8 @@ impl FileChecksumResult {
         }
     }
 
+    /// The cli options might prevent to display on the outcome of the
+    /// comparison on STDOUT.
     fn can_display(&self, opts: ChecksumOptions) -> bool {
         match self {
             FileChecksumResult::Ok => !opts.status && !opts.quiet,
