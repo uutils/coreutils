@@ -75,6 +75,17 @@ struct ChecksumResult {
     pub failed_open_file: i32,
 }
 
+/// This struct regroups CLI flags.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ChecksumOptions {
+    pub binary: bool,
+    pub ignore_missing: bool,
+    pub quiet: bool,
+    pub status: bool,
+    pub strict: bool,
+    pub warn: bool,
+}
+
 #[derive(Debug, Error)]
 pub enum ChecksumError {
     #[error("the --raw option is not supported with multiple files")]
@@ -505,17 +516,11 @@ fn identify_algo_name_and_length(
 /***
  * Do the checksum validation (can be strict or not)
 */
-#[allow(clippy::too_many_arguments)]
 pub fn perform_checksum_validation<'a, I>(
     files: I,
-    strict: bool,
-    status: bool,
-    warn: bool,
-    binary: bool,
-    ignore_missing: bool,
-    quiet: bool,
     algo_name_input: Option<&str>,
     length_input: Option<usize>,
+    opts: ChecksumOptions,
 ) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
@@ -610,7 +615,8 @@ where
 
                 // manage the input file
                 let file_to_check =
-                    match get_file_to_check(&real_filename_to_check, ignore_missing, &mut res) {
+                    match get_file_to_check(&real_filename_to_check, opts.ignore_missing, &mut res)
+                    {
                         Some(file) => file,
                         None => continue,
                     };
@@ -619,11 +625,11 @@ where
                 let create_fn = &mut algo.create_fn;
                 let mut digest = create_fn();
                 let (calculated_checksum, _) =
-                    digest_reader(&mut digest, &mut file_reader, binary, algo.bits).unwrap();
+                    digest_reader(&mut digest, &mut file_reader, opts.binary, algo.bits).unwrap();
 
                 // Do the checksum validation
                 if expected_checksum == calculated_checksum {
-                    if !quiet && !status {
+                    if !opts.quiet && !opts.status {
                         print_file_report(
                             std::io::stdout(),
                             filename_to_check,
@@ -633,7 +639,7 @@ where
                     }
                     correct_format += 1;
                 } else {
-                    if !status {
+                    if !opts.status {
                         print_file_report(
                             std::io::stdout(),
                             filename_to_check,
@@ -648,7 +654,7 @@ where
                     // Don't show any warning for empty or commented lines.
                     continue;
                 }
-                if warn {
+                if opts.warn {
                     let algo = if let Some(algo_name_input) = algo_name_input {
                         algo_name_input.to_uppercase()
                     } else {
@@ -670,7 +676,7 @@ where
         // not a single line correctly formatted found
         // return an error
         if !properly_formatted {
-            if !status {
+            if !opts.status {
                 return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
                     filename: get_filename_for_output(filename_input, input_is_stdin),
                 }
@@ -682,9 +688,9 @@ where
         }
 
         // if any incorrectly formatted line, show it
-        cksum_output(&res, status);
+        cksum_output(&res, opts.status);
 
-        if ignore_missing && correct_format == 0 {
+        if opts.ignore_missing && correct_format == 0 {
             // we have only bad format
             // and we had ignore-missing
             eprintln!(
@@ -696,13 +702,13 @@ where
         }
 
         // strict means that we should have an exit code.
-        if strict && res.bad_format > 0 {
+        if opts.strict && res.bad_format > 0 {
             set_exit_code(1);
         }
 
         // if we have any failed checksum verification, we set an exit code
         // except if we have ignore_missing
-        if (res.failed_cksum > 0 || res.failed_open_file > 0) && !ignore_missing {
+        if (res.failed_cksum > 0 || res.failed_open_file > 0) && !opts.ignore_missing {
             set_exit_code(1);
         }
     }
