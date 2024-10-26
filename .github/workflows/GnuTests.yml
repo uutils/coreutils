@@ -143,9 +143,25 @@ jobs:
     - name: Extract testing info into JSON
       shell: bash
       run : |
-        ## Extract testing info into JSON
+        # Extract testing info into JSON
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+
+        OUTPUT_PATH="$(realpath -- '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}')"
+        TEST_DIRECTORY_PATH="$(realpath -- '${{ steps.vars.outputs.path_GNU_tests }}')"
+
+        # Subshell makes "cd" temporary
+        # Start of subshell
+        (
+          cd "${path_UUTILS:?}/util/ci_tool"
+
+          cargo \
+          run \
+          -- \
+          extract-data-from-test-logs \
+          --output-path="${OUTPUT_PATH:?}" \
+          --test-directory-path="${TEST_DIRECTORY_PATH:?}"
+        )
+        # End of subshell
     - name: Extract/summarize testing info
       id: summary
       shell: bash
@@ -161,25 +177,29 @@ jobs:
 
         if test -f "${SUITE_LOG_FILE}"
         then
-            source ${path_UUTILS}/util/analyze-gnu-results.sh ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
-            if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
-              echo "::error ::Failed to parse test results from '${SUITE_LOG_FILE}'; failing early"
-              exit 1
-            fi
-            output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR / SKIP: $SKIP"
-            echo "${output}"
-            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
-            jq -n \
-                  --arg date "$(date --rfc-email)" \
-                  --arg sha "$GITHUB_SHA" \
-                  --arg total "$TOTAL" \
-                  --arg pass "$PASS" \
-                  --arg skip "$SKIP" \
-                  --arg fail "$FAIL" \
-                  --arg xpass "$XPASS" \
-                  --arg error "$ERROR" \
-                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-            HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+            HASH_OUTPUT_FILE="$(mktemp)"
+            OUTPUT_FILE="$(realpath -- '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}')"
+            REALPATH_ROOT_SUITE_LOG_FILE="$(realpath -- "${ROOT_SUITE_LOG_FILE:?}")"
+            REALPATH_SUITE_LOG_FILE="$(realpath -- "${SUITE_LOG_FILE:?}")"
+
+            # Subshell makes "cd" temporary
+            # Start of subshell
+            (
+              cd "${path_UUTILS:?}/util/ci_tool"
+
+              cargo \
+              run \
+              -- \
+              analyze-results \
+              --hash-output-file="${HASH_OUTPUT_FILE:?}" \
+              --output-file="${OUTPUT_FILE:?}" \
+              --root-suite-log-file="${REALPATH_ROOT_SUITE_LOG_FILE:?}" \
+              --sha-hash-from-ci="${GITHUB_SHA:?}" \
+              --suite-log-file="${REALPATH_SUITE_LOG_FILE:?}"
+            )
+            # End of subshell
+
+            HASH="$(cat "${HASH_OUTPUT_FILE:?}")"
             outputs HASH
           else
             echo "::error ::Failed to find summary of test results (missing '${SUITE_LOG_FILE}'); failing early"
@@ -244,7 +264,7 @@ jobs:
             CURRENT_RUN_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
             REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
             CURRENT_RUN_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
-            echo "Detailled information:"
+            echo "Detailed information:"
             echo "REF_ERROR = ${REF_ERROR}"
             echo "CURRENT_RUN_ERROR = ${CURRENT_RUN_ERROR}"
             echo "REF_FAILING = ${REF_FAILING}"
@@ -326,19 +346,31 @@ jobs:
       with:
         name: comment
         path: ${{ steps.vars.outputs.path_reference }}/comment/
-    - name: Compare test summary VS reference
+    - name: Compare test summary vs. reference
       if: success() || failure() # run regardless of prior step success/failure
       shell: bash
       run: |
-        ## Compare test summary VS reference
+        # Compare test summary vs. reference
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
-        if test -f "${REF_SUMMARY_FILE}"; then
-          echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
-          mv "${REF_SUMMARY_FILE}" main-gnu-result.json
-          python uutils/util/compare_gnu_result.py
-        else
-          echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
-        fi
+
+        IGNORE_INTERMITTENT_FILE="$(realpath -- ./uutils/.github/workflows/ignore-intermittent.txt)"
+        NEW_SUMMARY_FILE="$(realpath -- ./gnu-result.json)"
+        REALPATH_REF_SUMMARY_FILE="$(realpath -- "${REF_SUMMARY_FILE:?}" || printf '%s' '/___REF_SUMMARY_FILE_NOT_AVAILABLE___')"
+
+        # Subshell makes "cd" temporary
+        # Start of subshell
+        (
+          cd ./uutils/util/ci_tool
+
+          cargo \
+          run \
+          -- \
+          compare-result \
+          --ignore-intermittent-tests-file="${IGNORE_INTERMITTENT_FILE:?}" \
+          --new-summary-file="${NEW_SUMMARY_FILE:?}" \
+          --ref-summary-file="${REALPATH_REF_SUMMARY_FILE:?}"
+        )
+        # End of subshell
 
   gnu_coverage:
     name: Run GNU tests with coverage

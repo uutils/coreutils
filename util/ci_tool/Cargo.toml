@@ -1,0 +1,45 @@
+[dependencies]
+anyhow = { default-features = false, features = [
+  "backtrace",
+  "std",
+], version = "1.0.91" }
+chrono = { default-features = true, version = "0.4.38" }
+clap = { default-features = false, features = [
+  "derive",
+  "help",
+  "std",
+  "suggestions",
+  "usage",
+], version = "4.5.20" }
+const-hex = { default-features = false, features = [
+  "alloc",
+], version = "1.13.1" }
+glob = { default-features = false, version = "0.3.1" }
+regex = { default-features = false, features = [
+  "std",
+], version = "1.11.1" }
+serde = { default-features = false, version = "1.0.213" }
+serde_derive = { default-features = false, version = "1.0.213" }
+serde_json = { default-features = false, features = [
+  "std",
+], version = "1.0.132" }
+sha1 = { default-features = false, version = "0.10.6" }
+tracing = { default-features = false, version = "=0.1.40" }
+tracing-subscriber = { default-features = false, features = [
+  "ansi",
+  "fmt",
+  "std",
+  "tracing-log",
+], version = "=0.3.18" }
+
+[package]
+edition = "2021"
+name = "ci_tool"
+publish = false
+rust-version = "1.70.0"
+version = "0.1.0"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[workspace]
