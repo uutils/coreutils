@@ -1,3 +1,5 @@
+# spell-checker:ignore serde
+
 [dependencies]
 anyhow = { default-features = false, features = [
   "backtrace",
@@ -15,9 +17,7 @@ const-hex = { default-features = false, features = [
   "alloc",
 ], version = "1.13.1" }
 glob = { default-features = false, version = "0.3.1" }
-regex = { default-features = false, features = [
-  "std",
-], version = "1.11.1" }
+regex = { default-features = false, features = ["std"], version = "1.11.1" }
 serde = { default-features = false, version = "1.0.213" }
 serde_derive = { default-features = false, version = "1.0.213" }
 serde_json = { default-features = false, features = [
