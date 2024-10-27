@@ -1265,7 +1265,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
 
     for source in sources {
         let normalized_source = normalize_path(source);
-        if seen_sources.contains(&normalized_source) {
+        if options.backup == BackupMode::NoBackup && seen_sources.contains(&normalized_source) {
             show_warning!("source file {} specified more than once", source.quote());
         } else {
             let dest = construct_dest_path(source, target, target_type, options)
