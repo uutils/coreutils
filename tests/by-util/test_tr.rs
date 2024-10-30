@@ -1487,3 +1487,36 @@ fn test_trailing_backslash() {
         .stderr_is("tr: warning: an unescaped backslash at end of string is not portable\n")
         .stdout_is("abc");
 }
+
+#[test]
+fn test_multibyte_octal_sequence() {
+    new_ucmd!()
+        .args(&["-d", r"\501"])
+        .pipe_in("(1Ł)")
+        .succeeds()
+        // TODO
+        // A warning needs to be printed here
+        // See https://github.com/uutils/coreutils/issues/6821
+        .stdout_is("Ł)");
+}
+
+#[test]
+fn test_backwards_range() {
+    new_ucmd!()
+        .args(&["-d", r"\046-\048"])
+        .pipe_in("")
+        .fails()
+        .stderr_only(
+            r"tr: range-endpoints of '&-\004' are in reverse collating sequence order
+",
+        );
+}
+
+#[test]
+fn test_non_digit_repeat() {
+    new_ucmd!()
+        .args(&["a", "[b*c]"])
+        .pipe_in("")
+        .fails()
+        .stderr_only("tr: invalid repeat count 'c' in [c*n] construct\n");
+}
