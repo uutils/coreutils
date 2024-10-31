@@ -61,9 +61,21 @@ fn test_mkdir_parent() {
     let test_dir = "parent_dir/child_dir";
 
     scene.ucmd().arg("-p").arg(test_dir).succeeds();
-    scene.ucmd().arg("-p").arg(test_dir).succeeds();
+    scene.ucmd().arg("-p").arg("-p").arg(test_dir).succeeds();
     scene.ucmd().arg("--parent").arg(test_dir).succeeds();
+    scene
+        .ucmd()
+        .arg("--parent")
+        .arg("--parent")
+        .arg(test_dir)
+        .succeeds();
     scene.ucmd().arg("--parents").arg(test_dir).succeeds();
+    scene
+        .ucmd()
+        .arg("--parents")
+        .arg("--parents")
+        .arg(test_dir)
+        .succeeds();
 }
 
 #[test]

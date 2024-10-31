@@ -114,6 +114,7 @@ pub fn uu_app() -> Command {
                 .short('p')
                 .long(options::PARENTS)
                 .help("make parent directories as needed")
+                .overrides_with(options::PARENTS)
                 .action(ArgAction::SetTrue),
         )
         .arg(
