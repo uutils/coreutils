@@ -120,7 +120,19 @@ fn test_cp_duplicate_files() {
         ));
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 }
-
+#[test]
+fn test_cp_duplicate_folder() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-r")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER)
+        .succeeds()
+        .stderr_contains(format!(
+            "source directory '{TEST_COPY_FROM_FOLDER}' specified more than once"
+        ));
+    assert!(at.dir_exists(format!("{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER}").as_str()));
+}
 #[test]
 fn test_cp_duplicate_files_normalized_path() {
     let (at, mut ucmd) = at_and_ucmd!();
