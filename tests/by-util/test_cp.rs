@@ -122,6 +122,60 @@ fn test_cp_duplicate_files() {
 }
 
 #[test]
+fn test_cp_duplicate_folder() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-r")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER)
+        .succeeds()
+        .stderr_contains(format!(
+            "source directory '{TEST_COPY_FROM_FOLDER}' specified more than once"
+        ));
+    assert!(at.dir_exists(format!("{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER}").as_str()));
+}
+
+#[test]
+fn test_cp_duplicate_files_normalized_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(format!("./{TEST_HELLO_WORLD_SOURCE}"))
+        .arg(TEST_COPY_TO_FOLDER)
+        .succeeds()
+        .stderr_contains(format!(
+            "source file './{TEST_HELLO_WORLD_SOURCE}' specified more than once"
+        ));
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+}
+
+#[test]
+fn test_cp_duplicate_files_with_plain_backup() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .arg("--backup")
+        .fails()
+        // cp would skip duplicate src check and fail when it tries to overwrite the "just-created" file.
+        .stderr_contains(
+            "will not overwrite just-created 'hello_dir/hello_world.txt' with 'hello_world.txt",
+        );
+}
+
+#[test]
+fn test_cp_duplicate_files_with_numbered_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // cp would skip duplicate src check and succeeds
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .arg("--backup=numbered")
+        .succeeds();
+    at.file_exists(TEST_COPY_TO_FOLDER_FILE);
+    at.file_exists(format!("{TEST_COPY_TO_FOLDER}.~1~"));
+}
+
+#[test]
 fn test_cp_same_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "a";
