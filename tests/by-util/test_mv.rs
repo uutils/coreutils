@@ -1717,3 +1717,18 @@ mod inter_partition_copying {
             .stderr_contains("Permission denied");
     }
 }
+
+#[test]
+fn test_mv_error_msg_with_multiple_sources_that_does_not_exist() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("d");
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("b/")
+        .arg("d")
+        .fails()
+        .stderr_contains("mv: cannot stat 'a': No such file or directory")
+        .stderr_contains("mv: cannot stat 'b/': No such file or directory");
+}

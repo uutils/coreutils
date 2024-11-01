@@ -446,6 +446,11 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
     };
 
     for sourcepath in files {
+        if !sourcepath.exists() {
+            show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+            continue;
+        }
+
         if let Some(ref pb) = count_progress {
             pb.set_message(sourcepath.to_string_lossy().to_string());
         }
