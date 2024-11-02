@@ -1448,7 +1448,7 @@ fn test_mv_directory_into_subdirectory_of_itself_fails() {
     // check that it also errors out with /
     scene
         .ucmd()
-        .arg(format!("{}/", dir1))
+        .arg(format!("{dir1}/"))
         .arg(dir2)
         .fails()
         .stderr_contains(
@@ -1601,7 +1601,7 @@ fn test_acl() {
             return;
         }
         Err(e) => {
-            println!("test skipped: setfacl failed with {}", e);
+            println!("test skipped: setfacl failed with {e}");
             return;
         }
     }
@@ -1716,4 +1716,19 @@ mod inter_partition_copying {
             .stderr_contains("inter-device move failed:")
             .stderr_contains("Permission denied");
     }
+}
+
+#[test]
+fn test_mv_error_msg_with_multiple_sources_that_does_not_exist() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("d");
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("b/")
+        .arg("d")
+        .fails()
+        .stderr_contains("mv: cannot stat 'a': No such file or directory")
+        .stderr_contains("mv: cannot stat 'b/': No such file or directory");
 }

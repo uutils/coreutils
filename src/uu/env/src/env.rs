@@ -65,7 +65,7 @@ fn print_env(line_ending: LineEnding) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
     for (n, v) in env::vars() {
-        write!(stdout, "{}={}{}", n, v, line_ending).unwrap();
+        write!(stdout, "{n}={v}{line_ending}").unwrap();
     }
 }
 
@@ -281,15 +281,15 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
             USimpleError::new(125, "invalid backslash at end of string in -S")
         }
         parse_error::ParseError::InvalidSequenceBackslashXInMinusS { pos: _, c } => {
-            USimpleError::new(125, format!("invalid sequence '\\{}' in -S", c))
+            USimpleError::new(125, format!("invalid sequence '\\{c}' in -S"))
         }
         parse_error::ParseError::MissingClosingQuote { pos: _, c: _ } => {
             USimpleError::new(125, "no terminating quote in -S string")
         }
         parse_error::ParseError::ParsingOfVariableNameFailed { pos, msg } => {
-            USimpleError::new(125, format!("variable name issue (at {}): {}", pos, msg,))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {msg}",))
         }
-        _ => USimpleError::new(125, format!("Error: {:?}", e)),
+        _ => USimpleError::new(125, format!("Error: {e:?}")),
     })
 }
 
@@ -393,7 +393,7 @@ impl EnvAppData {
                     | clap::error::ErrorKind::DisplayVersion => e.into(),
                     _ => {
                         // extent any real issue with parameter parsing by the ERROR_MSG_S_SHEBANG
-                        let s = format!("{}", e);
+                        let s = format!("{e}");
                         if !s.is_empty() {
                             let s = s.trim_end();
                             uucore::show_error!("{}", s);

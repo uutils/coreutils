@@ -1,9 +1,8 @@
-<!-- spell-checker:ignore formatstring templating parameterizing each's -->
+<!-- spell-checker:ignore templating parameterizing each's -->
 
 # printf
 
 ```
-printf FORMATSTRING [ARGUMENT]...
 printf FORMAT [ARGUMENT]...
 printf OPTION
 ```

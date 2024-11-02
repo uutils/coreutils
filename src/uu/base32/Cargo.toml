@@ -1,3 +1,5 @@
+# spell-checker:ignore proptest
+
 [package]
 name = "uu_base32"
 version = "0.0.27"
@@ -19,6 +21,9 @@ path = "src/base32.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["encoding"] }
+
+[dev-dependencies]
+proptest = "1.5.0"
 
 [[bin]]
 name = "base32"

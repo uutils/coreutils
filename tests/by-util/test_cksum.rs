@@ -1277,3 +1277,228 @@ fn test_non_utf8_filename() {
         .stdout_is_bytes(b"SHA256 (funky\xffname) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n")
         .no_stderr();
 }
+
+#[test]
+fn test_check_comment_line() {
+    // A comment in a checksum file shall be discarded unnoticed.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write(
+        "CHECKSUM-sha1",
+        "\
+        # This is a comment\n\
+        SHA1 (foo) = 058ab38dd3603703b3a7063cf95dc51a4286b6fe\n\
+        # next comment is empty\n#",
+    );
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM-sha1")
+        .succeeds()
+        .stdout_contains("foo: OK")
+        .no_stderr();
+}
+
+#[test]
+fn test_check_comment_only() {
+    // A file only filled with comments is equivalent to an empty file,
+    // and therefore produces an error.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("CHECKSUM", "# This is a comment\n");
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .fails()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_check_comment_leading_space() {
+    // A comment must have its '#' in first position on the line.
+    // A space before it will raise a warning for improperly formatted line.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write(
+        "CHECKSUM-sha1",
+        " # This is a comment\n\
+        SHA1 (foo) = 058ab38dd3603703b3a7063cf95dc51a4286b6fe\n",
+    );
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM-sha1")
+        .succeeds()
+        .stdout_contains("foo: OK")
+        .stderr_contains("WARNING: 1 line is improperly formatted");
+}
+
+/// This test checks alignment with GNU's error handling.
+/// Windows has a different logic and is guarded by [`test_check_directory_error`].
+#[cfg(not(windows))]
+#[test]
+fn test_check_failed_to_read() {
+    // check `cksum`'s behavior when encountering directories or non existing files
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write(
+        "CHECKSUM",
+        "SHA1 (dir) = ffffffffffffffffffffffffffffffffffffffff\n\
+        SHA1 (not-file) = ffffffffffffffffffffffffffffffffffffffff\n",
+    );
+    at.mkdir("dir");
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .fails()
+        .stdout_is(
+            "dir: FAILED open or read\n\
+            not-file: FAILED open or read\n",
+        )
+        .stderr_contains("cksum: WARNING: 2 listed files could not be read");
+
+    // check with `--ignore-missing`
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .arg("--ignore-missing")
+        .fails()
+        .stdout_is("dir: FAILED open or read\n")
+        .stderr_contains("cksum: WARNING: 1 listed file could not be read");
+}
+
+#[test]
+fn test_zero_multiple_file() {
+    new_ucmd!()
+        .arg("-z")
+        .arg("alice_in_wonderland.txt")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("zero_multiple_file.expected");
+}
+
+#[test]
+fn test_zero_single_file() {
+    new_ucmd!()
+        .arg("--zero")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_is_fixture("zero_single_file.expected");
+}
+
+#[test]
+fn test_check_trailing_space_fails() {
+    // If a checksum line has trailing spaces after the digest,
+    // it shall be considered improperly formatted.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write(
+        "CHECKSUM",
+        "SHA1 (foo) = 058ab38dd3603703b3a7063cf95dc51a4286b6fe    \n",
+    );
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .fails()
+        .no_stdout()
+        .stderr_contains("CHECKSUM: no properly formatted checksum lines found");
+}
+
+/// Regroup tests related to the handling of non-utf-8 content
+/// in checksum files.
+/// These tests are excluded from Windows because it does not provide any safe
+/// conversion between `OsString` and byte sequences for non-utf-8 strings.
+#[cfg(not(windows))]
+mod check_utf8 {
+    use super::*;
+
+    #[test]
+    fn test_check_non_utf8_comment() {
+        let hashes =
+        b"MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\n\
+        # Comment with a non utf8 char: >>\xff<<\n\
+        SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\n\
+        BLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n"
+    ;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.touch("empty");
+        at.write_bytes("check", hashes);
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg(at.subdir.join("check"))
+            .succeeds()
+            .stdout_is("empty: OK\nempty: OK\nempty: OK\n")
+            .no_stderr();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_check_non_utf8_filename() {
+        use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let filename: OsString = OsStringExt::from_vec(b"funky\xffname".to_vec());
+        at.touch(&filename);
+
+        // Checksum match
+        at.write_bytes("check",
+            b"SHA256 (funky\xffname) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n");
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg(at.subdir.join("check"))
+            .succeeds()
+            .stdout_is_bytes(b"funky\xffname: OK\n")
+            .no_stderr();
+
+        // Checksum mismatch
+        at.write_bytes("check",
+            b"SHA256 (funky\xffname) = ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n");
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg(at.subdir.join("check"))
+            .fails()
+            .stdout_is_bytes(b"funky\xffname: FAILED\n")
+            .stderr_contains("1 computed checksum did NOT match");
+
+        // file not found
+        at.write_bytes("check",
+            b"SHA256 (flakey\xffname) = ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n");
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg(at.subdir.join("check"))
+            .fails()
+            .stdout_is_bytes(b"flakey\xffname: FAILED open or read\n")
+            .stderr_contains("1 listed file could not be read");
+    }
+}

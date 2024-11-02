@@ -266,7 +266,7 @@ Make to uninstall.
 To uninstall uutils:
 
 ```shell
-cargo uninstall uutils
+cargo uninstall coreutils
 ```
 
 ### Uninstall with GNU Make

@@ -30,7 +30,7 @@ jobs:
       contents: read  # for actions/checkout to fetch code
       pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
     name: Run GNU tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
     - name: Initialize workflow variables
       id: vars
@@ -75,7 +75,16 @@ jobs:
         repository: 'coreutils/coreutils'
         path: '${{ steps.vars.outputs.path_GNU }}'
         ref: ${{ steps.vars.outputs.repo_GNU_ref }}
-        submodules: recursive
+        submodules: false
+
+    - name: Override submodule URL and initialize submodules
+      # Use github instead of upstream git server
+      run: |
+        git submodule sync --recursive
+        git config submodule.gnulib.url https://github.com/coreutils/gnulib.git
+        git submodule update --init --recursive --depth 1
+      working-directory: ${{ steps.vars.outputs.path_GNU }}
+
     - name: Retrieve reference artifacts
       uses: dawidd6/action-download-artifact@v6
       # ref: <https://github.com/dawidd6/action-download-artifact>
@@ -91,7 +100,7 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev
+        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev libselinux1-dev attr
     - name: Add various locales
       shell: bash
       run: |
@@ -333,7 +342,7 @@ jobs:
 
   gnu_coverage:
     name: Run GNU tests with coverage
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
     - name: Checkout code uutil
       uses: actions/checkout@v4
@@ -358,7 +367,7 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev
+        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev libselinux1-dev attr
     - name: Add various locales
       run: |
         ## Add various locales

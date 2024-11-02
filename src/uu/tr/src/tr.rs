@@ -82,23 +82,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let op = sets[1].quote();
             let msg = if sets_len == 2 {
                 format!(
-                    "{} {}\nOnly one string may be given when deleting without squeezing repeats.",
-                    start, op,
+                    "{start} {op}\nOnly one string may be given when deleting without squeezing repeats.",
                 )
             } else {
-                format!("{} {}", start, op,)
+                format!("{start} {op}",)
             };
             return Err(UUsageError::new(1, msg));
         }
         if sets_len > 2 {
             let op = sets[2].quote();
-            let msg = format!("{} {}", start, op);
+            let msg = format!("{start} {op}");
             return Err(UUsageError::new(1, msg));
         }
     }
 
     if let Some(first) = sets.first() {
-        if let Some(b'\\') = os_str_as_bytes(first)?.last() {
+        let slice = os_str_as_bytes(first)?;
+        let trailing_backslashes = slice.iter().rev().take_while(|&&c| c == b'\\').count();
+        if trailing_backslashes % 2 == 1 {
+            // The trailing backslash has a non-backslash character before it.
             show!(USimpleError::new(
                 0,
                 "warning: an unescaped backslash at end of string is not portable"

@@ -39,12 +39,10 @@ impl UError for TouchError {}
 impl Display for TouchError {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
-            Self::InvalidDateFormat(s) => write!(f, "Unable to parse date: {}", s),
-            Self::InvalidFiletime(time) => write!(
-                f,
-                "Source has invalid access or modification time: {}",
-                time,
-            ),
+            Self::InvalidDateFormat(s) => write!(f, "Unable to parse date: {s}"),
+            Self::InvalidFiletime(time) => {
+                write!(f, "Source has invalid access or modification time: {time}",)
+            }
             Self::ReferenceFileInaccessible(path, err) => {
                 write!(
                     f,
@@ -54,9 +52,9 @@ impl Display for TouchError {
                 )
             }
             Self::WindowsStdoutPathError(code) => {
-                write!(f, "GetFinalPathNameByHandleW failed with code {}", code)
+                write!(f, "GetFinalPathNameByHandleW failed with code {code}")
             }
-            Self::TouchFileError { error, .. } => write!(f, "{}", error),
+            Self::TouchFileError { error, .. } => write!(f, "{error}"),
         }
     }
 }

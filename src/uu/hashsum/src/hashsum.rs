@@ -96,7 +96,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
         set_or_err(detect_algo("b3sum", None)?)?;
     }
     if matches.get_flag("sha3") {
-        let bits = matches.get_one::<usize>("bits").cloned();
+        let bits = matches.get_one::<usize>("bits").copied();
         set_or_err(create_sha3(bits)?)?;
     }
     if matches.get_flag("sha3-224") {
@@ -219,12 +219,19 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     }
 
     if check {
-        let text_flag = matches.get_flag("text");
-        let binary_flag = matches.get_flag("binary");
+        // on Windows, allow --binary/--text to be used with --check
+        // and keep the behavior of defaulting to binary
+        #[cfg(not(windows))]
+        let binary = {
+            let text_flag = matches.get_flag("text");
+            let binary_flag = matches.get_flag("binary");
 
-        if binary_flag || text_flag {
-            return Err(ChecksumError::BinaryTextConflict.into());
-        }
+            if binary_flag || text_flag {
+                return Err(ChecksumError::BinaryTextConflict.into());
+            }
+
+            false
+        };
 
         // Execute the checksum validation based on the presence of files or the use of stdin
         // Determine the source of input: a list of files or stdin.
@@ -239,7 +246,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             strict,
             status,
             warn,
-            binary_flag,
+            binary,
             ignore_missing,
             quiet,
             Some(algo.name),
@@ -297,11 +304,11 @@ mod options {
 
 pub fn uu_app_common() -> Command {
     #[cfg(windows)]
-    const BINARY_HELP: &str = "read in binary mode (default)";
+    const BINARY_HELP: &str = "read or check in binary mode (default)";
     #[cfg(not(windows))]
     const BINARY_HELP: &str = "read in binary mode";
     #[cfg(windows)]
-    const TEXT_HELP: &str = "read in text mode";
+    const TEXT_HELP: &str = "read or check in text mode";
     #[cfg(not(windows))]
     const TEXT_HELP: &str = "read in text mode (default)";
     Command::new(uucore::util_name())
