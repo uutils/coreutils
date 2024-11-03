@@ -107,14 +107,16 @@ impl From<ChecksumError> for LineCheckError {
 }
 
 /// Represents an error that was encountered when processing a checksum file.
-#[allow(clippy::enum_variant_names)]
 enum FileCheckError {
     /// a generic UError was encountered in sub-functions
     UError(Box<dyn UError>),
-    /// the error does not stop the processing of next files
-    NonCriticalError,
-    /// the error must stop the run of the program
-    CriticalError,
+    /// the checksum file is improperly formatted.
+    ImproperlyFormatted,
+    /// reading of the checksum file failed
+    CantOpenChecksumFile,
+    /// Algorithm detection was unsuccessful.
+    /// Either none is provided, or there is a conflict.
+    AlgoDetectionError,
 }
 
 impl From<Box<dyn UError>> for FileCheckError {
@@ -735,7 +737,7 @@ fn process_checksum_file(
                 // Could not read the file, show the error and continue to the next file
                 show_error!("{e}");
                 set_exit_code(1);
-                return Err(FileCheckError::NonCriticalError);
+                return Err(FileCheckError::CantOpenChecksumFile);
             }
         }
     };
@@ -749,7 +751,7 @@ fn process_checksum_file(
         };
         show_error!("{e}");
         set_exit_code(1);
-        return Err(FileCheckError::NonCriticalError);
+        return Err(FileCheckError::AlgoDetectionError);
     };
 
     for (i, line) in lines.iter().enumerate() {
@@ -791,7 +793,7 @@ fn process_checksum_file(
             .into());
         }
         set_exit_code(1);
-        return Err(FileCheckError::CriticalError);
+        return Err(FileCheckError::ImproperlyFormatted);
     }
 
     // if any incorrectly formatted line, show it
@@ -839,8 +841,8 @@ where
         use FileCheckError::*;
         match process_checksum_file(filename_input, algo_name_input, length_input, opts) {
             Err(UError(e)) => return Err(e),
-            Err(CriticalError) => break,
-            Err(NonCriticalError) | Ok(_) => continue,
+            Err(ImproperlyFormatted) => break,
+            Err(CantOpenChecksumFile | AlgoDetectionError) | Ok(_) => continue,
         }
     }
 
