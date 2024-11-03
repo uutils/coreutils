@@ -77,6 +77,7 @@ struct ChecksumResult {
 
 enum LineCheckError {
     UError(Box<dyn UError>),
+    DigestMismatch,
     Skipped,
     ImproperlyFormatted,
     CantOpenFile,
@@ -594,7 +595,7 @@ fn process_checksum_line(
     cli_algo_length: Option<usize>,
     properly_formatted: &mut bool,
     opts: ChecksumOptions,
-) -> Result<bool, LineCheckError> {
+) -> Result<(), LineCheckError> {
     let line_bytes = os_str_as_bytes(line)?;
     if let Some(caps) = chosen_regex.captures(line_bytes) {
         *properly_formatted = true;
@@ -663,7 +664,12 @@ fn process_checksum_line(
             prefix,
             opts,
         );
-        Ok(checksum_correct)
+
+        if checksum_correct {
+            Ok(())
+        } else {
+            Err(LineCheckError::DigestMismatch)
+        }
     } else {
         if line.is_empty() || line_bytes.starts_with(b"#") {
             // Don't show any warning for empty or commented lines.
@@ -740,8 +746,8 @@ fn process_checksum_file(
             &mut properly_formatted,
             opts,
         ) {
-            Ok(true) => correct_format += 1,
-            Ok(false) => res.failed_cksum += 1,
+            Ok(()) => correct_format += 1,
+            Err(LineCheckError::DigestMismatch) => res.failed_cksum += 1,
             Err(LineCheckError::UError(e)) => return Err(e.into()),
             Err(LineCheckError::Skipped) => continue,
             Err(LineCheckError::ImproperlyFormatted) => (),
