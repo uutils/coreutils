@@ -383,7 +383,7 @@ jobs:
         locale -a
     - name: Build binaries
       env:
-        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+        RUSTFLAGS: "-Cprofile-generate=uutils/target/debug -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
       run: |
         ## Build binaries
@@ -391,6 +391,8 @@ jobs:
         bash util/build-gnu.sh
     - name: Run GNU tests
       run: bash uutils/util/run-gnu-test.sh
+    - name: Install llvm-tools-preview
+      run: rustup component add llvm-tools-preview
     - name: Generate coverage data (via `grcov`)
       id: coverage
       run: |
@@ -401,9 +403,9 @@ jobs:
         mkdir -p "${COVERAGE_REPORT_DIR}"
         sudo chown -R "$(whoami)" "${COVERAGE_REPORT_DIR}"
         # display coverage files
-        grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
+        grcov . --binary-path="${COVERAGE_REPORT_DIR}" --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
         # generate coverage report
-        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
+        grcov . --binary-path="{COVERAGE_REPORT_DIR}" --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v4

@@ -945,7 +945,7 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.job.toolchain }}
-        components: rustfmt
+        components: rustfmt, llvm-tools-preview
     - uses: taiki-e/install-action@nextest
     - uses: taiki-e/install-action@grcov
     - uses: Swatinem/rust-cache@v2
@@ -1000,6 +1000,7 @@ jobs:
           # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
           windows-latest) C:/msys64/usr/bin/pacman.exe -Sy --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
         esac
+        mkdir -p ${{ vars.RUNNER_TEMP }}/target/debug
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -1014,17 +1015,19 @@ jobs:
       run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
         RUSTC_WRAPPER: ""
-        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+        RUSTFLAGS: "-Cprofile-generate=${{ vars.RUNNER_TEMP }}/target/debug -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
         RUST_BACKTRACE: "1"
+        LLVM_PROFILE_FILE: "coreutils-%p-%m.profraw"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test individual utilities
       run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
         RUSTC_WRAPPER: ""
-        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+        RUSTFLAGS: "-Cprofile-generate=${{ vars.RUNNER_TEMP }}/target/debug -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
         RUST_BACKTRACE: "1"
+        LLVM_PROFILE_FILE: "coreutils-%p-%m.profraw"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Generate coverage data (via `grcov`)
       id: coverage
@@ -1037,9 +1040,9 @@ jobs:
         # GRCOV_EXCLUDE_OPTION='--excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"' ## `grcov` ignores these params when passed as an environment variable (why?)
         mkdir -p "${COVERAGE_REPORT_DIR}"
         # display coverage files
-        grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
+        grcov . --binary-path="${COVERAGE_REPORT_DIR}" --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
         # generate coverage report
-        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
+        grcov . --binary-path="${COVERAGE_REPORT_DIR}" --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v4
