@@ -56,7 +56,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "219e3ce6f2611d83b51ec2098a12702112c29e57203a6b0a0929b2cddb486608"
 dependencies = [
- "unicode-width",
+ "unicode-width 0.1.13",
 ]
 
 [[package]]
@@ -407,7 +407,7 @@ dependencies = [
  "encode_unicode",
  "lazy_static",
  "libc",
- "unicode-width",
+ "unicode-width 0.1.13",
  "windows-sys 0.52.0",
 ]
 
@@ -1202,15 +1202,15 @@ dependencies = [
 
 [[package]]
 name = "indicatif"
-version = "0.17.8"
+version = "0.17.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "763a5a8f45087d6bcea4222e7b72c291a054edf80e4ef6efd2a4979878c7bea3"
+checksum = "cbf675b85ed934d3c67b5c5469701eec7db22689d0a2139d856e0925fa28b281"
 dependencies = [
  "console",
- "instant",
  "number_prefix",
  "portable-atomic",
- "unicode-width",
+ "unicode-width 0.2.0",
+ "web-time",
 ]
 
 [[package]]
@@ -1231,15 +1231,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "instant"
-version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
-dependencies = [
- "cfg-if",
 ]
 
 [[package]]
@@ -1636,7 +1627,7 @@ version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a6229bad892b46b0dcfaaeb18ad0d2e56400f5aaea05b768bde96e73676cf75"
 dependencies = [
- "unicode-width",
+ "unicode-width 0.1.13",
 ]
 
 [[package]]
@@ -2364,7 +2355,7 @@ dependencies = [
  "smawk",
  "terminal_size 0.2.6",
  "unicode-linebreak",
- "unicode-width",
+ "unicode-width 0.1.13",
 ]
 
 [[package]]
@@ -2487,6 +2478,12 @@ name = "unicode-width"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0336d538f7abc86d282a4189614dfaa90810dfc2c6f6427eaf88e16311dd225d"
+
+[[package]]
+name = "unicode-width"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
 
 [[package]]
 name = "unicode-xid"
@@ -2713,7 +2710,7 @@ version = "0.0.28"
 dependencies = [
  "clap",
  "tempfile",
- "unicode-width",
+ "unicode-width 0.1.13",
  "uucore",
 ]
 
@@ -2776,7 +2773,7 @@ name = "uu_expand"
 version = "0.0.28"
 dependencies = [
  "clap",
- "unicode-width",
+ "unicode-width 0.1.13",
  "uucore",
 ]
 
@@ -2818,7 +2815,7 @@ name = "uu_fmt"
 version = "0.0.28"
 dependencies = [
  "clap",
- "unicode-width",
+ "unicode-width 0.1.13",
  "uucore",
 ]
 
@@ -3003,7 +3000,7 @@ dependencies = [
  "crossterm",
  "nix",
  "unicode-segmentation",
- "unicode-width",
+ "unicode-width 0.1.13",
  "uucore",
 ]
 
@@ -3246,7 +3243,7 @@ dependencies = [
  "rayon",
  "self_cell",
  "tempfile",
- "unicode-width",
+ "unicode-width 0.1.13",
  "uucore",
 ]
 
@@ -3438,7 +3435,7 @@ name = "uu_unexpand"
 version = "0.0.28"
 dependencies = [
  "clap",
- "unicode-width",
+ "unicode-width 0.1.13",
  "uucore",
 ]
 
@@ -3496,7 +3493,7 @@ dependencies = [
  "libc",
  "nix",
  "thiserror",
- "unicode-width",
+ "unicode-width 0.1.13",
  "uucore",
 ]
 
@@ -3679,6 +3676,16 @@ name = "wasm-bindgen-shared"
 version = "0.2.87"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca6ad05a4870b2bf5fe995117d3728437bd27d7cd5f06f13c17443ef369775a1"
+
+[[package]]
+name = "web-time"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "wild"
