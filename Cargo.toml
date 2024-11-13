@@ -75,6 +75,7 @@ feat_common_core = [
   "dirname",
   "dd",
   "du",
+  "dmesg",
   "echo",
   "env",
   "expand",
@@ -398,6 +399,7 @@ dir = { optional = true, version = "0.0.28", package = "uu_dir", path = "src/uu/
 dircolors = { optional = true, version = "0.0.28", package = "uu_dircolors", path = "src/uu/dircolors" }
 dirname = { optional = true, version = "0.0.28", package = "uu_dirname", path = "src/uu/dirname" }
 du = { optional = true, version = "0.0.28", package = "uu_du", path = "src/uu/du" }
+dmesg = { optional = true, version = "0.0.28", package = "uu_dmesg", path = "src/uu/dmesg" }
 echo = { optional = true, version = "0.0.28", package = "uu_echo", path = "src/uu/echo" }
 env = { optional = true, version = "0.0.28", package = "uu_env", path = "src/uu/env" }
 expand = { optional = true, version = "0.0.28", package = "uu_expand", path = "src/uu/expand" }

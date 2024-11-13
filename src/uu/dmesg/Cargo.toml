@@ -1,0 +1,25 @@
+[package]
+name = "uu_dmesg"
+version = "0.0.28"
+authors = ["uutils developers"]
+license = "MIT"
+description = "dmesg ~ (uutils) print or control the kernel ring buffer"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/dmesg"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2021"
+
+readme.workspace = true
+
+[lib]
+path = "src/dmesg.rs"
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true }
+
+[[bin]]
+name = "dmesg"
+path = "src/main.rs"

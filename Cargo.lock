@@ -498,6 +498,7 @@ dependencies = [
  "uu_dir",
  "uu_dircolors",
  "uu_dirname",
+ "uu_dmesg",
  "uu_du",
  "uu_echo",
  "uu_env",
@@ -2736,6 +2737,14 @@ dependencies = [
 
 [[package]]
 name = "uu_dirname"
+version = "0.0.28"
+dependencies = [
+ "clap",
+ "uucore",
+]
+
+[[package]]
+name = "uu_dmesg"
 version = "0.0.28"
 dependencies = [
  "clap",
