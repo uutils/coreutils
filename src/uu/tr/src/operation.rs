@@ -22,7 +22,7 @@ use std::{
     io::{BufRead, Write},
     ops::Not,
 };
-use uucore::error::UError;
+use uucore::error::{UError, UResult, USimpleError};
 
 #[derive(Debug, Clone)]
 pub enum BadSequence {
@@ -577,7 +577,7 @@ impl SymbolTranslator for SqueezeOperation {
     }
 }
 
-pub fn translate_input<T, R, W>(input: &mut R, output: &mut W, mut translator: T)
+pub fn translate_input<T, R, W>(input: &mut R, output: &mut W, mut translator: T) -> UResult<()>
 where
     T: SymbolTranslator,
     R: BufRead,
@@ -585,7 +585,17 @@ where
 {
     let mut buf = Vec::new();
     let mut output_buf = Vec::new();
-    while let Ok(length) = input.read_until(b'\n', &mut buf) {
+    loop {
+        let length = match input.read_until(b'\n', &mut buf) {
+            Ok(0) => break, // EOF reached
+            Ok(n) => n,
+            Err(e) => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("{}: read error: {}", uucore::util_name(), e),
+                ));
+            }
+        };
         if length == 0 {
             break;
         } else {
@@ -596,4 +606,5 @@ where
         buf.clear();
         output_buf.clear();
     }
+    Ok(())
 }
