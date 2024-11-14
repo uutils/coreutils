@@ -97,6 +97,10 @@ mod test_dirname;
 #[path = "by-util/test_du.rs"]
 mod test_du;
 
+#[cfg(feature = "dmesg")]
+#[path = "by-util/test_dmesg.rs"]
+mod test_dmesg;
+
 #[cfg(feature = "echo")]
 #[path = "by-util/test_echo.rs"]
 mod test_echo;
