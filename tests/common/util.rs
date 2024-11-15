@@ -1614,6 +1614,11 @@ impl UCommand {
             }
         }
 
+        // Pass LLVM_PROFILE_FILE if it is set in the environment
+        if let Some(llvm_profile) = env::var_os("LLVM_PROFILE_FILE") {
+            command.env("LLVM_PROFILE_FILE", llvm_profile);
+        }
+
         command
             .envs(DEFAULT_ENV)
             .envs(self.env_vars.iter().cloned());
