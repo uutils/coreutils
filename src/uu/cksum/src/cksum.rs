@@ -13,8 +13,8 @@ use std::iter;
 use std::path::Path;
 use uucore::checksum::{
     calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
-    ChecksumError, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
+    ChecksumError, ChecksumOptions, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD,
+    ALGORITHM_OPTIONS_CRC, ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
 };
 use uucore::{
     encoding,
@@ -318,17 +318,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
             |files| files.map(OsStr::new).collect::<Vec<_>>(),
         );
-        return perform_checksum_validation(
-            files.iter().copied(),
-            strict,
-            status,
-            warn,
-            binary_flag,
+        let opts = ChecksumOptions {
+            binary: binary_flag,
             ignore_missing,
             quiet,
-            algo_option,
-            length,
-        );
+            status,
+            strict,
+            warn,
+        };
+
+        return perform_checksum_validation(files.iter().copied(), algo_option, length, opts);
     }
 
     let (tag, asterisk) = handle_tag_text_binary_flags(&matches)?;
