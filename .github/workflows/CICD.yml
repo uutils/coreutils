@@ -1037,6 +1037,8 @@ jobs:
         COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
         mkdir -p "${COVERAGE_REPORT_DIR}"
         # display coverage files
+        ls -al ${{ github.workspace }}/build/
+        ls -al .
         grcov ${{ github.workspace }}/build/ . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
         # generate coverage report
         grcov ${{ github.workspace }}/build/ . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
