@@ -783,6 +783,16 @@ fn test_invalid_float_point_fail_properly() {
         .fails()
         .no_stdout()
         .usage_error("invalid floating point argument: '66000e000000000000000000000000000000000000000000000000000009223372036854775807'");
+    new_ucmd!()
+        .args(&["-1.1e9223372036854775807"])
+        .fails()
+        .no_stdout()
+        .usage_error("invalid floating point argument: '-1.1e9223372036854775807'");
+    new_ucmd!()
+        .args(&["-.1e9223372036854775807"])
+        .fails()
+        .no_stdout()
+        .usage_error("invalid floating point argument: '-.1e9223372036854775807'");
 }
 
 #[test]
