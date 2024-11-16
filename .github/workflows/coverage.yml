@@ -1,0 +1,56 @@
+name: Coverage
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  codecov:
+    name: Code coverage (new)
+    runs-on: ${{ matrix.job.os }}
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest  , features: unix, toolchain: nightly }
+          - { os: macos-latest   , features: macos, toolchain: nightly }
+          # FIXME: Re-enable Code Coverage on windows, which currently fails due to "profiler_builtins". See #6686.
+          # - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
+    env:
+      CARGO_INCREMENTAL: "0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        run: rustup update stable
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Install Rust
+        run: rustup update stable
+
+      - name: llvm-cov show-env
+        run: cargo llvm-cov show-env --export-prefix
+
+      - name: Build
+        run: source <(cargo llvm-cov show-env --export-prefix) && cargo build --features=${{ matrix.job.features }}
+
+      - name: Test main crate
+        run: source <(cargo llvm-cov show-env --export-prefix) && cargo test --features=${{ matrix.job.features }} -p uucore -p coreutils
+
+      - name: Generate code coverage
+        run: source <(cargo llvm-cov show-env --export-prefix) && cargo llvm-cov report --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: true
