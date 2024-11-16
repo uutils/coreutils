@@ -1017,7 +1017,7 @@ jobs:
         RUSTFLAGS: "-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
         RUST_BACKTRACE: "1"
-        LLVM_PROFILE_FILE: ${{ github.workspace }}/build/profile-%p-%m.profraw
+        LLVM_PROFILE_FILE: "${{ github.workspace }}/build/profile-%p-%m.profraw"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test individual utilities
       run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
