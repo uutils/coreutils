@@ -111,7 +111,9 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
             2usize
         }
     } else {
-        let total = j as i64 + exponent;
+        let total = (j as i64)
+            .checked_add(exponent)
+            .ok_or(ParseNumberError::Float)?;
         let result = if total < 1 {
             1
         } else {
