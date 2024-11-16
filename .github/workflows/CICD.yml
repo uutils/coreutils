@@ -1035,8 +1035,6 @@ jobs:
         ## Generate coverage data
         COVERAGE_REPORT_DIR="target/debug"
         COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
-        # GRCOV_IGNORE_OPTION='--ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*"' ## `grcov` ignores these params when passed as an environment variable (why?)
-        # GRCOV_EXCLUDE_OPTION='--excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"' ## `grcov` ignores these params when passed as an environment variable (why?)
         mkdir -p "${COVERAGE_REPORT_DIR}"
         # display coverage files
         grcov ${{ github.workspace }}/build/profile-%p-%m.profraw --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
