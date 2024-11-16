@@ -1011,6 +1011,7 @@ jobs:
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
+        df -h
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Test
       run: |
