@@ -1732,3 +1732,23 @@ fn test_mv_error_msg_with_multiple_sources_that_does_not_exist() {
         .stderr_contains("mv: cannot stat 'a': No such file or directory")
         .stderr_contains("mv: cannot stat 'b/': No such file or directory");
 }
+
+#[test]
+fn test_mv_error_cant_move_itself() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("b");
+    scene
+        .ucmd()
+        .arg("b")
+        .arg("b/")
+        .fails()
+        .stderr_contains("mv: cannot move 'b' to a subdirectory of itself, 'b/b'");
+    scene
+        .ucmd()
+        .arg("./b")
+        .arg("b")
+        .arg("b/")
+        .fails()
+        .stderr_contains("mv: cannot move 'b' to a subdirectory of itself, 'b/b'");
+}
