@@ -219,10 +219,15 @@ fn parse_decimal_and_exponent(
         };
         // Special case: if the string is "-.1e2", we need to treat it
         // as if it were "-0.1e2".
-        let total = if s.starts_with("-.") {
-            i as i64 + exponent + 1
-        } else {
-            i as i64 + exponent
+        let total = {
+            let total = (i as i64)
+                .checked_add(exponent)
+                .ok_or(ParseNumberError::Float)?;
+            if s.starts_with("-.") {
+                total.checked_add(1).ok_or(ParseNumberError::Float)?
+            } else {
+                total
+            }
         };
         if total < minimum as i64 {
             minimum
