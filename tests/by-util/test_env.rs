@@ -512,7 +512,14 @@ fn test_gnu_e20() {
     );
 
     let out = scene.ucmd().args(&input).succeeds();
-    assert_eq!(out.stdout_str(), output);
+
+    // Remove the unwanted substring from stdout
+    let filtered_stdout = out.stdout_str().replace(
+        "__LLVM_PROFILE_RT_INIT_ONCE=__LLVM_PROFILE_RT_INIT_ONCE\n",
+        "",
+    );
+
+    assert_eq!(filtered_stdout, output);
 }
 
 #[test]
