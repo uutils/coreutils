@@ -106,7 +106,9 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
 
     let num_integral_digits = if is_minus_zero_float(s, &x) {
         if exponent > 0 {
-            2usize + exponent as usize
+            (2usize)
+                .checked_add(exponent as usize)
+                .ok_or(ParseNumberError::Float)?
         } else {
             2usize
         }
@@ -117,7 +119,7 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
         let result = if total < 1 {
             1
         } else {
-            total.try_into().unwrap()
+            total.try_into().map_err(|_| ParseNumberError::Float)?
         };
         if x.sign() == Sign::Minus {
             result + 1
@@ -209,7 +211,9 @@ fn parse_decimal_and_exponent(
             let integral_part: f64 = s[..j].parse().map_err(|_| ParseNumberError::Float)?;
             if integral_part.is_sign_negative() {
                 if exponent > 0 {
-                    2usize + exponent as usize
+                    2usize
+                        .checked_add(exponent as usize)
+                        .ok_or(ParseNumberError::Float)?
                 } else {
                     2usize
                 }
@@ -232,7 +236,7 @@ fn parse_decimal_and_exponent(
         if total < minimum as i64 {
             minimum
         } else {
-            total.try_into().unwrap()
+            total.try_into().map_err(|_| ParseNumberError::Float)?
         }
     };
 
