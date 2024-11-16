@@ -1043,7 +1043,7 @@ jobs:
         COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
         mkdir -p "${COVERAGE_REPORT_DIR}"
         # display coverage files (for debug)
-        ls -al ${{ github.workspace }}/build/|head -5
+        ls -al ${{ github.workspace }}/build/
         ls -al target/
         ls -al target/debug
         grcov ${{ github.workspace }}/build/ --output-type files -b target/debug/ --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
