@@ -441,43 +441,15 @@ fn determine_regex(lines: &[OsString]) -> Option<(Regex, bool)> {
     None
 }
 
-// Converts bytes to a hexadecimal string
-fn bytes_to_hex(bytes: &[u8]) -> String {
-    use std::fmt::Write;
-    bytes
-        .iter()
-        .fold(String::with_capacity(bytes.len() * 2), |mut hex, byte| {
-            write!(hex, "{byte:02x}").unwrap();
-            hex
-        })
-}
+/// Extract the expected digest from the checksum string
+fn get_expected_digest_as_hexa_string(caps: &Captures, chosen_regex: &Regex) -> Option<String> {
+    // Unwraps are safe, ensured by regex.
+    let ck = caps.name("checksum").unwrap().as_bytes();
 
-fn get_expected_checksum(
-    filename: &[u8],
-    caps: &Captures,
-    chosen_regex: &Regex,
-) -> UResult<String> {
     if chosen_regex.as_str() == ALGO_BASED_REGEX_BASE64 {
-        // Unwrap is safe, ensured by regex
-        let ck = caps.name("checksum").unwrap().as_bytes();
-        match BASE64.decode(ck) {
-            Ok(decoded_bytes) => {
-                match std::str::from_utf8(&decoded_bytes) {
-                    Ok(decoded_str) => Ok(decoded_str.to_string()),
-                    Err(_) => Ok(bytes_to_hex(&decoded_bytes)), // Handle as raw bytes if not valid UTF-8
-                }
-            }
-            Err(_) => Err(Box::new(
-                ChecksumError::NoProperlyFormattedChecksumLinesFound {
-                    filename: String::from_utf8_lossy(filename).to_string(),
-                },
-            )),
-        }
+        BASE64.decode(ck).map(hex::encode).ok()
     } else {
-        // Unwraps are safe, ensured by regex.
-        Ok(str::from_utf8(caps.name("checksum").unwrap().as_bytes())
-            .unwrap()
-            .to_string())
+        Some(str::from_utf8(ck).unwrap().to_string())
     }
 }
 
@@ -631,7 +603,13 @@ fn process_checksum_line(
             filename_to_check = &filename_to_check[1..];
         }
 
-        let expected_checksum = get_expected_checksum(filename_to_check, &caps, chosen_regex)?;
+        let expected_checksum = get_expected_digest_as_hexa_string(&caps, chosen_regex).ok_or(
+            LineCheckError::UError(Box::new(
+                ChecksumError::NoProperlyFormattedChecksumLinesFound {
+                    filename: String::from_utf8_lossy(filename_to_check).to_string(),
+                },
+            )),
+        )?;
 
         // If the algo_name is provided, we use it, otherwise we try to detect it
         let (algo_name, length) = if is_algo_based_format {
@@ -1250,13 +1228,13 @@ mod tests {
     }
 
     #[test]
-    fn test_get_expected_checksum() {
+    fn test_get_expected_digest() {
         let re = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
         let caps = re
             .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=")
             .unwrap();
 
-        let result = get_expected_checksum(b"filename", &caps, &re);
+        let result = get_expected_digest_as_hexa_string(&caps, &re);
 
         assert_eq!(
             result.unwrap(),
@@ -1271,9 +1249,9 @@ mod tests {
             .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU")
             .unwrap();
 
-        let result = get_expected_checksum(b"filename", &caps, &re);
+        let result = get_expected_digest_as_hexa_string(&caps, &re);
 
-        assert!(result.is_err());
+        assert!(result.is_none());
     }
 
     #[test]
