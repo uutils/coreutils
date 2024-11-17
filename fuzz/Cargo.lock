@@ -416,9 +416,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.161"
+version = "0.2.164"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e9489c2807c139ffd9c1794f4af0ebe86a828db53ecdc7fea2111d0fed085d1"
+checksum = "433bfe06b8c75da9b2e3fbea6e5329ff87748f0b144ef75306e674c3f6f7c13f"
 
 [[package]]
 name = "libfuzzer-sys"
@@ -847,7 +847,7 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
 [[package]]
 name = "uu_cut"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "bstr",
  "clap",
@@ -857,7 +857,7 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "chrono",
  "clap",
@@ -869,7 +869,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "uucore",
@@ -877,7 +877,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "nix 0.29.0",
@@ -887,7 +887,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "num-bigint",
@@ -898,7 +898,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "uucore",
@@ -906,7 +906,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -917,7 +917,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "binary-heap-plus",
  "clap",
@@ -937,7 +937,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "memchr",
@@ -946,7 +946,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "libc",
@@ -955,7 +955,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "nom",
@@ -964,7 +964,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "bytecount",
  "clap",
@@ -977,7 +977,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "dunce",
@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1029,7 +1029,7 @@ dependencies = [
 
 [[package]]
 name = "uuhelp_parser"
-version = "0.0.27"
+version = "0.0.28"
 
 [[package]]
 name = "wasi"
