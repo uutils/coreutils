@@ -68,11 +68,27 @@ pub struct HashAlgorithm {
     pub bits: usize,
 }
 
+/// This structure holds the count of checksum test lines' outcomes.
 #[derive(Default)]
 struct ChecksumResult {
-    pub bad_format: i32,
-    pub failed_cksum: i32,
-    pub failed_open_file: i32,
+    /// Number of lines in the file where the computed checksum MATCHES
+    /// the expectation.
+    pub correct: u32,
+    /// Number of lines in the file where the computed checksum DIFFERS
+    /// from the expectation.
+    pub failed_cksum: u32,
+    pub failed_open_file: u32,
+    /// Number of improperly formatted lines.
+    pub bad_format: u32,
+    /// Total number of non-empty, non-comment lines.
+    pub total: u32,
+}
+
+impl ChecksumResult {
+    #[inline]
+    fn total_properly_formatted(&self) -> u32 {
+        self.total - self.bad_format
+    }
 }
 
 /// Represents a reason for which the processing of a checksum line
@@ -681,8 +697,6 @@ fn process_checksum_file(
     cli_algo_length: Option<usize>,
     opts: ChecksumOptions,
 ) -> Result<(), FileCheckError> {
-    let mut correct_format = 0;
-    let mut properly_formatted_lines = 0;
     let mut res = ChecksumResult::default();
 
     let input_is_stdin = filename_input == OsStr::new("-");
@@ -712,7 +726,7 @@ fn process_checksum_file(
     };
 
     for (i, line) in lines.iter().enumerate() {
-        match process_checksum_line(
+        let line_result = process_checksum_line(
             filename_input,
             line,
             i,
@@ -721,34 +735,31 @@ fn process_checksum_file(
             cli_algo_name,
             cli_algo_length,
             opts,
-        ) {
-            Ok(()) => {
-                correct_format += 1;
-                properly_formatted_lines += 1
-            }
-            Err(LineCheckError::DigestMismatch) => {
-                res.failed_cksum += 1;
-                properly_formatted_lines += 1
-            }
-            Err(LineCheckError::UError(e)) => return Err(e.into()),
-            Err(LineCheckError::Skipped) => continue,
-            Err(LineCheckError::ImproperlyFormatted) => res.bad_format += 1,
-            Err(LineCheckError::CantOpenFile | LineCheckError::FileIsDirectory) => {
-                properly_formatted_lines += 1;
-                res.failed_open_file += 1
-            }
-            Err(LineCheckError::FileNotFound) => {
-                properly_formatted_lines += 1;
-                if !opts.ignore_missing {
-                    res.failed_open_file += 1
-                }
-            }
+        );
+
+        // Match a first time to elude critical UErrors, and increment the total
+        // in all cases except on skipped.
+        use LineCheckError::*;
+        match line_result {
+            Err(UError(e)) => return Err(e.into()),
+            Err(Skipped) => (),
+            _ => res.total += 1,
+        }
+
+        // Match a second time to update the right field of `res`.
+        match line_result {
+            Ok(()) => res.correct += 1,
+            Err(DigestMismatch) => res.failed_cksum += 1,
+            Err(ImproperlyFormatted) => res.bad_format += 1,
+            Err(CantOpenFile | FileIsDirectory) => res.failed_open_file += 1,
+            Err(FileNotFound) if !opts.ignore_missing => res.failed_open_file += 1,
+            _ => continue,
         };
     }
 
     // not a single line correctly formatted found
     // return an error
-    if properly_formatted_lines == 0 {
+    if res.total_properly_formatted() == 0 {
         if !opts.status {
             log_no_properly_formatted(get_filename_for_output(filename_input, input_is_stdin));
         }
@@ -759,7 +770,7 @@ fn process_checksum_file(
     // if any incorrectly formatted line, show it
     cksum_output(&res, opts.status);
 
-    if opts.ignore_missing && correct_format == 0 {
+    if opts.ignore_missing && res.correct == 0 {
         // we have only bad format
         // and we had ignore-missing
         eprintln!(
