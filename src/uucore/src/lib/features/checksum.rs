@@ -174,8 +174,6 @@ pub enum ChecksumError {
     CombineMultipleAlgorithms,
     #[error("Needs an algorithm to hash with.\nUse --help for more information.")]
     NeedAlgorithmToHash,
-    #[error("{filename}: no properly formatted checksum lines found")]
-    NoProperlyFormattedChecksumLinesFound { filename: String },
 }
 
 impl UError for ChecksumError {
@@ -239,6 +237,12 @@ fn cksum_output(res: &ChecksumResult, status: bool) {
     } else if res.failed_open_file > 1 {
         show_warning_caps!("{} listed files could not be read", res.failed_open_file);
     }
+}
+
+/// Print a "no properly formatted lines" message in stderr
+#[inline]
+fn log_no_properly_formatted(filename: String) {
+    show_error!("{filename}: no properly formatted checksum lines found");
 }
 
 /// Represents the different outcomes that can happen to a file
@@ -442,7 +446,7 @@ fn determine_regex(lines: &[OsString]) -> Option<(Regex, bool)> {
 }
 
 /// Extract the expected digest from the checksum string
-fn get_expected_digest_as_hexa_string(caps: &Captures, chosen_regex: &Regex) -> Option<String> {
+fn get_expected_digest_as_hex_string(caps: &Captures, chosen_regex: &Regex) -> Option<String> {
     // Unwraps are safe, ensured by regex.
     let ck = caps.name("checksum").unwrap().as_bytes();
 
@@ -528,8 +532,6 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
 fn identify_algo_name_and_length(
     caps: &Captures,
     algo_name_input: Option<&str>,
-    res: &mut ChecksumResult,
-    properly_formatted: &mut bool,
 ) -> Option<(String, Option<usize>)> {
     // When the algo-based format is matched, extract details from regex captures
     let algorithm = caps
@@ -543,14 +545,11 @@ fn identify_algo_name_and_length(
     // (for example SHA1 (f) = d...)
     // Also handle the case cksum -s sm3 but the file contains other formats
     if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
-        res.bad_format += 1;
-        *properly_formatted = false;
         return None;
     }
 
     if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
         // Not supported algo, leave early
-        *properly_formatted = false;
         return None;
     }
 
@@ -562,7 +561,6 @@ fn identify_algo_name_and_length(
         if bits_value % 8 == 0 {
             Some(Some(bits_value / 8))
         } else {
-            *properly_formatted = false;
             None // Return None to signal a divisibility issue
         }
     })?;
@@ -583,16 +581,12 @@ fn process_checksum_line(
     i: usize,
     chosen_regex: &Regex,
     is_algo_based_format: bool,
-    res: &mut ChecksumResult,
     cli_algo_name: Option<&str>,
     cli_algo_length: Option<usize>,
-    properly_formatted: &mut bool,
     opts: ChecksumOptions,
 ) -> Result<(), LineCheckError> {
     let line_bytes = os_str_as_bytes(line)?;
     if let Some(caps) = chosen_regex.captures(line_bytes) {
-        *properly_formatted = true;
-
         let mut filename_to_check = caps.name("filename").unwrap().as_bytes();
 
         if filename_to_check.starts_with(b"*")
@@ -603,18 +597,13 @@ fn process_checksum_line(
             filename_to_check = &filename_to_check[1..];
         }
 
-        let expected_checksum = get_expected_digest_as_hexa_string(&caps, chosen_regex).ok_or(
-            LineCheckError::UError(Box::new(
-                ChecksumError::NoProperlyFormattedChecksumLinesFound {
-                    filename: String::from_utf8_lossy(filename_to_check).to_string(),
-                },
-            )),
-        )?;
+        let expected_checksum = get_expected_digest_as_hex_string(&caps, chosen_regex)
+            .ok_or(LineCheckError::ImproperlyFormatted)?;
 
         // If the algo_name is provided, we use it, otherwise we try to detect it
         let (algo_name, length) = if is_algo_based_format {
-            identify_algo_name_and_length(&caps, cli_algo_name, res, properly_formatted)
-                .unwrap_or((String::new(), None))
+            identify_algo_name_and_length(&caps, cli_algo_name)
+                .ok_or(LineCheckError::ImproperlyFormatted)?
         } else if let Some(a) = cli_algo_name {
             // When a specific algorithm name is input, use it and use the provided bits
             // except when dealing with blake2b, where we will detect the length
@@ -628,16 +617,9 @@ fn process_checksum_line(
             }
         } else {
             // Default case if no algorithm is specified and non-algo based format is matched
-            (String::new(), None)
+            return Err(LineCheckError::ImproperlyFormatted);
         };
 
-        if algo_name.is_empty() {
-            // we haven't been able to detect the algo name. No point to continue
-            *properly_formatted = false;
-
-            // TODO: return error?
-            return Err(LineCheckError::ImproperlyFormatted);
-        }
         let mut algo = detect_algo(&algo_name, length)?;
 
         let (filename_to_check_unescaped, prefix) = unescape_filename(filename_to_check);
@@ -689,7 +671,6 @@ fn process_checksum_line(
             );
         }
 
-        res.bad_format += 1;
         Err(LineCheckError::ImproperlyFormatted)
     }
 }
@@ -701,8 +682,9 @@ fn process_checksum_file(
     opts: ChecksumOptions,
 ) -> Result<(), FileCheckError> {
     let mut correct_format = 0;
-    let mut properly_formatted = false;
+    let mut properly_formatted_lines = 0;
     let mut res = ChecksumResult::default();
+
     let input_is_stdin = filename_input == OsStr::new("-");
 
     let file: Box<dyn Read> = if input_is_stdin {
@@ -724,10 +706,7 @@ fn process_checksum_file(
     let lines = read_os_string_lines(reader).collect::<Vec<_>>();
 
     let Some((chosen_regex, is_algo_based_format)) = determine_regex(&lines) else {
-        let e = ChecksumError::NoProperlyFormattedChecksumLinesFound {
-            filename: get_filename_for_output(filename_input, input_is_stdin),
-        };
-        show_error!("{e}");
+        log_no_properly_formatted(get_filename_for_output(filename_input, input_is_stdin));
         set_exit_code(1);
         return Err(FileCheckError::AlgoDetectionError);
     };
@@ -739,21 +718,27 @@ fn process_checksum_file(
             i,
             &chosen_regex,
             is_algo_based_format,
-            &mut res,
             cli_algo_name,
             cli_algo_length,
-            &mut properly_formatted,
             opts,
         ) {
-            Ok(()) => correct_format += 1,
-            Err(LineCheckError::DigestMismatch) => res.failed_cksum += 1,
+            Ok(()) => {
+                correct_format += 1;
+                properly_formatted_lines += 1
+            }
+            Err(LineCheckError::DigestMismatch) => {
+                res.failed_cksum += 1;
+                properly_formatted_lines += 1
+            }
             Err(LineCheckError::UError(e)) => return Err(e.into()),
             Err(LineCheckError::Skipped) => continue,
-            Err(LineCheckError::ImproperlyFormatted) => (),
+            Err(LineCheckError::ImproperlyFormatted) => res.bad_format += 1,
             Err(LineCheckError::CantOpenFile | LineCheckError::FileIsDirectory) => {
+                properly_formatted_lines += 1;
                 res.failed_open_file += 1
             }
             Err(LineCheckError::FileNotFound) => {
+                properly_formatted_lines += 1;
                 if !opts.ignore_missing {
                     res.failed_open_file += 1
                 }
@@ -763,12 +748,9 @@ fn process_checksum_file(
 
     // not a single line correctly formatted found
     // return an error
-    if !properly_formatted {
+    if properly_formatted_lines == 0 {
         if !opts.status {
-            return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
-                filename: get_filename_for_output(filename_input, input_is_stdin),
-            }
-            .into());
+            log_no_properly_formatted(get_filename_for_output(filename_input, input_is_stdin));
         }
         set_exit_code(1);
         return Err(FileCheckError::ImproperlyFormatted);
@@ -1234,7 +1216,7 @@ mod tests {
             .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=")
             .unwrap();
 
-        let result = get_expected_digest_as_hexa_string(&caps, &re);
+        let result = get_expected_digest_as_hex_string(&caps, &re);
 
         assert_eq!(
             result.unwrap(),
@@ -1249,7 +1231,7 @@ mod tests {
             .captures(b"SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU")
             .unwrap();
 
-        let result = get_expected_digest_as_hexa_string(&caps, &re);
+        let result = get_expected_digest_as_hex_string(&caps, &re);
 
         assert!(result.is_none());
     }
