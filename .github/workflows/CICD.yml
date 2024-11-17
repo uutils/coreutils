@@ -753,6 +753,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: steps.vars.outputs.DEPLOY
       with:
+        draft: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.DPKG_NAME }}
