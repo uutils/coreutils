@@ -468,8 +468,12 @@ fn get_expected_digest_as_hex_string(caps: &Captures, chosen_regex: &Regex) -> O
 
     if chosen_regex.as_str() == ALGO_BASED_REGEX_BASE64 {
         BASE64.decode(ck).map(hex::encode).ok()
-    } else {
+    } else if ck.len() % 2 == 0 {
         Some(str::from_utf8(ck).unwrap().to_string())
+    } else {
+        // If the length of the digest is not a multiple of 2, then it
+        // must be improperly formatted (1 hex digit is 2 characters)
+        None
     }
 }
 
