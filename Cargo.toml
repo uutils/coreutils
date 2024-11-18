@@ -354,10 +354,10 @@ blake3 = "1.5.1"
 sm3 = "0.4.2"
 digest = "0.10.7"
 
-uucore = { version = ">=0.0.19", package = "uucore", path = "src/uucore" }
-uucore_procs = { version = ">=0.0.19", package = "uucore_procs", path = "src/uucore_procs" }
-uu_ls = { version = ">=0.0.18", path = "src/uu/ls" }
-uu_base32 = { version = ">=0.0.18", path = "src/uu/base32" }
+uucore = { version = "0.0.28", package = "uucore", path = "src/uucore" }
+uucore_procs = { version = "0.0.28", package = "uucore_procs", path = "src/uucore_procs" }
+uu_ls = { version = "0.0.28", path = "src/uu/ls" }
+uu_base32 = { version = "0.0.28", path = "src/uu/base32" }
 
 [dependencies]
 clap = { workspace = true }
