@@ -12,7 +12,7 @@ use std::error::Error;
 use std::fmt::Display;
 #[cfg(not(windows))]
 use std::fs::Metadata;
-use std::fs::{self, File};
+use std::fs::{self, DirEntry, File};
 use std::io::{BufRead, BufReader};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -138,7 +138,11 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: &Path, options: &TraversalOptions) -> std::io::Result<Self> {
+    fn new(
+        path: &Path,
+        dir_entry: Option<&DirEntry>,
+        options: &TraversalOptions,
+    ) -> std::io::Result<Self> {
         // Determine whether to dereference (follow) the symbolic link
         let should_dereference = match &options.dereference {
             Deref::All => true,
@@ -149,8 +153,11 @@ impl Stat {
         let metadata = if should_dereference {
             // Get metadata, following symbolic links if necessary
             fs::metadata(path)
+        } else if let Some(dir_entry) = dir_entry {
+            // Get metadata directly from the DirEntry, which is faster on Windows
+            dir_entry.metadata()
         } else {
-            // Get metadata without following symbolic links
+            // Get metadata from the filesystem without following symbolic links
             fs::symlink_metadata(path)
         }?;
 
@@ -319,7 +326,7 @@ fn du(
         'file_loop: for f in read {
             match f {
                 Ok(entry) => {
-                    match Stat::new(&entry.path(), options) {
+                    match Stat::new(&entry.path(), Some(&entry), options) {
                         Ok(this_stat) => {
                             // We have an exclude list
                             for pattern in &options.excludes {
@@ -765,7 +772,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // Check existence of path provided in argument
-        if let Ok(stat) = Stat::new(&path, &traversal_options) {
+        if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
             // Kick off the computation of disk usage from the initial path
             let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
             if let Some(inode) = stat.inode {
