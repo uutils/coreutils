@@ -555,7 +555,7 @@ impl StatPrinter {
                 size,
                 uucore::format::human::SizeFormat::Binary,
             ),
-            SizeFormat::BlockSize(block_size) => div_ceil(size, block_size).to_string(),
+            SizeFormat::BlockSize(block_size) => size.div_ceil(block_size).to_string(),
         }
     }
 
@@ -574,13 +574,6 @@ impl StatPrinter {
 
         Ok(())
     }
-}
-
-// This can be replaced with u64::div_ceil once it is stabilized.
-// This implementation approach is optimized for when `b` is a constant,
-// particularly a power of two.
-pub fn div_ceil(a: u64, b: u64) -> u64 {
-    (a + b - 1) / b
 }
 
 // Read file paths from the specified file, separated by null characters
