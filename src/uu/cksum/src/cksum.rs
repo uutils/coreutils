@@ -22,7 +22,7 @@ use uucore::{
     format_usage, help_about, help_section, help_usage,
     line_ending::LineEnding,
     os_str_as_bytes, show,
-    sum::{div_ceil, Digest},
+    sum::Digest,
 };
 
 const USAGE: &str = help_usage!("cksum.md");
@@ -124,7 +124,7 @@ where
                 format!(
                     "{} {}{}",
                     sum.parse::<u16>().unwrap(),
-                    div_ceil(sz, options.output_bits),
+                    sz.div_ceil(options.output_bits),
                     if not_file { "" } else { " " }
                 ),
                 !not_file,
@@ -134,7 +134,7 @@ where
                 format!(
                     "{:0bsd_width$} {:bsd_width$}{}",
                     sum.parse::<u16>().unwrap(),
-                    div_ceil(sz, options.output_bits),
+                    sz.div_ceil(options.output_bits),
                     if not_file { "" } else { " " }
                 ),
                 !not_file,
