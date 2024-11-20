@@ -104,6 +104,8 @@ skip = [
   { name = "terminal_size", version = "0.2.6" },
   # ansi-width, console, os_display
   { name = "unicode-width", version = "0.1.13" },
+  # notify
+  { name = "mio", version = "0.8.11" },
 ]
 # spell-checker: enable
 
