@@ -1198,3 +1198,25 @@ fn test_invalid_time_style() {
         .succeeds()
         .stdout_does_not_contain("du: invalid argument 'banana' for 'time style'");
 }
+
+#[test]
+fn test_human_size() {
+    use std::fs::File;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = at.plus_as_string("d");
+    at.mkdir(&dir);
+
+    for i in 1..=1023 {
+        let file_path = format!("{dir}/file{i}");
+        File::create(&file_path).expect("Failed to create file");
+    }
+
+    ts.ucmd()
+        .arg("--inodes")
+        .arg("-h")
+        .arg(&dir)
+        .succeeds()
+        .stdout_contains(format!("1.0K	{dir}"));
+}

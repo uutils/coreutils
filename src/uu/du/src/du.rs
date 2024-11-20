@@ -557,9 +557,6 @@ impl StatPrinter {
     }
 
     fn convert_size(&self, size: u64) -> String {
-        if self.inodes {
-            return size.to_string();
-        }
         match self.size_format {
             SizeFormat::HumanDecimal => uucore::format::human::human_readable(
                 size,
@@ -569,7 +566,14 @@ impl StatPrinter {
                 size,
                 uucore::format::human::SizeFormat::Binary,
             ),
-            SizeFormat::BlockSize(block_size) => size.div_ceil(block_size).to_string(),
+            SizeFormat::BlockSize(block_size) => {
+                if self.inodes {
+                    // we ignore block size (-B) with --inodes
+                    size.to_string()
+                } else {
+                    size.div_ceil(block_size).to_string()
+                }
+            }
         }
     }
 
