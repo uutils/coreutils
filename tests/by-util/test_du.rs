@@ -546,6 +546,33 @@ fn test_du_inodes_with_count_links() {
     }
 }
 
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_du_inodes_with_count_links_all() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    at.mkdir("d/d");
+    at.touch("d/f");
+    at.hard_link("d/f", "d/h");
+
+    let result = ts.ucmd().arg("--inodes").arg("-al").arg("d").succeeds();
+    result.no_stderr();
+
+    let mut result_seq: Vec<String> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
+        .collect();
+    result_seq.sort_unstable();
+    #[cfg(windows)]
+    assert_eq!(result_seq, ["1\td\\d", "1\td\\f", "1\td\\h", "4\td"]);
+    #[cfg(not(windows))]
+    assert_eq!(result_seq, ["1\td/d", "1\td/f", "1\td/h", "4\td"]);
+}
+
 #[test]
 fn test_du_h_flag_empty_file() {
     new_ucmd!()

@@ -346,14 +346,21 @@ fn du(
                             }
 
                             if let Some(inode) = this_stat.inode {
-                                if seen_inodes.contains(&inode) {
-                                    if options.count_links {
+                                // Check if the inode has been seen before and if we should skip it
+                                if seen_inodes.contains(&inode)
+                                    && (!options.count_links || !options.all)
+                                {
+                                    // If `count_links` is enabled and `all` is not, increment the inode count
+                                    if options.count_links && !options.all {
                                         my_stat.inodes += 1;
                                     }
+                                    // Skip further processing for this inode
                                     continue;
                                 }
+                                // Mark this inode as seen
                                 seen_inodes.insert(inode);
                             }
+
                             if this_stat.is_dir {
                                 if options.one_file_system {
                                     if let (Some(this_inode), Some(my_inode)) =
