@@ -346,14 +346,21 @@ fn du(
                             }
 
                             if let Some(inode) = this_stat.inode {
-                                if seen_inodes.contains(&inode) {
-                                    if options.count_links {
+                                // Check if the inode has been seen before and if we should skip it
+                                if seen_inodes.contains(&inode)
+                                    && (!options.count_links || !options.all)
+                                {
+                                    // If `count_links` is enabled and `all` is not, increment the inode count
+                                    if options.count_links && !options.all {
                                         my_stat.inodes += 1;
                                     }
+                                    // Skip further processing for this inode
                                     continue;
                                 }
+                                // Mark this inode as seen
                                 seen_inodes.insert(inode);
                             }
+
                             if this_stat.is_dir {
                                 if options.one_file_system {
                                     if let (Some(this_inode), Some(my_inode)) =
@@ -550,9 +557,6 @@ impl StatPrinter {
     }
 
     fn convert_size(&self, size: u64) -> String {
-        if self.inodes {
-            return size.to_string();
-        }
         match self.size_format {
             SizeFormat::HumanDecimal => uucore::format::human::human_readable(
                 size,
@@ -562,7 +566,14 @@ impl StatPrinter {
                 size,
                 uucore::format::human::SizeFormat::Binary,
             ),
-            SizeFormat::BlockSize(block_size) => size.div_ceil(block_size).to_string(),
+            SizeFormat::BlockSize(block_size) => {
+                if self.inodes {
+                    // we ignore block size (-B) with --inodes
+                    size.to_string()
+                } else {
+                    size.div_ceil(block_size).to_string()
+                }
+            }
         }
     }
 
