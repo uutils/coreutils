@@ -76,17 +76,24 @@ enum EscapeState {
     Octal(EscapeOctal),
 }
 
-/// Byte we need to present as escaped octal, in the form of `\nnn`
+/// Bytes we need to present as escaped octal, in the form of `\nnn` per byte.
+/// Only supports characters up to 2 bytes long in UTF-8.
 struct EscapeOctal {
-    c: u8,
+    c: [u8; 2],
     state: EscapeOctalState,
-    idx: usize,
+    idx: u8,
 }
 
 enum EscapeOctalState {
     Done,
-    Backslash,
-    Value,
+    FirstBackslash,
+    FirstValue,
+    LastBackslash,
+    LastValue,
+}
+
+fn byte_to_octal_digit(byte: u8, idx: u8) -> u8 {
+    (byte >> (idx * 3)) & 0o7
 }
 
 impl Iterator for EscapeOctal {
@@ -95,12 +102,26 @@ impl Iterator for EscapeOctal {
     fn next(&mut self) -> Option<char> {
         match self.state {
             EscapeOctalState::Done => None,
-            EscapeOctalState::Backslash => {
-                self.state = EscapeOctalState::Value;
+            EscapeOctalState::FirstBackslash => {
+                self.state = EscapeOctalState::FirstValue;
                 Some('\\')
             }
-            EscapeOctalState::Value => {
-                let octal_digit = ((self.c) >> (self.idx * 3)) & 0o7;
+            EscapeOctalState::LastBackslash => {
+                self.state = EscapeOctalState::LastValue;
+                Some('\\')
+            }
+            EscapeOctalState::FirstValue => {
+                let octal_digit = byte_to_octal_digit(self.c[0], self.idx);
+                if self.idx == 0 {
+                    self.state = EscapeOctalState::LastBackslash;
+                    self.idx = 2;
+                } else {
+                    self.idx -= 1;
+                }
+                Some(from_digit(octal_digit.into(), 8).unwrap())
+            }
+            EscapeOctalState::LastValue => {
+                let octal_digit = byte_to_octal_digit(self.c[1], self.idx);
                 if self.idx == 0 {
                     self.state = EscapeOctalState::Done;
                 } else {
@@ -113,11 +134,25 @@ impl Iterator for EscapeOctal {
 }
 
 impl EscapeOctal {
-    fn from(c: u8) -> Self {
+    fn from_char(c: char) -> Self {
+        if c.len_utf8() == 1 {
+            return Self::from_byte(c as u8);
+        }
+
+        let mut buf = [0; 2];
+        let _s = c.encode_utf8(&mut buf);
         Self {
-            c,
+            c: buf,
             idx: 2,
-            state: EscapeOctalState::Backslash,
+            state: EscapeOctalState::FirstBackslash,
+        }
+    }
+
+    fn from_byte(b: u8) -> Self {
+        Self {
+            c: [0, b],
+            idx: 2,
+            state: EscapeOctalState::LastBackslash,
         }
     }
 }
@@ -131,7 +166,7 @@ impl EscapedChar {
 
     fn new_octal(b: u8) -> Self {
         Self {
-            state: EscapeState::Octal(EscapeOctal::from(b)),
+            state: EscapeState::Octal(EscapeOctal::from_byte(b)),
         }
     }
 
@@ -159,7 +194,7 @@ impl EscapedChar {
                 _ => Char(' '),
             },
             ':' if dirname => Backslash(':'),
-            _ if c.is_ascii_control() => Octal(EscapeOctal::from(c as u8)),
+            _ if c.is_control() => Octal(EscapeOctal::from_char(c)),
             _ => Char(c),
         };
         Self { state: init_state }
@@ -176,11 +211,11 @@ impl EscapedChar {
             '\x0B' => Backslash('v'),
             '\x0C' => Backslash('f'),
             '\r' => Backslash('r'),
-            '\x00'..='\x1F' | '\x7F' => Octal(EscapeOctal::from(c as u8)),
             '\'' => match quotes {
                 Quotes::Single => Backslash('\''),
                 _ => Char('\''),
             },
+            _ if c.is_control() => Octal(EscapeOctal::from_char(c)),
             _ if SPECIAL_SHELL_CHARS.contains(c) => ForceQuote(c),
             _ => Char(c),
         };
@@ -564,10 +599,10 @@ mod tests {
                 ("\"one_two\"", "c"),
                 ("one_two", "shell"),
                 ("one_two", "shell-show"),
-                ("\'one_two\'", "shell-always"),
-                ("\'one_two\'", "shell-always-show"),
+                ("'one_two'", "shell-always"),
+                ("'one_two'", "shell-always-show"),
                 ("one_two", "shell-escape"),
-                ("\'one_two\'", "shell-escape-always"),
+                ("'one_two'", "shell-escape-always"),
             ],
         );
     }
@@ -581,12 +616,12 @@ mod tests {
                 ("one two", "literal-show"),
                 ("one\\ two", "escape"),
                 ("\"one two\"", "c"),
-                ("\'one two\'", "shell"),
-                ("\'one two\'", "shell-show"),
-                ("\'one two\'", "shell-always"),
-                ("\'one two\'", "shell-always-show"),
-                ("\'one two\'", "shell-escape"),
-                ("\'one two\'", "shell-escape-always"),
+                ("'one two'", "shell"),
+                ("'one two'", "shell-show"),
+                ("'one two'", "shell-always"),
+                ("'one two'", "shell-always-show"),
+                ("'one two'", "shell-escape"),
+                ("'one two'", "shell-escape-always"),
             ],
         );
 
@@ -628,7 +663,7 @@ mod tests {
 
         // One single quote
         check_names(
-            "one\'two",
+            "one'two",
             &[
                 ("one'two", "literal"),
                 ("one'two", "literal-show"),
@@ -714,7 +749,7 @@ mod tests {
             ],
         );
 
-        // The first 16 control characters. NUL is also included, even though it is of
+        // The first 16 ASCII control characters. NUL is also included, even though it is of
         // no importance for file names.
         check_names(
             "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F",
@@ -753,7 +788,7 @@ mod tests {
             ],
         );
 
-        // The last 16 control characters.
+        // The last 16 ASCII control characters.
         check_names(
             "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
             &[
@@ -805,6 +840,42 @@ mod tests {
                 ("'\x7F'", "shell-always-show"),
                 ("''$'\\177'", "shell-escape"),
                 ("''$'\\177'", "shell-escape-always"),
+            ],
+        );
+
+        // The first 16 Unicode control characters.
+        let test_str = std::str::from_utf8(b"\xC2\x80\xC2\x81\xC2\x82\xC2\x83\xC2\x84\xC2\x85\xC2\x86\xC2\x87\xC2\x88\xC2\x89\xC2\x8A\xC2\x8B\xC2\x8C\xC2\x8D\xC2\x8E\xC2\x8F").unwrap();
+        check_names(
+            test_str,
+            &[
+                ("????????????????", "literal"),
+                (test_str, "literal-show"),
+                ("\\302\\200\\302\\201\\302\\202\\302\\203\\302\\204\\302\\205\\302\\206\\302\\207\\302\\210\\302\\211\\302\\212\\302\\213\\302\\214\\302\\215\\302\\216\\302\\217", "escape"),
+                ("\"\\302\\200\\302\\201\\302\\202\\302\\203\\302\\204\\302\\205\\302\\206\\302\\207\\302\\210\\302\\211\\302\\212\\302\\213\\302\\214\\302\\215\\302\\216\\302\\217\"", "c"),
+                ("????????????????", "shell"),
+                (test_str, "shell-show"),
+                ("'????????????????'", "shell-always"),
+                (&format!("'{}'", test_str), "shell-always-show"),
+                ("''$'\\302\\200\\302\\201\\302\\202\\302\\203\\302\\204\\302\\205\\302\\206\\302\\207\\302\\210\\302\\211\\302\\212\\302\\213\\302\\214\\302\\215\\302\\216\\302\\217'", "shell-escape"),
+                ("''$'\\302\\200\\302\\201\\302\\202\\302\\203\\302\\204\\302\\205\\302\\206\\302\\207\\302\\210\\302\\211\\302\\212\\302\\213\\302\\214\\302\\215\\302\\216\\302\\217'", "shell-escape-always"),
+            ],
+        );
+
+        // The last 16 Unicode control characters.
+        let test_str = std::str::from_utf8(b"\xC2\x90\xC2\x91\xC2\x92\xC2\x93\xC2\x94\xC2\x95\xC2\x96\xC2\x97\xC2\x98\xC2\x99\xC2\x9A\xC2\x9B\xC2\x9C\xC2\x9D\xC2\x9E\xC2\x9F").unwrap();
+        check_names(
+            test_str,
+            &[
+                ("????????????????", "literal"),
+                (test_str, "literal-show"),
+                ("\\302\\220\\302\\221\\302\\222\\302\\223\\302\\224\\302\\225\\302\\226\\302\\227\\302\\230\\302\\231\\302\\232\\302\\233\\302\\234\\302\\235\\302\\236\\302\\237", "escape"),
+                ("\"\\302\\220\\302\\221\\302\\222\\302\\223\\302\\224\\302\\225\\302\\226\\302\\227\\302\\230\\302\\231\\302\\232\\302\\233\\302\\234\\302\\235\\302\\236\\302\\237\"", "c"),
+                ("????????????????", "shell"),
+                (test_str, "shell-show"),
+                ("'????????????????'", "shell-always"),
+                (&format!("'{}'", test_str), "shell-always-show"),
+                ("''$'\\302\\220\\302\\221\\302\\222\\302\\223\\302\\224\\302\\225\\302\\226\\302\\227\\302\\230\\302\\231\\302\\232\\302\\233\\302\\234\\302\\235\\302\\236\\302\\237'", "shell-escape"),
+                ("''$'\\302\\220\\302\\221\\302\\222\\302\\223\\302\\224\\302\\225\\302\\226\\302\\227\\302\\230\\302\\231\\302\\232\\302\\233\\302\\234\\302\\235\\302\\236\\302\\237'", "shell-escape-always"),
             ],
         );
     }
@@ -1065,7 +1136,7 @@ mod tests {
                 ("one\\\\two", "escape"),
                 ("\"one\\\\two\"", "c"),
                 ("'one\\two'", "shell"),
-                ("\'one\\two\'", "shell-always"),
+                ("'one\\two'", "shell-always"),
                 ("'one\\two'", "shell-escape"),
                 ("'one\\two'", "shell-escape-always"),
             ],
