@@ -6,8 +6,10 @@
 //! Set of functions for escaping names according to different quoting styles.
 
 use std::char::from_digit;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
+#[cfg(unix)]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 // These are characters with special meaning in the shell (e.g. bash).
 // The first const contains characters that only have a special meaning when they appear at the beginning of a name.
@@ -459,17 +461,37 @@ fn escape_name_inner(name: &[u8], style: &QuotingStyle, dirname: bool) -> Vec<u8
 }
 
 /// Escape a filename with respect to the given style.
-pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
-    let name = name.to_string_lossy();
-    String::from_utf8_lossy(&escape_name_inner(name.as_bytes(), style, false)).to_string()
+pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> OsString {
+    #[cfg(unix)]
+    {
+        let name = name.as_bytes();
+        OsStringExt::from_vec(escape_name_inner(name, style, false))
+    }
+    #[cfg(not(unix))]
+    {
+        let name = name.to_string_lossy();
+        String::from_utf8_lossy(&escape_name_inner(name.as_bytes(), style, false))
+            .to_string()
+            .into()
+    }
 }
 
 /// Escape a directory name with respect to the given style.
 /// This is mainly meant to be used for ls' directory name printing and is not
 /// likely to be used elsewhere.
-pub fn escape_dir_name(dir_name: &OsStr, style: &QuotingStyle) -> String {
-    let dir_name = dir_name.to_string_lossy();
-    String::from_utf8_lossy(&escape_name_inner(dir_name.as_bytes(), style, true)).to_string()
+pub fn escape_dir_name(dir_name: &OsStr, style: &QuotingStyle) -> OsString {
+    #[cfg(unix)]
+    {
+        let name = dir_name.as_bytes();
+        OsStringExt::from_vec(escape_name_inner(name, style, true))
+    }
+    #[cfg(not(unix))]
+    {
+        let name = dir_name.to_string_lossy();
+        String::from_utf8_lossy(&escape_name_inner(name.as_bytes(), style, true))
+            .to_string()
+            .into()
+    }
 }
 
 impl fmt::Display for QuotingStyle {
