@@ -961,9 +961,9 @@ dependencies = [
 
 [[package]]
 name = "fts-sys"
-version = "0.2.11"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28ab6a6dfd9184fe8a5097924dea6e7648f499121b3e933bb8486a17f817122e"
+checksum = "c427b250eff90452a35afd79fdfcbcf4880e307225bc28bd36d9a2cd78bb6d90"
 dependencies = [
  "bindgen",
  "libc",
