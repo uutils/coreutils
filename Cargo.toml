@@ -332,7 +332,7 @@ tempfile = "3.10.1"
 uutils_term_grid = "0.6"
 terminal_size = "0.4.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
-thiserror = "1.0.59"
+thiserror = "2.0.3"
 time = { version = "0.3.36" }
 unicode-segmentation = "1.11.0"
 unicode-width = "0.1.12"
