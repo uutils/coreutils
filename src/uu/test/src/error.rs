@@ -27,7 +27,7 @@ impl std::fmt::Display for ParseError {
             Self::ExtraArgument(s) => write!(f, "extra argument {s}"),
             Self::UnknownOperator(s) => write!(f, "unknown operator {s}"),
             Self::InvalidInteger(s) => write!(f, "invalid integer {s}"),
-            Self::UnaryOperatorExpected(s) => write!(f, "{s}: unary operator expected"),
+            Self::UnaryOperatorExpected(op) => write!(f, "{op}: unary operator expected"),
         }
     }
 }
