@@ -106,6 +106,10 @@ skip = [
   { name = "unicode-width", version = "0.1.13" },
   # notify
   { name = "mio", version = "0.8.11" },
+  # various crates
+  { name = "thiserror", version = "1.0.69" },
+  # thiserror
+  { name = "thiserror-impl", version = "1.0.69" },
 ]
 # spell-checker: enable
 
