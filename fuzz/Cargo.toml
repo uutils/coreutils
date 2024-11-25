@@ -8,11 +8,11 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "0.4"
-libc = "0.2"
-tempfile = "3"
-rand = { version = "0.8", features = ["small_rng"] }
-similar = "2"
+libfuzzer-sys = "0.4.7"
+libc = "0.2.153"
+tempfile = "3.11.0"
+rand = { version = "0.8.5", features = ["small_rng"] }
+similar = "2.5.0"
 
 uucore = { path = "../src/uucore/" }
 uu_date = { path = "../src/uu/date/" }

@@ -21,7 +21,10 @@ include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("{name} {VERSION} (multi-call binary)\n");
-    println!("Usage: {name} [function [arguments...]]\n");
+    println!("Usage: {name} [function [arguments...]]");
+    println!("       {name} --list\n");
+    println!("Options:");
+    println!("      --list    lists all defined functions, one per row\n");
     println!("Currently defined functions:\n");
     #[allow(clippy::map_clone)]
     let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
@@ -34,6 +37,8 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     );
 }
 
+/// # Panics
+/// Panics if the binary path cannot be determined
 fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     match args.next() {
         Some(ref s) if !s.is_empty() => PathBuf::from(s),
@@ -85,18 +90,24 @@ fn main() {
             process::exit(1);
         }
 
-        let util = match util_os.to_str() {
-            Some(util) => util,
-            None => not_found(&util_os),
+        let Some(util) = util_os.to_str() else {
+            not_found(&util_os)
         };
 
-        if util == "completion" {
-            gen_completions(args, &utils);
-        }
-
-        if util == "manpage" {
-            gen_manpage(args, &utils);
-        }
+        match util {
+            "completion" => gen_completions(args, &utils),
+            "manpage" => gen_manpage(args, &utils),
+            "--list" => {
+                let mut utils: Vec<_> = utils.keys().collect();
+                utils.sort();
+                for util in utils {
+                    println!("{util}");
+                }
+                process::exit(0);
+            }
+            // Not a special command: fallthrough to calling a util
+            _ => {}
+        };
 
         match utils.get(util) {
             Some(&(uumain, _)) => {
@@ -106,9 +117,8 @@ fn main() {
                 if util == "--help" || util == "-h" {
                     // see if they want help on a specific util
                     if let Some(util_os) = args.next() {
-                        let util = match util_os.to_str() {
-                            Some(util) => util,
-                            None => not_found(&util_os),
+                        let Some(util) = util_os.to_str() else {
+                            not_found(&util_os)
                         };
 
                         match utils.get(util) {
@@ -138,6 +148,8 @@ fn main() {
 }
 
 /// Prints completions for the utility in the first parameter for the shell in the second parameter to stdout
+/// # Panics
+/// Panics if the utility map is empty
 fn gen_completions<T: uucore::Args>(
     args: impl Iterator<Item = OsString>,
     util_map: &UtilityMap<T>,
@@ -176,6 +188,8 @@ fn gen_completions<T: uucore::Args>(
 }
 
 /// Generate the manpage for the utility in the first parameter
+/// # Panics
+/// Panics if the utility map is empty
 fn gen_manpage<T: uucore::Args>(
     args: impl Iterator<Item = OsString>,
     util_map: &UtilityMap<T>,
@@ -208,6 +222,8 @@ fn gen_manpage<T: uucore::Args>(
     process::exit(0);
 }
 
+/// # Panics
+/// Panics if the utility map is empty
 fn gen_coreutils_app<T: uucore::Args>(util_map: &UtilityMap<T>) -> Command {
     let mut command = Command::new("coreutils");
     for (name, (_, sub_app)) in util_map {

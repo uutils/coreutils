@@ -956,7 +956,7 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
                 a.group_key < b.group_key
             }
         })
-        .group_by(|file_line| file_line.group_key);
+        .chunk_by(|file_line| file_line.group_key);
 
     let start_page = options.start_page;
     let mut lines = Vec::new();

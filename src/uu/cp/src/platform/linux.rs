@@ -141,6 +141,10 @@ where
     }
     let src_fd = src_file.as_raw_fd();
     let mut current_offset: isize = 0;
+    // Maximize the data read at once to 16 MiB to avoid memory hogging with large files
+    // 16 MiB chunks should saturate an SSD
+    let step = std::cmp::min(size, 16 * 1024 * 1024) as usize;
+    let mut buf: Vec<u8> = vec![0x0; step];
     loop {
         let result = unsafe { libc::lseek(src_fd, current_offset.try_into().unwrap(), SEEK_DATA) }
             .try_into()
@@ -158,16 +162,14 @@ where
             return Err(std::io::Error::last_os_error());
         }
         let len: isize = hole - current_offset;
-        let mut buf: Vec<u8> = vec![0x0; len as usize];
-        src_file.read_exact_at(&mut buf, current_offset as u64)?;
-        unsafe {
-            libc::pwrite(
-                dst_fd,
-                buf.as_ptr() as *const libc::c_void,
-                len as usize,
-                current_offset.try_into().unwrap(),
-            )
-        };
+        // Read and write data in chunks of `step` while reusing the same buffer
+        for i in (0..len).step_by(step) {
+            // Ensure we don't read past the end of the file or the start of the next hole
+            let read_len = std::cmp::min((len - i) as usize, step);
+            let buf = &mut buf[..read_len];
+            src_file.read_exact_at(buf, (current_offset + i) as u64)?;
+            dst_file.write_all_at(buf, (current_offset + i) as u64)?;
+        }
         current_offset = hole;
     }
     Ok(())
@@ -197,15 +199,9 @@ where
     // https://www.kernel.org/doc/html/latest/filesystems/fiemap.html
     while current_offset < size {
         let this_read = src_file.read(&mut buf)?;
+        let buf = &buf[..this_read];
         if buf.iter().any(|&x| x != 0) {
-            unsafe {
-                libc::pwrite(
-                    dst_fd,
-                    buf.as_ptr() as *const libc::c_void,
-                    this_read,
-                    current_offset.try_into().unwrap(),
-                )
-            };
+            dst_file.write_all_at(buf, current_offset.try_into().unwrap())?;
         }
         current_offset += this_read;
     }

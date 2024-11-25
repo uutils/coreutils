@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+//! Set of functions for escaping names according to different quoting styles.
+
 use std::char::from_digit;
 use std::ffi::OsStr;
 use std::fmt;
@@ -9,27 +12,47 @@ use std::fmt;
 // These are characters with special meaning in the shell (e.g. bash).
 // The first const contains characters that only have a special meaning when they appear at the beginning of a name.
 const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
-const SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
+// PR#6559 : Remove `]{}` from special shell chars.
+const SPECIAL_SHELL_CHARS: &str = "`$&*()|[;\\'\"<>?! ";
 
+/// The quoting style to use when escaping a name.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuotingStyle {
+    /// Escape the name as a literal string.
     Shell {
+        /// Whether to escape characters in the name.
         escape: bool,
+
+        /// Whether to always quote the name.
         always_quote: bool,
+
+        /// Whether to show control characters.
         show_control: bool,
     },
+
+    /// Escape the name as a C string.
     C {
+        /// The type of quotes to use.
         quotes: Quotes,
     },
+
+    /// Escape the name as a literal string.
     Literal {
+        /// Whether to show control characters.
         show_control: bool,
     },
 }
 
+/// The type of quotes to use when escaping a name as a C string.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Quotes {
+    /// Do not use quotes.
     None,
+
+    /// Use single quotes.
     Single,
+
+    /// Use double quotes.
     Double,
     // TODO: Locale
 }
@@ -101,7 +124,7 @@ impl EscapedChar {
         }
     }
 
-    fn new_c(c: char, quotes: Quotes) -> Self {
+    fn new_c(c: char, quotes: Quotes, dirname: bool) -> Self {
         use EscapeState::*;
         let init_state = match c {
             '\x07' => Backslash('a'),
@@ -120,10 +143,11 @@ impl EscapedChar {
                 Quotes::Double => Backslash('"'),
                 _ => Char('"'),
             },
-            ' ' => match quotes {
+            ' ' if !dirname => match quotes {
                 Quotes::None => Backslash(' '),
                 _ => Char(' '),
             },
+            ':' if dirname => Backslash(':'),
             _ if c.is_ascii_control() => Octal(EscapeOctal::from(c)),
             _ => Char(c),
         };
@@ -262,7 +286,29 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
     (escaped_str, must_quote)
 }
 
-pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+/// Return a set of characters that implies quoting of the word in
+/// shell-quoting mode.
+fn shell_escaped_char_set(is_dirname: bool) -> &'static [char] {
+    const ESCAPED_CHARS: &[char] = &[
+        // the ':' colon character only induce quoting in the
+        // context of ls displaying a directory name before listing its content.
+        // (e.g. with the recursive flag -R)
+        ':',
+        // Under this line are the control characters that should be
+        // quoted in shell mode in all cases.
+        '"', '`', '$', '\\', '^', '\n', '\t', '\r', '=',
+    ];
+
+    let start_index = if is_dirname { 0 } else { 1 };
+
+    &ESCAPED_CHARS[start_index..]
+}
+
+/// Escape a name according to the given quoting style.
+///
+/// This inner function provides an additional flag `dirname` which
+/// is meant for ls' directory name display.
+fn escape_name_inner(name: &OsStr, style: &QuotingStyle, dirname: bool) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {
             if *show_control {
@@ -278,7 +324,7 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             let escaped_str: String = name
                 .to_string_lossy()
                 .chars()
-                .flat_map(|c| EscapedChar::new_c(c, *quotes))
+                .flat_map(|c| EscapedChar::new_c(c, *quotes, dirname))
                 .collect();
 
             match quotes {
@@ -293,7 +339,8 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             show_control,
         } => {
             let name = name.to_string_lossy();
-            let (quotes, must_quote) = if name.contains(&['"', '`', '$', '\\'][..]) {
+
+            let (quotes, must_quote) = if name.contains(shell_escaped_char_set(dirname)) {
                 (Quotes::Single, true)
             } else if name.contains('\'') {
                 (Quotes::Double, true)
@@ -316,6 +363,18 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             }
         }
     }
+}
+
+/// Escape a filename with respect to the given style.
+pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+    escape_name_inner(name, style, false)
+}
+
+/// Escape a directory name with respect to the given style.
+/// This is mainly meant to be used for ls' directory name printing and is not
+/// likely to be used elsewhere.
+pub fn escape_dir_name(dir_name: &OsStr, style: &QuotingStyle) -> String {
+    escape_name_inner(dir_name, style, true)
 }
 
 impl fmt::Display for QuotingStyle {
@@ -552,8 +611,8 @@ mod tests {
                 ("one\ntwo", "literal-show"),
                 ("one\\ntwo", "escape"),
                 ("\"one\\ntwo\"", "c"),
-                ("one?two", "shell"),
-                ("one\ntwo", "shell-show"),
+                ("'one?two'", "shell"),
+                ("'one\ntwo'", "shell-show"),
                 ("'one?two'", "shell-always"),
                 ("'one\ntwo'", "shell-always-show"),
                 ("'one'$'\\n''two'", "shell-escape"),
@@ -596,9 +655,9 @@ mod tests {
                     "\"\\000\\001\\002\\003\\004\\005\\006\\a\\b\\t\\n\\v\\f\\r\\016\\017\"",
                     "c",
                 ),
-                ("????????????????", "shell"),
+                ("'????????????????'", "shell"),
                 (
-                    "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F",
+                    "'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F'",
                     "shell-show",
                 ),
                 ("'????????????????'", "shell-always"),
@@ -778,31 +837,31 @@ mod tests {
             always_quote: false,
             show_control: false,
         };
-        assert_eq!(format!("{}", style), "shell-escape");
+        assert_eq!(format!("{style}"), "shell-escape");
 
         let style = QuotingStyle::Shell {
             escape: false,
             always_quote: true,
             show_control: false,
         };
-        assert_eq!(format!("{}", style), "shell-always-quote");
+        assert_eq!(format!("{style}"), "shell-always-quote");
 
         let style = QuotingStyle::Shell {
             escape: false,
             always_quote: false,
             show_control: true,
         };
-        assert_eq!(format!("{}", style), "shell-show-control");
+        assert_eq!(format!("{style}"), "shell-show-control");
 
         let style = QuotingStyle::C {
             quotes: Quotes::Double,
         };
-        assert_eq!(format!("{}", style), "C");
+        assert_eq!(format!("{style}"), "C");
 
         let style = QuotingStyle::Literal {
             show_control: false,
         };
-        assert_eq!(format!("{}", style), "literal");
+        assert_eq!(format!("{style}"), "literal");
     }
 
     #[test]

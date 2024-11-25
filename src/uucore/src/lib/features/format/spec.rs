@@ -252,7 +252,11 @@ impl Spec {
                 } else {
                     Case::Lowercase
                 },
-                alignment,
+                alignment: if flags.zero && !flags.minus {
+                    NumberAlignment::RightZero // float should always try to zero pad despite the precision
+                } else {
+                    alignment
+                },
                 positive_sign,
             },
             _ => return Err(&start[..index]),
@@ -374,6 +378,10 @@ impl Spec {
                 let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(0);
                 let i = args.get_i64();
 
+                if precision as u64 > i32::MAX as u64 {
+                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                }
+
                 num_format::SignedInt {
                     width,
                     precision,
@@ -392,6 +400,10 @@ impl Spec {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(0);
                 let i = args.get_u64();
+
+                if precision as u64 > i32::MAX as u64 {
+                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                }
 
                 num_format::UnsignedInt {
                     variant: *variant,
@@ -414,6 +426,10 @@ impl Spec {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(6);
                 let f = args.get_f64();
+
+                if precision as u64 > i32::MAX as u64 {
+                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                }
 
                 num_format::Float {
                     width,

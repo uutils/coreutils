@@ -231,6 +231,10 @@ pub fn run_gnu_cmd(
         command.arg(arg);
     }
 
+    // See https://github.com/uutils/coreutils/issues/6794
+    // uutils' coreutils is not locale-aware, and aims to mirror/be compatible with GNU Core Utilities's LC_ALL=C behavior
+    command.env("LC_ALL", "C");
+
     let output = if let Some(input_str) = pipe_input {
         // We have an pipe input
         command

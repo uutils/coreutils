@@ -347,6 +347,7 @@ fn test_filter_command_fails() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 fn test_filter_broken_pipe() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "filter-big-input";
@@ -705,7 +706,6 @@ fn test_split_invalid_bytes_size() {
 
 #[test]
 fn test_split_overflow_bytes_size() {
-    #[cfg(not(target_pointer_width = "128"))]
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "test_split_overflow_bytes_size";
     RandomFile::new(&at, name).add_bytes(1000);

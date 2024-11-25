@@ -115,7 +115,7 @@ struct Pinky {
 
 fn idle_string(when: i64) -> String {
     thread_local! {
-        static NOW: time::OffsetDateTime = time::OffsetDateTime::now_local().unwrap();
+        static NOW: time::OffsetDateTime = time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc());
     }
     NOW.with(|n| {
         let duration = n.unix_timestamp() - when;

@@ -119,6 +119,23 @@ take_screen_shot() {
     adb exec-out screencap -p > "$filename"
 }
 
+get_app_user() {
+    app="$1"
+    app_user="$(adb shell dumpsys package $app | grep 'userId=' | cut -d= -f2 | sort -u)"
+    if [[ -z "$app_user" ]]; then
+        echo "Couldn't find user for app: $app">&2
+        exit 1
+    fi
+    echo "$app_user"
+}
+
+termux_user() {
+    if [[ -z "$TERMUX_USER" ]]; then
+        TERMUX_USER="$(get_app_user com.termux)"
+    fi
+    echo "$TERMUX_USER"
+}
+
 launch_termux() {
     echo "launching termux"
     take_screen_shot "launch_termux_enter"
@@ -355,17 +372,17 @@ setup_ssh_forwarding() {
 }
 
 copy_file_or_dir_to_device_via_ssh() {
-    scp -r "$1" "scp://termux@127.0.0.1:9022/$2"
+    scp -r "$1" "scp://$(termux_user)@127.0.0.1:9022/$2"
 }
 
 copy_file_or_dir_from_device_via_ssh() {
-    scp -r "scp://termux@127.0.0.1:9022/$1" "$2"
+    scp -r "scp://$(termux_user)@127.0.0.1:9022/$1" "$2"
 }
 
 # runs the in args provided command on android side via ssh. forwards return code.
 # adds a timestamp to every line to be able to see where delays are
 run_command_via_ssh() {
-    ssh -p 9022 termux:@127.0.0.1 -o StrictHostKeyChecking=accept-new "$@" 2>&1 | add_timestamp_to_lines
+    ssh -p 9022 "$(termux_user)@127.0.0.1" -o StrictHostKeyChecking=accept-new "$@" 2>&1 | add_timestamp_to_lines
     return "${PIPESTATUS[0]}"
 }
 
@@ -376,7 +393,7 @@ test_ssh_connection() {
 # takes a local (on runner side) script file and runs it via ssh on the virtual android device. forwards return code.
 # adds a timestamp to every line to be able to see where delays are
 run_script_file_via_ssh() {
-    ssh -p 9022 termux:@127.0.0.1 -o StrictHostKeyChecking=accept-new "bash -s" < "$1" 2>&1 | add_timestamp_to_lines
+    ssh -p 9022 "$(termux_user)@127.0.0.1" -o StrictHostKeyChecking=accept-new "bash -s" < "$1" 2>&1 | add_timestamp_to_lines
     return "${PIPESTATUS[0]}"
 }
 

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) ints
+#![allow(clippy::cast_possible_wrap)]
 
 use std::time::Duration;
 
@@ -72,7 +73,6 @@ fn test_invalid_buffer_size() {
         .code_is(2)
         .stderr_only("sort: invalid suffix in --buffer-size argument '100f'\n");
 
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .arg("-n")
         .arg("-S")
@@ -889,7 +889,7 @@ fn test_dictionary_and_nonprinting_conflicts() {
     for restricted_arg in ["d", "i"] {
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
-                .arg(&format!("-{restricted_arg}{conflicting_arg}"))
+                .arg(format!("-{restricted_arg}{conflicting_arg}"))
                 .fails();
         }
         for conflicting_arg in &conflicting_args {
@@ -897,7 +897,7 @@ fn test_dictionary_and_nonprinting_conflicts() {
                 .args(&[
                     format!("-{restricted_arg}").as_str(),
                     "-k",
-                    &format!("1,1{conflicting_arg}"),
+                    format!("1,1{conflicting_arg}").as_str(),
                 ])
                 .succeeds();
         }
@@ -1034,6 +1034,37 @@ fn test_merge_batches() {
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");
+}
+
+#[test]
+fn test_batch_size_invalid() {
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg("--batch-size=0")
+        .fails()
+        .code_is(2)
+        .stderr_contains("sort: invalid --batch-size argument '0'")
+        .stderr_contains("sort: minimum --batch-size argument is '2'");
+}
+
+#[test]
+fn test_batch_size_too_large() {
+    let large_batch_size = "18446744073709551616";
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg(format!("--batch-size={large_batch_size}"))
+        .fails()
+        .code_is(2)
+        .stderr_contains(format!(
+            "--batch-size argument '{large_batch_size}' too large"
+        ));
+    #[cfg(target_os = "linux")]
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg(format!("--batch-size={large_batch_size}"))
+        .fails()
+        .code_is(2)
+        .stderr_contains("maximum --batch-size argument with current rlimit is");
 }
 
 #[test]

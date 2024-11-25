@@ -110,7 +110,7 @@ pub fn print_dired_output(
     out: &mut BufWriter<Stdout>,
 ) -> UResult<()> {
     out.flush()?;
-    if dired.padding == 0 && !dired.dired_positions.is_empty() {
+    if !dired.dired_positions.is_empty() {
         print_positions("//DIRED//", &dired.dired_positions);
     }
     if config.recursive {
@@ -122,9 +122,9 @@ pub fn print_dired_output(
 
 /// Helper function to print positions with a given prefix.
 fn print_positions(prefix: &str, positions: &Vec<BytePosition>) {
-    print!("{}", prefix);
+    print!("{prefix}");
     for c in positions {
-        print!(" {}", c);
+        print!(" {c}");
     }
     println!();
 }
@@ -177,6 +177,14 @@ pub fn update_positions(dired: &mut DiredOutput, start: usize, end: usize) {
     });
     // Remove the previous padding
     dired.padding = 0;
+}
+
+/// Checks if the "--dired" or "-D" argument is present in the command line arguments.
+/// we don't use clap here because we need to know if the argument is present
+/// as it can be overridden by --hyperlink
+pub fn is_dired_arg_present() -> bool {
+    let args: Vec<String> = std::env::args().collect();
+    args.iter().any(|x| x == "--dired" || x == "-D")
 }
 
 #[cfg(test)]

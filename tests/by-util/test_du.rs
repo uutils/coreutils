@@ -11,14 +11,18 @@ use regex::Regex;
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
 
+#[cfg(not(target_os = "openbsd"))]
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
 const SUB_DIR_LINKS: &str = "subdir/links";
 const SUB_DIR_LINKS_DEEPER_SYM_DIR: &str = "subdir/links/deeper_dir";
+#[cfg(not(target_os = "openbsd"))]
 const SUB_FILE: &str = "subdir/links/subwords.txt";
+#[cfg(not(target_os = "openbsd"))]
 const SUB_LINK: &str = "subdir/links/sublink.txt";
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_basics() {
     let ts = TestScenario::new(util_name!());
 
@@ -77,6 +81,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_basics_subdir() {
     let ts = TestScenario::new(util_name!());
 
@@ -136,7 +141,6 @@ fn test_du_invalid_size() {
             .fails()
             .code_is(1)
             .stderr_only(format!("du: invalid --{s} argument 'x'\n"));
-        #[cfg(not(target_pointer_width = "128"))]
         ts.ucmd()
             .arg(format!("--{s}=1Y"))
             .arg("/tmp")
@@ -185,6 +189,7 @@ fn test_du_non_existing_files() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_soft_link() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -231,7 +236,7 @@ fn _du_soft_link(s: &str) {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(all(not(target_os = "android"), not(target_os = "openbsd")))]
 #[test]
 fn test_du_hard_link() {
     let ts = TestScenario::new(util_name!());
@@ -280,6 +285,7 @@ fn _du_hard_link(s: &str) {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_d_flag() {
     let ts = TestScenario::new(util_name!());
 
@@ -323,6 +329,7 @@ fn _du_d_flag(s: &str) {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_dereference() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -394,7 +401,12 @@ fn _du_dereference(s: &str) {
     }
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "android", target_os = "freebsd")))]
+#[cfg(not(any(
+    target_os = "windows",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "openbsd"
+)))]
 #[test]
 fn test_du_no_dereference() {
     let ts = TestScenario::new(util_name!());
@@ -534,6 +546,33 @@ fn test_du_inodes_with_count_links() {
     }
 }
 
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_du_inodes_with_count_links_all() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    at.mkdir("d/d");
+    at.touch("d/f");
+    at.hard_link("d/f", "d/h");
+
+    let result = ts.ucmd().arg("--inodes").arg("-al").arg("d").succeeds();
+    result.no_stderr();
+
+    let mut result_seq: Vec<String> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
+        .collect();
+    result_seq.sort_unstable();
+    #[cfg(windows)]
+    assert_eq!(result_seq, ["1\td\\d", "1\td\\f", "1\td\\h", "4\td"]);
+    #[cfg(not(windows))]
+    assert_eq!(result_seq, ["1\td/d", "1\td/f", "1\td/h", "4\td"]);
+}
+
 #[test]
 fn test_du_h_flag_empty_file() {
     new_ucmd!()
@@ -546,7 +585,7 @@ fn test_du_h_flag_empty_file() {
 #[test]
 fn test_du_h_precision() {
     let test_cases = [
-        (133456345, "128M"),
+        (133_456_345, "128M"),
         (12 * 1024 * 1024, "12M"),
         (8500, "8.4K"),
     ];
@@ -642,7 +681,7 @@ fn birth_supported() -> bool {
     m.created().is_ok()
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "openbsd")))]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_du_no_permission() {
@@ -696,6 +735,7 @@ fn _du_no_permission(s: &str) {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_one_file_system() {
     let ts = TestScenario::new(util_name!());
 
@@ -713,6 +753,7 @@ fn test_du_one_file_system() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_threshold() {
     let ts = TestScenario::new(util_name!());
 
@@ -1008,6 +1049,7 @@ fn test_du_symlink_fail() {
 }
 
 #[cfg(not(windows))]
+#[cfg(not(target_os = "openbsd"))]
 #[test]
 fn test_du_symlink_multiple_fail() {
     let ts = TestScenario::new(util_name!());
@@ -1155,4 +1197,26 @@ fn test_invalid_time_style() {
         .arg("--time-style=banana")
         .succeeds()
         .stdout_does_not_contain("du: invalid argument 'banana' for 'time style'");
+}
+
+#[test]
+fn test_human_size() {
+    use std::fs::File;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = at.plus_as_string("d");
+    at.mkdir(&dir);
+
+    for i in 1..=1023 {
+        let file_path = format!("{dir}/file{i}");
+        File::create(&file_path).expect("Failed to create file");
+    }
+
+    ts.ucmd()
+        .arg("--inodes")
+        .arg("-h")
+        .arg(&dir)
+        .succeeds()
+        .stdout_contains(format!("1.0K	{dir}"));
 }

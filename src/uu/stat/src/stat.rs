@@ -4,9 +4,10 @@
 // file that was distributed with this source code.
 // spell-checker:ignore datetime
 
+use uucore::error::{UResult, USimpleError};
+
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::fs::display_permissions;
 use uucore::fsext::{pretty_filetype, pretty_fstype, read_fs_list, statfs, BirthTime, FsMeta};
 use uucore::libc::mode_t;
@@ -583,7 +584,10 @@ impl Stater {
             None
         } else {
             let mut mount_list = read_fs_list()
-                .map_err_context(|| "cannot read table of mounted file systems".into())?
+                .map_err(|e| {
+                    let context = "cannot read table of mounted file systems";
+                    USimpleError::new(e.code(), format!("{context}: {e}"))
+                })?
                 .iter()
                 .map(|mi| mi.mount_dir.clone())
                 .collect::<Vec<String>>();

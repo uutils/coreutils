@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone
 
 use crate::common::util::TestScenario;
 use unindent::unindent;
@@ -560,8 +560,8 @@ fn test_dec_offset() {
 
 #[test]
 fn test_no_offset() {
-    let input = [0u8; 31];
     const LINE: &str = " 00000000 00000000 00000000 00000000\n";
+    let input = [0u8; 31];
     let expected_output = [LINE, LINE, LINE, LINE].join("");
 
     new_ucmd!()
@@ -577,6 +577,27 @@ fn test_no_offset() {
 #[test]
 fn test_invalid_offset() {
     new_ucmd!().arg("-Ab").fails();
+}
+
+#[test]
+fn test_empty_offset() {
+    new_ucmd!()
+        .arg("-A")
+        .arg("")
+        .fails()
+        .stderr_only("od: Radix cannot be empty, and must be one of [o, d, x, n]\n");
+}
+
+#[test]
+fn test_offset_compatibility() {
+    let input = [0u8; 4];
+    let expected_output = " 000000 000000\n";
+
+    new_ucmd!()
+        .arg("-Anone")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
 }
 
 #[test]
@@ -860,7 +881,6 @@ fn test_od_invalid_bytes() {
                 "od: invalid suffix in {option} argument '{INVALID_SUFFIX}'\n"
             ));
 
-        #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
             .arg(format!("{option}={BIG_SIZE}"))
             .arg("file")
