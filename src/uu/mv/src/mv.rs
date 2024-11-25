@@ -83,6 +83,9 @@ pub struct Options {
 
     /// '-g, --progress'
     pub progress_bar: bool,
+
+    /// `--debug`
+    pub debug: bool,
 }
 
 /// specifies behavior of the overwrite flag
@@ -109,6 +112,7 @@ static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
+static OPT_DEBUG: &str = "debug";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -135,10 +139,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let backup_mode = backup_control::determine_backup_mode(&matches)?;
     let update_mode = update_control::determine_update_mode(&matches);
 
-    if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
+    if backup_mode != BackupMode::NoBackup
+        && (overwrite_mode == OverwriteMode::NoClobber
+            || update_mode == UpdateMode::ReplaceNone
+            || update_mode == UpdateMode::ReplaceNoneFail)
+    {
         return Err(UUsageError::new(
             1,
-            "options --backup and --no-clobber are mutually exclusive",
+            "cannot combine --backup with -n/--no-clobber or --update=none-fail",
         ));
     }
 
@@ -161,9 +169,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         update: update_mode,
         target_dir,
         no_target_dir: matches.get_flag(OPT_NO_TARGET_DIRECTORY),
-        verbose: matches.get_flag(OPT_VERBOSE),
+        verbose: matches.get_flag(OPT_VERBOSE) || matches.get_flag(OPT_DEBUG),
         strip_slashes: matches.get_flag(OPT_STRIP_TRAILING_SLASHES),
         progress_bar: matches.get_flag(OPT_PROGRESS),
+        debug: matches.get_flag(OPT_DEBUG),
     };
 
     mv(&files[..], &opts)
@@ -255,6 +264,12 @@ pub fn uu_app() -> Command {
                 .required(true)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
+        )
+        .arg(
+            Arg::new(OPT_DEBUG)
+                .long(OPT_DEBUG)
+                .help("explain how a file is copied. Implies -v")
+                .action(ArgAction::SetTrue),
         )
 }
 
@@ -431,6 +446,11 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
     };
 
     for sourcepath in files {
+        if !sourcepath.exists() {
+            show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
+            continue;
+        }
+
         if let Some(ref pb) = count_progress {
             pb.set_message(sourcepath.to_string_lossy().to_string());
         }
@@ -468,7 +488,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
                     format!(
                         "cannot move '{}' to a subdirectory of itself, '{}/{}'",
                         sourcepath.display(),
-                        target_dir.display(),
+                        uucore::fs::normalize_path(target_dir).display(),
                         canonicalized_target_dir.components().last().map_or_else(
                             || target_dir.display().to_string(),
                             |dir| { PathBuf::from(dir.as_os_str()).display().to_string() }
@@ -521,6 +541,9 @@ fn rename(
         }
 
         if opts.update == UpdateMode::ReplaceNone {
+            if opts.debug {
+                println!("skipped {}", to.quote());
+            }
             return Ok(());
         }
 
@@ -530,10 +553,17 @@ fn rename(
             return Ok(());
         }
 
+        if opts.update == UpdateMode::ReplaceNoneFail {
+            let err_msg = format!("not replacing {}", to.quote());
+            return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+        }
+
         match opts.overwrite {
             OverwriteMode::NoClobber => {
-                let err_msg = format!("not replacing {}", to.quote());
-                return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+                if opts.debug {
+                    println!("skipped {}", to.quote());
+                }
+                return Ok(());
             }
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
@@ -661,6 +691,19 @@ fn rename_with_fallback(
                 };
             }
         } else {
+            if to.is_symlink() {
+                fs::remove_file(to).map_err(|err| {
+                    let to = to.to_string_lossy();
+                    let from = from.to_string_lossy();
+                    io::Error::new(
+                        err.kind(),
+                        format!(
+                            "inter-device move failed: '{from}' to '{to}'\
+                            ; unable to remove target: {err}"
+                        ),
+                    )
+                })?;
+            }
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             fs::copy(from, to)
                 .and_then(|_| fsxattr::copy_xattrs(&from, &to))

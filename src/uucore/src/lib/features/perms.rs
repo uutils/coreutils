@@ -220,8 +220,8 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
             Some(".") | Some("..") => true,
             Some(path_str) => {
                 (path_str.ends_with(MAIN_SEPARATOR_STR))
-                    || (path_str.ends_with(&format!("{}.", MAIN_SEPARATOR_STR)))
-                    || (path_str.ends_with(&format!("{}..", MAIN_SEPARATOR_STR)))
+                    || (path_str.ends_with(&format!("{MAIN_SEPARATOR_STR}.")))
+                    || (path_str.ends_with(&format!("{MAIN_SEPARATOR_STR}..")))
             }
         };
         // TODO: Once we reach MSRV 1.74.0, replace this abomination by something simpler, e.g. this:

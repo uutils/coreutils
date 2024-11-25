@@ -6,8 +6,13 @@
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
+#![allow(
+    clippy::unicode_not_nfc,
+    clippy::cast_lossless,
+    clippy::cast_possible_truncation
+)]
 
-use crate::common::random::{AlphanumericNewline, RandomString};
+use crate::common::random::{AlphanumericNewline, RandomizedString};
 #[cfg(unix)]
 use crate::common::util::expected_result;
 #[cfg(not(windows))]
@@ -25,7 +30,8 @@ use std::io::{Seek, SeekFrom};
     not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 use std::path::Path;
 use std::process::Stdio;
@@ -34,7 +40,8 @@ use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
     not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 use tail::text;
 
@@ -48,7 +55,6 @@ const FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
 #[allow(dead_code)]
 const FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
-#[cfg(not(windows))]
 const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1000;
 
 // The binary integer "10000000" is *not* a valid UTF-8 encoding
@@ -84,7 +90,7 @@ fn test_stdin_explicit() {
 
 #[test]
 // FIXME: the -f test fails with: Assertion failed. Expected 'tail' to be running but exited with status=exit status: 0
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 #[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file() {
     // $ echo foo > f
@@ -193,12 +199,12 @@ fn test_nc_0_wo_follow() {
 #[test]
 #[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_nc_0_wo_follow2() {
+    use std::os::unix::fs::PermissionsExt;
     // verify that -[nc]0 without -f, exit without reading
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    use std::os::unix::fs::PermissionsExt;
     at.make_file("unreadable")
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
@@ -221,10 +227,11 @@ fn test_nc_0_wo_follow2() {
 #[test]
 #[cfg(unix)]
 fn test_permission_denied() {
+    use std::os::unix::fs::PermissionsExt;
+
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    use std::os::unix::fs::PermissionsExt;
     at.make_file("unreadable")
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
@@ -241,13 +248,14 @@ fn test_permission_denied() {
 #[test]
 #[cfg(unix)]
 fn test_permission_denied_multiple() {
+    use std::os::unix::fs::PermissionsExt;
+
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     at.touch("file1");
     at.touch("file2");
 
-    use std::os::unix::fs::PermissionsExt;
     at.make_file("unreadable")
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
@@ -288,7 +296,8 @@ fn test_follow_redirect_stdin_name_retry() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_dir() {
     // $ mkdir dir
@@ -1111,13 +1120,11 @@ fn test_invalid_num() {
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of lines: '1024R'");
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of bytes: '1Y': Value too large for defined data type");
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
         .fails()
@@ -1210,7 +1217,8 @@ fn test_retry2() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_retry3() {
     // inspired by: gnu/tests/tail-2/retry.sh
@@ -1254,7 +1262,8 @@ fn test_retry3() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_retry4() {
     // inspired by: gnu/tests/tail-2/retry.sh
@@ -1311,7 +1320,8 @@ fn test_retry4() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_retry5() {
     // inspired by: gnu/tests/tail-2/retry.sh
@@ -1397,7 +1407,8 @@ fn test_retry6() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_retry7() {
     // inspired by: gnu/tests/tail-2/retry.sh
@@ -1471,7 +1482,8 @@ fn test_retry7() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_retry8() {
     // Ensure that inotify will switch to polling mode if directory
@@ -1539,7 +1551,8 @@ fn test_retry8() {
     not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_retry9() {
     // inspired by: gnu/tests/tail-2/inotify-dir-recreate.sh
@@ -1620,7 +1633,8 @@ fn test_retry9() {
     not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_follow_descriptor_vs_rename1() {
     // inspired by: gnu/tests/tail-2/descriptor-vs-rename.sh
@@ -1683,7 +1697,8 @@ fn test_follow_descriptor_vs_rename1() {
     not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_follow_descriptor_vs_rename2() {
     // Ensure the headers are correct for --verbose.
@@ -1735,7 +1750,8 @@ fn test_follow_descriptor_vs_rename2() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_retry_headers() {
     // inspired by: "gnu/tests/tail-2/F-headers.sh"
@@ -2069,7 +2085,8 @@ fn test_follow_truncate_fast() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move_create1() {
     // This test triggers a move/create event while `tail --follow=name file` is running.
@@ -2124,7 +2141,8 @@ fn test_follow_name_move_create1() {
     not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move_create2() {
     // inspired by: "gnu/tests/tail-2/inotify-hash-abuse.sh"
@@ -2203,7 +2221,8 @@ fn test_follow_name_move_create2() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move1() {
     // This test triggers a move event while `tail --follow=name file` is running.
@@ -2264,7 +2283,8 @@ fn test_follow_name_move1() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move2() {
     // Like test_follow_name_move1, but move to a name that's already monitored.
@@ -2351,7 +2371,8 @@ fn test_follow_name_move2() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move_retry1() {
     // Similar to test_follow_name_move1 but with `--retry` (`-F`)
@@ -2410,7 +2431,8 @@ fn test_follow_name_move_retry1() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move_retry2() {
     // inspired by: "gnu/tests/tail-2/F-vs-rename.sh"
@@ -2596,7 +2618,7 @@ fn test_fifo() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_illegal_seek() {
     // This is here for reference only.
     // We don't call seek on fifos, so we don't hit this error case.
@@ -2807,7 +2829,7 @@ fn test_pipe_when_lines_option_given_multibyte_utf8_characters() {
 #[test]
 fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size_no_newline_at_eof() {
     let total_lines = 1;
-    let random_string = RandomString::generate_with_delimiter(
+    let random_string = RandomizedString::generate_with_delimiter(
         Alphanumeric,
         b'\n',
         total_lines,
@@ -2837,7 +2859,7 @@ fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size_no_newli
 #[test]
 fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size() {
     let total_lines = 100;
-    let random_string = RandomString::generate_with_delimiter(
+    let random_string = RandomizedString::generate_with_delimiter(
         Alphanumeric,
         b'\n',
         total_lines,
@@ -2897,7 +2919,7 @@ fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size() {
 #[test]
 fn test_pipe_when_lines_option_given_input_size_is_one_byte_greater_than_buffer_size() {
     let total_lines = 100;
-    let random_string = RandomString::generate_with_delimiter(
+    let random_string = RandomizedString::generate_with_delimiter(
         Alphanumeric,
         b'\n',
         total_lines,
@@ -2945,7 +2967,7 @@ fn test_pipe_when_lines_option_given_input_size_is_one_byte_greater_than_buffer_
 #[cfg(not(target_os = "windows"))]
 fn test_pipe_when_lines_option_given_input_size_has_multiple_size_of_buffer_size() {
     let total_lines = 100;
-    let random_string = RandomString::generate_with_delimiter(
+    let random_string = RandomizedString::generate_with_delimiter(
         Alphanumeric,
         b'\n',
         total_lines,
@@ -3137,7 +3159,7 @@ fn test_pipe_when_bytes_option_given_multibyte_utf8_characters() {
 
 #[test]
 fn test_pipe_when_bytes_option_given_input_size_is_equal_to_buffer_size() {
-    let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE);
+    let random_string = RandomizedString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE);
     let random_string = random_string.as_str();
 
     new_ucmd!()
@@ -3196,7 +3218,7 @@ fn test_pipe_when_bytes_option_given_input_size_is_equal_to_buffer_size() {
 
 #[test]
 fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_size() {
-    let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE + 1);
+    let random_string = RandomizedString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE + 1);
     let random_string = random_string.as_str();
 
     new_ucmd!()
@@ -3251,7 +3273,7 @@ fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size() {
-    let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE * 3);
+    let random_string = RandomizedString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE * 3);
     let random_string = random_string.as_str();
 
     new_ucmd!()
@@ -3367,7 +3389,7 @@ fn test_seek_bytes_forward_outside_file() {
 #[cfg(all(not(target_os = "android"), not(target_os = "windows")))] // FIXME:
 #[test]
 fn test_args_when_presume_input_pipe_given_input_is_pipe() {
-    let random_string = RandomString::generate(AlphanumericNewline, 1000);
+    let random_string = RandomizedString::generate(AlphanumericNewline, 1000);
     let random_string = random_string.as_str();
 
     new_ucmd!()
@@ -3403,7 +3425,7 @@ fn test_args_when_presume_input_pipe_given_input_is_pipe() {
 
 #[test]
 fn test_args_when_presume_input_pipe_given_input_is_file() {
-    let random_string = RandomString::generate(AlphanumericNewline, 1000);
+    let random_string = RandomizedString::generate(AlphanumericNewline, 1000);
     let random_string = random_string.as_str();
 
     let ts = TestScenario::new(util_name!());
@@ -3434,7 +3456,7 @@ fn test_args_when_presume_input_pipe_given_input_is_file() {
 }
 
 #[test]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 // FIXME: currently missing in the error message is the last line >>tail: no files remaining<<
 fn test_when_follow_retry_given_redirected_stdin_from_directory_then_correct_error_message() {
     let ts = TestScenario::new(util_name!());
@@ -3484,7 +3506,7 @@ fn test_when_argument_file_is_a_symlink() {
         .no_stdout()
         .no_stderr();
 
-    let random_string = RandomString::generate(AlphanumericNewline, 100);
+    let random_string = RandomizedString::generate(AlphanumericNewline, 100);
     let result = file.write_all(random_string.as_bytes());
     assert!(result.is_ok());
 
@@ -3526,7 +3548,7 @@ fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
 // TODO: make this work on windows
 #[test]
 #[cfg(unix)]
-#[cfg(disabled_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_when_argument_file_is_a_faulty_symlink_then_error() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3558,7 +3580,7 @@ fn test_when_argument_file_is_a_faulty_symlink_then_error() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(disabled_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     use std::os::unix::net;
 
@@ -3572,10 +3594,8 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     assert!(result.is_ok());
 
     #[cfg(all(not(target_os = "freebsd"), not(target_os = "macos")))]
-    let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: No such device or address\n",
-        socket
-    );
+    let expected_stderr =
+        format!("tail: cannot open '{socket}' for reading: No such device or address\n");
     #[cfg(target_os = "freebsd")]
     let expected_stderr = format!(
         "tail: cannot open '{}' for reading: Operation not supported\n",
@@ -3596,11 +3616,11 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     let path = "file";
     let mut file = at.make_file(path);
 
-    let random_string = RandomString::generate(AlphanumericNewline, 100);
+    let random_string = RandomizedString::generate(AlphanumericNewline, 100);
     let result = file.write_all(random_string.as_bytes());
     assert!(result.is_ok());
 
-    let expected_stdout = vec![format!("==> {} <==", path), random_string].join("\n");
+    let expected_stdout = [format!("==> {path} <=="), random_string].join("\n");
     ts.ucmd()
         .args(&["-c", "+0", path, socket])
         .fails()
@@ -3617,7 +3637,7 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
 }
 
 #[test]
-#[cfg(disabled_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3719,7 +3739,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
 }
 
 #[test]
-#[cfg(disabled_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3830,7 +3850,7 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
 // test system. However, this behavior shows up on the command line and, at the time of writing this
 // description, with this test on macos and windows.
 #[test]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_when_follow_retry_then_initial_print_of_file_is_written_to_stdout() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4141,7 +4161,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
 
 /// The expected test outputs come from gnu's tail.
 #[test]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_data_is_appended() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4229,7 +4249,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_data_is_appende
 
 /// The expected test outputs come from gnu's tail.
 #[test]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_is_truncated() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4282,7 +4302,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_is_truncat
 /// The expected test outputs come from gnu's tail.
 #[test]
 #[cfg(unix)]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4310,18 +4330,14 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
     at.append(path_name, more_data);
 
     let expected_stdout = format!(
-        "==> {0} <==\n\
-        {1}\n\
-        ==> {2} <==\n\
-        {1}\n\
-        ==> {0} <==\n\
-        {3}\n\
-        ==> {2} <==\n\
-        {3}",
-        path_name, // 0
-        file_data, // 1
-        link_name, // 2
-        more_data, // 3
+        "==> {path_name} <==\n\
+        {file_data}\n\
+        ==> {link_name} <==\n\
+        {file_data}\n\
+        ==> {path_name} <==\n\
+        {more_data}\n\
+        ==> {link_name} <==\n\
+        {more_data}"
     );
 
     child.make_assertion_with_delay(500).is_alive();
@@ -4348,18 +4364,14 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
     at.append(path_name, more_data);
 
     let expected_stdout = format!(
-        "==> {0} <==\n\
-        {1}\n\
-        ==> {2} <==\n\
-        {1}\n\
-        ==> {0} <==\n\
-        {3}\n\
-        ==> {2} <==\n\
-        {3}",
-        link_name, // 0
-        file_data, // 1
-        path_name, // 2
-        more_data, // 3
+        "==> {link_name} <==\n\
+        {file_data}\n\
+        ==> {path_name} <==\n\
+        {file_data}\n\
+        ==> {link_name} <==\n\
+        {more_data}\n\
+        ==> {path_name} <==\n\
+        {more_data}"
     );
 
     child.make_assertion_with_delay(500).is_alive();
@@ -4378,9 +4390,8 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     let dirname = "dir";
     at.mkdir(dirname);
     let expected_stderr = format!(
-        "tail: error reading '{0}': Is a directory\n\
-         tail: {0}: cannot follow end of this type of file\n",
-        dirname
+        "tail: error reading '{dirname}': Is a directory\n\
+         tail: {dirname}: cannot follow end of this type of file\n"
     );
     let mut child = scene.ucmd().args(&["-F", "--retry", "dir"]).run_no_wait();
 
@@ -4428,7 +4439,8 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same_size() {
     let scene = TestScenario::new(util_name!());
@@ -4546,7 +4558,7 @@ fn test_gnu_args_c() {
         .arg("-12c")
         .pipe_in(format!("x{}z", "y".repeat(12)))
         .succeeds()
-        .stdout_only(&format!("{}z", "y".repeat(11)));
+        .stdout_only(format!("{}z", "y".repeat(11)));
 }
 
 #[test]
@@ -4580,7 +4592,7 @@ fn test_gnu_args_l() {
         .arg("-l")
         .pipe_in(format!("x{}z", "y\n".repeat(10)))
         .succeeds()
-        .stdout_only(&format!("{}z", "y\n".repeat(9)));
+        .stdout_only(format!("{}z", "y\n".repeat(9)));
 }
 
 #[test]
@@ -4667,7 +4679,7 @@ fn test_gnu_args_b() {
         .arg("-b")
         .pipe_in("x\n".repeat(512 * 10 / 2 + 1))
         .succeeds()
-        .stdout_only(&"x\n".repeat(512 * 10 / 2));
+        .stdout_only("x\n".repeat(512 * 10 / 2));
 }
 
 #[test]

@@ -204,8 +204,8 @@ To ensure easy collaboration, we have guidelines for using Git and GitHub.
 
 ### Commit messages
 
-You can read this section in the Git book to learn how to write good commit
-messages: https://git-scm.com/book/ch5-2.html.
+You can read [this section in the Git book](https://git-scm.com/book/ms/v2/Distributed-Git-Contributing-to-a-Project) to learn how to write good commit
+messages.
 
 In addition, here are a few examples for a summary line when committing to
 uutils:
@@ -257,8 +257,7 @@ CI. However, you can use `#[cfg(...)]` attributes to create platform dependent
 features.
 
 **Tip:** For Windows, Microsoft provides some images (VMWare, Hyper-V,
-VirtualBox and Parallels) for development:
-<https://developer.microsoft.com/windows/downloads/virtual-machines/>
+VirtualBox and Parallels) for development [here](https://developer.microsoft.com/windows/downloads/virtual-machines/).
 
 ## Improving the GNU compatibility
 

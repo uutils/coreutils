@@ -2,12 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-/// Thin pipe-related wrappers around functions from the `nix` crate.
+
+//! Thin pipe-related wrappers around functions from the `nix` crate.
+
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::io::IoSlice;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::io::AsRawFd;
+use std::os::fd::AsFd;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::SpliceFFlags;
@@ -33,15 +35,8 @@ pub fn pipe() -> Result<(File, File)> {
 /// a [`pipe`] and then from the pipe into your target (with `splice_exact`):
 /// this is still very efficient.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice(source: &impl AsRawFd, target: &impl AsRawFd, len: usize) -> Result<usize> {
-    nix::fcntl::splice(
-        source.as_raw_fd(),
-        None,
-        target.as_raw_fd(),
-        None,
-        len,
-        SpliceFFlags::empty(),
-    )
+pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> Result<usize> {
+    nix::fcntl::splice(source, None, target, None, len, SpliceFFlags::empty())
 }
 
 /// Splice wrapper which fully finishes the write.
@@ -50,7 +45,7 @@ pub fn splice(source: &impl AsRawFd, target: &impl AsRawFd, len: usize) -> Resul
 ///
 /// Panics if `source` runs out of data before `len` bytes have been moved.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_exact(source: &impl AsRawFd, target: &impl AsRawFd, len: usize) -> Result<()> {
+pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> Result<()> {
     let mut left = len;
     while left != 0 {
         let written = splice(source, target, left)?;
@@ -64,10 +59,6 @@ pub fn splice_exact(source: &impl AsRawFd, target: &impl AsRawFd, len: usize) ->
 ///
 /// Returns the number of successfully copied bytes.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn vmsplice(target: &impl AsRawFd, bytes: &[u8]) -> Result<usize> {
-    nix::fcntl::vmsplice(
-        target.as_raw_fd(),
-        &[IoSlice::new(bytes)],
-        SpliceFFlags::empty(),
-    )
+pub fn vmsplice(target: &impl AsFd, bytes: &[u8]) -> Result<usize> {
+    nix::fcntl::vmsplice(target, &[IoSlice::new(bytes)], SpliceFFlags::empty())
 }

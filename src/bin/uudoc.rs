@@ -13,6 +13,9 @@ use zip::ZipArchive;
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
+/// # Errors
+/// Returns an error if the writer fails.
+#[allow(clippy::too_many_lines)]
 fn main() -> io::Result<()> {
     let mut tldr_zip = File::open("docs/tldr.zip")
         .ok()
@@ -170,6 +173,8 @@ struct MDWriter<'a, 'b> {
 }
 
 impl<'a, 'b> MDWriter<'a, 'b> {
+    /// # Errors
+    /// Returns an error if the writer fails.
     fn markdown(&mut self) -> io::Result<()> {
         write!(self.w, "# {}\n\n", self.name)?;
         self.additional()?;
@@ -180,6 +185,8 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         self.examples()
     }
 
+    /// # Errors
+    /// Returns an error if the writer fails.
     fn additional(&mut self) -> io::Result<()> {
         writeln!(self.w, "<div class=\"additional\">")?;
         self.platforms()?;
@@ -187,6 +194,8 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         writeln!(self.w, "</div>")
     }
 
+    /// # Errors
+    /// Returns an error if the writer fails.
     fn platforms(&mut self) -> io::Result<()> {
         writeln!(self.w, "<div class=\"platforms\">")?;
         for (feature, icon) in [
@@ -209,6 +218,10 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns an error if the writer fails.
+    /// # Panics
+    /// Panics if the version is not found.
     fn version(&mut self) -> io::Result<()> {
         writeln!(
             self.w,
@@ -217,6 +230,8 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         )
     }
 
+    /// # Errors
+    /// Returns an error if the writer fails.
     fn usage(&mut self) -> io::Result<()> {
         if let Some(markdown) = &self.markdown {
             let usage = uuhelp_parser::parse_usage(markdown);
@@ -230,6 +245,8 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         }
     }
 
+    /// # Errors
+    /// Returns an error if the writer fails.
     fn about(&mut self) -> io::Result<()> {
         if let Some(markdown) = &self.markdown {
             writeln!(self.w, "{}", uuhelp_parser::parse_about(markdown))
@@ -238,6 +255,8 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         }
     }
 
+    /// # Errors
+    /// Returns an error if the writer fails.
     fn after_help(&mut self) -> io::Result<()> {
         if let Some(markdown) = &self.markdown {
             if let Some(after_help) = uuhelp_parser::parse_section("after help", markdown) {
@@ -248,6 +267,8 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns an error if the writer fails.
     fn examples(&mut self) -> io::Result<()> {
         if let Some(zip) = self.tldr_zip {
             let content = if let Some(f) =
@@ -292,6 +313,8 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         Ok(())
     }
 
+    /// # Errors
+    /// Returns an error if the writer fails.
     fn options(&mut self) -> io::Result<()> {
         writeln!(self.w, "<h2>Options</h2>")?;
         write!(self.w, "<dl>")?;
@@ -354,6 +377,8 @@ impl<'a, 'b> MDWriter<'a, 'b> {
     }
 }
 
+/// # Panics
+/// Panics if the archive is not ok
 fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Option<String> {
     let mut s = String::new();
     archive.by_name(name).ok()?.read_to_string(&mut s).unwrap();

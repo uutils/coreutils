@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore NOFILE
+// spell-checker:ignore NOFILE nonewline cmdline
 
 #[cfg(not(windows))]
 use crate::common::util::vec_of_size;
@@ -23,7 +23,6 @@ fn test_output_simple() {
 
 #[test]
 fn test_no_options() {
-    // spell-checker:disable-next-line
     for fixture in ["empty.txt", "alpha.txt", "nonewline.txt"] {
         // Give fixture through command line file argument
         new_ucmd!()
@@ -196,7 +195,6 @@ fn test_directory() {
 fn test_directory_and_file() {
     let s = TestScenario::new(util_name!());
     s.fixtures.mkdir("test_directory2");
-    // spell-checker:disable-next-line
     for fixture in ["empty.txt", "alpha.txt", "nonewline.txt"] {
         s.ucmd()
             .args(&["test_directory2", fixture])
@@ -219,7 +217,7 @@ fn test_three_directories_and_file_and_stdin() {
             "alpha.txt",
             "-",
             "file_which_does_not_exist.txt",
-            "nonewline.txt", // spell-checker:disable-line
+            "nonewline.txt",
             "test_directory3/test_directory5",
             "test_directory3/../test_directory3/test_directory5",
             "test_directory3",
@@ -288,6 +286,15 @@ fn test_numbered_lines_no_trailing_newline() {
              3\tklmno\n     4\tpqrst\n     5\tuvwxyz\n",
         );
     // spell-checker:enable
+}
+
+#[test]
+fn test_numbered_lines_with_crlf() {
+    new_ucmd!()
+        .args(&["-n"])
+        .pipe_in("Hello\r\nWorld")
+        .succeeds()
+        .stdout_only("     1\tHello\r\n     2\tWorld");
 }
 
 #[test]
@@ -487,7 +494,7 @@ fn test_dev_random() {
 }
 
 /// Reading from /dev/full should return an infinite amount of zero bytes.
-/// Wikipedia says there is support on Linux, FreeBSD, and NetBSD.
+/// Wikipedia says there is support on Linux, FreeBSD, and `NetBSD`.
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_dev_full() {
@@ -520,6 +527,21 @@ fn test_dev_full_show_all() {
         .with_exact_output(buf_len, 0)
         .stdout_only_bytes(expected);
     proc.kill();
+}
+
+// For some reason splice() on first of those files fails, resulting in
+// fallback inside `write_fast`, the other splice succeeds, in effect
+// without additional flush output gets reversed.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_fast_fallthrough_uses_flush() {
+    const PROC_INIT_CMDLINE: &str = "/proc/1/cmdline";
+    let cmdline = std::fs::read_to_string(PROC_INIT_CMDLINE).unwrap();
+
+    new_ucmd!()
+        .args(&[PROC_INIT_CMDLINE, "alpha.txt"])
+        .succeeds()
+        .stdout_only(format!("{cmdline}abcde\nfghij\nklmno\npqrst\nuvwxyz\n")); // spell-checker:disable-line
 }
 
 #[test]
@@ -603,6 +625,7 @@ fn test_write_to_self() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 fn test_error_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("2", "1");

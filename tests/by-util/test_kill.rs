@@ -98,7 +98,7 @@ fn test_kill_table_lists_all_vertically() {
     let signals = command
         .stdout_str()
         .split('\n')
-        .flat_map(|line| line.trim().split(' ').nth(1))
+        .filter_map(|line| line.trim().split(' ').nth(1))
         .collect::<Vec<&str>>();
 
     assert!(signals.contains(&"KILL"));
@@ -130,9 +130,9 @@ fn test_kill_list_one_signal_ignore_case() {
 fn test_kill_list_unknown_must_match_input_case() {
     new_ucmd!()
         .arg("-l")
-        .arg("IaMnOtAsIgNaL") // spell-checker:disable-line
+        .arg("IaMnOtAsIgNaL")
         .fails()
-        .stderr_contains("IaMnOtAsIgNaL"); // spell-checker:disable-line
+        .stderr_contains("IaMnOtAsIgNaL");
 }
 
 #[test]
@@ -169,7 +169,6 @@ fn test_kill_list_three_signal_first_unknown() {
 
 #[test]
 fn test_kill_set_bad_signal_name() {
-    // spell-checker:disable-line
     new_ucmd!()
         .arg("-s")
         .arg("IAMNOTASIGNAL") // spell-checker:disable-line
@@ -274,17 +273,26 @@ fn test_kill_with_signal_name_new_form_unknown_must_match_input_case() {
     let target = Target::new();
     new_ucmd!()
         .arg("-s")
-        .arg("IaMnOtAsIgNaL") // spell-checker:disable-line
+        .arg("IaMnOtAsIgNaL")
         .arg(format!("{}", target.pid()))
         .fails()
         .stderr_contains("unknown signal")
-        .stderr_contains("IaMnOtAsIgNaL"); // spell-checker:disable-line
+        .stderr_contains("IaMnOtAsIgNaL");
 }
 
 #[test]
 fn test_kill_no_pid_provided() {
-    // spell-checker:disable-line
     new_ucmd!()
         .fails()
         .stderr_contains("no process ID specified");
+}
+
+#[test]
+fn test_kill_with_signal_exit_new_form() {
+    let target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("EXIT")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
 }

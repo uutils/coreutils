@@ -82,3 +82,14 @@ We support `--sort=name`, which makes it possible to override an earlier value.
 
 `du` allows `birth` and `creation` as values for the `--time` argument to show the creation time. It
 also provides a `-v`/`--verbose` flag.
+
+## `id`
+
+`id` has three additional flags:
+* `-P` displays the id as a password file entry
+* `-p` makes the output human-readable
+* `-A` displays the process audit user ID
+
+## `uptime`
+
+Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides `-s`/`--since` to show since when the system is up.

@@ -12,7 +12,7 @@ use std::error::Error;
 use std::fmt::Display;
 #[cfg(not(windows))]
 use std::fs::Metadata;
-use std::fs::{self, File};
+use std::fs::{self, DirEntry, File};
 use std::io::{BufRead, BufReader};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -138,7 +138,11 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: &Path, options: &TraversalOptions) -> std::io::Result<Self> {
+    fn new(
+        path: &Path,
+        dir_entry: Option<&DirEntry>,
+        options: &TraversalOptions,
+    ) -> std::io::Result<Self> {
         // Determine whether to dereference (follow) the symbolic link
         let should_dereference = match &options.dereference {
             Deref::All => true,
@@ -149,8 +153,11 @@ impl Stat {
         let metadata = if should_dereference {
             // Get metadata, following symbolic links if necessary
             fs::metadata(path)
+        } else if let Some(dir_entry) = dir_entry {
+            // Get metadata directly from the DirEntry, which is faster on Windows
+            dir_entry.metadata()
         } else {
-            // Get metadata without following symbolic links
+            // Get metadata from the filesystem without following symbolic links
             fs::symlink_metadata(path)
         }?;
 
@@ -319,7 +326,7 @@ fn du(
         'file_loop: for f in read {
             match f {
                 Ok(entry) => {
-                    match Stat::new(&entry.path(), options) {
+                    match Stat::new(&entry.path(), Some(&entry), options) {
                         Ok(this_stat) => {
                             // We have an exclude list
                             for pattern in &options.excludes {
@@ -339,14 +346,21 @@ fn du(
                             }
 
                             if let Some(inode) = this_stat.inode {
-                                if seen_inodes.contains(&inode) {
-                                    if options.count_links {
+                                // Check if the inode has been seen before and if we should skip it
+                                if seen_inodes.contains(&inode)
+                                    && (!options.count_links || !options.all)
+                                {
+                                    // If `count_links` is enabled and `all` is not, increment the inode count
+                                    if options.count_links && !options.all {
                                         my_stat.inodes += 1;
                                     }
+                                    // Skip further processing for this inode
                                     continue;
                                 }
+                                // Mark this inode as seen
                                 seen_inodes.insert(inode);
                             }
+
                             if this_stat.is_dir {
                                 if options.one_file_system {
                                     if let (Some(this_inode), Some(my_inode)) =
@@ -543,9 +557,6 @@ impl StatPrinter {
     }
 
     fn convert_size(&self, size: u64) -> String {
-        if self.inodes {
-            return size.to_string();
-        }
         match self.size_format {
             SizeFormat::HumanDecimal => uucore::format::human::human_readable(
                 size,
@@ -555,7 +566,14 @@ impl StatPrinter {
                 size,
                 uucore::format::human::SizeFormat::Binary,
             ),
-            SizeFormat::BlockSize(block_size) => div_ceil(size, block_size).to_string(),
+            SizeFormat::BlockSize(block_size) => {
+                if self.inodes {
+                    // we ignore block size (-B) with --inodes
+                    size.to_string()
+                } else {
+                    size.div_ceil(block_size).to_string()
+                }
+            }
         }
     }
 
@@ -576,13 +594,6 @@ impl StatPrinter {
     }
 }
 
-// This can be replaced with u64::div_ceil once it is stabilized.
-// This implementation approach is optimized for when `b` is a constant,
-// particularly a power of two.
-pub fn div_ceil(a: u64, b: u64) -> u64 {
-    (a + b - 1) / b
-}
-
 // Read file paths from the specified file, separated by null characters
 fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     let reader: Box<dyn BufRead> = if file_name == "-" {
@@ -594,7 +605,7 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
         if path.is_dir() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("{}: read error: Is a directory", file_name),
+                format!("{file_name}: read error: Is a directory"),
             ));
         }
 
@@ -604,10 +615,7 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!(
-                        "cannot open '{}' for reading: No such file or directory",
-                        file_name
-                    ),
+                    format!("cannot open '{file_name}' for reading: No such file or directory"),
                 ))
             }
             Err(e) => return Err(e),
@@ -768,7 +776,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // Check existence of path provided in argument
-        if let Ok(stat) = Stat::new(&path, &traversal_options) {
+        if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
             // Kick off the computation of disk usage from the initial path
             let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
             if let Some(inode) = stat.inode {

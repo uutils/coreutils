@@ -5,14 +5,20 @@
 
 // spell-checker:ignore (ToDO) inval
 
+//! A module for handling ranges of values.
+
 use std::cmp::max;
 use std::str::FromStr;
 
 use crate::display::Quotable;
 
+/// A range of values
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Range {
+    /// The lower bound of the range
     pub low: usize,
+
+    /// The upper bound of the range
     pub high: usize,
 }
 
@@ -72,6 +78,7 @@ impl FromStr for Range {
 }
 
 impl Range {
+    /// Parse a list of ranges separated by commas and/or spaces
     pub fn from_list(list: &str) -> Result<Vec<Self>, String> {
         let mut ranges = Vec::new();
 
@@ -106,6 +113,7 @@ impl Range {
     }
 }
 
+/// Calculate the complement of the given ranges.
 pub fn complement(ranges: &[Range]) -> Vec<Range> {
     let mut prev_high = 0;
     let mut complements = Vec::with_capacity(ranges.len() + 1);

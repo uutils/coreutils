@@ -19,7 +19,7 @@ impl SplitName {
     /// Creates a new SplitName with the given user-defined options:
     /// - `prefix_opt` specifies a prefix for all splits.
     /// - `format_opt` specifies a custom format for the suffix part of the filename, using the
-    /// `sprintf` format notation.
+    ///   `sprintf` format notation.
     /// - `n_digits_opt` defines the width of the split number.
     ///
     /// # Caveats

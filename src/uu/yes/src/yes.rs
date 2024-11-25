@@ -9,6 +9,8 @@ use clap::{builder::ValueParser, crate_version, Arg, ArgAction, Command};
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::os::fd::AsFd;
 use uucore::error::{UResult, USimpleError};
 #[cfg(unix)]
 use uucore::signals::enable_pipe_errors;
@@ -118,7 +120,7 @@ pub fn exec(bytes: &[u8]) -> io::Result<()> {
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        match splice::splice_data(bytes, &stdout) {
+        match splice::splice_data(bytes, &stdout.as_fd()) {
             Ok(_) => return Ok(()),
             Err(splice::Error::Io(err)) => return Err(err),
             Err(splice::Error::Unsupported) => (),

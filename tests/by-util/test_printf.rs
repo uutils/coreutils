@@ -521,10 +521,7 @@ fn sub_any_specifiers_after_period() {
 
 #[test]
 fn unspecified_left_justify_is_1_width() {
-    new_ucmd!()
-        .args(&["%-o"]) //spell-checker:disable-line
-        .succeeds()
-        .stdout_only("0");
+    new_ucmd!().args(&["%-o"]).succeeds().stdout_only("0");
 }
 
 #[test]
@@ -538,7 +535,7 @@ fn sub_any_specifiers_after_second_param() {
 #[test]
 fn stop_after_additional_escape() {
     new_ucmd!()
-        .args(&["A%sC\\cD%sF", "B", "E"]) //spell-checker:disable-line
+        .args(&["A%sC\\cD%sF", "B", "E"])
         .succeeds()
         .stdout_only("ABC");
 }
@@ -776,4 +773,146 @@ fn format_spec_zero_char_fails() {
 fn format_spec_zero_string_fails() {
     // It is invalid to have the format spec '%0s'
     new_ucmd!().args(&["%0s", "3"]).fails().code_is(1);
+}
+
+#[test]
+fn invalid_precision_fails() {
+    // It is invalid to have length of output string greater than i32::MAX
+    new_ucmd!()
+        .args(&["%.*d", "2147483648", "0"])
+        .fails()
+        .stderr_is("printf: invalid precision: '2147483648'\n");
+}
+
+#[test]
+fn float_invalid_precision_fails() {
+    // It is invalid to have length of output string greater than i32::MAX
+    new_ucmd!()
+        .args(&["%.*f", "2147483648", "0"])
+        .fails()
+        .stderr_is("printf: invalid precision: '2147483648'\n");
+}
+
+// The following padding-tests test for the cases in which flags in ['0', ' '] are given.
+// For integer, only try to pad when no precision is given, while
+// for float, always try to pad
+#[test]
+fn space_padding_with_space_test() {
+    //  Check if printf gives an extra space in the beginning
+    new_ucmd!()
+        .args(&["% 3d", "1"])
+        .succeeds()
+        .stdout_only("  1");
+}
+
+#[test]
+fn zero_padding_with_space_test() {
+    new_ucmd!()
+        .args(&["% 03d", "1"])
+        .succeeds()
+        .stdout_only(" 01");
+}
+
+#[test]
+fn zero_padding_with_plus_test() {
+    new_ucmd!()
+        .args(&["%+04d", "1"])
+        .succeeds()
+        .stdout_only("+001");
+}
+
+#[test]
+fn negative_zero_padding_test() {
+    new_ucmd!()
+        .args(&["%03d", "-1"])
+        .succeeds()
+        .stdout_only("-01");
+}
+
+#[test]
+fn negative_zero_padding_with_space_test() {
+    new_ucmd!()
+        .args(&["% 03d", "-1"])
+        .succeeds()
+        .stdout_only("-01");
+}
+
+#[test]
+fn float_with_zero_precision_should_pad() {
+    new_ucmd!()
+        .args(&["%03.0f", "-1"])
+        .succeeds()
+        .stdout_only("-01");
+}
+
+#[test]
+fn precision_check() {
+    new_ucmd!()
+        .args(&["%.3d", "1"])
+        .succeeds()
+        .stdout_only("001");
+}
+
+#[test]
+fn space_padding_with_precision() {
+    new_ucmd!()
+        .args(&["%4.3d", "1"])
+        .succeeds()
+        .stdout_only(" 001");
+}
+
+#[test]
+fn float_zero_padding_with_precision() {
+    new_ucmd!()
+        .args(&["%04.1f", "1"])
+        .succeeds()
+        .stdout_only("01.0");
+}
+
+#[test]
+fn float_space_padding_with_precision() {
+    new_ucmd!()
+        .args(&["%4.1f", "1"])
+        .succeeds()
+        .stdout_only(" 1.0");
+}
+
+#[test]
+fn negative_float_zero_padding_with_precision() {
+    new_ucmd!()
+        .args(&["%05.1f", "-1"])
+        .succeeds()
+        .stdout_only("-01.0");
+}
+
+#[test]
+fn float_default_precision_space_padding() {
+    new_ucmd!()
+        .args(&["%10f", "1"])
+        .succeeds()
+        .stdout_only("  1.000000");
+}
+
+#[test]
+fn float_default_precision_zero_padding() {
+    new_ucmd!()
+        .args(&["%010f", "1"])
+        .succeeds()
+        .stdout_only("001.000000");
+}
+
+#[test]
+fn flag_position_space_padding() {
+    new_ucmd!()
+        .args(&["% +3.1d", "1"])
+        .succeeds()
+        .stdout_only(" +1");
+}
+
+#[test]
+fn float_flag_position_space_padding() {
+    new_ucmd!()
+        .args(&["% +5.1f", "1"])
+        .succeeds()
+        .stdout_only(" +1.0");
 }

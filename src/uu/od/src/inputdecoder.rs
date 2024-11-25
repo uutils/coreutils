@@ -179,8 +179,8 @@ mod tests {
 
         assert_eq!(-2.0, mem.read_float(0, 8));
         assert_eq!(-2.0, mem.read_float(4, 4));
-        assert_eq!(0xc000000000000000, mem.read_uint(0, 8));
-        assert_eq!(0xc0000000, mem.read_uint(4, 4));
+        assert_eq!(0xc000_0000_0000_0000, mem.read_uint(0, 8));
+        assert_eq!(0xc000_0000, mem.read_uint(4, 4));
         assert_eq!(0xc000, mem.read_uint(6, 2));
         assert_eq!(0xc0, mem.read_uint(7, 1));
         assert_eq!(&[0, 0xc0], mem.get_buffer(6));

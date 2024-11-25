@@ -2,10 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use crate::common::util::{vec_of_size, TestScenario};
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
-
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
@@ -357,6 +357,19 @@ fn test_file_one_long_word() {
 /// bytes are displayed.
 #[test]
 fn test_file_bytes_dictate_width() {
+    // . is a directory, so minimum_width should get set to 7
+    #[cfg(not(windows))]
+    const STDOUT: &str = concat!(
+        "      0       0       0 emptyfile.txt\n",
+        "      0       0       0 .\n",
+        "      0       0       0 total\n",
+    );
+    #[cfg(windows)]
+    const STDOUT: &str = concat!(
+        "      0       0       0 emptyfile.txt\n",
+        "      0       0       0 total\n",
+    );
+
     // This file has 10,001 bytes. Five digits are required to
     // represent that. Even though the number of lines is 1 and the
     // number of words is 0, each of those counts is formatted with
@@ -384,18 +397,6 @@ fn test_file_bytes_dictate_width() {
             "  18  166 1074 total\n",
         ));
 
-    // . is a directory, so minimum_width should get set to 7
-    #[cfg(not(windows))]
-    const STDOUT: &str = concat!(
-        "      0       0       0 emptyfile.txt\n",
-        "      0       0       0 .\n",
-        "      0       0       0 total\n",
-    );
-    #[cfg(windows)]
-    const STDOUT: &str = concat!(
-        "      0       0       0 emptyfile.txt\n",
-        "      0       0       0 total\n",
-    );
     new_ucmd!()
         .args(&["-lwc", "emptyfile.txt", "."])
         .run()
@@ -446,7 +447,7 @@ fn test_files_from_pseudo_filesystem() {
         let actual = at.read("/sys/kernel/profiling").len();
         assert_eq!(
             result.stdout_str(),
-            format!("{} /sys/kernel/profiling\n", actual)
+            format!("{actual} /sys/kernel/profiling\n")
         );
     }
 }
@@ -737,6 +738,10 @@ fn files0_from_dir() {
             concat!("wc: cannot open ", $p, " for reading: Permission denied\n")
         };
     }
+    #[cfg(windows)]
+    const DOT_ERR: &str = dir_err!("'.'");
+    #[cfg(not(windows))]
+    const DOT_ERR: &str = dir_err!(".");
 
     new_ucmd!()
         .args(&["--files0-from=dir with spaces"])
@@ -744,10 +749,6 @@ fn files0_from_dir() {
         .stderr_only(dir_err!("'dir with spaces'"));
 
     // Those contexts have different rules about quoting in errors...
-    #[cfg(windows)]
-    const DOT_ERR: &str = dir_err!("'.'");
-    #[cfg(not(windows))]
-    const DOT_ERR: &str = dir_err!(".");
     new_ucmd!()
         .args(&["--files0-from=."])
         .fails()
