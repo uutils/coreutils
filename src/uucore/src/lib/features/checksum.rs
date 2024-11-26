@@ -1056,7 +1056,7 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let captures = algo_based_regex.captures(*input);
+            let captures = algo_based_regex.captures(input);
             match expected {
                 Some((algo, bits, filename, checksum)) => {
                     assert!(captures.is_some());
@@ -1206,7 +1206,7 @@ mod tests {
 
         // Test leading space before checksum line
         let lines_algo_based_leading_space =
-            vec!["   MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e"]
+            ["   MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e"]
                 .iter()
                 .map(|s| OsString::from(s.to_string()))
                 .collect::<Vec<_>>();
@@ -1216,7 +1216,7 @@ mod tests {
 
         // Test trailing space after checksum line (should fail)
         let lines_algo_based_leading_space =
-            vec!["MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e "]
+            ["MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e "]
                 .iter()
                 .map(|s| OsString::from(s.to_string()))
                 .collect::<Vec<_>>();
