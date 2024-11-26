@@ -1251,33 +1251,6 @@ fn test_several_files_error_mgmt() {
         .stderr_contains("incorrect: no properly ");
 }
 
-#[cfg(target_os = "linux")]
-#[test]
-fn test_non_utf8_filename() {
-    use std::ffi::OsString;
-    use std::os::unix::ffi::OsStringExt;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let filename: OsString = OsStringExt::from_vec(b"funky\xffname".to_vec());
-
-    at.touch(&filename);
-
-    scene
-        .ucmd()
-        .arg(&filename)
-        .succeeds()
-        .stdout_is_bytes(b"4294967295 0 funky\xffname\n")
-        .no_stderr();
-    scene
-        .ucmd()
-        .arg("-asha256")
-        .arg(filename)
-        .succeeds()
-        .stdout_is_bytes(b"SHA256 (funky\xffname) = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n")
-        .no_stderr();
-}
-
 #[test]
 fn test_check_comment_line() {
     // A comment in a checksum file shall be discarded unnoticed.
@@ -1430,12 +1403,13 @@ fn test_check_trailing_space_fails() {
 /// in checksum files.
 /// These tests are excluded from Windows because it does not provide any safe
 /// conversion between `OsString` and byte sequences for non-utf-8 strings.
-#[cfg(not(windows))]
 mod check_utf8 {
-    use super::*;
 
+    // This test should pass on linux and macos.
+    #[cfg(not(windows))]
     #[test]
     fn test_check_non_utf8_comment() {
+        use super::*;
         let hashes =
         b"MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\n\
         # Comment with a non utf8 char: >>\xff<<\n\
@@ -1458,9 +1432,12 @@ mod check_utf8 {
             .no_stderr();
     }
 
+    // This test should pass on linux. Windows and macos will fail to
+    // create a file which name contains '\xff'.
     #[cfg(target_os = "linux")]
     #[test]
     fn test_check_non_utf8_filename() {
+        use super::*;
         use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
         let scene = TestScenario::new(util_name!());
@@ -1597,35 +1574,68 @@ fn test_check_mix_hex_base64() {
         .stdout_only("foo1.dat: OK\nfoo2.dat: OK\n");
 }
 
-#[ignore = "not yet implemented"]
+/// This test ensures that an improperly formatted base64 checksum in a file
+/// does not interrupt the processing of next lines.
 #[test]
-fn test_check_incorrectly_formatted_checksum_does_not_stop_processing() {
-    // The first line contains an incorrectly formatted checksum that can't be
-    // correctly decoded. This must not prevent the program from looking at the
-    // rest of the file.
-    let lines = [
-        "BLAKE2b-56 (foo1) = GFYEQ7HhAw=",    // Should be 2 '=' at the end
-        "BLAKE2b-56 (foo2) = 18560443b1e103", // OK
-    ];
-
+fn test_check_incorrectly_formatted_checksum_keeps_processing_b64() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    at.touch("f");
 
-    at.write("foo1", "foo");
-    at.write("foo2", "foo");
-    at.write("sum", &lines.join("\n"));
+    let good_ck = "MD5 (f) = 1B2M2Y8AsgTpgAmY7PhCfg=="; // OK
+    let bad_ck = "MD5 (f) = 1B2M2Y8AsgTpgAmY7PhCfg="; // Missing last '='
 
+    // Good then Bad
     scene
         .ucmd()
         .arg("--check")
-        .arg(at.subdir.join("sum"))
+        .pipe_in([good_ck, bad_ck].join("\n").as_bytes().to_vec())
         .succeeds()
-        .stderr_contains("1 line is improperly formatted")
-        .stdout_contains("foo2: OK");
+        .stdout_contains("f: OK")
+        .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
+
+    // Bad then Good
+    scene
+        .ucmd()
+        .arg("--check")
+        .pipe_in([bad_ck, good_ck].join("\n").as_bytes().to_vec())
+        .succeeds()
+        .stdout_contains("f: OK")
+        .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
+}
+
+/// This test ensures that an improperly formatted hexadecimal checksum in a
+/// file does not interrupt the processing of next lines.
+#[test]
+fn test_check_incorrectly_formatted_checksum_keeps_processing_hex() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    let good_ck = "MD5 (f) = d41d8cd98f00b204e9800998ecf8427e"; // OK
+    let bad_ck = "MD5 (f) = d41d8cd98f00b204e9800998ecf8427"; // Missing last
+
+    // Good then Bad
+    scene
+        .ucmd()
+        .arg("--check")
+        .pipe_in([good_ck, bad_ck].join("\n").as_bytes().to_vec())
+        .succeeds()
+        .stdout_contains("f: OK")
+        .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
+
+    // Bad then Good
+    scene
+        .ucmd()
+        .arg("--check")
+        .pipe_in([bad_ck, good_ck].join("\n").as_bytes().to_vec())
+        .succeeds()
+        .stdout_contains("f: OK")
+        .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
 }
 
 /// This module reimplements the cksum-base64.pl GNU test.
-mod cksum_base64 {
+mod gnu_cksum_base64 {
     use super::*;
     use crate::common::util::log_info;
 
