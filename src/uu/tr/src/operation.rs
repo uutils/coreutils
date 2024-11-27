@@ -329,10 +329,7 @@ impl Sequence {
             recognize(many_m_n(1, 3, one_of("01234567"))),
             |out: &[u8]| {
                 let str_to_parse = std::str::from_utf8(out).unwrap();
-                match u8::from_str_radix(str_to_parse, 8) {
-                    Ok(ue) => Some(ue),
-                    Err(_pa) => None,
-                }
+                u8::from_str_radix(str_to_parse, 8).ok()
             },
         )(input)
     }
@@ -342,21 +339,19 @@ impl Sequence {
             recognize(many_m_n(1, 3, one_of("01234567"))),
             |out: &[u8]| {
                 let str_to_parse = std::str::from_utf8(out).unwrap();
-                match u8::from_str_radix(str_to_parse, 8) {
-                    Ok(ue) => Some(ue),
-                    Err(_pa) => {
-                        let origin_octal: &str = std::str::from_utf8(input).unwrap();
-                        let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
-                        let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
-                        show_warning!(
-                            "the ambiguous octal escape \\{} is being\n        interpreted as the 2-byte sequence \\0{}, {}",
-                            origin_octal,
-                            actual_octal_tail,
-                            outstand_char
-                        );
-                        None
-                    }
+                let result = u8::from_str_radix(str_to_parse, 8).ok();
+                if result.is_none() {
+                    let origin_octal: &str = std::str::from_utf8(input).unwrap();
+                    let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
+                    let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
+                    show_warning!(
+                        "the ambiguous octal escape \\{} is being\n        interpreted as the 2-byte sequence \\0{}, {}",
+                        origin_octal,
+                        actual_octal_tail,
+                        outstand_char
+                    );
                 }
+                result
             },
         )(input)
     }
