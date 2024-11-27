@@ -416,9 +416,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.165"
+version = "0.2.166"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcb4d3d38eab6c5239a362fa8bae48c03baf980a6e7079f063942d563ef3533e"
+checksum = "c2ccc108bbc0b1331bd061864e7cd823c0cab660bbe6970e66e2c0614decde36"
 
 [[package]]
 name = "libfuzzer-sys"
