@@ -279,7 +279,10 @@ impl<'a> Shufable for Vec<&'a [u8]> {
         // this is safe.
         (**self).choose(rng).unwrap()
     }
-    type PartialShuffleIterator<'b> = std::iter::Copied<std::slice::Iter<'b, &'a [u8]>> where Self: 'b;
+    type PartialShuffleIterator<'b>
+        = std::iter::Copied<std::slice::Iter<'b, &'a [u8]>>
+    where
+        Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
@@ -298,7 +301,10 @@ impl Shufable for RangeInclusive<usize> {
     fn choose(&self, rng: &mut WrappedRng) -> usize {
         rng.gen_range(self.clone())
     }
-    type PartialShuffleIterator<'b> = NonrepeatingIterator<'b> where Self: 'b;
+    type PartialShuffleIterator<'b>
+        = NonrepeatingIterator<'b>
+    where
+        Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
