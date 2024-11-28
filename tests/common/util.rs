@@ -75,7 +75,7 @@ pub fn is_ci() -> bool {
 }
 
 /// Read a test scenario fixture, returning its bytes
-fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> Vec<u8> {
+fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: Option<&Rc<TempDir>>, file_rel_path: S) -> Vec<u8> {
     let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();
     AtPath::new(tmpdir_path).read_bytes(file_rel_path.as_ref().to_str().unwrap())
 }
@@ -517,7 +517,7 @@ impl CmdResult {
     /// like `stdout_is()`, but expects the contents of the file at the provided relative path
     #[track_caller]
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        let contents = read_scenario_fixture(self.tmpd.as_ref(), file_rel_path);
         self.stdout_is(String::from_utf8(contents).unwrap())
     }
 
@@ -539,7 +539,7 @@ impl CmdResult {
     /// ```
     #[track_caller]
     pub fn stdout_is_fixture_bytes<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        let contents = read_scenario_fixture(self.tmpd.as_ref(), file_rel_path);
         self.stdout_is_bytes(contents)
     }
 
@@ -552,7 +552,7 @@ impl CmdResult {
         template_vars: &[(&str, &str)],
     ) -> &Self {
         let mut contents =
-            String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
+            String::from_utf8(read_scenario_fixture(self.tmpd.as_ref(), file_rel_path)).unwrap();
         for kv in template_vars {
             contents = contents.replace(kv.0, kv.1);
         }
@@ -566,7 +566,8 @@ impl CmdResult {
         file_rel_path: T,
         template_vars: &[Vec<(String, String)>],
     ) {
-        let contents = String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
+        let contents =
+            String::from_utf8(read_scenario_fixture(self.tmpd.as_ref(), file_rel_path)).unwrap();
         let possible_values = template_vars.iter().map(|vars| {
             let mut contents = contents.clone();
             for kv in vars {
@@ -604,7 +605,7 @@ impl CmdResult {
     /// Like `stdout_is_fixture`, but for stderr
     #[track_caller]
     pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        let contents = read_scenario_fixture(self.tmpd.as_ref(), file_rel_path);
         self.stderr_is(String::from_utf8(contents).unwrap())
     }
 
@@ -629,7 +630,7 @@ impl CmdResult {
     /// like `stdout_only()`, but expects the contents of the file at the provided relative path
     #[track_caller]
     pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        let contents = read_scenario_fixture(self.tmpd.as_ref(), file_rel_path);
         self.stdout_only_bytes(contents)
     }
 
@@ -1384,7 +1385,7 @@ impl UCommand {
 
     /// like `pipe_in()`, but uses the contents of the file at the provided relative path as the piped in data
     pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> &mut Self {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        let contents = read_scenario_fixture(self.tmpd.as_ref(), file_rel_path);
         self.pipe_in(contents)
     }
 
