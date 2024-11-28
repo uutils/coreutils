@@ -2862,6 +2862,7 @@ dependencies = [
  "file_diff",
  "filetime",
  "libc",
+ "nix",
  "uucore",
 ]
 
