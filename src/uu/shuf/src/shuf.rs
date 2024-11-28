@@ -380,7 +380,7 @@ impl<'a> NonrepeatingIterator<'a> {
     }
 }
 
-impl<'a> Iterator for NonrepeatingIterator<'a> {
+impl Iterator for NonrepeatingIterator<'_> {
     type Item = usize;
 
     fn next(&mut self) -> Option<usize> {
@@ -407,7 +407,7 @@ trait Writable {
     fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error>;
 }
 
-impl<'a> Writable for &'a [u8] {
+impl Writable for &[u8] {
     fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error> {
         output.write_all(self)
     }
