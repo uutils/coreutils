@@ -36,13 +36,14 @@ impl Target {
         Self { child }
     }
     fn send_signal(&mut self, signal: Signal) {
-        Command::new("kill")
+        let _ = Command::new("kill")
             .args(&[
                 format!("-{}", signal as i32),
                 format!("{}", self.child.id()),
             ])
             .spawn()
-            .expect("failed to send signal");
+            .expect("failed to send signal")
+            .wait();
         self.child.delay(100);
     }
     fn is_alive(&mut self) -> bool {

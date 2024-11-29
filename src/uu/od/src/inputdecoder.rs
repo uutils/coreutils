@@ -33,7 +33,7 @@ where
     byte_order: ByteOrder,
 }
 
-impl<'a, I> InputDecoder<'a, I> {
+impl<I> InputDecoder<'_, I> {
     /// Creates a new `InputDecoder` with an allocated buffer of `normal_length` + `peek_length` bytes.
     /// `byte_order` determines how to read multibyte formats from the buffer.
     pub fn new(
@@ -55,7 +55,7 @@ impl<'a, I> InputDecoder<'a, I> {
     }
 }
 
-impl<'a, I> InputDecoder<'a, I>
+impl<I> InputDecoder<'_, I>
 where
     I: PeekRead,
 {
@@ -81,7 +81,7 @@ where
     }
 }
 
-impl<'a, I> HasError for InputDecoder<'a, I>
+impl<I> HasError for InputDecoder<'_, I>
 where
     I: HasError,
 {
@@ -103,7 +103,7 @@ pub struct MemoryDecoder<'a> {
     byte_order: ByteOrder,
 }
 
-impl<'a> MemoryDecoder<'a> {
+impl MemoryDecoder<'_> {
     /// Set a part of the internal buffer to zero.
     /// access to the whole buffer is possible, not just to the valid data.
     pub fn zero_out_buffer(&mut self, start: usize, end: usize) {

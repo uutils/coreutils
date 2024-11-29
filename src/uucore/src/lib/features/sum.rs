@@ -403,7 +403,7 @@ impl<'a> DigestWriter<'a> {
     }
 }
 
-impl<'a> Write for DigestWriter<'a> {
+impl Write for DigestWriter<'_> {
     #[cfg(not(windows))]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.digest.hash_update(buf);

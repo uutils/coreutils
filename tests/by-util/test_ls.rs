@@ -1329,10 +1329,10 @@ fn test_ls_long_symlink_color() {
             Some(captures) => {
                 dbg!(captures.get(1).unwrap().as_str().to_string());
                 dbg!(captures.get(2).unwrap().as_str().to_string());
-                return (
+                (
                     captures.get(1).unwrap().as_str().to_string(),
                     captures.get(2).unwrap().as_str().to_string(),
-                );
+                )
             }
             None => (String::new(), input.to_string()),
         }

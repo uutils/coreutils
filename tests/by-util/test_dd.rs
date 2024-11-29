@@ -1658,13 +1658,14 @@ fn test_reading_partial_blocks_from_fifo() {
     // Start different processes to write to the FIFO, with a small
     // pause in between.
     let mut writer_command = Command::new("sh");
-    writer_command
+    let _ = writer_command
         .args([
             "-c",
             &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
         ])
         .spawn()
-        .unwrap();
+        .unwrap()
+        .wait();
 
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.stdout, b"abcd");
@@ -1701,13 +1702,14 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // Start different processes to write to the FIFO, with a small
     // pause in between.
     let mut writer_command = Command::new("sh");
-    writer_command
+    let _ = writer_command
         .args([
             "-c",
             &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
         ])
         .spawn()
-        .unwrap();
+        .unwrap()
+        .wait();
 
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.stdout, b"abcd");

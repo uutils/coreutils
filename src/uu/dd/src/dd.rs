@@ -424,7 +424,7 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
     }
 }
 
-impl<'a> Read for Input<'a> {
+impl Read for Input<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
@@ -447,7 +447,7 @@ impl<'a> Read for Input<'a> {
     }
 }
 
-impl<'a> Input<'a> {
+impl Input<'_> {
     /// Discard the system file cache for the given portion of the input.
     ///
     /// `offset` and `len` specify a contiguous portion of the input.
@@ -928,7 +928,7 @@ enum BlockWriter<'a> {
     Unbuffered(Output<'a>),
 }
 
-impl<'a> BlockWriter<'a> {
+impl BlockWriter<'_> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         match self {
             Self::Unbuffered(o) => o.discard_cache(offset, len),
