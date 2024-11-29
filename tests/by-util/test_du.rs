@@ -1194,3 +1194,61 @@ fn test_human_size() {
         .succeeds()
         .stdout_contains(format!("1.0K	{dir}"));
 }
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_du_deduplicated_input_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    at.mkdir("d/d");
+    at.touch("d/f");
+    at.hard_link("d/f", "d/h");
+
+    let result = ts
+        .ucmd()
+        .arg("--inodes")
+        .arg("d")
+        .arg("d")
+        .arg("d")
+        .succeeds();
+    result.no_stderr();
+
+    let result_seq: Vec<String> = result
+        .stdout_str()
+        .lines()
+        .map(|x| x.parse().unwrap())
+        .collect();
+    #[cfg(windows)]
+    assert_eq!(result_seq, ["1\td\\d", "3\td"]);
+    #[cfg(not(windows))]
+    assert_eq!(result_seq, ["1\td/d", "3\td"]);
+}
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_du_no_deduplicated_input_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/d");
+
+    let result = ts
+        .ucmd()
+        .arg("--inodes")
+        .arg("-l")
+        .arg("d")
+        .arg("d")
+        .arg("d")
+        .succeeds();
+    result.no_stderr();
+
+    let result_seq: Vec<String> = result
+        .stdout_str()
+        .lines()
+        .map(|x| x.parse().unwrap())
+        .collect();
+    assert_eq!(result_seq, ["2\td", "2\td", "2\td"]);
+}
