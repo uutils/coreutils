@@ -23,7 +23,7 @@ use std::{
     io::{BufRead, Write},
     ops::Not,
 };
-use uucore::error::UError;
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::show_warning;
 
 #[derive(Debug, Clone)]
@@ -608,7 +608,7 @@ impl SymbolTranslator for SqueezeOperation {
     }
 }
 
-pub fn translate_input<T, R, W>(input: &mut R, output: &mut W, mut translator: T)
+pub fn translate_input<T, R, W>(input: &mut R, output: &mut W, mut translator: T) -> UResult<()>
 where
     T: SymbolTranslator,
     R: BufRead,
@@ -616,15 +616,25 @@ where
 {
     let mut buf = Vec::new();
     let mut output_buf = Vec::new();
+
     while let Ok(length) = input.read_until(b'\n', &mut buf) {
         if length == 0 {
-            break;
-        } else {
-            let filtered = buf.iter().filter_map(|c| translator.translate(*c));
-            output_buf.extend(filtered);
-            output.write_all(&output_buf).unwrap();
+            break; // EOF reached
         }
+
+        let filtered = buf.iter().filter_map(|&c| translator.translate(c));
+        output_buf.extend(filtered);
+
+        if let Err(e) = output.write_all(&output_buf) {
+            return Err(USimpleError::new(
+                1,
+                format!("{}: write error: {}", uucore::util_name(), e),
+            ));
+        }
+
         buf.clear();
         output_buf.clear();
     }
+
+    Ok(())
 }

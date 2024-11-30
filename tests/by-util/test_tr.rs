@@ -14,6 +14,15 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_invalid_input() {
+    new_ucmd!()
+        .args(&["1", "1", "<", "."])
+        .fails()
+        .code_is(1)
+        .stderr_contains("tr: extra operand '<'");
+}
+
+#[test]
 fn test_to_upper() {
     new_ucmd!()
         .args(&["a-z", "A-Z"])
