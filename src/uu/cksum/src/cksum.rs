@@ -13,8 +13,8 @@ use std::iter;
 use std::path::Path;
 use uucore::checksum::{
     calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
-    ChecksumError, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
+    ChecksumError, ChecksumOptions, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD,
+    ALGORITHM_OPTIONS_CRC, ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
 };
 use uucore::{
     encoding,
@@ -22,7 +22,7 @@ use uucore::{
     format_usage, help_about, help_section, help_usage,
     line_ending::LineEnding,
     os_str_as_bytes, show,
-    sum::{div_ceil, Digest},
+    sum::Digest,
 };
 
 const USAGE: &str = help_usage!("cksum.md");
@@ -124,7 +124,7 @@ where
                 format!(
                     "{} {}{}",
                     sum.parse::<u16>().unwrap(),
-                    div_ceil(sz, options.output_bits),
+                    sz.div_ceil(options.output_bits),
                     if not_file { "" } else { " " }
                 ),
                 !not_file,
@@ -134,7 +134,7 @@ where
                 format!(
                     "{:0bsd_width$} {:bsd_width$}{}",
                     sum.parse::<u16>().unwrap(),
-                    div_ceil(sz, options.output_bits),
+                    sz.div_ceil(options.output_bits),
                     if not_file { "" } else { " " }
                 ),
                 !not_file,
@@ -318,17 +318,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
             |files| files.map(OsStr::new).collect::<Vec<_>>(),
         );
-        return perform_checksum_validation(
-            files.iter().copied(),
-            strict,
-            status,
-            warn,
-            binary_flag,
+        let opts = ChecksumOptions {
+            binary: binary_flag,
             ignore_missing,
             quiet,
-            algo_option,
-            length,
-        );
+            status,
+            strict,
+            warn,
+        };
+
+        return perform_checksum_validation(files.iter().copied(), algo_option, length, opts);
     }
 
     let (tag, asterisk) = handle_tag_text_binary_flags(&matches)?;

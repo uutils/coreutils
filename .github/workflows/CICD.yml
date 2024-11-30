@@ -11,7 +11,7 @@ env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.70.0"
+  RUST_MIN_SRV: "1.77.0"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -139,7 +139,7 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v17
+    - uses: DavidAnson/markdownlint-cli2-action@v18
       with:
         fix: "true"
         globs: |
@@ -397,14 +397,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v6
+      uses: dawidd6/action-download-artifact@v7
       with:
         workflow: CICD.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v6
+      uses: dawidd6/action-download-artifact@v7
       with:
         workflow: CICD.yml
         name: size-result
@@ -753,6 +753,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: steps.vars.outputs.DEPLOY
       with:
+        draft: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.DPKG_NAME }}

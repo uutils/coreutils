@@ -189,6 +189,13 @@ fn process_file(
         _ => {
             let f = File::open(file_name)
                 .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
+            if f.metadata()
+                .map_err_context(|| format!("cannot get metadata for {}", file_name.quote()))?
+                .is_dir()
+            {
+                return Err(USimpleError::new(1, "read error".to_string()));
+            }
+
             Box::new(f) as Box<dyn Read + 'static>
         }
     });

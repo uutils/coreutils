@@ -64,7 +64,7 @@ impl<'a> ReverseChunks<'a> {
     }
 }
 
-impl<'a> Iterator for ReverseChunks<'a> {
+impl Iterator for ReverseChunks<'_> {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {

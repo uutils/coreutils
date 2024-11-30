@@ -777,12 +777,22 @@ fn test_undefined() {
 }
 
 #[test]
-#[ignore = "Need issue #6235 to be fixed"]
 fn test_invalid_float_point_fail_properly() {
     new_ucmd!()
         .args(&["66000e000000000000000000000000000000000000000000000000000009223372036854775807"])
         .fails()
-        .stdout_only(""); // might need to be updated
+        .no_stdout()
+        .usage_error("invalid floating point argument: '66000e000000000000000000000000000000000000000000000000000009223372036854775807'");
+    new_ucmd!()
+        .args(&["-1.1e9223372036854775807"])
+        .fails()
+        .no_stdout()
+        .usage_error("invalid floating point argument: '-1.1e9223372036854775807'");
+    new_ucmd!()
+        .args(&["-.1e9223372036854775807"])
+        .fails()
+        .no_stdout()
+        .usage_error("invalid floating point argument: '-.1e9223372036854775807'");
 }
 
 #[test]
