@@ -16,13 +16,6 @@ use uucore::{format_usage, help_about, help_usage, show};
 const USAGE: &str = help_usage!("sum.md");
 const ABOUT: &str = help_about!("sum.md");
 
-// This can be replaced with usize::div_ceil once it is stabilized.
-// This implementation approach is optimized for when `b` is a constant,
-// particularly a power of two.
-const fn div_ceil(a: usize, b: usize) -> usize {
-    (a + b - 1) / b
-}
-
 fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     let mut buf = [0; 4096];
     let mut bytes_read = 0;
@@ -41,7 +34,7 @@ fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     }
 
     // Report blocks read in terms of 1024-byte blocks.
-    let blocks_read = div_ceil(bytes_read, 1024);
+    let blocks_read = bytes_read.div_ceil(1024);
     (blocks_read, checksum)
 }
 
@@ -66,7 +59,7 @@ fn sysv_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     ret = (ret & 0xffff) + (ret >> 16);
 
     // Report blocks read in terms of 512-byte blocks.
-    let blocks_read = div_ceil(bytes_read, 512);
+    let blocks_read = bytes_read.div_ceil(512);
     (blocks_read, ret as u16)
 }
 

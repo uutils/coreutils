@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore backticks uuhelp
+// spell-checker:ignore backticks uuhelp SIGSEGV
 
 //! A collection of procedural macros for uutils.
 #![deny(missing_docs)]
@@ -25,6 +25,10 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
     let new = quote!(
         pub fn uumain(args: impl uucore::Args) -> i32 {
             #stream
+
+            // disable rust signal handlers (otherwise processes don't dump core after e.g. one SIGSEGV)
+            #[cfg(unix)]
+            uucore::disable_rust_signal_handlers().expect("Disabling rust signal handlers failed");
             let result = uumain(args);
             match result {
                 Ok(()) => uucore::error::get_exit_code(),
@@ -67,9 +71,10 @@ pub fn help_about(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
     let text: String = uuhelp_parser::parse_about(&read_help(&filename));
-    if text.is_empty() {
-        panic!("About text not found! Make sure the markdown format is correct");
-    }
+    assert!(
+        !text.is_empty(),
+        "About text not found! Make sure the markdown format is correct"
+    );
     TokenTree::Literal(Literal::string(&text)).into()
 }
 
@@ -84,9 +89,10 @@ pub fn help_usage(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
     let text: String = uuhelp_parser::parse_usage(&read_help(&filename));
-    if text.is_empty() {
-        panic!("Usage text not found! Make sure the markdown format is correct");
-    }
+    assert!(
+        !text.is_empty(),
+        "Usage text not found! Make sure the markdown format is correct"
+    );
     TokenTree::Literal(Literal::string(&text)).into()
 }
 

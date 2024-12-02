@@ -114,6 +114,7 @@ pub fn uu_app() -> Command {
                 .short('p')
                 .long(options::PARENTS)
                 .help("make parent directories as needed")
+                .overrides_with(options::PARENTS)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -127,6 +128,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::DIRS)
                 .action(ArgAction::Append)
                 .num_args(1..)
+                .required(true)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath),
         )
@@ -159,6 +161,13 @@ fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) ->
 /// To match the GNU behavior, a path with the last directory being a single dot
 /// (like `some/path/to/.`) is created (with the dot stripped).
 pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+    if path.as_os_str().is_empty() {
+        return Err(USimpleError::new(
+            1,
+            "cannot create directory '': No such file or directory".to_owned(),
+        ));
+    }
+
     // Special case to match GNU's behavior:
     // mkdir -p foo/. should work and just create foo/
     // std::fs::create_dir("foo/."); fails in pure Rust

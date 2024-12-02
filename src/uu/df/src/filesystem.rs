@@ -111,9 +111,9 @@ impl Filesystem {
         #[cfg(windows)]
         let usage = FsUsage::new(Path::new(&_stat_path)).ok()?;
         Some(Self {
+            file,
             mount_info,
             usage,
-            file,
         })
     }
 

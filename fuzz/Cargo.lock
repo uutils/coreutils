@@ -325,9 +325,9 @@ dependencies = [
 
 [[package]]
 name = "fastrand"
-version = "2.1.0"
+version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fc0510504f03c51ada170672ac806f1f105a88aa97a5281117e1ddc3368e51a"
+checksum = "e8c02a5121d4ea3eb16a80748c74f5549a5665e4c21333c6098f283870fbdea6"
 
 [[package]]
 name = "fnv"
@@ -416,19 +416,18 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.158"
+version = "0.2.167"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8adc4bb1803a324070e64a98ae98f38934d91957a99cfb3a43dcbc01bc56439"
+checksum = "09d6582e104315a817dff97f75133544b2e094ee22447d2acf4a74e189ba06fc"
 
 [[package]]
 name = "libfuzzer-sys"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a96cfd5557eb82f2b83fed4955246c988d331975a002961b07c81584d107e7f7"
+checksum = "9b9569d2f74e257076d8c6bfa73fb505b46b851e51ddaecc825944aa3bed17fa"
 dependencies = [
  "arbitrary",
  "cc",
- "once_cell",
 ]
 
 [[package]]
@@ -601,9 +600,9 @@ checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.83"
+version = "1.0.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b33eb56c327dec362a9e55b3ad14f9d2f0904fb5a5b03b513ab5465399e9f43"
+checksum = "37d3544b3f2748c54e147655edb5025752e2303145b5aefb3c3ea2c78b973bb0"
 dependencies = [
  "unicode-ident",
 ]
@@ -668,15 +667,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "redox_syscall"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "469052894dcb553421e483e4209ee581a45100d31b4018de03e5a7ad86374a7e"
-dependencies = [
- "bitflags 2.5.0",
-]
-
-[[package]]
 name = "regex"
 version = "1.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -718,9 +708,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.34"
+version = "0.38.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70dc5ec042f7a43c4a73241207cecc9873a06d45debb38b329f8541d85c2730f"
+checksum = "99e4ea3e1cdc4b559b8e5650f9c8e5998e3e5c1343b4eaf034565f32318d63c0"
 dependencies = [
  "bitflags 2.5.0",
  "errno",
@@ -769,9 +759,9 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "syn"
-version = "2.0.65"
+version = "2.0.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2863d96a84c6439701d7a38f9de935ec562c8832cc55d1dde0f513b52fad106"
+checksum = "44d46482f1c1c87acd84dea20c1bf5ebff4c757009ed6bf19cfd36fb10e92c4e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -780,9 +770,9 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.12.0"
+version = "3.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04cbcdd0c794ebb0d4cf35e88edd2f7d2c4c3e9a5a6dab322839b321c6a87a64"
+checksum = "28cce251fcbc87fac86a866eeb0d6c2d536fc16d06f184bb61aeae11aa4cee0c"
 dependencies = [
  "cfg-if",
  "fastrand",
@@ -803,18 +793,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.61"
+version = "2.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c546c80d6be4bc6a00c0f01730c08df82eaa7a7a61f11d656526506112cc1709"
+checksum = "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.61"
+version = "2.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46c3384250002a6d5af4d114f2845d37b57521033f30d5c3f46c4d70e1197533"
+checksum = "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -856,7 +846,7 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
 [[package]]
 name = "uu_cut"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "bstr",
  "clap",
@@ -866,19 +856,19 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "chrono",
  "clap",
  "libc",
  "parse_datetime",
  "uucore",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
 name = "uu_echo"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "uucore",
@@ -886,7 +876,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "nix 0.29.0",
@@ -896,7 +886,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "num-bigint",
@@ -907,7 +897,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "uucore",
@@ -915,7 +905,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -926,7 +916,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "binary-heap-plus",
  "clap",
@@ -946,7 +936,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "memchr",
@@ -955,17 +945,16 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "libc",
- "redox_syscall",
  "uucore",
 ]
 
 [[package]]
 name = "uu_tr"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "nom",
@@ -974,7 +963,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "bytecount",
  "clap",
@@ -987,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "clap",
  "dunce",
@@ -1001,7 +990,7 @@ dependencies = [
  "uucore_procs",
  "wild",
  "winapi-util",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1030,7 +1019,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.0.27"
+version = "0.0.28"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1039,7 +1028,7 @@ dependencies = [
 
 [[package]]
 name = "uuhelp_parser"
-version = "0.0.27"
+version = "0.0.28"
 
 [[package]]
 name = "wasi"

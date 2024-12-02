@@ -207,13 +207,6 @@ impl Digest for CRC {
     }
 }
 
-// This can be replaced with usize::div_ceil once it is stabilized.
-// This implementation approach is optimized for when `b` is a constant,
-// particularly a power of two.
-pub fn div_ceil(a: usize, b: usize) -> usize {
-    (a + b - 1) / b
-}
-
 pub struct BSD {
     state: u16,
 }
@@ -410,7 +403,7 @@ impl<'a> DigestWriter<'a> {
     }
 }
 
-impl<'a> Write for DigestWriter<'a> {
+impl Write for DigestWriter<'_> {
     #[cfg(not(windows))]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.digest.hash_update(buf);

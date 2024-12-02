@@ -311,7 +311,6 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
 ///
 /// Finally, if there are duplicate entries, the one with the shorter
 /// path is kept.
-
 fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
     let mut result = vec![];
     for mi in vmi {
@@ -331,7 +330,6 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
 ///
 /// `opt` excludes certain filesystems from consideration and allows for the synchronization of filesystems before running; see
 /// [`Options`] for more information.
-
 fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
@@ -444,7 +442,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => {
             let filesystems = get_all_filesystems(&opt).map_err(|e| {
                 let context = "cannot read table of mounted file systems";
-                USimpleError::new(e.code(), format!("{}: {}", context, e))
+                USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
             if filesystems.is_empty() {
@@ -457,7 +455,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let paths: Vec<_> = paths.collect();
             let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
                 let context = "cannot read table of mounted file systems";
-                USimpleError::new(e.code(), format!("{}: {}", context, e))
+                USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
             // This can happen if paths are given as command-line arguments

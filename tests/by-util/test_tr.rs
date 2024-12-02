@@ -14,6 +14,15 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_invalid_input() {
+    new_ucmd!()
+        .args(&["1", "1", "<", "."])
+        .fails()
+        .code_is(1)
+        .stderr_contains("tr: extra operand '<'");
+}
+
+#[test]
 fn test_to_upper() {
     new_ucmd!()
         .args(&["a-z", "A-Z"])
@@ -641,7 +650,6 @@ fn check_against_gnu_tr_tests_d() {
 }
 
 #[test]
-#[ignore = "I cannot tell if this means that tr preserve the octal representation?"]
 fn check_against_gnu_tr_tests_e() {
     // ['e', qw(-s '[\0-\5]'), {IN=>"\0\0a\1\1b\2\2\2c\3\3\3d\4\4\4\4e\5\5"}, {OUT=>"\0a\1b\2c\3d\4e\5"}],
     new_ucmd!()
@@ -1027,7 +1035,8 @@ fn check_against_gnu_tr_tests_bs_055() {
 }
 
 #[test]
-#[ignore = "Failing in Windows because it will not separate '\' and 'x' as separate arguments"]
+// Fails on Windows because it will not separate '\' and 'x' as separate arguments
+#[cfg(unix)]
 fn check_against_gnu_tr_tests_bs_at_end() {
     // ['bs-at-end', qw('\\' x), {IN=>"\\"}, {OUT=>'x'},
     //  {ERR=>"$prog: warning: an unescaped backslash at end of "
@@ -1041,7 +1050,6 @@ fn check_against_gnu_tr_tests_bs_at_end() {
 }
 
 #[test]
-#[ignore = "not sure why GNU bails here. `[Y*]` should be able to generate all the mapping"]
 fn check_against_gnu_tr_tests_ross_0a() {
     // # From Ross
     // ['ross-0a', qw(-cs '[:upper:]' 'X[Y*]'), {IN=>''}, {OUT=>''}, {EXIT=>1},
@@ -1054,7 +1062,6 @@ fn check_against_gnu_tr_tests_ross_0a() {
 }
 
 #[test]
-#[ignore = "not sure why GNU bails here. `[Y*]` should be able to generate all the mapping"]
 fn check_against_gnu_tr_tests_ross_0b() {
     // ['ross-0b', qw(-cs '[:cntrl:]' 'X[Y*]'), {IN=>''}, {OUT=>''}, {EXIT=>1},
     //  {ERR=>$map_all_to_1}],
@@ -1062,7 +1069,7 @@ fn check_against_gnu_tr_tests_ross_0b() {
         .args(&["-cs", "[:cntrl:]", "X[Y*]"])
         .pipe_in("")
         .fails()
-        .stderr_is("tr: when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
+        .stderr_is("tr: when translating with complemented character classes,\nstring2 must map all characters in the domain to one\n");
 }
 
 #[test]
@@ -1233,7 +1240,6 @@ fn check_against_gnu_tr_tests_repeat_x_c() {
 }
 
 #[test]
-#[ignore = "I think either clap-rs or uutils is parsing the '-H' as an argument..."]
 fn check_against_gnu_tr_tests_fowler_1() {
     // # From Glenn Fowler.
     // ['fowler-1', qw(ah -H), {IN=>'aha'}, {OUT=>'-H-'}],
@@ -1444,4 +1450,80 @@ fn test_truncate_non_utf8_set() {
         .pipe_in(*stdin)
         .succeeds()
         .stdout_is_bytes(b"\x010mp12");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_unescaped_backslash_warning_false_positive() {
+    // Was erroneously printing this warning (even though the backslash was escaped):
+    // "tr: warning: an unescaped backslash at end of string is not portable"
+    new_ucmd!()
+        .args(&["-d", r"\\"])
+        .pipe_in(r"a\b\c\")
+        .succeeds()
+        .stdout_only("abc");
+    new_ucmd!()
+        .args(&["-d", r"\\\\"])
+        .pipe_in(r"a\b\c\")
+        .succeeds()
+        .stdout_only("abc");
+    new_ucmd!()
+        .args(&["-d", r"\\\\\\"])
+        .pipe_in(r"a\b\c\")
+        .succeeds()
+        .stdout_only("abc");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_trailing_backslash() {
+    new_ucmd!()
+        .args(&["-d", r"\"])
+        .pipe_in(r"a\b\c\")
+        .succeeds()
+        .stderr_is("tr: warning: an unescaped backslash at end of string is not portable\n")
+        .stdout_is("abc");
+    new_ucmd!()
+        .args(&["-d", r"\\\"])
+        .pipe_in(r"a\b\c\")
+        .succeeds()
+        .stderr_is("tr: warning: an unescaped backslash at end of string is not portable\n")
+        .stdout_is("abc");
+    new_ucmd!()
+        .args(&["-d", r"\\\\\"])
+        .pipe_in(r"a\b\c\")
+        .succeeds()
+        .stderr_is("tr: warning: an unescaped backslash at end of string is not portable\n")
+        .stdout_is("abc");
+}
+
+#[test]
+fn test_multibyte_octal_sequence() {
+    new_ucmd!()
+        .args(&["-d", r"\501"])
+        .pipe_in("(1Ł)")
+        .succeeds()
+        .stderr_is("tr: warning: the ambiguous octal escape \\501 is being\n        interpreted as the 2-byte sequence \\050, 1\n")
+        .stdout_is("Ł)");
+}
+
+#[test]
+fn test_backwards_range() {
+    new_ucmd!()
+        .args(&["-d", r"\046-\048"])
+        .pipe_in("")
+        .fails()
+        .stderr_only(
+            r"tr: range-endpoints of '&-\004' are in reverse collating sequence order
+",
+        );
+}
+
+#[test]
+fn test_non_digit_repeat() {
+    new_ucmd!()
+        .args(&["a", "[b*c]"])
+        .pipe_in("")
+        .fails()
+        .stderr_only("tr: invalid repeat count 'c' in [c*n] construct\n");
 }

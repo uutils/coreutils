@@ -55,7 +55,7 @@ use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
-use uucore::quoting_style::{escape_name, QuotingStyle};
+use uucore::quoting_style::{escape_dir_name, escape_name, QuotingStyle};
 use uucore::{
     display::Quotable,
     error::{set_exit_code, UError, UResult},
@@ -831,7 +831,7 @@ impl Config {
                 options::FULL_TIME,
             ]
             .iter()
-            .flat_map(|opt| {
+            .filter_map(|opt| {
                 if options.value_source(opt) == Some(clap::parser::ValueSource::CommandLine) {
                     options.indices_of(opt)
                 } else {
@@ -2036,14 +2036,27 @@ impl PathData {
     }
 }
 
+/// Show the directory name in the case where several arguments are given to ls
+/// or the recursive flag is passed.
+///
+/// ```no-exec
+/// $ ls -R
+/// .:                  <- This is printed by this function
+/// dir1 file1 file2
+///
+/// dir1:               <- This as well
+/// file11
+/// ```
 fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
-    if config.hyperlink && !config.dired {
-        let name = escape_name(path_data.p_buf.as_os_str(), &config.quoting_style);
-        let hyperlink = create_hyperlink(&name, path_data);
-        write!(out, "{}:", hyperlink).unwrap();
+    let escaped_name = escape_dir_name(path_data.p_buf.as_os_str(), &config.quoting_style);
+
+    let name = if config.hyperlink && !config.dired {
+        create_hyperlink(&escaped_name, path_data)
     } else {
-        write!(out, "{}:", path_data.p_buf.display()).unwrap();
-    }
+        escaped_name
+    };
+
+    write!(out, "{name}:").unwrap();
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2091,7 +2104,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // color is given
         if style_manager.get_normal_style().is_some() {
             let to_write = style_manager.reset(true);
-            write!(out, "{}", to_write)?;
+            write!(out, "{to_write}")?;
         }
     }
 
@@ -2327,9 +2340,10 @@ fn enter_directory(
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| p.ft.get().is_some())
-            .filter(|p| p.ft.get().unwrap().is_some())
-            .filter(|p| p.ft.get().unwrap().unwrap().is_dir())
+            .filter(|p| {
+                p.ft.get()
+                    .is_some_and(|o_ft| o_ft.is_some_and(|ft| ft.is_dir()))
+            })
         {
             match fs::read_dir(&e.p_buf) {
                 Err(err) => {
@@ -2574,7 +2588,7 @@ fn display_items(
             Format::Commas => {
                 let mut current_col = 0;
                 if let Some(name) = names.next() {
-                    write!(out, "{}", name)?;
+                    write!(out, "{name}")?;
                     current_col = ansi_width(&name) as u16 + 2;
                 }
                 for name in names {
@@ -2582,10 +2596,10 @@ fn display_items(
                     // If the width is 0 we print one single line
                     if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
-                        write!(out, ",\n{}", name)?;
+                        write!(out, ",\n{name}")?;
                     } else {
                         current_col += name_width + 2;
-                        write!(out, ", {}", name)?;
+                        write!(out, ", {name}")?;
                     }
                 }
                 // Current col is never zero again if names have been printed.
@@ -2855,7 +2869,7 @@ fn display_item_long(
         );
 
         let displayed_item = if quoted && !item_name.starts_with('\'') {
-            format!(" {}", item_name)
+            format!(" {item_name}")
         } else {
             item_name
         };
@@ -2969,7 +2983,7 @@ fn display_item_long(
         }
         write!(output_display, "{}{}", displayed_item, config.line_ending).unwrap();
     }
-    write!(out, "{}", output_display)?;
+    write!(out, "{output_display}")?;
 
     Ok(())
 }

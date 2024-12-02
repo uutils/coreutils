@@ -129,7 +129,7 @@ impl FmtOptions {
         if width > MAX_WIDTH {
             return Err(USimpleError::new(
                 1,
-                format!("invalid width: '{}': Numerical result out of range", width),
+                format!("invalid width: '{width}': Numerical result out of range"),
             ));
         }
 
@@ -154,13 +154,13 @@ impl FmtOptions {
             crown,
             tagged,
             mail,
-            uniform,
-            quick,
             split_only,
             prefix,
             xprefix,
             anti_prefix,
             xanti_prefix,
+            uniform,
+            quick,
             width,
             goal,
             tabwidth,
@@ -189,6 +189,13 @@ fn process_file(
         _ => {
             let f = File::open(file_name)
                 .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
+            if f.metadata()
+                .map_err_context(|| format!("cannot get metadata for {}", file_name.quote()))?
+                .is_dir()
+            {
+                return Err(USimpleError::new(1, "read error".to_string()));
+            }
+
             Box::new(f) as Box<dyn Read + 'static>
         }
     });
@@ -241,7 +248,7 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
                 } else {
                     let first_num = x.chars().nth(1).expect("a negative number should be at least two characters long");
                     Some(Err(
-                        UUsageError::new(1, format!("invalid option -- {}; -WIDTH is recognized only when it is the first\noption; use -w N instead", first_num))
+                        UUsageError::new(1, format!("invalid option -- {first_num}; -WIDTH is recognized only when it is the first\noption; use -w N instead"))
                     ))
                 }
             } else {

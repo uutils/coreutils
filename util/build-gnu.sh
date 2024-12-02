@@ -365,5 +365,8 @@ sed -i  's/44;37/37;44/' tests/ls/multihardlink.sh
 # do that. So, it's okay to ignore the zero.
 sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/color-clear-to-eol.sh
 
+# patching this because of the same reason as the last one.
+sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/quote-align.sh
+
 # Slightly different error message
 sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh

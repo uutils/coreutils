@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore bindgen
+
 #![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 
 use crate::common::util::TestScenario;
@@ -13,6 +16,14 @@ use std::os::unix::fs::PermissionsExt;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
+fn test_no_arg() {
+    new_ucmd!()
+        .fails()
+        .code_is(1)
+        .stderr_contains("error: the following required arguments were not provided:");
 }
 
 #[test]
@@ -50,9 +61,21 @@ fn test_mkdir_parent() {
     let test_dir = "parent_dir/child_dir";
 
     scene.ucmd().arg("-p").arg(test_dir).succeeds();
-    scene.ucmd().arg("-p").arg(test_dir).succeeds();
+    scene.ucmd().arg("-p").arg("-p").arg(test_dir).succeeds();
     scene.ucmd().arg("--parent").arg(test_dir).succeeds();
+    scene
+        .ucmd()
+        .arg("--parent")
+        .arg("--parent")
+        .arg(test_dir)
+        .succeeds();
     scene.ucmd().arg("--parents").arg(test_dir).succeeds();
+    scene
+        .ucmd()
+        .arg("--parents")
+        .arg("--parents")
+        .arg(test_dir)
+        .succeeds();
 }
 
 #[test]
@@ -323,4 +346,12 @@ fn test_umask_compliance() {
         // tests all permission combinations
         test_single_case(i as mode_t);
     }
+}
+
+#[test]
+fn test_empty_argument() {
+    new_ucmd!()
+        .arg("")
+        .fails()
+        .stderr_only("mkdir: cannot create directory '': No such file or directory\n");
 }

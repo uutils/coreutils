@@ -172,7 +172,7 @@ struct MDWriter<'a, 'b> {
     markdown: Option<String>,
 }
 
-impl<'a, 'b> MDWriter<'a, 'b> {
+impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn markdown(&mut self) -> io::Result<()> {
