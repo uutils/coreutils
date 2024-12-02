@@ -28,7 +28,7 @@ pub trait HasError {
     fn has_error(&self) -> bool;
 }
 
-impl<'b> MultifileReader<'b> {
+impl MultifileReader<'_> {
     pub fn new(fnames: Vec<InputSource>) -> MultifileReader {
         let mut mf = MultifileReader {
             ni: fnames,
@@ -76,7 +76,7 @@ impl<'b> MultifileReader<'b> {
     }
 }
 
-impl<'b> io::Read for MultifileReader<'b> {
+impl io::Read for MultifileReader<'_> {
     // Fill buf with bytes read from the list of files
     // Returns Ok(<number of bytes read>)
     // Handles io errors itself, thus always returns OK
@@ -113,7 +113,7 @@ impl<'b> io::Read for MultifileReader<'b> {
     }
 }
 
-impl<'b> HasError for MultifileReader<'b> {
+impl HasError for MultifileReader<'_> {
     fn has_error(&self) -> bool {
         self.any_err
     }

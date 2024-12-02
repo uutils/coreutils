@@ -14,6 +14,15 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_invalid_input() {
+    new_ucmd!()
+        .args(&["1", "1", "<", "."])
+        .fails()
+        .code_is(1)
+        .stderr_contains("tr: extra operand '<'");
+}
+
+#[test]
 fn test_to_upper() {
     new_ucmd!()
         .args(&["a-z", "A-Z"])
@@ -1486,4 +1495,35 @@ fn test_trailing_backslash() {
         .succeeds()
         .stderr_is("tr: warning: an unescaped backslash at end of string is not portable\n")
         .stdout_is("abc");
+}
+
+#[test]
+fn test_multibyte_octal_sequence() {
+    new_ucmd!()
+        .args(&["-d", r"\501"])
+        .pipe_in("(1Ł)")
+        .succeeds()
+        .stderr_is("tr: warning: the ambiguous octal escape \\501 is being\n        interpreted as the 2-byte sequence \\050, 1\n")
+        .stdout_is("Ł)");
+}
+
+#[test]
+fn test_backwards_range() {
+    new_ucmd!()
+        .args(&["-d", r"\046-\048"])
+        .pipe_in("")
+        .fails()
+        .stderr_only(
+            r"tr: range-endpoints of '&-\004' are in reverse collating sequence order
+",
+        );
+}
+
+#[test]
+fn test_non_digit_repeat() {
+    new_ucmd!()
+        .args(&["a", "[b*c]"])
+        .pipe_in("")
+        .fails()
+        .stderr_only("tr: invalid repeat count 'c' in [c*n] construct\n");
 }

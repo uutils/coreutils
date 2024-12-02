@@ -8,6 +8,7 @@ use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
 
+use std::io::Write;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
@@ -119,6 +120,60 @@ fn test_cp_duplicate_files() {
             "source file '{TEST_HELLO_WORLD_SOURCE}' specified more than once"
         ));
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+}
+
+#[test]
+fn test_cp_duplicate_folder() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-r")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER)
+        .succeeds()
+        .stderr_contains(format!(
+            "source directory '{TEST_COPY_FROM_FOLDER}' specified more than once"
+        ));
+    assert!(at.dir_exists(format!("{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER}").as_str()));
+}
+
+#[test]
+fn test_cp_duplicate_files_normalized_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(format!("./{TEST_HELLO_WORLD_SOURCE}"))
+        .arg(TEST_COPY_TO_FOLDER)
+        .succeeds()
+        .stderr_contains(format!(
+            "source file './{TEST_HELLO_WORLD_SOURCE}' specified more than once"
+        ));
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+}
+
+#[test]
+fn test_cp_duplicate_files_with_plain_backup() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .arg("--backup")
+        .fails()
+        // cp would skip duplicate src check and fail when it tries to overwrite the "just-created" file.
+        .stderr_contains(
+            "will not overwrite just-created 'hello_dir/hello_world.txt' with 'hello_world.txt",
+        );
+}
+
+#[test]
+fn test_cp_duplicate_files_with_numbered_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // cp would skip duplicate src check and succeeds
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .arg("--backup=numbered")
+        .succeeds();
+    at.file_exists(TEST_COPY_TO_FOLDER_FILE);
+    at.file_exists(format!("{TEST_COPY_TO_FOLDER}.~1~"));
 }
 
 #[test]
@@ -393,9 +448,9 @@ fn test_cp_arg_update_older_dest_older_than_src() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -419,9 +474,9 @@ fn test_cp_arg_update_short_no_overwrite() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -445,9 +500,9 @@ fn test_cp_arg_update_short_overwrite() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -472,9 +527,9 @@ fn test_cp_arg_update_none_then_all() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -500,9 +555,9 @@ fn test_cp_arg_update_all_then_none() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 

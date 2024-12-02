@@ -13,14 +13,16 @@ use std::iter;
 use std::path::Path;
 use uucore::checksum::{
     calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
-    ChecksumError, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
+    ChecksumError, ChecksumOptions, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD,
+    ALGORITHM_OPTIONS_CRC, ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
 };
 use uucore::{
     encoding,
     error::{FromIo, UResult, USimpleError},
-    format_usage, help_about, help_section, help_usage, os_str_as_bytes, show,
-    sum::{div_ceil, Digest},
+    format_usage, help_about, help_section, help_usage,
+    line_ending::LineEnding,
+    os_str_as_bytes, show,
+    sum::Digest,
 };
 
 const USAGE: &str = help_usage!("cksum.md");
@@ -42,6 +44,7 @@ struct Options {
     length: Option<usize>,
     output_format: OutputFormat,
     asterisk: bool, // if we display an asterisk or not (--binary/--text)
+    line_ending: LineEnding,
 }
 
 /// Calculate checksum
@@ -121,7 +124,7 @@ where
                 format!(
                     "{} {}{}",
                     sum.parse::<u16>().unwrap(),
-                    div_ceil(sz, options.output_bits),
+                    sz.div_ceil(options.output_bits),
                     if not_file { "" } else { " " }
                 ),
                 !not_file,
@@ -131,7 +134,7 @@ where
                 format!(
                     "{:0bsd_width$} {:bsd_width$}{}",
                     sum.parse::<u16>().unwrap(),
-                    div_ceil(sz, options.output_bits),
+                    sz.div_ceil(options.output_bits),
                     if not_file { "" } else { " " }
                 ),
                 !not_file,
@@ -173,7 +176,7 @@ where
             // Therefore, emit the bytes directly to stdout, without any attempt at encoding them.
             let _dropped_result = stdout().write_all(os_str_as_bytes(filename.as_os_str())?);
         }
-        println!("{after_filename}");
+        print!("{after_filename}{}", options.line_ending);
     }
 
     Ok(())
@@ -195,6 +198,7 @@ mod options {
     pub const WARN: &str = "warn";
     pub const IGNORE_MISSING: &str = "ignore-missing";
     pub const QUIET: &str = "quiet";
+    pub const ZERO: &str = "zero";
 }
 
 /// Determines whether to prompt an asterisk (*) in the output.
@@ -314,22 +318,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
             |files| files.map(OsStr::new).collect::<Vec<_>>(),
         );
-        return perform_checksum_validation(
-            files.iter().copied(),
-            strict,
-            status,
-            warn,
-            binary_flag,
+        let opts = ChecksumOptions {
+            binary: binary_flag,
             ignore_missing,
             quiet,
-            algo_option,
-            length,
-        );
+            status,
+            strict,
+            warn,
+        };
+
+        return perform_checksum_validation(files.iter().copied(), algo_option, length, opts);
     }
 
     let (tag, asterisk) = handle_tag_text_binary_flags(&matches)?;
 
     let algo = detect_algo(algo_name, length)?;
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let output_format = if matches.get_flag(options::RAW) {
         OutputFormat::Raw
@@ -347,6 +351,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         tag,
         output_format,
         asterisk,
+        line_ending,
     };
 
     match matches.get_many::<OsString>(options::FILE) {
@@ -472,6 +477,15 @@ pub fn uu_app() -> Command {
             Arg::new(options::IGNORE_MISSING)
                 .long(options::IGNORE_MISSING)
                 .help("don't fail or report status for missing files")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::ZERO)
+                .long(options::ZERO)
+                .short('z')
+                .help(
+                    "end each output line with NUL, not newline,\n and disable file name escaping",
+                )
                 .action(ArgAction::SetTrue),
         )
         .after_help(AFTER_HELP)
