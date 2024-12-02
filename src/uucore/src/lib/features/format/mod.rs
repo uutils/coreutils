@@ -48,7 +48,7 @@ use std::{
 
 use crate::error::UError;
 
-use self::{
+pub use self::{
     escape::{parse_escape_code, EscapedChar},
     num_format::Formatter,
 };
