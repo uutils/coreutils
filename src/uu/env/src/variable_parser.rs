@@ -11,7 +11,7 @@ pub struct VariableParser<'a, 'b> {
     pub parser: &'b mut StringParser<'a>,
 }
 
-impl<'a, 'b> VariableParser<'a, 'b> {
+impl<'a> VariableParser<'a, '_> {
     fn get_current_char(&self) -> Option<char> {
         self.parser.peek().ok()
     }

@@ -132,24 +132,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let delete_op = DeleteOperation::new(set1);
             let squeeze_op = SqueezeOperation::new(set2);
             let op = delete_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         } else {
             let op = DeleteOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         }
     } else if squeeze_flag {
         if sets_len < 2 {
             let op = SqueezeOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         } else {
             let translate_op = TranslateOperation::new(set1, set2.clone())?;
             let squeeze_op = SqueezeOperation::new(set2);
             let op = translate_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         }
     } else {
         let op = TranslateOperation::new(set1, set2)?;
-        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
     }
     Ok(())
 }

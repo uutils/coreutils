@@ -16,13 +16,15 @@ use nom::{
     IResult,
 };
 use std::{
+    char,
     collections::{HashMap, HashSet},
     error::Error,
     fmt::{Debug, Display},
     io::{BufRead, Write},
     ops::Not,
 };
-use uucore::error::UError;
+use uucore::error::{UError, UResult, USimpleError};
+use uucore::show_warning;
 
 #[derive(Debug, Clone)]
 pub enum BadSequence {
@@ -293,7 +295,9 @@ impl Sequence {
             Self::parse_class,
             Self::parse_char_equal,
             // NOTE: This must be the last one
-            map(Self::parse_backslash_or_char, |s| Ok(Self::Char(s))),
+            map(Self::parse_backslash_or_char_with_warning, |s| {
+                Ok(Self::Char(s))
+            }),
         )))(input)
         .map(|(_, r)| r)
         .unwrap()
@@ -302,10 +306,16 @@ impl Sequence {
     }
 
     fn parse_octal(input: &[u8]) -> IResult<&[u8], u8> {
+        // For `parse_char_range`, `parse_char_star`, `parse_char_repeat`, `parse_char_equal`.
+        // Because in these patterns, there's no ambiguous cases.
+        preceded(tag("\\"), Self::parse_octal_up_to_three_digits)(input)
+    }
+
+    fn parse_octal_with_warning(input: &[u8]) -> IResult<&[u8], u8> {
         preceded(
             tag("\\"),
             alt((
-                Self::parse_octal_up_to_three_digits,
+                Self::parse_octal_up_to_three_digits_with_warning,
                 // Fallback for if the three digit octal escape is greater than \377 (0xFF), and therefore can't be
                 // parsed as as a byte
                 // See test `test_multibyte_octal_sequence`
@@ -319,16 +329,29 @@ impl Sequence {
             recognize(many_m_n(1, 3, one_of("01234567"))),
             |out: &[u8]| {
                 let str_to_parse = std::str::from_utf8(out).unwrap();
+                u8::from_str_radix(str_to_parse, 8).ok()
+            },
+        )(input)
+    }
 
-                match u8::from_str_radix(str_to_parse, 8) {
-                    Ok(ue) => Some(ue),
-                    Err(_pa) => {
-                        // TODO
-                        // A warning needs to be printed here
-                        // See https://github.com/uutils/coreutils/issues/6821
-                        None
-                    }
+    fn parse_octal_up_to_three_digits_with_warning(input: &[u8]) -> IResult<&[u8], u8> {
+        map_opt(
+            recognize(many_m_n(1, 3, one_of("01234567"))),
+            |out: &[u8]| {
+                let str_to_parse = std::str::from_utf8(out).unwrap();
+                let result = u8::from_str_radix(str_to_parse, 8).ok();
+                if result.is_none() {
+                    let origin_octal: &str = std::str::from_utf8(input).unwrap();
+                    let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
+                    let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
+                    show_warning!(
+                        "the ambiguous octal escape \\{} is being\n        interpreted as the 2-byte sequence \\0{}, {}",
+                        origin_octal,
+                        actual_octal_tail,
+                        outstand_char
+                    );
                 }
+                result
             },
         )(input)
     }
@@ -358,6 +381,14 @@ impl Sequence {
 
     fn parse_backslash_or_char(input: &[u8]) -> IResult<&[u8], u8> {
         alt((Self::parse_octal, Self::parse_backslash, Self::single_char))(input)
+    }
+
+    fn parse_backslash_or_char_with_warning(input: &[u8]) -> IResult<&[u8], u8> {
+        alt((
+            Self::parse_octal_with_warning,
+            Self::parse_backslash,
+            Self::single_char,
+        ))(input)
     }
 
     fn single_char(input: &[u8]) -> IResult<&[u8], u8> {
@@ -577,7 +608,7 @@ impl SymbolTranslator for SqueezeOperation {
     }
 }
 
-pub fn translate_input<T, R, W>(input: &mut R, output: &mut W, mut translator: T)
+pub fn translate_input<T, R, W>(input: &mut R, output: &mut W, mut translator: T) -> UResult<()>
 where
     T: SymbolTranslator,
     R: BufRead,
@@ -585,15 +616,25 @@ where
 {
     let mut buf = Vec::new();
     let mut output_buf = Vec::new();
+
     while let Ok(length) = input.read_until(b'\n', &mut buf) {
         if length == 0 {
-            break;
-        } else {
-            let filtered = buf.iter().filter_map(|c| translator.translate(*c));
-            output_buf.extend(filtered);
-            output.write_all(&output_buf).unwrap();
+            break; // EOF reached
         }
+
+        let filtered = buf.iter().filter_map(|&c| translator.translate(c));
+        output_buf.extend(filtered);
+
+        if let Err(e) = output.write_all(&output_buf) {
+            return Err(USimpleError::new(
+                1,
+                format!("{}: write error: {}", uucore::util_name(), e),
+            ));
+        }
+
         buf.clear();
         output_buf.clear();
     }
+
+    Ok(())
 }
