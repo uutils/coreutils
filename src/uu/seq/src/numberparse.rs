@@ -106,16 +106,20 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
 
     let num_integral_digits = if is_minus_zero_float(s, &x) {
         if exponent > 0 {
-            2usize + exponent as usize
+            (2usize)
+                .checked_add(exponent as usize)
+                .ok_or(ParseNumberError::Float)?
         } else {
             2usize
         }
     } else {
-        let total = j as i64 + exponent;
+        let total = (j as i64)
+            .checked_add(exponent)
+            .ok_or(ParseNumberError::Float)?;
         let result = if total < 1 {
             1
         } else {
-            total.try_into().unwrap()
+            total.try_into().map_err(|_| ParseNumberError::Float)?
         };
         if x.sign() == Sign::Minus {
             result + 1
@@ -207,7 +211,9 @@ fn parse_decimal_and_exponent(
             let integral_part: f64 = s[..j].parse().map_err(|_| ParseNumberError::Float)?;
             if integral_part.is_sign_negative() {
                 if exponent > 0 {
-                    2usize + exponent as usize
+                    2usize
+                        .checked_add(exponent as usize)
+                        .ok_or(ParseNumberError::Float)?
                 } else {
                     2usize
                 }
@@ -217,15 +223,20 @@ fn parse_decimal_and_exponent(
         };
         // Special case: if the string is "-.1e2", we need to treat it
         // as if it were "-0.1e2".
-        let total = if s.starts_with("-.") {
-            i as i64 + exponent + 1
-        } else {
-            i as i64 + exponent
+        let total = {
+            let total = (i as i64)
+                .checked_add(exponent)
+                .ok_or(ParseNumberError::Float)?;
+            if s.starts_with("-.") {
+                total.checked_add(1).ok_or(ParseNumberError::Float)?
+            } else {
+                total
+            }
         };
         if total < minimum as i64 {
             minimum
         } else {
-            total.try_into().unwrap()
+            total.try_into().map_err(|_| ParseNumberError::Float)?
         }
     };
 

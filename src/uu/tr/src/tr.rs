@@ -82,23 +82,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let op = sets[1].quote();
             let msg = if sets_len == 2 {
                 format!(
-                    "{} {}\nOnly one string may be given when deleting without squeezing repeats.",
-                    start, op,
+                    "{start} {op}\nOnly one string may be given when deleting without squeezing repeats.",
                 )
             } else {
-                format!("{} {}", start, op,)
+                format!("{start} {op}",)
             };
             return Err(UUsageError::new(1, msg));
         }
         if sets_len > 2 {
             let op = sets[2].quote();
-            let msg = format!("{} {}", start, op);
+            let msg = format!("{start} {op}");
             return Err(UUsageError::new(1, msg));
         }
     }
 
     if let Some(first) = sets.first() {
-        if let Some(b'\\') = os_str_as_bytes(first)?.last() {
+        let slice = os_str_as_bytes(first)?;
+        let trailing_backslashes = slice.iter().rev().take_while(|&&c| c == b'\\').count();
+        if trailing_backslashes % 2 == 1 {
+            // The trailing backslash has a non-backslash character before it.
             show!(USimpleError::new(
                 0,
                 "warning: an unescaped backslash at end of string is not portable"
@@ -130,24 +132,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let delete_op = DeleteOperation::new(set1);
             let squeeze_op = SqueezeOperation::new(set2);
             let op = delete_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         } else {
             let op = DeleteOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         }
     } else if squeeze_flag {
         if sets_len < 2 {
             let op = SqueezeOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         } else {
             let translate_op = TranslateOperation::new(set1, set2.clone())?;
             let squeeze_op = SqueezeOperation::new(set2);
             let op = translate_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         }
     } else {
         let op = TranslateOperation::new(set1, set2)?;
-        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
     }
     Ok(())
 }

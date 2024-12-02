@@ -8,6 +8,7 @@ use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
 
+use std::io::Write;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
@@ -119,6 +120,60 @@ fn test_cp_duplicate_files() {
             "source file '{TEST_HELLO_WORLD_SOURCE}' specified more than once"
         ));
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+}
+
+#[test]
+fn test_cp_duplicate_folder() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-r")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER)
+        .succeeds()
+        .stderr_contains(format!(
+            "source directory '{TEST_COPY_FROM_FOLDER}' specified more than once"
+        ));
+    assert!(at.dir_exists(format!("{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER}").as_str()));
+}
+
+#[test]
+fn test_cp_duplicate_files_normalized_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(format!("./{TEST_HELLO_WORLD_SOURCE}"))
+        .arg(TEST_COPY_TO_FOLDER)
+        .succeeds()
+        .stderr_contains(format!(
+            "source file './{TEST_HELLO_WORLD_SOURCE}' specified more than once"
+        ));
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+}
+
+#[test]
+fn test_cp_duplicate_files_with_plain_backup() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .arg("--backup")
+        .fails()
+        // cp would skip duplicate src check and fail when it tries to overwrite the "just-created" file.
+        .stderr_contains(
+            "will not overwrite just-created 'hello_dir/hello_world.txt' with 'hello_world.txt",
+        );
+}
+
+#[test]
+fn test_cp_duplicate_files_with_numbered_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // cp would skip duplicate src check and succeeds
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .arg("--backup=numbered")
+        .succeeds();
+    at.file_exists(TEST_COPY_TO_FOLDER_FILE);
+    at.file_exists(format!("{TEST_COPY_TO_FOLDER}.~1~"));
 }
 
 #[test]
@@ -341,7 +396,7 @@ fn test_cp_arg_update_none_fail() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--update=none-fail")
         .fails()
-        .stderr_contains(format!("not replacing '{}'", TEST_HOW_ARE_YOU_SOURCE));
+        .stderr_contains(format!("not replacing '{TEST_HOW_ARE_YOU_SOURCE}'"));
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
@@ -393,9 +448,9 @@ fn test_cp_arg_update_older_dest_older_than_src() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -419,9 +474,9 @@ fn test_cp_arg_update_short_no_overwrite() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -445,9 +500,9 @@ fn test_cp_arg_update_short_overwrite() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -472,9 +527,9 @@ fn test_cp_arg_update_none_then_all() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -500,9 +555,9 @@ fn test_cp_arg_update_all_then_none() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -598,6 +653,41 @@ fn test_cp_arg_interactive_verbose_clobber() {
     ucmd.args(&["-vin", "--debug", "a", "b"])
         .succeeds()
         .stdout_contains("skipped 'b'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_f_i_verbose_non_writeable_destination_y() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    // Non-writeable file
+    at.set_mode("b", 0o0000);
+
+    ucmd.args(&["-f", "-i", "--verbose", "a", "b"])
+        .pipe_in("y")
+        .succeeds()
+        .stderr_is("cp: replace 'b', overriding mode 0000 (---------)? ")
+        .stdout_is("'a' -> 'b'\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_f_i_verbose_non_writeable_destination_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    // Non-writeable file
+    at.set_mode("b", 0o0000);
+
+    ucmd.args(&["-f", "-i", "--verbose", "a", "b"])
+        .pipe_in("")
+        .fails()
+        .stderr_only("cp: replace 'b', overriding mode 0000 (---------)? ");
 }
 
 #[test]
@@ -3862,7 +3952,7 @@ fn test_acl_preserve() {
             return;
         }
         Err(e) => {
-            println!("test skipped: setfacl failed with {}", e);
+            println!("test skipped: setfacl failed with {e}");
             return;
         }
     }
@@ -5546,7 +5636,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         let child = scene
             .ucmd()
             .args(&[
-                format!("--preserve={}", attr).as_str(),
+                format!("--preserve={attr}").as_str(),
                 "-R",
                 "--copy-contents",
                 "--parents",
@@ -5565,12 +5655,12 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
                 start_time.elapsed() < timeout,
                 "timed out: cp took too long to create destination directory"
             );
-            if at.dir_exists(&format!("{}/{}", DEST_DIR, SRC_DIR)) {
+            if at.dir_exists(&format!("{DEST_DIR}/{SRC_DIR}")) {
                 break;
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        let mode = at.metadata(&format!("{}/{}", DEST_DIR, SRC_DIR)).mode();
+        let mode = at.metadata(&format!("{DEST_DIR}/{SRC_DIR}")).mode();
         #[allow(clippy::unnecessary_cast, clippy::cast_lossless)]
         let mask = if attr == "mode" {
             libc::S_IWGRP | libc::S_IWOTH
@@ -5580,8 +5670,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         assert_eq!(
             (mode & mask),
             0,
-            "unwanted permissions are present - {}",
-            attr
+            "unwanted permissions are present - {attr}"
         );
         at.write(FIFO, "done");
         child.wait().unwrap().succeeded();
@@ -5638,18 +5727,15 @@ fn test_preserve_attrs_overriding_2() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
         at.mkdir(FOLDER);
-        at.make_file(&format!("{}/{}", FOLDER, FILE1));
-        at.set_mode(&format!("{}/{}", FOLDER, FILE1), 0o775);
-        at.hard_link(
-            &format!("{}/{}", FOLDER, FILE1),
-            &format!("{}/{}", FOLDER, FILE2),
-        );
+        at.make_file(&format!("{FOLDER}/{FILE1}"));
+        at.set_mode(&format!("{FOLDER}/{FILE1}"), 0o775);
+        at.hard_link(&format!("{FOLDER}/{FILE1}"), &format!("{FOLDER}/{FILE2}"));
         args.append(&mut vec![FOLDER, DEST]);
-        let src_file1_metadata = at.metadata(&format!("{}/{}", FOLDER, FILE1));
+        let src_file1_metadata = at.metadata(&format!("{FOLDER}/{FILE1}"));
         scene.ucmd().args(&args).succeeds();
         at.dir_exists(DEST);
-        let dest_file1_metadata = at.metadata(&format!("{}/{}", DEST, FILE1));
-        let dest_file2_metadata = at.metadata(&format!("{}/{}", DEST, FILE2));
+        let dest_file1_metadata = at.metadata(&format!("{DEST}/{FILE1}"));
+        let dest_file2_metadata = at.metadata(&format!("{DEST}/{FILE2}"));
         assert_eq!(
             src_file1_metadata.modified().unwrap(),
             dest_file1_metadata.modified().unwrap()
@@ -5743,6 +5829,59 @@ fn test_cp_parents_absolute_path() {
         .succeeds();
     let res = format!("dest{}/a/b/f", at.root_dir_resolved());
     at.file_exists(res);
+}
+
+#[test]
+fn test_copy_symlink_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+
+    at.write("t", "hello");
+    at.relative_symlink_file("../t", "a/1");
+    at.relative_symlink_file("../t", "b/1");
+
+    ucmd.arg("--no-dereference")
+        .arg("a/1")
+        .arg("b/1")
+        .arg("c")
+        .fails()
+        .stderr_only(if cfg!(not(target_os = "windows")) {
+            "cp: will not overwrite just-created 'c/1' with 'b/1'\n"
+        } else {
+            "cp: will not overwrite just-created 'c\\1' with 'b/1'\n"
+        });
+}
+
+#[test]
+fn test_symlink_mode_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+
+    at.write("a/t", "hello");
+    at.write("b/t", "hello");
+
+    if cfg!(not(target_os = "windows")) {
+        ucmd.arg("-s")
+            .arg("a/t")
+            .arg("b/t")
+            .arg(".")
+            .fails()
+            .stderr_only("cp: will not overwrite just-created './t' with 'b/t'\n");
+
+        assert_eq!(at.read("./t"), "hello");
+    } else {
+        ucmd.arg("-s")
+            .arg("a\\t")
+            .arg("b\\t")
+            .arg(".")
+            .fails()
+            .stderr_only("cp: will not overwrite just-created '.\\t' with 'b\\t'\n");
+
+        assert_eq!(at.read(".\\t"), "hello");
+    }
 }
 
 // make sure that cp backup dest symlink before removing it.

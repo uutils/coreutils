@@ -1649,7 +1649,7 @@ fn test_reading_partial_blocks_from_fifo() {
     // until the writer process starts).
     let mut reader_command = Command::new(TESTS_BINARY);
     let child = reader_command
-        .args(["dd", "ibs=3", "obs=3", &format!("if={}", fifoname)])
+        .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -1658,13 +1658,14 @@ fn test_reading_partial_blocks_from_fifo() {
     // Start different processes to write to the FIFO, with a small
     // pause in between.
     let mut writer_command = Command::new("sh");
-    writer_command
+    let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {}", fifoname),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
         ])
         .spawn()
-        .unwrap();
+        .unwrap()
+        .wait();
 
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.stdout, b"abcd");
@@ -1692,7 +1693,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // `bs=N` takes precedence over `ibs=N` and `obs=N`.
     let mut reader_command = Command::new(TESTS_BINARY);
     let child = reader_command
-        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={}", fifoname)])
+        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -1701,13 +1702,14 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // Start different processes to write to the FIFO, with a small
     // pause in between.
     let mut writer_command = Command::new("sh");
-    writer_command
+    let _ = writer_command
         .args([
             "-c",
-            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {}", fifoname),
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
         ])
         .spawn()
-        .unwrap();
+        .unwrap()
+        .wait();
 
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.stdout, b"abcd");
@@ -1769,10 +1771,10 @@ fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
         .succeeds();
 
     let err_file_content = std::fs::read_to_string(at.plus_as_string("err")).unwrap();
-    println!("stderr:\n{}", err_file_content);
+    println!("stderr:\n{err_file_content}");
 
     let out_file_content = std::fs::read_to_string(at.plus_as_string("out")).unwrap();
-    println!("stdout:\n{}", out_file_content);
+    println!("stdout:\n{out_file_content}");
     assert_eq!(out_file_content, "bde");
 }
 

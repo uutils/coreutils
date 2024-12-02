@@ -10,6 +10,11 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_invalid_input() {
+    new_ucmd!().arg(".").fails().code_is(1);
+}
+
+#[test]
 fn test_fmt() {
     new_ucmd!()
         .arg("one-word-per-line.txt")

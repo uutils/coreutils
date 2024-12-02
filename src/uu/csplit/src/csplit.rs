@@ -197,7 +197,7 @@ struct SplitWriter<'a> {
     dev_null: bool,
 }
 
-impl<'a> Drop for SplitWriter<'a> {
+impl Drop for SplitWriter<'_> {
     fn drop(&mut self) {
         if self.options.elide_empty_files && self.size == 0 {
             let file_name = self.options.split_name.get(self.counter);
@@ -206,7 +206,7 @@ impl<'a> Drop for SplitWriter<'a> {
     }
 }
 
-impl<'a> SplitWriter<'a> {
+impl SplitWriter<'_> {
     fn new(options: &CsplitOptions) -> SplitWriter {
         SplitWriter {
             options,

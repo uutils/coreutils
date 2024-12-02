@@ -267,7 +267,7 @@ pub struct FileMerger<'a> {
     reader_join_handle: JoinHandle<UResult<()>>,
 }
 
-impl<'a> FileMerger<'a> {
+impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     pub fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
         let mut out = output.into_write();
@@ -341,7 +341,7 @@ struct FileComparator<'a> {
     settings: &'a GlobalSettings,
 }
 
-impl<'a> Compare<MergeableFile> for FileComparator<'a> {
+impl Compare<MergeableFile> for FileComparator<'_> {
     fn compare(&self, a: &MergeableFile, b: &MergeableFile) -> Ordering {
         let mut cmp = compare_by(
             &a.current_chunk.lines()[a.line_idx],

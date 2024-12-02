@@ -3,35 +3,24 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (strings) ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUV
-// spell-checker:ignore (encodings) lsbf msbf hexupper
+// spell-checker:ignore (encodings) lsbf msbf
+// spell-checker:ignore unpadded
 
-use std::io::{self, Read, Write};
-
-use data_encoding::{Encoding, BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER};
+use crate::error::{UResult, USimpleError};
+use data_encoding::Encoding;
 use data_encoding_macro::new_encoding;
-#[cfg(feature = "thiserror")]
-use thiserror::Error;
+use std::collections::VecDeque;
 
-#[derive(Debug, Error)]
-pub enum DecodeError {
-    #[error("{}", _0)]
-    Decode(#[from] data_encoding::DecodeError),
-    #[error("{}", _0)]
-    DecodeZ85(#[from] z85::DecodeError),
-    #[error("{}", _0)]
-    Io(#[from] io::Error),
+// Re-export for the faster decoding/encoding logic
+pub mod for_base_common {
+    pub use data_encoding::*;
 }
 
-#[derive(Debug)]
-pub enum EncodeError {
-    Z85InputLenNotMultipleOf4,
-    InvalidInput,
+pub mod for_cksum {
+    pub use data_encoding::BASE64;
 }
 
-pub type DecodeResult = Result<Vec<u8>, DecodeError>;
-
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Format {
     Base64,
     Base64Url,
@@ -42,138 +31,182 @@ pub enum Format {
     Base2Msbf,
     Z85,
 }
-use self::Format::*;
 
-const BASE2LSBF: Encoding = new_encoding! {
+pub const BASE2LSBF: Encoding = new_encoding! {
     symbols: "01",
     bit_order: LeastSignificantFirst,
 };
-const BASE2MSBF: Encoding = new_encoding! {
+
+pub const BASE2MSBF: Encoding = new_encoding! {
     symbols: "01",
     bit_order: MostSignificantFirst,
 };
 
-pub fn encode(f: Format, input: &[u8]) -> Result<String, EncodeError> {
-    Ok(match f {
-        Base32 => BASE32.encode(input),
-        Base64 => BASE64.encode(input),
-        Base64Url => BASE64URL.encode(input),
-        Base32Hex => BASE32HEX.encode(input),
-        Base16 => HEXUPPER.encode(input),
-        Base2Lsbf => BASE2LSBF.encode(input),
-        Base2Msbf => BASE2MSBF.encode(input),
-        Z85 => {
-            // According to the spec we should not accept inputs whose len is not a multiple of 4.
-            // However, the z85 crate implements a padded encoding and accepts such inputs. We have to manually check for them.
-            if input.len() % 4 == 0 {
-                z85::encode(input)
-            } else {
-                return Err(EncodeError::Z85InputLenNotMultipleOf4);
-            }
-        }
-    })
+pub struct Z85Wrapper {}
+
+pub struct EncodingWrapper {
+    pub alphabet: &'static [u8],
+    pub encoding: Encoding,
+    pub unpadded_multiple: usize,
+    pub valid_decoding_multiple: usize,
 }
 
-pub fn decode(f: Format, input: &[u8]) -> DecodeResult {
-    Ok(match f {
-        Base32 => BASE32.decode(input)?,
-        Base64 => BASE64.decode(input)?,
-        Base64Url => BASE64URL.decode(input)?,
-        Base32Hex => BASE32HEX.decode(input)?,
-        Base16 => HEXUPPER.decode(input)?,
-        Base2Lsbf => BASE2LSBF.decode(input)?,
-        Base2Msbf => BASE2MSBF.decode(input)?,
-        Z85 => {
-            // The z85 crate implements a padded encoding by using a leading '#' which is otherwise not allowed.
-            // We manually check for a leading '#' and return an error ourselves.
-            if input.starts_with(b"#") {
-                return Err(z85::DecodeError::InvalidByte(0, b'#').into());
-            } else {
-                z85::decode(input)?
-            }
-        }
-    })
-}
+impl EncodingWrapper {
+    pub fn new(
+        encoding: Encoding,
+        valid_decoding_multiple: usize,
+        unpadded_multiple: usize,
+        alphabet: &'static [u8],
+    ) -> Self {
+        assert!(valid_decoding_multiple > 0);
 
-pub struct Data<R: Read> {
-    line_wrap: usize,
-    ignore_garbage: bool,
-    input: R,
-    format: Format,
-    alphabet: &'static [u8],
-}
+        assert!(unpadded_multiple > 0);
 
-impl<R: Read> Data<R> {
-    pub fn new(input: R, format: Format) -> Self {
+        assert!(!alphabet.is_empty());
+
         Self {
-            line_wrap: 76,
-            ignore_garbage: false,
-            input,
-            format,
-            alphabet: match format {
-                Base32 => b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567=",
-                Base64 => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=+/",
-                Base64Url => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=_-",
-                Base32Hex => b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
-                Base16 => b"0123456789ABCDEF",
-                Base2Lsbf => b"01",
-                Base2Msbf => b"01",
-                Z85 => b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#",
-            },
+            alphabet,
+            encoding,
+            unpadded_multiple,
+            valid_decoding_multiple,
         }
     }
+}
 
-    #[must_use]
-    pub fn line_wrap(mut self, wrap: usize) -> Self {
-        self.line_wrap = wrap;
-        self
+pub trait SupportsFastDecodeAndEncode {
+    /// Returns the list of characters used by this encoding
+    fn alphabet(&self) -> &'static [u8];
+
+    fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()>;
+
+    fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()>;
+
+    /// Inputs with a length that is a multiple of this number do not have padding when encoded. For instance:
+    ///
+    /// "The quick brown"
+    ///
+    /// is 15 characters (divisible by 3), so it is encoded in Base64 without padding:
+    ///
+    /// "VGhlIHF1aWNrIGJyb3du"
+    ///
+    /// While:
+    ///
+    /// "The quick brown fox"
+    ///
+    /// is 19 characters, which is not divisible by 3, so its Base64 representation has padding:
+    ///
+    /// "VGhlIHF1aWNrIGJyb3duIGZveA=="
+    ///
+    /// The encoding performed by `fast_encode` depends on this number being correct.
+    fn unpadded_multiple(&self) -> usize;
+
+    /// Data to decode must be a length that is multiple of this number
+    ///
+    /// The decoding performed by `fast_decode` depends on this number being correct.
+    fn valid_decoding_multiple(&self) -> usize;
+}
+
+impl SupportsFastDecodeAndEncode for Z85Wrapper {
+    fn alphabet(&self) -> &'static [u8] {
+        // Z85 alphabet
+        b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"
     }
 
-    #[must_use]
-    pub fn ignore_garbage(mut self, ignore: bool) -> Self {
-        self.ignore_garbage = ignore;
-        self
-    }
+    fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        if input.first() == Some(&b'#') {
+            return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+        }
 
-    pub fn decode(&mut self) -> DecodeResult {
-        let mut buf = vec![];
-        self.input.read_to_end(&mut buf)?;
-        if self.ignore_garbage {
-            buf.retain(|c| self.alphabet.contains(c));
-        } else {
-            buf.retain(|&c| c != b'\r' && c != b'\n');
+        let decode_result = match z85::decode(input) {
+            Ok(ve) => ve,
+            Err(_de) => {
+                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+            }
         };
-        decode(self.format, &buf)
+
+        output.extend_from_slice(&decode_result);
+
+        Ok(())
     }
 
-    pub fn encode(&mut self) -> Result<String, EncodeError> {
-        let mut buf: Vec<u8> = vec![];
-        match self.input.read_to_end(&mut buf) {
-            Ok(_) => encode(self.format, buf.as_slice()),
-            Err(_) => Err(EncodeError::InvalidInput),
+    fn valid_decoding_multiple(&self) -> usize {
+        5
+    }
+
+    fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
+        // According to the spec we should not accept inputs whose len is not a multiple of 4.
+        // However, the z85 crate implements a padded encoding and accepts such inputs. We have to manually check for them.
+        if input.len() % 4 != 0 {
+            return Err(USimpleError::new(
+                1,
+                "error: invalid input (length must be multiple of 4 characters)".to_owned(),
+            ));
         }
+
+        let string = z85::encode(input);
+
+        output.extend(string.as_bytes());
+
+        Ok(())
+    }
+
+    fn unpadded_multiple(&self) -> usize {
+        4
     }
 }
 
-// NOTE: this will likely be phased out at some point
-pub fn wrap_print<R: Read>(data: &Data<R>, res: &str) {
-    let stdout = io::stdout();
-    wrap_write(stdout.lock(), data.line_wrap, res).unwrap();
-}
-
-pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: &str) -> io::Result<()> {
-    use std::cmp::min;
-
-    if line_wrap == 0 {
-        return write!(writer, "{res}");
+impl SupportsFastDecodeAndEncode for EncodingWrapper {
+    fn alphabet(&self) -> &'static [u8] {
+        self.alphabet
     }
 
-    let mut start = 0;
-    while start < res.len() {
-        let end = min(start + line_wrap, res.len());
-        writeln!(writer, "{}", &res[start..end])?;
-        start = end;
+    // Adapted from `decode` in the "data-encoding" crate
+    fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        let decode_len_result = match self.encoding.decode_len(input.len()) {
+            Ok(us) => us,
+            Err(_de) => {
+                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+            }
+        };
+
+        let output_len = output.len();
+
+        output.resize(output_len + decode_len_result, 0);
+
+        match self.encoding.decode_mut(input, &mut (output[output_len..])) {
+            Ok(us) => {
+                // See:
+                // https://docs.rs/data-encoding/latest/data_encoding/struct.Encoding.html#method.decode_mut
+                // "Returns the length of the decoded output. This length may be smaller than the output length if the input contained padding or ignored characters. The output bytes after the returned length are not initialized and should not be read."
+                output.truncate(output_len + us);
+            }
+            Err(_de) => {
+                return Err(USimpleError::new(1, "error: invalid input".to_owned()));
+            }
+        }
+
+        Ok(())
     }
 
-    Ok(())
+    fn valid_decoding_multiple(&self) -> usize {
+        self.valid_decoding_multiple
+    }
+
+    // Adapted from `encode_append` in the "data-encoding" crate
+    fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
+        let output_len = output.len();
+
+        output.resize(output_len + self.encoding.encode_len(input.len()), 0);
+
+        let make_contiguous_result = output.make_contiguous();
+
+        self.encoding
+            .encode_mut(input, &mut (make_contiguous_result[output_len..]));
+
+        Ok(())
+    }
+
+    fn unpadded_multiple(&self) -> usize {
+        self.unpadded_multiple
+    }
 }
