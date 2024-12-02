@@ -649,6 +649,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let summarize = matches.get_flag(options::SUMMARIZE);
 
+    let count_links = matches.get_flag(options::COUNT_LINKS);
+
     let max_depth = parse_depth(
         matches
             .get_one::<String>(options::MAX_DEPTH)
@@ -669,15 +671,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         read_files_from(file_from)?
-    } else {
-        match matches.get_one::<String>(options::FILE) {
-            Some(_) => matches
-                .get_many::<String>(options::FILE)
-                .unwrap()
-                .map(PathBuf::from)
-                .collect(),
-            None => vec![PathBuf::from(".")],
+    } else if let Some(files) = matches.get_many::<String>(options::FILE) {
+        let files = files.map(PathBuf::from);
+        if count_links {
+            files.collect()
+        } else {
+            // Deduplicate while preserving order
+            let mut seen = std::collections::HashSet::new();
+            files
+                .filter(|path| seen.insert(path.clone()))
+                .collect::<Vec<_>>()
         }
+    } else {
+        vec![PathBuf::from(".")]
     };
 
     let time = matches.contains_id(options::TIME).then(|| {
@@ -719,7 +725,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             Deref::None
         },
-        count_links: matches.get_flag(options::COUNT_LINKS),
+        count_links,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
     };

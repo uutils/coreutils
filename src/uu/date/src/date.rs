@@ -103,7 +103,7 @@ enum Iso8601Format {
     Ns,
 }
 
-impl<'a> From<&'a str> for Iso8601Format {
+impl From<&str> for Iso8601Format {
     fn from(s: &str) -> Self {
         match s {
             HOURS => Self::Hours,
@@ -123,7 +123,7 @@ enum Rfc3339Format {
     Ns,
 }
 
-impl<'a> From<&'a str> for Rfc3339Format {
+impl From<&str> for Rfc3339Format {
     fn from(s: &str) -> Self {
         match s {
             DATE => Self::Date,

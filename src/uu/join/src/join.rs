@@ -109,7 +109,7 @@ struct MultiByteSep<'a> {
     finder: Finder<'a>,
 }
 
-impl<'a> Separator for MultiByteSep<'a> {
+impl Separator for MultiByteSep<'_> {
     fn field_ranges(&self, haystack: &[u8], len_guess: usize) -> Vec<(usize, usize)> {
         let mut field_ranges = Vec::with_capacity(len_guess);
         let mut last_end = 0;

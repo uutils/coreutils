@@ -14,6 +14,15 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_invalid_input() {
+    new_ucmd!()
+        .args(&["1", "1", "<", "."])
+        .fails()
+        .code_is(1)
+        .stderr_contains("tr: extra operand '<'");
+}
+
+#[test]
 fn test_to_upper() {
     new_ucmd!()
         .args(&["a-z", "A-Z"])
@@ -1494,9 +1503,7 @@ fn test_multibyte_octal_sequence() {
         .args(&["-d", r"\501"])
         .pipe_in("(1Ł)")
         .succeeds()
-        // TODO
-        // A warning needs to be printed here
-        // See https://github.com/uutils/coreutils/issues/6821
+        .stderr_is("tr: warning: the ambiguous octal escape \\501 is being\n        interpreted as the 2-byte sequence \\050, 1\n")
         .stdout_is("Ł)");
 }
 
