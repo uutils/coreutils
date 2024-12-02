@@ -3,19 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//spell-checker:ignore (args) lsbf msbf
+// spell-checker:ignore lsbf msbf
 
 use clap::{Arg, ArgAction, Command};
 use uu_base32::base_common::{self, Config, BASE_CMD_PARSE_ERROR};
-
+use uucore::error::UClapError;
 use uucore::{
     encoding::Format,
     error::{UResult, UUsageError},
 };
-
-use std::io::{stdin, Read};
-use uucore::error::UClapError;
-
 use uucore::{help_about, help_usage};
 
 const ABOUT: &str = help_about!("basenc.md");
@@ -81,16 +77,8 @@ fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (config, format) = parse_cmd_args(args)?;
-    // Create a reference to stdin so we can return a locked stdin from
-    // parse_base_cmd_args
-    let stdin_raw = stdin();
-    let mut input: Box<dyn Read> = base_common::get_input(&config, &stdin_raw)?;
 
-    base_common::handle_input(
-        &mut input,
-        format,
-        config.wrap_cols,
-        config.ignore_garbage,
-        config.decode,
-    )
+    let mut input = base_common::get_input(&config)?;
+
+    base_common::handle_input(&mut input, format, config)
 }

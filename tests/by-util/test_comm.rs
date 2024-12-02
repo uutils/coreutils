@@ -292,3 +292,36 @@ fn test_no_such_file() {
         .fails()
         .stderr_only("comm: bogus_file_1: No such file or directory\n");
 }
+
+#[test]
+fn test_is_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
+        .args(&[".", "."])
+        .fails()
+        .stderr_only("comm: .: Is a directory\n");
+
+    at.mkdir("dir");
+    scene
+        .ucmd()
+        .args(&["dir", "."])
+        .fails()
+        .stderr_only("comm: dir: Is a directory\n");
+
+    at.touch("file");
+    scene
+        .ucmd()
+        .args(&[".", "file"])
+        .fails()
+        .stderr_only("comm: .: Is a directory\n");
+
+    at.touch("file");
+    scene
+        .ucmd()
+        .args(&["file", "."])
+        .fails()
+        .stderr_only("comm: .: Is a directory\n");
+}

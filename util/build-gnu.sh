@@ -174,8 +174,7 @@ grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 
 # Remove tests checking for --version & --help
 # Not really interesting for us and logs are too big
-sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
-    -e '/tests\/help\/help-version.sh/ D' \
+sed -i -e '/tests\/help\/help-version.sh/ D' \
     -e '/tests\/help\/help-version-getopt.sh/ D' \
     Makefile
 
@@ -365,6 +364,9 @@ sed -i  's/44;37/37;44/' tests/ls/multihardlink.sh
 # that anywhere in our implementation, and it looks like GNU's ls also doesn't
 # do that. So, it's okay to ignore the zero.
 sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/color-clear-to-eol.sh
+
+# patching this because of the same reason as the last one.
+sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/quote-align.sh
 
 # Slightly different error message
 sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh

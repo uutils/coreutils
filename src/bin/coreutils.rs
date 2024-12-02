@@ -21,7 +21,10 @@ include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("{name} {VERSION} (multi-call binary)\n");
-    println!("Usage: {name} [function [arguments...]]\n");
+    println!("Usage: {name} [function [arguments...]]");
+    println!("       {name} --list\n");
+    println!("Options:");
+    println!("      --list    lists all defined functions, one per row\n");
     println!("Currently defined functions:\n");
     #[allow(clippy::map_clone)]
     let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();

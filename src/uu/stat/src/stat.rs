@@ -586,7 +586,7 @@ impl Stater {
             let mut mount_list = read_fs_list()
                 .map_err(|e| {
                     let context = "cannot read table of mounted file systems";
-                    USimpleError::new(e.code(), format!("{}: {}", context, e))
+                    USimpleError::new(e.code(), format!("{context}: {e}"))
                 })?
                 .iter()
                 .map(|mi| mi.mount_dir.clone())

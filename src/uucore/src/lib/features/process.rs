@@ -8,6 +8,7 @@
 // spell-checker:ignore pgrep pwait snice
 
 use libc::{gid_t, pid_t, uid_t};
+#[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
 use std::io;
 use std::process::Child;
@@ -150,6 +151,6 @@ mod tests {
         assert!(getsid(getpid()).expect("getsid(getpid)") > 0);
 
         // This might caused tests failure but the probability is low.
-        assert!(getsid(999999).is_err());
+        assert!(getsid(999_999).is_err());
     }
 }

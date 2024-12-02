@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
+//
+// spell-checker:ignore sigaction SIGBUS SIGSEGV
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -100,13 +102,42 @@ pub use crate::features::fsxattr;
 
 //## core functions
 
+#[cfg(unix)]
+use nix::errno::Errno;
+#[cfg(unix)]
+use nix::sys::signal::{
+    sigaction, SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV,
+};
+use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::io::{BufRead, BufReader};
+use std::iter;
 #[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::str;
 use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
+
+/// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
+/// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
+#[cfg(unix)]
+pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
+    unsafe {
+        sigaction(
+            SIGSEGV,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    unsafe {
+        sigaction(
+            SIGBUS,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    Ok(())
+}
 
 /// Execute utility code for `util`.
 ///
@@ -238,6 +269,72 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
         .as_bytes();
 
     Ok(bytes)
+}
+
+/// Helper function for converting a slice of bytes into an &OsStr
+/// or OsString in non-unix targets.
+///
+/// It converts `&[u8]` to `Cow<OsStr>` for unix targets only.
+/// On non-unix (i.e. Windows), the conversion goes through the String type
+/// and thus undergo UTF-8 validation, making it fail if the stream contains
+/// non-UTF-8 characters.
+pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
+    #[cfg(unix)]
+    let os_str = Cow::Borrowed(OsStr::from_bytes(bytes));
+    #[cfg(not(unix))]
+    let os_str = Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(|_| {
+        mods::error::UUsageError::new(1, "Unable to transform bytes into OsStr")
+    })?));
+
+    Ok(os_str)
+}
+
+/// Helper function for making an `OsString` from a byte field
+/// It converts `Vec<u8>` to `OsString` for unix targets only.
+/// On non-unix (i.e. Windows) it may fail if the bytes are not valid UTF-8
+pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
+    #[cfg(unix)]
+    let s = OsString::from_vec(vec);
+    #[cfg(not(unix))]
+    let s = OsString::from(String::from_utf8(vec).map_err(|_| {
+        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+    })?);
+
+    Ok(s)
+}
+
+/// Equivalent to `std::BufRead::lines` which outputs each line as a `Vec<u8>`,
+/// which avoids panicking on non UTF-8 input.
+pub fn read_byte_lines<R: std::io::Read>(
+    mut buf_reader: BufReader<R>,
+) -> impl Iterator<Item = Vec<u8>> {
+    iter::from_fn(move || {
+        let mut buf = Vec::with_capacity(256);
+        let size = buf_reader.read_until(b'\n', &mut buf).ok()?;
+
+        if size == 0 {
+            return None;
+        }
+
+        // Trim (\r)\n
+        if buf.ends_with(b"\n") {
+            buf.pop();
+            if buf.ends_with(b"\r") {
+                buf.pop();
+            }
+        }
+
+        Some(buf)
+    })
+}
+
+/// Equivalent to `std::BufRead::lines` which outputs each line as an `OsString`
+/// This won't panic on non UTF-8 characters on Unix,
+/// but it still will on Windows.
+pub fn read_os_string_lines<R: std::io::Read>(
+    buf_reader: BufReader<R>,
+) -> impl Iterator<Item = OsString> {
+    read_byte_lines(buf_reader).map(|byte_line| os_string_from_vec(byte_line).expect("UTF-8 error"))
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`

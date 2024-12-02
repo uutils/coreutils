@@ -114,10 +114,9 @@ impl<'a> StringParser<'a> {
     }
 
     pub fn peek_chunk(&self) -> Option<Chunk<'a>> {
-        return self
-            .get_chunk_with_length_at(self.pointer)
+        self.get_chunk_with_length_at(self.pointer)
             .ok()
-            .map(|(chunk, _)| chunk);
+            .map(|(chunk, _)| chunk)
     }
 
     pub fn consume_chunk(&mut self) -> Result<Chunk<'a>, Error> {

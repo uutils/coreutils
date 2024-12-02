@@ -23,6 +23,11 @@ fn help() {
 }
 
 #[test]
+fn invalid_input() {
+    new_ucmd!().arg("-/").fails().code_is(125);
+}
+
+#[test]
 fn print() {
     new_ucmd!().succeeds();
 
@@ -46,7 +51,7 @@ fn invalid() {
         "unconfined_u:unconfined_r:unconfined_t:s0",
         "inexistent-file",
     ];
-    new_ucmd!().args(args).fails().code_is(127);
+    new_ucmd!().args(args).fails().code_is(1);
 
     let args = &["invalid", "/bin/true"];
     new_ucmd!().args(args).fails().code_is(1);
@@ -55,7 +60,7 @@ fn invalid() {
     new_ucmd!().args(args).fails().code_is(1);
 
     let args = &["--compute", "--compute"];
-    new_ucmd!().args(args).fails().code_is(1);
+    new_ucmd!().args(args).fails().code_is(125);
 
     // clap has an issue that makes this test fail: https://github.com/clap-rs/clap/issues/1543
     // TODO: Enable this code once the issue is fixed in the clap version we're using.
@@ -64,14 +69,15 @@ fn invalid() {
     for flag in [
         "-t", "--type", "-u", "--user", "-r", "--role", "-l", "--range",
     ] {
-        new_ucmd!().arg(flag).fails().code_is(1);
+        new_ucmd!().arg(flag).fails().code_is(125);
 
         let args = &[flag, "example", flag, "example"];
-        new_ucmd!().args(args).fails().code_is(1);
+        new_ucmd!().args(args).fails().code_is(125);
     }
 }
 
 #[test]
+#[cfg(feature = "feat_selinux")]
 fn plain_context() {
     let ctx = "unconfined_u:unconfined_r:unconfined_t:s0-s0";
     new_ucmd!().args(&[ctx, "/bin/true"]).succeeds();
@@ -90,6 +96,7 @@ fn plain_context() {
 }
 
 #[test]
+#[cfg(feature = "feat_selinux")]
 fn custom_context() {
     let t_ud = "unconfined_t";
     let u_ud = "unconfined_u";

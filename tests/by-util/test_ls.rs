@@ -174,7 +174,7 @@ fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
     let regex = Regex::new(regex_str).unwrap();
     let m = regex.captures(&stdout_str).unwrap();
     let fstype = m["fstype"].to_owned();
-    println!("detected fstype: {}", fstype);
+    println!("detected fstype: {fstype}");
     fstype
 }
 
@@ -1329,10 +1329,10 @@ fn test_ls_long_symlink_color() {
             Some(captures) => {
                 dbg!(captures.get(1).unwrap().as_str().to_string());
                 dbg!(captures.get(2).unwrap().as_str().to_string());
-                return (
+                (
                     captures.get(1).unwrap().as_str().to_string(),
                     captures.get(2).unwrap().as_str().to_string(),
-                );
+                )
             }
             None => (String::new(), input.to_string()),
         }
@@ -2197,6 +2197,464 @@ fn test_ls_recursive_1() {
         .stdout_is(out);
 }
 
+/// The quoting module regroups tests that check the behavior of ls when
+/// quoting and escaping special characters with different quoting styles.
+#[cfg(unix)]
+mod quoting {
+    use super::TestScenario;
+
+    /// Create a directory with "dirname", then for each check, assert that the
+    /// output is correct.
+    fn check_quoting_dirname(dirname: &str, checks: &[(&str, &str, &str)], extra_args: &[&str]) {
+        for (qt_style, regular_mode, dir_mode) in checks {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.mkdir(dirname);
+
+            let expected = format!(
+                "{}:\n{}\n\n{}:\n",
+                match *qt_style {
+                    "shell-always" | "shell-escape-always" => "'.'",
+                    "c" => "\".\"",
+                    _ => ".",
+                },
+                regular_mode,
+                dir_mode
+            );
+
+            scene
+                .ucmd()
+                .arg("-R")
+                .arg(format!("--quoting-style={qt_style}"))
+                .args(extra_args)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+
+    #[test]
+    fn test_ls_quoting_simple() {
+        check_quoting_dirname(
+            // Control case
+            "dirname",
+            &[
+                ("literal", "dirname", "./dirname"),
+                ("shell", "dirname", "./dirname"),
+                ("shell-always", "'dirname'", "'./dirname'"),
+                ("shell-escape", "dirname", "./dirname"),
+                ("shell-escape-always", "'dirname'", "'./dirname'"),
+                ("c", "\"dirname\"", "\"./dirname\""),
+                ("escape", "dirname", "./dirname"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_space() {
+        check_quoting_dirname(
+            // Space character
+            "dir name",
+            &[
+                ("literal", "dir name", "./dir name"),
+                ("shell", "'dir name'", "'./dir name'"),
+                ("shell-always", "'dir name'", "'./dir name'"),
+                ("shell-escape", "'dir name'", "'./dir name'"),
+                ("shell-escape-always", "'dir name'", "'./dir name'"),
+                ("c", "\"dir name\"", "\"./dir name\""),
+                ("escape", "dir\\ name", "./dir name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_dollar() {
+        check_quoting_dirname(
+            // Dollar character
+            "dir$name",
+            &[
+                ("literal", "dir$name", "./dir$name"),
+                ("shell", "'dir$name'", "'./dir$name'"),
+                ("shell-always", "'dir$name'", "'./dir$name'"),
+                ("shell-escape", "'dir$name'", "'./dir$name'"),
+                ("shell-escape-always", "'dir$name'", "'./dir$name'"),
+                ("c", "\"dir$name\"", "\"./dir$name\""),
+                ("escape", "dir$name", "./dir$name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_single_quote() {
+        check_quoting_dirname(
+            // Single quote character
+            "dir'name",
+            &[
+                ("literal", "dir'name", "./dir'name"),
+                ("shell", "\"dir'name\"", "\"./dir'name\""),
+                ("shell-always", "\"dir'name\"", "\"./dir'name\""),
+                ("shell-escape", "\"dir'name\"", "\"./dir'name\""),
+                ("shell-escape-always", "\"dir'name\"", "\"./dir'name\""),
+                ("c", "\"dir'name\"", "\"./dir'name\""),
+                ("escape", "dir'name", "./dir'name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_double_quote() {
+        check_quoting_dirname(
+            // Double quote character
+            "dir\"name",
+            &[
+                ("literal", "dir\"name", "./dir\"name"),
+                ("shell", "'dir\"name'", "'./dir\"name'"),
+                ("shell-always", "'dir\"name'", "'./dir\"name'"),
+                ("shell-escape", "'dir\"name'", "'./dir\"name'"),
+                ("shell-escape-always", "'dir\"name'", "'./dir\"name'"),
+                ("c", "\"dir\\\"name\"", "\"./dir\\\"name\""),
+                ("escape", "dir\"name", "./dir\"name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_colon() {
+        check_quoting_dirname(
+            // Colon character
+            "dir:name",
+            &[
+                ("literal", "dir:name", "./dir:name"),
+                ("shell", "dir:name", "'./dir:name'"),
+                ("shell-always", "'dir:name'", "'./dir:name'"),
+                ("shell-escape", "dir:name", "'./dir:name'"),
+                ("shell-escape-always", "'dir:name'", "'./dir:name'"),
+                ("c", "\"dir:name\"", "\"./dir\\:name\""),
+                ("escape", "dir:name", "./dir\\:name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_backslash() {
+        check_quoting_dirname(
+            // Backslash character
+            "dir\\name",
+            &[
+                ("literal", "dir\\name", "./dir\\name"),
+                ("shell", "'dir\\name'", "'./dir\\name'"),
+                ("shell-always", "'dir\\name'", "'./dir\\name'"),
+                ("shell-escape", "'dir\\name'", "'./dir\\name'"),
+                ("shell-escape-always", "'dir\\name'", "'./dir\\name'"),
+                ("c", "\"dir\\\\name\"", "\"./dir\\\\name\""),
+                ("escape", "dir\\\\name", "./dir\\\\name"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_linefeed() {
+        check_quoting_dirname(
+            // Linefeed character
+            "dir\nname",
+            &[
+                ("literal", "dir\nname", "./dir\nname"),
+                ("shell", "'dir\nname'", "'./dir\nname'"),
+                ("shell-always", "'dir\nname'", "'./dir\nname'"),
+                ("shell-escape", "'dir'$'\\n''name'", "'./dir'$'\\n''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\n''name'",
+                    "'./dir'$'\\n''name'",
+                ),
+                ("c", "\"dir\\nname\"", "\"./dir\\nname\""),
+                ("escape", "dir\\nname", "./dir\\nname"),
+            ],
+            &[],
+        );
+
+        check_quoting_dirname(
+            // Linefeed character WITH hide-control-chars
+            "dir\nname",
+            &[
+                ("literal", "dir?name", "./dir?name"),
+                ("shell", "'dir?name'", "'./dir?name'"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\n''name'", "'./dir'$'\\n''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\n''name'",
+                    "'./dir'$'\\n''name'",
+                ),
+                ("c", "\"dir\\nname\"", "\"./dir\\nname\""),
+                ("escape", "dir\\nname", "./dir\\nname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_tabulation() {
+        check_quoting_dirname(
+            // Tabulation character
+            "dir\tname",
+            &[
+                ("literal", "dir\tname", "./dir\tname"),
+                ("shell", "'dir\tname'", "'./dir\tname'"),
+                ("shell-always", "'dir\tname'", "'./dir\tname'"),
+                ("shell-escape", "'dir'$'\\t''name'", "'./dir'$'\\t''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\t''name'",
+                    "'./dir'$'\\t''name'",
+                ),
+                ("c", "\"dir\\tname\"", "\"./dir\\tname\""),
+                ("escape", "dir\\tname", "./dir\\tname"),
+            ],
+            &[],
+        );
+
+        check_quoting_dirname(
+            // Tabulation character
+            "dir\tname",
+            &[
+                ("literal", "dir?name", "./dir?name"),
+                ("shell", "'dir?name'", "'./dir?name'"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\t''name'", "'./dir'$'\\t''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\t''name'",
+                    "'./dir'$'\\t''name'",
+                ),
+                ("c", "\"dir\\tname\"", "\"./dir\\tname\""),
+                ("escape", "dir\\tname", "./dir\\tname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_carriage_return() {
+        check_quoting_dirname(
+            // Carriage return character
+            "dir\rname",
+            &[
+                ("literal", "dir?name", "./dir?name"),
+                ("shell", "'dir?name'", "'./dir?name'"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\r''name'", "'./dir'$'\\r''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\r''name'",
+                    "'./dir'$'\\r''name'",
+                ),
+                ("c", "\"dir\\rname\"", "\"./dir\\rname\""),
+                ("escape", "dir\\rname", "./dir\\rname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_bell() {
+        check_quoting_dirname(
+            // Bell character
+            "dir\x07name",
+            &[
+                ("shell", "dir?name", "./dir?name"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\a''name'", "'./dir'$'\\a''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\a''name'",
+                    "'./dir'$'\\a''name'",
+                ),
+                ("c", "\"dir\\aname\"", "\"./dir\\aname\""),
+                ("escape", "dir\\aname", "./dir\\aname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_backspace() {
+        check_quoting_dirname(
+            // Backspace character
+            "dir\x08name",
+            &[
+                ("shell", "dir?name", "./dir?name"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\b''name'", "'./dir'$'\\b''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\b''name'",
+                    "'./dir'$'\\b''name'",
+                ),
+                ("c", "\"dir\\bname\"", "\"./dir\\bname\""),
+                ("escape", "dir\\bname", "./dir\\bname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_vertical_tab() {
+        check_quoting_dirname(
+            // Vertical tab character
+            "dir\x0bname",
+            &[
+                ("shell", "dir?name", "./dir?name"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\v''name'", "'./dir'$'\\v''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\v''name'",
+                    "'./dir'$'\\v''name'",
+                ),
+                ("c", "\"dir\\vname\"", "\"./dir\\vname\""),
+                ("escape", "dir\\vname", "./dir\\vname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_formfeed() {
+        check_quoting_dirname(
+            // Form feed character
+            "dir\x0cname",
+            &[
+                ("shell", "dir?name", "./dir?name"),
+                ("shell-always", "'dir?name'", "'./dir?name'"),
+                ("shell-escape", "'dir'$'\\f''name'", "'./dir'$'\\f''name'"),
+                (
+                    "shell-escape-always",
+                    "'dir'$'\\f''name'",
+                    "'./dir'$'\\f''name'",
+                ),
+                ("c", "\"dir\\fname\"", "\"./dir\\fname\""),
+                ("escape", "dir\\fname", "./dir\\fname"),
+            ],
+            &["--hide-control-chars"],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_open_bracket() {
+        check_quoting_dirname(
+            "[-open_bracket",
+            &[
+                ("shell", "'[-open_bracket'", "'./[-open_bracket'"),
+                ("shell-always", "'[-open_bracket'", "'./[-open_bracket'"),
+                ("shell-escape", "'[-open_bracket'", "'./[-open_bracket'"),
+                (
+                    "shell-escape-always",
+                    "'[-open_bracket'",
+                    "'./[-open_bracket'",
+                ),
+                ("c", "\"[-open_bracket\"", "\"./[-open_bracket\""),
+                ("escape", "[-open_bracket", "./[-open_bracket"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_close_bracket() {
+        check_quoting_dirname(
+            "]-close_bracket",
+            &[
+                ("shell", "]-close_bracket", "./]-close_bracket"),
+                ("shell-always", "']-close_bracket'", "'./]-close_bracket'"),
+                ("shell-escape", "]-close_bracket", "./]-close_bracket"),
+                (
+                    "shell-escape-always",
+                    "']-close_bracket'",
+                    "'./]-close_bracket'",
+                ),
+                ("c", "\"]-close_bracket\"", "\"./]-close_bracket\""),
+                ("escape", "]-close_bracket", "./]-close_bracket"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_open_brace() {
+        check_quoting_dirname(
+            "{-open_brace",
+            &[
+                ("shell", "{-open_brace", "./{-open_brace"),
+                ("shell-always", "'{-open_brace'", "'./{-open_brace'"),
+                ("shell-escape", "{-open_brace", "./{-open_brace"),
+                ("shell-escape-always", "'{-open_brace'", "'./{-open_brace'"),
+                ("c", "\"{-open_brace\"", "\"./{-open_brace\""),
+                ("escape", "{-open_brace", "./{-open_brace"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_close_brace() {
+        check_quoting_dirname(
+            "}-close_brace",
+            &[
+                ("shell", "}-close_brace", "./}-close_brace"),
+                ("shell-always", "'}-close_brace'", "'./}-close_brace'"),
+                ("shell-escape", "}-close_brace", "./}-close_brace"),
+                (
+                    "shell-escape-always",
+                    "'}-close_brace'",
+                    "'./}-close_brace'",
+                ),
+                ("c", "\"}-close_brace\"", "\"./}-close_brace\""),
+                ("escape", "}-close_brace", "./}-close_brace"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_caret() {
+        check_quoting_dirname(
+            "^-caret",
+            &[
+                ("shell", "'^-caret'", "'./^-caret'"),
+                ("shell-always", "'^-caret'", "'./^-caret'"),
+                ("shell-escape", "'^-caret'", "'./^-caret'"),
+                ("shell-escape-always", "'^-caret'", "'./^-caret'"),
+                ("c", "\"^-caret\"", "\"./^-caret\""),
+                ("escape", "^-caret", "./^-caret"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn test_ls_quoting_equal() {
+        check_quoting_dirname(
+            "=-equal",
+            &[
+                ("shell", "'=-equal'", "'./=-equal'"),
+                ("shell-always", "'=-equal'", "'./=-equal'"),
+                ("shell-escape", "'=-equal'", "'./=-equal'"),
+                ("shell-escape-always", "'=-equal'", "'./=-equal'"),
+                ("c", "\"=-equal\"", "\"./=-equal\""),
+                ("escape", "=-equal", "./=-equal"),
+            ],
+            &[],
+        );
+    }
+}
+
 #[test]
 fn test_ls_color() {
     let scene = TestScenario::new(util_name!());
@@ -2738,7 +3196,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=shell-escape-always", "'one'$'\\n''two'"),
             ("--quoting-style=shell-escape-alway", "'one'$'\\n''two'"),
             ("--quoting-style=shell-escape-a", "'one'$'\\n''two'"),
-            ("--quoting-style=shell", "one?two"),
+            ("--quoting-style=shell", "'one?two'"),
             ("--quoting-style=shell-always", "'one?two'"),
             ("--quoting-style=shell-a", "'one?two'"),
         ] {
@@ -2756,7 +3214,7 @@ fn test_ls_quoting_style() {
             ("-N", "one\ntwo"),
             ("--literal", "one\ntwo"),
             ("--l", "one\ntwo"),
-            ("--quoting-style=shell", "one\ntwo"), // FIXME: GNU ls quotes this case
+            ("--quoting-style=shell", "'one\ntwo'"),
             ("--quoting-style=shell-always", "'one\ntwo'"),
         ] {
             scene
@@ -2981,8 +3439,8 @@ fn test_ls_align_unquoted() {
         .terminal_simulation(true)
         .succeeds()
         .stdout_only("\"'quoted'\"   CAPS  'elf two'   foobar\r\n");
-    //                              ^      ^          ^
-    //                              space  no-space   space
+    //                                  ^      ^          ^
+    //                                  space  no-space   space
 
     // The same should happen with format columns/across
     // and shell quoting style, except for the `\r` at the end.
@@ -2994,8 +3452,8 @@ fn test_ls_align_unquoted() {
             .arg("--quoting-style=shell")
             .succeeds()
             .stdout_only("\"'quoted'\"   CAPS  'elf two'   foobar\n");
-        //                              ^      ^          ^
-        //                              space  no-space   space
+        //                                  ^      ^          ^
+        //                                  space  no-space   space
     }
 }
 
@@ -4120,7 +4578,7 @@ fn test_ls_dired_recursive_multiple() {
     let result = cmd.succeeds();
 
     let output = result.stdout_str().to_string();
-    println!("Output:\n{}", output);
+    println!("Output:\n{output}");
 
     let dired_line = output
         .lines()
@@ -4143,7 +4601,7 @@ fn test_ls_dired_recursive_multiple() {
                 .unwrap()
                 .trim()
                 .to_string();
-            println!("Extracted filename: {}", filename);
+            println!("Extracted filename: {filename}");
             filename
         })
         .collect();
@@ -4229,8 +4687,8 @@ fn test_ls_dired_complex() {
         .skip(1)
         .map(|s| s.parse().unwrap())
         .collect();
-    println!("{:?}", positions);
-    println!("Parsed byte positions: {:?}", positions);
+    println!("{positions:?}");
+    println!("Parsed byte positions: {positions:?}");
     assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
 
     let filenames: Vec<String> = positions
@@ -4242,12 +4700,12 @@ fn test_ls_dired_complex() {
                 .unwrap()
                 .trim()
                 .to_string();
-            println!("Extracted filename: {}", filename);
+            println!("Extracted filename: {filename}");
             filename
         })
         .collect();
 
-    println!("Extracted filenames: {:?}", filenames);
+    println!("Extracted filenames: {filenames:?}");
     assert_eq!(filenames, vec!["a1", "a22", "a333", "a4444", "d"]);
 }
 
@@ -4269,7 +4727,7 @@ fn test_ls_subdired_complex() {
     let result = cmd.succeeds();
 
     let output = result.stdout_str().to_string();
-    println!("Output:\n{}", output);
+    println!("Output:\n{output}");
 
     let dired_line = output
         .lines()
@@ -4280,7 +4738,7 @@ fn test_ls_subdired_complex() {
         .skip(1)
         .map(|s| s.parse().unwrap())
         .collect();
-    println!("Parsed byte positions: {:?}", positions);
+    println!("Parsed byte positions: {positions:?}");
     assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
 
     let dirnames: Vec<String> = positions
@@ -4290,12 +4748,12 @@ fn test_ls_subdired_complex() {
             let end_pos = chunk[1];
             let dirname =
                 String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec()).unwrap();
-            println!("Extracted dirname: {}", dirname);
+            println!("Extracted dirname: {dirname}");
             dirname
         })
         .collect();
 
-    println!("Extracted dirnames: {:?}", dirnames);
+    println!("Extracted dirnames: {dirnames:?}");
     #[cfg(unix)]
     assert_eq!(dirnames, vec!["dir1", "dir1/c2", "dir1/d"]);
     #[cfg(windows)]
@@ -4786,7 +5244,7 @@ fn test_acl_display() {
             return;
         }
         Err(e) => {
-            println!("test skipped: setfacl failed with {}", e);
+            println!("test skipped: setfacl failed with {e}");
             return;
         }
     }
@@ -4874,7 +5332,7 @@ fn test_ls_color_norm() {
     let expected = "\x1b[0m\x1b[07mnorm \x1b[0m\x1b[01mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
     scene
         .ucmd()
-        .env("LS_COLORS", format!("{}:fi=1", colors))
+        .env("LS_COLORS", format!("{colors}:fi=1"))
         .env("TIME_STYLE", "+norm")
         .arg("-gGU")
         .arg("--color")
@@ -4889,7 +5347,7 @@ fn test_ls_color_norm() {
         "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
     scene
         .ucmd()
-        .env("LS_COLORS", format!("{}:fi=", colors))
+        .env("LS_COLORS", format!("{colors}:fi="))
         .env("TIME_STYLE", "+norm")
         .arg("-gGU")
         .arg("--color")
@@ -4903,7 +5361,7 @@ fn test_ls_color_norm() {
         "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
     scene
         .ucmd()
-        .env("LS_COLORS", format!("{}:fi=0", colors))
+        .env("LS_COLORS", format!("{colors}:fi=0"))
         .env("TIME_STYLE", "+norm")
         .arg("-gGU")
         .arg("--color")
@@ -4949,4 +5407,112 @@ fn test_ls_color_clear_to_eol() {
     // check that the wrapped name contains clear to end of line code
     // cspell:disable-next-line
     result.stdout_contains("\x1b[0m\x1b[31;42mzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\x1b[0m\x1b[K");
+}
+
+#[test]
+fn test_suffix_case_sensitivity() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("img1.jpg");
+    at.touch("IMG2.JPG");
+    at.touch("img3.JpG");
+    at.touch("file1.z");
+    at.touch("file2.Z");
+
+    // *.jpg is specified only once so any suffix that has .jpg should match
+    // without caring about the letter case
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.Z=01;31")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("file1.z")
+        .arg("file2.Z")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35mIMG2.JPG\x1b[0m\n\
+                \x1b[01;31mfile1.z\x1b[0m\n\
+                \x1b[01;31mfile2.Z\x1b[0m",
+        /* cSpell:enable */
+    );
+
+    // *.jpg is specified more than once with different cases and style, so
+    // case should matter here
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.JPG=01;35;46")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
+                img3.JpG",
+        /* cSpell:enable */
+    );
+
+    // *.jpg is specified more than once with different cases but style is same, so
+    // case can ignored
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.JPG=01;35")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35mIMG2.JPG\x1b[0m\n\
+                \x1b[01;35mimg3.JpG\x1b[0m",
+        /* cSpell:enable */
+    );
+
+    // last *.jpg gets more priority resulting in same style across
+    // different cases specified, so case can ignored
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35:*.jpg=01;35;46:*.JPG=01;35;46")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35;46mimg1.jpg\x1b[0m\n\
+                \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
+                \x1b[01;35;46mimg3.JpG\x1b[0m",
+        /* cSpell:enable */
+    );
+
+    // last *.jpg gets more priority resulting in different style across
+    // different cases specified, so case matters
+    let result = scene
+        .ucmd()
+        .env("LS_COLORS", "*.jpg=01;35;46:*.jpg=01;35:*.JPG=01;35;46")
+        .arg("-U1")
+        .arg("--color=always")
+        .arg("img1.jpg")
+        .arg("IMG2.JPG")
+        .arg("img3.JpG")
+        .succeeds();
+    result.stdout_contains(
+        /* cSpell:disable */
+        "\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\
+                \x1b[01;35;46mIMG2.JPG\x1b[0m\n\
+                img3.JpG",
+        /* cSpell:enable */
+    );
 }

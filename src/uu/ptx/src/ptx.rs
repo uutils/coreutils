@@ -129,7 +129,7 @@ impl WordFilter {
                 HashSet::new() // really only chars found in file
             } else {
                 // GNU off means at least these are considered
-                [' ', '\t', '\n'].iter().cloned().collect()
+                [' ', '\t', '\n'].iter().copied().collect()
             };
             hs.extend(chars);
             Some(hs)

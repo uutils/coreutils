@@ -3594,10 +3594,8 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     assert!(result.is_ok());
 
     #[cfg(all(not(target_os = "freebsd"), not(target_os = "macos")))]
-    let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: No such device or address\n",
-        socket
-    );
+    let expected_stderr =
+        format!("tail: cannot open '{socket}' for reading: No such device or address\n");
     #[cfg(target_os = "freebsd")]
     let expected_stderr = format!(
         "tail: cannot open '{}' for reading: Operation not supported\n",
@@ -3622,7 +3620,7 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     let result = file.write_all(random_string.as_bytes());
     assert!(result.is_ok());
 
-    let expected_stdout = [format!("==> {} <==", path), random_string].join("\n");
+    let expected_stdout = [format!("==> {path} <=="), random_string].join("\n");
     ts.ucmd()
         .args(&["-c", "+0", path, socket])
         .fails()

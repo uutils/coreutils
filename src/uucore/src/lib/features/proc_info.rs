@@ -370,7 +370,7 @@ mod tests {
     fn test_pid_entry() {
         let current_pid = current_pid();
 
-        let mut pid_entry = ProcessInformation::try_new(
+        let pid_entry = ProcessInformation::try_new(
             PathBuf::from_str(&format!("/proc/{}", current_pid)).unwrap(),
         )
         .unwrap();

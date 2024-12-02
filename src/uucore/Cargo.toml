@@ -2,7 +2,7 @@
 
 [package]
 name = "uucore"
-version = "0.0.27"
+version = "0.0.28"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uutils ~ 'core' uutils code library (cross-platform)"
@@ -77,7 +77,7 @@ default = []
 backup-control = []
 colors = []
 checksum = ["data-encoding", "thiserror", "regex", "sum"]
-encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]
+encoding = ["data-encoding", "data-encoding-macro", "z85"]
 entries = ["libc"]
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys"]
