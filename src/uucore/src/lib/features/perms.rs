@@ -23,7 +23,7 @@ use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, MAIN_SEPARATOR_STR};
+use std::path::{Path, MAIN_SEPARATOR};
 
 /// The various level of verbosity
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -214,23 +214,13 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
         // We cannot check path.is_dir() here, as this would resolve symlinks,
         // which we need to avoid here.
         // All directory-ish paths match "*/", except ".", "..", "*/.", and "*/..".
-        let looks_like_dir = match path.as_os_str().to_str() {
-            // If it contains special character, prefer to err on the side of safety, i.e. forbidding the chown operation:
-            None => false,
-            Some(".") | Some("..") => true,
-            Some(path_str) => {
-                (path_str.ends_with(MAIN_SEPARATOR_STR))
-                    || (path_str.ends_with(&format!("{MAIN_SEPARATOR_STR}.")))
-                    || (path_str.ends_with(&format!("{MAIN_SEPARATOR_STR}..")))
-            }
-        };
-        // TODO: Once we reach MSRV 1.74.0, replace this abomination by something simpler, e.g. this:
-        // let path_bytes = path.as_os_str().as_encoded_bytes();
-        // let looks_like_dir = path_bytes == [b'.']
-        //     || path_bytes == [b'.', b'.']
-        //     || path_bytes.ends_with(&[MAIN_SEPARATOR as u8])
-        //     || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.'])
-        //     || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.', b'.']);
+        let path_bytes = path.as_os_str().as_encoded_bytes();
+        let looks_like_dir = path_bytes == [b'.']
+            || path_bytes == [b'.', b'.']
+            || path_bytes.ends_with(&[MAIN_SEPARATOR as u8])
+            || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.'])
+            || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.', b'.']);
+
         if !looks_like_dir {
             return false;
         }

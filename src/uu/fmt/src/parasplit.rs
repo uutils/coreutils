@@ -73,7 +73,7 @@ pub struct FileLines<'a> {
     lines: Lines<&'a mut FileOrStdReader>,
 }
 
-impl<'a> FileLines<'a> {
+impl FileLines<'_> {
     fn new<'b>(opts: &'b FmtOptions, lines: Lines<&'b mut FileOrStdReader>) -> FileLines<'b> {
         FileLines { opts, lines }
     }
@@ -144,7 +144,7 @@ impl<'a> FileLines<'a> {
     }
 }
 
-impl<'a> Iterator for FileLines<'a> {
+impl Iterator for FileLines<'_> {
     type Item = Line;
 
     fn next(&mut self) -> Option<Line> {
@@ -232,7 +232,7 @@ pub struct ParagraphStream<'a> {
     opts: &'a FmtOptions,
 }
 
-impl<'a> ParagraphStream<'a> {
+impl ParagraphStream<'_> {
     pub fn new<'b>(opts: &'b FmtOptions, reader: &'b mut FileOrStdReader) -> ParagraphStream<'b> {
         let lines = FileLines::new(opts, reader.lines()).peekable();
         // at the beginning of the file, we might find mail headers
@@ -273,7 +273,7 @@ impl<'a> ParagraphStream<'a> {
     }
 }
 
-impl<'a> Iterator for ParagraphStream<'a> {
+impl Iterator for ParagraphStream<'_> {
     type Item = Result<Paragraph, String>;
 
     #[allow(clippy::cognitive_complexity)]
@@ -491,7 +491,7 @@ struct WordSplit<'a> {
     prev_punct: bool,
 }
 
-impl<'a> WordSplit<'a> {
+impl WordSplit<'_> {
     fn analyze_tabs(&self, string: &str) -> (Option<usize>, usize, Option<usize>) {
         // given a string, determine (length before tab) and (printed length after first tab)
         // if there are no tabs, beforetab = -1 and aftertab is the printed length
@@ -517,7 +517,7 @@ impl<'a> WordSplit<'a> {
     }
 }
 
-impl<'a> WordSplit<'a> {
+impl WordSplit<'_> {
     fn new<'b>(opts: &'b FmtOptions, string: &'b str) -> WordSplit<'b> {
         // wordsplits *must* start at a non-whitespace character
         let trim_string = string.trim_start();

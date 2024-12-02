@@ -6,9 +6,8 @@
 // spell-checker:ignore (ToDO) delim mkdelim
 
 use std::cmp::Ordering;
-use std::fs::File;
+use std::fs::{metadata, File};
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
-use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
@@ -130,7 +129,10 @@ fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
     if name == "-" {
         Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
     } else {
-        let f = File::open(Path::new(name))?;
+        if metadata(name)?.is_dir() {
+            return Err(io::Error::new(io::ErrorKind::Other, "Is a directory"));
+        }
+        let f = File::open(name)?;
         Ok(LineReader::new(
             Input::FileIn(BufReader::new(f)),
             line_ending,
