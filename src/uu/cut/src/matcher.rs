@@ -23,7 +23,7 @@ impl<'a> ExactMatcher<'a> {
     }
 }
 
-impl<'a> Matcher for ExactMatcher<'a> {
+impl Matcher for ExactMatcher<'_> {
     fn next_match(&self, haystack: &[u8]) -> Option<(usize, usize)> {
         let mut pos = 0usize;
         loop {

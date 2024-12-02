@@ -41,11 +41,15 @@ use std::collections::VecDeque;
 /// [`push_back`]: struct.RingBuffer.html#method.push_back
 /// [`from_iter`]: struct.RingBuffer.html#method.from_iter
 pub struct RingBuffer<T> {
+    /// The data stored in the ring buffer.
     pub data: VecDeque<T>,
+
+    /// The maximum number of elements that the ring buffer can hold.
     size: usize,
 }
 
 impl<T> RingBuffer<T> {
+    /// Create a new ring buffer with a maximum size of `size`.
     pub fn new(size: usize) -> Self {
         Self {
             data: VecDeque::new(),
@@ -53,6 +57,7 @@ impl<T> RingBuffer<T> {
         }
     }
 
+    /// Create a new ring buffer from an iterator.
     pub fn from_iter(iter: impl Iterator<Item = T>, size: usize) -> Self {
         let mut ring_buffer = Self::new(size);
         for value in iter {

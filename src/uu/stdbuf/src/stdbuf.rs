@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::process;
 use tempfile::tempdir;
 use tempfile::TempDir;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UClapError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -141,7 +141,7 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     let options = ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.0))?;
 

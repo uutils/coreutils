@@ -379,7 +379,8 @@ fn test_presume_input_pipe_5_chars() {
     not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 #[test]
 fn test_read_backwards_bytes_proc_fs_version() {
@@ -394,7 +395,8 @@ fn test_read_backwards_bytes_proc_fs_version() {
     not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 #[test]
 fn test_read_backwards_bytes_proc_fs_modules() {
@@ -409,7 +411,8 @@ fn test_read_backwards_bytes_proc_fs_modules() {
     not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 #[test]
 fn test_read_backwards_lines_proc_fs_modules() {
@@ -424,7 +427,8 @@ fn test_read_backwards_lines_proc_fs_modules() {
     not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
 ))]
 #[test]
 fn test_read_backwards_bytes_sys_kernel_profiling() {

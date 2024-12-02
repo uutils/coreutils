@@ -45,6 +45,7 @@ flamegraph
 fsxattr
 fullblock
 getfacl
+getopt
 gibi
 gibibytes
 glob
@@ -74,6 +75,7 @@ microbenchmarks
 microbenchmarking
 multibyte
 multicall
+nmerge
 noatime
 nocache
 nocreat
@@ -155,3 +157,7 @@ retval
 subdir
 val
 vals
+
+# * clippy
+uninlined
+nonminimal

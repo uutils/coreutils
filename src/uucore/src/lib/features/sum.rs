@@ -207,13 +207,6 @@ impl Digest for CRC {
     }
 }
 
-// This can be replaced with usize::div_ceil once it is stabilized.
-// This implementation approach is optimized for when `b` is a constant,
-// particularly a power of two.
-pub fn div_ceil(a: usize, b: usize) -> usize {
-    (a + b - 1) / b
-}
-
 pub struct BSD {
     state: u16,
 }
@@ -402,7 +395,7 @@ impl<'a> DigestWriter<'a> {
 
     pub fn finalize(&mut self) -> bool {
         if self.was_last_character_carriage_return {
-            self.digest.hash_update(&[b'\r']);
+            self.digest.hash_update(b"\r");
             true
         } else {
             false
@@ -410,7 +403,7 @@ impl<'a> DigestWriter<'a> {
     }
 }
 
-impl<'a> Write for DigestWriter<'a> {
+impl Write for DigestWriter<'_> {
     #[cfg(not(windows))]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.digest.hash_update(buf);
@@ -433,7 +426,7 @@ impl<'a> Write for DigestWriter<'a> {
         // call to `write()`.
         let n = buf.len();
         if self.was_last_character_carriage_return && n > 0 && buf[0] != b'\n' {
-            self.digest.hash_update(&[b'\r']);
+            self.digest.hash_update(b"\r");
         }
 
         // Next, find all occurrences of "\r\n", inputting the slice
@@ -491,15 +484,15 @@ mod tests {
         // Writing "\r" in one call to `write()`, and then "\n" in another.
         let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
         let mut writer_crlf = DigestWriter::new(&mut digest, false);
-        writer_crlf.write_all(&[b'\r']).unwrap();
-        writer_crlf.write_all(&[b'\n']).unwrap();
+        writer_crlf.write_all(b"\r").unwrap();
+        writer_crlf.write_all(b"\n").unwrap();
         writer_crlf.finalize();
         let result_crlf = digest.result_str();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
         let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
-        writer_lf.write_all(&[b'\n']).unwrap();
+        writer_lf.write_all(b"\n").unwrap();
         writer_lf.finalize();
         let result_lf = digest.result_str();
 

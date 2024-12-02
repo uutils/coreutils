@@ -11,13 +11,17 @@ use std::io::Write;
 use std::path::Path;
 
 pub fn main() {
-    if let Ok(profile) = env::var("PROFILE") {
-        println!("cargo:rustc-cfg=build={profile:?}");
-    }
-
     const ENV_FEATURE_PREFIX: &str = "CARGO_FEATURE_";
     const FEATURE_PREFIX: &str = "feat_";
     const OVERRIDE_PREFIX: &str = "uu_";
+
+    // Do not rebuild build script unless the script itself or the enabled features are modified
+    // See <https://doc.rust-lang.org/cargo/reference/build-scripts.html#change-detection>
+    println!("cargo:rerun-if-changed=build.rs");
+
+    if let Ok(profile) = env::var("PROFILE") {
+        println!("cargo:rustc-cfg=build={profile:?}");
+    }
 
     let out_dir = env::var("OUT_DIR").unwrap();
 
@@ -29,8 +33,8 @@ pub fn main() {
             #[allow(clippy::match_same_arms)]
             match krate.as_ref() {
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" => continue, // common/standard feature names
-                "nightly" | "test_unimplemented" => continue, // crate-local custom features
-                "uudoc" => continue,                          // is not a utility
+                "nightly" | "test_unimplemented" | "expensive_tests" => continue, // crate-local custom features
+                "uudoc" => continue, // is not a utility
                 "test" => continue, // over-ridden with 'uu_test' to avoid collision with rust core crate 'test'
                 s if s.starts_with(FEATURE_PREFIX) => continue, // crate feature sets
                 _ => {}             // util feature name
@@ -46,6 +50,7 @@ pub fn main() {
         "type UtilityMap<T> = phf::OrderedMap<&'static str, (fn(T) -> i32, fn() -> Command)>;\n\
          \n\
          #[allow(clippy::too_many_lines)]
+         #[allow(clippy::unreadable_literal)]
          fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n"
             .as_bytes(),
     )

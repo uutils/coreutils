@@ -110,7 +110,7 @@ pub fn print_dired_output(
     out: &mut BufWriter<Stdout>,
 ) -> UResult<()> {
     out.flush()?;
-    if dired.padding == 0 && !dired.dired_positions.is_empty() {
+    if !dired.dired_positions.is_empty() {
         print_positions("//DIRED//", &dired.dired_positions);
     }
     if config.recursive {
@@ -122,9 +122,9 @@ pub fn print_dired_output(
 
 /// Helper function to print positions with a given prefix.
 fn print_positions(prefix: &str, positions: &Vec<BytePosition>) {
-    print!("{}", prefix);
+    print!("{prefix}");
     for c in positions {
-        print!(" {}", c);
+        print!(" {c}");
     }
     println!();
 }

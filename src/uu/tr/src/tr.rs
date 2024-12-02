@@ -8,12 +8,13 @@
 mod operation;
 mod unicode_table;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use operation::{
     translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
 };
+use std::ffi::OsString;
 use std::io::{stdin, stdout, BufWriter};
-use uucore::{format_usage, help_about, help_section, help_usage, show};
+use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show};
 
 use crate::operation::DeleteOperation;
 use uucore::display::Quotable;
@@ -43,7 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Ultimately this should be OsString, but we might want to wait for the
     // pattern API on OsStr
     let sets: Vec<_> = matches
-        .get_many::<String>(options::SETS)
+        .get_many::<OsString>(options::SETS)
         .into_iter()
         .flatten()
         .map(ToOwned::to_owned)
@@ -81,23 +82,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let op = sets[1].quote();
             let msg = if sets_len == 2 {
                 format!(
-                    "{} {}\nOnly one string may be given when deleting without squeezing repeats.",
-                    start, op,
+                    "{start} {op}\nOnly one string may be given when deleting without squeezing repeats.",
                 )
             } else {
-                format!("{} {}", start, op,)
+                format!("{start} {op}",)
             };
             return Err(UUsageError::new(1, msg));
         }
         if sets_len > 2 {
             let op = sets[2].quote();
-            let msg = format!("{} {}", start, op);
+            let msg = format!("{start} {op}");
             return Err(UUsageError::new(1, msg));
         }
     }
 
     if let Some(first) = sets.first() {
-        if first.ends_with('\\') {
+        let slice = os_str_as_bytes(first)?;
+        let trailing_backslashes = slice.iter().rev().take_while(|&&c| c == b'\\').count();
+        if trailing_backslashes % 2 == 1 {
+            // The trailing backslash has a non-backslash character before it.
             show!(USimpleError::new(
                 0,
                 "warning: an unescaped backslash at end of string is not portable"
@@ -113,10 +116,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
-    let mut sets_iter = sets.iter().map(|c| c.as_str());
+    let mut sets_iter = sets.iter().map(|c| c.as_os_str());
     let (set1, set2) = Sequence::solve_set_characters(
-        sets_iter.next().unwrap_or_default().as_bytes(),
-        sets_iter.next().unwrap_or_default().as_bytes(),
+        os_str_as_bytes(sets_iter.next().unwrap_or_default())?,
+        os_str_as_bytes(sets_iter.next().unwrap_or_default())?,
         complement_flag,
         // if we are not translating then we don't truncate set1
         truncate_set1_flag && translating,
@@ -129,24 +132,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let delete_op = DeleteOperation::new(set1);
             let squeeze_op = SqueezeOperation::new(set2);
             let op = delete_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         } else {
             let op = DeleteOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         }
     } else if squeeze_flag {
         if sets_len < 2 {
             let op = SqueezeOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         } else {
             let translate_op = TranslateOperation::new(set1, set2.clone())?;
             let squeeze_op = SqueezeOperation::new(set2);
             let op = translate_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         }
     } else {
         let op = TranslateOperation::new(set1, set2)?;
-        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
     }
     Ok(())
 }
@@ -195,5 +198,9 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::TRUNCATE_SET1),
         )
-        .arg(Arg::new(options::SETS).num_args(1..))
+        .arg(
+            Arg::new(options::SETS)
+                .num_args(1..)
+                .value_parser(value_parser!(OsString)),
+        )
 }

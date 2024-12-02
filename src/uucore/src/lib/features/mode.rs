@@ -191,14 +191,11 @@ pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
             break;
         }
         if let Some(arg_stripped) = arg.strip_prefix('-') {
-            if let Some(second) = arg.chars().nth(1) {
-                match second {
-                    'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
-                        *arg = arg_stripped.to_string();
-                        return true;
-                    }
-                    _ => {}
-                }
+            if let Some('r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7') =
+                arg.chars().nth(1)
+            {
+                *arg = arg_stripped.to_string();
+                return true;
             }
         }
     }

@@ -67,7 +67,7 @@ fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UR
             }
             InvalidModes::Ignore => {}
         };
-        println!("{}", input_line);
+        println!("{input_line}");
     }
 
     Ok(())
@@ -428,8 +428,8 @@ mod tests {
         options.header = 0;
         let result = handle_buffer(BufReader::new(mock_buffer), &options)
             .expect_err("returned Ok after receiving IO error");
-        let result_debug = format!("{:?}", result);
-        let result_display = format!("{}", result);
+        let result_debug = format!("{result:?}");
+        let result_display = format!("{result}");
         assert_eq!(result_debug, "IoError(\"broken pipe\")");
         assert_eq!(result_display, "broken pipe");
         assert_eq!(result.code(), 1);

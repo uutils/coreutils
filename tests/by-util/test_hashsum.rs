@@ -19,19 +19,20 @@ macro_rules! test_digest {
         static BITS_ARG: &'static str = concat!("--bits=", stringify!($size));
         static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");
         static CHECK_FILE: &'static str = concat!(stringify!($id), ".checkfile");
+        static INPUT_FILE: &'static str = "input.txt";
 
         #[test]
         fn test_single_file() {
             let ts = TestScenario::new("hashsum");
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
-                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("input.txt").succeeds().no_stderr().stdout_str()));
+                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg(INPUT_FILE).succeeds().no_stderr().stdout_str()));
         }
 
         #[test]
         fn test_stdin() {
             let ts = TestScenario::new("hashsum");
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
-                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).pipe_in_fixture("input.txt").succeeds().no_stderr().stdout_str()));
+                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).pipe_in_fixture(INPUT_FILE).succeeds().no_stderr().stdout_str()));
         }
 
         #[test]
@@ -41,7 +42,7 @@ macro_rules! test_digest {
             if DIGEST_ARG == "--b3sum" {
                 // Option only available on b3sum
                 assert_eq!(format!("{0}\n{0}\n", ts.fixtures.read(EXPECTED_FILE)),
-                       ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--no-names").arg("input.txt").arg("-").pipe_in_fixture("input.txt")
+                       ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--no-names").arg(INPUT_FILE).arg("-").pipe_in_fixture(INPUT_FILE)
                        .succeeds().no_stderr().stdout_str()
                        );
                 }
@@ -50,7 +51,7 @@ macro_rules! test_digest {
         #[test]
         fn test_check() {
             let ts = TestScenario::new("hashsum");
-            println!("File content='{}'", ts.fixtures.read("input.txt"));
+            println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
             println!("Check file='{}'", ts.fixtures.read(CHECK_FILE));
 
             ts.ucmd()
@@ -64,7 +65,7 @@ macro_rules! test_digest {
         fn test_zero() {
             let ts = TestScenario::new("hashsum");
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
-                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--zero").arg("input.txt").succeeds().no_stderr().stdout_str()));
+                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--zero").arg(INPUT_FILE).succeeds().no_stderr().stdout_str()));
         }
 
 
@@ -83,7 +84,7 @@ macro_rules! test_digest {
             // The asterisk indicates that the digest was computed in
             // binary mode.
             let n = expected.len();
-            let expected = [&expected[..n - 3], &[b' ', b'-', b'\n']].concat();
+            let expected = [&expected[..n - 3], b" -\n"].concat();
             new_ucmd!()
                 .args(&[DIGEST_ARG, BITS_ARG, "-t"])
                 .pipe_in("a\r\nb\r\nc\r\n")
@@ -874,6 +875,19 @@ fn test_check_quiet() {
         .fails()
         .stdout_contains("f: FAILED")
         .stderr_contains("WARNING: 1 computed checksum did NOT match");
+
+    scene
+        .ccmd("md5sum")
+        .arg("--quiet")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stderr_contains("md5sum: the --quiet option is meaningful only when verifying checksums");
+    scene
+        .ccmd("md5sum")
+        .arg("--strict")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stderr_contains("md5sum: the --strict option is meaningful only when verifying checksums");
 }
 
 #[test]
@@ -889,4 +903,156 @@ fn test_star_to_start() {
         .arg(at.subdir.join("in.md5"))
         .succeeds()
         .stdout_only("f: OK\n");
+}
+
+#[test]
+fn test_check_b2sum_strict_check() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("f");
+
+    let checksums = [
+        "2e  f\n",
+        "e4a6a0577479b2b4  f\n",
+        "cae66941d9efbd404e4d88758ea67670  f\n",
+        "246c0442cd564aced8145b8b60f1370aa7  f\n",
+        "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8  f\n",
+        "4ded8c5fc8b12f3273f877ca585a44ad6503249a2b345d6d9c0e67d85bcb700db4178c0303e93b8f4ad758b8e2c9fd8b3d0c28e585f1928334bb77d36782e8  f\n",
+        "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce  f\n",
+    ];
+
+    at.write("ck", &checksums.join(""));
+
+    let output = "f: OK\n".to_string().repeat(checksums.len());
+
+    scene
+        .ccmd("b2sum")
+        .arg("-c")
+        .arg(at.subdir.join("ck"))
+        .succeeds()
+        .stdout_only(&output);
+
+    scene
+        .ccmd("b2sum")
+        .arg("--strict")
+        .arg("-c")
+        .arg(at.subdir.join("ck"))
+        .succeeds()
+        .stdout_only(&output);
+}
+
+#[test]
+fn test_check_md5_comment_line() {
+    // A comment in a checksum file shall be discarded unnoticed.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write(
+        "MD5SUM",
+        "\
+        # This is a comment\n\
+        8411029f3f5b781026a93db636aca721  foo\n\
+        # next comment is empty\n#",
+    );
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("MD5SUM")
+        .succeeds()
+        .stdout_contains("foo: OK")
+        .no_stderr();
+}
+
+#[test]
+fn test_check_md5_comment_only() {
+    // A file only filled with comments is equivalent to an empty file,
+    // and therefore produces an error.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write("MD5SUM", "# This is a comment\n");
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("MD5SUM")
+        .fails()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_check_md5_comment_leading_space() {
+    // A file only filled with comments is equivalent to an empty file,
+    // and therefore produces an error.
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foo", "foo-content\n");
+    at.write(
+        "MD5SUM",
+        " # This is a comment\n\
+        8411029f3f5b781026a93db636aca721  foo\n",
+    );
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("MD5SUM")
+        .succeeds()
+        .stdout_contains("foo: OK")
+        .stderr_contains("WARNING: 1 line is improperly formatted");
+}
+
+#[test]
+fn test_sha256_binary() {
+    let ts = TestScenario::new(util_name!());
+    assert_eq!(
+        ts.fixtures.read("binary.sha256.expected"),
+        get_hash!(ts
+            .ucmd()
+            .arg("--sha256")
+            .arg("--bits=256")
+            .arg("binary.png")
+            .succeeds()
+            .no_stderr()
+            .stdout_str())
+    );
+}
+
+#[test]
+fn test_sha256_stdin_binary() {
+    let ts = TestScenario::new(util_name!());
+    assert_eq!(
+        ts.fixtures.read("binary.sha256.expected"),
+        get_hash!(ts
+            .ucmd()
+            .arg("--sha256")
+            .arg("--bits=256")
+            .pipe_in_fixture("binary.png")
+            .succeeds()
+            .no_stderr()
+            .stdout_str())
+    );
+}
+
+#[test]
+fn test_check_sha256_binary() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&[
+            "--sha256",
+            "--bits=256",
+            "--check",
+            "binary.sha256.checkfile",
+        ])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("binary.png: OK\n");
 }
