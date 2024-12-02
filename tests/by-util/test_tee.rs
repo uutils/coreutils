@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#![allow(clippy::borrow_as_ptr)]
+
 use crate::common::util::TestScenario;
 use regex::Regex;
 #[cfg(target_os = "linux")]
@@ -170,7 +172,7 @@ mod linux_only {
 
         let mut fds: [c_int; 2] = [0, 0];
         assert!(
-            (unsafe { libc::pipe(&mut fds as *mut c_int) } == 0),
+            (unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) } == 0),
             "Failed to create pipe"
         );
 

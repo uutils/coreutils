@@ -4,14 +4,21 @@
 // file that was distributed with this source code.
 
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus
 
 #![allow(dead_code)]
+#![allow(
+    clippy::too_many_lines,
+    clippy::should_panic_without_expect,
+    clippy::missing_errors_doc
+)]
 
 #[cfg(unix)]
 use libc::mode_t;
 #[cfg(unix)]
 use nix::pty::OpenptyResult;
+#[cfg(unix)]
+use nix::sys;
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use rlimit::setrlimit;
@@ -54,7 +61,7 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
 static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
-static END_OF_TRANSMISSION_SEQUENCE: &[u8] = &[b'\n', 0x04];
+static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 pub const PATH: &str = env!("PATH");
@@ -68,7 +75,7 @@ pub fn is_ci() -> bool {
 }
 
 /// Read a test scenario fixture, returning its bytes
-fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> Vec<u8> {
+fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: Option<&Rc<TempDir>>, file_rel_path: S) -> Vec<u8> {
     let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();
     AtPath::new(tmpdir_path).read_bytes(file_rel_path.as_ref().to_str().unwrap())
 }
@@ -182,7 +189,7 @@ impl CmdResult {
 
     /// Assert `stdout` as bytes with a predicate function returning a `bool`.
     #[track_caller]
-    pub fn stdout_check<'a, F>(&'a self, predicate: F) -> &Self
+    pub fn stdout_check<'a, F>(&'a self, predicate: F) -> &'a Self
     where
         F: Fn(&'a [u8]) -> bool,
     {
@@ -197,7 +204,7 @@ impl CmdResult {
 
     /// Assert `stdout` as `&str` with a predicate function returning a `bool`.
     #[track_caller]
-    pub fn stdout_str_check<'a, F>(&'a self, predicate: F) -> &Self
+    pub fn stdout_str_check<'a, F>(&'a self, predicate: F) -> &'a Self
     where
         F: Fn(&'a str) -> bool,
     {
@@ -212,7 +219,7 @@ impl CmdResult {
 
     /// Assert `stderr` as bytes with a predicate function returning a `bool`.
     #[track_caller]
-    pub fn stderr_check<'a, F>(&'a self, predicate: F) -> &Self
+    pub fn stderr_check<'a, F>(&'a self, predicate: F) -> &'a Self
     where
         F: Fn(&'a [u8]) -> bool,
     {
@@ -227,7 +234,7 @@ impl CmdResult {
 
     /// Assert `stderr` as `&str` with a predicate function returning a `bool`.
     #[track_caller]
-    pub fn stderr_str_check<'a, F>(&'a self, predicate: F) -> &Self
+    pub fn stderr_str_check<'a, F>(&'a self, predicate: F) -> &'a Self
     where
         F: Fn(&'a str) -> bool,
     {
@@ -510,7 +517,7 @@ impl CmdResult {
     /// like `stdout_is()`, but expects the contents of the file at the provided relative path
     #[track_caller]
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        let contents = read_scenario_fixture(self.tmpd.as_ref(), file_rel_path);
         self.stdout_is(String::from_utf8(contents).unwrap())
     }
 
@@ -532,7 +539,7 @@ impl CmdResult {
     /// ```
     #[track_caller]
     pub fn stdout_is_fixture_bytes<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        let contents = read_scenario_fixture(self.tmpd.as_ref(), file_rel_path);
         self.stdout_is_bytes(contents)
     }
 
@@ -545,7 +552,7 @@ impl CmdResult {
         template_vars: &[(&str, &str)],
     ) -> &Self {
         let mut contents =
-            String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
+            String::from_utf8(read_scenario_fixture(self.tmpd.as_ref(), file_rel_path)).unwrap();
         for kv in template_vars {
             contents = contents.replace(kv.0, kv.1);
         }
@@ -559,7 +566,8 @@ impl CmdResult {
         file_rel_path: T,
         template_vars: &[Vec<(String, String)>],
     ) {
-        let contents = String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
+        let contents =
+            String::from_utf8(read_scenario_fixture(self.tmpd.as_ref(), file_rel_path)).unwrap();
         let possible_values = template_vars.iter().map(|vars| {
             let mut contents = contents.clone();
             for kv in vars {
@@ -597,7 +605,7 @@ impl CmdResult {
     /// Like `stdout_is_fixture`, but for stderr
     #[track_caller]
     pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        let contents = read_scenario_fixture(self.tmpd.as_ref(), file_rel_path);
         self.stderr_is(String::from_utf8(contents).unwrap())
     }
 
@@ -622,7 +630,7 @@ impl CmdResult {
     /// like `stdout_only()`, but expects the contents of the file at the provided relative path
     #[track_caller]
     pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        let contents = read_scenario_fixture(self.tmpd.as_ref(), file_rel_path);
         self.stdout_only_bytes(contents)
     }
 
@@ -793,7 +801,7 @@ pub fn compare_xattrs<P: AsRef<std::path::Path>>(path1: P, path2: P) -> bool {
                 attrs.sort();
                 attrs
             })
-            .unwrap_or_else(|_| Vec::new())
+            .unwrap_or_default()
     };
 
     get_sorted_xattrs(path1) == get_sorted_xattrs(path2)
@@ -1377,7 +1385,7 @@ impl UCommand {
 
     /// like `pipe_in()`, but uses the contents of the file at the provided relative path as the piped in data
     pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> &mut Self {
-        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        let contents = read_scenario_fixture(self.tmpd.as_ref(), file_rel_path);
         self.pipe_in(contents)
     }
 
@@ -1491,7 +1499,6 @@ impl UCommand {
 
     #[cfg(unix)]
     fn spawn_reader_thread(
-        &self,
         captured_output: Option<CapturedOutput>,
         pty_fd_master: OwnedFd,
         name: String,
@@ -1518,12 +1525,12 @@ impl UCommand {
     ///
     /// These __defaults__ are:
     /// * `bin_path`: Depending on the platform and os, the native shell (unix -> `/bin/sh` etc.).
-    /// This default also requires to set the first argument to `-c` on unix (`/C` on windows) if
-    /// this argument wasn't specified explicitly by the user.
+    ///   This default also requires to set the first argument to `-c` on unix (`/C` on windows) if
+    ///   this argument wasn't specified explicitly by the user.
     /// * `util_name`: `None`. If neither `bin_path` nor `util_name` were given the arguments are
-    /// run in a shell (See `bin_path` above).
+    ///   run in a shell (See `bin_path` above).
     /// * `temp_dir`: If `current_dir` was not set, a new temporary directory will be created in
-    /// which this command will be run and `current_dir` will be set to this `temp_dir`.
+    ///   which this command will be run and `current_dir` will be set to this `temp_dir`.
     /// * `current_dir`: The temporary directory given by `temp_dir`.
     /// * `timeout`: `30 seconds`
     /// * `stdin`: `Stdio::null()`
@@ -1678,7 +1685,7 @@ impl UCommand {
                     slave: po_slave,
                     master: po_master,
                 } = nix::pty::openpty(&terminal_size, None).unwrap();
-                captured_stdout = self.spawn_reader_thread(
+                captured_stdout = Self::spawn_reader_thread(
                     captured_stdout,
                     po_master,
                     "stdout_reader".to_string(),
@@ -1691,7 +1698,7 @@ impl UCommand {
                     slave: pe_slave,
                     master: pe_master,
                 } = nix::pty::openpty(&terminal_size, None).unwrap();
-                captured_stderr = self.spawn_reader_thread(
+                captured_stderr = Self::spawn_reader_thread(
                     captured_stderr,
                     pe_master,
                     "stderr_reader".to_string(),
@@ -2091,7 +2098,7 @@ impl UChild {
         self.delay(millis).make_assertion()
     }
 
-    /// Try to kill the child process and wait for it's termination.
+    /// Try to kill the child process and wait for its termination.
     ///
     /// This method blocks until the child process is killed, but returns an error if `self.timeout`
     /// or the default of 60s was reached. If no such error happened, the process resources are
@@ -2139,6 +2146,75 @@ impl UChild {
     /// If the child process could not be terminated within `self.timeout` or the default of 60s.
     pub fn kill(&mut self) -> &mut Self {
         self.try_kill()
+            .or_else(|error| {
+                // We still throw the error on timeout in the `try_kill` function
+                if error.kind() == io::ErrorKind::Other {
+                    Err(error)
+                } else {
+                    Ok(())
+                }
+            })
+            .unwrap();
+        self
+    }
+
+    /// Try to kill the child process and wait for its termination.
+    ///
+    /// This method blocks until the child process is killed, but returns an error if `self.timeout`
+    /// or the default of 60s was reached. If no such error happened, the process resources are
+    /// released, so there is usually no need to call `wait` or alike on unix systems although it's
+    /// still possible to do so.
+    ///
+    /// # Platform specific behavior
+    ///
+    /// On unix systems the child process resources will be released like a call to [`Child::wait`]
+    /// or alike would do.
+    ///
+    /// # Error
+    ///
+    /// If [`Child::kill`] returned an error or if the child process could not be terminated within
+    /// `self.timeout` or the default of 60s.
+    #[cfg(unix)]
+    pub fn try_kill_with_custom_signal(
+        &mut self,
+        signal_name: sys::signal::Signal,
+    ) -> io::Result<()> {
+        let start = Instant::now();
+        sys::signal::kill(
+            nix::unistd::Pid::from_raw(self.raw.id().try_into().unwrap()),
+            signal_name,
+        )
+        .unwrap();
+
+        let timeout = self.timeout.unwrap_or(Duration::from_secs(60));
+        // As a side effect, we're cleaning up the killed child process with the implicit call to
+        // `Child::try_wait` in `self.is_alive`, which reaps the process id on unix systems. We
+        // always fail with error on timeout if `self.timeout` is set to zero.
+        while self.is_alive() || timeout == Duration::ZERO {
+            if start.elapsed() < timeout {
+                self.delay(10);
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("kill: Timeout of '{}s' reached", timeout.as_secs_f64()),
+                ));
+            }
+            hint::spin_loop();
+        }
+
+        Ok(())
+    }
+
+    /// Terminate the child process using custom signal parameter and wait for the termination.
+    ///
+    /// Ignores any errors happening during [`Child::kill`] (i.e. child process already exited) but
+    /// still panics on timeout.
+    ///
+    /// # Panics
+    /// If the child process could not be terminated within `self.timeout` or the default of 60s.
+    #[cfg(unix)]
+    pub fn kill_with_custom_signal(&mut self, signal_name: sys::signal::Signal) -> &mut Self {
+        self.try_kill_with_custom_signal(signal_name)
             .or_else(|error| {
                 // We still throw the error on timeout in the `try_kill` function
                 if error.kind() == io::ErrorKind::Other {
@@ -3077,7 +3153,7 @@ mod tests {
         let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
 
         result.stdout_str_check(|stdout| stdout.ends_with("world\n"));
-        result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
         result.no_stderr();
     }
 
@@ -3092,7 +3168,7 @@ mod tests {
         ));
 
         result.stderr_str_check(|stderr| stderr.ends_with("world\n"));
-        result.stderr_check(|stderr| stderr.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.stderr_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
         result.no_stdout();
     }
 
@@ -3189,8 +3265,6 @@ mod tests {
     #[cfg(feature = "sleep")]
     #[cfg(unix)]
     #[rstest]
-    #[case::signal_full_name_lower_case("sigkill")]
-    #[case::signal_short_name_lower_case("kill")]
     #[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
     #[case::signal_just_sig("SIG")]
     #[case::signal_value_too_high("100")]
@@ -3201,6 +3275,17 @@ mod tests {
         child.kill();
         let result = child.wait().unwrap();
         result.signal_name_is(signal_name);
+    }
+
+    #[test]
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    fn test_cmd_result_signal_name_is_accepts_lowercase() {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+        child.kill();
+        let result = child.wait().unwrap();
+        result.signal_name_is("sigkill");
+        result.signal_name_is("kill");
     }
 
     #[test]
@@ -3895,6 +3980,7 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[cfg(not(target_os = "openbsd"))]
     #[test]
     fn test_altering_umask() {
         use uucore::mode::get_umask;

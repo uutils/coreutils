@@ -316,7 +316,7 @@ pub struct FilenameIterator<'a> {
 }
 
 impl<'a> FilenameIterator<'a> {
-    pub fn new(prefix: &'a str, suffix: &'a Suffix) -> UResult<FilenameIterator<'a>> {
+    pub fn new(prefix: &'a str, suffix: &'a Suffix) -> UResult<Self> {
         let radix = suffix.stype.radix();
         let number = if suffix.auto_widening {
             Number::DynamicWidth(DynamicWidthNumber::new(radix, suffix.start))
@@ -341,7 +341,7 @@ impl<'a> FilenameIterator<'a> {
     }
 }
 
-impl<'a> Iterator for FilenameIterator<'a> {
+impl Iterator for FilenameIterator<'_> {
     type Item = String;
 
     fn next(&mut self) -> Option<Self::Item> {

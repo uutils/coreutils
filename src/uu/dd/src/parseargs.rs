@@ -430,7 +430,7 @@ impl std::fmt::Display for ParseError {
                 write!(f, "Unrecognized conv=CONV -> {arg}")
             }
             Self::MultiplierStringParseFailure(arg) => {
-                write!(f, "Unrecognized byte multiplier -> {arg}")
+                write!(f, "invalid number: ‘{arg}’")
             }
             Self::MultiplierStringOverflow(arg) => {
                 write!(
@@ -474,8 +474,9 @@ fn show_zero_multiplier_warning() {
 }
 
 /// Parse bytes using str::parse, then map error if needed.
-fn parse_bytes_only(s: &str) -> Result<u64, ParseError> {
-    s.parse()
+fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
+    s[..i]
+        .parse()
         .map_err(|_| ParseError::MultiplierStringParseFailure(s.to_string()))
 }
 
@@ -520,9 +521,9 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
                 return Err(ParseError::InvalidNumber(full.to_string()))
             }
         },
-        (Some(i), None, None) => (parse_bytes_only(&s[..i])?, 1),
-        (None, Some(i), None) => (parse_bytes_only(&s[..i])?, 2),
-        (None, None, Some(i)) => (parse_bytes_only(&s[..i])?, 512),
+        (Some(i), None, None) => (parse_bytes_only(s, i)?, 1),
+        (None, Some(i), None) => (parse_bytes_only(s, i)?, 2),
+        (None, None, Some(i)) => (parse_bytes_only(s, i)?, 512),
         _ => return Err(ParseError::MultiplierStringParseFailure(full.to_string())),
     };
     num.checked_mul(multiplier)

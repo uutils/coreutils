@@ -3,12 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD
+#![allow(clippy::missing_errors_doc)]
 
 use crate::common::util::TestScenario;
 #[cfg(unix)]
 use crate::common::util::UChild;
 #[cfg(unix)]
 use nix::sys::signal::Signal;
+#[cfg(feature = "echo")]
 use regex::Regex;
 use std::env;
 use std::path::Path;
@@ -34,13 +36,14 @@ impl Target {
         Self { child }
     }
     fn send_signal(&mut self, signal: Signal) {
-        Command::new("kill")
+        let _ = Command::new("kill")
             .args(&[
                 format!("-{}", signal as i32),
                 format!("{}", self.child.id()),
             ])
             .spawn()
-            .expect("failed to send signal");
+            .expect("failed to send signal")
+            .wait();
         self.child.delay(100);
     }
     fn is_alive(&mut self) -> bool {
@@ -97,6 +100,7 @@ fn test_if_windows_batch_files_can_be_executed() {
     assert!(result.stdout_str().contains("Hello Windows World!"));
 }
 
+#[cfg(feature = "echo")]
 #[test]
 fn test_debug_1() {
     let ts = TestScenario::new(util_name!());
@@ -117,6 +121,7 @@ fn test_debug_1() {
     );
 }
 
+#[cfg(feature = "echo")]
 #[test]
 fn test_debug_2() {
     let ts = TestScenario::new(util_name!());
@@ -143,6 +148,7 @@ fn test_debug_2() {
     );
 }
 
+#[cfg(feature = "echo")]
 #[test]
 fn test_debug1_part_of_string_arg() {
     let ts = TestScenario::new(util_name!());
@@ -164,6 +170,7 @@ fn test_debug1_part_of_string_arg() {
     );
 }
 
+#[cfg(feature = "echo")]
 #[test]
 fn test_debug2_part_of_string_arg() {
     let ts = TestScenario::new(util_name!());
@@ -555,28 +562,28 @@ fn test_env_parsing_errors() {
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S\|\&\;"#) // no quotes, invalid escape sequence |
+        .arg(r"-S\|\&\;") // no quotes, invalid escape sequence |
         .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\|' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S\<\&\;"#) // no quotes, invalid escape sequence <
+        .arg(r"-S\<\&\;") // no quotes, invalid escape sequence <
         .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\<' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S\>\&\;"#) // no quotes, invalid escape sequence >
+        .arg(r"-S\>\&\;") // no quotes, invalid escape sequence >
         .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\>' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S\`\&\;"#) // no quotes, invalid escape sequence `
+        .arg(r"-S\`\&\;") // no quotes, invalid escape sequence `
         .fails()
         .code_is(125)
         .no_stdout()
@@ -590,14 +597,14 @@ fn test_env_parsing_errors() {
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S'\`\&\;'"#) // single quotes, invalid escape sequence `
+        .arg(r"-S'\`\&\;'") // single quotes, invalid escape sequence `
         .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S\`"#) // ` escaped without quotes
+        .arg(r"-S\`") // ` escaped without quotes
         .fails()
         .code_is(125)
         .no_stdout()
@@ -611,14 +618,14 @@ fn test_env_parsing_errors() {
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S'\`'"#) // ` escaped in single quotes
+        .arg(r"-S'\`'") // ` escaped in single quotes
         .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
-        .args(&[r#"-S\🦉"#]) // ` escaped in single quotes
+        .args(&[r"-S\🦉"]) // ` escaped in single quotes
         .fails()
         .code_is(125)
         .no_stdout()
@@ -747,7 +754,7 @@ fn test_env_with_gnu_reference_unset_invalid_variables() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, feature = "dirname", feature = "echo"))]
 fn test_env_overwrite_arg0() {
     let ts = TestScenario::new(util_name!());
 
@@ -771,7 +778,7 @@ fn test_env_overwrite_arg0() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, feature = "echo"))]
 fn test_env_arg_argv0_overwrite() {
     let ts = TestScenario::new(util_name!());
 
@@ -819,7 +826,7 @@ fn test_env_arg_argv0_overwrite() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, feature = "echo"))]
 fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
     let ts = TestScenario::new(util_name!());
 
@@ -1031,7 +1038,7 @@ mod tests_split_iterator {
         // minimal amount of quoting in typical cases.
         match escape_style(s) {
             EscapeStyle::None => s.into(),
-            EscapeStyle::SingleQuoted => format!("'{}'", s).into(),
+            EscapeStyle::SingleQuoted => format!("'{s}'").into(),
             EscapeStyle::Mixed => {
                 let mut quoted = String::new();
                 quoted.push('\'');
@@ -1111,17 +1118,13 @@ mod tests_split_iterator {
             match split(input) {
                 Err(actual) => {
                     panic!(
-                        "[{i}] calling split({:?}):\nexpected: Ok({:?})\n  actual: Err({:?})\n",
-                        input, expected, actual
+                        "[{i}] calling split({input:?}):\nexpected: Ok({expected:?})\n  actual: Err({actual:?})\n"
                     );
                 }
                 Ok(actual) => {
                     assert!(
                         expected == actual.as_slice(),
-                        "[{i}] After split({:?}).unwrap()\nexpected: {:?}\n  actual: {:?}\n",
-                        input,
-                        expected,
-                        actual
+                        "[{i}] After split({input:?}).unwrap()\nexpected: {expected:?}\n  actual: {actual:?}\n"
                     );
                 }
             }
@@ -1165,11 +1168,11 @@ mod tests_split_iterator {
     #[test]
     fn split_single_quotes() {
         split_ok(&[
-            (r#"''"#, &[r#""#]),
-            (r#"'a'"#, &[r#"a"#]),
-            (r#"'\\'"#, &[r#"\"#]),
-            (r#"' \\ '"#, &[r#" \ "#]),
-            (r#"'#'"#, &[r#"#"#]),
+            (r"''", &[r""]),
+            (r"'a'", &[r"a"]),
+            (r"'\\'", &[r"\"]),
+            (r"' \\ '", &[r" \ "]),
+            (r"'#'", &[r"#"]),
         ]);
     }
 
@@ -1191,12 +1194,12 @@ mod tests_split_iterator {
     #[test]
     fn split_unquoted() {
         split_ok(&[
-            (r#"\\|\\&\\;"#, &[r#"\|\&\;"#]),
-            (r#"\\<\\>"#, &[r#"\<\>"#]),
-            (r#"\\(\\)"#, &[r#"\(\)"#]),
-            (r#"\$"#, &[r#"$"#]),
+            (r"\\|\\&\\;", &[r"\|\&\;"]),
+            (r"\\<\\>", &[r"\<\>"]),
+            (r"\\(\\)", &[r"\(\)"]),
+            (r"\$", &[r"$"]),
             (r#"\""#, &[r#"""#]),
-            (r#"\'"#, &[r#"'"#]),
+            (r"\'", &[r"'"]),
             ("\\\n", &[]),
             (" \\\n \n", &[]),
             ("a\nb\nc", &["a", "b", "c"]),
@@ -1276,7 +1279,7 @@ mod tests_split_iterator {
             Err(ParseError::InvalidSequenceBackslashXInMinusS { pos: 2, c: 'a' })
         );
         assert_eq!(
-            split(r#"\🦉"#),
+            split(r"\🦉"),
             Err(ParseError::InvalidSequenceBackslashXInMinusS {
                 pos: 1,
                 c: '\u{FFFD}'
@@ -1287,9 +1290,9 @@ mod tests_split_iterator {
     #[test]
     fn split_comments() {
         split_ok(&[
-            (r#" x # comment "#, &["x"]),
-            (r#" w1#w2 "#, &["w1#w2"]),
-            (r#"'not really a # comment'"#, &["not really a # comment"]),
+            (r" x # comment ", &["x"]),
+            (r" w1#w2 ", &["w1#w2"]),
+            (r"'not really a # comment'", &["not really a # comment"]),
             (" a # very long comment \n b # another comment", &["a", "b"]),
         ]);
     }

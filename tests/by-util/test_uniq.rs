@@ -357,6 +357,7 @@ struct TestCase {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn gnu_tests() {
     let cases = [
         TestCase {

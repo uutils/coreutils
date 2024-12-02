@@ -175,7 +175,7 @@ impl Entry {
             let source_is_dir = direntry.path().is_dir();
             if path_ends_with_terminator(context.target) && source_is_dir {
                 if let Err(e) = std::fs::create_dir_all(context.target) {
-                    eprintln!("Failed to create directory: {}", e);
+                    eprintln!("Failed to create directory: {e}");
                 }
             } else {
                 descendant = descendant.strip_prefix(context.root)?.to_path_buf();
@@ -431,7 +431,9 @@ pub(crate) fn copy_directory(
         let dest = target.join(root.file_name().unwrap());
         copy_attributes(root, dest.as_path(), &options.attributes)?;
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
-            copy_attributes(x, y, &options.attributes)?;
+            if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
+                copy_attributes(&src, y, &options.attributes)?;
+            }
         }
     } else {
         copy_attributes(root, target, &options.attributes)?;

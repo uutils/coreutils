@@ -370,6 +370,6 @@ impl<'a> SplitIterator<'a> {
 }
 
 pub fn split(s: &NativeIntStr) -> Result<Vec<NativeIntString>, ParseError> {
-    let splitted_args = SplitIterator::new(s).split()?;
-    Ok(splitted_args)
+    let split_args = SplitIterator::new(s).split()?;
+    Ok(split_args)
 }

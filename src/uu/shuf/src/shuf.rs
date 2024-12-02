@@ -279,7 +279,10 @@ impl<'a> Shufable for Vec<&'a [u8]> {
         // this is safe.
         (**self).choose(rng).unwrap()
     }
-    type PartialShuffleIterator<'b> = std::iter::Copied<std::slice::Iter<'b, &'a [u8]>> where Self: 'b;
+    type PartialShuffleIterator<'b>
+        = std::iter::Copied<std::slice::Iter<'b, &'a [u8]>>
+    where
+        Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
@@ -298,7 +301,10 @@ impl Shufable for RangeInclusive<usize> {
     fn choose(&self, rng: &mut WrappedRng) -> usize {
         rng.gen_range(self.clone())
     }
-    type PartialShuffleIterator<'b> = NonrepeatingIterator<'b> where Self: 'b;
+    type PartialShuffleIterator<'b>
+        = NonrepeatingIterator<'b>
+    where
+        Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
@@ -321,14 +327,10 @@ struct NonrepeatingIterator<'a> {
 }
 
 impl<'a> NonrepeatingIterator<'a> {
-    fn new(
-        range: RangeInclusive<usize>,
-        rng: &'a mut WrappedRng,
-        amount: usize,
-    ) -> NonrepeatingIterator {
+    fn new(range: RangeInclusive<usize>, rng: &'a mut WrappedRng, amount: usize) -> Self {
         let capped_amount = if range.start() > range.end() {
             0
-        } else if *range.start() == 0 && *range.end() == std::usize::MAX {
+        } else if *range.start() == 0 && *range.end() == usize::MAX {
             amount
         } else {
             amount.min(range.end() - range.start() + 1)
@@ -378,7 +380,7 @@ impl<'a> NonrepeatingIterator<'a> {
     }
 }
 
-impl<'a> Iterator for NonrepeatingIterator<'a> {
+impl Iterator for NonrepeatingIterator<'_> {
     type Item = usize;
 
     fn next(&mut self) -> Option<usize> {
@@ -405,7 +407,7 @@ trait Writable {
     fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error>;
 }
 
-impl<'a> Writable for &'a [u8] {
+impl Writable for &[u8] {
     fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error> {
         output.write_all(self)
     }
@@ -482,7 +484,7 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
 }
 
 fn parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
-    let mut result = std::usize::MAX;
+    let mut result = usize::MAX;
     for count in headcounts {
         match count.parse::<usize>() {
             Ok(pv) => result = std::cmp::min(result, pv),
@@ -535,17 +537,17 @@ mod test_number_set_decision {
 
     #[test]
     fn test_stay_positive_large_remaining_first() {
-        assert_eq!(false, number_set_should_list_remaining(0, std::usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(0, usize::MAX));
     }
 
     #[test]
     fn test_stay_positive_large_remaining_second() {
-        assert_eq!(false, number_set_should_list_remaining(1, std::usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(1, usize::MAX));
     }
 
     #[test]
     fn test_stay_positive_large_remaining_tenth() {
-        assert_eq!(false, number_set_should_list_remaining(9, std::usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(9, usize::MAX));
     }
 
     #[test]
@@ -589,17 +591,14 @@ mod test_number_set_decision {
     // Ensure that we are overflow-free:
     #[test]
     fn test_no_crash_exceed_max_size1() {
-        assert_eq!(
-            false,
-            number_set_should_list_remaining(12345, std::usize::MAX)
-        );
+        assert_eq!(false, number_set_should_list_remaining(12345, usize::MAX));
     }
 
     #[test]
     fn test_no_crash_exceed_max_size2() {
         assert_eq!(
             true,
-            number_set_should_list_remaining(std::usize::MAX - 1, std::usize::MAX)
+            number_set_should_list_remaining(usize::MAX - 1, usize::MAX)
         );
     }
 
@@ -607,7 +606,7 @@ mod test_number_set_decision {
     fn test_no_crash_exceed_max_size3() {
         assert_eq!(
             true,
-            number_set_should_list_remaining(std::usize::MAX, std::usize::MAX)
+            number_set_should_list_remaining(usize::MAX, usize::MAX)
         );
     }
 }

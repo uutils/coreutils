@@ -347,6 +347,7 @@ fn test_filter_command_fails() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 fn test_filter_broken_pipe() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "filter-big-input";

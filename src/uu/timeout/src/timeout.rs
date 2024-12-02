@@ -288,7 +288,6 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
 }
 
 /// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
-
 fn timeout(
     cmd: &[String],
     duration: Duration,

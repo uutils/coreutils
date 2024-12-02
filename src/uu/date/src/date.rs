@@ -103,7 +103,7 @@ enum Iso8601Format {
     Ns,
 }
 
-impl<'a> From<&'a str> for Iso8601Format {
+impl From<&str> for Iso8601Format {
     fn from(s: &str) -> Self {
         match s {
             HOURS => Self::Hours,
@@ -123,7 +123,7 @@ enum Rfc3339Format {
     Ns,
 }
 
-impl<'a> From<&'a str> for Rfc3339Format {
+impl From<&str> for Rfc3339Format {
     fn from(s: &str) -> Self {
         match s {
             DATE => Self::Date,
@@ -227,11 +227,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Box::new(iter)
             }
             DateSource::Human(relative_time) => {
-                // Get the current DateTime<FixedOffset> for things like "1 year ago"
-                let current_time = DateTime::<FixedOffset>::from(Local::now());
-                // double check the result is overflow or not of the current_time + relative_time
+                // Double check the result is overflow or not of the current_time + relative_time
                 // it may cause a panic of chrono::datetime::DateTime add
-                match current_time.checked_add_signed(relative_time) {
+                match now.checked_add_signed(relative_time) {
                     Some(date) => {
                         let iter = std::iter::once(Ok(date));
                         Box::new(iter)
@@ -239,7 +237,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     None => {
                         return Err(USimpleError::new(
                             1,
-                            format!("invalid date {}", relative_time),
+                            format!("invalid date {relative_time}"),
                         ));
                     }
                 }

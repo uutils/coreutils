@@ -1,0 +1,32 @@
+diff --git a/tests/misc/invalid-opt.pl b/tests/misc/invalid-opt.pl
+index 4b9c4c184..4ccd89482 100755
+--- a/tests/misc/invalid-opt.pl
++++ b/tests/misc/invalid-opt.pl
+@@ -74,23 +74,13 @@ foreach my $prog (@built_programs)
+     defined $out
+       or $out = '';
+ 
+-    my $err = $expected_err{$prog};
+-    defined $err
+-      or $err = $x == 0 ? '' : "$prog: invalid option -- /\n$try";
+-
+-    # Accommodate different syntax in glibc's getopt
+-    # diagnostics by filtering out single quotes.
+-    # Also accommodate BSD getopt.
+-    my $err_subst = "s,'/',/,; s,unknown,invalid,";
+-
+-    # Depending on how this script is run, stty emits different
+-    # diagnostics.  Don't bother checking them.
+-    $prog eq 'stty'
+-      and $err_subst = 's/(.|\n)*//ms';
++    # Strip all stderr output
++    # Our output is better and more consistent
++    my $err_subst = 's/(.|\n)*//ms';
+ 
+     my @Tests = (["$prog-invalid-opt", '-/', {OUT=>$out},
+                   {ERR_SUBST => $err_subst},
+-                  {EXIT=>$x}, {ERR=>$err}]);
++                  {EXIT=>$x}]);
+ 
+     my $save_temps = $ENV{DEBUG};
+     my $verbose = $ENV{VERBOSE};

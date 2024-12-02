@@ -154,6 +154,7 @@ mod ut {
     pub use libc::USER_PROCESS;
 }
 
+/// A login record
 pub struct Utmpx {
     inner: utmpx,
 }
@@ -213,6 +214,7 @@ impl Utmpx {
     pub fn into_inner(self) -> utmpx {
         self.inner
     }
+    /// check if the record is a user process
     pub fn is_user_process(&self) -> bool {
         !self.user().is_empty() && self.record_type() == USER_PROCESS
     }

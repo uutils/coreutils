@@ -8,6 +8,7 @@ use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
 
+use std::io::Write;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
@@ -54,7 +55,6 @@ static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
 static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
-#[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 #[cfg(all(
     unix,
@@ -123,6 +123,60 @@ fn test_cp_duplicate_files() {
 }
 
 #[test]
+fn test_cp_duplicate_folder() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-r")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER)
+        .succeeds()
+        .stderr_contains(format!(
+            "source directory '{TEST_COPY_FROM_FOLDER}' specified more than once"
+        ));
+    assert!(at.dir_exists(format!("{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER}").as_str()));
+}
+
+#[test]
+fn test_cp_duplicate_files_normalized_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(format!("./{TEST_HELLO_WORLD_SOURCE}"))
+        .arg(TEST_COPY_TO_FOLDER)
+        .succeeds()
+        .stderr_contains(format!(
+            "source file './{TEST_HELLO_WORLD_SOURCE}' specified more than once"
+        ));
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+}
+
+#[test]
+fn test_cp_duplicate_files_with_plain_backup() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .arg("--backup")
+        .fails()
+        // cp would skip duplicate src check and fail when it tries to overwrite the "just-created" file.
+        .stderr_contains(
+            "will not overwrite just-created 'hello_dir/hello_world.txt' with 'hello_world.txt",
+        );
+}
+
+#[test]
+fn test_cp_duplicate_files_with_numbered_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // cp would skip duplicate src check and succeeds
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .arg("--backup=numbered")
+        .succeeds();
+    at.file_exists(TEST_COPY_TO_FOLDER_FILE);
+    at.file_exists(format!("{TEST_COPY_TO_FOLDER}.~1~"));
+}
+
+#[test]
 fn test_cp_same_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "a";
@@ -164,6 +218,42 @@ fn test_cp_multiple_files() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
         .succeeds();
+
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
+}
+
+#[test]
+fn test_cp_multiple_files_with_nonexistent_file() {
+    #[cfg(windows)]
+    let error_msg = "The system cannot find the file specified";
+    #[cfg(not(windows))]
+    let error_msg = format!("'{TEST_NONEXISTENT_FILE}': No such file or directory");
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_NONEXISTENT_FILE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .fails()
+        .stderr_contains(error_msg);
+
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
+}
+
+#[test]
+fn test_cp_multiple_files_with_empty_file_name() {
+    #[cfg(windows)]
+    let error_msg = "The system cannot find the path specified";
+    #[cfg(not(windows))]
+    let error_msg = "'': No such file or directory";
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .fails()
+        .stderr_contains(error_msg);
 
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
@@ -289,18 +379,25 @@ fn test_cp_arg_update_interactive_error() {
 
 #[test]
 fn test_cp_arg_update_none() {
-    for argument in ["--update=none", "--update=non", "--update=n"] {
-        let (at, mut ucmd) = at_and_ucmd!();
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--update=none")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+}
 
-        ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-            .arg(TEST_HOW_ARE_YOU_SOURCE)
-            .arg(argument)
-            .succeeds()
-            .no_stderr()
-            .no_stdout();
-
-        assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
-    }
+#[test]
+fn test_cp_arg_update_none_fail() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--update=none-fail")
+        .fails()
+        .stderr_contains(format!("not replacing '{TEST_HOW_ARE_YOU_SOURCE}'"));
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
 #[test]
@@ -351,9 +448,9 @@ fn test_cp_arg_update_older_dest_older_than_src() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -377,9 +474,9 @@ fn test_cp_arg_update_short_no_overwrite() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -403,9 +500,9 @@ fn test_cp_arg_update_short_overwrite() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -430,9 +527,9 @@ fn test_cp_arg_update_none_then_all() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -458,9 +555,9 @@ fn test_cp_arg_update_all_then_none() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -488,7 +585,7 @@ fn test_cp_arg_interactive() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+#[cfg(not(any(target_os = "android", target_os = "freebsd", target_os = "openbsd")))]
 fn test_cp_arg_interactive_update_overwrite_newer() {
     // -u -i won't show the prompt to validate the override or not
     // Therefore, the error code will be 0
@@ -553,10 +650,44 @@ fn test_cp_arg_interactive_verbose_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    ucmd.args(&["-vin", "a", "b"])
+    ucmd.args(&["-vin", "--debug", "a", "b"])
+        .succeeds()
+        .stdout_contains("skipped 'b'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_f_i_verbose_non_writeable_destination_y() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    // Non-writeable file
+    at.set_mode("b", 0o0000);
+
+    ucmd.args(&["-f", "-i", "--verbose", "a", "b"])
+        .pipe_in("y")
+        .succeeds()
+        .stderr_is("cp: replace 'b', overriding mode 0000 (---------)? ")
+        .stdout_is("'a' -> 'b'\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_f_i_verbose_non_writeable_destination_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.touch("b");
+
+    // Non-writeable file
+    at.set_mode("b", 0o0000);
+
+    ucmd.args(&["-f", "-i", "--verbose", "a", "b"])
+        .pipe_in("")
         .fails()
-        .stderr_is("cp: not replacing 'b'\n")
-        .no_stdout();
+        .stderr_only("cp: replace 'b', overriding mode 0000 (---------)? ");
 }
 
 #[test]
@@ -609,6 +740,36 @@ fn test_cp_arg_link_with_same_file() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_cp_verbose_preserved_link_to_dir() {
+    use std::os::linux::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let hardlink = "hardlink";
+    let dir = "dir";
+    let dst_file = "dir/file";
+    let dst_hardlink = "dir/hardlink";
+
+    at.touch(file);
+    at.hard_link(file, hardlink);
+    at.mkdir(dir);
+
+    ucmd.args(&["-d", "--verbose", file, hardlink, dir])
+        .succeeds()
+        .stdout_is("'file' -> 'dir/file'\n'hardlink' -> 'dir/hardlink'\n");
+
+    assert!(at.file_exists(dst_file));
+    assert!(at.file_exists(dst_hardlink));
+    assert_eq!(at.metadata(dst_file).st_nlink(), 2);
+    assert_eq!(at.metadata(dst_hardlink).st_nlink(), 2);
+    assert_eq!(
+        at.metadata(dst_file).st_ino(),
+        at.metadata(dst_hardlink).st_ino()
+    );
+}
+
+#[test]
 fn test_cp_arg_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -625,8 +786,9 @@ fn test_cp_arg_no_clobber() {
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clobber")
-        .fails()
-        .stderr_contains("not replacing");
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'how_are_you.txt'");
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
@@ -637,7 +799,9 @@ fn test_cp_arg_no_clobber_inferred_arg() {
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clob")
-        .fails();
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'how_are_you.txt'");
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
@@ -653,6 +817,7 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
+        .arg("--debug")
         .succeeds()
         .no_stderr();
 
@@ -664,7 +829,9 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
-        .fails();
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'dest.txt'");
 
     assert_eq!(at.read("source.txt"), "some-content");
     // Should be empty as the "no-clobber" should keep
@@ -1255,6 +1422,7 @@ fn test_cp_parents_dest_not_directory() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_cp_parents_with_permissions_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1295,6 +1463,7 @@ fn test_cp_parents_with_permissions_copy_file() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_cp_parents_with_permissions_copy_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1352,6 +1521,7 @@ fn test_cp_issue_1665() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_cp_preserve_no_args() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src_file = "a";
@@ -1379,6 +1549,7 @@ fn test_cp_preserve_no_args() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_cp_preserve_no_args_before_opts() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src_file = "a";
@@ -1433,7 +1604,7 @@ fn test_cp_preserve_all() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "openbsd"))))]
 fn test_cp_preserve_xattr() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src_file = "a";
@@ -1704,11 +1875,12 @@ fn test_cp_preserve_links_case_7() {
 
     ucmd.arg("-n")
         .arg("--preserve=links")
+        .arg("--debug")
         .arg("src/f")
         .arg("src/g")
         .arg("dest")
-        .fails()
-        .stderr_contains("not replacing");
+        .succeeds()
+        .stdout_contains("skipped");
 
     assert!(at.dir_exists("dest"));
     assert!(at.plus("dest").join("f").exists());
@@ -1994,7 +2166,7 @@ fn test_cp_archive_recursive() {
     let result = scene2
         .cmd("ls")
         .arg("-al")
-        .arg(&at.subdir.join(TEST_COPY_TO_FOLDER))
+        .arg(at.subdir.join(TEST_COPY_TO_FOLDER))
         .run();
 
     println!("ls dest {}", result.stdout_str());
@@ -2002,7 +2174,7 @@ fn test_cp_archive_recursive() {
     let result = scene2
         .cmd("ls")
         .arg("-al")
-        .arg(&at.subdir.join(TEST_COPY_TO_FOLDER_NEW))
+        .arg(at.subdir.join(TEST_COPY_TO_FOLDER_NEW))
         .run();
 
     println!("ls dest {}", result.stdout_str());
@@ -2298,9 +2470,9 @@ fn test_closes_file_descriptors() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_cp_sparse_never_empty() {
+    const BUFFER_SIZE: usize = 4096 * 4;
     let (at, mut ucmd) = at_and_ucmd!();
 
-    const BUFFER_SIZE: usize = 4096 * 4;
     let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
     at.make_file("src_file1");
@@ -2318,10 +2490,10 @@ fn test_cp_sparse_never_empty() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_cp_sparse_always_empty() {
+    const BUFFER_SIZE: usize = 4096 * 4;
     for argument in ["--sparse=always", "--sparse=alway", "--sparse=al"] {
         let (at, mut ucmd) = at_and_ucmd!();
 
-        const BUFFER_SIZE: usize = 4096 * 4;
         let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
         at.make_file("src_file1");
@@ -2338,9 +2510,9 @@ fn test_cp_sparse_always_empty() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_cp_sparse_always_non_empty() {
+    const BUFFER_SIZE: usize = 4096 * 16 + 3;
     let (at, mut ucmd) = at_and_ucmd!();
 
-    const BUFFER_SIZE: usize = 4096 * 16 + 3;
     let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
     let blocks_to_touch = [buf.len() / 3, 2 * (buf.len() / 3)];
 
@@ -2408,12 +2580,11 @@ fn test_cp_sparse_never_reflink_always() {
 #[cfg(feature = "truncate")]
 #[test]
 fn test_cp_reflink_always_override() {
-    let scene = TestScenario::new(util_name!());
-
     const DISK: &str = "disk.img";
     const ROOTDIR: &str = "disk_root/";
     const USERDIR: &str = "dir/";
     const MOUNTPOINT: &str = "mountpoint/";
+    let scene = TestScenario::new(util_name!());
 
     let src1_path: &str = &[MOUNTPOINT, USERDIR, "src1"].concat();
     let src2_path: &str = &[MOUNTPOINT, USERDIR, "src2"].concat();
@@ -2529,6 +2700,7 @@ fn test_copy_symlink_force() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 fn test_no_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
@@ -2545,12 +2717,12 @@ fn test_no_preserve_mode() {
     let umask: u16 = 0o022;
     ucmd.arg("file")
         .arg("dest")
-        .umask(umask as libc::mode_t)
+        .umask(libc::mode_t::from(umask))
         .succeeds()
         .no_stderr()
         .no_stdout();
     // remove sticky bit, setuid and setgid bit; apply umask
-    let expected_perms = PERMS_ALL & !0o7000 & !umask as u32;
+    let expected_perms = PERMS_ALL & !0o7000 & u32::from(!umask);
     assert_eq!(
         at.plus("dest").metadata().unwrap().mode() & 0o7777,
         expected_perms
@@ -2559,6 +2731,7 @@ fn test_no_preserve_mode() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 fn test_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
@@ -2716,7 +2889,7 @@ fn test_cp_dangling_symlink_inside_directory() {
 }
 
 /// Test for copying a dangling symbolic link and its permissions.
-#[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))] // FIXME: fix this test for FreeBSD/OpenBSD
 #[test]
 fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2934,7 +3107,7 @@ fn test_copy_same_symlink_no_dereference_dangling() {
 }
 
 // TODO: enable for Android, when #3477 solved
-#[cfg(not(any(windows, target_os = "android")))]
+#[cfg(not(any(windows, target_os = "android", target_os = "openbsd")))]
 #[test]
 fn test_cp_parents_2_dirs() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3164,7 +3337,7 @@ fn test_copy_nested_directory_to_itself_disallowed() {
 }
 
 /// Test for preserving permissions when copying a directory.
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
 fn test_copy_dir_preserve_permissions() {
     // Create a directory that has some non-default permissions.
@@ -3194,7 +3367,7 @@ fn test_copy_dir_preserve_permissions() {
 
 /// Test for preserving permissions when copying a directory, even in
 /// the face of an inaccessible file in that directory.
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
 fn test_copy_dir_preserve_permissions_inaccessible_file() {
     // Create a directory that has some non-default permissions and
@@ -3264,7 +3437,7 @@ fn test_same_file_force_backup() {
 }
 
 /// Test for copying the contents of a FIFO as opposed to the FIFO object itself.
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
 #[test]
 fn test_copy_contents_fifo() {
     // TODO this test should work on FreeBSD, but the command was
@@ -3324,7 +3497,7 @@ fn test_reflink_never_sparse_always() {
 
 /// Test for preserving attributes of a hard link in a directory.
 #[test]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "openbsd")))]
 fn test_preserve_hardlink_attributes_in_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -3779,7 +3952,7 @@ fn test_acl_preserve() {
             return;
         }
         Err(e) => {
-            println!("test skipped: setfacl failed with {}", e);
+            println!("test skipped: setfacl failed with {e}");
             return;
         }
     }
@@ -5447,6 +5620,7 @@ mod link_deref {
 // disable these excessive permissions.
 #[test]
 #[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
 fn test_dir_perm_race_with_preserve_mode_and_ownership() {
     const SRC_DIR: &str = "src";
     const DEST_DIR: &str = "dest";
@@ -5462,7 +5636,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         let child = scene
             .ucmd()
             .args(&[
-                format!("--preserve={}", attr).as_str(),
+                format!("--preserve={attr}").as_str(),
                 "-R",
                 "--copy-contents",
                 "--parents",
@@ -5477,16 +5651,17 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         let start_time = std::time::Instant::now();
         // wait for cp to create dirs
         loop {
-            if start_time.elapsed() >= timeout {
-                panic!("timed out: cp took too long to create destination directory")
-            }
-            if at.dir_exists(&format!("{}/{}", DEST_DIR, SRC_DIR)) {
+            assert!(
+                start_time.elapsed() < timeout,
+                "timed out: cp took too long to create destination directory"
+            );
+            if at.dir_exists(&format!("{DEST_DIR}/{SRC_DIR}")) {
                 break;
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        let mode = at.metadata(&format!("{}/{}", DEST_DIR, SRC_DIR)).mode();
-        #[allow(clippy::unnecessary_cast)]
+        let mode = at.metadata(&format!("{DEST_DIR}/{SRC_DIR}")).mode();
+        #[allow(clippy::unnecessary_cast, clippy::cast_lossless)]
         let mask = if attr == "mode" {
             libc::S_IWGRP | libc::S_IWOTH
         } else {
@@ -5495,8 +5670,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         assert_eq!(
             (mode & mask),
             0,
-            "unwanted permissions are present - {}",
-            attr
+            "unwanted permissions are present - {attr}"
         );
         at.write(FIFO, "done");
         child.wait().unwrap().succeeded();
@@ -5553,18 +5727,15 @@ fn test_preserve_attrs_overriding_2() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
         at.mkdir(FOLDER);
-        at.make_file(&format!("{}/{}", FOLDER, FILE1));
-        at.set_mode(&format!("{}/{}", FOLDER, FILE1), 0o775);
-        at.hard_link(
-            &format!("{}/{}", FOLDER, FILE1),
-            &format!("{}/{}", FOLDER, FILE2),
-        );
+        at.make_file(&format!("{FOLDER}/{FILE1}"));
+        at.set_mode(&format!("{FOLDER}/{FILE1}"), 0o775);
+        at.hard_link(&format!("{FOLDER}/{FILE1}"), &format!("{FOLDER}/{FILE2}"));
         args.append(&mut vec![FOLDER, DEST]);
-        let src_file1_metadata = at.metadata(&format!("{}/{}", FOLDER, FILE1));
+        let src_file1_metadata = at.metadata(&format!("{FOLDER}/{FILE1}"));
         scene.ucmd().args(&args).succeeds();
         at.dir_exists(DEST);
-        let dest_file1_metadata = at.metadata(&format!("{}/{}", DEST, FILE1));
-        let dest_file2_metadata = at.metadata(&format!("{}/{}", DEST, FILE2));
+        let dest_file1_metadata = at.metadata(&format!("{DEST}/{FILE1}"));
+        let dest_file2_metadata = at.metadata(&format!("{DEST}/{FILE2}"));
         assert_eq!(
             src_file1_metadata.modified().unwrap(),
             dest_file1_metadata.modified().unwrap()
@@ -5572,4 +5743,180 @@ fn test_preserve_attrs_overriding_2() {
         assert_eq!(src_file1_metadata.mode(), dest_file1_metadata.mode());
         assert_ne!(dest_file1_metadata.ino(), dest_file2_metadata.ino());
     }
+}
+
+/// Test the behavior of preserving permissions when copying through a symlink
+#[test]
+#[cfg(unix)]
+fn test_cp_symlink_permissions() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.set_mode("a", 0o700);
+    at.symlink_file("a", "symlink");
+    at.mkdir("dest");
+    scene
+        .ucmd()
+        .args(&["--preserve", "symlink", "dest"])
+        .succeeds();
+    let dest_dir_metadata = at.metadata("dest/symlink");
+    let src_dir_metadata = at.metadata("a");
+    assert_eq!(
+        src_dir_metadata.permissions().mode(),
+        dest_dir_metadata.permissions().mode()
+    );
+}
+
+/// Test the behavior of preserving permissions of parents when copying through a symlink
+#[test]
+#[cfg(unix)]
+fn test_cp_parents_symlink_permissions_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a");
+    at.touch("a/file");
+    at.set_mode("a", 0o700);
+    at.symlink_dir("a", "symlink");
+    at.mkdir("dest");
+    scene
+        .ucmd()
+        .args(&["--parents", "-a", "symlink/file", "dest"])
+        .succeeds();
+    let dest_dir_metadata = at.metadata("dest/symlink");
+    let src_dir_metadata = at.metadata("a");
+    assert_eq!(
+        src_dir_metadata.permissions().mode(),
+        dest_dir_metadata.permissions().mode()
+    );
+}
+
+/// Test the behavior of preserving permissions of parents when copying through
+/// a symlink when source is a dir.
+#[test]
+#[cfg(unix)]
+fn test_cp_parents_symlink_permissions_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b");
+    at.set_mode("a", 0o755); // Set mode for the actual directory
+    at.symlink_dir("a", "symlink");
+    at.mkdir("dest");
+    scene
+        .ucmd()
+        .args(&["--parents", "-a", "symlink/b", "dest"])
+        .succeeds();
+    let dest_dir_metadata = at.metadata("dest/symlink");
+    let src_dir_metadata = at.metadata("a");
+    assert_eq!(
+        src_dir_metadata.permissions().mode(),
+        dest_dir_metadata.permissions().mode()
+    );
+}
+
+/// Test the behavior of copying a file to a destination with parents using absolute paths.
+#[cfg(unix)]
+#[test]
+fn test_cp_parents_absolute_path() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b");
+    at.touch("a/b/f");
+    at.mkdir("dest");
+    let src = format!("{}/a/b/f", at.root_dir_resolved());
+    scene
+        .ucmd()
+        .args(&["--parents", src.as_str(), "dest"])
+        .succeeds();
+    let res = format!("dest{}/a/b/f", at.root_dir_resolved());
+    at.file_exists(res);
+}
+
+#[test]
+fn test_copy_symlink_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+
+    at.write("t", "hello");
+    at.relative_symlink_file("../t", "a/1");
+    at.relative_symlink_file("../t", "b/1");
+
+    ucmd.arg("--no-dereference")
+        .arg("a/1")
+        .arg("b/1")
+        .arg("c")
+        .fails()
+        .stderr_only(if cfg!(not(target_os = "windows")) {
+            "cp: will not overwrite just-created 'c/1' with 'b/1'\n"
+        } else {
+            "cp: will not overwrite just-created 'c\\1' with 'b/1'\n"
+        });
+}
+
+#[test]
+fn test_symlink_mode_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+
+    at.write("a/t", "hello");
+    at.write("b/t", "hello");
+
+    if cfg!(not(target_os = "windows")) {
+        ucmd.arg("-s")
+            .arg("a/t")
+            .arg("b/t")
+            .arg(".")
+            .fails()
+            .stderr_only("cp: will not overwrite just-created './t' with 'b/t'\n");
+
+        assert_eq!(at.read("./t"), "hello");
+    } else {
+        ucmd.arg("-s")
+            .arg("a\\t")
+            .arg("b\\t")
+            .arg(".")
+            .fails()
+            .stderr_only("cp: will not overwrite just-created '.\\t' with 'b\\t'\n");
+
+        assert_eq!(at.read(".\\t"), "hello");
+    }
+}
+
+// make sure that cp backup dest symlink before removing it.
+#[test]
+fn test_cp_with_options_backup_and_rem_when_dest_is_symlink() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("file", "xyz");
+    at.mkdir("inner_dir");
+    at.write("inner_dir/inner_file", "abc");
+    at.relative_symlink_file("inner_file", "inner_dir/sl");
+    scene
+        .ucmd()
+        .args(&["-b", "--rem", "file", "inner_dir/sl"])
+        .succeeds();
+    assert!(at.file_exists("inner_dir/inner_file"));
+    assert_eq!(at.read("inner_dir/inner_file"), "abc");
+    assert!(at.symlink_exists("inner_dir/sl~"));
+    assert!(!at.symlink_exists("inner_dir/sl"));
+    assert_eq!(at.read("inner_dir/sl"), "xyz");
+}
+
+#[test]
+fn test_cp_single_file() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .fails()
+        .code_is(1)
+        .stderr_contains("missing destination file");
+}
+
+#[test]
+fn test_cp_no_file() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    ucmd.fails()
+        .code_is(1)
+        .stderr_contains("error: the following required arguments were not provided:");
 }

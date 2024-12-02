@@ -259,7 +259,7 @@ fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> 
 fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::Result<()> {
     if n == 0 {
         //prints everything
-        return read_n_bytes(input, std::u64::MAX);
+        return read_n_bytes(input, u64::MAX);
     }
 
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {

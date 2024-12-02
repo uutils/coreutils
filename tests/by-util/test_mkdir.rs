@@ -2,6 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore bindgen
+
+#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use libc::mode_t;
@@ -11,6 +16,14 @@ use std::os::unix::fs::PermissionsExt;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
+fn test_no_arg() {
+    new_ucmd!()
+        .fails()
+        .code_is(1)
+        .stderr_contains("error: the following required arguments were not provided:");
 }
 
 #[test]
@@ -48,9 +61,21 @@ fn test_mkdir_parent() {
     let test_dir = "parent_dir/child_dir";
 
     scene.ucmd().arg("-p").arg(test_dir).succeeds();
-    scene.ucmd().arg("-p").arg(test_dir).succeeds();
+    scene.ucmd().arg("-p").arg("-p").arg(test_dir).succeeds();
     scene.ucmd().arg("--parent").arg(test_dir).succeeds();
+    scene
+        .ucmd()
+        .arg("--parent")
+        .arg("--parent")
+        .arg(test_dir)
+        .succeeds();
     scene.ucmd().arg("--parents").arg(test_dir).succeeds();
+    scene
+        .ucmd()
+        .arg("--parents")
+        .arg("--parents")
+        .arg(test_dir)
+        .succeeds();
 }
 
 #[test]
@@ -125,6 +150,27 @@ fn test_mkdir_parent_mode_check_existing_parent() {
         at.metadata("a/b/c").permissions().mode() as mode_t,
         (!default_umask & 0o777) + 0o40000
     );
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_mkdir_parent_mode_skip_existing_last_component_chmod() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.set_mode("a/b", 0);
+
+    let default_umask: mode_t = 0o160;
+
+    ucmd.arg("-p")
+        .arg("a/b")
+        .umask(default_umask)
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.metadata("a/b").permissions().mode() as mode_t, 0o40000);
 }
 
 #[test]
@@ -206,6 +252,61 @@ fn test_recursive_reporting() {
 }
 
 #[test]
+// Windows don't have acl entries
+// TODO Enable and modify this for macos when xattr processing for macos is added.
+// TODO Enable and modify this for freebsd when xattr processing for freebsd is enabled.
+#[cfg(target_os = "linux")]
+fn test_mkdir_acl() {
+    use std::{collections::HashMap, ffi::OsString};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+
+    let mut map: HashMap<OsString, Vec<u8>> = HashMap::new();
+    // posix_acl entries are in the form of
+    // struct posix_acl_entry{
+    //  tag: u16,
+    //  perm: u16,
+    //  id: u32,
+    // }
+    // the fields are serialized in little endian.
+    // The entries are preceded by a header of value of 0x0002
+    // Reference: `<https://github.com/torvalds/linux/blob/master/include/uapi/linux/posix_acl_xattr.h>`
+    // The id is undefined i.e. -1 which in u32 is 0xFFFFFFFF and tag and perm bits as given in the
+    // header file.
+    // Reference: `<https://github.com/torvalds/linux/blob/master/include/uapi/linux/posix_acl.h>`
+    //
+    //
+    // There is a bindgen bug which generates the ACL_OTHER constant whose value is 0x20 into 32.
+    // which when the bug is fixed will need to be changed back to 20 from 32 in the vec 'xattr_val'.
+    //
+    // Reference `<https://github.com/rust-lang/rust-bindgen/issues/2926>`
+    //
+    // The xattr_val vector is the header 0x0002 followed by tag and permissions for user_obj , tag
+    // and permissions and for group_obj and finally the tag and permissions for ACL_OTHER. Each
+    // entry has undefined id as mentioned above.
+    //
+    //
+
+    let xattr_val: Vec<u8> = vec![
+        2, 0, 0, 0, 1, 0, 7, 0, 255, 255, 255, 255, 4, 0, 7, 0, 255, 255, 255, 255, 32, 0, 5, 0,
+        255, 255, 255, 255,
+    ];
+
+    map.insert(OsString::from("system.posix_acl_default"), xattr_val);
+
+    uucore::fsxattr::apply_xattrs(at.plus("a"), map).unwrap();
+
+    ucmd.arg("-p").arg("a/b").umask(0x077).succeeds();
+
+    let perms = at.metadata("a/b").permissions().mode();
+
+    // 0x770 would be user:rwx,group:rwx permissions
+    assert_eq!(perms, 16893);
+}
+
+#[test]
 fn test_mkdir_trailing_dot() {
     new_ucmd!().arg("-p").arg("-v").arg("test_dir").succeeds();
 
@@ -245,4 +346,12 @@ fn test_umask_compliance() {
         // tests all permission combinations
         test_single_case(i as mode_t);
     }
+}
+
+#[test]
+fn test_empty_argument() {
+    new_ucmd!()
+        .arg("")
+        .fails()
+        .stderr_only("mkdir: cannot create directory '': No such file or directory\n");
 }

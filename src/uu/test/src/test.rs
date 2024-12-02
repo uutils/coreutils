@@ -162,6 +162,10 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
         Some(Symbol::Literal(s)) => Ok(!s.is_empty()),
         Some(Symbol::None) | None => Ok(false),
         Some(Symbol::BoolOp(op)) => {
+            if (op == "-a" || op == "-o") && stack.len() < 2 {
+                return Err(ParseError::UnaryOperatorExpected(op.quote().to_string()));
+            }
+
             let b = eval(stack)?;
             let a = eval(stack)?;
 
@@ -230,14 +234,7 @@ fn isatty(fd: &OsStr) -> ParseResult<bool> {
     fd.to_str()
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
-        .map(|i| {
-            #[cfg(not(target_os = "redox"))]
-            unsafe {
-                libc::isatty(i) == 1
-            }
-            #[cfg(target_os = "redox")]
-            syscall::dup(i, b"termios").map(syscall::close).is_ok()
-        })
+        .map(|i| unsafe { libc::isatty(i) == 1 })
 }
 
 #[derive(Eq, PartialEq)]
@@ -276,24 +273,6 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         Write = 0o2,
         Execute = 0o1,
     }
-
-    let geteuid = || {
-        #[cfg(not(target_os = "redox"))]
-        let euid = geteuid();
-        #[cfg(target_os = "redox")]
-        let euid = syscall::geteuid().unwrap() as u32;
-
-        euid
-    };
-
-    let getegid = || {
-        #[cfg(not(target_os = "redox"))]
-        let egid = getegid();
-        #[cfg(target_os = "redox")]
-        let egid = syscall::getegid().unwrap() as u32;
-
-        egid
-    };
 
     let perm = |metadata: Metadata, p: Permission| {
         if geteuid() == metadata.uid() {

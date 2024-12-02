@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use crate::common::util::{AtPath, TestScenario, UCommand};
 use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -32,12 +33,14 @@ fn make_file(file: &str, mode: u32) {
 fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     make_file(&at.plus_as_string(TEST_FILE), test.before);
     let perms = at.metadata(TEST_FILE).permissions().mode();
-    if perms != test.before {
-        panic!(
-            "{}: expected: {:o} got: {:o}",
-            "setting permissions on test files before actual test run failed", test.after, perms
-        );
-    }
+
+    assert!(
+        perms == test.before,
+        "{}: expected: {:o} got: {:o}",
+        "setting permissions on test files before actual test run failed",
+        test.after,
+        perms
+    );
 
     for arg in &test.args {
         ucmd.arg(arg);
@@ -52,9 +55,13 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     }
 
     let perms = at.metadata(TEST_FILE).permissions().mode();
-    if perms != test.after {
-        panic!("{}: expected: {:o} got: {:o}", ucmd, test.after, perms);
-    }
+    assert!(
+        perms == test.after,
+        "{}: expected: {:o} got: {:o}",
+        ucmd,
+        test.after,
+        perms
+    );
 }
 
 fn run_tests(tests: Vec<TestCase>) {
@@ -128,6 +135,7 @@ fn test_chmod_octal() {
 
 #[test]
 #[allow(clippy::unreadable_literal)]
+#[allow(clippy::too_many_lines)]
 // spell-checker:disable-next-line
 fn test_chmod_ugoa() {
     let tests = vec![
