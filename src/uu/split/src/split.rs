@@ -658,7 +658,7 @@ where
         // Most likely continuous/infinite input stream
         return Err(io::Error::new(
             ErrorKind::Other,
-            format!("{}: cannot determine input size", input),
+            format!("{input}: cannot determine input size"),
         ));
     } else {
         // Could be that file size is larger than set read limit
@@ -684,7 +684,7 @@ where
                 // to address all possible file types and edge cases
                 return Err(io::Error::new(
                     ErrorKind::Other,
-                    format!("{}: cannot determine file size", input),
+                    format!("{input}: cannot determine file size"),
                 ));
             }
         }
@@ -748,7 +748,7 @@ impl<'a> ByteChunkWriter<'a> {
     }
 }
 
-impl<'a> Write for ByteChunkWriter<'a> {
+impl Write for ByteChunkWriter<'_> {
     /// Implements `--bytes=SIZE`
     fn write(&mut self, mut buf: &[u8]) -> std::io::Result<usize> {
         // If the length of `buf` exceeds the number of bytes remaining
@@ -872,7 +872,7 @@ impl<'a> LineChunkWriter<'a> {
     }
 }
 
-impl<'a> Write for LineChunkWriter<'a> {
+impl Write for LineChunkWriter<'_> {
     /// Implements `--lines=NUMBER`
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         // If the number of lines in `buf` exceeds the number of lines
@@ -978,7 +978,7 @@ impl<'a> LineBytesChunkWriter<'a> {
     }
 }
 
-impl<'a> Write for LineBytesChunkWriter<'a> {
+impl Write for LineBytesChunkWriter<'_> {
     /// Write as many lines to a chunk as possible without
     /// exceeding the byte limit. If a single line has more bytes
     /// than the limit, then fill an entire single chunk with those

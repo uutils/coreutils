@@ -15,4 +15,4 @@ If none of --compute, --type, --user, --role or --range is specified, then the f
 
 Note that only carefully-chosen contexts are likely to successfully run.
 
-With neither CONTEXT nor COMMAND are specified, then this prints the current security context.
+If neither CONTEXT nor COMMAND is specified, the current security context is printed.

@@ -45,6 +45,7 @@ flamegraph
 fsxattr
 fullblock
 getfacl
+getopt
 gibi
 gibibytes
 glob

@@ -146,3 +146,77 @@ fn test_base64_file_not_found() {
         .fails()
         .stderr_only("base64: a.txt: No such file or directory\n");
 }
+
+#[test]
+fn test_no_repeated_trailing_newline() {
+    new_ucmd!()
+        .args(&["--wrap", "10", "--", "-"])
+        .pipe_in("The quick brown fox jumps over the lazy dog.")
+        .succeeds()
+        .stdout_only(
+            // cSpell:disable
+            "\
+VGhlIHF1aW
+NrIGJyb3du
+IGZveCBqdW
+1wcyBvdmVy
+IHRoZSBsYX
+p5IGRvZy4=
+",
+            // cSpell:enable
+        );
+}
+
+#[test]
+fn test_wrap_default() {
+    const PIPE_IN: &str = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.";
+
+    new_ucmd!()
+        .args(&["--", "-"])
+        .pipe_in(PIPE_IN)
+        .succeeds()
+        .stdout_only(
+            // cSpell:disable
+            "\
+VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJy
+b3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZy4gVGhlIHF1aWNrIGJyb3duIGZveCBqdW1w
+cyBvdmVyIHRoZSBsYXp5IGRvZy4=
+",
+            // cSpell:enable
+        );
+}
+
+// Prevent regression to:
+//
+// ❯ coreutils manpage base64 | rg --fixed-strings -- 'base32'
+// The data are encoded as described for the base32 alphabet in RFC 4648.
+// to the bytes of the formal base32 alphabet. Use \-\-ignore\-garbage
+// The data are encoded as described for the base32 alphabet in RFC 4648.
+// to the bytes of the formal base32 alphabet. Use \-\-ignore\-garbage
+#[test]
+fn test_manpage() {
+    use std::process::{Command, Stdio};
+
+    let test_scenario = TestScenario::new("");
+
+    let child = Command::new(test_scenario.bin_path)
+        .arg("manpage")
+        .arg("base64")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    let output = child.wait_with_output().unwrap();
+
+    assert_eq!(output.status.code().unwrap(), 0);
+
+    assert!(output.stderr.is_empty());
+
+    let stdout_str = std::str::from_utf8(&output.stdout).unwrap();
+
+    assert!(stdout_str.contains("base64 alphabet"));
+
+    assert!(!stdout_str.to_ascii_lowercase().contains("base32"));
+}

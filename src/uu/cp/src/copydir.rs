@@ -175,7 +175,7 @@ impl Entry {
             let source_is_dir = direntry.path().is_dir();
             if path_ends_with_terminator(context.target) && source_is_dir {
                 if let Err(e) = std::fs::create_dir_all(context.target) {
-                    eprintln!("Failed to create directory: {}", e);
+                    eprintln!("Failed to create directory: {e}");
                 }
             } else {
                 descendant = descendant.strip_prefix(context.root)?.to_path_buf();

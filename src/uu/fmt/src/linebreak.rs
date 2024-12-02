@@ -20,7 +20,7 @@ struct BreakArgs<'a> {
     ostream: &'a mut BufWriter<Stdout>,
 }
 
-impl<'a> BreakArgs<'a> {
+impl BreakArgs<'_> {
     fn compute_width(&self, winfo: &WordInfo, posn: usize, fresh: bool) -> usize {
         if fresh {
             0
