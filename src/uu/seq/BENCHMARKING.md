@@ -15,7 +15,7 @@ Next, build the `seq` binary under the release profile:
 cargo build --release -p uu_seq
 ```
 
-Finally, you can compare the performance of the two versions of `head`
+Finally, you can compare the performance of the two versions of `seq`
 by running, for example,
 
 ```shell

@@ -7,8 +7,8 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
-use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
+use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 mod helper;
 
@@ -205,9 +205,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             nl(&mut buffer, &mut stats, &settings)?;
         } else {
             let path = Path::new(file);
-            let reader = File::open(path).map_err_context(|| file.to_string())?;
-            let mut buffer = BufReader::new(reader);
-            nl(&mut buffer, &mut stats, &settings)?;
+
+            if path.is_dir() {
+                show_error!("{}: Is a directory", path.display());
+                set_exit_code(1);
+            } else {
+                let reader = File::open(path).map_err_context(|| file.to_string())?;
+                let mut buffer = BufReader::new(reader);
+                nl(&mut buffer, &mut stats, &settings)?;
+            }
         }
     }
 

@@ -59,6 +59,25 @@ fn default_arguments() {
 }
 
 #[test]
+fn only_whitespace_separators_merge() {
+    new_ucmd!()
+        .arg("contiguous_separators.txt")
+        .arg("-")
+        .pipe_in(" a  ,c ")
+        .succeeds()
+        .stdout_only("a ,,,b ,c \n");
+
+    new_ucmd!()
+        .arg("contiguous_separators.txt")
+        .arg("-t")
+        .arg(",")
+        .arg("-")
+        .pipe_in(" a  ,c ")
+        .succeeds()
+        .stdout_only(" a  ,,,b,c \n");
+}
+
+#[test]
 fn different_fields() {
     new_ucmd!()
         .arg("fields_2.txt")
@@ -208,9 +227,9 @@ fn tab_multi_character() {
         .arg("semicolon_fields_1.txt")
         .arg("semicolon_fields_2.txt")
         .arg("-t")
-        .arg("э")
+        .arg("ab")
         .fails()
-        .stderr_is("join: multi-character tab э\n");
+        .stderr_is("join: multi-character tab ab\n");
 }
 
 #[test]
@@ -335,7 +354,7 @@ fn wrong_line_order() {
         .arg("fields_4.txt")
         .fails()
         .stdout_contains("7 g f 4 fg")
-        .stderr_is(&format!(
+        .stderr_is(format!(
             "{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order\n",
             ts.bin_path.to_string_lossy(),
             ts.util_name
@@ -347,7 +366,7 @@ fn wrong_line_order() {
         .arg("fields_4.txt")
         .fails()
         .stdout_does_not_contain("7 g f 4 fg")
-        .stderr_is(&format!(
+        .stderr_is(format!(
             "{0}: fields_4.txt:5: is not sorted: 11 g 5 gh\n",
             ts.util_name
         ));
@@ -361,7 +380,7 @@ fn both_files_wrong_line_order() {
         .arg("fields_5.txt")
         .fails()
         .stdout_contains("5 e 3 ef")
-        .stderr_is(&format!(
+        .stderr_is(format!(
             "{0} {1}: fields_5.txt:4: is not sorted: 3\n{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order\n",
             ts.bin_path.to_string_lossy(),
             ts.util_name
@@ -373,7 +392,7 @@ fn both_files_wrong_line_order() {
         .arg("fields_5.txt")
         .fails()
         .stdout_does_not_contain("5 e 3 ef")
-        .stderr_is(&format!(
+        .stderr_is(format!(
             "{0}: fields_5.txt:4: is not sorted: 3\n",
             ts.util_name
         ));
@@ -437,14 +456,22 @@ fn non_unicode() {
 
     #[cfg(unix)]
     {
-        let invalid_utf8: u8 = 167;
+        let non_utf8_byte: u8 = 167;
         new_ucmd!()
             .arg("-t")
-            .arg(OsStr::from_bytes(&[invalid_utf8]))
+            .arg(OsStr::from_bytes(&[non_utf8_byte]))
             .arg("non-unicode_1.bin")
             .arg("non-unicode_2.bin")
             .succeeds()
             .stdout_only_fixture("non-unicode_sep.expected");
+
+        new_ucmd!()
+            .arg("-t")
+            .arg(OsStr::from_bytes(&[non_utf8_byte, non_utf8_byte]))
+            .arg("non-unicode_1.bin")
+            .arg("non-unicode_2.bin")
+            .fails()
+            .stderr_is("join: non-UTF-8 multi-byte tab\n");
     }
 
     #[cfg(windows)]
@@ -460,6 +487,16 @@ fn non_unicode() {
                 "join: unprintable field separators are only supported on unix-like platforms\n",
             );
     }
+}
+
+#[test]
+fn multibyte_sep() {
+    new_ucmd!()
+        .arg("-t§")
+        .arg("multibyte_sep_1.txt")
+        .arg("multibyte_sep_2.txt")
+        .succeeds()
+        .stdout_only_fixture("multibyte_sep.expected");
 }
 
 #[test]

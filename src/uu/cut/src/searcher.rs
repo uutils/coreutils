@@ -27,7 +27,7 @@ impl<'a, 'b, M: Matcher> Searcher<'a, 'b, M> {
 // Iterate over field delimiters
 // Returns (first, last) positions of each sequence, where `haystack[first..last]`
 // corresponds to the delimiter.
-impl<'a, 'b, M: Matcher> Iterator for Searcher<'a, 'b, M> {
+impl<M: Matcher> Iterator for Searcher<'_, '_, M> {
     type Item = (usize, usize);
 
     fn next(&mut self) -> Option<Self::Item> {

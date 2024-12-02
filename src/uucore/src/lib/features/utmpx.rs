@@ -54,8 +54,6 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
-use once_cell::sync::Lazy;
-
 use crate::*; // import macros from `../../macros.rs`
 
 // In case the c_char array doesn't end with NULL
@@ -156,6 +154,7 @@ mod ut {
     pub use libc::USER_PROCESS;
 }
 
+/// A login record
 pub struct Utmpx {
     inner: utmpx,
 }
@@ -191,7 +190,8 @@ impl Utmpx {
         let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
             + 1_000_i64 * self.inner.ut_tv.tv_usec as i64)
             .into();
-        let local_offset = time::OffsetDateTime::now_local().unwrap().offset();
+        let local_offset =
+            time::OffsetDateTime::now_local().map_or_else(|_| time::UtcOffset::UTC, |v| v.offset());
         time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
             .unwrap()
             .to_offset(local_offset)
@@ -214,6 +214,7 @@ impl Utmpx {
     pub fn into_inner(self) -> utmpx {
         self.inner
     }
+    /// check if the record is a user process
     pub fn is_user_process(&self) -> bool {
         !self.user().is_empty() && self.record_type() == USER_PROCESS
     }

@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda winget -->
+<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda winget openembedded yocto bblayers bitbake -->
 
 # Installation
 
@@ -119,7 +119,7 @@ port install coreutils-uutils
 
 ## FreeBSD
 
-[![FreeBSD port](https://repology.org/badge/version-for-repo/freebsd/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
+[![FreeBSD port](https://repology.org/badge/version-for-repo/freebsd/rust-coreutils.svg)](https://repology.org/project/rust-coreutils/versions)
 
 ```sh
 pkg install rust-coreutils
@@ -150,6 +150,17 @@ scoop install uutils-coreutils
 ```
 conda install -c conda-forge uutils-coreutils
 ```
+
+### Yocto
+
+[Yocto recipe](https://github.com/openembedded/meta-openembedded/tree/master/meta-oe/recipes-core/uutils-coreutils)
+
+The uutils-coreutils recipe is provided as part of the meta-openembedded yocto layer.
+Clone [poky](https://github.com/yoctoproject/poky) and [meta-openembedded](https://github.com/openembedded/meta-openembedded/tree/master), add
+`meta-openembedded/meta-oe` as layer in your `build/conf/bblayers.conf` file,
+and then either call `bitbake uutils-coreutils`, or use
+`PREFERRED_PROVIDER_coreutils = "uutils-coreutils"` in your `build/conf/local.conf` file and
+then build your usual yocto image.
 
 ## Non-standard packages
 

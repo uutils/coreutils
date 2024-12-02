@@ -1,13 +1,29 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR vdir rcexp xpart dired
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink
 
 set -e
 
+# Use GNU version for make, nproc, readlink and sed on *BSD
+case "$OSTYPE" in
+    *bsd*)
+        MAKE="gmake"
+        NPROC="gnproc"
+        READLINK="greadlink"
+        SED="gsed"
+        ;;
+    *)
+        MAKE="make"
+        NPROC="nproc"
+        READLINK="readlink"
+        SED="sed"
+        ;;
+esac
+
 ME="${0}"
-ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
+ME_dir="$(dirname -- "$("${READLINK}" -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
 # Default profile is 'debug'
@@ -26,7 +42,7 @@ echo "UU_MAKE_PROFILE='${UU_MAKE_PROFILE}'"
 ### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
 
 path_UUTILS=${path_UUTILS:-${REPO_main_dir}}
-path_GNU="$(readlink -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
+path_GNU="$("${READLINK}" -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 
 ###
 
@@ -44,7 +60,7 @@ fi
 
 ###
 
-release_tag_GNU="v9.4"
+release_tag_GNU="v9.5"
 
 if test ! -d "${path_GNU}"; then
     echo "Could not find GNU coreutils (expected at '${path_GNU}')"
@@ -78,15 +94,15 @@ if [ "$(uname)" == "Linux" ]; then
     export SELINUX_ENABLED=1
 fi
 
-make PROFILE="${UU_MAKE_PROFILE}"
+"${MAKE}" PROFILE="${UU_MAKE_PROFILE}"
 
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
 for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
     sum_path="${UU_BUILD_DIR}/${sum}"
-    test -f "${sum_path}" || cp "${UU_BUILD_DIR}/hashsum" "${sum_path}"
+    test -f "${sum_path}" || (cd ${UU_BUILD_DIR} && ln -s "hashsum" "${sum}")
 done
-test -f "${UU_BUILD_DIR}/[" || cp "${UU_BUILD_DIR}/test" "${UU_BUILD_DIR}/["
+test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
 
 ##
 
@@ -102,14 +118,12 @@ for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
 done
 
 if test -f gnu-built; then
-    # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
-    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
     echo "GNU build already found. Skip"
     echo "'rm -f $(pwd)/gnu-built' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
     ./bootstrap --skip-po
-    ./configure --quiet --disable-gcc-warnings
+    ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
@@ -117,7 +131,7 @@ else
     sed -i 's| tr | /usr/bin/tr |' tests/init.sh
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
-    make -j "$(nproc)"
+    "${MAKE}" -j "$("${NPROC}")"
     touch gnu-built
 fi
 
@@ -137,7 +151,7 @@ t_max=36
 #         done
 #     )
 #     for i in ${seq}; do
-#         make "tests/factor/t${i}.sh"
+#         "${MAKE}" "tests/factor/t${i}.sh"
 #     done
 #     cat
 #     sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*.sh
@@ -160,8 +174,7 @@ grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 
 # Remove tests checking for --version & --help
 # Not really interesting for us and logs are too big
-sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
-    -e '/tests\/help\/help-version.sh/ D' \
+sed -i -e '/tests\/help\/help-version.sh/ D' \
     -e '/tests\/help\/help-version-getopt.sh/ D' \
     Makefile
 
@@ -179,9 +192,18 @@ sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail/tail-n0f.sh 
 sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/test/test-N.sh
 sed -i 's|split |/usr/bin/split |' tests/factor/factor-parallel.sh
 sed -i 's|id -|/usr/bin/id -|' tests/runcon/runcon-no-reorder.sh
+sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
 # tests/ls/abmon-align.sh - https://github.com/uutils/coreutils/issues/3505
 sed -i 's|touch |/usr/bin/touch |' tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh tests/ls/ls-time.sh tests/stat/stat-nanoseconds.sh tests/misc/time-style.sh tests/test/test-N.sh tests/ls/abmon-align.sh
 sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
+
+# our messages are better
+sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
+sed -i "s|cp: target directory 'symlink': Permission denied|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
+
+# Our message is a bit better
+sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is not a directory|" tests/mv/trailing-slash.sh
+
 sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
 sed -i 's|paste |/usr/bin/paste |' tests/od/od-endian.sh
 sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh
@@ -190,13 +212,15 @@ sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh
 sed -i 's|\(^\s*\)seq \$|\1'"${SYSTEM_TIMEOUT}"' 0.1 seq \$|' tests/seq/seq-precision.sh tests/seq/seq-long-double.sh
 
 # Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
-grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
-grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/local/bin/\s?/usr/local/bin/|/usr/local/bin/|g'
+grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs -r sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
+grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r sed -Ei 's|/usr/local/bin/\s?/usr/local/bin/|/usr/local/bin/|g'
 
 #### Adjust tests to make them work with Rust/coreutils
 # in some cases, what we are doing in rust/coreutils is good (or better)
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
+
+eval cat "$path_UUTILS/util/gnu-patches/*.patch" | patch -N -r - -d "$path_GNU" -p 1 -i - || true
 
 sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-eacces.sh
 
@@ -217,23 +241,31 @@ sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel':
 # however there's a bug because `---dis` is an alias for: `---disable-inotify`
 sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 
+# Do not FAIL, just do a regular ERROR
+sed -i -e "s|framework_failure_ 'no inotify_add_watch';|fail=1;|" tests/tail/inotify-rotate-resources.sh
+
 test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 # pr produces very long log and this command isn't super interesting
 # SKIP for now
 sed -i -e "s|my \$prog = 'pr';$|my \$prog = 'pr';CuSkip::skip \"\$prog: SKIP for producing too long logs\";|" tests/pr/pr-tests.pl
 
+# We don't have the same error message and no need to be that specific
+sed -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
+    -e "s|--pages argument '\$too_big' too large|invalid --pages argument '\$too_big'|"  \
+    -e "s|invalid page range|invalid --pages argument|" tests/misc/xstrtol.pl
+
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
 # it hit the decode error, while we don't write anything if the input is invalid.
-sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/misc/base64.pl
-sed -i "s/\(\(b2[ml]_[69]\|b32h_[56]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"\3/g" tests/misc/basenc.pl
+sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/basenc/base64.pl
+sed -i "s/\(\(b2[ml]_[69]\|b32h_[56]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"\3/g" tests/basenc/basenc.pl
 
 # add "error: " to the expected error message
-sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/misc/basenc.pl
+sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/basenc/basenc.pl
 
 # basenc: swap out error message for unexpected arg
-sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: Found argument '--foobar' which wasn't expected, or isn't valid in this context\n\n  If you tried to supply '--foobar' as a value rather than a flag, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information try '--help'\n\"}]/" tests/misc/basenc.pl
-sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/misc/basenc.pl
+sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: Found argument '--foobar' which wasn't expected, or isn't valid in this context\n\n  If you tried to supply '--foobar' as a value rather than a flag, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information try '--help'\n\"}]/" tests/basenc/basenc.pl
+sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/basenc/basenc.pl
 
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
 sed -i "s|require_built_ |# require_built_ |g" init.cfg
@@ -246,14 +278,11 @@ sed -i "s|\$PACKAGE_VERSION|[0-9]*|g" tests/rm/fail-2eperm.sh tests/mv/sticky-to
 # with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test
 sed -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" err || framework_failure_~" tests/misc/usage_vs_getopt.sh
 sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~  sed -n \"1s/'-\\\/'/'OPT'/p\" < err >> pat || framework_failure_~" tests/misc/usage_vs_getopt.sh
-# Ignore some binaries (not built)
-# And change the default error code to 2
-# see issue #3331 (clap limitation).
-# Upstream returns 1 for most of the program. We do for cp, truncate & pr
-# So, keep it as it
-sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|runcon) return;; esac/" -e "s/rcexp=125 ;;/rcexp=2 ;;\ncp|truncate|pr) rcexp=1;;/" tests/misc/usage_vs_getopt.sh
+# Ignore runcon, it needs some extra attention
+# For all other tools, we want drop-in compatibility, and that includes the exit code.
+sed -i -e "s/rcexp=1$/rcexp=1\n  case \"\$prg\" in runcon|stdbuf) return;; esac/" tests/misc/usage_vs_getopt.sh
 # GNU has option=[SUFFIX], clap is <SUFFIX>
-sed -i -e "s/cat opts/sed -i -e \"s| <.\*>$||g\" opts/" tests/misc/usage_vs_getopt.sh
+sed -i -e "s/cat opts/sed -i -e \"s| <.\*$||g\" opts/" tests/misc/usage_vs_getopt.sh
 # for some reasons, some stuff are duplicated, strip that
 sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
 
@@ -268,7 +297,8 @@ sed -i -e "s/ginstall: creating directory/install: creating directory/g" tests/i
 
 # GNU doesn't support padding < -LONG_MAX
 # disable this test case
-sed -i -Ez "s/\n([^\n#]*pad-3\.2[^\n]*)\n([^\n]*)\n([^\n]*)/\n# uutils\/numfmt supports padding = LONG_MIN\n#\1\n#\2\n#\3/" tests/misc/numfmt.pl
+# Use GNU sed because option -z is not available on BSD sed
+"${SED}" -i -Ez "s/\n([^\n#]*pad-3\.2[^\n]*)\n([^\n]*)\n([^\n]*)/\n# uutils\/numfmt supports padding = LONG_MIN\n#\1\n#\2\n#\3/" tests/misc/numfmt.pl
 
 # Update the GNU error message to match the one generated by clap
 sed -i -e "s/\$prog: multiple field specifications/error: The argument '--field <FIELDS>' was provided more than once, but cannot be used multiple times\n\nUsage: numfmt [OPTION]... [NUMBER]...\n\n\nFor more information try '--help'/g" tests/misc/numfmt.pl
@@ -283,13 +313,19 @@ sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/printf/printf-cov.pl
 
 sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du: option requires an argument/error: a value is required for '--threshold <SIZE>' but none was supplied/" -e "/Try 'du --help' for more information./d" tests/du/threshold.sh
 
+# Remove the extra output check
+sed -i -e "s|Try '\$prog --help' for more information.\\\n||" tests/du/files0-from.pl
+sed -i -e "s|when reading file names from stdin, no file name of\"|-: No such file or directory\n\"|" -e "s| '-' allowed\\\n||" tests/du/files0-from.pl
+sed -i -e "s|-: No such file or directory|cannot access '-': No such file or directory|g" tests/du/files0-from.pl
+
 awk 'BEGIN {count=0} /compare exp out2/ && count < 6 {sub(/compare exp out2/, "grep -q \"cannot be used with\" out2"); count++} 1' tests/df/df-output.sh > tests/df/df-output.sh.tmp && mv tests/df/df-output.sh.tmp tests/df/df-output.sh
 
 # with ls --dired, in case of error, we have a slightly different error position
 sed -i -e "s|44 45|48 49|" tests/ls/stat-failed.sh
 
 # small difference in the error message
-sed -i -e "/ls: invalid argument 'XX' for 'time style'/,/Try 'ls --help' for more information\./c\
+# Use GNU sed for /c command
+"${SED}" -i -e "/ls: invalid argument 'XX' for 'time style'/,/Try 'ls --help' for more information\./c\
 ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"long-iso\", \"iso\", \"locale\", \"+FORMAT (e.g., +%H:%M) for a 'date'-style format\"]\n\nFor more information try --help" tests/ls/time-style-diag.sh
 
 # disable two kind of tests:
@@ -298,7 +334,39 @@ ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"lo
 sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/help/help-version-getopt.sh
 
 # Add debug info + we have less syscall then GNU's. Adjust our check.
-sed -i -e '/test \$n_stat1 = \$n_stat2 \\/c\
+# Use GNU sed for /c command
+"${SED}" -i -e '/test \$n_stat1 = \$n_stat2 \\/c\
 echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
+
+# no need to replicate this output with hashsum
+sed -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
+
+# Our ls command always outputs ANSI color codes prepended with a zero. However,
+# in the case of GNU, it seems inconsistent. Nevertheless, it looks like it
+# doesn't matter whether we prepend a zero or not.
+sed -i -E 's/\^\[\[([1-9]m)/^[[0\1/g;  s/\^\[\[m/^[[0m/g' tests/ls/color-norm.sh
+# It says in the test itself that having more than one reset is a bug, so we
+# don't need to replicate that behavior.
+sed -i -E 's/(\^\[\[0m)+/\^\[\[0m/g' tests/ls/color-norm.sh
+
+# GNU's ls seems to output color codes in the order given in the environment
+# variable, but our ls seems to output them in a predefined order. Nevertheless,
+# the order doesn't matter, so it's okay.
+sed -i  's/44;37/37;44/' tests/ls/multihardlink.sh
+
+# Just like mentioned in the previous patch, GNU's ls output color codes in the
+# same way it is specified in the environment variable, but our ls emits them
+# differently. In this case, the color code is set to 0;31;42, and our ls would
+# ignore the 0; part. This would have been a bug if we output color codes
+# individually, for example, ^[[31^[[42 instead of ^[[31;42, but we don't do
+# that anywhere in our implementation, and it looks like GNU's ls also doesn't
+# do that. So, it's okay to ignore the zero.
+sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/color-clear-to-eol.sh
+
+# patching this because of the same reason as the last one.
+sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/quote-align.sh
+
+# Slightly different error message
+sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh

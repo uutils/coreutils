@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use chrono::{DateTime, Local};
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, ArgMatches, Command};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
@@ -12,7 +12,7 @@ use std::error::Error;
 use std::fmt::Display;
 #[cfg(not(windows))]
 use std::fs::Metadata;
-use std::fs::{self, File};
+use std::fs::{self, DirEntry, File};
 use std::io::{BufRead, BufReader};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -26,11 +26,12 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use uucore::display::{print_verbatim, Quotable};
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_warning};
+use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -65,6 +66,7 @@ mod options {
     pub const INODES: &str = "inodes";
     pub const EXCLUDE: &str = "exclude";
     pub const EXCLUDE_FROM: &str = "exclude-from";
+    pub const FILES0_FROM: &str = "files0-from";
     pub const VERBOSE: &str = "verbose";
     pub const FILE: &str = "FILE";
 }
@@ -72,9 +74,6 @@ mod options {
 const ABOUT: &str = help_about!("du.md");
 const AFTER_HELP: &str = help_section!("after help", "du.md");
 const USAGE: &str = help_usage!("du.md");
-
-// TODO: Support Z & Y (currently limited by size of u64)
-const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
 
 struct TraversalOptions {
     all: bool,
@@ -115,7 +114,8 @@ enum Time {
 
 #[derive(Clone)]
 enum SizeFormat {
-    Human(u64),
+    HumanDecimal,
+    HumanBinary,
     BlockSize(u64),
 }
 
@@ -138,7 +138,11 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: &Path, options: &TraversalOptions) -> std::io::Result<Self> {
+    fn new(
+        path: &Path,
+        dir_entry: Option<&DirEntry>,
+        options: &TraversalOptions,
+    ) -> std::io::Result<Self> {
         // Determine whether to dereference (follow) the symbolic link
         let should_dereference = match &options.dereference {
             Deref::All => true,
@@ -149,8 +153,11 @@ impl Stat {
         let metadata = if should_dereference {
             // Get metadata, following symbolic links if necessary
             fs::metadata(path)
+        } else if let Some(dir_entry) = dir_entry {
+            // Get metadata directly from the DirEntry, which is faster on Windows
+            dir_entry.metadata()
         } else {
-            // Get metadata without following symbolic links
+            // Get metadata from the filesystem without following symbolic links
             fs::symlink_metadata(path)
         }?;
 
@@ -319,7 +326,7 @@ fn du(
         'file_loop: for f in read {
             match f {
                 Ok(entry) => {
-                    match Stat::new(&entry.path(), options) {
+                    match Stat::new(&entry.path(), Some(&entry), options) {
                         Ok(this_stat) => {
                             // We have an exclude list
                             for pattern in &options.excludes {
@@ -339,14 +346,21 @@ fn du(
                             }
 
                             if let Some(inode) = this_stat.inode {
-                                if seen_inodes.contains(&inode) {
-                                    if options.count_links {
+                                // Check if the inode has been seen before and if we should skip it
+                                if seen_inodes.contains(&inode)
+                                    && (!options.count_links || !options.all)
+                                {
+                                    // If `count_links` is enabled and `all` is not, increment the inode count
+                                    if options.count_links && !options.all {
                                         my_stat.inodes += 1;
                                     }
+                                    // Skip further processing for this inode
                                     continue;
                                 }
+                                // Mark this inode as seen
                                 seen_inodes.insert(inode);
                             }
+
                             if this_stat.is_dir {
                                 if options.one_file_system {
                                     if let (Some(this_inode), Some(my_inode)) =
@@ -543,23 +557,23 @@ impl StatPrinter {
     }
 
     fn convert_size(&self, size: u64) -> String {
-        if self.inodes {
-            return size.to_string();
-        }
         match self.size_format {
-            SizeFormat::Human(multiplier) => {
-                if size == 0 {
-                    return "0".to_string();
+            SizeFormat::HumanDecimal => uucore::format::human::human_readable(
+                size,
+                uucore::format::human::SizeFormat::Decimal,
+            ),
+            SizeFormat::HumanBinary => uucore::format::human::human_readable(
+                size,
+                uucore::format::human::SizeFormat::Binary,
+            ),
+            SizeFormat::BlockSize(block_size) => {
+                if self.inodes {
+                    // we ignore block size (-B) with --inodes
+                    size.to_string()
+                } else {
+                    size.div_ceil(block_size).to_string()
                 }
-                for &(unit, power) in &UNITS {
-                    let limit = multiplier.pow(power);
-                    if size >= limit {
-                        return format!("{:.1}{}", (size as f64) / (limit as f64), unit);
-                    }
-                }
-                format!("{size}B")
             }
-            SizeFormat::BlockSize(block_size) => div_ceil(size, block_size).to_string(),
         }
     }
 
@@ -580,11 +594,52 @@ impl StatPrinter {
     }
 }
 
-// This can be replaced with u64::div_ceil once it is stabilized.
-// This implementation approach is optimized for when `b` is a constant,
-// particularly a power of two.
-pub fn div_ceil(a: u64, b: u64) -> u64 {
-    (a + b - 1) / b
+// Read file paths from the specified file, separated by null characters
+fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
+    let reader: Box<dyn BufRead> = if file_name == "-" {
+        // Read from standard input
+        Box::new(BufReader::new(std::io::stdin()))
+    } else {
+        // First, check if the file_name is a directory
+        let path = PathBuf::from(file_name);
+        if path.is_dir() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{file_name}: read error: Is a directory"),
+            ));
+        }
+
+        // Attempt to open the file and handle the error if it does not exist
+        match File::open(file_name) {
+            Ok(file) => Box::new(BufReader::new(file)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("cannot open '{file_name}' for reading: No such file or directory"),
+                ))
+            }
+            Err(e) => return Err(e),
+        }
+    };
+
+    let mut paths = Vec::new();
+
+    for (i, line) in reader.split(b'\0').enumerate() {
+        let path = line?;
+
+        if path.is_empty() {
+            let line_number = i + 1;
+            show_error!("{file_name}:{line_number}: invalid zero-length file name");
+            set_exit_code(1);
+        } else {
+            let p = PathBuf::from(String::from_utf8_lossy(&path).to_string());
+            if !paths.contains(&p) {
+                paths.push(p);
+            }
+        }
+    }
+
+    Ok(paths)
 }
 
 #[uucore::main]
@@ -594,6 +649,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let summarize = matches.get_flag(options::SUMMARIZE);
 
+    let count_links = matches.get_flag(options::COUNT_LINKS);
+
     let max_depth = parse_depth(
         matches
             .get_one::<String>(options::MAX_DEPTH)
@@ -601,13 +658,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         summarize,
     )?;
 
-    let files = match matches.get_one::<String>(options::FILE) {
-        Some(_) => matches
-            .get_many::<String>(options::FILE)
-            .unwrap()
-            .map(PathBuf::from)
-            .collect(),
-        None => vec![PathBuf::from(".")],
+    let files = if let Some(file_from) = matches.get_one::<String>(options::FILES0_FROM) {
+        if file_from == "-" && matches.get_one::<String>(options::FILE).is_some() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "extra operand {}\nfile operands cannot be combined with --files0-from",
+                    matches.get_one::<String>(options::FILE).unwrap().quote()
+                ),
+            )
+            .into());
+        }
+
+        read_files_from(file_from)?
+    } else if let Some(files) = matches.get_many::<String>(options::FILE) {
+        let files = files.map(PathBuf::from);
+        if count_links {
+            files.collect()
+        } else {
+            // Deduplicate while preserving order
+            let mut seen = std::collections::HashSet::new();
+            files
+                .filter(|path| seen.insert(path.clone()))
+                .collect::<Vec<_>>()
+        }
+    } else {
+        vec![PathBuf::from(".")]
     };
 
     let time = matches.contains_id(options::TIME).then(|| {
@@ -620,9 +696,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     });
 
     let size_format = if matches.get_flag(options::HUMAN_READABLE) {
-        SizeFormat::Human(1024)
+        SizeFormat::HumanBinary
     } else if matches.get_flag(options::SI) {
-        SizeFormat::Human(1000)
+        SizeFormat::HumanDecimal
     } else if matches.get_flag(options::BYTES) {
         SizeFormat::BlockSize(1)
     } else if matches.get_flag(options::BLOCK_SIZE_1K) {
@@ -649,9 +725,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             Deref::None
         },
-        count_links: matches.get_flag(options::COUNT_LINKS),
+        count_links,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
+    };
+
+    let time_format = if time.is_some() {
+        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
+    } else {
+        "%Y-%m-%d %H:%M".to_string()
     };
 
     let stat_printer = StatPrinter {
@@ -670,8 +752,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .transpose()?,
         apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
         time,
-        time_format: parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?
-            .to_string(),
+        time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
     };
 
@@ -701,7 +782,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // Check existence of path provided in argument
-        if let Ok(stat) = Stat::new(&path, &traversal_options) {
+        if let Ok(stat) = Stat::new(&path, None, &traversal_options) {
             // Kick off the computation of disk usage from the initial path
             let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
             if let Some(inode) = stat.inode {
@@ -718,8 +799,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .send(Err(USimpleError::new(
                     1,
                     format!(
-                        "{}: No such file or directory",
-                        path.to_string_lossy().maybe_quote()
+                        "cannot access {}: No such file or directory",
+                        path.to_string_lossy().quote()
                     ),
                 )))
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
@@ -955,12 +1036,24 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
         )
         .arg(
+            Arg::new(options::FILES0_FROM)
+                .long("files0-from")
+                .value_name("FILE")
+                .value_hint(clap::ValueHint::FilePath)
+                .help("summarize device usage of the NUL-terminated file names specified in file F; if F is -, then read names from standard input")
+                .action(ArgAction::Append)
+        )
+        .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)
                 .value_name("WORD")
                 .require_equals(true)
                 .num_args(0..)
-                .value_parser(["atime", "access", "use", "ctime", "status", "birth", "creation"])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("atime").alias("access").alias("use"),
+                    PossibleValue::new("ctime").alias("status"),
+                    PossibleValue::new("creation").alias("birth"),
+                ]))
                 .help(
                     "show time of the last modification of any file in the \
                     directory, or any of its subdirectories. If WORD is given, show time as WORD instead \

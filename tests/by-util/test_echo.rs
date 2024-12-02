@@ -13,12 +13,7 @@ fn test_default() {
 
 #[test]
 fn test_no_trailing_newline() {
-    new_ucmd!()
-        .arg("-n")
-        .arg("hi")
-        .succeeds()
-        .no_stderr()
-        .stdout_only("hi");
+    new_ucmd!().arg("-n").arg("hi").succeeds().stdout_only("hi");
 }
 
 #[test]
@@ -292,4 +287,99 @@ fn old_octal_syntax() {
         .arg("\\1011")
         .succeeds()
         .stdout_is("A1\n");
+}
+
+#[test]
+fn partial_version_argument() {
+    new_ucmd!().arg("--ver").succeeds().stdout_is("--ver\n");
+}
+
+#[test]
+fn partial_help_argument() {
+    new_ucmd!().arg("--he").succeeds().stdout_is("--he\n");
+}
+
+#[test]
+fn multibyte_escape_unicode() {
+    // spell-checker:disable-next-line
+    // Tests suggested by kkew3
+    // https://github.com/uutils/coreutils/issues/6741
+
+    // \u{1F602} is:
+    //
+    // "Face with Tears of Joy"
+    // U+1F602
+    // "😂"
+
+    new_ucmd!()
+        .args(&["-e", r"\xf0\x9f\x98\x82"])
+        .succeeds()
+        .stdout_only("\u{1F602}\n");
+
+    new_ucmd!()
+        .args(&["-e", r"\x41\xf0\x9f\x98\x82\x42"])
+        .succeeds()
+        .stdout_only("A\u{1F602}B\n");
+
+    new_ucmd!()
+        .args(&["-e", r"\xf0\x41\x9f\x98\x82"])
+        .succeeds()
+        .stdout_only_bytes(b"\xF0A\x9F\x98\x82\n");
+
+    new_ucmd!()
+        .args(&["-e", r"\x41\xf0\c\x9f\x98\x82"])
+        .succeeds()
+        .stdout_only_bytes(b"A\xF0");
+}
+
+#[test]
+fn non_utf_8_hex_round_trip() {
+    new_ucmd!()
+        .args(&["-e", r"\xFF"])
+        .succeeds()
+        .stdout_only_bytes(b"\xFF\n");
+}
+
+#[test]
+fn nine_bit_octal() {
+    const RESULT: &[u8] = b"\xFF\n";
+
+    new_ucmd!()
+        .args(&["-e", r"\0777"])
+        .succeeds()
+        .stdout_only_bytes(RESULT);
+
+    new_ucmd!()
+        .args(&["-e", r"\777"])
+        .succeeds()
+        .stdout_only_bytes(RESULT);
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn non_utf_8() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // ISO-8859-1 encoded text
+    // spell-checker:disable
+    const INPUT_AND_OUTPUT: &[u8] =
+        b"Swer an rehte g\xFCete wendet s\xEEn gem\xFCete, dem volget s\xE6lde und \xEAre.";
+    // spell-checker:enable
+
+    let os_str = OsStr::from_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("-n")
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+}
+
+#[test]
+fn slash_eight_off_by_one() {
+    new_ucmd!()
+        .args(&["-e", "-n", r"\8"])
+        .succeeds()
+        .stdout_only(r"\8");
 }

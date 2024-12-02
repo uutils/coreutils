@@ -7,13 +7,14 @@ use libc::STDIN_FILENO;
 use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
 use rand::prelude::SliceRandom;
 use rand::Rng;
+use similar::TextDiff;
 use std::ffi::OsString;
-use std::io;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicBool, Once};
+use std::{io, thread};
 
 /// Represents the result of running a command, including its standard output,
 /// standard error, and exit code.
@@ -56,7 +57,7 @@ pub fn generate_and_run_uumain<F>(
     pipe_input: Option<&str>,
 ) -> CommandResult
 where
-    F: FnOnce(std::vec::IntoIter<OsString>) -> i32,
+    F: FnOnce(std::vec::IntoIter<OsString>) -> i32 + Send + 'static,
 {
     // Duplicate the stdout and stderr file descriptors
     let original_stdout_fd = unsafe { dup(STDOUT_FILENO) };
@@ -68,6 +69,7 @@ where
             exit_code: -1,
         };
     }
+
     println!("Running test {:?}", &args[0..]);
     let mut pipe_stdout_fds = [-1; 2];
     let mut pipe_stderr_fds = [-1; 2];
@@ -120,10 +122,23 @@ where
         None
     };
 
-    let uumain_exit_status = uumain_function(args.to_owned().into_iter());
-
-    io::stdout().flush().unwrap();
-    io::stderr().flush().unwrap();
+    let (uumain_exit_status, captured_stdout, captured_stderr) = thread::scope(|s| {
+        let out = s.spawn(|| read_from_fd(pipe_stdout_fds[0]));
+        let err = s.spawn(|| read_from_fd(pipe_stderr_fds[0]));
+        let status = uumain_function(args.to_owned().into_iter());
+        // Reset the exit code global variable in case we run another test after this one
+        // See https://github.com/uutils/coreutils/issues/5777
+        uucore::error::set_exit_code(0);
+        io::stdout().flush().unwrap();
+        io::stderr().flush().unwrap();
+        unsafe {
+            close(pipe_stdout_fds[1]);
+            close(pipe_stderr_fds[1]);
+            close(STDOUT_FILENO);
+            close(STDERR_FILENO);
+        }
+        (status, out.join().unwrap(), err.join().unwrap())
+    });
 
     // Restore the original stdout and stderr
     if unsafe { dup2(original_stdout_fd, STDOUT_FILENO) } == -1
@@ -138,9 +153,6 @@ where
     unsafe {
         close(original_stdout_fd);
         close(original_stderr_fd);
-
-        close(pipe_stdout_fds[1]);
-        close(pipe_stderr_fds[1]);
     }
 
     // Restore the original stdin if it was modified
@@ -155,18 +167,14 @@ where
         unsafe { close(fd) };
     }
 
-    let captured_stdout = read_from_fd(pipe_stdout_fds[0]).trim().to_string();
-    let captured_stderr = read_from_fd(pipe_stderr_fds[0]).to_string();
-    let captured_stderr = captured_stderr
-        .split_once(':')
-        .map(|x| x.1)
-        .unwrap_or("")
-        .trim()
-        .to_string();
-
     CommandResult {
         stdout: captured_stdout,
-        stderr: captured_stderr,
+        stderr: captured_stderr
+            .split_once(':')
+            .map(|x| x.1)
+            .unwrap_or("")
+            .trim()
+            .to_string(),
         exit_code: uumain_exit_status,
     }
 }
@@ -223,9 +231,16 @@ pub fn run_gnu_cmd(
         command.arg(arg);
     }
 
+    // See https://github.com/uutils/coreutils/issues/6794
+    // uutils' coreutils is not locale-aware, and aims to mirror/be compatible with GNU Core Utilities's LC_ALL=C behavior
+    command.env("LC_ALL", "C");
+
     let output = if let Some(input_str) = pipe_input {
         // We have an pipe input
-        command.stdin(Stdio::piped()).stdout(Stdio::piped());
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
         let mut child = command.spawn().expect("Failed to execute command");
         let child_stdin = child.stdin.as_mut().unwrap();
@@ -311,12 +326,14 @@ pub fn compare_result(
         discrepancies.push("stdout differs");
         println!("Rust stdout: {}", rust_result.stdout);
         println!("GNU stdout: {}", gnu_result.stdout);
+        print_diff(&rust_result.stdout, &gnu_result.stdout);
         should_panic = true;
     }
     if rust_result.stderr.trim() != gnu_result.stderr.trim() {
         discrepancies.push("stderr differs");
         println!("Rust stderr: {}", rust_result.stderr);
         println!("GNU stderr: {}", gnu_result.stderr);
+        print_diff(&rust_result.stderr, &gnu_result.stderr);
         if fail_on_stderr_diff {
             should_panic = true;
         }
@@ -343,6 +360,16 @@ pub fn compare_result(
     }
 }
 
+/// When we have different outputs, print the diff
+fn print_diff(rust_output: &str, gnu_output: &str) {
+    println!("Diff=");
+    let diff = TextDiff::from_lines(rust_output, gnu_output);
+    for change in diff.iter_all_changes() {
+        print!("{}{}", change.tag(), change);
+    }
+    println!();
+}
+
 pub fn generate_random_string(max_length: usize) -> String {
     let mut rng = rand::thread_rng();
     let valid_utf8: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -351,7 +378,7 @@ pub fn generate_random_string(max_length: usize) -> String {
     let invalid_utf8 = [0xC3, 0x28]; // Invalid UTF-8 sequence
     let mut result = String::new();
 
-    for _ in 0..rng.gen_range(1..=max_length) {
+    for _ in 0..rng.gen_range(0..=max_length) {
         if rng.gen_bool(0.9) {
             let ch = valid_utf8.choose(&mut rng).unwrap();
             result.push(*ch);

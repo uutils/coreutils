@@ -46,7 +46,7 @@ pub struct ReverseChunks<'a> {
 }
 
 impl<'a> ReverseChunks<'a> {
-    pub fn new(file: &'a mut File) -> ReverseChunks<'a> {
+    pub fn new(file: &'a mut File) -> Self {
         let current = if cfg!(unix) {
             file.stream_position().unwrap()
         } else {
@@ -64,7 +64,7 @@ impl<'a> ReverseChunks<'a> {
     }
 }
 
-impl<'a> Iterator for ReverseChunks<'a> {
+impl Iterator for ReverseChunks<'_> {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {

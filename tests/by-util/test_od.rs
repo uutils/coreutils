@@ -3,25 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone
 
 use crate::common::util::TestScenario;
-use std::env;
-use std::fs::remove_file;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
 use unindent::unindent;
 
-// octal dump of 'abcdefghijklmnopqrstuvwxyz\n'     // spell-checker:disable-line
+// octal dump of 'abcdefghijklmnopqrstuvwxyz\n'
 static ALPHA_OUT: &str = "
         0000000 061141 062143 063145 064147 065151 066153 067155 070157
         0000020 071161 072163 073165 074167 075171 000012
         0000033
         ";
-
-// XXX We could do a better job of ensuring that we have a fresh temp dir to ourselves,
-// not a general one full of other process leftovers.
 
 #[test]
 fn test_invalid_arg() {
@@ -31,88 +23,64 @@ fn test_invalid_arg() {
 // Test that od can read one file and dump with default format
 #[test]
 fn test_file() {
-    // TODO: Can this be replaced by AtPath?
-    use std::env;
-    let temp = env::temp_dir();
-    let tmpdir = Path::new(&temp);
-    let file = tmpdir.join("test");
-
-    {
-        let mut f = File::create(&file).unwrap();
-        // spell-checker:disable-next-line
-        assert!(
-            f.write_all(b"abcdefghijklmnopqrstuvwxyz\n").is_ok(),
-            "Test setup failed - could not write file"
-        );
-    }
-
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("test", "abcdefghijklmnopqrstuvwxyz\n");
+    scene
+        .ucmd()
         .arg("--endian=little")
-        .arg(file.as_os_str())
+        .arg("test")
         .succeeds()
         .no_stderr()
         .stdout_is(unindent(ALPHA_OUT));
-
+    scene
+        .ucmd()
+        .arg("--endian=littl") // spell-checker:disable-line
+        .arg("test")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(unindent(ALPHA_OUT));
+    scene
+        .ucmd()
+        .arg("--endian=l")
+        .arg("test")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(unindent(ALPHA_OUT));
     // Ensure that default format matches `-t o2`, and that `-t` does not absorb file argument
-    new_ucmd!()
+    scene
+        .ucmd()
         .arg("--endian=little")
         .arg("-t")
         .arg("o2")
-        .arg(file.as_os_str())
-        .succeeds()
-        .no_stderr()
-        .stdout_is(unindent(ALPHA_OUT));
-
-    let _ = remove_file(file);
+        .arg("test");
 }
 
 // Test that od can read 2 files and concatenate the contents
 #[test]
 fn test_2files() {
-    let temp = env::temp_dir();
-    let tmpdir = Path::new(&temp);
-    let file1 = tmpdir.join("test1");
-    let file2 = tmpdir.join("test2");
-
-    for (n, a) in [(1, "a"), (2, "b")] {
-        println!("number: {n} letter:{a}");
-    }
-
-    // spell-checker:disable-next-line
-    for (path, data) in [(&file1, "abcdefghijklmnop"), (&file2, "qrstuvwxyz\n")] {
-        let mut f = File::create(path).unwrap();
-        assert!(
-            f.write_all(data.as_bytes()).is_ok(),
-            "Test setup failed - could not write file"
-        );
-    }
-
-    new_ucmd!()
-        .arg("--endian=little")
-        .arg(file1.as_os_str())
-        .arg(file2.as_os_str())
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("test1", "abcdefghijklmnop");
+    at.write("test2", "qrstuvwxyz\n"); // spell-checker:disable-line
+    ucmd.arg("--endian=little")
+        .arg("test1")
+        .arg("test2")
         .succeeds()
         .no_stderr()
         .stdout_is(unindent(ALPHA_OUT));
-    // TODO: Handle errors?
-    let _ = remove_file(file1);
-    let _ = remove_file(file2);
 }
 
 // Test that od gives non-0 exit val for filename that doesn't exist.
 #[test]
 fn test_no_file() {
-    let temp = env::temp_dir();
-    let tmpdir = Path::new(&temp);
-    let file = tmpdir.join("}surely'none'would'thus'a'file'name"); // spell-checker:disable-line
-
-    new_ucmd!().arg(file.as_os_str()).fails();
+    let (_at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("}surely'none'would'thus'a'file'name").fails();
 }
 
 // Test that od reads from stdin instead of a file
 #[test]
 fn test_from_stdin() {
-    let input = "abcdefghijklmnopqrstuvwxyz\n"; // spell-checker:disable-line
+    let input = "abcdefghijklmnopqrstuvwxyz\n";
     new_ucmd!()
         .arg("--endian=little")
         .run_piped_stdin(input.as_bytes())
@@ -124,26 +92,16 @@ fn test_from_stdin() {
 // Test that od reads from stdin and also from files
 #[test]
 fn test_from_mixed() {
-    let temp = env::temp_dir();
-    let tmpdir = Path::new(&temp);
-    let file1 = tmpdir.join("test-1");
-    let file3 = tmpdir.join("test-3");
-
+    let (at, mut ucmd) = at_and_ucmd!();
     // spell-checker:disable-next-line
     let (data1, data2, data3) = ("abcdefg", "hijklmnop", "qrstuvwxyz\n");
-    for (path, data) in [(&file1, data1), (&file3, data3)] {
-        let mut f = File::create(path).unwrap();
-        assert!(
-            f.write_all(data.as_bytes()).is_ok(),
-            "Test setup failed - could not write file"
-        );
-    }
+    at.write("test-1", data1);
+    at.write("test-3", data3);
 
-    new_ucmd!()
-        .arg("--endian=little")
-        .arg(file1.as_os_str())
+    ucmd.arg("--endian=little")
+        .arg("test-1")
         .arg("-")
-        .arg(file3.as_os_str())
+        .arg("test-3")
         .run_piped_stdin(data2.as_bytes())
         .success()
         .no_stderr()
@@ -152,7 +110,7 @@ fn test_from_mixed() {
 
 #[test]
 fn test_multiple_formats() {
-    let input = "abcdefghijklmnopqrstuvwxyz\n"; // spell-checker:disable-line
+    let input = "abcdefghijklmnopqrstuvwxyz\n";
     new_ucmd!()
         .arg("-c")
         .arg("-b")
@@ -463,6 +421,16 @@ fn test_big_endian() {
         .run_piped_stdin(&input[..])
         .no_stderr()
         .success()
+        .stdout_is(&expected_output);
+    new_ucmd!()
+        .arg("--endian=b")
+        .arg("-F")
+        .arg("-f")
+        .arg("-X")
+        .arg("-x")
+        .run_piped_stdin(&input[..])
+        .no_stderr()
+        .success()
         .stdout_is(expected_output);
 }
 
@@ -592,8 +560,8 @@ fn test_dec_offset() {
 
 #[test]
 fn test_no_offset() {
-    let input = [0u8; 31];
     const LINE: &str = " 00000000 00000000 00000000 00000000\n";
+    let input = [0u8; 31];
     let expected_output = [LINE, LINE, LINE, LINE].join("");
 
     new_ucmd!()
@@ -612,8 +580,29 @@ fn test_invalid_offset() {
 }
 
 #[test]
+fn test_empty_offset() {
+    new_ucmd!()
+        .arg("-A")
+        .arg("")
+        .fails()
+        .stderr_only("od: Radix cannot be empty, and must be one of [o, d, x, n]\n");
+}
+
+#[test]
+fn test_offset_compatibility() {
+    let input = [0u8; 4];
+    let expected_output = " 000000 000000\n";
+
+    new_ucmd!()
+        .arg("-Anone")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected_output);
+}
+
+#[test]
 fn test_skip_bytes() {
-    let input = "abcdefghijklmnopq"; // spell-checker:disable-line
+    let input = "abcdefghijklmnopq";
     new_ucmd!()
         .arg("-c")
         .arg("--skip-bytes=5")
@@ -630,7 +619,7 @@ fn test_skip_bytes() {
 
 #[test]
 fn test_skip_bytes_hex() {
-    let input = "abcdefghijklmnopq"; // spell-checker:disable-line
+    let input = "abcdefghijklmnopq";
     new_ucmd!()
         .arg("-c")
         .arg("--skip-bytes=0xB")
@@ -668,7 +657,7 @@ fn test_skip_bytes_error() {
 
 #[test]
 fn test_read_bytes() {
-    let input = "abcdefghijklmnopqrstuvwxyz\n12345678"; // spell-checker:disable-line
+    let input = "abcdefghijklmnopqrstuvwxyz\n12345678";
     new_ucmd!()
         .arg("--endian=little")
         .arg("--read-bytes=27")
@@ -727,7 +716,7 @@ fn test_filename_parsing() {
 
 #[test]
 fn test_stdin_offset() {
-    let input = "abcdefghijklmnopq"; // spell-checker:disable-line
+    let input = "abcdefghijklmnopq";
     new_ucmd!()
         .arg("-c")
         .arg("+5")
@@ -762,7 +751,7 @@ fn test_file_offset() {
 #[test]
 fn test_traditional() {
     // note gnu od does not align both lines
-    let input = "abcdefghijklmnopq"; // spell-checker:disable-line
+    let input = "abcdefghijklmnopq";
     new_ucmd!()
         .arg("--traditional")
         .arg("-a")
@@ -785,7 +774,7 @@ fn test_traditional() {
 #[test]
 fn test_traditional_with_skip_bytes_override() {
     // --skip-bytes is ignored in this case
-    let input = "abcdefghijklmnop"; // spell-checker:disable-line
+    let input = "abcdefghijklmnop";
     new_ucmd!()
         .arg("--traditional")
         .arg("--skip-bytes=10")
@@ -805,7 +794,7 @@ fn test_traditional_with_skip_bytes_override() {
 #[test]
 fn test_traditional_with_skip_bytes_non_override() {
     // no offset specified in the traditional way, so --skip-bytes is used
-    let input = "abcdefghijklmnop"; // spell-checker:disable-line
+    let input = "abcdefghijklmnop";
     new_ucmd!()
         .arg("--traditional")
         .arg("--skip-bytes=10")
@@ -835,7 +824,7 @@ fn test_traditional_error() {
 
 #[test]
 fn test_traditional_only_label() {
-    let input = "abcdefghijklmnopqrstuvwxyz"; // spell-checker:disable-line
+    let input = "abcdefghijklmnopqrstuvwxyz";
     new_ucmd!()
         .arg("-An")
         .arg("--traditional")
@@ -892,7 +881,6 @@ fn test_od_invalid_bytes() {
                 "od: invalid suffix in {option} argument '{INVALID_SUFFIX}'\n"
             ));
 
-        #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
             .arg(format!("{option}={BIG_SIZE}"))
             .arg("file")

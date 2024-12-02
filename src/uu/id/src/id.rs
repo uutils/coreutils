@@ -324,6 +324,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::OPT_AUDIT)
                 .short('A')
@@ -396,6 +397,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::OPT_PASSWORD)
                 .short('P')
                 .help("Display the id as a password file entry.")
+                .conflicts_with(options::OPT_HUMAN_READABLE)
                 .action(ArgAction::SetTrue),
         )
         .arg(

@@ -21,7 +21,7 @@ pub enum CsplitError {
     MatchNotFound(String),
     #[error("{}: match not found on repetition {}", ._0.quote(), _1)]
     MatchNotFoundOnRepetition(String, usize),
-    #[error("line number must be greater than zero")]
+    #[error("0: line number must be greater than zero")]
     LineNumberIsZero,
     #[error("line number '{}' is smaller than preceding line number, {}", _0, _1)]
     LineNumberSmallerThanPrevious(usize, usize),

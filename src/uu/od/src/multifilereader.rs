@@ -5,9 +5,7 @@
 // spell-checker:ignore (ToDO) multifile curr fnames fname xfrd fillloop mockstream
 
 use std::fs::File;
-use std::io;
-use std::io::BufReader;
-use std::vec::Vec;
+use std::io::{self, BufReader};
 
 use uucore::display::Quotable;
 use uucore::show_error;
@@ -30,7 +28,7 @@ pub trait HasError {
     fn has_error(&self) -> bool;
 }
 
-impl<'b> MultifileReader<'b> {
+impl MultifileReader<'_> {
     pub fn new(fnames: Vec<InputSource>) -> MultifileReader {
         let mut mf = MultifileReader {
             ni: fnames,
@@ -78,7 +76,7 @@ impl<'b> MultifileReader<'b> {
     }
 }
 
-impl<'b> io::Read for MultifileReader<'b> {
+impl io::Read for MultifileReader<'_> {
     // Fill buf with bytes read from the list of files
     // Returns Ok(<number of bytes read>)
     // Handles io errors itself, thus always returns OK
@@ -115,7 +113,7 @@ impl<'b> io::Read for MultifileReader<'b> {
     }
 }
 
-impl<'b> HasError for MultifileReader<'b> {
+impl HasError for MultifileReader<'_> {
     fn has_error(&self) -> bool {
         self.any_err
     }

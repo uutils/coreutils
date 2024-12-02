@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#![allow(clippy::similar_names)]
+
 use crate::common::util::TestScenario;
 use std::path::PathBuf;
 
@@ -548,6 +550,67 @@ fn test_symlink_no_deref_dir() {
 }
 
 #[test]
+fn test_symlink_no_deref_file_in_destination_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file1 = "foo";
+    let file2 = "bar";
+
+    let dest = "baz";
+
+    let link1 = "baz/foo";
+    let link2 = "baz/bar";
+
+    at.touch(file1);
+    at.touch(file2);
+    at.mkdir(dest);
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+    assert!(at.dir_exists(dest));
+
+    // -n and -f should work alone
+    scene
+        .ucmd()
+        .args(&["-sn", file1, dest])
+        .succeeds()
+        .no_stderr();
+    assert!(at.is_symlink(link1));
+    assert_eq!(at.resolve_link(link1), file1);
+
+    scene
+        .ucmd()
+        .args(&["-sf", file1, dest])
+        .succeeds()
+        .no_stderr();
+    assert!(at.is_symlink(link1));
+    assert_eq!(at.resolve_link(link1), file1);
+
+    // -n alone should fail if destination exists already (it should now)
+    scene.ucmd().args(&["-sn", file1, dest]).fails();
+
+    // -nf should also work
+    scene
+        .ucmd()
+        .args(&["-snf", file1, dest])
+        .succeeds()
+        .no_stderr();
+    assert!(at.is_symlink(link1));
+    assert_eq!(at.resolve_link(link1), file1);
+
+    scene
+        .ucmd()
+        .args(&["-snf", file1, file2, dest])
+        .succeeds()
+        .no_stderr();
+    assert!(at.is_symlink(link1));
+    assert_eq!(at.resolve_link(link1), file1);
+    assert!(at.is_symlink(link2));
+    assert_eq!(at.resolve_link(link2), file2);
+}
+
+#[test]
 fn test_symlink_no_deref_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -718,4 +781,51 @@ fn test_symlink_remove_existing_same_src_and_dest() {
         .stderr_contains("'a' and 'a' are the same file");
     assert!(at.file_exists("a") && !at.symlink_exists("a"));
     assert_eq!(at.read("a"), "sample");
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_ln_seen_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
+
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+
+    assert!(at.plus("c").join("f").exists());
+    // b/f still exists
+    assert!(at.plus("b").join("f").exists());
+    // a/f still exists
+    assert!(at.plus("a").join("f").exists());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        // Check inode numbers
+        let inode_a_f = at.plus("a").join("f").metadata().unwrap().ino();
+        let inode_b_f = at.plus("b").join("f").metadata().unwrap().ino();
+        let inode_c_f = at.plus("c").join("f").metadata().unwrap().ino();
+
+        assert_eq!(
+            inode_a_f, inode_c_f,
+            "Inode numbers of a/f and c/f should be equal"
+        );
+        assert_ne!(
+            inode_b_f, inode_c_f,
+            "Inode numbers of b/f and c/f should not be equal"
+        );
+    }
 }

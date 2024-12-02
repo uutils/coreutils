@@ -1,7 +1,7 @@
 # join
 
 ```
-join [OPTIONS] <FILE1> <FILE2>
+join [OPTION]... FILE1 FILE2
 ```
 
 For each pair of input lines with identical join fields, write a line to

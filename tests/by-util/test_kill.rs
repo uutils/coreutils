@@ -62,7 +62,8 @@ fn test_kill_list_all_signals() {
         .succeeds()
         .stdout_contains("KILL")
         .stdout_contains("TERM")
-        .stdout_contains("HUP");
+        .stdout_contains("HUP")
+        .stdout_does_not_contain("EXIT");
 }
 
 #[test]
@@ -83,6 +84,29 @@ fn test_kill_list_all_signals_as_table() {
 }
 
 #[test]
+fn test_kill_table_starts_at_1() {
+    new_ucmd!()
+        .arg("-t")
+        .succeeds()
+        .stdout_matches(&Regex::new("^\\s?1\\sHUP").unwrap());
+}
+
+#[test]
+fn test_kill_table_lists_all_vertically() {
+    // Check for a few signals.  Do not try to be comprehensive.
+    let command = new_ucmd!().arg("-t").succeeds();
+    let signals = command
+        .stdout_str()
+        .split('\n')
+        .filter_map(|line| line.trim().split(' ').nth(1))
+        .collect::<Vec<&str>>();
+
+    assert!(signals.contains(&"KILL"));
+    assert!(signals.contains(&"TERM"));
+    assert!(signals.contains(&"HUP"));
+}
+
+#[test]
 fn test_kill_list_one_signal_from_name() {
     // Use SIGKILL because it is 9 on all unixes.
     new_ucmd!()
@@ -93,8 +117,58 @@ fn test_kill_list_one_signal_from_name() {
 }
 
 #[test]
+fn test_kill_list_one_signal_ignore_case() {
+    // Use SIGKILL because it is 9 on all unixes.
+    new_ucmd!()
+        .arg("-l")
+        .arg("KiLl")
+        .succeeds()
+        .stdout_matches(&Regex::new("\\b9\\b").unwrap());
+}
+
+#[test]
+fn test_kill_list_unknown_must_match_input_case() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("IaMnOtAsIgNaL")
+        .fails()
+        .stderr_contains("IaMnOtAsIgNaL");
+}
+
+#[test]
+fn test_kill_list_all_vertically() {
+    // Check for a few signals.  Do not try to be comprehensive.
+    let command = new_ucmd!().arg("-l").succeeds();
+    let signals = command.stdout_str().split('\n').collect::<Vec<&str>>();
+    assert!(signals.contains(&"KILL"));
+    assert!(signals.contains(&"TERM"));
+    assert!(signals.contains(&"HUP"));
+}
+
+#[test]
+fn test_kill_list_two_signal_from_name() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("INT")
+        .arg("KILL")
+        .succeeds()
+        .stdout_matches(&Regex::new("\\d\n\\d").unwrap());
+}
+
+#[test]
+fn test_kill_list_three_signal_first_unknown() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("IAMNOTASIGNAL") // spell-checker:disable-line
+        .arg("INT")
+        .arg("KILL")
+        .fails()
+        .stderr_contains("unknown signal")
+        .stdout_matches(&Regex::new("\\d\n\\d").unwrap());
+}
+
+#[test]
 fn test_kill_set_bad_signal_name() {
-    // spell-checker:disable-line
     new_ucmd!()
         .arg("-s")
         .arg("IAMNOTASIGNAL") // spell-checker:disable-line
@@ -162,6 +236,17 @@ fn test_kill_with_signal_name_new_form() {
 }
 
 #[test]
+fn test_kill_with_signal_name_new_form_ignore_case() {
+    let mut target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("KiLl")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+}
+
+#[test]
 fn test_kill_with_signal_prefixed_name_new_form() {
     let mut target = Target::new();
     new_ucmd!()
@@ -170,4 +255,44 @@ fn test_kill_with_signal_prefixed_name_new_form() {
         .arg(format!("{}", target.pid()))
         .succeeds();
     assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+}
+
+#[test]
+fn test_kill_with_signal_prefixed_name_new_form_ignore_case() {
+    let mut target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("SiGKiLl")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+}
+
+#[test]
+fn test_kill_with_signal_name_new_form_unknown_must_match_input_case() {
+    let target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("IaMnOtAsIgNaL")
+        .arg(format!("{}", target.pid()))
+        .fails()
+        .stderr_contains("unknown signal")
+        .stderr_contains("IaMnOtAsIgNaL");
+}
+
+#[test]
+fn test_kill_no_pid_provided() {
+    new_ucmd!()
+        .fails()
+        .stderr_contains("no process ID specified");
+}
+
+#[test]
+fn test_kill_with_signal_exit_new_form() {
+    let target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("EXIT")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
 }

@@ -2,7 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// library ~ (core/bundler file)
+//! library ~ (core/bundler file)
+// #![deny(missing_docs)] //TODO: enable this
+//
+// spell-checker:ignore sigaction SIGBUS SIGSEGV
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -22,9 +25,11 @@ pub use uucore_procs::*;
 // * cross-platform modules
 pub use crate::mods::display;
 pub use crate::mods::error;
+pub use crate::mods::io;
 pub use crate::mods::line_ending;
 pub use crate::mods::os;
 pub use crate::mods::panic;
+pub use crate::mods::posix;
 
 // * string parsing modules
 pub use crate::parser::parse_glob;
@@ -35,6 +40,8 @@ pub use crate::parser::shortcut_value_parser;
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
 pub use crate::features::backup_control;
+#[cfg(feature = "checksum")]
+pub use crate::features::checksum;
 #[cfg(feature = "colors")]
 pub use crate::features::colors;
 #[cfg(feature = "encoding")]
@@ -43,8 +50,6 @@ pub use crate::features::encoding;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
-#[cfg(feature = "fsext")]
-pub use crate::features::fsext;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
 #[cfg(feature = "quoting-style")]
@@ -89,12 +94,50 @@ pub use crate::features::utmpx;
 #[cfg(all(windows, feature = "wide"))]
 pub use crate::features::wide;
 
+#[cfg(feature = "fsext")]
+pub use crate::features::fsext;
+
+#[cfg(all(unix, not(target_os = "macos"), feature = "fsxattr"))]
+pub use crate::features::fsxattr;
+
 //## core functions
 
+#[cfg(unix)]
+use nix::errno::Errno;
+#[cfg(unix)]
+use nix::sys::signal::{
+    sigaction, SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV,
+};
+use std::borrow::Cow;
+use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::io::{BufRead, BufReader};
+use std::iter;
+#[cfg(unix)]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::str;
 use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
+
+/// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
+/// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
+#[cfg(unix)]
+pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
+    unsafe {
+        sigaction(
+            SIGSEGV,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    unsafe {
+        sigaction(
+            SIGBUS,
+            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
+        )
+    }?;
+    Ok(())
+}
 
 /// Execute utility code for `util`.
 ///
@@ -105,9 +148,15 @@ macro_rules! bin {
     ($util:ident) => {
         pub fn main() {
             use std::io::Write;
-            uucore::panic::mute_sigpipe_panic(); // suppress extraneous error output for SIGPIPE failures/panics
-            let code = $util::uumain(uucore::args_os()); // execute utility code
-            std::io::stdout().flush().expect("could not flush stdout"); // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
+            // suppress extraneous error output for SIGPIPE failures/panics
+            uucore::panic::mute_sigpipe_panic();
+            // execute utility code
+            let code = $util::uumain(uucore::args_os());
+            // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
+            if let Err(e) = std::io::stdout().flush() {
+                eprintln!("Error flushing stdout: {}", e);
+            }
+
             std::process::exit(code);
         }
     };
@@ -125,10 +174,14 @@ pub fn format_usage(s: &str) -> String {
     s.replace("{}", crate::execution_phrase())
 }
 
+/// Used to check if the utility is the second argument.
+/// Used to check if we were called as a multicall binary (`coreutils <utility>`)
 pub fn get_utility_is_second_arg() -> bool {
     crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
 }
 
+/// Change the value of `UTILITY_IS_SECOND_ARG` to true
+/// Used to specify that the utility is the second argument.
 pub fn set_utility_is_second_arg() {
     crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
 }
@@ -167,6 +220,10 @@ pub fn execution_phrase() -> &'static str {
     &EXECUTION_PHRASE
 }
 
+/// Args contains arguments passed to the utility.
+/// It is a trait that extends `Iterator<Item = OsString>`.
+/// It provides utility functions to collect the arguments into a `Vec<String>`.
+/// The collected `Vec<String>` can be lossy or ignore invalid encoding.
 pub trait Args: Iterator<Item = OsString> + Sized {
     /// Collects the iterator into a `Vec<String>`, lossily converting the `OsString`s to `Strings`.
     fn collect_lossy(self) -> Vec<String> {
@@ -181,6 +238,8 @@ pub trait Args: Iterator<Item = OsString> + Sized {
 
 impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 
+/// Returns an iterator over the command line arguments as `OsString`s.
+/// args_os() can be expensive to call
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
 }
@@ -192,6 +251,90 @@ pub fn read_yes() -> bool {
         Ok(_) => matches!(s.chars().next(), Some('y' | 'Y')),
         _ => false,
     }
+}
+
+/// Helper function for processing delimiter values (which could be non UTF-8)
+/// It converts OsString to &[u8] for unix targets only
+/// On non-unix (i.e. Windows) it will just return an error if delimiter value is not UTF-8
+pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
+    #[cfg(unix)]
+    let bytes = os_string.as_bytes();
+
+    #[cfg(not(unix))]
+    let bytes = os_string
+        .to_str()
+        .ok_or_else(|| {
+            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+        })?
+        .as_bytes();
+
+    Ok(bytes)
+}
+
+/// Helper function for converting a slice of bytes into an &OsStr
+/// or OsString in non-unix targets.
+///
+/// It converts `&[u8]` to `Cow<OsStr>` for unix targets only.
+/// On non-unix (i.e. Windows), the conversion goes through the String type
+/// and thus undergo UTF-8 validation, making it fail if the stream contains
+/// non-UTF-8 characters.
+pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
+    #[cfg(unix)]
+    let os_str = Cow::Borrowed(OsStr::from_bytes(bytes));
+    #[cfg(not(unix))]
+    let os_str = Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(|_| {
+        mods::error::UUsageError::new(1, "Unable to transform bytes into OsStr")
+    })?));
+
+    Ok(os_str)
+}
+
+/// Helper function for making an `OsString` from a byte field
+/// It converts `Vec<u8>` to `OsString` for unix targets only.
+/// On non-unix (i.e. Windows) it may fail if the bytes are not valid UTF-8
+pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
+    #[cfg(unix)]
+    let s = OsString::from_vec(vec);
+    #[cfg(not(unix))]
+    let s = OsString::from(String::from_utf8(vec).map_err(|_| {
+        mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+    })?);
+
+    Ok(s)
+}
+
+/// Equivalent to `std::BufRead::lines` which outputs each line as a `Vec<u8>`,
+/// which avoids panicking on non UTF-8 input.
+pub fn read_byte_lines<R: std::io::Read>(
+    mut buf_reader: BufReader<R>,
+) -> impl Iterator<Item = Vec<u8>> {
+    iter::from_fn(move || {
+        let mut buf = Vec::with_capacity(256);
+        let size = buf_reader.read_until(b'\n', &mut buf).ok()?;
+
+        if size == 0 {
+            return None;
+        }
+
+        // Trim (\r)\n
+        if buf.ends_with(b"\n") {
+            buf.pop();
+            if buf.ends_with(b"\r") {
+                buf.pop();
+            }
+        }
+
+        Some(buf)
+    })
+}
+
+/// Equivalent to `std::BufRead::lines` which outputs each line as an `OsString`
+/// This won't panic on non UTF-8 characters on Unix,
+/// but it still will on Windows.
+pub fn read_os_string_lines<R: std::io::Read>(
+    buf_reader: BufReader<R>,
+) -> impl Iterator<Item = OsString> {
+    read_byte_lines(buf_reader).map(|byte_line| os_string_from_vec(byte_line).expect("UTF-8 error"))
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`

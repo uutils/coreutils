@@ -1,13 +1,23 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-# spell-checker:ignore (utils) cksum coreutils dircolors hashsum mkdir mktemp printenv printf readlink realpath  rmdir shuf tsort unexpand
+# spell-checker:ignore (shell) OSTYPE
+# spell-checker:ignore (utils) cksum coreutils dircolors hashsum mkdir mktemp printenv printf readlink realpath grealpath rmdir shuf tsort unexpand
 # spell-checker:ignore (jq) deps startswith
+
+# Use GNU version for realpath on *BSD
+case "$OSTYPE" in
+    *bsd*)
+        REALPATH="grealpath"
+        ;;
+    *)
+        REALPATH="realpath"
+        ;;
+esac
 
 ME="${0}"
 ME_dir="$(dirname -- "${ME}")"
 ME_parent_dir="$(dirname -- "${ME_dir}")"
-# NOTE: On FreeBSD, `-mP` arguments are not available.
-ME_parent_dir_abs="$(realpath -mP -- "${ME_parent_dir}" || realpath -- "${ME_parent_dir}")"
+ME_parent_dir_abs="$("${REALPATH}" -mP -- "${ME_parent_dir}" || "${REALPATH}" -- "${ME_parent_dir}")"
 
 # refs: <https://forge.rust-lang.org/release/platform-support.html> , <https://docs.rs/platforms/0.2.1/platforms/platform/tier1/index.html>
 
@@ -23,6 +33,10 @@ cd "${project_main_dir}" &&
         echo "WARN: missing \`jq\` (install with \`sudo apt install jq\`); falling back to default (only fully cross-platform) utility list" 1>&2
         echo "$default_utils"
     else
-        cargo metadata "$@" --format-version 1 | jq -r "[.resolve.nodes[] | { id: .id, deps: [.deps[] | { name:.name, pkg:.pkg }] }] | .[] | select(.id|startswith(\"coreutils\")) | [.deps[] | select((.name|startswith(\"uu_\")) or (.pkg|startswith(\"uu_\")))] | [.[].pkg | match(\"^\\\w+\";\"g\")] | [.[].string | sub(\"^uu_\"; \"\")] | sort | join(\" \")"
-        # cargo metadata "$@" --format-version 1 | jq -r "[.resolve.nodes[] | { id: .id, deps: [.deps[] | { name:.name, pkg:.pkg }] }] | .[] | select(.id|startswith(\"coreutils\")) | [.deps[] | select((.name|startswith(\"uu_\")) or (.pkg|startswith(\"uu_\")))] | [.[].pkg | match(\"^\\\w+\";\"g\")] | [.[].string] | sort | join(\" \")"
+    # Find 'coreutils' id with regex
+    # with cargo v1.76.0, id = "coreutils 0.0.26 (path+file://<coreutils local directory>)"
+    # with cargo >= v1.77.0
+    # - if local path != '<...>/coreutils' id = "path+file://<coreutils local directory>#coreutils@0.0.26"
+    # - if local path == '<...>/coreutils' id = "path+file://<parent directory>/coreutils#0.0.26"
+        cargo metadata "$@" --format-version 1 | jq -r '[.resolve.nodes[] | select(.id|match(".*coreutils[ |@|#]\\d+\\.\\d+\\.\\d+")) | .deps[] | select(.pkg|match("uu_")) | .name | sub("^uu_"; "")] | sort | join(" ")'
     fi

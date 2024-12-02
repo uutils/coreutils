@@ -7,7 +7,6 @@ use super::*;
 use std::error::Error;
 use std::fmt;
 use std::io::{self, BufRead};
-use std::str;
 
 /// Wraps a `std::io::BufRead` buffered byte stream and decode it as UTF-8.
 pub struct BufReadDecoder<B: BufRead> {
@@ -28,7 +27,7 @@ pub enum BufReadDecoderError<'a> {
     Io(io::Error),
 }
 
-impl<'a> fmt::Display for BufReadDecoderError<'a> {
+impl fmt::Display for BufReadDecoderError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             BufReadDecoderError::InvalidByteSequence(bytes) => {
@@ -39,7 +38,7 @@ impl<'a> fmt::Display for BufReadDecoderError<'a> {
     }
 }
 
-impl<'a> Error for BufReadDecoderError<'a> {
+impl Error for BufReadDecoderError<'_> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match *self {
             BufReadDecoderError::InvalidByteSequence(_) => None,

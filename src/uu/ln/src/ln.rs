@@ -12,6 +12,7 @@ use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
 
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
@@ -295,53 +296,65 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     if !target_dir.is_dir() {
         return Err(LnError::TargetIsDirectory(target_dir.to_owned()).into());
     }
+    // remember the linked destinations for further usage
+    let mut linked_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
 
     let mut all_successful = true;
     for srcpath in files {
-        let targetpath =
-            if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) {
-                // In that case, we don't want to do link resolution
-                // We need to clean the target
-                if target_dir.is_symlink() {
-                    if target_dir.is_file() {
-                        if let Err(e) = fs::remove_file(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.quote(), e);
-                        };
-                    }
-                    if target_dir.is_dir() {
-                        // Not sure why but on Windows, the symlink can be
-                        // considered as a dir
-                        // See test_ln::test_symlink_no_deref_dir
-                        if let Err(e) = fs::remove_dir(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.quote(), e);
-                        };
-                    }
-                }
-                target_dir.to_path_buf()
-            } else {
-                match srcpath.as_os_str().to_str() {
-                    Some(name) => {
-                        match Path::new(name).file_name() {
-                            Some(basename) => target_dir.join(basename),
-                            // This can be None only for "." or "..". Trying
-                            // to create a link with such name will fail with
-                            // EEXIST, which agrees with the behavior of GNU
-                            // coreutils.
-                            None => target_dir.join(name),
-                        }
-                    }
-                    None => {
-                        show_error!("cannot stat {}: No such file or directory", srcpath.quote());
-                        all_successful = false;
-                        continue;
+        let targetpath = if settings.no_dereference
+            && matches!(settings.overwrite, OverwriteMode::Force)
+            && target_dir.is_symlink()
+        {
+            // In that case, we don't want to do link resolution
+            // We need to clean the target
+            if target_dir.is_file() {
+                if let Err(e) = fs::remove_file(target_dir) {
+                    show_error!("Could not update {}: {}", target_dir.quote(), e);
+                };
+            }
+            if target_dir.is_dir() {
+                // Not sure why but on Windows, the symlink can be
+                // considered as a dir
+                // See test_ln::test_symlink_no_deref_dir
+                if let Err(e) = fs::remove_dir(target_dir) {
+                    show_error!("Could not update {}: {}", target_dir.quote(), e);
+                };
+            }
+            target_dir.to_path_buf()
+        } else {
+            match srcpath.as_os_str().to_str() {
+                Some(name) => {
+                    match Path::new(name).file_name() {
+                        Some(basename) => target_dir.join(basename),
+                        // This can be None only for "." or "..". Trying
+                        // to create a link with such name will fail with
+                        // EEXIST, which agrees with the behavior of GNU
+                        // coreutils.
+                        None => target_dir.join(name),
                     }
                 }
-            };
+                None => {
+                    show_error!("cannot stat {}: No such file or directory", srcpath.quote());
+                    all_successful = false;
+                    continue;
+                }
+            }
+        };
 
-        if let Err(e) = link(srcpath, &targetpath, settings) {
+        if linked_destinations.contains(&targetpath) {
+            // If the target file was already created in this ln call, do not overwrite
+            show_error!(
+                "will not overwrite just-created '{}' with '{}'",
+                targetpath.display(),
+                srcpath.display()
+            );
+            all_successful = false;
+        } else if let Err(e) = link(srcpath, &targetpath, settings) {
             show_error!("{}", e);
             all_successful = false;
         }
+
+        linked_destinations.insert(targetpath.clone());
     }
     if all_successful {
         Ok(())

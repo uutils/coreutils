@@ -76,6 +76,14 @@ fn total_with_suppressed_regular_output() {
 }
 
 #[test]
+fn repeated_flags() {
+    new_ucmd!()
+        .args(&["--total", "-123123", "--total", "a", "b"])
+        .succeeds()
+        .stdout_is_fixture("ab_total_suppressed_regular_output.expected");
+}
+
+#[test]
 fn total_with_output_delimiter() {
     new_ucmd!()
         .args(&["--total", "--output-delimiter=word", "a", "b"])
@@ -89,6 +97,69 @@ fn output_delimiter() {
         .args(&["--output-delimiter=word", "a", "b"])
         .succeeds()
         .stdout_only_fixture("ab_delimiter_word.expected");
+}
+
+#[test]
+fn output_delimiter_hyphen_one() {
+    new_ucmd!()
+        .args(&["--output-delimiter", "-1", "a", "b"])
+        .succeeds()
+        .stdout_only_fixture("ab_delimiter_hyphen_one.expected");
+}
+
+#[test]
+fn output_delimiter_hyphen_help() {
+    new_ucmd!()
+        .args(&["--output-delimiter", "--help", "a", "b"])
+        .succeeds()
+        .stdout_only_fixture("ab_delimiter_hyphen_help.expected");
+}
+
+#[test]
+fn output_delimiter_multiple_identical() {
+    new_ucmd!()
+        .args(&[
+            "--output-delimiter=word",
+            "--output-delimiter=word",
+            "a",
+            "b",
+        ])
+        .succeeds()
+        .stdout_only_fixture("ab_delimiter_word.expected");
+}
+
+#[test]
+fn output_delimiter_multiple_different() {
+    new_ucmd!()
+        .args(&[
+            "--output-delimiter=word",
+            "--output-delimiter=other",
+            "a",
+            "b",
+        ])
+        .fails()
+        .no_stdout()
+        .stderr_contains("multiple")
+        .stderr_contains("output")
+        .stderr_contains("delimiters");
+}
+
+#[test]
+#[ignore = "This is too weird; deviate intentionally."]
+fn output_delimiter_multiple_different_prevents_help() {
+    new_ucmd!()
+        .args(&[
+            "--output-delimiter=word",
+            "--output-delimiter=other",
+            "--help",
+            "a",
+            "b",
+        ])
+        .fails()
+        .no_stdout()
+        .stderr_contains("multiple")
+        .stderr_contains("output")
+        .stderr_contains("delimiters");
 }
 
 #[test]
@@ -220,4 +291,37 @@ fn test_no_such_file() {
         .args(&["bogus_file_1", "bogus_file_2"])
         .fails()
         .stderr_only("comm: bogus_file_1: No such file or directory\n");
+}
+
+#[test]
+fn test_is_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
+        .args(&[".", "."])
+        .fails()
+        .stderr_only("comm: .: Is a directory\n");
+
+    at.mkdir("dir");
+    scene
+        .ucmd()
+        .args(&["dir", "."])
+        .fails()
+        .stderr_only("comm: dir: Is a directory\n");
+
+    at.touch("file");
+    scene
+        .ucmd()
+        .args(&[".", "file"])
+        .fails()
+        .stderr_only("comm: .: Is a directory\n");
+
+    at.touch("file");
+    scene
+        .ucmd()
+        .args(&["file", "."])
+        .fails()
+        .stderr_only("comm: .: Is a directory\n");
 }

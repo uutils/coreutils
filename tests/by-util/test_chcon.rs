@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (jargon) xattributes
-
+#![allow(clippy::missing_errors_doc, clippy::similar_names)]
 #![cfg(feature = "feat_selinux")]
 
 use std::ffi::CString;
@@ -89,6 +89,33 @@ fn valid_context_on_valid_symlink() {
 }
 
 #[test]
+fn valid_context_on_valid_symlink_override_dereference() {
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.touch("a.tmp");
+    dir.symlink_file("a.tmp", "la.tmp");
+
+    let a_context = get_file_context(dir.plus("a.tmp")).unwrap();
+    let la_context = get_file_context(dir.plus("la.tmp")).unwrap();
+    let new_a_context = "guest_u:object_r:etc_t:s0:c42";
+    assert_ne!(a_context.as_deref(), Some(new_a_context));
+    assert_ne!(la_context.as_deref(), Some(new_a_context));
+
+    cmd.args(&[
+        "--verbose",
+        "--no-dereference",
+        "--dereference",
+        new_a_context,
+    ])
+    .arg(dir.plus("la.tmp"))
+    .succeeds();
+    assert_eq!(
+        get_file_context(dir.plus("a.tmp")).unwrap().as_deref(),
+        Some(new_a_context)
+    );
+    assert_eq!(get_file_context(dir.plus("la.tmp")).unwrap(), la_context);
+}
+
+#[test]
 fn valid_context_on_broken_symlink() {
     let (dir, mut cmd) = at_and_ucmd!();
     dir.symlink_file("a.tmp", "la.tmp");
@@ -98,6 +125,29 @@ fn valid_context_on_broken_symlink() {
     cmd.args(&["--verbose", "--no-dereference", new_la_context])
         .arg(dir.plus("la.tmp"))
         .succeeds();
+    assert_eq!(
+        get_file_context(dir.plus("la.tmp")).unwrap().as_deref(),
+        Some(new_la_context)
+    );
+}
+
+#[test]
+fn valid_context_on_broken_symlink_after_deref() {
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.symlink_file("a.tmp", "la.tmp");
+
+    let la_context = get_file_context(dir.plus("la.tmp")).unwrap();
+    let new_la_context = "guest_u:object_r:etc_t:s0:c42";
+    assert_ne!(la_context.as_deref(), Some(new_la_context));
+
+    cmd.args(&[
+        "--verbose",
+        "--dereference",
+        "--no-dereference",
+        new_la_context,
+    ])
+    .arg(dir.plus("la.tmp"))
+    .succeeds();
     assert_eq!(
         get_file_context(dir.plus("la.tmp")).unwrap().as_deref(),
         Some(new_la_context)
@@ -325,6 +375,30 @@ fn user_change() {
 }
 
 #[test]
+fn user_change_repeated() {
+    let (dir, mut cmd) = at_and_ucmd!();
+
+    dir.touch("a.tmp");
+    let a_context = get_file_context(dir.plus("a.tmp")).unwrap();
+    let new_a_context = if let Some(a_context) = a_context {
+        let mut components: Vec<_> = a_context.split(':').collect();
+        components[0] = "guest_u";
+        components.join(":")
+    } else {
+        set_file_context(dir.plus("a.tmp"), "unconfined_u:object_r:user_tmp_t:s0").unwrap();
+        String::from("guest_u:object_r:user_tmp_t:s0")
+    };
+
+    cmd.args(&["--verbose", "--user=wrong", "--user=guest_u"])
+        .arg(dir.plus("a.tmp"))
+        .succeeds();
+    assert_eq!(
+        get_file_context(dir.plus("a.tmp")).unwrap(),
+        Some(new_a_context)
+    );
+}
+
+#[test]
 fn role_change() {
     let (dir, mut cmd) = at_and_ucmd!();
 
@@ -417,6 +491,99 @@ fn valid_reference() {
         .succeeds();
     assert_eq!(
         get_file_context(dir.plus("b.tmp")).unwrap().as_deref(),
+        Some(new_a_context)
+    );
+}
+
+#[test]
+fn valid_reference_repeat_flags() {
+    let (dir, mut cmd) = at_and_ucmd!();
+
+    dir.touch("a.tmp");
+    let new_a_context = "guest_u:object_r:etc_t:s0:c42";
+    set_file_context(dir.plus("a.tmp"), new_a_context).unwrap();
+
+    dir.touch("b.tmp");
+    let b_context = get_file_context(dir.plus("b.tmp")).unwrap();
+    assert_ne!(b_context.as_deref(), Some(new_a_context));
+
+    cmd.arg("--verbose")
+        .arg("-vvRRHHLLPP") // spell-checker:disable-line
+        .arg("--no-preserve-root")
+        .arg("--no-preserve-root")
+        .arg("--preserve-root")
+        .arg("--preserve-root")
+        .arg("--dereference")
+        .arg("--dereference")
+        .arg("--no-dereference")
+        .arg("--no-dereference")
+        .arg(format!("--reference={}", dir.plus_as_string("a.tmp")))
+        .arg(dir.plus("b.tmp"))
+        .succeeds();
+    assert_eq!(
+        get_file_context(dir.plus("b.tmp")).unwrap().as_deref(),
+        Some(new_a_context)
+    );
+}
+
+#[test]
+fn valid_reference_repeated_reference() {
+    let (dir, mut cmd) = at_and_ucmd!();
+
+    dir.touch("a.tmp");
+    let new_a_context = "guest_u:object_r:etc_t:s0:c42";
+    set_file_context(dir.plus("a.tmp"), new_a_context).unwrap();
+
+    dir.touch("wrong.tmp");
+    let new_wrong_context = "guest_u:object_r:etc_t:s42:c0";
+    set_file_context(dir.plus("wrong.tmp"), new_wrong_context).unwrap();
+
+    dir.touch("b.tmp");
+    let b_context = get_file_context(dir.plus("b.tmp")).unwrap();
+    assert_ne!(b_context.as_deref(), Some(new_a_context));
+
+    cmd.arg("--verbose")
+        .arg(format!("--reference={}", dir.plus_as_string("wrong.tmp")))
+        .arg(format!("--reference={}", dir.plus_as_string("a.tmp")))
+        .arg(dir.plus("b.tmp"))
+        .succeeds();
+    assert_eq!(
+        get_file_context(dir.plus("b.tmp")).unwrap().as_deref(),
+        Some(new_a_context)
+    );
+    assert_eq!(
+        get_file_context(dir.plus("wrong.tmp")).unwrap().as_deref(),
+        Some(new_wrong_context)
+    );
+}
+
+#[test]
+fn valid_reference_multi() {
+    let (dir, mut cmd) = at_and_ucmd!();
+
+    dir.touch("a.tmp");
+    let new_a_context = "guest_u:object_r:etc_t:s0:c42";
+    set_file_context(dir.plus("a.tmp"), new_a_context).unwrap();
+
+    dir.touch("b1.tmp");
+    let b1_context = get_file_context(dir.plus("b1.tmp")).unwrap();
+    assert_ne!(b1_context.as_deref(), Some(new_a_context));
+
+    dir.touch("b2.tmp");
+    let b2_context = get_file_context(dir.plus("b2.tmp")).unwrap();
+    assert_ne!(b2_context.as_deref(), Some(new_a_context));
+
+    cmd.arg("--verbose")
+        .arg(format!("--reference={}", dir.plus_as_string("a.tmp")))
+        .arg(dir.plus("b1.tmp"))
+        .arg(dir.plus("b2.tmp"))
+        .succeeds();
+    assert_eq!(
+        get_file_context(dir.plus("b1.tmp")).unwrap().as_deref(),
+        Some(new_a_context)
+    );
+    assert_eq!(
+        get_file_context(dir.plus("b2.tmp")).unwrap().as_deref(),
         Some(new_a_context)
     );
 }
