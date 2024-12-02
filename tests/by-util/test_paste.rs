@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore bsdutils toybox
+
 use crate::common::util::TestScenario;
 
 struct TestData<'b> {
@@ -11,7 +14,7 @@ struct TestData<'b> {
     out: &'b str,
 }
 
-static EXAMPLE_DATA: &[TestData] = &[
+const EXAMPLE_DATA: &[TestData] = &[
     // Ensure that paste properly handles files lacking a final newline.
     TestData {
         name: "no-nl-1",
@@ -168,11 +171,11 @@ fn test_delimiter_list_ending_with_escaped_backslash() {
         let (at, mut ucmd) = at_and_ucmd!();
         let mut ins = vec![];
         for (i, one_in) in ["a\n", "b\n"].iter().enumerate() {
-            let file = format!("in{}", i);
+            let file = format!("in{i}");
             at.write(&file, one_in);
             ins.push(file);
         }
-        ucmd.args(&[d, "\\\\"])
+        ucmd.args(&[d, r"\\"])
             .args(&ins)
             .succeeds()
             .stdout_is("a\\b\n");
@@ -183,13 +186,174 @@ fn test_delimiter_list_ending_with_escaped_backslash() {
 fn test_delimiter_list_ending_with_unescaped_backslash() {
     for d in ["-d", "--delimiters"] {
         new_ucmd!()
-            .args(&[d, "\\"])
+            .args(&[d, r"\"])
             .fails()
-            .stderr_contains("delimiter list ends with an unescaped backslash: \\");
+            .stderr_contains(r"delimiter list ends with an unescaped backslash: \");
+
         new_ucmd!()
-            .args(&[d, "_\\"])
+            .args(&[d, r"\\\"])
             .fails()
-            .stderr_contains("delimiter list ends with an unescaped backslash: _\\");
+            .stderr_contains(r"delimiter list ends with an unescaped backslash: \\\");
+
+        new_ucmd!()
+            .args(&[d, r"_\"])
+            .fails()
+            .stderr_contains(r"delimiter list ends with an unescaped backslash: _\");
+    }
+}
+
+#[test]
+fn test_delimiter_list_empty() {
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[option_style, "", "-s"])
+            .pipe_in(
+                "\
+A ALPHA 1 _
+B BRAVO 2 _
+C CHARLIE 3 _
+",
+            )
+            .succeeds()
+            .stdout_only(
+                "\
+A ALPHA 1 _B BRAVO 2 _C CHARLIE 3 _
+",
+            );
+    }
+}
+
+// Was panicking (usize subtraction that would have resulted in a negative number)
+// Not observable in release builds, since integer overflow checking is not enabled
+#[test]
+fn test_delimiter_truncation() {
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[option_style, "!@#", "-s", "-", "-", "-"])
+            .pipe_in(
+                "\
+FIRST
+SECOND
+THIRD
+FOURTH
+ABCDEFG
+",
+            )
+            .succeeds()
+            .stdout_only(
+                "\
+FIRST!SECOND@THIRD#FOURTH!ABCDEFG
+
+
+",
+            );
+    }
+}
+
+#[test]
+fn test_non_utf8_input() {
+    // 0xC0 is not valid UTF-8
+    const INPUT: &[u8] = b"Non-UTF-8 test: \xC0\x00\xC0.\n";
+
+    new_ucmd!()
+        .pipe_in(INPUT)
+        .succeeds()
+        .stdout_only_bytes(INPUT);
+}
+
+#[test]
+fn test_three_trailing_backslashes_delimiter() {
+    const ONE_BACKSLASH_STR: &str = r"\";
+
+    let three_backslashes_string = ONE_BACKSLASH_STR.repeat(3);
+
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[option_style, &three_backslashes_string])
+            .fails()
+            .no_stdout()
+            .stderr_str_check(|st| {
+                st.ends_with(&format!(
+                    ": delimiter list ends with an unescaped backslash: {three_backslashes_string}\n"
+                ))
+            });
+    }
+}
+
+// "If any other characters follow the <backslash>, the results are unspecified."
+// https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+// However, other implementations remove the backslash
+#[test]
+fn test_posix_unspecified_delimiter() {
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[option_style, r"\z", "-s"])
+            .pipe_in(
+                "\
+1
+2
+3
+4
+",
+            )
+            .succeeds()
+            .stdout_only(
+                "\
+1z2z3z4
+",
+            );
+    }
+}
+
+// "Empty string (not a null character)"
+// https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
+#[test]
+fn test_backslash_zero_delimiter() {
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[option_style, r"\0z\0", "-s"])
+            .pipe_in(
+                "\
+1
+2
+3
+4
+5
+6
+",
+            )
+            .succeeds()
+            .stdout_only(
+                "\
+12z345z6
+",
+            );
+    }
+}
+
+// As of 2024-10-09, only bsdutils (https://github.com/dcantrell/bsdutils, derived from FreeBSD) and toybox handle
+// multibyte delimiter characters in the way a user would likely expect. BusyBox and GNU Core Utilities do not.
+#[test]
+fn test_multi_byte_delimiter() {
+    for option_style in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[option_style, "!ß@", "-s"])
+            .pipe_in(
+                "\
+1
+2
+3
+4
+5
+6
+",
+            )
+            .succeeds()
+            .stdout_only(
+                "\
+1!2ß3@4!5ß6
+",
+            );
     }
 }
 

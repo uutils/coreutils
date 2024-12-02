@@ -6,8 +6,7 @@
 // spell-checker:ignore mydir
 use crate::common::util::TestScenario;
 use filetime::FileTime;
-use std::thread::sleep;
-use std::time::Duration;
+use std::io::Write;
 
 #[test]
 fn test_mv_invalid_arg() {
@@ -299,9 +298,9 @@ fn test_mv_interactive_no_clobber_force_last_arg_wins() {
 
     scene
         .ucmd()
-        .args(&[file_a, file_b, "-f", "-i", "-n"])
-        .fails()
-        .stderr_is(format!("mv: not replacing '{file_b}'\n"));
+        .args(&[file_a, file_b, "-f", "-i", "-n", "--debug"])
+        .succeeds()
+        .stdout_contains("skipped 'b.txt'");
 
     scene
         .ucmd()
@@ -352,9 +351,9 @@ fn test_mv_no_clobber() {
     ucmd.arg("-n")
         .arg(file_a)
         .arg(file_b)
-        .fails()
-        .code_is(1)
-        .stderr_only(format!("mv: not replacing '{file_b}'\n"));
+        .arg("--debug")
+        .succeeds()
+        .stdout_contains("skipped 'test_mv_no_clobber_file_b");
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -863,14 +862,16 @@ fn test_mv_backup_off() {
 }
 
 #[test]
-fn test_mv_backup_no_clobber_conflicting_options() {
-    new_ucmd!()
-        .arg("--backup")
-        .arg("--no-clobber")
-        .arg("file1")
-        .arg("file2")
-        .fails()
-        .usage_error("options --backup and --no-clobber are mutually exclusive");
+fn test_mv_backup_conflicting_options() {
+    for conflicting_opt in ["--no-clobber", "--update=none-fail", "--update=none"] {
+        new_ucmd!()
+            .arg("--backup")
+            .arg(conflicting_opt)
+            .arg("file1")
+            .arg("file2")
+            .fails()
+            .usage_error("cannot combine --backup with -n/--no-clobber or --update=none-fail");
+    }
 }
 
 #[test]
@@ -972,9 +973,9 @@ fn test_mv_arg_update_older_dest_not_older() {
     let old_content = "file1 content\n";
     let new_content = "file2 content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -999,9 +1000,9 @@ fn test_mv_arg_update_none_then_all() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -1027,9 +1028,9 @@ fn test_mv_arg_update_all_then_none() {
     let old_content = "old content\n";
     let new_content = "new content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -1053,9 +1054,9 @@ fn test_mv_arg_update_older_dest_older() {
     let old_content = "file1 content\n";
     let new_content = "file2 content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -1079,9 +1080,9 @@ fn test_mv_arg_update_short_overwrite() {
     let old_content = "file1 content\n";
     let new_content = "file2 content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -1105,9 +1106,9 @@ fn test_mv_arg_update_short_no_overwrite() {
     let old_content = "file1 content\n";
     let new_content = "file2 content\n";
 
-    at.write(old, old_content);
-
-    sleep(Duration::from_secs(1));
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
     at.write(new, new_content);
 
@@ -1400,10 +1401,9 @@ fn test_mv_arg_interactive_skipped_vin() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    ucmd.args(&["-vin", "a", "b"])
-        .fails()
-        .stderr_is("mv: not replacing 'b'\n")
-        .no_stdout();
+    ucmd.args(&["-vin", "a", "b", "--debug"])
+        .succeeds()
+        .stdout_contains("skipped 'b'");
 }
 
 #[test]
@@ -1447,7 +1447,7 @@ fn test_mv_directory_into_subdirectory_of_itself_fails() {
     // check that it also errors out with /
     scene
         .ucmd()
-        .arg(format!("{}/", dir1))
+        .arg(format!("{dir1}/"))
         .arg(dir2)
         .fails()
         .stderr_contains(
@@ -1600,7 +1600,7 @@ fn test_acl() {
             return;
         }
         Err(e) => {
-            println!("test skipped: setfacl failed with {}", e);
+            println!("test skipped: setfacl failed with {e}");
             return;
         }
     }
@@ -1715,4 +1715,39 @@ mod inter_partition_copying {
             .stderr_contains("inter-device move failed:")
             .stderr_contains("Permission denied");
     }
+}
+
+#[test]
+fn test_mv_error_msg_with_multiple_sources_that_does_not_exist() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("d");
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("b/")
+        .arg("d")
+        .fails()
+        .stderr_contains("mv: cannot stat 'a': No such file or directory")
+        .stderr_contains("mv: cannot stat 'b/': No such file or directory");
+}
+
+#[test]
+fn test_mv_error_cant_move_itself() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("b");
+    scene
+        .ucmd()
+        .arg("b")
+        .arg("b/")
+        .fails()
+        .stderr_contains("mv: cannot move 'b' to a subdirectory of itself, 'b/b'");
+    scene
+        .ucmd()
+        .arg("./b")
+        .arg("b")
+        .arg("b/")
+        .fails()
+        .stderr_contains("mv: cannot move 'b' to a subdirectory of itself, 'b/b'");
 }

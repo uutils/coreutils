@@ -94,72 +94,72 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
 #[allow(clippy::cognitive_complexity)]
 fn test_format_flo32() {
     assert_eq!(format_flo32(1.0), "     1.0000000");
-    assert_eq!(format_flo32(9.9999990), "     9.9999990");
+    assert_eq!(format_flo32(9.999_999_0), "     9.9999990");
     assert_eq!(format_flo32(10.0), "     10.000000");
-    assert_eq!(format_flo32(99.999977), "     99.999977");
-    assert_eq!(format_flo32(99.999992), "     99.999992");
+    assert_eq!(format_flo32(99.999_977), "     99.999977");
+    assert_eq!(format_flo32(99.999_992), "     99.999992");
     assert_eq!(format_flo32(100.0), "     100.00000");
     assert_eq!(format_flo32(999.99994), "     999.99994");
     assert_eq!(format_flo32(1000.0), "     1000.0000");
     assert_eq!(format_flo32(9999.9990), "     9999.9990");
     assert_eq!(format_flo32(10000.0), "     10000.000");
     assert_eq!(format_flo32(99999.992), "     99999.992");
-    assert_eq!(format_flo32(100000.0), "     100000.00");
-    assert_eq!(format_flo32(999999.94), "     999999.94");
-    assert_eq!(format_flo32(1000000.0), "     1000000.0");
-    assert_eq!(format_flo32(9999999.0), "     9999999.0");
-    assert_eq!(format_flo32(10000000.0), "      10000000");
-    assert_eq!(format_flo32(99999992.0), "      99999992");
-    assert_eq!(format_flo32(100000000.0), "   1.0000000e8");
-    assert_eq!(format_flo32(9.9999994e8), "   9.9999994e8");
+    assert_eq!(format_flo32(100_000.0), "     100000.00");
+    assert_eq!(format_flo32(999_999.94), "     999999.94");
+    assert_eq!(format_flo32(1_000_000.0), "     1000000.0");
+    assert_eq!(format_flo32(9_999_999.0), "     9999999.0");
+    assert_eq!(format_flo32(10_000_000.0), "      10000000");
+    assert_eq!(format_flo32(99_999_992.0), "      99999992");
+    assert_eq!(format_flo32(100_000_000.0), "   1.0000000e8");
+    assert_eq!(format_flo32(9.999_999_4e8), "   9.9999994e8");
     assert_eq!(format_flo32(1.0e9), "   1.0000000e9");
-    assert_eq!(format_flo32(9.9999990e9), "   9.9999990e9");
+    assert_eq!(format_flo32(9.999_999_0e9), "   9.9999990e9");
     assert_eq!(format_flo32(1.0e10), "  1.0000000e10");
 
     assert_eq!(format_flo32(0.1), "    0.10000000");
-    assert_eq!(format_flo32(0.99999994), "    0.99999994");
-    assert_eq!(format_flo32(0.010000001), "  1.0000001e-2");
-    assert_eq!(format_flo32(0.099999994), "  9.9999994e-2");
+    assert_eq!(format_flo32(0.999_999_94), "    0.99999994");
+    assert_eq!(format_flo32(0.010_000_001), "  1.0000001e-2");
+    assert_eq!(format_flo32(0.099_999_994), "  9.9999994e-2");
     assert_eq!(format_flo32(0.001), "  1.0000000e-3");
-    assert_eq!(format_flo32(0.0099999998), "  9.9999998e-3");
+    assert_eq!(format_flo32(0.009_999_999_8), "  9.9999998e-3");
 
     assert_eq!(format_flo32(-1.0), "    -1.0000000");
-    assert_eq!(format_flo32(-9.9999990), "    -9.9999990");
+    assert_eq!(format_flo32(-9.999_999_0), "    -9.9999990");
     assert_eq!(format_flo32(-10.0), "    -10.000000");
-    assert_eq!(format_flo32(-99.999977), "    -99.999977");
-    assert_eq!(format_flo32(-99.999992), "    -99.999992");
+    assert_eq!(format_flo32(-99.999_977), "    -99.999977");
+    assert_eq!(format_flo32(-99.999_992), "    -99.999992");
     assert_eq!(format_flo32(-100.0), "    -100.00000");
     assert_eq!(format_flo32(-999.99994), "    -999.99994");
     assert_eq!(format_flo32(-1000.0), "    -1000.0000");
     assert_eq!(format_flo32(-9999.9990), "    -9999.9990");
     assert_eq!(format_flo32(-10000.0), "    -10000.000");
     assert_eq!(format_flo32(-99999.992), "    -99999.992");
-    assert_eq!(format_flo32(-100000.0), "    -100000.00");
-    assert_eq!(format_flo32(-999999.94), "    -999999.94");
-    assert_eq!(format_flo32(-1000000.0), "    -1000000.0");
-    assert_eq!(format_flo32(-9999999.0), "    -9999999.0");
-    assert_eq!(format_flo32(-10000000.0), "     -10000000");
-    assert_eq!(format_flo32(-99999992.0), "     -99999992");
-    assert_eq!(format_flo32(-100000000.0), "  -1.0000000e8");
-    assert_eq!(format_flo32(-9.9999994e8), "  -9.9999994e8");
+    assert_eq!(format_flo32(-100_000.0), "    -100000.00");
+    assert_eq!(format_flo32(-999_999.94), "    -999999.94");
+    assert_eq!(format_flo32(-1_000_000.0), "    -1000000.0");
+    assert_eq!(format_flo32(-9_999_999.0), "    -9999999.0");
+    assert_eq!(format_flo32(-10_000_000.0), "     -10000000");
+    assert_eq!(format_flo32(-99_999_992.0), "     -99999992");
+    assert_eq!(format_flo32(-100_000_000.0), "  -1.0000000e8");
+    assert_eq!(format_flo32(-9.999_999_4e8), "  -9.9999994e8");
     assert_eq!(format_flo32(-1.0e9), "  -1.0000000e9");
-    assert_eq!(format_flo32(-9.9999990e9), "  -9.9999990e9");
+    assert_eq!(format_flo32(-9.999_999_0e9), "  -9.9999990e9");
     assert_eq!(format_flo32(-1.0e10), " -1.0000000e10");
 
     assert_eq!(format_flo32(-0.1), "   -0.10000000");
-    assert_eq!(format_flo32(-0.99999994), "   -0.99999994");
-    assert_eq!(format_flo32(-0.010000001), " -1.0000001e-2");
-    assert_eq!(format_flo32(-0.099999994), " -9.9999994e-2");
+    assert_eq!(format_flo32(-0.999_999_94), "   -0.99999994");
+    assert_eq!(format_flo32(-0.010_000_001), " -1.0000001e-2");
+    assert_eq!(format_flo32(-0.099_999_994), " -9.9999994e-2");
     assert_eq!(format_flo32(-0.001), " -1.0000000e-3");
-    assert_eq!(format_flo32(-0.0099999998), " -9.9999998e-3");
+    assert_eq!(format_flo32(-0.009_999_999_8), " -9.9999998e-3");
 
-    assert_eq!(format_flo32(3.4028233e38), "  3.4028233e38");
-    assert_eq!(format_flo32(-3.4028233e38), " -3.4028233e38");
-    assert_eq!(format_flo32(-1.1663108e-38), "-1.1663108e-38");
-    assert_eq!(format_flo32(-4.7019771e-38), "-4.7019771e-38");
+    assert_eq!(format_flo32(3.402_823_3e38), "  3.4028233e38");
+    assert_eq!(format_flo32(-3.402_823_3e38), " -3.4028233e38");
+    assert_eq!(format_flo32(-1.166_310_8e-38), "-1.1663108e-38");
+    assert_eq!(format_flo32(-4.701_977_1e-38), "-4.7019771e-38");
     assert_eq!(format_flo32(1e-45), "         1e-45");
 
-    assert_eq!(format_flo32(-3.402823466e+38), " -3.4028235e38");
+    assert_eq!(format_flo32(-3.402_823_466e+38), " -3.4028235e38");
     assert_eq!(format_flo32(f32::NAN), "           NaN");
     assert_eq!(format_flo32(f32::INFINITY), "           inf");
     assert_eq!(format_flo32(f32::NEG_INFINITY), "          -inf");
@@ -172,13 +172,16 @@ fn test_format_flo32() {
 fn test_format_flo64() {
     assert_eq!(format_flo64(1.0), "      1.0000000000000000");
     assert_eq!(format_flo64(10.0), "      10.000000000000000");
-    assert_eq!(format_flo64(1000000000000000.0), "      1000000000000000.0");
     assert_eq!(
-        format_flo64(10000000000000000.0),
+        format_flo64(1_000_000_000_000_000.0),
+        "      1000000000000000.0"
+    );
+    assert_eq!(
+        format_flo64(10_000_000_000_000_000.0),
         "       10000000000000000"
     );
     assert_eq!(
-        format_flo64(100000000000000000.0),
+        format_flo64(100_000_000_000_000_000.0),
         "   1.0000000000000000e17"
     );
 
@@ -186,7 +189,7 @@ fn test_format_flo64() {
     assert_eq!(format_flo64(-0.01), "  -1.0000000000000000e-2");
 
     assert_eq!(
-        format_flo64(-2.2250738585072014e-308),
+        format_flo64(-2.225_073_858_507_201_4e-308),
         "-2.2250738585072014e-308"
     );
     assert_eq!(format_flo64(4e-320), "                  4e-320");

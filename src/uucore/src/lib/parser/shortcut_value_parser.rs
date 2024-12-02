@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore abcdefgh abef
+// spell-checker:ignore abcdefgh abef Strs
 
 //! A parser that accepts shortcuts for values.
 //! `ShortcutValueParser` is similar to clap's `PossibleValuesParser`
@@ -32,6 +32,7 @@ impl ShortcutValueParser {
         cmd: &clap::Command,
         arg: Option<&clap::Arg>,
         value: &str,
+        possible_values: &[&PossibleValue],
     ) -> clap::Error {
         let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(cmd);
 
@@ -52,8 +53,36 @@ impl ShortcutValueParser {
             ContextValue::Strings(self.0.iter().map(|x| x.get_name().to_string()).collect()),
         );
 
+        // if `possible_values` is not empty then that means this error is because of an ambiguous value.
+        if !possible_values.is_empty() {
+            add_ambiguous_value_tip(possible_values, &mut err, value);
+        }
         err
     }
+}
+
+/// Adds a suggestion when error is because of ambiguous values based on the provided possible values.
+fn add_ambiguous_value_tip(
+    possible_values: &[&PossibleValue],
+    err: &mut clap::error::Error,
+    value: &str,
+) {
+    let mut formatted_possible_values = String::new();
+    for (i, s) in possible_values.iter().enumerate() {
+        formatted_possible_values.push_str(&format!("'{}'", s.get_name()));
+        if i < possible_values.len() - 2 {
+            formatted_possible_values.push_str(", ");
+        } else if i < possible_values.len() - 1 {
+            formatted_possible_values.push_str(" or ");
+        }
+    }
+    err.insert(
+        ContextKind::Suggested,
+        ContextValue::StyledStrs(vec![format!(
+            "It looks like '{value}' could match several values. Did you mean {formatted_possible_values}?"
+        )
+        .into()]),
+    );
 }
 
 impl TypedValueParser for ShortcutValueParser {
@@ -76,13 +105,13 @@ impl TypedValueParser for ShortcutValueParser {
             .collect();
 
         match matched_values.len() {
-            0 => Err(self.generate_clap_error(cmd, arg, value)),
+            0 => Err(self.generate_clap_error(cmd, arg, value, &[])),
             1 => Ok(matched_values[0].get_name().to_string()),
             _ => {
                 if let Some(direct_match) = matched_values.iter().find(|x| x.get_name() == value) {
                     Ok(direct_match.get_name().to_string())
                 } else {
-                    Err(self.generate_clap_error(cmd, arg, value))
+                    Err(self.generate_clap_error(cmd, arg, value, &matched_values))
                 }
             }
         }
@@ -143,7 +172,10 @@ mod tests {
 
         for ambiguous_value in ambiguous_values {
             let result = parser.parse_ref(&cmd, None, OsStr::new(ambiguous_value));
-            assert_eq!(ErrorKind::InvalidValue, result.unwrap_err().kind());
+            assert_eq!(ErrorKind::InvalidValue, result.as_ref().unwrap_err().kind());
+            assert!(result.unwrap_err().to_string().contains(&format!(
+                "It looks like '{ambiguous_value}' could match several values. Did you mean 'abcd' or 'abef'?"
+            )));
         }
 
         let result = parser.parse_ref(&cmd, None, OsStr::new("abc"));
