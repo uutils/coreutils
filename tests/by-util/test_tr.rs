@@ -20,6 +20,14 @@ fn test_invalid_input() {
         .fails()
         .code_is(1)
         .stderr_contains("tr: extra operand '<'");
+    #[cfg(unix)]
+    new_ucmd!()
+        .args(&["1", "1"])
+        // will test "tr 1 1 < ."
+        .set_stdin(std::process::Stdio::from(std::fs::File::open(".").unwrap()))
+        .fails()
+        .code_is(1)
+        .stderr_contains("tr: read error: Is a directory");
 }
 
 #[test]

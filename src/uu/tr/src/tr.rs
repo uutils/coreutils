@@ -8,17 +8,17 @@
 mod operation;
 mod unicode_table;
 
+use crate::operation::DeleteOperation;
 use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use operation::{
     translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
 };
 use std::ffi::OsString;
 use std::io::{stdin, stdout, BufWriter};
-use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show};
-
-use crate::operation::DeleteOperation;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::fs::is_stdin_directory;
+use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show};
 
 const ABOUT: &str = help_about!("tr.md");
 const AFTER_HELP: &str = help_section!("after help", "tr.md");
@@ -125,6 +125,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         truncate_set1_flag && translating,
         translating,
     )?;
+
+    if is_stdin_directory(&stdin) {
+        return Err(USimpleError::new(1, "read error: Is a directory"));
+    }
 
     // '*_op' are the operations that need to be applied, in order.
     if delete_flag {
