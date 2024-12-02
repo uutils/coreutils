@@ -402,7 +402,23 @@ fn test_mv_same_file() {
     ucmd.arg(file_a)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_a}' and '{file_a}' are the same file\n",));
+        .stderr_is(format!("mv: '{file_a}' and '{file_a}' are the same file\n"));
+}
+
+#[test]
+fn test_mv_file_to_same_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "a";
+    let dir = "dir";
+    let path = &format!("{dir}/{file}");
+
+    at.mkdir(dir);
+    at.touch(path);
+
+    ucmd.arg(path)
+        .arg(dir)
+        .fails()
+        .stderr_is(format!("mv: '{path}' and '{path}' are the same file\n"));
 }
 
 #[test]
