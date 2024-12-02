@@ -773,19 +773,17 @@ fn rename_with_fallback(
             }
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             fs::copy(from, to)
-                .map(|v| {
+                .inspect(|_| {
                     if let Some(vc) = verbose_context {
                         vc.print_copy_file(from, to, true);
                     }
-                    v
                 })
                 .and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
             #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-            fs::copy(from, to).map(|v| {
+            fs::copy(from, to).inspect(|_| {
                 if let Some(vc) = verbose_context {
                     vc.print_copy_file(from, to, true);
                 }
-                v
             })?;
             fs::remove_file(from)?;
             if let Some(vc) = verbose_context {

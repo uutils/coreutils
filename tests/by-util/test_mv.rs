@@ -1625,11 +1625,11 @@ fn test_acl() {
 
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
-    use super::*;
     use crate::common::util::TestScenario;
     use std::ffi::OsString;
     use std::fs::{read_to_string, set_permissions, write, File};
     use std::os::unix::fs::{symlink, FileTypeExt, MetadataExt, PermissionsExt};
+    use std::time::Duration;
     use tempfile::TempDir;
     use uucore::display::Quotable;
     use uucore::fsxattr::retrieve_xattrs;
@@ -1959,7 +1959,7 @@ mod inter_partition_copying {
         // make sure to wait for a second so that when the dest file is created, it
         // would have a different filetime so that the only way the dest file
         // would have a same timestamp is by copying the timestamp of src file.
-        sleep(Duration::from_secs(1));
+        std::thread::sleep(Duration::from_secs(1));
         // mv to other partition
         scene
             .ucmd()
@@ -2045,7 +2045,7 @@ mod inter_partition_copying {
             println!("no fs xattr support: {err}");
         }
 
-        sleep(Duration::from_secs(1));
+        std::thread::sleep(Duration::from_secs(1));
         // mv to other partition
         scene
             .ucmd()
