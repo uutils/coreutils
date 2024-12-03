@@ -469,23 +469,19 @@ impl<'a> Pager<'a> {
 
     fn should_close(&mut self) -> bool {
         self.upper_mark
-            .saturating_add(self.content_rows.into())
+            .saturating_add(self.content_rows)
             .ge(&self.line_count)
     }
 
     fn page_down(&mut self) {
         // If the next page down position __after redraw__ is greater than the total line count,
         // the upper mark must not grow past top of the screen at the end of the open file.
-        if self
-            .upper_mark
-            .saturating_add(self.content_rows * 2)
-            >= self.line_count
-        {
+        if self.upper_mark.saturating_add(self.content_rows * 2) >= self.line_count {
             self.upper_mark = self.line_count - self.content_rows;
             return;
         }
 
-        self.upper_mark = self.upper_mark.saturating_add(self.content_rows.into());
+        self.upper_mark = self.upper_mark.saturating_add(self.content_rows);
     }
 
     fn page_up(&mut self) {
@@ -524,7 +520,7 @@ impl<'a> Pager<'a> {
         self.draw_lines(stdout);
         let lower_mark = self
             .line_count
-            .min(self.upper_mark.saturating_add(self.content_rows.into()));
+            .min(self.upper_mark.saturating_add(self.content_rows));
         self.draw_prompt(stdout, lower_mark, wrong_key);
         stdout.flush().unwrap();
     }
