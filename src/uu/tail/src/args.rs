@@ -336,11 +336,11 @@ impl Settings {
             let blocking_stdin = self.pid == 0
                 && self.follow == Some(FollowMode::Descriptor)
                 && self.num_inputs() == 1
-                && Handle::stdin().map_or(false, |handle| {
+                && Handle::stdin().is_ok_and(|handle| {
                     handle
                         .as_file()
                         .metadata()
-                        .map_or(false, |meta| !meta.is_file())
+                        .is_ok_and(|meta| !meta.is_file())
                 });
 
             if !blocking_stdin && std::io::stdin().is_terminal() {

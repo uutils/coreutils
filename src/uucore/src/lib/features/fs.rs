@@ -710,7 +710,7 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
     path.as_os_str()
         .as_bytes()
         .last()
-        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
+        .is_some_and(|&byte| byte == b'/' || byte == b'\\')
 }
 
 #[cfg(windows)]
