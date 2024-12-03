@@ -23,7 +23,7 @@ use uucore::fs::{
 use uucore::show;
 use uucore::show_error;
 use uucore::uio_error;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, CopyResult, Error,
@@ -77,6 +77,12 @@ fn get_local_to_root_parent(
         }
         None => Ok(path.to_path_buf()),
     }
+}
+
+/// Given an iterator, return all its items except the last.
+fn skip_last<T>(mut iter: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
+    let last = iter.next();
+    iter.scan(last, |state, item| std::mem::replace(state, Some(item)))
 }
 
 /// Paths that are invariant throughout the traversal when copying a directory.
@@ -248,7 +254,7 @@ fn copy_direntry(
         if target_is_file {
             return Err("cannot overwrite non-directory with directory".into());
         } else {
-            build_dir(&local_to_target, false, options)?;
+            build_dir(&local_to_target, false, options, Some(&source_absolute))?;
             if options.verbose {
                 println!("{}", context_for(&source_relative, &local_to_target));
             }
@@ -373,7 +379,7 @@ pub(crate) fn copy_directory(
     let tmp = if options.parents {
         if let Some(parent) = root.parent() {
             let new_target = target.join(parent);
-            build_dir(&new_target, true, options)?;
+            build_dir(&new_target, true, options, None)?;
             if options.verbose {
                 // For example, if copying file `a/b/c` and its parents
                 // to directory `d/`, then print
@@ -405,6 +411,9 @@ pub(crate) fn copy_directory(
         Err(e) => return Err(format!("failed to get current directory {e}").into()),
     };
 
+    // The directory we were in during the previous iteration
+    let mut last_iter: Option<DirEntry> = None;
+
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
         .same_file_system(options.one_file_system)
@@ -423,23 +432,93 @@ pub(crate) fn copy_directory(
                     copied_destinations,
                     copied_files,
                 )?;
+
+                // We omit certain permissions when creating directories
+                // to prevent other users from accessing them before they're done.
+                // We thus need to fix the permissions of each directory we copy
+                // once it's contents are ready.
+                // This "fixup" is implemented here in a memory-efficient manner.
+                //
+                // We detect iterations where we "walk up" the directory tree,
+                // and fix permissions on all the directories we exited.
+                // (Note that there can be more than one! We might step out of
+                // `./a/b/c` into `./a/`, in which case we'll need to fix the
+                // permissions of both `./a/b/c` and `./a/b`, in that order.)
+                if direntry.file_type().is_dir() {
+                    // If true, last_iter is not a parent of this iter.
+                    // The means we just exited a directory.
+                    let went_up = if let Some(last_iter) = &last_iter {
+                        last_iter.path().strip_prefix(direntry.path()).is_ok()
+                    } else {
+                        false
+                    };
+
+                    if went_up {
+                        // Compute the "difference" between `last_iter` and `direntry`.
+                        // For example, if...
+                        // - last_iter = `a/b/c/d`
+                        // - direntry = `a/b`
+                        // then diff = `c/d`
+                        //
+                        // All the unwraps() here are unreachable.
+                        let last_iter = last_iter.as_ref().unwrap();
+                        let diff = last_iter.path().strip_prefix(direntry.path()).unwrap();
+
+                        // Fix permissions for every entry in `diff`, inside-out.
+                        // We skip the last directory (which will be `.`) because
+                        // its permissions will be fixed when we walk _out_ of it.
+                        // (at this point, we might not be done copying `.`!)
+                        for p in skip_last(diff.ancestors()) {
+                            let src = direntry.path().join(p);
+                            let entry = Entry::new(&context, &src, options.no_target_dir)?;
+
+                            copy_attributes(
+                                &entry.source_absolute,
+                                &entry.local_to_target,
+                                &options.attributes,
+                            )?;
+                        }
+                    }
+
+                    last_iter = Some(direntry);
+                }
             }
+
             // Print an error message, but continue traversing the directory.
             Err(e) => show_error!("{}", e),
         }
     }
 
-    // Copy the attributes from the root directory to the target directory.
+    // Handle final directory permission fixes.
+    // This is almost the same as the permission-fixing code above,
+    // with minor differences (commented)
+    if let Some(last_iter) = last_iter {
+        let diff = last_iter.path().strip_prefix(root).unwrap();
+
+        // Do _not_ skip `.` this time, since we know we're done.
+        // This is where we fix the permissions of the top-level
+        // directory we just copied.
+        for p in diff.ancestors() {
+            let src = root.join(p);
+            let entry = Entry::new(&context, &src, options.no_target_dir)?;
+
+            copy_attributes(
+                &entry.source_absolute,
+                &entry.local_to_target,
+                &options.attributes,
+            )?;
+        }
+    }
+
+    // Also fix permissions for parent directories,
+    // if we were asked to create them.
     if options.parents {
         let dest = target.join(root.file_name().unwrap());
-        copy_attributes(root, dest.as_path(), &options.attributes)?;
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
             if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
                 copy_attributes(&src, y, &options.attributes)?;
             }
         }
-    } else {
-        copy_attributes(root, target, &options.attributes)?;
     }
 
     Ok(())
@@ -472,13 +551,21 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
 /// Builds a directory at the specified path with the given options.
 ///
 /// # Notes
-/// - It excludes certain permissions if ownership or special mode bits could
-///   potentially change.
+/// - If `copy_attributes_from` is `Some`, the new directory's attributes will be
+///   copied from the provided file. Otherwise, the new directory will have the default
+///   attributes for the current user.
+/// - This method excludes certain permissions if ownership or special mode bits could
+///   potentially change. (See `test_dir_perm_race_with_preserve_mode_and_ownership``)
 /// - The `recursive` flag determines whether parent directories should be created
 ///   if they do not already exist.
 // we need to allow unused_variable since `options` might be unused in non unix systems
 #[allow(unused_variables)]
-fn build_dir(path: &PathBuf, recursive: bool, options: &Options) -> CopyResult<()> {
+fn build_dir(
+    path: &PathBuf,
+    recursive: bool,
+    options: &Options,
+    copy_attributes_from: Option<&Path>,
+) -> CopyResult<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(recursive);
 
@@ -487,6 +574,9 @@ fn build_dir(path: &PathBuf, recursive: bool, options: &Options) -> CopyResult<(
     // could potentially change.
     #[cfg(unix)]
     {
+        use crate::Preserve;
+        use std::os::unix::fs::PermissionsExt;
+
         // we need to allow trivial casts here because some systems like linux have u32 constants in
         // in libc while others don't.
         #[allow(clippy::unnecessary_cast)]
@@ -498,7 +588,18 @@ fn build_dir(path: &PathBuf, recursive: bool, options: &Options) -> CopyResult<(
             } else {
                 0
             } as u32;
-        excluded_perms |= uucore::mode::get_umask();
+
+        let umask = if copy_attributes_from.is_some()
+            && matches!(options.attributes.mode, Preserve::Yes { .. })
+        {
+            !fs::symlink_metadata(copy_attributes_from.unwrap())?
+                .permissions()
+                .mode()
+        } else {
+            uucore::mode::get_umask()
+        };
+
+        excluded_perms |= umask;
         let mode = !excluded_perms & 0o777; //use only the last three octet bits
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);
     }
