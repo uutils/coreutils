@@ -283,6 +283,15 @@ fn test_multiple() {
 }
 
 #[test]
+fn test_newline_delimited() {
+    new_ucmd!()
+        .args(&["-f", "1", "-d", "\n"])
+        .pipe_in("a:1\nb:")
+        .succeeds()
+        .stdout_only_bytes("a:1\n");
+}
+
+#[test]
 fn test_multiple_mode_args() {
     for args in [
         vec!["-b1", "-b2"],
