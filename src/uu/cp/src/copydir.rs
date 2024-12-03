@@ -23,7 +23,7 @@ use uucore::fs::{
 use uucore::show;
 use uucore::show_error;
 use uucore::uio_error;
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 use crate::{
     aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, CopyResult, Error,
@@ -162,17 +162,18 @@ struct Entry {
 }
 
 impl Entry {
-    fn new(
+    fn new<A: AsRef<Path>>(
         context: &Context,
-        direntry: &DirEntry,
+        source: A,
         no_target_dir: bool,
     ) -> Result<Self, StripPrefixError> {
-        let source_relative = direntry.path().to_path_buf();
+        let source = source.as_ref();
+        let source_relative = source.to_path_buf();
         let source_absolute = context.current_dir.join(&source_relative);
         let mut descendant =
             get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
         if no_target_dir {
-            let source_is_dir = direntry.path().is_dir();
+            let source_is_dir = source.is_dir();
             if path_ends_with_terminator(context.target) && source_is_dir {
                 if let Err(e) = std::fs::create_dir_all(context.target) {
                     eprintln!("Failed to create directory: {e}");
@@ -213,6 +214,7 @@ where
     // `path.ends_with(".")` does not seem to work
     path.as_ref().display().to_string().ends_with("/.")
 }
+
 #[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
@@ -246,7 +248,7 @@ fn copy_direntry(
         if target_is_file {
             return Err("cannot overwrite non-directory with directory".into());
         } else {
-            build_dir(options, &local_to_target, false)?;
+            build_dir(&local_to_target, false, options)?;
             if options.verbose {
                 println!("{}", context_for(&source_relative, &local_to_target));
             }
@@ -371,7 +373,7 @@ pub(crate) fn copy_directory(
     let tmp = if options.parents {
         if let Some(parent) = root.parent() {
             let new_target = target.join(parent);
-            build_dir(options, &new_target, true)?;
+            build_dir(&new_target, true, options)?;
             if options.verbose {
                 // For example, if copying file `a/b/c` and its parents
                 // to directory `d/`, then print
@@ -410,7 +412,8 @@ pub(crate) fn copy_directory(
     {
         match direntry_result {
             Ok(direntry) => {
-                let entry = Entry::new(&context, &direntry, options.no_target_dir)?;
+                let entry = Entry::new(&context, direntry.path(), options.no_target_dir)?;
+
                 copy_direntry(
                     progress_bar,
                     entry,
@@ -475,9 +478,10 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
 ///   if they do not already exist.
 // we need to allow unused_variable since `options` might be unused in non unix systems
 #[allow(unused_variables)]
-fn build_dir(options: &Options, path: &PathBuf, recursive: bool) -> CopyResult<()> {
+fn build_dir(path: &PathBuf, recursive: bool, options: &Options) -> CopyResult<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(recursive);
+
     // To prevent unauthorized access before the folder is ready,
     // exclude certain permissions if ownership or special mode bits
     // could potentially change.
@@ -498,6 +502,7 @@ fn build_dir(options: &Options, path: &PathBuf, recursive: bool) -> CopyResult<(
         let mode = !excluded_perms & 0o777; //use only the last three octet bits
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, mode);
     }
+
     builder.create(path)?;
     Ok(())
 }
