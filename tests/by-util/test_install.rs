@@ -1717,3 +1717,41 @@ fn test_install_root_combined() {
     run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
     run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
 }
+
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+fn test_install_copy_failures() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    let file1 = "source_file";
+    let file2 = "target_file";
+
+    at.touch(file1);
+    scene.ccmd("chmod").arg("000").arg(file1).succeeds();
+
+    // if source file is not readable, it will raise a permission error.
+    // since we create the file with mode 0600 before `fs::copy`, if the
+    // copy failed, the file should be removed.
+    scene
+        .ucmd()
+        .arg(file1)
+        .arg(file2)
+        .arg("--mode=400")
+        .fails()
+        .stderr_contains("permission denied");
+    assert!(!at.file_exists(file2));
+
+    // if source file is good to copy, it should succeed and set the
+    // destination file permissions accordingly
+    scene.ccmd("chmod").arg("644").arg(file1).succeeds();
+    scene
+        .ucmd()
+        .arg(file1)
+        .arg(file2)
+        .arg("--mode=400")
+        .succeeds();
+    assert!(at.file_exists(file2));
+    assert_eq!(0o100_400_u32, at.metadata(file2).permissions().mode());
+}
