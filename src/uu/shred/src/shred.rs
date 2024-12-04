@@ -185,6 +185,7 @@ enum BytesWriter {
     RandomSource {
         file: File,
         buffer: Vec<u8>,
+        path: PathBuf,
     },
 }
 
@@ -194,15 +195,12 @@ impl BytesWriter {
             PassType::Random => {
                 if let Some(path) = random_source {
                     // Attempt to open the specified file as the random source
-                    match File::open(path) {
-                        Ok(file) => {
-                            let metadata = file.metadata().unwrap();
-                            let buffer_size = metadata.len() as usize;
-                            Self::RandomSource {
-                                file,
-                                buffer: vec![0; buffer_size],
-                            }
-                        }
+                    match File::open(&path) {
+                        Ok(file) => Self::RandomSource {
+                            file,
+                            buffer: Vec::new(),
+                            path,
+                        },
                         Err(e) => {
                             // TODO remove panic
                             panic!("Failed to open random source file: {:?}", e);
@@ -234,37 +232,42 @@ impl BytesWriter {
         }
     }
 
-    fn bytes_for_pass(&mut self, size: usize) -> &[u8] {
+    fn bytes_for_pass(&mut self, size: usize) -> Result<&[u8], io::Error> {
         match self {
             Self::Random { rng, buffer } => {
                 let bytes = &mut buffer[..size];
                 rng.fill(bytes);
-                bytes
+                Ok(bytes)
             }
             Self::Pattern { offset, buffer } => {
                 let bytes = &buffer[*offset..size + *offset];
                 *offset = (*offset + size) % PATTERN_LENGTH;
-                bytes
+                Ok(bytes)
             }
-            Self::RandomSource { file, buffer } => {
+            Self::RandomSource { file, buffer, path } => {
                 buffer.resize(size, 0); // Resize buffer to desired size, filling with zeros if needed
                 let mut total_read = 0;
                 while total_read < size {
                     match file.read(&mut buffer[total_read..]) {
                         Ok(0) => {
-                            // EOF reached, consider whether to wrap around or accept partial fill
-                            break;
+                            // EOF reached before we could read enough data
+                            return Err(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                format!("{}: end of file", path.maybe_quote()),
+                            ));
                         }
                         Ok(n) => {
                             total_read += n;
                         }
                         Err(e) => {
-                            // TODO remove panic
-                            panic!("Failed to read random bytes from source file: {:?}", e);
+                            return Err(io::Error::new(
+                                e.kind(),
+                                format!("{}: {}", path.maybe_quote(), e),
+                            ));
                         }
                     }
                 }
-                &buffer[..total_read]
+                Ok(&buffer[..total_read])
             }
         }
     }
@@ -542,16 +545,15 @@ fn wipe_file(path_str: &str, opts: &WipeOptions) -> UResult<()> {
                 pass_name
             );
         }
-        // size is an optional argument for exactly how many bytes we want to shred
-        // Ignore failed writes; just keep trying
-        show_if_err!(do_pass(
+        // Propagate errors instead of ignoring them
+        do_pass(
             &mut file,
             &pass_type,
             opts.exact,
             size,
-            opts.random_source.as_ref()
+            opts.random_source.as_ref(),
         )
-        .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
+        .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))?;
     }
 
     if opts.remove_method != RemoveMethod::None {
@@ -575,7 +577,7 @@ fn do_pass(
 
     // We start by writing BLOCK_SIZE times as many time as possible.
     for _ in 0..(file_size / BLOCK_SIZE as u64) {
-        let block = writer.bytes_for_pass(BLOCK_SIZE);
+        let block = writer.bytes_for_pass(BLOCK_SIZE)?;
         file.write_all(block)?;
     }
 
@@ -584,7 +586,7 @@ fn do_pass(
     let bytes_left = (file_size % BLOCK_SIZE as u64) as usize;
     if bytes_left > 0 {
         let size = if exact { bytes_left } else { BLOCK_SIZE };
-        let block = writer.bytes_for_pass(size);
+        let block = writer.bytes_for_pass(size)?;
         file.write_all(block)?;
     }
 

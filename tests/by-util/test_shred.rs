@@ -223,8 +223,26 @@ fn test_random_source() {
 
     ucmd.arg("--verbose")
         .arg("--random-source")
-        .arg(random_source)
         .arg(file)
+        .arg(random_source)
         .succeeds()
         .stderr_contains("1/3 (random)");
+}
+
+#[test]
+fn test_random_source_eof() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let test_file = "test_file";
+    at.write(test_file, "abc");
+
+    let random_source = "source";
+    at.touch(random_source);
+
+    ucmd.arg("--verbose")
+        .arg("--random-source=source")
+        .arg(test_file)
+        .fails()
+        .stderr_contains("end of file")
+        .code_is(1);
 }
