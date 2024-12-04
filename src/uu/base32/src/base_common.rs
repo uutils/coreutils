@@ -3,15 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore hexupper lsbf msbf unpadded
+// spell-checker:ignore hexupper lsbf msbf unpadded nopad aGVsbG8sIHdvcmxkIQ
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{self, ErrorKind, Read};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
-    for_base_common::{BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER},
+    for_base_common::{BASE32, BASE32HEX, BASE64, BASE64URL, BASE64_NOPAD, HEXUPPER},
     Format, Z85Wrapper, BASE2LSBF, BASE2MSBF,
 };
 use uucore::encoding::{EncodingWrapper, SupportsFastDecodeAndEncode};
@@ -143,25 +143,50 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
         )
 }
 
-pub fn get_input(config: &Config) -> UResult<Box<dyn Read>> {
+/// A trait alias for types that implement both `Read` and `Seek`.
+pub trait ReadSeek: Read + Seek {}
+
+/// Automatically implement the `ReadSeek` trait for any type that implements both `Read` and `Seek`.
+impl<T: Read + Seek> ReadSeek for T {}
+
+pub fn get_input(config: &Config) -> UResult<Box<dyn ReadSeek>> {
     match &config.to_read {
         Some(path_buf) => {
             // Do not buffer input, because buffering is handled by `fast_decode` and `fast_encode`
             let file =
                 File::open(path_buf).map_err_context(|| path_buf.maybe_quote().to_string())?;
-
             Ok(Box::new(file))
         }
         None => {
-            let stdin_lock = io::stdin().lock();
-
-            Ok(Box::new(stdin_lock))
+            let mut buffer = Vec::new();
+            io::stdin().read_to_end(&mut buffer)?;
+            Ok(Box::new(io::Cursor::new(buffer)))
         }
     }
 }
 
-pub fn handle_input(input: &mut dyn Read, format: Format, config: Config) -> UResult<()> {
-    let supports_fast_decode_and_encode = get_supports_fast_decode_and_encode(format);
+/// Determines if the input buffer ends with padding ('=') after trimming trailing whitespace.
+fn has_padding<R: Read + Seek>(input: &mut R) -> UResult<bool> {
+    let mut buf = Vec::new();
+    input
+        .read_to_end(&mut buf)
+        .map_err(|err| USimpleError::new(1, format_read_error(err.kind())))?;
+
+    // Reverse iterator and skip trailing whitespace without extra collections
+    let has_padding = buf
+        .iter()
+        .rfind(|&&byte| !byte.is_ascii_whitespace())
+        .is_some_and(|&byte| byte == b'=');
+
+    input.seek(SeekFrom::Start(0))?;
+    Ok(has_padding)
+}
+
+pub fn handle_input<R: Read + Seek>(input: &mut R, format: Format, config: Config) -> UResult<()> {
+    let has_padding = has_padding(input)?;
+
+    let supports_fast_decode_and_encode =
+        get_supports_fast_decode_and_encode(format, config.decode, has_padding);
 
     let supports_fast_decode_and_encode_ref = supports_fast_decode_and_encode.as_ref();
 
@@ -184,7 +209,11 @@ pub fn handle_input(input: &mut dyn Read, format: Format, config: Config) -> URe
     }
 }
 
-pub fn get_supports_fast_decode_and_encode(format: Format) -> Box<dyn SupportsFastDecodeAndEncode> {
+pub fn get_supports_fast_decode_and_encode(
+    format: Format,
+    decode: bool,
+    has_padding: bool,
+) -> Box<dyn SupportsFastDecodeAndEncode> {
     const BASE16_VALID_DECODING_MULTIPLE: usize = 2;
     const BASE2_VALID_DECODING_MULTIPLE: usize = 8;
     const BASE32_VALID_DECODING_MULTIPLE: usize = 8;
@@ -231,13 +260,24 @@ pub fn get_supports_fast_decode_and_encode(format: Format) -> Box<dyn SupportsFa
             // spell-checker:disable-next-line
             b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
         )),
-        Format::Base64 => Box::from(EncodingWrapper::new(
-            BASE64,
-            BASE64_VALID_DECODING_MULTIPLE,
-            BASE64_UNPADDED_MULTIPLE,
-            // spell-checker:disable-next-line
-            b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=+/",
-        )),
+        Format::Base64 => {
+            let alphabet: &[u8] = if has_padding {
+                &b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/="[..]
+            } else {
+                &b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/"[..]
+            };
+            let wrapper = if decode && !has_padding {
+                BASE64_NOPAD
+            } else {
+                BASE64
+            };
+            Box::from(EncodingWrapper::new(
+                wrapper,
+                BASE64_VALID_DECODING_MULTIPLE,
+                BASE64_UNPADDED_MULTIPLE,
+                alphabet,
+            ))
+        }
         Format::Base64Url => Box::from(EncodingWrapper::new(
             BASE64URL,
             BASE64_VALID_DECODING_MULTIPLE,
@@ -316,6 +356,7 @@ pub mod fast_encode {
         encoded_buffer: &mut VecDeque<u8>,
         output: &mut dyn Write,
         is_cleanup: bool,
+        empty_wrap: bool,
     ) -> io::Result<()> {
         // TODO
         // `encoded_buffer` only has to be a VecDeque if line wrapping is enabled
@@ -324,7 +365,9 @@ pub mod fast_encode {
         output.write_all(encoded_buffer.make_contiguous())?;
 
         if is_cleanup {
-            output.write_all(b"\n")?;
+            if !empty_wrap {
+                output.write_all(b"\n")?;
+            }
         } else {
             encoded_buffer.clear();
         }
@@ -381,12 +424,13 @@ pub mod fast_encode {
         encoded_buffer: &mut VecDeque<u8>,
         output: &mut dyn Write,
         is_cleanup: bool,
+        empty_wrap: bool,
     ) -> io::Result<()> {
         // Write all data in `encoded_buffer` to `output`
         if let &mut Some(ref mut li) = line_wrapping {
             write_with_line_breaks(li, encoded_buffer, output, is_cleanup)?;
         } else {
-            write_without_line_breaks(encoded_buffer, output, is_cleanup)?;
+            write_without_line_breaks(encoded_buffer, output, is_cleanup, empty_wrap)?;
         }
 
         Ok(())
@@ -473,9 +517,14 @@ pub mod fast_encode {
                     )?;
 
                     assert!(leftover_buffer.len() < encode_in_chunks_of_size);
-
                     // Write all data in `encoded_buffer` to `output`
-                    write_to_output(&mut line_wrapping, &mut encoded_buffer, output, false)?;
+                    write_to_output(
+                        &mut line_wrapping,
+                        &mut encoded_buffer,
+                        output,
+                        false,
+                        wrap == Some(0),
+                    )?;
                 }
                 Err(er) => {
                     let kind = er.kind();
@@ -499,7 +548,13 @@ pub mod fast_encode {
 
             // Write all data in `encoded_buffer` to output
             // `is_cleanup` triggers special cleanup-only logic
-            write_to_output(&mut line_wrapping, &mut encoded_buffer, output, true)?;
+            write_to_output(
+                &mut line_wrapping,
+                &mut encoded_buffer,
+                output,
+                true,
+                wrap == Some(0),
+            )?;
         }
 
         Ok(())
@@ -758,4 +813,34 @@ fn format_read_error(kind: ErrorKind) -> String {
     }
 
     format!("read error: {kind_string_capitalized}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_has_padding() {
+        let test_cases = vec![
+            ("aGVsbG8sIHdvcmxkIQ==", true),
+            ("aGVsbG8sIHdvcmxkIQ== ", true),
+            ("aGVsbG8sIHdvcmxkIQ==\n", true),
+            ("aGVsbG8sIHdvcmxkIQ== \n", true),
+            ("aGVsbG8sIHdvcmxkIQ=", true),
+            ("aGVsbG8sIHdvcmxkIQ= ", true),
+            ("aGVsbG8sIHdvcmxkIQ \n", false),
+            ("aGVsbG8sIHdvcmxkIQ", false),
+        ];
+
+        for (input, expected) in test_cases {
+            let mut cursor = Cursor::new(input.as_bytes());
+            assert_eq!(
+                has_padding(&mut cursor).unwrap(),
+                expected,
+                "Failed for input: '{}'",
+                input
+            );
+        }
+    }
 }
