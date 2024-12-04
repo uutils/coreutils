@@ -22,6 +22,8 @@ chrono = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true }
 parse_datetime = { workspace = true }
+chrono-tz = { workspace = true }
+iana-time-zone = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
