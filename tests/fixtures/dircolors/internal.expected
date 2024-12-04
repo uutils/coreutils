@@ -16,6 +16,7 @@ TERM console
 TERM cygwin
 TERM *direct*
 TERM dtterm
+TERM foot
 TERM gnome
 TERM hurd
 TERM jfbterm

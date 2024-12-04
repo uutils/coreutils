@@ -22,6 +22,7 @@ pub static TERMS: &[&str] = &[
     "cygwin",
     "*direct*",
     "dtterm",
+    "foot",
     "gnome",
     "hurd",
     "jfbterm",
