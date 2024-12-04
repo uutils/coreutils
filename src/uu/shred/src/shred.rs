@@ -43,7 +43,7 @@ pub mod options {
         pub const WIPESYNC: &str = "wipesync";
     }
 }
-struct Params {
+struct WipeOptions {
     iterations: usize,
     remove_method: RemoveMethod,
     size: Option<u64>,
@@ -313,7 +313,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>(options::SIZE)
         .map(|s| s.to_string());
     let size = get_size(size_arg);
-    let opts = Params {
+    let opts = WipeOptions {
         iterations,
         remove_method,
         force: matches.get_flag(options::FORCE),
@@ -443,7 +443,7 @@ fn pass_name(pass_type: &PassType) -> String {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn wipe_file(path_str: &str, opts: &Params) -> UResult<()> {
+fn wipe_file(path_str: &str, opts: &WipeOptions) -> UResult<()> {
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
     if !path.exists() {
