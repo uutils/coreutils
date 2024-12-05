@@ -1443,7 +1443,7 @@ mod check_utf8 {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
         let filename: OsString = OsStringExt::from_vec(b"funky\xffname".to_vec());
-        at.touch(&filename);
+        at.touch(filename);
 
         // Checksum match
         at.write_bytes("check",
@@ -1544,7 +1544,6 @@ fn test_check_confusing_base64() {
 
 /// This test checks that when a file contains several checksum lines
 /// with different encoding, the decoding still works.
-#[ignore = "not yet implemented"]
 #[test]
 fn test_check_mix_hex_base64() {
     let b64 = "BLAKE2b-128 (foo1.dat) = BBNuJPhdRwRlw9tm5Y7VbA==";
@@ -1767,5 +1766,83 @@ mod gnu_cksum_base64 {
                 .no_stdout()
                 .stderr_contains("no properly formatted checksum lines found");
         }
+    }
+}
+
+/// The tests in this module check the behavior of cksum when given different
+/// checksum formats and algorithms in the same file, while specifying an
+/// algorithm on CLI or not.
+mod format_mix {
+    use super::*;
+
+    // First line is algo-based, second one is not
+    const INPUT_ALGO_NON_ALGO: &str = "\
+        BLAKE2b (bar) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n\
+        786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce  foo";
+
+    // First line is non algo-based, second one is
+    const INPUT_NON_ALGO_ALGO: &str = "\
+        786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce  foo\n\
+        BLAKE2b (bar) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce";
+
+    /// Make a simple scene with foo and bar empty files
+    fn make_scene() -> TestScenario {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.touch("foo");
+        at.touch("bar");
+
+        scene
+    }
+
+    #[test]
+    fn test_check_cli_algo_non_algo() {
+        let scene = make_scene();
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--algo=blake2b")
+            .pipe_in(INPUT_ALGO_NON_ALGO)
+            .succeeds()
+            .stdout_contains("bar: OK\nfoo: OK")
+            .no_stderr();
+    }
+
+    #[test]
+    fn test_check_cli_non_algo_algo() {
+        let scene = make_scene();
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("--algo=blake2b")
+            .pipe_in(INPUT_NON_ALGO_ALGO)
+            .succeeds()
+            .stdout_contains("foo: OK\nbar: OK")
+            .no_stderr();
+    }
+
+    #[test]
+    fn test_check_algo_non_algo() {
+        let scene = make_scene();
+        scene
+            .ucmd()
+            .arg("--check")
+            .pipe_in(INPUT_ALGO_NON_ALGO)
+            .succeeds()
+            .stdout_contains("bar: OK")
+            .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
+    }
+
+    #[test]
+    fn test_check_non_algo_algo() {
+        let scene = make_scene();
+        scene
+            .ucmd()
+            .arg("--check")
+            .pipe_in(INPUT_NON_ALGO_ALGO)
+            .succeeds()
+            .stdout_contains("bar: OK")
+            .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
     }
 }
