@@ -8,7 +8,7 @@ use data_encoding::BASE64;
 use os_display::Quotable;
 use regex::bytes::{Captures, Regex};
 use std::{
-    ffi::{OsStr, OsString},
+    ffi::OsStr,
     fmt::Display,
     fs::File,
     io::{self, stdin, BufReader, Read, Write},
@@ -130,9 +130,6 @@ enum FileCheckError {
     ImproperlyFormatted,
     /// reading of the checksum file failed
     CantOpenChecksumFile,
-    /// Algorithm detection was unsuccessful.
-    /// Either none is provided, or there is a conflict.
-    AlgoDetectionError,
 }
 
 impl From<Box<dyn UError>> for FileCheckError {
@@ -441,7 +438,7 @@ fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
 }
 
 /// Determines the appropriate regular expression to use based on the provided lines.
-fn determine_regex(lines: &[OsString]) -> Option<(Regex, bool)> {
+fn determine_regex(line: impl AsRef<OsStr>) -> Option<(Regex, bool)> {
     let regexes = [
         (Regex::new(ALGO_BASED_REGEX).unwrap(), true),
         (Regex::new(DOUBLE_SPACE_REGEX).unwrap(), false),
@@ -449,12 +446,10 @@ fn determine_regex(lines: &[OsString]) -> Option<(Regex, bool)> {
         (Regex::new(ALGO_BASED_REGEX_BASE64).unwrap(), true),
     ];
 
-    for line in lines {
-        let line_bytes = os_str_as_bytes(line).expect("UTF-8 decoding failed");
-        for (regex, is_algo_based) in &regexes {
-            if regex.is_match(line_bytes) {
-                return Some((regex.clone(), *is_algo_based));
-            }
+    let line_bytes = os_str_as_bytes(line.as_ref()).expect("UTF-8 decoding failed");
+    for (regex, is_algo_based) in &regexes {
+        if regex.is_match(line_bytes) {
+            return Some((regex.clone(), *is_algo_based));
         }
     }
 
@@ -599,13 +594,20 @@ fn process_checksum_line(
     filename_input: &OsStr,
     line: &OsStr,
     i: usize,
-    chosen_regex: &Regex,
-    is_algo_based_format: bool,
     cli_algo_name: Option<&str>,
     cli_algo_length: Option<usize>,
     opts: ChecksumOptions,
 ) -> Result<(), LineCheckError> {
     let line_bytes = os_str_as_bytes(line)?;
+
+    // early return on empty or commented lines.
+    if line.is_empty() || line_bytes.starts_with(b"#") {
+        return Err(LineCheckError::Skipped);
+    }
+
+    let (chosen_regex, is_algo_based_format) =
+        determine_regex(line).ok_or(LineCheckError::ImproperlyFormatted)?;
+
     if let Some(caps) = chosen_regex.captures(line_bytes) {
         let mut filename_to_check = caps.name("filename").unwrap().as_bytes();
 
@@ -617,7 +619,7 @@ fn process_checksum_line(
             filename_to_check = &filename_to_check[1..];
         }
 
-        let expected_checksum = get_expected_digest_as_hex_string(&caps, chosen_regex)
+        let expected_checksum = get_expected_digest_as_hex_string(&caps, &chosen_regex)
             .ok_or(LineCheckError::ImproperlyFormatted)?;
 
         // If the algo_name is provided, we use it, otherwise we try to detect it
@@ -672,10 +674,6 @@ fn process_checksum_line(
             Err(LineCheckError::DigestMismatch)
         }
     } else {
-        if line.is_empty() || line_bytes.starts_with(b"#") {
-            // Don't show any warning for empty or commented lines.
-            return Err(LineCheckError::Skipped);
-        }
         if opts.warn {
             let algo = if let Some(algo_name_input) = cli_algo_name {
                 algo_name_input.to_uppercase()
@@ -723,19 +721,11 @@ fn process_checksum_file(
     let reader = BufReader::new(file);
     let lines = read_os_string_lines(reader).collect::<Vec<_>>();
 
-    let Some((chosen_regex, is_algo_based_format)) = determine_regex(&lines) else {
-        log_no_properly_formatted(get_filename_for_output(filename_input, input_is_stdin));
-        set_exit_code(1);
-        return Err(FileCheckError::AlgoDetectionError);
-    };
-
     for (i, line) in lines.iter().enumerate() {
         let line_result = process_checksum_line(
             filename_input,
             line,
             i,
-            &chosen_regex,
-            is_algo_based_format,
             cli_algo_name,
             cli_algo_length,
             opts,
@@ -816,8 +806,7 @@ where
         use FileCheckError::*;
         match process_checksum_file(filename_input, algo_name_input, length_input, opts) {
             Err(UError(e)) => return Err(e),
-            Err(ImproperlyFormatted) => break,
-            Err(CantOpenChecksumFile | AlgoDetectionError) | Ok(_) => continue,
+            Err(CantOpenChecksumFile | ImproperlyFormatted) | Ok(_) => continue,
         }
     }
 
@@ -926,6 +915,7 @@ pub fn escape_filename(filename: &Path) -> (String, &'static str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
 
     #[test]
     fn test_unescape_filename() {
@@ -1161,66 +1151,39 @@ mod tests {
     #[test]
     fn test_determine_regex() {
         // Test algo-based regex
-        let lines_algo_based = ["MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e"]
-            .iter()
-            .map(|s| OsString::from(s.to_string()))
-            .collect::<Vec<_>>();
-        let (regex, algo_based) = determine_regex(&lines_algo_based).unwrap();
+        let line_algo_based =
+            OsString::from("MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e");
+        let (regex, algo_based) = determine_regex(&line_algo_based).unwrap();
         assert!(algo_based);
-        assert!(regex.is_match(os_str_as_bytes(&lines_algo_based[0]).unwrap()));
+        assert!(regex.is_match(os_str_as_bytes(&line_algo_based).unwrap()));
 
         // Test double-space regex
-        let lines_double_space = ["d41d8cd98f00b204e9800998ecf8427e  example.txt"]
-            .iter()
-            .map(|s| OsString::from(s.to_string()))
-            .collect::<Vec<_>>();
-        let (regex, algo_based) = determine_regex(&lines_double_space).unwrap();
+        let line_double_space = OsString::from("d41d8cd98f00b204e9800998ecf8427e  example.txt");
+        let (regex, algo_based) = determine_regex(&line_double_space).unwrap();
         assert!(!algo_based);
-        assert!(regex.is_match(os_str_as_bytes(&lines_double_space[0]).unwrap()));
+        assert!(regex.is_match(os_str_as_bytes(&line_double_space).unwrap()));
 
         // Test single-space regex
-        let lines_single_space = ["d41d8cd98f00b204e9800998ecf8427e example.txt"]
-            .iter()
-            .map(|s| OsString::from(s.to_string()))
-            .collect::<Vec<_>>();
-        let (regex, algo_based) = determine_regex(&lines_single_space).unwrap();
+        let line_single_space = OsString::from("d41d8cd98f00b204e9800998ecf8427e example.txt");
+        let (regex, algo_based) = determine_regex(&line_single_space).unwrap();
         assert!(!algo_based);
-        assert!(regex.is_match(os_str_as_bytes(&lines_single_space[0]).unwrap()));
-
-        // Test double-space regex start with invalid
-        let lines_double_space = ["ERR", "d41d8cd98f00b204e9800998ecf8427e  example.txt"]
-            .iter()
-            .map(|s| OsString::from(s.to_string()))
-            .collect::<Vec<_>>();
-        let (regex, algo_based) = determine_regex(&lines_double_space).unwrap();
-        assert!(!algo_based);
-        assert!(!regex.is_match(os_str_as_bytes(&lines_double_space[0]).unwrap()));
-        assert!(regex.is_match(os_str_as_bytes(&lines_double_space[1]).unwrap()));
+        assert!(regex.is_match(os_str_as_bytes(&line_single_space).unwrap()));
 
         // Test invalid checksum line
-        let lines_invalid = ["invalid checksum line"]
-            .iter()
-            .map(|s| OsString::from(s.to_string()))
-            .collect::<Vec<_>>();
-        assert!(determine_regex(&lines_invalid).is_none());
+        let line_invalid = OsString::from("invalid checksum line");
+        assert!(determine_regex(&line_invalid).is_none());
 
         // Test leading space before checksum line
-        let lines_algo_based_leading_space =
-            ["   MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e"]
-                .iter()
-                .map(|s| OsString::from(s.to_string()))
-                .collect::<Vec<_>>();
-        let res = determine_regex(&lines_algo_based_leading_space);
+        let line_algo_based_leading_space =
+            OsString::from("   MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e");
+        let res = determine_regex(&line_algo_based_leading_space);
         assert!(res.is_some());
         assert_eq!(res.unwrap().0.as_str(), ALGO_BASED_REGEX);
 
         // Test trailing space after checksum line (should fail)
-        let lines_algo_based_leading_space =
-            ["MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e "]
-                .iter()
-                .map(|s| OsString::from(s.to_string()))
-                .collect::<Vec<_>>();
-        let res = determine_regex(&lines_algo_based_leading_space);
+        let line_algo_based_leading_space =
+            OsString::from("MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e ");
+        let res = determine_regex(&line_algo_based_leading_space);
         assert!(res.is_none());
     }
 
