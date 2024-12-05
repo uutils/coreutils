@@ -5,6 +5,7 @@
 // spell-checker:ignore anotherfile invalidchecksum regexes JWZG FFFD xffname prefixfilename
 
 use data_encoding::BASE64;
+use lazy_static::lazy_static;
 use os_display::Quotable;
 use regex::bytes::{Match, Regex};
 use std::{
@@ -428,6 +429,13 @@ const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>
 // In this case, we ignore the *
 const SINGLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s(?P<filename>\*?(?-u:.*))$";
 
+lazy_static! {
+    static ref R_ALGO_BASED: Regex = Regex::new(ALGO_BASED_REGEX).unwrap();
+    static ref R_DOUBLE_SPACE: Regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
+    static ref R_SINGLE_SPACE: Regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
+    static ref R_ALGO_BASED_BASE_64: Regex = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
+}
+
 /// Hold the data extracted from a checksum line.
 struct LineInfo {
     algo_name: Option<String>,
@@ -435,28 +443,32 @@ struct LineInfo {
     checksum: String,
     filename: Vec<u8>,
 
-    regex: Regex,
+    regex: &'static Regex,
 }
 
 impl LineInfo {
-    fn parse(s: impl AsRef<OsStr>, cached_regex: &mut Option<Regex>) -> Option<Self> {
-        let regexes = [
-            (Regex::new(ALGO_BASED_REGEX).unwrap(), true),
-            (Regex::new(DOUBLE_SPACE_REGEX).unwrap(), false),
-            (Regex::new(SINGLE_SPACE_REGEX).unwrap(), false),
-            (Regex::new(ALGO_BASED_REGEX_BASE64).unwrap(), false),
+    fn parse(s: impl AsRef<OsStr>, cached_regex: &mut Option<&'static Regex>) -> Option<Self> {
+        let regexes: &[(&'static Regex, bool)] = &[
+            (&R_ALGO_BASED, true),
+            (&R_DOUBLE_SPACE, false),
+            (&R_SINGLE_SPACE, false),
+            (&R_ALGO_BASED_BASE_64, true),
         ];
 
         let line_bytes = os_str_as_bytes(s.as_ref()).expect("UTF-8 decoding failed");
 
-        for (regex, algo_based) in &regexes {
+        for (regex, algo_based) in regexes {
             if !regex.is_match(line_bytes) {
                 continue;
             }
 
-            let mut r = regex.clone();
-            if !algo_based && cached_regex.is_some() {
-                r = cached_regex.clone().unwrap();
+            let mut r = *regex;
+            if !algo_based {
+                if cached_regex.is_some() {
+                    r = cached_regex.unwrap();
+                } else {
+                    *cached_regex = Some(r);
+                }
             }
 
             if let Some(caps) = r.captures(line_bytes) {
@@ -470,7 +482,7 @@ impl LineInfo {
                         .map(|m| match_to_string(m).parse::<usize>().unwrap()),
                     checksum: caps.name("checksum").map(match_to_string).unwrap(),
                     filename: caps.name("filename").map(|m| m.as_bytes().into()).unwrap(),
-                    regex: r.clone(),
+                    regex: r,
                 });
             }
         }
@@ -638,7 +650,7 @@ fn process_checksum_line(
     cli_algo_name: Option<&str>,
     cli_algo_length: Option<usize>,
     opts: ChecksumOptions,
-    cached_regex: &mut Option<Regex>,
+    cached_regex: &mut Option<&'static Regex>,
 ) -> Result<(), LineCheckError> {
     let line_bytes = os_str_as_bytes(line)?;
 
@@ -652,7 +664,7 @@ fn process_checksum_line(
         // its cannot be changed (can't have single and double space regexes
         // used in the same file).
         if cached_regex.is_none() && !line_info.is_algo_based() {
-            let _ = cached_regex.insert(line_info.regex.clone());
+            let _ = cached_regex.insert(line_info.regex);
         }
 
         let mut filename_to_check = line_info.filename.as_slice();
