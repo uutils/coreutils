@@ -464,6 +464,9 @@ impl LineInfo {
 
             let mut r = *regex;
             if !algo_based {
+                // The cached regex ensures that when processing non-algo based regexes,
+                // its cannot be changed (can't have single and double space regexes
+                // used in the same file).
                 if cached_regex.is_some() {
                     r = cached_regex.unwrap();
                 } else {
@@ -636,13 +639,101 @@ fn identify_algo_name_and_length(
     Some((algorithm, bits))
 }
 
+/// Given a filename and an algorithm, compute the digest and compare it with
+/// the expected one.
+fn compute_and_check_digest_from_file(
+    filename: &[u8],
+    expected_checksum: &str,
+    mut algo: HashAlgorithm,
+    opts: ChecksumOptions,
+) -> Result<(), LineCheckError> {
+    let (filename_to_check_unescaped, prefix) = unescape_filename(filename);
+    let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
+
+    // Open the input file
+    let file_to_check = get_file_to_check(&real_filename_to_check, opts)?;
+    let mut file_reader = BufReader::new(file_to_check);
+
+    // Read the file and calculate the checksum
+    let create_fn = &mut algo.create_fn;
+    let mut digest = create_fn();
+    let (calculated_checksum, _) =
+        digest_reader(&mut digest, &mut file_reader, opts.binary, algo.bits).unwrap();
+
+    // Do the checksum validation
+    let checksum_correct = expected_checksum == calculated_checksum;
+    print_file_report(
+        std::io::stdout(),
+        filename,
+        FileChecksumResult::from_bool(checksum_correct),
+        prefix,
+        opts,
+    );
+
+    if checksum_correct {
+        Ok(())
+    } else {
+        Err(LineCheckError::DigestMismatch)
+    }
+}
+
+/// Check a digest checksum with non-algo based pre-treatment.
+fn process_algo_based_line(
+    line_info: &LineInfo,
+    cli_algo_name: Option<&str>,
+    opts: ChecksumOptions,
+) -> Result<(), LineCheckError> {
+    let filename_to_check = line_info.filename.as_slice();
+    let expected_checksum =
+        get_expected_digest_as_hex_string(line_info).ok_or(LineCheckError::ImproperlyFormatted)?;
+
+    let (algo_name, algo_bitlen) = identify_algo_name_and_length(line_info, cli_algo_name)
+        .ok_or(LineCheckError::ImproperlyFormatted)?;
+
+    let algo = detect_algo(&algo_name, algo_bitlen)?;
+
+    compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
+}
+
+/// Check a digest checksum with non-algo based pre-treatment.
+fn process_non_algo_based_line(
+    i: usize,
+    line_info: &LineInfo,
+    cli_algo_name: &str,
+    cli_algo_length: Option<usize>,
+    opts: ChecksumOptions,
+) -> Result<(), LineCheckError> {
+    let mut filename_to_check = line_info.filename.as_slice();
+    if filename_to_check.starts_with(b"*") && i == 0 && line_info.regex_str() == SINGLE_SPACE_REGEX
+    {
+        // Remove the leading asterisk if present - only for the first line
+        filename_to_check = &filename_to_check[1..];
+    }
+    let expected_checksum =
+        get_expected_digest_as_hex_string(line_info).ok_or(LineCheckError::ImproperlyFormatted)?;
+
+    // When a specific algorithm name is input, use it and use the provided bits
+    // except when dealing with blake2b, where we will detect the length
+    let (algo_name, algo_bitlen) = if cli_algo_name == ALGORITHM_OPTIONS_BLAKE2B {
+        // division by 2 converts the length of the Blake2b checksum from hexadecimal
+        // characters to bytes, as each byte is represented by two hexadecimal characters.
+        let length = Some(expected_checksum.len() / 2);
+        (ALGORITHM_OPTIONS_BLAKE2B.to_string(), length)
+    } else {
+        (cli_algo_name.to_lowercase(), cli_algo_length)
+    };
+
+    let algo = detect_algo(&algo_name, algo_bitlen)?;
+
+    compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
+}
+
 /// Parses a checksum line, detect the algorithm to use, read the file and produce
 /// its digest, and compare it to the expected value.
 ///
 /// Returns `Ok(bool)` if the comparison happened, bool indicates if the digest
 /// matched the expected.
 /// If the comparison didn't happen, return a `LineChecksumError`.
-#[allow(clippy::too_many_arguments)]
 fn process_checksum_line(
     filename_input: &OsStr,
     line: &OsStr,
@@ -654,82 +745,23 @@ fn process_checksum_line(
 ) -> Result<(), LineCheckError> {
     let line_bytes = os_str_as_bytes(line)?;
 
-    // early return on empty or commented lines.
+    // Early return on empty or commented lines.
     if line.is_empty() || line_bytes.starts_with(b"#") {
         return Err(LineCheckError::Skipped);
     }
 
+    // Use `LineInfo` to extract the data of a line.
+    // Then, depending on its format, apply a different pre-treatment.
     if let Some(line_info) = LineInfo::parse(line, cached_regex) {
-        // The cached regex ensures that when processing non-algo based regexes,
-        // its cannot be changed (can't have single and double space regexes
-        // used in the same file).
-        if cached_regex.is_none() && !line_info.is_algo_based() {
-            let _ = cached_regex.insert(line_info.regex);
-        }
-
-        let mut filename_to_check = line_info.filename.as_slice();
-
-        if filename_to_check.starts_with(b"*")
-            && i == 0
-            && line_info.regex_str() == SINGLE_SPACE_REGEX
-        {
-            // Remove the leading asterisk if present - only for the first line
-            filename_to_check = &filename_to_check[1..];
-        }
-
-        let expected_checksum = get_expected_digest_as_hex_string(&line_info)
-            .ok_or(LineCheckError::ImproperlyFormatted)?;
-
-        // If the algo_name is provided, we use it, otherwise we try to detect it
-        let (algo_name, length) = if line_info.is_algo_based() {
-            identify_algo_name_and_length(&line_info, cli_algo_name)
-                .ok_or(LineCheckError::ImproperlyFormatted)?
-        } else if let Some(a) = cli_algo_name {
-            // When a specific algorithm name is input, use it and use the provided bits
-            // except when dealing with blake2b, where we will detect the length
-            if cli_algo_name == Some(ALGORITHM_OPTIONS_BLAKE2B) {
-                // division by 2 converts the length of the Blake2b checksum from hexadecimal
-                // characters to bytes, as each byte is represented by two hexadecimal characters.
-                let length = Some(expected_checksum.len() / 2);
-                (ALGORITHM_OPTIONS_BLAKE2B.to_string(), length)
-            } else {
-                (a.to_lowercase(), cli_algo_length)
-            }
+        if line_info.is_algo_based() {
+            process_algo_based_line(&line_info, cli_algo_name, opts)
+        } else if let Some(cli_algo) = cli_algo_name {
+            // If we match a non-algo based regex, we expect a cli argument
+            // to give us the algorithm to use
+            process_non_algo_based_line(i, &line_info, cli_algo, cli_algo_length, opts)
         } else {
-            // Default case if no algorithm is specified and non-algo based format is matched
+            // We have no clue of what algorithm to use
             return Err(LineCheckError::ImproperlyFormatted);
-        };
-
-        let mut algo = detect_algo(&algo_name, length)?;
-
-        let (filename_to_check_unescaped, prefix) = unescape_filename(filename_to_check);
-
-        let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
-
-        // manage the input file
-        let file_to_check = get_file_to_check(&real_filename_to_check, opts)?;
-        let mut file_reader = BufReader::new(file_to_check);
-
-        // Read the file and calculate the checksum
-        let create_fn = &mut algo.create_fn;
-        let mut digest = create_fn();
-        let (calculated_checksum, _) =
-            digest_reader(&mut digest, &mut file_reader, opts.binary, algo.bits).unwrap();
-
-        // Do the checksum validation
-        let checksum_correct = expected_checksum == calculated_checksum;
-        print_file_report(
-            std::io::stdout(),
-            filename_to_check,
-            FileChecksumResult::from_bool(checksum_correct),
-            prefix,
-            opts,
-        );
-
-        if checksum_correct {
-            Ok(())
-        } else {
-            Err(LineCheckError::DigestMismatch)
         }
     } else {
         if opts.warn {
