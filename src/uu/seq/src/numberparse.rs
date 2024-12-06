@@ -392,6 +392,7 @@ mod tests {
     fn test_parse_big_int() {
         assert_eq!(parse("0"), ExtendedBigDecimal::zero());
         assert_eq!(parse("0.1e1"), ExtendedBigDecimal::one());
+        assert_eq!(parse("0.1E1"), ExtendedBigDecimal::one());
         assert_eq!(
             parse("1.0e1"),
             ExtendedBigDecimal::BigDecimal("10".parse::<BigDecimal>().unwrap())
