@@ -29,9 +29,9 @@ use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, USimpleError, UUsageError};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop, normalize_path,
-    path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
-    ResolveMode,
+    are_hardlinks_to_same_file, canonicalize, get_filename, is_file_writeable, is_symlink_loop,
+    normalize_path, path_ends_with_terminator, paths_refer_to_same_file, FileInformation,
+    MissingHandling, ResolveMode,
 };
 use uucore::{backup_control, show, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -1786,28 +1786,6 @@ fn handle_existing_dest(
     };
 
     Ok(dest_was_removed)
-}
-
-/// Returns true if `path` is writeable by the current group/user, otherwise returns false
-#[cfg(unix)]
-fn is_file_writeable(path: &Path) -> bool {
-    // 0 indicates that that the call to `access` succeeded, which in this case would mean that `path` is writeable
-    const SUCCESS: libc::c_int = 0;
-
-    // It looks like the pattern in the codebase is to unwrap the return value of `CString::new`
-    let path_cstring = CString::new(path.as_os_str().as_bytes().to_vec()).unwrap();
-
-    let path_pointer: *const libc::c_char = path_cstring.as_ptr().cast::<libc::c_char>();
-
-    let access_result = unsafe {
-        // Check if the current group/user can can write to `path`
-        libc::access(path_pointer, libc::W_OK)
-    };
-
-    // Ensure `path_pointer` remains valid through FFI call
-    drop(path_cstring);
-
-    access_result == SUCCESS
 }
 
 /// Checks if:

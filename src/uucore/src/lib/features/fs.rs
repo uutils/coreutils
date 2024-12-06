@@ -23,6 +23,7 @@ use std::hash::Hash;
 use std::io::{Error, ErrorKind, Result as IOResult};
 #[cfg(unix)]
 use std::os::unix::{fs::MetadataExt, io::AsRawFd};
+
 use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
@@ -721,6 +722,13 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
         .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
 }
 
+/// Returns true if `path` is writeable by the current group/user, otherwise returns false
+#[cfg(unix)]
+pub fn is_file_writeable(path: &Path) -> bool {
+    // `AccessFlags::W_OK` checks if the file is writeable.
+    nix::unistd::access(path, nix::unistd::AccessFlags::W_OK).is_ok()
+}
+
 pub mod sane_blksize {
 
     #[cfg(not(target_os = "windows"))]
@@ -1029,5 +1037,24 @@ mod tests {
     fn test_get_file_name() {
         let file_path = PathBuf::from("~/foo.txt");
         assert!(matches!(get_filename(&file_path), Some("foo.txt")));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_is_file_writeable() {
+        use std::fs::File;
+        use std::os::unix::fs::PermissionsExt;
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file");
+
+        File::create(&file_path).unwrap();
+
+        assert!(is_file_writeable(&file_path));
+
+        let mut permissions = fs::metadata(&file_path).unwrap().permissions();
+        permissions.set_mode(0o444); // Read-only
+        fs::set_permissions(&file_path, permissions).unwrap();
+
+        assert!(!is_file_writeable(&file_path));
     }
 }
