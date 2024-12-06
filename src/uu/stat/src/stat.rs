@@ -93,6 +93,26 @@ pub enum OutputType {
     Unknown,
 }
 
+enum QuotingStyle {
+    Locale,
+    Shell,
+    Default,
+    Quote,
+}
+
+impl std::str::FromStr for QuotingStyle {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "locale" => Ok(QuotingStyle::Locale),
+            "shell" => Ok(QuotingStyle::Shell),
+            // The others aren't exposed to the user
+            _ => Err(format!("Invalid quoting style: {}", s)),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum Token {
     Char(char),
@@ -293,18 +313,14 @@ fn print_str(s: &str, flags: &Flags, width: usize, precision: Option<usize>) {
     pad_and_print(s, flags.left, width, Padding::Space);
 }
 
-fn quote_file_name(file_name: &str, quoting_style: &str) -> String {
+fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
     match quoting_style {
-        "locale" | "shell" => {
-            // Escape single quotes and enclose in single quotes
+        QuotingStyle::Locale | QuotingStyle::Shell => {
             let escaped = file_name.replace('\'', r"\'");
             format!("'{}'", escaped)
         }
-        "default" => {
-            format!("\"{}\"", file_name)
-        }
-        "quote" => file_name.to_string(),
-        _ => file_name.quote().to_string(),
+        QuotingStyle::Default => format!("\"{}\"", file_name),
+        QuotingStyle::Quote => file_name.to_string(),
     }
 }
 
@@ -810,30 +826,35 @@ impl Stater {
                                     // quoted file name with dereference if symbolic link
                                     'N' => {
                                         let quoting_style = env::var("QUOTING_STYLE")
-                                            .unwrap_or_else(|_| "default".to_string());
+                                            .ok()
+                                            .and_then(|style| style.parse().ok())
+                                            .unwrap_or(QuotingStyle::Default);
+
                                         let file_name = if file_type.is_symlink() {
-                                            let dst = match fs::read_link(&file) {
-                                                Ok(path) => path,
+                                            let quoted_display_name =
+                                                quote_file_name(&display_name, &quoting_style);
+                                            match fs::read_link(&file) {
+                                                Ok(dst) => {
+                                                    let quoted_dst = quote_file_name(
+                                                        &dst.to_string_lossy(),
+                                                        &quoting_style,
+                                                    );
+                                                    format!("{quoted_display_name} -> {quoted_dst}")
+                                                }
                                                 Err(e) => {
                                                     println!("{e}");
                                                     return 1;
                                                 }
-                                            };
-                                            format!(
-                                                "{} -> {}",
-                                                quote_file_name(&display_name, &quoting_style),
-                                                quote_file_name(
-                                                    &dst.to_string_lossy(),
-                                                    &quoting_style
-                                                )
-                                            )
-                                        } else {
-                                            if self.from_user {
-                                                quote_file_name(&display_name, &quoting_style)
-                                            } else {
-                                                quote_file_name(&display_name, "quote")
                                             }
+                                        } else {
+                                            let style = if self.from_user {
+                                                quoting_style
+                                            } else {
+                                                QuotingStyle::Quote
+                                            };
+                                            quote_file_name(&display_name, &style)
                                         };
+
                                         OutputType::Str(file_name)
                                     }
 
