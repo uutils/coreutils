@@ -700,15 +700,15 @@ mod tests {
             test_string.push_str("👩🏻‍🔬");
         }
 
-        let lines = break_line(&test_string, 80);
+        let lines = break_line(&test_string, 31);
 
         let widths: Vec<usize> = lines
             .iter()
             .map(|s| UnicodeWidthStr::width(&s[..]))
             .collect();
 
-        // Each 👩🏻‍🔬 is 6 character width it break line to the closest number to 80 => 6 * 13 = 78
-        assert_eq!((78, 42), (widths[0], widths[1]));
+        // Each 👩🏻‍🔬 is 2 character width, break line to the closest even number to 31
+        assert_eq!((30, 10), (widths[0], widths[1]));
     }
 
     #[test]
