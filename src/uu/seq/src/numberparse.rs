@@ -333,7 +333,7 @@ impl FromStr for PreciseNumber {
         // number differently depending on its form. This is important
         // because the form of the input dictates how the output will be
         // presented.
-        match (s.find('.'), s.find('e')) {
+        match (s.find('.'), s.find(['e', 'E'])) {
             // For example, "123456" or "inf".
             (None, None) => parse_no_decimal_no_exponent(s),
             // For example, "123e456" or "1e-2".
