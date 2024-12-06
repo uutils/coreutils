@@ -19,6 +19,11 @@
 //! `snice` (TBD)
 //!
 
+// This file is currently flagged as dead code, because it isn't used anywhere
+// in the codebase. It may be useful in the future though, so we decide to keep
+// it.
+#![allow(dead_code)]
+
 use crate::features::tty::Teletype;
 use std::hash::Hash;
 use std::{
