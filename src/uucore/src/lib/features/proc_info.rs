@@ -315,6 +315,7 @@ fn stat_split(stat: &str) -> Vec<String> {
 }
 
 /// Iterating pid in current system
+#[allow(dead_code)]
 pub fn walk_process() -> impl Iterator<Item = ProcessInformation> {
     WalkDir::new("/proc/")
         .max_depth(1)

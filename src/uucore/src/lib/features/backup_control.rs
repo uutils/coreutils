@@ -667,17 +667,14 @@ mod tests {
 
     #[test]
     fn test_numbered_backup_path() {
-        assert_eq!(numbered_backup_path(&Path::new("")), PathBuf::from(".~1~"));
+        assert_eq!(numbered_backup_path(Path::new("")), PathBuf::from(".~1~"));
+        assert_eq!(numbered_backup_path(Path::new("/")), PathBuf::from("/.~1~"));
         assert_eq!(
-            numbered_backup_path(&Path::new("/")),
-            PathBuf::from("/.~1~")
-        );
-        assert_eq!(
-            numbered_backup_path(&Path::new("/hello/world")),
+            numbered_backup_path(Path::new("/hello/world")),
             PathBuf::from("/hello/world.~1~")
         );
         assert_eq!(
-            numbered_backup_path(&Path::new("/hello/world/")),
+            numbered_backup_path(Path::new("/hello/world/")),
             PathBuf::from("/hello/world.~1~")
         );
     }
@@ -685,19 +682,19 @@ mod tests {
     #[test]
     fn test_simple_backup_path() {
         assert_eq!(
-            simple_backup_path(&Path::new(""), ".bak"),
+            simple_backup_path(Path::new(""), ".bak"),
             PathBuf::from(".bak")
         );
         assert_eq!(
-            simple_backup_path(&Path::new("/"), ".bak"),
+            simple_backup_path(Path::new("/"), ".bak"),
             PathBuf::from("/.bak")
         );
         assert_eq!(
-            simple_backup_path(&Path::new("/hello/world"), ".bak"),
+            simple_backup_path(Path::new("/hello/world"), ".bak"),
             PathBuf::from("/hello/world.bak")
         );
         assert_eq!(
-            simple_backup_path(&Path::new("/hello/world/"), ".bak"),
+            simple_backup_path(Path::new("/hello/world/"), ".bak"),
             PathBuf::from("/hello/world.bak")
         );
     }
