@@ -352,3 +352,24 @@ fn test_without_argument() {
         .fails()
         .stderr_contains("missing operand\nTry 'stat --help' for more information.");
 }
+
+#[test]
+fn test_quoting_style_locale() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("'");
+    ts.ucmd()
+        .env("QUOTING_STYLE", "locale")
+        .args(&["-c", "%N", "'"])
+        .run()
+        .no_stderr()
+        .stdout_is("'\\''\n")
+        .succeeded();
+
+    ts.ucmd()
+        .args(&["-c", "%N", "'"])
+        .run()
+        .no_stderr()
+        .stdout_is("\"'\"\n")
+        .succeeded();
+}

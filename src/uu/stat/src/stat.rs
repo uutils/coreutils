@@ -19,10 +19,10 @@ use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
-use std::fs;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
+use std::{env, fs};
 
 const ABOUT: &str = help_about!("stat.md");
 const USAGE: &str = help_usage!("stat.md");
@@ -293,6 +293,21 @@ fn print_str(s: &str, flags: &Flags, width: usize, precision: Option<usize>) {
     pad_and_print(s, flags.left, width, Padding::Space);
 }
 
+fn quote_file_name(file_name: &str, quoting_style: &str) -> String {
+    match quoting_style {
+        "locale" | "shell" => {
+            // Escape single quotes and enclose in single quotes
+            let escaped = file_name.replace('\'', r"\'");
+            format!("'{}'", escaped)
+        }
+        "default" => {
+            format!("\"{}\"", file_name)
+        }
+        "quote" => file_name.to_string(),
+        _ => file_name.quote().to_string(),
+    }
+}
+
 /// Prints an integer value based on the provided flags, width, and precision.
 ///
 /// # Arguments
@@ -431,12 +446,10 @@ impl Stater {
                 ' ' => flag.space = true,
                 '+' => flag.sign = true,
                 '\'' => flag.group = true,
-                'I' => unimplemented!(),
                 _ => break,
             }
             *i += 1;
         }
-        check_bound(format_str, bound, old, *i)?;
 
         let mut width = 0;
         let mut precision = None;
@@ -465,9 +478,27 @@ impl Stater {
         }
 
         *i = j;
+
+        // Check for multi-character specifiers (e.g., `%Hd`, `%Lr`)
+        if *i + 1 < bound {
+            if let Some(&next_char) = chars.get(*i + 1) {
+                if (chars[*i] == 'H' || chars[*i] == 'L') && (next_char == 'd' || next_char == 'r')
+                {
+                    let specifier = format!("{}{}", chars[*i], next_char);
+                    *i += 1;
+                    return Ok(Token::Directive {
+                        flag,
+                        width,
+                        precision,
+                        format: specifier.chars().next().unwrap(),
+                    });
+                }
+            }
+        }
+
         Ok(Token::Directive {
-            width,
             flag,
+            width,
             precision,
             format: chars[*i],
         })
@@ -778,6 +809,8 @@ impl Stater {
                                     'n' => OutputType::Str(display_name.to_string()),
                                     // quoted file name with dereference if symbolic link
                                     'N' => {
+                                        let quoting_style = env::var("QUOTING_STYLE")
+                                            .unwrap_or_else(|_| "default".to_string());
                                         let file_name = if file_type.is_symlink() {
                                             let dst = match fs::read_link(&file) {
                                                 Ok(path) => path,
@@ -786,12 +819,24 @@ impl Stater {
                                                     return 1;
                                                 }
                                             };
-                                            format!("{} -> {}", display_name.quote(), dst.quote())
+                                            format!(
+                                                "{} -> {}",
+                                                quote_file_name(&display_name, &quoting_style),
+                                                quote_file_name(
+                                                    &dst.to_string_lossy(),
+                                                    &quoting_style
+                                                )
+                                            )
                                         } else {
-                                            display_name.to_string()
+                                            if self.from_user {
+                                                quote_file_name(&display_name, &quoting_style)
+                                            } else {
+                                                quote_file_name(&display_name, "quote")
+                                            }
                                         };
                                         OutputType::Str(file_name)
                                     }
+
                                     // optimal I/O transfer size hint
                                     'o' => OutputType::Unsigned(meta.blksize()),
                                     // total size, in bytes
@@ -842,6 +887,14 @@ impl Stater {
                                     )),
                                     // time of last status change, seconds since Epoch
                                     'Z' => OutputType::Integer(meta.ctime()),
+                                    'R' => {
+                                        let major = meta.rdev() >> 8;
+                                        let minor = meta.rdev() & 0xff;
+                                        OutputType::Str(format!("{},{}", major, minor))
+                                    }
+                                    'r' => OutputType::Unsigned(meta.rdev()),
+                                    'H' => OutputType::Unsigned(meta.rdev() >> 8), // Major in decimal
+                                    'L' => OutputType::Unsigned(meta.rdev() & 0xff), // Minor in decimal
 
                                     _ => OutputType::Unknown,
                                 };
