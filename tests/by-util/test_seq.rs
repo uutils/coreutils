@@ -333,6 +333,11 @@ fn test_width_scientific_notation() {
         .succeeds()
         .stdout_is("0999\n1000\n")
         .no_stderr();
+    new_ucmd!()
+        .args(&["-w", "999", "1E3"])
+        .succeeds()
+        .stdout_is("0999\n1000\n")
+        .no_stderr();
 }
 
 #[test]
