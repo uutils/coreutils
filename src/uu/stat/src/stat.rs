@@ -563,6 +563,15 @@ impl Stater {
         if let Some((field_width, offset)) = format_str[j..].scan_num::<usize>() {
             width = field_width;
             j += offset;
+
+            // Reject directives like `%<NUMBER>` by checking if width has been parsed.
+            if j >= bound || chars[j] == '%' {
+                let invalid_directive: String = chars[old..=j.min(bound - 1)].iter().collect();
+                return Err(USimpleError::new(
+                    1,
+                    format!("{}: invalid directive", invalid_directive.quote()),
+                ));
+            }
         }
         check_bound(format_str, bound, old, j)?;
 

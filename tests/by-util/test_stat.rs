@@ -412,3 +412,20 @@ fn test_printf_bel_etc() {
         .succeeds()
         .stdout_is_bytes(expected_stdout);
 }
+
+#[test]
+fn test_printf_invalid_directive() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["--printf=%9", "."])
+        .fails()
+        .code_is(1)
+        .stderr_contains("'%9': invalid directive");
+
+    ts.ucmd()
+        .args(&["--printf=%9%", "."])
+        .fails()
+        .code_is(1)
+        .stderr_contains("'%9%': invalid directive");
+}
