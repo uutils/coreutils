@@ -421,8 +421,7 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
 //    algo must be uppercase or b (for blake2b)
 // 2. <checksum> [* ]<filename>
 // 3. <checksum> [*]<filename> (only one space)
-const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>(?-u:.*))\)\s*=\s*(?P<checksum>[a-fA-F0-9]+)$";
-const ALGO_BASED_REGEX_BASE64: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>(?-u:.*))\)\s*=\s*(?P<checksum>[A-Za-z0-9+/]+={0,2})$";
+const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>(?-u:.*))\)\s*=\s*(?P<checksum>[A-Za-z0-9+/]+={0,2})$";
 
 const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>(?-u:.*))$";
 
@@ -433,7 +432,6 @@ lazy_static! {
     static ref R_ALGO_BASED: Regex = Regex::new(ALGO_BASED_REGEX).unwrap();
     static ref R_DOUBLE_SPACE: Regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
     static ref R_SINGLE_SPACE: Regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
-    static ref R_ALGO_BASED_BASE_64: Regex = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
 }
 
 /// Hold the data extracted from a checksum line.
@@ -452,7 +450,6 @@ impl LineInfo {
             (&R_ALGO_BASED, true),
             (&R_DOUBLE_SPACE, false),
             (&R_SINGLE_SPACE, false),
-            (&R_ALGO_BASED_BASE_64, true),
         ];
 
         let line_bytes = os_str_as_bytes(s.as_ref()).expect("UTF-8 decoding failed");
