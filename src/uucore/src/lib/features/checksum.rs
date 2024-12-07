@@ -421,8 +421,7 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
 //    algo must be uppercase or b (for blake2b)
 // 2. <checksum> [* ]<filename>
 // 3. <checksum> [*]<filename> (only one space)
-const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>(?-u:.*))\)\s*=\s*(?P<checksum>[a-fA-F0-9]+)$";
-const ALGO_BASED_REGEX_BASE64: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>(?-u:.*))\)\s*=\s*(?P<checksum>[A-Za-z0-9+/]+={0,2})$";
+const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>(?-u:.*))\)\s*=\s*(?P<checksum>[A-Za-z0-9+/]+={0,2})$";
 
 const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>(?-u:.*))$";
 
@@ -433,7 +432,23 @@ lazy_static! {
     static ref R_ALGO_BASED: Regex = Regex::new(ALGO_BASED_REGEX).unwrap();
     static ref R_DOUBLE_SPACE: Regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
     static ref R_SINGLE_SPACE: Regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
-    static ref R_ALGO_BASED_BASE_64: Regex = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum LineFormat {
+    AlgoBased,
+    SingleSpace,
+    DoubleSpace,
+}
+
+impl LineFormat {
+    fn to_regex(self) -> &'static Regex {
+        match self {
+            LineFormat::AlgoBased => &R_ALGO_BASED,
+            LineFormat::SingleSpace => &R_SINGLE_SPACE,
+            LineFormat::DoubleSpace => &R_DOUBLE_SPACE,
+        }
+    }
 }
 
 /// Hold the data extracted from a checksum line.
@@ -443,34 +458,41 @@ struct LineInfo {
     checksum: String,
     filename: Vec<u8>,
 
-    regex: &'static Regex,
+    format: LineFormat,
 }
 
 impl LineInfo {
-    fn parse(s: impl AsRef<OsStr>, cached_regex: &mut Option<&'static Regex>) -> Option<Self> {
-        let regexes: &[(&'static Regex, bool)] = &[
-            (&R_ALGO_BASED, true),
-            (&R_DOUBLE_SPACE, false),
-            (&R_SINGLE_SPACE, false),
-            (&R_ALGO_BASED_BASE_64, true),
+    /// Returns a `LineInfo` parsed from a checksum line.
+    /// The function will run 3 regexes against the line and select the first one that matches
+    /// to populate the fields of the struct.
+    /// However, there is a catch to handle regarding the handling of `cached_regex`.
+    /// In case of non-algo-based regex, if `cached_regex` is Some, it must take the priority
+    /// over the detected regex. Otherwise, we must set it the the detected regex.
+    /// This specific behavior is emphasized by the test
+    /// `test_hashsum::test_check_md5sum_only_one_space`.
+    fn parse(s: impl AsRef<OsStr>, cached_regex: &mut Option<LineFormat>) -> Option<Self> {
+        let regexes: &[(&'static Regex, LineFormat)] = &[
+            (&R_ALGO_BASED, LineFormat::AlgoBased),
+            (&R_DOUBLE_SPACE, LineFormat::DoubleSpace),
+            (&R_SINGLE_SPACE, LineFormat::SingleSpace),
         ];
 
         let line_bytes = os_str_as_bytes(s.as_ref()).expect("UTF-8 decoding failed");
 
-        for (regex, algo_based) in regexes {
+        for (regex, format) in regexes {
             if !regex.is_match(line_bytes) {
                 continue;
             }
 
             let mut r = *regex;
-            if !algo_based {
+            if *format != LineFormat::AlgoBased {
                 // The cached regex ensures that when processing non-algo based regexes,
-                // its cannot be changed (can't have single and double space regexes
+                // it cannot be changed (can't have single and double space regexes
                 // used in the same file).
                 if cached_regex.is_some() {
-                    r = cached_regex.unwrap();
+                    r = cached_regex.unwrap().to_regex();
                 } else {
-                    *cached_regex = Some(r);
+                    *cached_regex = Some(*format);
                 }
             }
 
@@ -485,22 +507,12 @@ impl LineInfo {
                         .map(|m| match_to_string(m).parse::<usize>().unwrap()),
                     checksum: caps.name("checksum").map(match_to_string).unwrap(),
                     filename: caps.name("filename").map(|m| m.as_bytes().into()).unwrap(),
-                    regex: r,
+                    format: *format,
                 });
             }
         }
 
         None
-    }
-
-    #[inline]
-    fn is_algo_based(&self) -> bool {
-        self.algo_name.is_some()
-    }
-
-    #[inline]
-    fn regex_str(&self) -> &str {
-        self.regex.as_str()
     }
 }
 
@@ -730,14 +742,16 @@ fn process_algo_based_line(
 
 /// Check a digest checksum with non-algo based pre-treatment.
 fn process_non_algo_based_line(
-    i: usize,
+    line_number: usize,
     line_info: &LineInfo,
     cli_algo_name: &str,
     cli_algo_length: Option<usize>,
     opts: ChecksumOptions,
 ) -> Result<(), LineCheckError> {
     let mut filename_to_check = line_info.filename.as_slice();
-    if filename_to_check.starts_with(b"*") && i == 0 && line_info.regex_str() == SINGLE_SPACE_REGEX
+    if filename_to_check.starts_with(b"*")
+        && line_number == 0
+        && line_info.format == LineFormat::SingleSpace
     {
         // Remove the leading asterisk if present - only for the first line
         filename_to_check = &filename_to_check[1..];
@@ -774,7 +788,7 @@ fn process_checksum_line(
     cli_algo_name: Option<&str>,
     cli_algo_length: Option<usize>,
     opts: ChecksumOptions,
-    cached_regex: &mut Option<&'static Regex>,
+    cached_regex: &mut Option<LineFormat>,
 ) -> Result<(), LineCheckError> {
     let line_bytes = os_str_as_bytes(line)?;
 
@@ -786,7 +800,7 @@ fn process_checksum_line(
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
     if let Some(line_info) = LineInfo::parse(line, cached_regex) {
-        if line_info.is_algo_based() {
+        if line_info.format == LineFormat::AlgoBased {
             process_algo_based_line(&line_info, cli_algo_name, opts)
         } else if let Some(cli_algo) = cli_algo_name {
             // If we match a non-algo based regex, we expect a cli argument
@@ -1284,23 +1298,21 @@ mod tests {
         let line_algo_based =
             OsString::from("MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e");
         let line_info = LineInfo::parse(&line_algo_based, &mut cached_regex).unwrap();
-        assert!(line_info.is_algo_based());
         assert_eq!(line_info.algo_name.as_deref(), Some("MD5"));
         assert!(line_info.algo_bit_len.is_none());
         assert_eq!(line_info.filename, b"example.txt");
         assert_eq!(line_info.checksum, "d41d8cd98f00b204e9800998ecf8427e");
-        assert_eq!(line_info.regex_str(), ALGO_BASED_REGEX);
+        assert_eq!(line_info.format, LineFormat::AlgoBased);
         assert!(cached_regex.is_none());
 
         // Test double-space regex
         let line_double_space = OsString::from("d41d8cd98f00b204e9800998ecf8427e  example.txt");
         let line_info = LineInfo::parse(&line_double_space, &mut cached_regex).unwrap();
-        assert!(!line_info.is_algo_based());
         assert!(line_info.algo_name.is_none());
         assert!(line_info.algo_bit_len.is_none());
         assert_eq!(line_info.filename, b"example.txt");
         assert_eq!(line_info.checksum, "d41d8cd98f00b204e9800998ecf8427e");
-        assert_eq!(line_info.regex_str(), DOUBLE_SPACE_REGEX);
+        assert_eq!(line_info.format, LineFormat::DoubleSpace);
         assert!(cached_regex.is_some());
 
         cached_regex = None;
@@ -1308,12 +1320,11 @@ mod tests {
         // Test single-space regex
         let line_single_space = OsString::from("d41d8cd98f00b204e9800998ecf8427e example.txt");
         let line_info = LineInfo::parse(&line_single_space, &mut cached_regex).unwrap();
-        assert!(!line_info.is_algo_based());
         assert!(line_info.algo_name.is_none());
         assert!(line_info.algo_bit_len.is_none());
         assert_eq!(line_info.filename, b"example.txt");
         assert_eq!(line_info.checksum, "d41d8cd98f00b204e9800998ecf8427e");
-        assert_eq!(line_info.regex_str(), SINGLE_SPACE_REGEX);
+        assert_eq!(line_info.format, LineFormat::SingleSpace);
         assert!(cached_regex.is_some());
 
         cached_regex = None;
@@ -1328,7 +1339,7 @@ mod tests {
             OsString::from("   MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e");
         let res = LineInfo::parse(&line_algo_based_leading_space, &mut cached_regex);
         assert!(res.is_some());
-        assert_eq!(res.unwrap().regex_str(), ALGO_BASED_REGEX);
+        assert_eq!(line_info.format, LineFormat::AlgoBased);
         assert!(cached_regex.is_none());
 
         // Test trailing space after checksum line (should fail)
