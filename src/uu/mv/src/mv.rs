@@ -679,7 +679,7 @@ fn rename_with_fallback(
             };
 
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            fsxattr::apply_xattrs(to, xattrs).unwrap();
+            fsxattr::apply_xattrs(to, xattrs)?;
 
             if let Err(err) = result {
                 return match err.kind {
