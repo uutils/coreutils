@@ -103,7 +103,9 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     // displayed as "0.01", but "1e2" will be displayed as "100",
     // without a decimal point.
     let x: BigDecimal = {
-        let parsed_decimal = s.parse::<BigDecimal>().map_err(|_| ParseNumberError::Float)?;
+        let parsed_decimal = s
+            .parse::<BigDecimal>()
+            .map_err(|_| ParseNumberError::Float)?;
         if parsed_decimal == BigDecimal::zero() {
             BigDecimal::zero()
         } else {
@@ -212,7 +214,9 @@ fn parse_decimal_and_exponent(
     let num_digits_between_decimal_point_and_e = (j - (i + 1)) as i64;
     let exponent: i64 = s[j + 1..].parse().map_err(|_| ParseNumberError::Float)?;
     let val: BigDecimal = {
-        let parsed_decimal = s.parse::<BigDecimal>().map_err(|_| ParseNumberError::Float)?;
+        let parsed_decimal = s
+            .parse::<BigDecimal>()
+            .map_err(|_| ParseNumberError::Float)?;
         if parsed_decimal == BigDecimal::zero() {
             BigDecimal::zero()
         } else {
