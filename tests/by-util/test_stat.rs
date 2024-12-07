@@ -373,3 +373,42 @@ fn test_quoting_style_locale() {
         .stdout_is("\"'\"\n")
         .succeeded();
 }
+
+#[test]
+fn test_printf_octal_1() {
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = vec![0x0A, 0xFF]; // Newline + byte 255
+    ts.ucmd()
+        .args(&["--printf=\\012\\377", "."])
+        .succeeds()
+        .stdout_is_bytes(expected_stdout);
+}
+
+#[test]
+fn test_printf_octal_2() {
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = vec![b'.', 0x0A, b'a', 0xFF, b'b'];
+    ts.ucmd()
+        .args(&["--printf=.\\012a\\377b", "."])
+        .succeeds()
+        .stdout_is_bytes(expected_stdout);
+}
+
+#[test]
+fn test_printf_hex_3() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["--printf=\\x", "."])
+        .run()
+        .stderr_contains("warning: incomplete hex escape");
+}
+
+#[test]
+fn test_printf_bel_etc() {
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = vec![0x07, 0x08, 0x0C, 0x0A, 0x0D, 0x09]; // BEL, BS, FF, LF, CR, TAB
+    ts.ucmd()
+        .args(&["--printf=\\a\\b\\f\\n\\r\\t", "."])
+        .succeeds()
+        .stdout_is_bytes(expected_stdout);
+}

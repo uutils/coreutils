@@ -22,6 +22,7 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs::{FileType, Metadata};
+use std::io::Write;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
@@ -119,6 +120,7 @@ impl std::str::FromStr for QuotingStyle {
 #[derive(Debug, PartialEq, Eq)]
 enum Token {
     Char(char),
+    Byte(u8),
     Directive {
         flag: Flags,
         width: usize,
@@ -362,6 +364,7 @@ fn get_quoted_file_name(
 
 fn process_token_fs(t: &Token, meta: StatFs, display_name: &str) {
     match *t {
+        Token::Byte(byte) => write_raw_byte(byte),
         Token::Char(c) => print!("{c}"),
         Token::Directive {
             flag,
@@ -512,6 +515,10 @@ fn print_unsigned_hex(
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
+fn write_raw_byte(byte: u8) {
+    std::io::stdout().write_all(&[byte]).unwrap();
+}
+
 impl Stater {
     fn process_flags(chars: &[char], i: &mut usize, bound: usize, flag: &mut Flags) {
         while *i < bound {
@@ -614,33 +621,49 @@ impl Stater {
             return Token::Char('\\');
         }
         match chars[*i] {
-            'x' if *i + 1 < bound => {
-                if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
-                    *i += offset;
-                    Token::Char(c)
+            'a' => Token::Byte(0x07),   // BEL
+            'b' => Token::Byte(0x08),   // Backspace
+            'f' => Token::Byte(0x0C),   // Form feed
+            'n' => Token::Byte(0x0A),   // Line feed
+            'r' => Token::Byte(0x0D),   // Carriage return
+            't' => Token::Byte(0x09),   // Horizontal tab
+            '\\' => Token::Byte(b'\\'), // Backslash
+            '\'' => Token::Byte(b'\''), // Single quote
+            '"' => Token::Byte(b'"'),   // Double quote
+            '0'..='7' => {
+                // Parse octal escape sequence (up to 3 digits)
+                let mut value = 0u8;
+                let mut count = 0;
+                while *i < bound && count < 3 {
+                    if let Some(digit) = chars[*i].to_digit(8) {
+                        value = value * 8 + digit as u8;
+                        *i += 1;
+                        count += 1;
+                    } else {
+                        break;
+                    }
+                }
+                *i -= 1; // Adjust index to account for the outer loop increment
+                Token::Byte(value)
+            }
+            'x' => {
+                // Parse hexadecimal escape sequence
+                if *i + 1 < bound {
+                    if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
+                        *i += offset;
+                        Token::Byte(c as u8)
+                    } else {
+                        show_warning!("unrecognized escape '\\x'");
+                        Token::Byte(b'x')
+                    }
                 } else {
-                    show_warning!("unrecognized escape '\\x'");
-                    Token::Char('x')
+                    show_warning!("incomplete hex escape '\\x'");
+                    Token::Byte(b'x')
                 }
             }
-            '0'..='7' => {
-                let (c, offset) = format_str[*i..].scan_char(8).unwrap();
-                *i += offset - 1;
-                Token::Char(c)
-            }
-            '"' => Token::Char('"'),
-            '\\' => Token::Char('\\'),
-            'a' => Token::Char('\x07'),
-            'b' => Token::Char('\x08'),
-            'e' => Token::Char('\x1B'),
-            'f' => Token::Char('\x0C'),
-            'n' => Token::Char('\n'),
-            'r' => Token::Char('\r'),
-            't' => Token::Char('\t'),
-            'v' => Token::Char('\x0B'),
-            c => {
-                show_warning!("unrecognized escape '\\{}'", c);
-                Token::Char(c)
+            other => {
+                show_warning!("unrecognized escape '\\{}'", other);
+                Token::Byte(other as u8)
             }
         }
     }
@@ -773,7 +796,9 @@ impl Stater {
         from_user: bool,
     ) -> Result<(), i32> {
         match *t {
+            Token::Byte(byte) => write_raw_byte(byte),
             Token::Char(c) => print!("{c}"),
+
             Token::Directive {
                 flag,
                 width,
