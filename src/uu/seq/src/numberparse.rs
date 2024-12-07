@@ -102,7 +102,11 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     // displayed in decimal notation. For example, "1e-2" will be
     // displayed as "0.01", but "1e2" will be displayed as "100",
     // without a decimal point.
-    let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
+    let x: BigDecimal = if s.starts_with('0') {
+        BigDecimal::zero()
+    } else {
+        s.parse().map_err(|_| ParseNumberError::Float)?
+    };
 
     let num_integral_digits = if is_minus_zero_float(s, &x) {
         if exponent > 0 {
@@ -204,7 +208,11 @@ fn parse_decimal_and_exponent(
     // Because of the match guard, this subtraction will not underflow.
     let num_digits_between_decimal_point_and_e = (j - (i + 1)) as i64;
     let exponent: i64 = s[j + 1..].parse().map_err(|_| ParseNumberError::Float)?;
-    let val: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
+    let val: BigDecimal = if s.starts_with('0') {
+        BigDecimal::zero()
+    } else {
+        s.parse().map_err(|_| ParseNumberError::Float)?
+    };
 
     let num_integral_digits = {
         let minimum: usize = {

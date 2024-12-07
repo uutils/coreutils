@@ -837,3 +837,31 @@ fn test_invalid_format() {
         .no_stdout()
         .stderr_contains("format '%g%g' has too many % directives");
 }
+
+#[test]
+fn test_parse_scientific_zero() {
+    new_ucmd!()
+        .args(&["0e15", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+    new_ucmd!()
+        .args(&["0.0e15", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+    new_ucmd!()
+        .args(&["0", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+    new_ucmd!()
+        .args(&["-w", "0e15", "1"])
+        .succeeds()
+        .stdout_only("0000000000000000\n0000000000000001\n");
+    new_ucmd!()
+        .args(&["-w", "0.0e15", "1"])
+        .succeeds()
+        .stdout_only("0000000000000000\n0000000000000001\n");
+    new_ucmd!()
+        .args(&["-w", "0", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+}
