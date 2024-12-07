@@ -242,7 +242,7 @@ fn test_multi_files() {
 #[test]
 fn test_printf() {
     let args = [
-        "--printf=123%-# 15q\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.23m\\x12\\167\\132\\112\\n",
+        "--printf=123%-# 15q\\r\\\"\\\\\\a\\b\\x1B\\f\\x0B%+020.23m\\x12\\167\\132\\112\\n",
         "/",
     ];
     let ts = TestScenario::new(util_name!());

@@ -1173,7 +1173,7 @@ mod tests {
 
     #[test]
     fn printf_format() {
-        let s = r#"%-# 15a\t\r\"\\\a\b\e\f\v%+020.-23w\x12\167\132\112\n"#;
+        let s = r#"%-# 15a\t\r\"\\\a\b\x1B\f\x0B%+020.-23w\x12\167\132\112\n"#;
         let expected = vec![
             Token::Directive {
                 flag: Flags {
@@ -1186,15 +1186,15 @@ mod tests {
                 precision: None,
                 format: 'a',
             },
-            Token::Char('\t'),
-            Token::Char('\r'),
-            Token::Char('"'),
-            Token::Char('\\'),
-            Token::Char('\x07'),
-            Token::Char('\x08'),
-            Token::Char('\x1B'),
-            Token::Char('\x0C'),
-            Token::Char('\x0B'),
+            Token::Byte(b'\t'),
+            Token::Byte(b'\r'),
+            Token::Byte(b'"'),
+            Token::Byte(b'\\'),
+            Token::Byte(b'\x07'),
+            Token::Byte(b'\x08'),
+            Token::Byte(b'\x1B'),
+            Token::Byte(b'\x0C'),
+            Token::Byte(b'\x0B'),
             Token::Directive {
                 flag: Flags {
                     sign: true,
@@ -1205,11 +1205,11 @@ mod tests {
                 precision: None,
                 format: 'w',
             },
-            Token::Char('\x12'),
-            Token::Char('w'),
-            Token::Char('Z'),
-            Token::Char('J'),
-            Token::Char('\n'),
+            Token::Byte(b'\x12'),
+            Token::Byte(b'w'),
+            Token::Byte(b'Z'),
+            Token::Byte(b'J'),
+            Token::Byte(b'\n'),
         ];
         assert_eq!(&expected, &Stater::generate_tokens(s, true).unwrap());
     }
