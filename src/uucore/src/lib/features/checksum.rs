@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore anotherfile invalidchecksum regexes JWZG FFFD xffname prefixfilename
+// spell-checker:ignore anotherfile invalidchecksum regexes JWZG FFFD xffname prefixfilename bytelen bitlen hexdigit
 
 use data_encoding::BASE64;
 use lazy_static::lazy_static;
@@ -515,22 +515,43 @@ fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
 }
 
 /// Extract the expected digest from the checksum string
-fn get_expected_digest_as_hex_string(line_info: &LineInfo) -> Option<Cow<str>> {
+fn get_expected_digest_as_hex_string(
+    line_info: &LineInfo,
+    len_hint: Option<usize>,
+) -> Option<Cow<str>> {
     let ck = &line_info.checksum;
 
-    if line_info.regex_str() == ALGO_BASED_REGEX_BASE64 {
-        BASE64
-            .decode(ck.as_bytes())
-            .map(hex::encode)
-            .map(Cow::Owned)
-            .ok()
-    } else if ck.len() % 2 == 0 {
-        Some(Cow::Borrowed(ck))
-    } else {
+    // TODO MSRV 1.82, replace `is_some_and` with `is_none_or`
+    // to improve readability. This closure returns True if a length hint provided
+    // and the argument isn't the same as the hint.
+    let against_hint = |len| len_hint.is_some_and(|l| l != len);
+
+    if ck.len() % 2 != 0 {
         // If the length of the digest is not a multiple of 2, then it
         // must be improperly formatted (1 hex digit is 2 characters)
-        None
+        return None;
     }
+
+    // If the digest can be decoded as hexadecimal AND it length match the
+    // one expected (in case it's given), just go with it.
+    if ck.as_bytes().iter().all(u8::is_ascii_hexdigit) && !against_hint(ck.len()) {
+        return Some(Cow::Borrowed(ck));
+    }
+
+    // If hexadecimal digest fails for any reason, interpret the digest as base 64.
+    BASE64
+        .decode(ck.as_bytes()) // Decode the string as encoded base64
+        .map(hex::encode) // Encode it back as hexadecimal
+        .map(Cow::<str>::Owned)
+        .ok()
+        .and_then(|s| {
+            // Check the digest length
+            if !against_hint(s.len()) {
+                Some(s)
+            } else {
+                None
+            }
+        })
 }
 
 /// Returns a reader that reads from the specified file, or from stdin if `filename_to_check` is "-".
@@ -604,12 +625,11 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
     }
 }
 
-/// Extracts the algorithm name and length from the regex captures if the algo-based format is matched.
+/// Gets the algorithm name and length from the `LineInfo` if the algo-based format is matched.
 fn identify_algo_name_and_length(
     line_info: &LineInfo,
     algo_name_input: Option<&str>,
 ) -> Option<(String, Option<usize>)> {
-    // When the algo-based format is matched, extract details from regex captures
     let algorithm = line_info
         .algo_name
         .clone()
@@ -628,15 +648,20 @@ fn identify_algo_name_and_length(
         return None;
     }
 
-    let bits = line_info.algo_bitlen.map_or(Some(None), |bits| {
-        if bits % 8 == 0 {
-            Some(Some(bits / 8))
-        } else {
-            None // Return None to signal a divisibility issue
+    let bytes = if let Some(bitlen) = line_info.algo_bit_len {
+        if bitlen % 8 != 0 {
+            // The given length is wrong
+            return None;
         }
-    })?;
+        Some(bitlen / 8)
+    } else if algorithm == ALGORITHM_OPTIONS_BLAKE2B {
+        // Default length with BLAKE2b,
+        Some(64)
+    } else {
+        None
+    };
 
-    Some((algorithm, bits))
+    Some((algorithm, bytes))
 }
 
 /// Given a filename and an algorithm, compute the digest and compare it with
@@ -684,13 +709,21 @@ fn process_algo_based_line(
     opts: ChecksumOptions,
 ) -> Result<(), LineCheckError> {
     let filename_to_check = line_info.filename.as_slice();
-    let expected_checksum =
-        get_expected_digest_as_hex_string(line_info).ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    let (algo_name, algo_bitlen) = identify_algo_name_and_length(line_info, cli_algo_name)
+    let (algo_name, algo_byte_len) = identify_algo_name_and_length(line_info, cli_algo_name)
         .ok_or(LineCheckError::ImproperlyFormatted)?;
 
-    let algo = detect_algo(&algo_name, algo_bitlen)?;
+    // If the digest bitlen is known, we can check the format of the expected
+    // checksum with it.
+    let digest_char_length_hint = match (algo_name.as_str(), algo_byte_len) {
+        (ALGORITHM_OPTIONS_BLAKE2B, Some(bytelen)) => Some(bytelen * 2),
+        _ => None,
+    };
+
+    let expected_checksum = get_expected_digest_as_hex_string(line_info, digest_char_length_hint)
+        .ok_or(LineCheckError::ImproperlyFormatted)?;
+
+    let algo = detect_algo(&algo_name, algo_byte_len)?;
 
     compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
 }
@@ -709,12 +742,12 @@ fn process_non_algo_based_line(
         // Remove the leading asterisk if present - only for the first line
         filename_to_check = &filename_to_check[1..];
     }
-    let expected_checksum =
-        get_expected_digest_as_hex_string(line_info).ok_or(LineCheckError::ImproperlyFormatted)?;
+    let expected_checksum = get_expected_digest_as_hex_string(line_info, None)
+        .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     // When a specific algorithm name is input, use it and use the provided bits
     // except when dealing with blake2b, where we will detect the length
-    let (algo_name, algo_bitlen) = if cli_algo_name == ALGORITHM_OPTIONS_BLAKE2B {
+    let (algo_name, algo_byte_len) = if cli_algo_name == ALGORITHM_OPTIONS_BLAKE2B {
         // division by 2 converts the length of the Blake2b checksum from hexadecimal
         // characters to bytes, as each byte is represented by two hexadecimal characters.
         let length = Some(expected_checksum.len() / 2);
@@ -723,7 +756,7 @@ fn process_non_algo_based_line(
         (cli_algo_name.to_lowercase(), cli_algo_length)
     };
 
-    let algo = detect_algo(&algo_name, algo_bitlen)?;
+    let algo = detect_algo(&algo_name, algo_byte_len)?;
 
     compute_and_check_digest_from_file(filename_to_check, &expected_checksum, algo, opts)
 }
@@ -1312,7 +1345,7 @@ mod tests {
         let mut cached_regex = None;
         let line_info = LineInfo::parse(&line, &mut cached_regex).unwrap();
 
-        let result = get_expected_digest_as_hex_string(&line_info);
+        let result = get_expected_digest_as_hex_string(&line_info, None);
 
         assert_eq!(
             result.unwrap(),
@@ -1327,7 +1360,7 @@ mod tests {
         let mut cached_regex = None;
         let line_info = LineInfo::parse(&line, &mut cached_regex).unwrap();
 
-        let result = get_expected_digest_as_hex_string(&line_info);
+        let result = get_expected_digest_as_hex_string(&line_info, None);
 
         assert!(result.is_none());
     }
