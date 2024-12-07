@@ -1337,8 +1337,7 @@ mod tests {
         // Test leading space before checksum line
         let line_algo_based_leading_space =
             OsString::from("   MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e");
-        let res = LineInfo::parse(&line_algo_based_leading_space, &mut cached_regex);
-        assert!(res.is_some());
+        let line_info = LineInfo::parse(&line_algo_based_leading_space, &mut cached_regex).unwrap();
         assert_eq!(line_info.format, LineFormat::AlgoBased);
         assert!(cached_regex.is_none());
 

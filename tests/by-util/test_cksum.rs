@@ -1480,7 +1480,6 @@ mod check_utf8 {
     }
 }
 
-#[ignore = "not yet implemented"]
 #[test]
 fn test_check_blake_length_guess() {
     let correct_lines = [
@@ -1523,7 +1522,6 @@ fn test_check_blake_length_guess() {
         .stderr_contains("foo.sums: no properly formatted checksum lines found");
 }
 
-#[ignore = "not yet implemented"]
 #[test]
 fn test_check_confusing_base64() {
     let cksum = "BLAKE2b-48 (foo.dat) = fc1f97C4";
