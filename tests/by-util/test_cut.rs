@@ -288,7 +288,7 @@ fn test_newline_delimited() {
         .args(&["-f", "1", "-d", "\n"])
         .pipe_in("a:1\nb:")
         .succeeds()
-        .stdout_only_bytes("a:1\n");
+        .stdout_only_bytes("a:1\nb:\n");
 }
 
 #[test]
@@ -328,4 +328,40 @@ fn test_8bit_non_utf8_delimiter() {
         .args(&["--out=_", "-f2,3", "8bit-delim.txt"])
         .succeeds()
         .stdout_check(|out| out == "b_c\n".as_bytes());
+}
+
+#[test]
+fn test_newline_preservation_with_f1_option() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("1", "a\nb");
+    let expected = "a\nb\n";
+    ucmd.args(&["-f1-", "1"]).succeeds().stdout_is(expected);
+}
+
+#[test]
+fn test_cut_handles_empty_lines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("1", "a\nb");
+    at.write("2", "a\nb\n");
+    ucmd.args(&["-f1-", "1"]).succeeds().stdout_is_fixture("2");
+}
+
+#[ignore = "Not yet implemented"]
+#[test]
+fn test_output_delimiter_with_character_ranges() {
+    new_ucmd!()
+        .args(&["-c2-3,4-", "--output-delim=:"])
+        .pipe_in("abcdefg\n")
+        .succeeds()
+        .stdout_only("bc:defg\n");
+}
+
+#[ignore = "Not yet implemented"]
+#[test]
+fn test_output_delimiter_with_adjacent_ranges() {
+    new_ucmd!()
+        .args(&["-b1-2,3-4", "--output-d=:"])
+        .pipe_in("abcd\n")
+        .succeeds()
+        .stdout_only("ab:cd\n");
 }
