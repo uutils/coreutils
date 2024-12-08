@@ -256,11 +256,10 @@ fn test_pipe_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("FIFO");
     ucmd.arg("FIFO")
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_contains("fifo")
-        .stdout_contains("File: FIFO")
-        .succeeded();
+        .stdout_contains("File: FIFO");
 }
 
 #[test]
@@ -275,19 +274,17 @@ fn test_stdin_pipe_fifo1() {
     new_ucmd!()
         .arg("-")
         .set_stdin(std::process::Stdio::piped())
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_contains("fifo")
-        .stdout_contains("File: -")
-        .succeeded();
+        .stdout_contains("File: -");
     new_ucmd!()
         .args(&["-L", "-"])
         .set_stdin(std::process::Stdio::piped())
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_contains("fifo")
-        .stdout_contains("File: -")
-        .succeeded();
+        .stdout_contains("File: -");
 }
 
 #[test]
@@ -299,11 +296,10 @@ fn test_stdin_pipe_fifo2() {
     new_ucmd!()
         .arg("-")
         .set_stdin(std::process::Stdio::null())
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_contains("character special file")
-        .stdout_contains("File: -")
-        .succeeded();
+        .stdout_contains("File: -");
 }
 
 #[test]
@@ -339,11 +335,10 @@ fn test_stdin_redirect() {
     ts.ucmd()
         .arg("-")
         .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_contains("regular empty file")
-        .stdout_contains("File: -")
-        .succeeded();
+        .stdout_contains("File: -");
 }
 
 #[test]
@@ -361,17 +356,13 @@ fn test_quoting_style_locale() {
     ts.ucmd()
         .env("QUOTING_STYLE", "locale")
         .args(&["-c", "%N", "'"])
-        .run()
-        .no_stderr()
-        .stdout_is("'\\''\n")
-        .succeeded();
+        .succeeds()
+        .stdout_only("'\\''\n");
 
     ts.ucmd()
         .args(&["-c", "%N", "'"])
-        .run()
-        .no_stderr()
-        .stdout_is("\"'\"\n")
-        .succeeded();
+        .succeeds()
+        .stdout_only("\"'\"\n");
 }
 
 #[test]
@@ -395,11 +386,11 @@ fn test_printf_octal_2() {
 }
 
 #[test]
-fn test_printf_hex_3() {
+fn test_printf_incomplete_hex() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()
         .args(&["--printf=\\x", "."])
-        .run()
+        .succeeds()
         .stderr_contains("warning: incomplete hex escape");
 }
 
