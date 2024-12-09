@@ -184,7 +184,7 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     let mut out = BufWriter::new(out.lock());
 
     // The number of bytes in the line separator.
-    let slen = separator.as_bytes().len();
+    let slen = separator.len();
 
     // The index of the start of the next line in the `data`.
     //
