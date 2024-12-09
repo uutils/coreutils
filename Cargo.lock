@@ -2743,7 +2743,7 @@ version = "0.0.28"
 dependencies = [
  "clap",
  "tempfile",
- "unicode-width 0.1.13",
+ "unicode-width 0.2.0",
  "uucore",
 ]
 
@@ -2806,7 +2806,7 @@ name = "uu_expand"
 version = "0.0.28"
 dependencies = [
  "clap",
- "unicode-width 0.1.13",
+ "unicode-width 0.2.0",
  "uucore",
 ]
 
@@ -2848,7 +2848,7 @@ name = "uu_fmt"
 version = "0.0.28"
 dependencies = [
  "clap",
- "unicode-width 0.1.13",
+ "unicode-width 0.2.0",
  "uucore",
 ]
 
@@ -3033,7 +3033,7 @@ dependencies = [
  "crossterm",
  "nix",
  "unicode-segmentation",
- "unicode-width 0.1.13",
+ "unicode-width 0.2.0",
  "uucore",
 ]
 
@@ -3276,7 +3276,7 @@ dependencies = [
  "rayon",
  "self_cell",
  "tempfile",
- "unicode-width 0.1.13",
+ "unicode-width 0.2.0",
  "uucore",
 ]
 
@@ -3468,7 +3468,7 @@ name = "uu_unexpand"
 version = "0.0.28"
 dependencies = [
  "clap",
- "unicode-width 0.1.13",
+ "unicode-width 0.2.0",
  "uucore",
 ]
 
@@ -3526,7 +3526,7 @@ dependencies = [
  "libc",
  "nix",
  "thiserror 2.0.6",
- "unicode-width 0.1.13",
+ "unicode-width 0.2.0",
  "uucore",
 ]
 
