@@ -97,10 +97,12 @@ pub enum OutputType {
     Unknown,
 }
 
+#[derive(Default)]
 enum QuotingStyle {
     Locale,
     Shell,
-    Default,
+    #[default]
+    ShellEscapeAlways,
     Quote,
 }
 
@@ -111,6 +113,7 @@ impl std::str::FromStr for QuotingStyle {
         match s {
             "locale" => Ok(QuotingStyle::Locale),
             "shell" => Ok(QuotingStyle::Shell),
+            "shell-escape-always" => Ok(QuotingStyle::ShellEscapeAlways),
             // The others aren't exposed to the user
             _ => Err(format!("Invalid quoting style: {}", s)),
         }
@@ -324,7 +327,7 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
             let escaped = file_name.replace('\'', r"\'");
             format!("'{}'", escaped)
         }
-        QuotingStyle::Default => format!("\"{}\"", file_name),
+        QuotingStyle::ShellEscapeAlways => format!("\"{}\"", file_name),
         QuotingStyle::Quote => file_name.to_string(),
     }
 }
@@ -338,7 +341,7 @@ fn get_quoted_file_name(
     let quoting_style = env::var("QUOTING_STYLE")
         .ok()
         .and_then(|style| style.parse().ok())
-        .unwrap_or(QuotingStyle::Default);
+        .unwrap_or_default();
 
     if file_type.is_symlink() {
         let quoted_display_name = quote_file_name(display_name, &quoting_style);
@@ -362,7 +365,7 @@ fn get_quoted_file_name(
     }
 }
 
-fn process_token_fs(t: &Token, meta: StatFs, display_name: &str) {
+fn process_token_filesystem(t: &Token, meta: StatFs, display_name: &str) {
     match *t {
         Token::Byte(byte) => write_raw_byte(byte),
         Token::Char(c) => print!("{c}"),
@@ -943,7 +946,7 @@ impl Stater {
 
                     // Usage
                     for t in tokens {
-                        process_token_fs(t, meta, &display_name);
+                        process_token_filesystem(t, meta, &display_name);
                     }
                 }
                 Err(e) => {
