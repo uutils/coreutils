@@ -3503,6 +3503,7 @@ dependencies = [
  "glob",
  "hex",
  "itertools",
+ "lazy_static",
  "libc",
  "md-5",
  "memchr",
