@@ -38,7 +38,7 @@ pub mod num_parser;
 mod spec;
 
 pub use argument::*;
-use spec::Spec;
+pub use spec::Spec;
 use std::{
     error::Error,
     fmt::Display,
