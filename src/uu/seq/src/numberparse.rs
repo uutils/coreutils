@@ -341,7 +341,7 @@ impl FromStr for PreciseNumber {
         // Check if the string seems to be in hexadecimal format.
         //
         // May be 0x123 or -0x123, so the index `i` may be either 0 or 1.
-        if let Some(i) = s.to_lowercase().find("0x") {
+        if let Some(i) = s.find("0x").or_else(|| s.find("0X")) {
             if i <= 1 {
                 return parse_hexadecimal(s);
             }
