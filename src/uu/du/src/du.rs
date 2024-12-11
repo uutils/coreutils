@@ -533,7 +533,7 @@ impl StatPrinter {
 
                         if !self
                             .threshold
-                            .map_or(false, |threshold| threshold.should_exclude(size))
+                            .is_some_and(|threshold| threshold.should_exclude(size))
                             && self
                                 .max_depth
                                 .map_or(true, |max_depth| stat_info.depth <= max_depth)
