@@ -25,6 +25,7 @@ dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
 wild = "2.2.1"
 glob = { workspace = true }
+lazy_static = "1.4.0"
 # * optional
 itertools = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
