@@ -1417,3 +1417,34 @@ fn repeat_everything() {
     assert_eq!(at.read("xxz_004"), generate(37, 44 + 1));
     assert_eq!(at.read("xxz_005"), generate(46, 50 + 1));
 }
+
+#[cfg(unix)]
+#[test]
+fn test_named_pipe_input_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let mut fifo_writer =
+        create_named_pipe_with_writer(&at.plus_as_string("fifo"), &generate(1, 51));
+
+    let result = ucmd.args(&["fifo", "10"]).succeeds();
+    fifo_writer.kill().unwrap();
+    fifo_writer.wait().unwrap();
+    result.stdout_only("18\n123\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 2);
+    assert_eq!(at.read("xx00"), generate(1, 10));
+    assert_eq!(at.read("xx01"), generate(10, 51));
+}
+
+#[cfg(unix)]
+fn create_named_pipe_with_writer(path: &str, data: &str) -> std::process::Child {
+    nix::unistd::mkfifo(path, nix::sys::stat::Mode::S_IRWXU).unwrap();
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("echo -n '{}' > {path}", data))
+        .spawn()
+        .unwrap()
+}
