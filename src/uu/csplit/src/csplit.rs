@@ -582,12 +582,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         let file = File::open(file_name)
             .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
-        let file_metadata = file
-            .metadata()
-            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
-        if !file_metadata.is_file() {
-            return Err(CsplitError::NotRegularFile(file_name.to_string()).into());
-        }
         Ok(csplit(&options, &patterns, BufReader::new(file))?)
     }
 }
