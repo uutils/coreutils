@@ -21,7 +21,7 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     cmp::Reverse,
     error::Error,
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     fmt::{Display, Write as FmtWrite},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{stdout, BufWriter, ErrorKind, Stdout, Write},
@@ -55,7 +55,7 @@ use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
-use uucore::quoting_style::{escape_dir_name, escape_name, QuotingStyle};
+use uucore::quoting_style::QuotingStyle;
 use uucore::{
     display::Quotable,
     error::{set_exit_code, UError, UResult},
@@ -3541,4 +3541,16 @@ fn calculate_padding_collection(
     }
 
     padding_collections
+}
+
+fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+    uucore::quoting_style::escape_name(name, style)
+        .to_string_lossy()
+        .to_string()
+}
+
+fn escape_dir_name(name: &OsStr, style: &QuotingStyle) -> String {
+    uucore::quoting_style::escape_dir_name(name, style)
+        .to_string_lossy()
+        .to_string()
 }
