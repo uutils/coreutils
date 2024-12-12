@@ -1448,3 +1448,14 @@ fn create_named_pipe_with_writer(path: &str, data: &str) -> std::process::Child 
         .spawn()
         .unwrap()
 }
+
+#[test]
+fn test_directory_input_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("test_directory");
+
+    ucmd.args(&["test_directory", "1"])
+        .fails()
+        .code_is(1)
+        .stderr_only("csplit: read error: Is a directory\n");
+}
