@@ -16,6 +16,7 @@ use num_traits::Num;
 use num_traits::Zero;
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
+use crate::floatparse;
 use crate::number::PreciseNumber;
 
 /// An error returned when parsing a number fails.
@@ -296,6 +297,14 @@ fn parse_decimal_and_exponent(
 /// assert_eq!(actual, expected);
 /// ```
 fn parse_hexadecimal(s: &str) -> Result<PreciseNumber, ParseNumberError> {
+    if s.find(['.', 'p', 'P']).is_some() {
+        floatparse::parse_hexadecimal_float(s)
+    } else {
+        parse_hexadecimal_integer(s)
+    }
+}
+
+fn parse_hexadecimal_integer(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     let (is_neg, s) = if s.starts_with('-') {
         (true, &s[3..])
     } else {
