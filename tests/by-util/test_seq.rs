@@ -698,7 +698,7 @@ fn test_parse_error_hex() {
     new_ucmd!()
         .arg("0xlmnop")
         .fails()
-        .usage_error("invalid hexadecimal argument: '0xlmnop'");
+        .usage_error("invalid floating point argument: '0xlmnop'");
 }
 
 #[test]
