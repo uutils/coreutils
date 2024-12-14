@@ -15,6 +15,7 @@ use uucore::{format_usage, help_about, help_usage};
 
 mod error;
 mod extendedbigdecimal;
+mod floatparse;
 // public to allow fuzzing
 #[cfg(fuzzing)]
 pub mod number;
