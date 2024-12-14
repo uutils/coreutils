@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore extendedbigdecimal bigdecimal numberparse
+// spell-checker:ignore extendedbigdecimal bigdecimal numberparse floatparse
 //! Parsing numbers for use in `seq`.
 //!
 //! This module provides an implementation of [`FromStr`] for the
