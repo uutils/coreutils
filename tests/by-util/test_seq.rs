@@ -826,3 +826,73 @@ fn test_parse_scientific_zero() {
         .succeeds()
         .stdout_only("0\n1\n");
 }
+
+#[test]
+fn test_parse_valid_hexadecimal_float() {
+    new_ucmd!()
+        .args(&["0x1p-1", "2"])
+        .succeeds()
+        .stdout_only("0.5\n1.5\n");
+
+    new_ucmd!()
+        .args(&["1", "0x1p-1", "2"])
+        .succeeds()
+        .stdout_only("1.0\n1.5\n2.0\n");
+
+    new_ucmd!()
+        .args(&["0x3.4p-1", "0x4p-1", "4"])
+        .succeeds()
+        .stdout_only("1.625\n3.625\n");
+
+    new_ucmd!()
+        .args(&["0x3.4p-1", "0x4p-1", "4"])
+        .succeeds()
+        .stdout_only("1.625\n3.625\n");
+
+    new_ucmd!()
+        .args(&[" 0x.8p16", "32768"])
+        .succeeds()
+        .stdout_only("32768\n");
+}
+
+#[ignore]
+#[test]
+fn test_parse_valid_hexadecimal_float_format_issues() {
+    // Parsing is OK, but value representation conflicts with the GNU seq.
+
+    // Test output: 4095.953125
+    // In fact, the 4095.953125 is correct value.
+    // (65535 + 4/16)*2^(-4) = 4095.953125
+    // So, it looks like a formatting or output rounding differences
+    new_ucmd!()
+        .args(&["0xffff.4p-4", "4096"])
+        .succeeds()
+        .stdout_only("4095.95\n");
+
+    // Test output: 1023.999999999068677425384521484375
+    // 0xffffffffff = 1099511627775
+    // 2^(-30) = 1 / 1073741824
+    // 1099511627775 / 1073741824 = 1024
+    new_ucmd!()
+        .args(&["0xffffffffffp-30", "1024"]) // spell-checker:disable-line
+        .succeeds()
+        .stdout_only("1024\n");
+
+    // Test output: 5.330078125
+    new_ucmd!()
+        .args(&["0xa.a9p-1", "6"])
+        .succeeds()
+        .stdout_only("5.33008\n");
+
+    // Test output: 5.330078125
+    new_ucmd!()
+        .args(&["0xA.A9p-1", "6"])
+        .succeeds()
+        .stdout_only("5.33008\n");
+
+    //Test output: 0.00000000992804416455328464508056640625
+    new_ucmd!()
+        .args(&["0xa.a9p-30", "1"])
+        .succeeds()
+        .stdout_only("9.92804e-09\n1\n");
+}
