@@ -314,7 +314,7 @@ sed -i -e "s|mv: cannot overwrite 'a/t': Directory not empty|mv: cannot move 'b/
 # disable these test cases
 sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/printf/printf-cov.pl
 
-sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du: option requires an argument/error: a value is required for '--threshold <SIZE>' but none was supplied/" -e "/Try 'du --help' for more information./d" tests/du/threshold.sh
+sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du: option requires an argument/error: a value is required for '--threshold <SIZE>' but none was supplied/" -e "s/Try 'du --help' for more information./\nFor more information, try '--help'./" tests/du/threshold.sh
 
 # Remove the extra output check
 sed -i -e "s|Try '\$prog --help' for more information.\\\n||" tests/du/files0-from.pl

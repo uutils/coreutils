@@ -48,12 +48,12 @@ fn test_hex_rejects_sign_after_identifier() {
         .args(&["-0x-123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("unexpected argument '-0' found");
+        .usage_error("invalid floating point argument: '-0x-123ABC'");
     new_ucmd!()
         .args(&["-0x+123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("unexpected argument '-0' found");
+        .usage_error("invalid floating point argument: '-0x+123ABC'");
 }
 
 #[test]

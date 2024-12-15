@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) extendedbigdecimal numberparse
+use std::ffi::OsString;
 use std::io::{stdout, ErrorKind, Write};
 
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -47,9 +48,33 @@ struct SeqOptions<'a> {
 /// The elements are (first, increment, last).
 type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 
+// Turn short args with attached value, for example "-s,", into two args "-s" and "," to make
+// them work with clap.
+fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
+    let mut v: Vec<OsString> = Vec::new();
+
+    for arg in args {
+        let bytes = arg.as_encoded_bytes();
+
+        if bytes.len() > 2
+            && (bytes.starts_with(b"-f") || bytes.starts_with(b"-s") || bytes.starts_with(b"-t"))
+        {
+            let (short_arg, value) = bytes.split_at(2);
+            // SAFETY:
+            // Both `short_arg` and `value` only contain content that originated from `OsStr::as_encoded_bytes`
+            v.push(unsafe { OsString::from_encoded_bytes_unchecked(short_arg.to_vec()) });
+            v.push(unsafe { OsString::from_encoded_bytes_unchecked(value.to_vec()) });
+        } else {
+            v.push(arg);
+        }
+    }
+
+    v.into_iter()
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from(split_short_args_with_value(args))?;
 
     let numbers_option = matches.get_many::<String>(ARG_NUMBERS);
 
@@ -138,7 +163,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .trailing_var_arg(true)
-        .allow_negative_numbers(true)
         .infer_long_args(true)
         .version(crate_version!())
         .about(ABOUT)
@@ -169,7 +193,10 @@ pub fn uu_app() -> Command {
                 .help("use printf style floating-point FORMAT"),
         )
         .arg(
+            // we use allow_hyphen_values instead of allow_negative_numbers because clap removed
+            // the support for "exotic" negative numbers like -.1 (see https://github.com/clap-rs/clap/discussions/5837)
             Arg::new(ARG_NUMBERS)
+                .allow_hyphen_values(true)
                 .action(ArgAction::Append)
                 .num_args(1..=3),
         )
