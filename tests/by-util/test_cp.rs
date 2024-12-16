@@ -4265,6 +4265,29 @@ fn test_cp_debug_reflink_never_sparse_always_non_sparse_file_with_long_zero_sequ
     );
 }
 
+#[cfg(all(unix, not(target_os = "freebsd")))]
+#[test]
+fn test_copy_fifo() {
+    use std::fs;
+
+    let scenario: TestScenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+    unsafe { libc::umask(0o075) };
+    at.mkfifo("fifo");
+    let mut ucmd = scenario.ucmd();
+    ucmd.args(&["-a", "--no-preserve=mode", "fifo", "fifo_copy"])
+        .succeeds();
+    let fifo_metadata = fs::metadata(at.plus("fifo")).expect("Failed to fetch metadata for fifo");
+    let fifo_copy_metadata =
+        fs::metadata(at.plus("fifo_copy")).expect("Failed to fetch metadata for fifo_copy");
+
+    let fifo_permissions = format!("{:o}", fifo_metadata.permissions().mode());
+    let fifo_copy_permissions = format!("{:o}", fifo_copy_metadata.permissions().mode());
+
+    assert_eq!(fifo_permissions, "10600");
+    assert_eq!(fifo_copy_permissions, "10602");
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_always_sparse_virtual_file() {
