@@ -338,14 +338,6 @@ fn test_newline_preservation_with_f1_option() {
     ucmd.args(&["-f1-", "1"]).succeeds().stdout_is(expected);
 }
 
-#[test]
-fn test_cut_handles_empty_lines() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("1", "a\nb");
-    at.write("2", "a\nb\n");
-    ucmd.args(&["-f1-", "1"]).succeeds().stdout_is_fixture("2");
-}
-
 #[ignore = "Not yet implemented"]
 #[test]
 fn test_output_delimiter_with_character_ranges() {
