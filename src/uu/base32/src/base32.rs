@@ -5,6 +5,7 @@
 
 pub mod base_common;
 
+use base_common::ReadSeek;
 use clap::Command;
 use uucore::{encoding::Format, error::UResult, help_about, help_usage};
 
@@ -17,7 +18,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let config = base_common::parse_base_cmd_args(args, ABOUT, USAGE)?;
 
-    let mut input = base_common::get_input(&config)?;
+    let mut input: Box<dyn ReadSeek> = base_common::get_input(&config)?;
 
     base_common::handle_input(&mut input, format, config)
 }
