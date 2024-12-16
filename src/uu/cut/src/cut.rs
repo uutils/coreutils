@@ -131,8 +131,9 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
 
         if delim_search.peek().is_none() {
             if !only_delimited {
+                // Always write the entire line, even if it doesn't end with `newline_char`
                 out.write_all(line)?;
-                if line[line.len() - 1] != newline_char {
+                if line.is_empty() || line[line.len() - 1] != newline_char {
                     out.write_all(&[newline_char])?;
                 }
             }
@@ -213,8 +214,12 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
         let mut print_delim = false;
 
         if delim_search.peek().is_none() {
-            if !only_delimited && line[line.len() - 1] == newline_char {
+            if !only_delimited {
+                // Always write the entire line, even if it doesn't end with `newline_char`
                 out.write_all(line)?;
+                if line.is_empty() || line[line.len() - 1] != newline_char {
+                    out.write_all(&[newline_char])?;
+                }
             }
 
             return Ok(true);
