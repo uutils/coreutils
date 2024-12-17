@@ -6,12 +6,15 @@
 
 use libc::{SEEK_DATA, SEEK_HOLE};
 use std::fs::{File, OpenOptions};
-use std::io::Read;
+use std::io::{Read, Write};
+use std::os::fd::AsFd;
 use std::os::unix::fs::FileExt;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
+
+use uucore::splice::write_fast_using_splice;
 
 use quick_error::ResultExt;
 
@@ -220,8 +223,8 @@ fn check_dest_is_fifo(dest: &Path) -> bool {
     }
 }
 
-/// Copy the contents of the given source FIFO to the given file.
-fn copy_fifo_contents<P>(source: P, dest: P) -> std::io::Result<u64>
+/// Copy the contents of the given source stream to a given file.
+fn copy_stream_contents<P>(is_pipe: bool, source: P, dest: P) -> std::io::Result<u64>
 where
     P: AsRef<Path>,
 {
@@ -250,23 +253,50 @@ where
         .write(true)
         .mode(mode)
         .open(&dest)?;
-    let num_bytes_copied = std::io::copy(&mut src_file, &mut dst_file)?;
-    dst_file.set_permissions(src_file.metadata()?.permissions())?;
-    Ok(num_bytes_copied)
+
+    let num_bytes_copied;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        // If we're on Linux or Android, try to use the splice() system call
+        // for faster writing. If it works, we're done.
+        let res = write_fast_using_splice(&src_file, &dst_file.as_fd())?;
+        if !res.1 {
+            num_bytes_copied = res.0;
+        } else {
+            num_bytes_copied = std::io::copy(&mut src_file, &mut dst_file)?
+                .try_into()
+                .unwrap();
+            dst_file.flush()?;
+        }
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        num_bytes_copied = std::io::copy(&mut src_file, &mut dst_file)?
+            .try_into()
+            .unwrap();
+    }
+
+    // If stream is a character or block device, we don't need to take care of its permissions for
+    // now. See: https://github.com/uutils/coreutils/pull/4211
+    if is_pipe {
+        dst_file.set_permissions(src_file.metadata()?.permissions())?;
+    }
+
+    Ok(num_bytes_copied.try_into().unwrap())
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
-/// The `source_is_fifo` flag must be set to `true` if and only if
-/// `source` is a FIFO (also known as a named pipe). In this case,
-/// copy-on-write is not possible, so we copy the contents using
-/// [`std::io::copy`].
+/// The `source_is_stream` flag must be set to `true` if and only if
+/// `source` is a stream (i.e FIFOs, block/character devices).
 pub(crate) fn copy_on_write(
     source: &Path,
     dest: &Path,
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
     context: &str,
+    source_is_stream: bool,
     source_is_fifo: bool,
 ) -> CopyResult<CopyDebug> {
     let mut copy_debug = CopyDebug {
@@ -279,10 +309,10 @@ pub(crate) fn copy_on_write(
             copy_debug.sparse_detection = SparseDebug::Zeros;
             // Default SparseDebug val for SparseMode::Always
             copy_debug.reflink = OffloadReflinkDebug::No;
-            if source_is_fifo {
+            if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
 
-                copy_fifo_contents(source, dest).map(|_| ())
+                copy_stream_contents(source_is_fifo, source, dest).map(|_| ())
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_never_sparse_always(source, dest);
@@ -300,10 +330,10 @@ pub(crate) fn copy_on_write(
         (ReflinkMode::Never, SparseMode::Never) => {
             copy_debug.reflink = OffloadReflinkDebug::No;
 
-            if source_is_fifo {
+            if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
 
-                copy_fifo_contents(source, dest).map(|_| ())
+                copy_stream_contents(source_is_fifo, source, dest).map(|_| ())
             } else {
                 let result = handle_reflink_never_sparse_never(source);
                 if let Ok(debug) = result {
@@ -315,9 +345,9 @@ pub(crate) fn copy_on_write(
         (ReflinkMode::Never, SparseMode::Auto) => {
             copy_debug.reflink = OffloadReflinkDebug::No;
 
-            if source_is_fifo {
+            if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_fifo_contents(source, dest).map(|_| ())
+                copy_stream_contents(source_is_fifo, source, dest).map(|_| ())
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_never_sparse_auto(source, dest);
@@ -335,10 +365,10 @@ pub(crate) fn copy_on_write(
         (ReflinkMode::Auto, SparseMode::Always) => {
             copy_debug.sparse_detection = SparseDebug::Zeros; // Default SparseDebug val for
                                                               // SparseMode::Always
-            if source_is_fifo {
+            if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
 
-                copy_fifo_contents(source, dest).map(|_| ())
+                copy_stream_contents(source_is_fifo, source, dest).map(|_| ())
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_auto_sparse_always(source, dest);
@@ -356,9 +386,9 @@ pub(crate) fn copy_on_write(
 
         (ReflinkMode::Auto, SparseMode::Never) => {
             copy_debug.reflink = OffloadReflinkDebug::No;
-            if source_is_fifo {
+            if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_fifo_contents(source, dest).map(|_| ())
+                copy_stream_contents(source_is_fifo, source, dest).map(|_| ())
             } else {
                 let result = handle_reflink_auto_sparse_never(source);
                 if let Ok(debug) = result {
@@ -369,9 +399,9 @@ pub(crate) fn copy_on_write(
             }
         }
         (ReflinkMode::Auto, SparseMode::Auto) => {
-            if source_is_fifo {
+            if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Unsupported;
-                copy_fifo_contents(source, dest).map(|_| ())
+                copy_stream_contents(source_is_fifo, source, dest).map(|_| ())
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_auto_sparse_auto(source, dest);

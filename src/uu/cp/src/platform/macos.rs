@@ -15,15 +15,16 @@ use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug
 
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
-/// The `source_is_fifo` flag must be set to `true` if and only if
-/// `source` is a FIFO (also known as a named pipe).
+/// The `source_is_stream` flag must be set to `true` if and only if
+/// `source` is a stream (i.e FIFOs, block/character devices)
 pub(crate) fn copy_on_write(
     source: &Path,
     dest: &Path,
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
     context: &str,
-    source_is_fifo: bool,
+    source_is_stream: bool,
+    #[allow(unused_variables)] source_is_fifo: bool,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
         return Err("--sparse is only supported on linux".to_string().into());
@@ -85,7 +86,9 @@ pub(crate) fn copy_on_write(
             }
             _ => {
                 copy_debug.reflink = OffloadReflinkDebug::Yes;
-                if source_is_fifo {
+                if source_is_stream {
+                    // `fs::copy` does not support copying special files (including streams).
+                    // Instead, `cp` would have to make the files then use io::copy.
                     let mut src_file = File::open(source)?;
                     let mut dst_file = File::create(dest)?;
                     io::copy(&mut src_file, &mut dst_file).context(context)?
