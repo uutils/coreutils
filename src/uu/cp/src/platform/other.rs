@@ -3,18 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore reflink
-use std::fs::{self, File, OpenOptions};
-use std::io;
-
-use std::path::Path;
 
 use quick_error::ResultExt;
+use std::fs::{self, File, OpenOptions};
+use std::path::Path;
 
-#[cfg(all(not(windows)))]
+#[cfg(not(windows))]
 use uucore::mode::get_umask;
 
 use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
 
+#[cfg(unix)]
+use std::io;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 

@@ -1939,10 +1939,6 @@ fn handle_copy_mode(
         || source_file_type.is_char_device();
     #[cfg(unix)]
     let source_is_fifo = source_file_type.is_fifo();
-    #[cfg(not(unix))]
-    let source_is_stream = false;
-    #[cfg(not(unix))]
-    let source_is_fifo = false;
 
     match options.copy_mode {
         CopyMode::Link => {
@@ -2306,10 +2302,16 @@ fn copy_file(
         // inaccessible once we reach this part of the code as it has been closed. That means we
         // can't dereference it to get its attribute.
         // find a more reliable way to distinguish between named pipes and anonymous pipes.
+        #[cfg(unix)]
         if source_metadata.file_type().is_fifo() {
             copy_attributes(source, dest, &options.attributes)?;
         } else if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
         {
+            copy_attributes(&src, dest, &options.attributes)?;
+        }
+
+        #[cfg(not(unix))]
+        if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
             copy_attributes(&src, dest, &options.attributes)?;
         }
     } else {
