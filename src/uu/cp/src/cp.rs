@@ -2375,6 +2375,7 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
+#[allow(clippy::too_many_arguments)]
 fn copy_helper(
     source: &Path,
     dest: &Path,
