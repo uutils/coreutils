@@ -33,7 +33,7 @@ uucore = { workspace = true, features = [
 ] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-uucore = { workspace = true, features = [ "splice" ] }
+uucore = { workspace = true, features = ["splice"] }
 
 [[bin]]
 name = "install"
