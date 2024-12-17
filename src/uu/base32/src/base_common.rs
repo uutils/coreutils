@@ -11,7 +11,7 @@ use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
-    for_base_common::{BASE32, BASE32HEX, BASE64, BASE64URL, BASE64_NOPAD, HEXUPPER},
+    for_base_common::{BASE32, BASE32HEX, BASE64, BASE64URL, BASE64_NOPAD, HEXUPPER_PERMISSIVE},
     Format, Z85Wrapper, BASE2LSBF, BASE2MSBF,
 };
 use uucore::encoding::{EncodingWrapper, SupportsFastDecodeAndEncode};
@@ -226,11 +226,11 @@ pub fn get_supports_fast_decode_and_encode(
 
     match format {
         Format::Base16 => Box::from(EncodingWrapper::new(
-            HEXUPPER,
+            HEXUPPER_PERMISSIVE,
             BASE16_VALID_DECODING_MULTIPLE,
             BASE16_UNPADDED_MULTIPLE,
             // spell-checker:disable-next-line
-            b"0123456789ABCDEF",
+            b"0123456789ABCDEFabcdef",
         )),
         Format::Base2Lsbf => Box::from(EncodingWrapper::new(
             BASE2LSBF,
