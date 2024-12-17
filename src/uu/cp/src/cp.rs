@@ -172,7 +172,7 @@ pub enum CopyMode {
 /// For full compatibility with GNU, these options should also combine. We
 /// currently only do a best effort imitation of that behavior, because it is
 /// difficult to achieve in clap, especially with `--no-preserve`.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Attributes {
     #[cfg(unix)]
     pub ownership: Preserve,
