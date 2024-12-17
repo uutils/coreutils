@@ -42,7 +42,7 @@ xattr = { workspace = true }
 exacl = { workspace = true, optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-uucore = { workspace = true, features = [ "splice" ] }
+uucore = { workspace = true, features = ["splice"] }
 
 [[bin]]
 name = "cp"
