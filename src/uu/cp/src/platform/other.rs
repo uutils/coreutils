@@ -44,13 +44,13 @@ pub(crate) fn copy_on_write(
 
     #[cfg(unix)]
     if source_is_stream {
-        let mut src_file = File::open(&source)?;
+        let mut src_file = File::open(source)?;
         let mode = 0o622 & !get_umask();
         let mut dst_file = OpenOptions::new()
             .create(true)
             .write(true)
             .mode(mode)
-            .open(&dest)?;
+            .open(dest)?;
         io::copy(&mut src_file, &mut dst_file).context(context)?;
 
         if source_is_fifo {
