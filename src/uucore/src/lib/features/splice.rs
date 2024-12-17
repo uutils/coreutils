@@ -15,6 +15,7 @@ use std::{
     },
 };
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::pipes::{pipe, splice, splice_exact};
 
 const SPLICE_SIZE: usize = 1024 * 128;
