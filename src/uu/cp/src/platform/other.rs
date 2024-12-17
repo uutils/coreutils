@@ -5,7 +5,7 @@
 // spell-checker:ignore reflink
 
 use quick_error::ResultExt;
-use std::fs::{self, File, OpenOptions};
+use std::fs;
 use std::path::Path;
 
 #[cfg(not(windows))]
@@ -13,6 +13,8 @@ use uucore::mode::get_umask;
 
 use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
 
+#[cfg(unix)]
+use std::fs::{File, OpenOptions};
 #[cfg(unix)]
 use std::io;
 #[cfg(unix)]
