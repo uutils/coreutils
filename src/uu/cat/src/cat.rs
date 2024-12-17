@@ -448,7 +448,7 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
 
 /// Writes handle to stdout with no configuration. This allows a
 /// simple memory copy.
-fn write_fast<R: Read + AsFd + AsRawFd>(handle: &mut InputHandle<R>) -> CatResult<()> {
+fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
