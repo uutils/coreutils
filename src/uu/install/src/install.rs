@@ -10,10 +10,6 @@ mod mode;
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
-
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::fs::File;
@@ -30,6 +26,8 @@ use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 use uucore::process::{getegid, geteuid};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::splice::write_fast_using_splice;
 use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
 
 #[cfg(unix)]
@@ -134,16 +132,6 @@ impl Display for InstallError {
         }
     }
 }
-
-#[cfg(unix)]
-pub(crate) trait FdReadable: Read + AsFd + AsRawFd {}
-#[cfg(not(unix))]
-trait FdReadable: Read {}
-
-#[cfg(unix)]
-impl<T> FdReadable for T where T: Read + AsFd + AsRawFd {}
-#[cfg(not(unix))]
-impl<T> FdReadable for T where T: Read {}
 
 #[derive(Clone, Eq, PartialEq)]
 pub enum MainFunction {
@@ -779,7 +767,7 @@ fn copy_normal_file(from: &Path, to: &Path) -> UResult<()> {
 /// # Returns
 ///
 /// Returns an empty Result or an error in case of failure.
-fn copy_stream<R: FdReadable>(handle: &mut R, to: &Path) -> UResult<()> {
+fn copy_stream<R: Read + AsFd + AsRawFd>(handle: &mut R, to: &Path) -> UResult<()> {
     // Overwrite the target file.
     let mut target_file = File::create(to)?;
 
@@ -787,7 +775,7 @@ fn copy_stream<R: FdReadable>(handle: &mut R, to: &Path) -> UResult<()> {
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &target_file.as_fd())? {
+        if !write_fast_using_splice(handle, &target_file.as_fd())?.1 {
             return Ok(());
         }
     }
@@ -847,6 +835,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         // Stream-based copying to get around the limitations of std::fs::copy
         ft if ft.is_char_device() || ft.is_block_device() || ft.is_fifo() => {
             let mut handle = File::open(from)?;
+
             copy_stream(&mut handle, to)?;
         }
         _ => copy_normal_file(from, to)?,

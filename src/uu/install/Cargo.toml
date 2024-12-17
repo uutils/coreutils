@@ -24,13 +24,16 @@ libc = { workspace = true }
 nix = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
+  "entries",
   "fs",
   "mode",
   "perms",
-  "entries",
-  "process",
   "pipes",
+  "process",
 ] }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+uucore = { workspace = true, features = [ "splice" ] }
 
 [[bin]]
 name = "install"
