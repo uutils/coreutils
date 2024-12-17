@@ -858,7 +858,23 @@ fn test_parse_valid_hexadecimal_float() {
 #[ignore]
 #[test]
 fn test_parse_valid_hexadecimal_float_format_issues() {
-    // Parsing is OK, but value representation conflicts with the GNU seq.
+    // These tests detect differences in the representation of floating-point values with GNU seq.
+    // There are two key areas to investigate:
+    //
+    // 1. GNU seq uses long double (80-bit) types for values, while the current implementation
+    // relies on f64 (64-bit). This can lead to differences due to varying precision. However, it's
+    // likely not the primary cause, as even double (64-bit) values can differ when compared to
+    // f64.
+    //
+    // 2. GNU seq uses the %Lg format specifier for printing (see the "get_default_format" function
+    // ). It appears that Rust lacks a direct equivalent for this format. Additionally, %Lg
+    // can use %f (floating) or %e (scientific) depending on the precision. There also seem to be
+    // some differences in the behavior of C and Rust when displaying floating-point or scientific
+    // notation, at least without additional configuration.
+    //
+    // It makes sense to begin by experimenting with formats and attempting to replicate
+    // the printf("%Lg",...) behavior. Another area worth investigating is glibc, as reviewing its
+    // code may help uncover additional corner cases or test data that could reveal more issues.
 
     // Test output: 4095.953125
     // In fact, the 4095.953125 is correct value.
