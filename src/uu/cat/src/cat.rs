@@ -12,12 +12,12 @@ use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::fs::FileInformation;
 
-#[cfg(unix)]
-use std::os::fd::{AsFd, AsRawFd};
-
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
+use uucore::splice::write_fast_using_splice;
+
+#[cfg(unix)]
+use std::os::fd::{AsFd, AsRawFd};
 
 /// Unix domain socket support
 #[cfg(unix)]
@@ -26,6 +26,7 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
+
 use uucore::{format_usage, help_about, help_usage};
 
 const USAGE: &str = help_usage!("cat.md");
@@ -447,14 +448,14 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
 
 /// Writes handle to stdout with no configuration. This allows a
 /// simple memory copy.
-fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
+fn write_fast<R: Read + AsFd + AsRawFd>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &stdout_lock)? {
+        if !write_fast_using_splice(&handle.reader, &stdout_lock)?.1 {
             return Ok(());
         }
     }
