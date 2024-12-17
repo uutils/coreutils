@@ -15,7 +15,7 @@ use std::{
     },
 };
 
-use super::pipes::{pipe, splice, splice_exact};
+use crate::pipes::{pipe, splice, splice_exact};
 
 const SPLICE_SIZE: usize = 1024 * 128;
 const BUF_SIZE: usize = 1024 * 16;
