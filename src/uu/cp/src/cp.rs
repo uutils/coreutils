@@ -2395,10 +2395,13 @@ fn copy_helper(
         return Err(Error::NotADirectory(dest.to_path_buf()));
     }
 
+    #[cfg(unix)]
     if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
         copy_fifo(dest, options.overwrite, options.debug)?;
-    } else if source_is_symlink {
+        return Ok(());
+    }
+    if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else {
         let copy_debug = copy_on_write(
