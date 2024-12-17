@@ -80,7 +80,7 @@ pub use crate::features::pipes;
 pub use crate::features::process;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub use crate::features::signals;
-#[cfg(all(unix, feature = "splice"))]
+#[cfg(all(any(target_os = "linux", target_os = "android"), feature = "splice"))]
 pub use crate::features::splice;
 #[cfg(all(
     unix,
