@@ -49,6 +49,8 @@ pub mod pipes;
 pub mod proc_info;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
+#[cfg(all(any(target_os = "linux", target_os = "android"), feature = "splice"))]
+pub mod splice;
 #[cfg(all(target_os = "linux", feature = "tty"))]
 pub mod tty;
 

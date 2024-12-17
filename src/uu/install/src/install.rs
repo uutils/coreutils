@@ -12,11 +12,10 @@ use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use std::error::Error;
 use std::fmt::{Debug, Display};
-use std::fs;
 use std::fs::File;
-use std::os::unix::fs::MetadataExt;
-#[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
+use std::fs::{self, metadata};
+use std::io::{Read, Write};
+use std::os::fd::{AsFd, AsRawFd};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
 use uucore::backup_control::{self, BackupMode};
@@ -27,7 +26,14 @@ use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 use uucore::process::{getegid, geteuid};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::splice::write_fast_using_splice;
 use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
+
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
+#[cfg(unix)]
+use std::os::unix::prelude::OsStrExt;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -736,7 +742,64 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     }
 }
 
-/// Copy a file from one path to another.
+/// Copy a non-special file using std::fs::copy.
+///
+/// # Parameters
+/// * `from` - The source file path.
+/// * `to` - The destination file path.
+///
+/// # Returns
+///
+/// Returns an empty Result or an error in case of failure.
+fn copy_normal_file(from: &Path, to: &Path) -> UResult<()> {
+    if let Err(err) = fs::copy(from, to) {
+        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
+    }
+    Ok(())
+}
+
+/// Read from stream into specified target file.
+///
+/// # Parameters
+/// * `handle` - Open file handle.
+/// * `to` - The destination file path.
+///
+/// # Returns
+///
+/// Returns an empty Result or an error in case of failure.
+fn copy_stream<R: Read + AsFd + AsRawFd>(handle: &mut R, to: &Path) -> UResult<()> {
+    // Overwrite the target file.
+    let mut target_file = File::create(to)?;
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        // If we're on Linux or Android, try to use the splice() system call
+        // for faster writing. If it works, we're done.
+        if !write_fast_using_splice(handle, &target_file.as_fd())?.1 {
+            return Ok(());
+        }
+    }
+    // If we're not on Linux or Android, or the splice() call failed,
+    // fall back on slower writing.
+    let mut buf = [0; 1024 * 64];
+    while let Ok(n) = handle.read(&mut buf) {
+        if n == 0 {
+            break;
+        }
+        target_file.write_all(&buf[..n])?;
+    }
+
+    // If the splice() call failed and there has been some data written to
+    // stdout via while loop above AND there will be second splice() call
+    // that will succeed, data pushed through splice will be output before
+    // the data buffered in stdout.lock. Therefore additional explicit flush
+    // is required here.
+    target_file.flush()?;
+    Ok(())
+}
+
+/// Copy a file from one path to another. Handles the certain cases of special files (e.g character
+/// specials)
 ///
 /// # Parameters
 ///
@@ -760,18 +823,25 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         }
     }
 
-    if from.as_os_str() == "/dev/null" {
-        /* workaround a limitation of fs::copy
-         * https://github.com/rust-lang/rust/issues/79390
-         */
-        if let Err(err) = File::create(to) {
+    let ft = match metadata(from) {
+        Ok(ft) => ft.file_type(),
+        Err(err) => {
             return Err(
                 InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
             );
         }
-    } else if let Err(err) = fs::copy(from, to) {
-        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
+    };
+
+    // Stream-based copying to get around the limitations of std::fs::copy
+    #[cfg(unix)]
+    if ft.is_char_device() || ft.is_block_device() || ft.is_fifo() {
+        let mut handle = File::open(from)?;
+        copy_stream(&mut handle, to)?;
+        return Ok(());
     }
+
+    copy_normal_file(from, to)?;
+
     Ok(())
 }
 

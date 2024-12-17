@@ -30,6 +30,12 @@ uucore = { workspace = true, features = [
   "process",
 ] }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+uucore = { workspace = true, features = ["splice"] }
+
 [[bin]]
 name = "install"
 path = "src/main.rs"
