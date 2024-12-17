@@ -2308,10 +2308,9 @@ fn copy_file(
         // find a more reliable way to distinguish between named pipes and anonymous pipes.
         if source_metadata.file_type().is_fifo() {
             copy_attributes(source, dest, &options.attributes)?;
-        } else {
-            if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
-                copy_attributes(&src, dest, &options.attributes)?;
-            }
+        } else if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
+        {
+            copy_attributes(&src, dest, &options.attributes)?;
         }
     } else {
         copy_attributes(source, dest, &options.attributes)?;
