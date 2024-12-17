@@ -56,6 +56,7 @@ pub(crate) fn copy_on_write(
         if source_is_fifo {
             dst_file.set_permissions(src_file.metadata()?.permissions())?;
         }
+        return Ok(copy_debug);
     }
 
     fs::copy(source, dest).context(context)?;
