@@ -1,0 +1,26 @@
+name: zizmor
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # pin@v4
+        with:
+          persist-credentials: false
+
+      - name: Download zizmor
+        run: cargo install zizmor
+
+      - name: Run zizmor 🌈
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          zizmor --gh-token "$GH_TOKEN" .github/workflows/*.yml
+
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
