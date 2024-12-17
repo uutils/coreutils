@@ -9,6 +9,24 @@ use crate::numberparse::ParseNumberError;
 use bigdecimal::BigDecimal;
 use num_traits::FromPrimitive;
 
+///  Parse a number from a floating-point hexadecimal exponent notation.
+///
+/// # Errors
+///
+/// This function returns an error if:
+/// - the input string is not a valid hexadecimal string
+/// - the input data can't be interpreted as ['f64'] or ['BigDecimal']
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let input = "0x1.4p-2";
+/// let expected = 0.3125;
+/// match input.parse::<PreciseNumber>().unwrap().number {
+///     ExtendedBigDecimal::BigDecimal(bd)  => assert_eq!(bd.to_f64().unwrap(),expected),
+///     _ => unreachable!()
+/// };
+/// ```
 pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     let value = parse_float(s)?;
     let number = BigDecimal::from_f64(value).ok_or(ParseNumberError::Float)?;
@@ -20,6 +38,13 @@ pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberErro
     ))
 }
 
+/// Parse a floating-point number from a hexadecimal notation.
+///
+/// # Errors
+///
+/// This function returns an error if:
+/// - the input string is not a hexadecimal string
+/// - input data can't be interpreted as ['f64'] and ['BigDecimal']
 fn parse_float(s: &str) -> Result<f64, ParseNumberError> {
     let mut s = s.trim();
 
@@ -34,12 +59,13 @@ fn parse_float(s: &str) -> Result<f64, ParseNumberError> {
         1.0
     };
 
-    // Is HEX?
-    if s.starts_with("0x") || s.starts_with("0X") {
-        s = &s[2..];
-    } else {
+    // Return error if not a Hex string
+    if !s.starts_with("0x") && !s.starts_with("0X") {
         return Err(ParseNumberError::Float);
     }
+
+    // Skip Hex prefix
+    s = &s[2..];
 
     // Read an integer part (if presented)
     let length = s.chars().take_while(|c| c.is_ascii_hexdigit()).count();
@@ -71,10 +97,10 @@ fn parse_float(s: &str) -> Result<f64, ParseNumberError> {
         None
     };
 
-    // Post checks:
-    // - Both Fractions & Power values can't be none in the same time
-    // - string should be consumed. Otherwise, it's possible to have garbage symbols after the HEX
-    // float
+    // Post-checks:
+    // - Both 'fractional' and 'power' values cannot be 'None' at the same time.
+    // - The entire string must be consumed; otherwise, there could be garbage symbols after the Hex float.
+
     if fractional.is_none() && power.is_none() {
         return Err(ParseNumberError::Float);
     }
@@ -89,6 +115,11 @@ fn parse_float(s: &str) -> Result<f64, ParseNumberError> {
     Ok(total)
 }
 
+/// Parse the fractional part in hexadecimal notation.
+///
+/// # Errors
+///
+/// This function returns an error if the string is empty or contains characters that are not hex digits.
 fn parse_fractional_part(s: &str) -> Result<f64, ParseNumberError> {
     if s.is_empty() {
         return Err(ParseNumberError::Float);
@@ -109,6 +140,7 @@ fn parse_fractional_part(s: &str) -> Result<f64, ParseNumberError> {
 
 #[cfg(test)]
 mod tests {
+
     use super::parse_hexadecimal_float;
     use crate::{numberparse::ParseNumberError, ExtendedBigDecimal};
     use num_traits::ToPrimitive;
