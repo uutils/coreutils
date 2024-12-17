@@ -9,6 +9,8 @@ use std::io;
 use std::path::Path;
 
 use quick_error::ResultExt;
+
+#[cfg(all(not(windows)))]
 use uucore::mode::get_umask;
 
 use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
