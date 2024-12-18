@@ -257,20 +257,24 @@ fn test_no_such_file() {
 
 #[test]
 fn test_equal_as_delimiter() {
-    new_ucmd!()
-        .args(&["-f", "2", "-d="])
-        .pipe_in("--dir=./out/lib")
-        .succeeds()
-        .stdout_only("./out/lib\n");
+    for arg in ["-d=", "--delimiter=="] {
+        new_ucmd!()
+            .args(&["-f2", arg])
+            .pipe_in("--dir=./out/lib")
+            .succeeds()
+            .stdout_only("./out/lib\n");
+    }
 }
 
 #[test]
 fn test_empty_string_as_delimiter() {
-    new_ucmd!()
-        .args(&["-f2", "--delimiter="])
-        .pipe_in("a=b\n")
-        .succeeds()
-        .stdout_only("a=b\n");
+    for arg in ["-d''", "--delimiter=", "--delimiter=''"] {
+        new_ucmd!()
+            .args(&["-f2", arg])
+            .pipe_in("a\0b\n")
+            .succeeds()
+            .stdout_only("b\n");
+    }
 }
 
 #[test]
