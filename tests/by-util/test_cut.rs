@@ -47,6 +47,13 @@ static COMPLEX_SEQUENCE: &TestedSequence = &TestedSequence {
 };
 
 #[test]
+fn test_no_argument() {
+    new_ucmd!().fails().stderr_is(
+        "cut: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n",
+    );
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
 }
@@ -276,6 +283,15 @@ fn test_equal_as_delimiter3() {
 }
 
 #[test]
+fn test_newline_delimited() {
+    new_ucmd!()
+        .args(&["-f", "1", "-d", "\n"])
+        .pipe_in("a:1\nb:")
+        .succeeds()
+        .stdout_only_bytes("a:1\nb:\n");
+}
+
+#[test]
 fn test_multiple() {
     let result = new_ucmd!()
         .args(&["-f2", "-d:", "-d="])
@@ -283,15 +299,6 @@ fn test_multiple() {
         .succeeds();
     assert_eq!(result.stdout_str(), "b\n");
     assert_eq!(result.stderr_str(), "");
-}
-
-#[test]
-fn test_newline_delimited() {
-    new_ucmd!()
-        .args(&["-f", "1", "-d", "\n"])
-        .pipe_in("a:1\nb:")
-        .succeeds()
-        .stdout_only_bytes("a:1\nb:\n");
 }
 
 #[test]
@@ -310,13 +317,6 @@ fn test_multiple_mode_args() {
         .fails()
         .stderr_is("cut: invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)\n");
     }
-}
-
-#[test]
-fn test_no_argument() {
-    new_ucmd!().fails().stderr_is(
-        "cut: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n",
-    );
 }
 
 #[test]
