@@ -83,13 +83,14 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
         if res == -1 {
             let err = IOError::last_os_error();
             if err.raw_os_error() == Some(libc::EINVAL) {
-                // Number of groups changed, retry
+                // Number of groups has increased, retry
                 continue;
             } else {
                 return Err(err);
             }
         } else {
-            groups.truncate(ngroups.try_into().unwrap());
+            // Number of groups may have decreased
+            groups.truncate(res.try_into().unwrap());
             return Ok(groups);
         }
     }
