@@ -727,7 +727,7 @@ fn get_root_dev_ino() -> Result<DeviceAndINode> {
 }
 
 fn root_dev_ino_check(root_dev_ino: Option<DeviceAndINode>, dir_dev_ino: DeviceAndINode) -> bool {
-    root_dev_ino.map_or(false, |root_dev_ino| root_dev_ino == dir_dev_ino)
+    root_dev_ino == Some(dir_dev_ino)
 }
 
 fn root_dev_ino_warn(dir_name: &Path) {
