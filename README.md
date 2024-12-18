@@ -15,6 +15,7 @@
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 ![MSRV](https://img.shields.io/badge/MSRV-1.77.0-brightgreen)
+[![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20uutils%20coreutils%20Guru-006BFF)](https://gurubase.io/g/uutils-coreutils)
 
 </div>
 
