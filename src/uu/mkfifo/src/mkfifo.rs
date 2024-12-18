@@ -6,6 +6,8 @@
 use clap::{crate_version, Arg, ArgAction, Command};
 use libc::mkfifo;
 use std::ffi::CString;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show};
@@ -47,12 +49,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for f in fifos {
         let err = unsafe {
             let name = CString::new(f.as_bytes()).unwrap();
-            mkfifo(name.as_ptr(), mode as libc::mode_t)
+            mkfifo(name.as_ptr(), 0o666)
         };
         if err == -1 {
             show!(USimpleError::new(
                 1,
-                format!("cannot create fifo {}: File exists", f.quote())
+                format!("cannot create fifo {}: File exists", f.quote()),
+            ));
+        }
+
+        // Explicitly set the permissions to ignore umask
+        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode as u32)) {
+            return Err(USimpleError::new(
+                1,
+                format!("cannot set permissions on {}: {}", f.quote(), e),
             ));
         }
     }

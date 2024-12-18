@@ -52,3 +52,31 @@ fn test_create_one_fifo_already_exists() {
         .fails()
         .stderr_is("mkfifo: cannot create fifo 'abcdef': File exists\n");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_create_fifo_with_mode_and_umask() {
+    use uucore::fs::display_permissions;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let test_fifo_creation = |mode: &str, umask: u32, expected: &str| {
+        #[cfg(target_os = "macos")]
+        let umask = umask as u16;
+
+        scene
+            .ucmd()
+            .arg("-m")
+            .arg(mode)
+            .arg(format!("fifo_test_{mode}"))
+            .umask(umask)
+            .succeeds();
+
+        let metadata = std::fs::metadata(at.subdir.join(format!("fifo_test_{mode}"))).unwrap();
+        let permissions = display_permissions(&metadata, true);
+        assert_eq!(permissions, expected.to_string());
+    };
+
+    test_fifo_creation("734", 0o077, "prwx-wxr--"); // spell-checker:disable-line
+    test_fifo_creation("706", 0o777, "prwx---rw-"); // spell-checker:disable-line
+}
