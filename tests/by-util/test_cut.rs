@@ -293,12 +293,11 @@ fn test_newline_delimited() {
 
 #[test]
 fn test_multiple() {
-    let result = new_ucmd!()
+    new_ucmd!()
         .args(&["-f2", "-d:", "-d="])
         .pipe_in("a=b\n")
-        .succeeds();
-    assert_eq!(result.stdout_str(), "b\n");
-    assert_eq!(result.stderr_str(), "");
+        .succeeds()
+        .stdout_only("b\n");
 }
 
 #[test]
