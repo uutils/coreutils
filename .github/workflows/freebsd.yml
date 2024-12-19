@@ -35,6 +35,8 @@ jobs:
       RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.7
@@ -127,6 +129,8 @@ jobs:
       RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.7
