@@ -70,11 +70,13 @@ pub use crate::features::version_cmp;
 #[cfg(all(not(windows), feature = "mode"))]
 pub use crate::features::mode;
 // ** unix-only
+#[cfg(all(any(target_os = "linux", target_os = "android"), feature = "buf-copy"))]
+pub use crate::features::buf_copy;
 #[cfg(all(unix, feature = "entries"))]
 pub use crate::features::entries;
 #[cfg(all(unix, feature = "perms"))]
 pub use crate::features::perms;
-#[cfg(all(unix, feature = "pipes"))]
+#[cfg(all(unix, any(feature = "pipes", feature = "buf-copy")))]
 pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
