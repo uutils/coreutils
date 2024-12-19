@@ -79,6 +79,8 @@ jobs:
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Collect information about runner
       if: always()
       continue-on-error: true

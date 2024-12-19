@@ -47,6 +47,13 @@ static COMPLEX_SEQUENCE: &TestedSequence = &TestedSequence {
 };
 
 #[test]
+fn test_no_args() {
+    new_ucmd!().fails().stderr_is(
+        "cut: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n",
+    );
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
 }
@@ -249,25 +256,29 @@ fn test_no_such_file() {
 }
 
 #[test]
-fn test_equal_as_delimiter1() {
-    new_ucmd!()
-        .args(&["-f", "2", "-d="])
-        .pipe_in("--dir=./out/lib")
-        .succeeds()
-        .stdout_only("./out/lib\n");
+fn test_equal_as_delimiter() {
+    for arg in ["-d=", "--delimiter=="] {
+        new_ucmd!()
+            .args(&["-f2", arg])
+            .pipe_in("--dir=./out/lib")
+            .succeeds()
+            .stdout_only("./out/lib\n");
+    }
 }
 
 #[test]
-fn test_equal_as_delimiter2() {
-    new_ucmd!()
-        .args(&["-f2", "--delimiter="])
-        .pipe_in("a=b\n")
-        .succeeds()
-        .stdout_only("a=b\n");
+fn test_empty_string_as_delimiter() {
+    for arg in ["-d''", "--delimiter=", "--delimiter=''"] {
+        new_ucmd!()
+            .args(&["-f2", arg])
+            .pipe_in("a\0b\n")
+            .succeeds()
+            .stdout_only("b\n");
+    }
 }
 
 #[test]
-fn test_equal_as_delimiter3() {
+fn test_empty_string_as_delimiter_with_output_delimiter() {
     new_ucmd!()
         .args(&["-f", "1,2", "-d", "''", "--output-delimiter=Z"])
         .pipe_in("ab\0cd\n")
@@ -276,22 +287,21 @@ fn test_equal_as_delimiter3() {
 }
 
 #[test]
-fn test_multiple() {
-    let result = new_ucmd!()
-        .args(&["-f2", "-d:", "-d="])
-        .pipe_in("a=b\n")
-        .succeeds();
-    assert_eq!(result.stdout_str(), "b\n");
-    assert_eq!(result.stderr_str(), "");
-}
-
-#[test]
-fn test_newline_delimited() {
+fn test_newline_as_delimiter() {
     new_ucmd!()
         .args(&["-f", "1", "-d", "\n"])
         .pipe_in("a:1\nb:")
         .succeeds()
         .stdout_only_bytes("a:1\nb:\n");
+}
+
+#[test]
+fn test_multiple_delimiters() {
+    new_ucmd!()
+        .args(&["-f2", "-d:", "-d="])
+        .pipe_in("a=b\n")
+        .succeeds()
+        .stdout_only("b\n");
 }
 
 #[test]
@@ -310,13 +320,6 @@ fn test_multiple_mode_args() {
         .fails()
         .stderr_is("cut: invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)\n");
     }
-}
-
-#[test]
-fn test_no_argument() {
-    new_ucmd!().fails().stderr_is(
-        "cut: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n",
-    );
 }
 
 #[test]
