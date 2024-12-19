@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) extendedbigdecimal numberparse
+// spell-checker:ignore (ToDO) extendedbigdecimal numberparse floatparse
 use std::ffi::OsString;
 use std::io::{stdout, ErrorKind, Write};
 
@@ -15,6 +15,7 @@ use uucore::{format_usage, help_about, help_usage};
 
 mod error;
 mod extendedbigdecimal;
+mod floatparse;
 // public to allow fuzzing
 #[cfg(fuzzing)]
 pub mod number;

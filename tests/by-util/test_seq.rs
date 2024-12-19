@@ -698,7 +698,7 @@ fn test_parse_error_hex() {
     new_ucmd!()
         .arg("0xlmnop")
         .fails()
-        .usage_error("invalid hexadecimal argument: '0xlmnop'");
+        .usage_error("invalid floating point argument: '0xlmnop'");
 }
 
 #[test]
@@ -815,4 +815,90 @@ fn test_parse_scientific_zero() {
         .args(&["-w", "0", "1"])
         .succeeds()
         .stdout_only("0\n1\n");
+}
+
+#[test]
+fn test_parse_valid_hexadecimal_float() {
+    new_ucmd!()
+        .args(&["0x1p-1", "2"])
+        .succeeds()
+        .stdout_only("0.5\n1.5\n");
+
+    new_ucmd!()
+        .args(&["1", "0x1p-1", "2"])
+        .succeeds()
+        .stdout_only("1.0\n1.5\n2.0\n");
+
+    new_ucmd!()
+        .args(&["0x3.4p-1", "0x4p-1", "4"])
+        .succeeds()
+        .stdout_only("1.625\n3.625\n");
+
+    new_ucmd!()
+        .args(&["0x3.4p-1", "0x4p-1", "4"])
+        .succeeds()
+        .stdout_only("1.625\n3.625\n");
+
+    new_ucmd!()
+        .args(&[" 0x.8p16", "32768"])
+        .succeeds()
+        .stdout_only("32768\n");
+}
+
+#[ignore]
+#[test]
+fn test_parse_valid_hexadecimal_float_format_issues() {
+    // These tests detect differences in the representation of floating-point values with GNU seq.
+    // There are two key areas to investigate:
+    //
+    // 1. GNU seq uses long double (80-bit) types for values, while the current implementation
+    // relies on f64 (64-bit). This can lead to differences due to varying precision. However, it's
+    // likely not the primary cause, as even double (64-bit) values can differ when compared to
+    // f64.
+    //
+    // 2. GNU seq uses the %Lg format specifier for printing (see the "get_default_format" function
+    // ). It appears that Rust lacks a direct equivalent for this format. Additionally, %Lg
+    // can use %f (floating) or %e (scientific) depending on the precision. There also seem to be
+    // some differences in the behavior of C and Rust when displaying floating-point or scientific
+    // notation, at least without additional configuration.
+    //
+    // It makes sense to begin by experimenting with formats and attempting to replicate
+    // the printf("%Lg",...) behavior. Another area worth investigating is glibc, as reviewing its
+    // code may help uncover additional corner cases or test data that could reveal more issues.
+
+    // Test output: 4095.953125
+    // In fact, the 4095.953125 is correct value.
+    // (65535 + 4/16)*2^(-4) = 4095.953125
+    // So, it looks like a formatting or output rounding differences
+    new_ucmd!()
+        .args(&["0xffff.4p-4", "4096"])
+        .succeeds()
+        .stdout_only("4095.95\n");
+
+    // Test output: 1023.999999999068677425384521484375
+    // 0xffffffffff = 1099511627775
+    // 2^(-30) = 1 / 1073741824
+    // 1099511627775 / 1073741824 = 1024
+    new_ucmd!()
+        .args(&["0xffffffffffp-30", "1024"]) // spell-checker:disable-line
+        .succeeds()
+        .stdout_only("1024\n");
+
+    // Test output: 5.330078125
+    new_ucmd!()
+        .args(&["0xa.a9p-1", "6"])
+        .succeeds()
+        .stdout_only("5.33008\n");
+
+    // Test output: 5.330078125
+    new_ucmd!()
+        .args(&["0xA.A9p-1", "6"])
+        .succeeds()
+        .stdout_only("5.33008\n");
+
+    //Test output: 0.00000000992804416455328464508056640625
+    new_ucmd!()
+        .args(&["0xa.a9p-30", "1"])
+        .succeeds()
+        .stdout_only("9.92804e-09\n1\n");
 }
