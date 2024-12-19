@@ -46,7 +46,7 @@ jobs:
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+        unset FAIL_ON_FAULT ; case "$STYLE_FAIL_ON_FAULT" in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
           *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
         esac;
@@ -93,7 +93,7 @@ jobs:
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+        unset FAIL_ON_FAULT ; case "$STYLE_FAIL_ON_FAULT" in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
           *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
         esac;
@@ -133,7 +133,7 @@ jobs:
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+        unset FAIL_ON_FAULT ; case "$STYLE_FAIL_ON_FAULT" in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
           *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
         esac;
