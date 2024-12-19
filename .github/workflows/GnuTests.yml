@@ -23,6 +23,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+env:
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
 jobs:
   gnu:
     permissions:
@@ -45,9 +48,9 @@ jobs:
         path_reference="reference"
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
-        repo_default_branch="${{ github.event.repository.default_branch }}"
+        repo_default_branch="$DEFAULT_BRANCH"
         repo_GNU_ref="v9.5"
-        repo_reference_branch="${{ github.event.repository.default_branch }}"
+        repo_reference_branch="$DEFAULT_BRANCH"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
         SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
