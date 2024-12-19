@@ -19,6 +19,7 @@ path = "src/yes.rs"
 [dependencies]
 clap = { workspace = true }
 itertools = { workspace = true }
+uucore = { workspace = true, features = ["buf-copy"] }
 
 [target.'cfg(unix)'.dependencies]
 uucore = { workspace = true, features = ["pipes", "signals"] }
@@ -26,9 +27,6 @@ nix = { workspace = true }
 
 [target.'cfg(not(unix))'.dependencies]
 uucore = { workspace = true, features = ["pipes"] }
-
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-uucore = { workspace = true, features = ["buf-copy"] }
 
 [[bin]]
 name = "yes"

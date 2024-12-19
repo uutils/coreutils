@@ -11,6 +11,7 @@ use std::ffi::OsString;
 use std::io::{stdout, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsRawFd;
 #[cfg(unix)]
 use uucore::buf_copy::is_pipe;
@@ -113,6 +114,9 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
     }
 }
 
+/// On Linux and Android, repeatedly call the splice function to write our buffered string into
+/// standard output using the `splice` system call.
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn loop_splice_data<T>(bytes: &[u8], out: &T) -> UResult<()>
 where
     T: AsRawFd + AsFd,
