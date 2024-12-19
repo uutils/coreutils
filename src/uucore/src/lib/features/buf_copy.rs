@@ -10,19 +10,21 @@
 //! does not handle copying special files (e.g pipes, character/block devices).
 
 use crate::error::{UError, UResult};
-use nix::unistd;
+
 use std::fs::File;
 use std::{
     io::{self, Read, Write},
-    os::{
-        fd::AsFd,
-        unix::io::{AsRawFd, RawFd},
-    },
+    os::fd::AsFd,
 };
 
-use nix::{errno::Errno, libc::S_IFIFO, sys::stat::fstat};
-
+#[cfg(unix)]
 use super::pipes::{pipe, splice, splice_exact, vmsplice};
+#[cfg(unix)]
+use nix::unistd;
+#[cfg(unix)]
+use nix::{errno::Errno, libc::S_IFIFO, sys::stat::fstat};
+#[cfg(unix)]
+use std::os::unix::io::{AsRawFd, RawFd};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -311,6 +313,7 @@ mod tests {
         assert!(maybe_unsupported(err).is_err());
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_splice_data_to_pipe() {
         let (pipe_read, pipe_write) = pipes::pipe().unwrap();
@@ -322,6 +325,7 @@ mod tests {
         assert_eq!(bytes as usize, data.len());
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_splice_data_to_file() {
         let mut temp_file = new_temp_file();
@@ -360,6 +364,7 @@ mod tests {
         assert_eq!(&buf[..n as usize], data);
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_splice_write() {
         let (mut pipe_read, pipe_write) = pipes::pipe().unwrap();
