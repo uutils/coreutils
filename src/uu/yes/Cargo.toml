@@ -27,6 +27,9 @@ nix = { workspace = true }
 [target.'cfg(not(unix))'.dependencies]
 uucore = { workspace = true, features = ["pipes"] }
 
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+uucore = { workspace = true, features = ["buf-copy"] }
+
 [[bin]]
 name = "yes"
 path = "src/main.rs"
