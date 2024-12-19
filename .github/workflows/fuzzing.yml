@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - uses: dtolnay/rust-toolchain@nightly
     - name: Install `cargo-fuzz`
       run: cargo install cargo-fuzz
@@ -62,6 +64,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - uses: dtolnay/rust-toolchain@nightly
     - name: Install `cargo-fuzz`
       run: cargo install cargo-fuzz
