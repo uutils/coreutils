@@ -178,7 +178,7 @@ jobs:
           util/android-commands.sh sync_host
           util/android-commands.sh build
           util/android-commands.sh tests
-          if [[ "${{ steps.rust-cache.outputs.cache-hit }}" != 'true' ]]; then util/android-commands.sh sync_image; fi; exit 0
+          if [ "${{ steps.rust-cache.outputs.cache-hit }}" != 'true' ]; then util/android-commands.sh sync_image; fi; exit 0
     - name: Collect information about runner ressources
       if: always()
       continue-on-error: true
