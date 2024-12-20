@@ -299,9 +299,15 @@ fn test_newline_as_delimiter() {
 fn test_multiple_delimiters() {
     new_ucmd!()
         .args(&["-f2", "-d:", "-d="])
-        .pipe_in("a=b\n")
+        .pipe_in("a:=b\n")
         .succeeds()
         .stdout_only("b\n");
+
+    new_ucmd!()
+        .args(&["-f2", "-d=", "-d:"])
+        .pipe_in("a:=b\n")
+        .succeeds()
+        .stdout_only("=b\n");
 }
 
 #[test]
