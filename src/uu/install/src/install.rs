@@ -13,8 +13,11 @@ use filetime::{set_file_times, FileTime};
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::fs;
+#[cfg(not(unix))]
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
@@ -748,29 +751,78 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
-    // fs::copy fails if destination is a invalid symlink.
-    // so lets just remove all existing files at destination before copy.
-    if let Err(e) = fs::remove_file(to) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            show_error!(
-                "Failed to remove existing file {}. Error: {:?}",
-                to.display(),
-                e
-            );
+    // Open the source file and get a file descriptor, making sure the source file exists.
+    #[cfg(unix)]
+    let src = fs::OpenOptions::new().read(true).open(from);
+    #[cfg(not(unix))]
+    let src = File::open(from);
+    if let Err(e) = src {
+        show_error!(
+            "Failed to open source file {}. Error: {:?}",
+            from.display(),
+            e
+        );
+        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), e).into());
+    }
+    let mut src = src.unwrap();
+
+    // If the source file is opened to be read, the copy should fail only when there is a problem
+    // with the destination, so lets just remove all existing files at destination before copy.
+    let remove_destination = || {
+        if let Err(e) = fs::remove_file(to) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                show_error!(
+                    "Failed to remove existing file {}. Error: {:?}",
+                    to.display(),
+                    e
+                );
+                return Err(e);
+            }
         }
+        Ok(())
+    };
+
+    // Errors out this case if the destination file cannot be created.
+    if let Err(e) = remove_destination() {
+        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), e).into());
     }
 
-    if from.as_os_str() == "/dev/null" {
-        /* workaround a limitation of fs::copy
-         * https://github.com/rust-lang/rust/issues/79390
-         */
-        if let Err(err) = File::create(to) {
+    // Create the destination file first. Using safer mode on unix to avoid
+    // potential unsafe mode between time-of-creation and time-of-chmod.
+    #[cfg(unix)]
+    let dst = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(to);
+    #[cfg(not(unix))]
+    let dst = File::create(to);
+
+    if let Err(e) = dst {
+        show_error!(
+            "Failed to create destination file {}. Error: {:?}",
+            to.display(),
+            e
+        );
+        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), e).into());
+    }
+    let mut dst = dst.unwrap();
+
+    /* workaround a limitation of fs::copy: skip copy if source is /dev/null
+     * https://github.com/rust-lang/rust/issues/79390
+     */
+    if from.as_os_str() != "/dev/null" {
+        // Use `std::io::copy` to avoid unsafe file modes here.
+        if let Err(err) = std::io::copy(&mut src, &mut dst) {
+            drop(src);
+            drop(dst);
+            // This removal should be successful unless changes happened after the
+            // creation of the destination, so we just ignore it here.
+            let _ = remove_destination();
             return Err(
                 InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
             );
         }
-    } else if let Err(err) = fs::copy(from, to) {
-        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
     }
     Ok(())
 }
