@@ -4,6 +4,7 @@ on:
   push:
   pull_request:
 
+
 jobs:
   zizmor:
     name: zizmor
@@ -14,13 +15,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download zizmor
-        run: cargo install zizmor
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # pin@v4
 
       - name: Run zizmor 🌈
         run: |
           cd "$GITHUB_WORKSPACE"
-          zizmor --gh-token "$GH_TOKEN" .github/workflows/*.yml
+          uvx zizmor --gh-token "$GH_TOKEN" .github/workflows/*.yml
 
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
