@@ -319,18 +319,23 @@ fn maybe_unsupported(error: nix::Error) -> Result<(u64, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(any(target_os = "linux", target_os = "android", not(unix)))]
     use std::fs::File;
-    #[cfg(any(target_os = "linux", target_os = "android", not(unix)))]
     use tempfile::tempdir;
 
     #[cfg(unix)]
     use crate::pipes;
+    #[cfg(unix)]
+    use std::fs::OpenOptions;
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(unix)]
     fn new_temp_file() -> File {
         let temp_dir = tempdir().unwrap();
-        File::create(temp_dir.path().join("file.txt")).unwrap()
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(temp_dir.path().join("file.txt"))
+            .unwrap()
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -378,14 +383,20 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_splice_data_to_file() {
+        use std::io::{Seek, SeekFrom};
+
         let mut temp_file = new_temp_file();
         let (pipe_read, pipe_write) = pipes::pipe().unwrap();
         let data = b"Hello, world!";
         let (bytes, _) = splice_data_to_fd(data, &pipe_read, &pipe_write, &temp_file).unwrap();
-        let mut buf = [0; 1024];
-        let n = temp_file.read(&mut buf).unwrap();
-        assert_eq!(&buf[..n], data);
         assert_eq!(bytes as usize, data.len());
+
+        // We would have been at the end already, so seek again to the start.
+        temp_file.seek(SeekFrom::Start(0)).unwrap();
+
+        let mut buf = Vec::new();
+        temp_file.read_to_end(&mut buf).unwrap();
+        assert_eq!(buf, data);
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -405,15 +416,28 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_copy_stream() {
+        use std::{
+            io::{Seek, SeekFrom},
+            thread,
+        };
+        let mut dest_file = new_temp_file();
+
         let (mut pipe_read, mut pipe_write) = pipes::pipe().unwrap();
         let data = b"Hello, world!";
-        let n = pipe_write.write(data).unwrap();
-        assert_eq!(n, data.len());
-        let mut buf = [0; 1024];
-        let n = copy_stream(&mut pipe_read, &mut pipe_write).unwrap();
-        let n2 = pipe_read.read(&mut buf).unwrap();
-        assert_eq!(n as usize, n2);
-        assert_eq!(&buf[..n as usize], data);
+        let thread = thread::spawn(move || {
+            pipe_write.write_all(data).unwrap();
+        });
+        let result = copy_stream(&mut pipe_read, &mut dest_file).unwrap();
+        thread.join().unwrap();
+        assert!(result == data.len() as u64);
+
+        // We would have been at the end already, so seek again to the start.
+        dest_file.seek(SeekFrom::Start(0)).unwrap();
+
+        let mut buf = Vec::new();
+        dest_file.read_to_end(&mut buf).unwrap();
+
+        assert_eq!(buf, data);
     }
 
     #[test]
@@ -445,12 +469,28 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_splice_write() {
-        let (mut pipe_read, pipe_write) = pipes::pipe().unwrap();
+        use std::{
+            io::{Seek, SeekFrom},
+            thread,
+        };
+
+        let (pipe_read, mut pipe_write) = pipes::pipe().unwrap();
+        let mut dest_file = new_temp_file();
         let data = b"Hello, world!";
-        let (bytes, _) = splice_write(&pipe_read, &pipe_write).unwrap();
-        let mut buf = [0; 1024];
-        let n = pipe_read.read(&mut buf).unwrap();
-        assert_eq!(&buf[..n], data);
-        assert_eq!(bytes as usize, data.len());
+        let thread = thread::spawn(move || {
+            pipe_write.write_all(data).unwrap();
+        });
+        let (bytes, _) = splice_write(&pipe_read, &dest_file).unwrap();
+        thread.join().unwrap();
+
+        assert!(bytes == data.len() as u64);
+
+        // We would have been at the end already, so seek again to the start.
+        dest_file.seek(SeekFrom::Start(0)).unwrap();
+
+        let mut buf = Vec::new();
+        dest_file.read_to_end(&mut buf).unwrap();
+
+        assert_eq!(buf, data);
     }
 }
