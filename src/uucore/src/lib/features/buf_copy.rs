@@ -272,19 +272,20 @@ pub fn splice_data_to_fd<T: AsFd>(
     write_pipe: &File,
     dest: &T,
 ) -> UResult<(u64, bool)> {
-    loop {
-        let mut bytes = bytes;
-        while !bytes.is_empty() {
-            let len = match vmsplice(&write_pipe, bytes) {
-                Ok(n) => n,
-                Err(e) => return Ok(maybe_unsupported(e)?),
-            };
-            if let Err(e) = splice_exact(&read_pipe, dest, len) {
-                return Ok(maybe_unsupported(e)?);
-            }
-            bytes = &bytes[len..];
+    let mut n_bytes: u64 = 0;
+    let mut bytes = bytes;
+    while !bytes.is_empty() {
+        let len = match vmsplice(&write_pipe, bytes) {
+            Ok(n) => n,
+            Err(e) => return Ok(maybe_unsupported(e)?),
+        };
+        if let Err(e) = splice_exact(&read_pipe, dest, len) {
+            return Ok(maybe_unsupported(e)?);
         }
+        bytes = &bytes[len..];
+        n_bytes += len as u64;
     }
+    Ok((n_bytes, false))
 }
 
 /// Conversion from a `nix::Error` into our `Error` which implements `UError`.
