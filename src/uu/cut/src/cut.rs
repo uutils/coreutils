@@ -350,10 +350,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
 
 // Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
 // Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
-fn get_delimiters(
-    matches: &ArgMatches,
-    delimiter_is_equal: bool,
-) -> UResult<(Delimiter, Option<&[u8]>)> {
+fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
     let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
     let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
     let delim = match delim_opt {
@@ -364,12 +361,7 @@ fn get_delimiters(
             ));
         }
         Some(os_string) => {
-            // GNU's `cut` supports `-d=` to set the delimiter to `=`.
-            // Clap parsing is limited in this situation, see:
-            // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-            if delimiter_is_equal {
-                Delimiter::Slice(b"=")
-            } else if os_string == "''" || os_string.is_empty() {
+            if os_string == "''" || os_string.is_empty() {
                 // treat `''` as empty delimiter
                 Delimiter::Slice(b"\0")
             } else {
@@ -423,15 +415,26 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect::<Vec<OsString>>();
+    // GNU's `cut` supports `-d=` to set the delimiter to `=`.
+    // Clap parsing is limited in this situation, see:
+    // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+    let args: Vec<OsString> = args
+        .into_iter()
+        .map(|x| {
+            if x == "-d=" {
+                "--delimiter==".into()
+            } else {
+                x
+            }
+        })
+        .collect();
 
-    let delimiter_is_equal = args.contains(&OsString::from("-d=")); // special case
     let matches = uu_app().try_get_matches_from(args)?;
 
     let complement = matches.get_flag(options::COMPLEMENT);
     let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
 
-    let (delimiter, out_delimiter) = get_delimiters(&matches, delimiter_is_equal)?;
+    let (delimiter, out_delimiter) = get_delimiters(&matches)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
 
     // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
