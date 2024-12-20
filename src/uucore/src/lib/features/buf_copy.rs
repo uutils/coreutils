@@ -9,27 +9,55 @@
 //! used by utilities to work around the limitations of Rust's `fs::copy` which
 //! does not handle copying special files (e.g pipes, character/block devices).
 
-use crate::error::{UError, UResult};
-use nix::unistd;
-use std::fs::File;
-use std::{
-    io::{self, Read, Write},
-    os::{
-        fd::AsFd,
-        unix::io::{AsRawFd, RawFd},
-    },
-};
+use crate::error::UError;
+use std::io::{Read, Write};
 
-use nix::{errno::Errno, libc::S_IFIFO, sys::stat::fstat};
-
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use super::pipes::{pipe, splice, splice_exact, vmsplice};
-
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::errno::Errno;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::{libc::S_IFIFO, sys::stat::fstat, unistd};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::fs::File;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::os::unix::io::RawFd;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 type Result<T> = std::result::Result<T, Error>;
+
+use crate::error::UResult;
+
+#[cfg(unix)]
+use std::os::unix::io::{AsFd, AsRawFd};
+
+#[cfg(unix)]
+/// A readable file descriptor. Available in unix and unix-line platforms.
+pub trait FdReadable: Read + AsFd + AsRawFd {}
+#[cfg(not(unix))]
+/// A readable file descriptor. Available in non-unix platforms.
+pub trait FdReadable: Read {}
+
+#[cfg(unix)]
+impl<T> FdReadable for T where T: Read + AsFd + AsRawFd {}
+#[cfg(not(unix))]
+impl<T> FdReadable for T where T: Read {}
+
+#[cfg(unix)]
+/// A writable file descriptor. Available in unix and unix-line platforms.
+pub trait FdWritable: Write + AsFd + AsRawFd {}
+#[cfg(not(unix))]
+/// A writable file descriptor. Available in non-unix platforms.
+pub trait FdWritable: Write {}
+
+#[cfg(unix)]
+impl<T> FdWritable for T where T: Write + AsFd + AsRawFd {}
+#[cfg(not(unix))]
+impl<T> FdWritable for T where T: Write {}
 
 /// Error types used by buffer-copying functions from the `buf_copy` module.
 #[derive(Debug)]
 pub enum Error {
-    Io(io::Error),
+    Io(std::io::Error),
     WriteError(String),
 }
 
@@ -54,7 +82,17 @@ impl UError for Error {
     }
 }
 
-/// Helper function to determine whether a given handle (such as a file) is a pipe or not.
+// The generalization of this function (and other splice_data functions) is not trivial as most
+// utilities will just write data finitely. However, `yes`, which is the sole crate using these
+// functions as of now, continuously loops the data write. Coupling the `is_pipe` check together
+// with the data write logic means that the check has to be done for every single write, which adds
+// unnecessary overhead.
+//
+/// Helper function to determine whether a given handle (such as a file) is a pipe or not. Can be
+/// used to determine whether to use the `splice_data_to_pipe` or the `splice_data_to_fd` function.
+/// This function is available exclusively to Linux and Android as it is meant to be used at the
+/// scope of splice operations.
+///
 ///
 /// # Arguments
 /// * `out` - path of handle
@@ -62,7 +100,7 @@ impl UError for Error {
 /// # Returns
 /// A `bool` indicating whether the given handle is a pipe or not.
 #[inline]
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn is_pipe<P>(path: &P) -> Result<bool>
 where
     P: AsRawFd,
@@ -70,7 +108,9 @@ where
     Ok(fstat(path.as_raw_fd())?.st_mode as nix::libc::mode_t & S_IFIFO != 0)
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SPLICE_SIZE: usize = 1024 * 128;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const BUF_SIZE: usize = 1024 * 16;
 
 /// Copy data from `Read` implementor `source` into a `Write` implementor
@@ -92,8 +132,8 @@ const BUF_SIZE: usize = 1024 * 16;
 /// operation is successful.
 pub fn copy_stream<R, S>(src: &mut R, dest: &mut S) -> UResult<u64>
 where
-    R: Read + AsFd + AsRawFd,
-    S: Write + AsFd + AsRawFd,
+    R: FdReadable,
+    S: FdWritable,
 {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
@@ -160,6 +200,7 @@ where
 
 /// Move exactly `num_bytes` bytes from `read_fd` to `write_fd` using the `read`
 /// and `write` calls.
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn copy_exact(read_fd: RawFd, write_fd: &impl AsFd, num_bytes: usize) -> std::io::Result<usize> {
     let mut left = num_bytes;
     let mut buf = [0; BUF_SIZE];
@@ -247,10 +288,10 @@ pub fn splice_data_to_fd<T: AsFd>(
 }
 
 /// Conversion from a `nix::Error` into our `Error` which implements `UError`.
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 impl From<nix::Error> for Error {
     fn from(error: nix::Error) -> Self {
-        Self::Io(io::Error::from_raw_os_error(error as i32))
+        Self::Io(std::io::Error::from_raw_os_error(error as i32))
     }
 }
 
@@ -276,16 +317,22 @@ fn maybe_unsupported(error: nix::Error) -> Result<(u64, bool)> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    #[cfg(any(target_os = "linux", target_os = "android", not(unix)))]
+    use std::fs::File;
+    #[cfg(any(target_os = "linux", target_os = "android", not(unix)))]
     use tempfile::tempdir;
 
-    use super::*;
+    #[cfg(unix)]
     use crate::pipes;
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn new_temp_file() -> File {
         let temp_dir = tempdir().unwrap();
         File::create(temp_dir.path().join("file.txt")).unwrap()
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_file_is_pipe() {
         let temp_file = new_temp_file();
@@ -296,21 +343,26 @@ mod tests {
         assert!(!is_pipe(&temp_file).unwrap());
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_valid_splice_errs() {
-        let err = nix::Error::from(Errno::EINVAL);
+        use nix::errno::Errno;
+        use nix::Error;
+
+        let err = Error::from(Errno::EINVAL);
         assert_eq!(maybe_unsupported(err).unwrap(), (0, true));
 
-        let err = nix::Error::from(Errno::ENOSYS);
+        let err = Error::from(Errno::ENOSYS);
         assert_eq!(maybe_unsupported(err).unwrap(), (0, true));
 
-        let err = nix::Error::from(Errno::EBADF);
+        let err = Error::from(Errno::EBADF);
         assert_eq!(maybe_unsupported(err).unwrap(), (0, true));
 
-        let err = nix::Error::from(Errno::EPERM);
+        let err = Error::from(Errno::EPERM);
         assert!(maybe_unsupported(err).is_err());
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_splice_data_to_pipe() {
         let (pipe_read, pipe_write) = pipes::pipe().unwrap();
@@ -322,6 +374,7 @@ mod tests {
         assert_eq!(bytes as usize, data.len());
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_splice_data_to_file() {
         let mut temp_file = new_temp_file();
@@ -334,6 +387,7 @@ mod tests {
         assert_eq!(bytes as usize, data.len());
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_copy_exact() {
         let (mut pipe_read, mut pipe_write) = pipes::pipe().unwrap();
@@ -348,6 +402,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn test_copy_stream() {
         let (mut pipe_read, mut pipe_write) = pipes::pipe().unwrap();
         let data = b"Hello, world!";
@@ -360,6 +415,33 @@ mod tests {
         assert_eq!(&buf[..n as usize], data);
     }
 
+    #[test]
+    #[cfg(not(unix))]
+    // Test for non-unix platforms. We use regular files instead.
+    fn test_copy_stream() {
+        let temp_dir = tempdir().unwrap();
+        let src_path = temp_dir.path().join("src.txt");
+        let dest_path = temp_dir.path().join("dest.txt");
+
+        let mut src_file = File::create(&src_path).unwrap();
+        let mut dest_file = File::create(&dest_path).unwrap();
+
+        let data = b"Hello, world!";
+        src_file.write_all(data).unwrap();
+        src_file.sync_all().unwrap();
+
+        let mut src_file = File::open(&src_path).unwrap();
+        let bytes_copied = copy_stream(&mut src_file, &mut dest_file).unwrap();
+
+        let mut dest_file = File::open(&dest_path).unwrap();
+        let mut buf = Vec::new();
+        dest_file.read_to_end(&mut buf).unwrap();
+
+        assert_eq!(bytes_copied as usize, data.len());
+        assert_eq!(buf, data);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn test_splice_write() {
         let (mut pipe_read, pipe_write) = pipes::pipe().unwrap();

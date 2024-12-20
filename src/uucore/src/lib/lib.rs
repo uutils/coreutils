@@ -40,6 +40,8 @@ pub use crate::parser::shortcut_value_parser;
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
 pub use crate::features::backup_control;
+#[cfg(feature = "buf-copy")]
+pub use crate::features::buf_copy;
 #[cfg(feature = "checksum")]
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
@@ -70,8 +72,6 @@ pub use crate::features::version_cmp;
 #[cfg(all(not(windows), feature = "mode"))]
 pub use crate::features::mode;
 // ** unix-only
-#[cfg(all(any(target_os = "linux", target_os = "android"), feature = "buf-copy"))]
-pub use crate::features::buf_copy;
 #[cfg(all(unix, feature = "entries"))]
 pub use crate::features::entries;
 #[cfg(all(unix, feature = "perms"))]
