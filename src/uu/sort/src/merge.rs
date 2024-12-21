@@ -25,7 +25,6 @@ use std::{
 };
 
 use compare::Compare;
-use itertools::Itertools;
 use uucore::error::UResult;
 
 use crate::{
@@ -67,58 +66,63 @@ fn replace_output_file_in_input_files(
 ///
 /// If `settings.merge_batch_size` is greater than the length of `files`, intermediate files will be used.
 /// If `settings.compress_prog` is `Some`, intermediate files will be compressed with it.
-pub fn merge<'a>(
+pub fn merge(
     files: &mut [OsString],
-    settings: &'a GlobalSettings,
-    output: Option<&str>,
+    settings: &GlobalSettings,
+    output: Output,
     tmp_dir: &mut TmpDirWrapper,
-) -> UResult<FileMerger<'a>> {
-    replace_output_file_in_input_files(files, output, tmp_dir)?;
+) -> UResult<()> {
+    replace_output_file_in_input_files(files, output.as_output_name(), tmp_dir)?;
+    let files = files
+        .iter()
+        .map(|file| open(file).map(|file| PlainMergeInput { inner: file }));
     if settings.compress_prog.is_none() {
-        merge_with_file_limit::<_, _, WriteablePlainTmpFile>(
-            files
-                .iter()
-                .map(|file| open(file).map(|file| PlainMergeInput { inner: file })),
-            settings,
-            tmp_dir,
-        )
+        merge_with_file_limit::<_, _, WriteablePlainTmpFile>(files, settings, output, tmp_dir)
     } else {
-        merge_with_file_limit::<_, _, WriteableCompressedTmpFile>(
-            files
-                .iter()
-                .map(|file| open(file).map(|file| PlainMergeInput { inner: file })),
-            settings,
-            tmp_dir,
-        )
+        merge_with_file_limit::<_, _, WriteableCompressedTmpFile>(files, settings, output, tmp_dir)
     }
 }
 
 // Merge already sorted `MergeInput`s.
 pub fn merge_with_file_limit<
-    'a,
     M: MergeInput + 'static,
     F: ExactSizeIterator<Item = UResult<M>>,
     Tmp: WriteableTmpFile + 'static,
 >(
     files: F,
-    settings: &'a GlobalSettings,
+    settings: &GlobalSettings,
+    output: Output,
     tmp_dir: &mut TmpDirWrapper,
-) -> UResult<FileMerger<'a>> {
-    if files.len() > settings.merge_batch_size {
-        let mut remaining_files = files.len();
-        let batches = files.chunks(settings.merge_batch_size);
-        let mut batches = batches.into_iter();
+) -> UResult<()> {
+    if files.len() <= settings.merge_batch_size {
+        let merger = merge_without_limit(files, settings);
+        merger?.write_all(settings, output)
+    } else {
         let mut temporary_files = vec![];
-        while remaining_files != 0 {
-            // Work around the fact that `Chunks` is not an `ExactSizeIterator`.
-            remaining_files = remaining_files.saturating_sub(settings.merge_batch_size);
-            let merger = merge_without_limit(batches.next().unwrap(), settings)?;
+        let mut batch = vec![];
+        for file in files {
+            batch.push(file);
+            if batch.len() >= settings.merge_batch_size {
+                assert_eq!(batch.len(), settings.merge_batch_size);
+                let merger = merge_without_limit(batch.into_iter(), settings)?;
+                batch = vec![];
+
+                let mut tmp_file =
+                    Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
+                merger.write_all_to(settings, tmp_file.as_write())?;
+                temporary_files.push(tmp_file.finished_writing()?);
+            }
+        }
+        // Merge any remaining files that didn't get merged in a full batch above.
+        if !batch.is_empty() {
+            assert!(batch.len() < settings.merge_batch_size);
+            let merger = merge_without_limit(batch.into_iter(), settings)?;
+
             let mut tmp_file =
                 Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
             merger.write_all_to(settings, tmp_file.as_write())?;
             temporary_files.push(tmp_file.finished_writing()?);
         }
-        assert!(batches.next().is_none());
         merge_with_file_limit::<_, _, Tmp>(
             temporary_files
                 .into_iter()
@@ -127,10 +131,9 @@ pub fn merge_with_file_limit<
                         dyn FnMut(Tmp::Closed) -> UResult<<Tmp::Closed as ClosedTmpFile>::Reopened>,
                     >),
             settings,
+            output,
             tmp_dir,
         )
-    } else {
-        merge_without_limit(files, settings)
     }
 }
 
@@ -260,7 +263,7 @@ struct PreviousLine {
 }
 
 /// Merges files together. This is **not** an iterator because of lifetime problems.
-pub struct FileMerger<'a> {
+struct FileMerger<'a> {
     heap: binary_heap_plus::BinaryHeap<MergeableFile, FileComparator<'a>>,
     request_sender: Sender<(usize, RecycledChunk)>,
     prev: Option<PreviousLine>,
@@ -269,12 +272,12 @@ pub struct FileMerger<'a> {
 
 impl FileMerger<'_> {
     /// Write the merged contents to the output file.
-    pub fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
+    fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
         let mut out = output.into_write();
         self.write_all_to(settings, &mut out)
     }
 
-    pub fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
+    fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
         while self.write_next(settings, out) {}
         drop(self.request_sender);
         self.reader_join_handle.join().unwrap()

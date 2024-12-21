@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints
+// spell-checker:ignore (words) ints (linux) NOFILE
 #![allow(clippy::cast_possible_wrap)]
 
 use std::time::Duration;
@@ -1071,6 +1071,31 @@ fn test_batch_size_too_large() {
 fn test_merge_batch_size() {
     TestScenario::new(util_name!())
         .ucmd()
+        .arg("--batch-size=2")
+        .arg("-m")
+        .arg("--unique")
+        .arg("merge_ints_interleaved_1.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_1.txt")
+        .succeeds()
+        .stdout_only_fixture("merge_ints_interleaved.expected");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_merge_batch_size_with_limit() {
+    use rlimit::Resource;
+    // Currently need...
+    // 3 descriptors for stdin, stdout, stderr
+    // 2 descriptors for CTRL+C handling logic (to be reworked at some point)
+    // 2 descriptors for the input files (i.e. batch-size of 2).
+    let limit_fd = 3 + 2 + 2;
+    TestScenario::new(util_name!())
+        .ucmd()
+        .limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
