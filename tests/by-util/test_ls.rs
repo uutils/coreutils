@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
+// spell-checker:ignore (words) fakeroot setcap
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -5515,4 +5516,50 @@ fn test_suffix_case_sensitivity() {
                 img3.JpG",
         /* cSpell:enable */
     );
+}
+
+#[cfg(all(unix, target_os = "linux"))]
+#[test]
+fn test_ls_capabilities() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Test must be run as root (or with `sudo -E`)
+    // fakeroot setcap cap_net_bind_service=ep /tmp/file_name
+    // doesn't trigger an error and fails silently
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        return;
+    }
+    at.mkdir("test");
+    at.mkdir("test/dir");
+    at.touch("test/cap_pos");
+    at.touch("test/dir/cap_neg");
+    at.touch("test/dir/cap_pos");
+
+    let files = ["test/cap_pos", "test/dir/cap_pos"];
+    for file in &files {
+        scene
+            .cmd("sudo")
+            .args(&[
+                "-E",
+                "--non-interactive",
+                "setcap",
+                "cap_net_bind_service=ep",
+                at.plus(file).to_str().unwrap(),
+            ])
+            .succeeds();
+    }
+
+    let ls_colors = "di=:ca=30;41";
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", ls_colors)
+        .arg("--color=always")
+        .arg("test/cap_pos")
+        .arg("test/dir")
+        .succeeds()
+        .stdout_contains("\x1b[30;41mtest/cap_pos") // spell-checker:disable-line
+        .stdout_contains("\x1b[30;41mcap_pos") // spell-checker:disable-line
+        .stdout_does_not_contain("0;41mtest/dir/cap_neg"); // spell-checker:disable-line
 }
