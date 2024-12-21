@@ -2317,11 +2317,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.8"
+version = "2.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08f5383f3e0071702bf93ab5ee99b52d26936be9dedd9413067cbdcddcb6141a"
+checksum = "f072643fd0190df67a8bab670c20ef5d8737177d6ac6b2e9a236cb096206b2cc"
 dependencies = [
- "thiserror-impl 2.0.8",
+ "thiserror-impl 2.0.9",
 ]
 
 [[package]]
@@ -2337,9 +2337,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.8"
+version = "2.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2f357fcec90b3caef6623a099691be676d033b40a058ac95d2a6ade6fa0c943"
+checksum = "7b50fa271071aae2e6ee85f842e2e28ba8cd2c5fb67f11fcb1fd70b276f9e7d4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2538,7 +2538,7 @@ version = "0.0.28"
 dependencies = [
  "clap",
  "nix",
- "thiserror 2.0.8",
+ "thiserror 2.0.9",
  "uucore",
 ]
 
@@ -2550,7 +2550,7 @@ dependencies = [
  "fts-sys",
  "libc",
  "selinux",
- "thiserror 2.0.8",
+ "thiserror 2.0.9",
  "uucore",
 ]
 
@@ -2627,7 +2627,7 @@ version = "0.0.28"
 dependencies = [
  "clap",
  "regex",
- "thiserror 2.0.8",
+ "thiserror 2.0.9",
  "uucore",
 ]
 
@@ -3143,7 +3143,7 @@ dependencies = [
  "clap",
  "libc",
  "selinux",
- "thiserror 2.0.8",
+ "thiserror 2.0.9",
  "uucore",
 ]
 
@@ -3422,7 +3422,7 @@ version = "0.0.28"
 dependencies = [
  "chrono",
  "clap",
- "thiserror 2.0.8",
+ "thiserror 2.0.9",
  "utmp-classic",
  "uucore",
 ]
@@ -3453,7 +3453,7 @@ dependencies = [
  "clap",
  "libc",
  "nix",
- "thiserror 2.0.8",
+ "thiserror 2.0.9",
  "unicode-width 0.2.0",
  "uucore",
 ]
@@ -3515,7 +3515,7 @@ dependencies = [
  "sha3",
  "sm3",
  "tempfile",
- "thiserror 2.0.8",
+ "thiserror 2.0.9",
  "time",
  "uucore_procs",
  "walkdir",
@@ -3988,7 +3988,7 @@ dependencies = [
  "flate2",
  "indexmap",
  "memchr",
- "thiserror 2.0.8",
+ "thiserror 2.0.9",
  "zopfli",
 ]
 
