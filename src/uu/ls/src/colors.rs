@@ -156,19 +156,23 @@ pub(crate) fn color_name(
     target_symlink: Option<&PathData>,
     wrap: bool,
 ) -> String {
-    #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
-    let has_capabilities = false;
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     // Check if the file has capabilities
-    let has_capabilities = uucore::fsxattr::has_acl(path.p_buf.as_path());
-
-    // If the file has capabilities, use a specific style for `ca` (capabilities)
-    if has_capabilities {
-        if let Some(style) = style_manager
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    {
+        // Skip checking capabilities if LS_COLORS=ca=:
+        let capabilities = style_manager
             .colors
-            .style_for_indicator(Indicator::Capabilities)
-        {
-            return style_manager.apply_style(Some(style), name, wrap);
+            .style_for_indicator(Indicator::Capabilities);
+
+        let has_capabilities = if capabilities.is_none() {
+            false
+        } else {
+            uucore::fsxattr::has_acl(path.p_buf.as_path())
+        };
+
+        // If the file has capabilities, use a specific style for `ca` (capabilities)
+        if has_capabilities {
+            return style_manager.apply_style(capabilities, name, wrap);
         }
     }
 
