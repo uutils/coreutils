@@ -353,20 +353,20 @@ impl Spec {
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
             Self::QuotedString => {
-                let s = args.get_str();
-                writer
-                    .write_all(
-                        escape_name(
-                            s.as_ref(),
-                            &QuotingStyle::Shell {
-                                escape: true,
-                                always_quote: false,
-                                show_control: false,
-                            },
-                        )
-                        .as_bytes(),
-                    )
-                    .map_err(FormatError::IoError)
+                let s = escape_name(
+                    args.get_str().as_ref(),
+                    &QuotingStyle::Shell {
+                        escape: true,
+                        always_quote: false,
+                        show_control: false,
+                    },
+                );
+                #[cfg(unix)]
+                let bytes = std::os::unix::ffi::OsStringExt::into_vec(s);
+                #[cfg(not(unix))]
+                let bytes = s.to_string_lossy().as_bytes().to_owned();
+
+                writer.write_all(&bytes).map_err(FormatError::IoError)
             }
             Self::SignedInt {
                 width,
