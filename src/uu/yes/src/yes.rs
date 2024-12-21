@@ -8,15 +8,23 @@
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, Command};
 use std::error::Error;
 use std::ffi::OsString;
-use std::io::{self, Write};
+use std::io::{stdout, Write};
+use uucore::error::UResult;
+use uucore::{format_usage, help_about, help_usage};
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
-use uucore::error::{UResult, USimpleError};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::os::fd::AsRawFd;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::buf_copy::is_pipe;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::buf_copy::{splice_data_to_fd, splice_data_to_pipe};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::pipes::pipe;
+
 #[cfg(unix)]
 use uucore::signals::enable_pipe_errors;
-use uucore::{format_usage, help_about, help_usage};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
 
 const ABOUT: &str = help_about!("yes.md");
 const USAGE: &str = help_usage!("yes.md");
@@ -33,11 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     args_into_buffer(&mut buffer, matches.get_many::<OsString>("STRING")).unwrap();
     prepare_buffer(&mut buffer);
 
-    match exec(&buffer) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
-        Err(err) => Err(USimpleError::new(1, format!("standard output: {err}"))),
-    }
+    exec(&buffer)
 }
 
 pub fn uu_app() -> Command {
@@ -112,20 +116,45 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
     }
 }
 
-pub fn exec(bytes: &[u8]) -> io::Result<()> {
-    let stdout = io::stdout();
+/// On Linux and Android, repeatedly call the splice function to write our buffered string into
+/// standard output using the `splice` system call.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn loop_splice_data<T>(bytes: &[u8], out: &T) -> UResult<()>
+where
+    T: AsRawFd + AsFd,
+{
+    let is_pipe = is_pipe(out)?;
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+
+    // Under the if statements below, an Ok(()) is returned to indicate that the
+    // splice call failed but is still recoverable, i.e by using the
+    // stdout.write_all method.
+    if is_pipe {
+
+        loop {
+            if splice_data_to_pipe(bytes, out)?.1 {
+                return Ok(());
+            }
+        }
+    } else {
+        let (read, write) = pipe()?;
+        loop {
+            if splice_data_to_fd(bytes, &read, &write, out)?.1 {
+                return Ok(());
+            };
+        }
+    }
+}
+
+pub fn exec(bytes: &[u8]) -> UResult<()> {
+    let stdout = stdout();
     let mut stdout = stdout.lock();
     #[cfg(unix)]
     enable_pipe_errors()?;
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        match splice::splice_data(bytes, &stdout.as_fd()) {
-            Ok(_) => return Ok(()),
-            Err(splice::Error::Io(err)) => return Err(err),
-            Err(splice::Error::Unsupported) => (),
-        }
-    }
+    loop_splice_data(bytes, &stdout)?;
 
     loop {
         stdout.write_all(bytes)?;

@@ -19,6 +19,7 @@ path = "src/yes.rs"
 [dependencies]
 clap = { workspace = true }
 itertools = { workspace = true }
+uucore = { workspace = true, features = ["buf-copy"] }
 
 [target.'cfg(unix)'.dependencies]
 uucore = { workspace = true, features = ["pipes", "signals"] }
