@@ -35,6 +35,8 @@ pub enum CsplitError {
     SuffixFormatTooManyPercents,
     #[error("{} is not a regular file", ._0.quote())]
     NotRegularFile(String),
+    #[error("{}", _0)]
+    UError(Box<dyn UError>),
 }
 
 impl From<io::Error> for CsplitError {
@@ -43,8 +45,17 @@ impl From<io::Error> for CsplitError {
     }
 }
 
+impl From<Box<dyn UError>> for CsplitError {
+    fn from(error: Box<dyn UError>) -> Self {
+        Self::UError(error)
+    }
+}
+
 impl UError for CsplitError {
     fn code(&self) -> i32 {
-        1
+        match self {
+            Self::UError(e) => e.code(),
+            _ => 1,
+        }
     }
 }
