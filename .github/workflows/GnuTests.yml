@@ -249,11 +249,15 @@ jobs:
             CURRENT_RUN_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
             REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
             CURRENT_RUN_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
-            echo "Detailled information:"
+            REF_SKIP=$(sed -n "s/^SKIP: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
+            CURRENT_RUN_SKIP=$(sed -n "s/^SKIP: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
+
+            echo "Detailed information:"
             echo "REF_ERROR = ${REF_ERROR}"
             echo "CURRENT_RUN_ERROR = ${CURRENT_RUN_ERROR}"
             echo "REF_FAILING = ${REF_FAILING}"
             echo "CURRENT_RUN_FAILING = ${CURRENT_RUN_FAILING}"
+            echo "REF_SKIP_PASS = ${REF_SKIP}"
 
             # Compare failing and error tests
             for LINE in ${CURRENT_RUN_FAILING}
@@ -313,6 +317,17 @@ jobs:
                 echo $MSG >> ${COMMENT_LOG}
               fi
             done
+
+            for LINE in ${REF_SKIP}
+            do
+              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_SKIP}"
+              then
+                MSG="Congrats! The gnu test ${LINE} is no longer SKIP! (might be PASS, ERROR or FAIL)"
+                echo "::warning ::$MSG"
+                echo $MSG >> ${COMMENT_LOG}
+              fi
+            done
+
           else
             echo "::warning ::Skipping ${test_type} test failure comparison; no prior reference test logs are available."
           fi
