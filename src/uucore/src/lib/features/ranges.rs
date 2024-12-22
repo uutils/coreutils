@@ -91,7 +91,7 @@ impl Range {
         Ok(Self::merge(ranges))
     }
 
-    /// Merge any overlapping ranges
+    /// Merge any overlapping ranges. Adjacent ranges are *NOT* merged.
     ///
     /// Is guaranteed to return only disjoint ranges in a sorted order.
     fn merge(mut ranges: Vec<Self>) -> Vec<Self> {
@@ -101,10 +101,7 @@ impl Range {
         for i in 0..ranges.len() {
             let j = i + 1;
 
-            // The +1 is a small optimization, because we can merge adjacent Ranges.
-            // For example (1,3) and (4,6), because in the integers, there are no
-            // possible values between 3 and 4, this is equivalent to (1,6).
-            while j < ranges.len() && ranges[j].low <= ranges[i].high + 1 {
+            while j < ranges.len() && ranges[j].low <= ranges[i].high {
                 let j_high = ranges.remove(j).high;
                 ranges[i].high = max(ranges[i].high, j_high);
             }
@@ -216,8 +213,8 @@ mod test {
             &[r(10, 40), r(50, 60)],
         );
 
-        // Merge adjacent ranges
-        m(vec![r(1, 3), r(4, 6)], &[r(1, 6)]);
+        // Don't merge adjacent ranges
+        m(vec![r(1, 3), r(4, 6)], &[r(1, 3), r(4, 6)]);
     }
 
     #[test]

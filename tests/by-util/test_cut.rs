@@ -350,7 +350,6 @@ fn test_newline_preservation_with_f1_option() {
     ucmd.args(&["-f1-", "1"]).succeeds().stdout_is(expected);
 }
 
-#[ignore = "Not yet implemented"]
 #[test]
 fn test_output_delimiter_with_character_ranges() {
     new_ucmd!()
@@ -360,7 +359,6 @@ fn test_output_delimiter_with_character_ranges() {
         .stdout_only("bc:defg\n");
 }
 
-#[ignore = "Not yet implemented"]
 #[test]
 fn test_output_delimiter_with_adjacent_ranges() {
     new_ucmd!()
