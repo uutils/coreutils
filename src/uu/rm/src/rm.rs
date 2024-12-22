@@ -398,7 +398,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     if !check_one_fs(path, options) {
         return true;
     }
-  
+
     let path = clean_trailing_slashes(path);
     if path_is_current_or_parent_directory(path) {
         show_error!(
