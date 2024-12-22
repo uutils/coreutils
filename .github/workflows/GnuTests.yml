@@ -312,7 +312,7 @@ jobs:
             do
               if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_ERROR}"
               then
-                MSG="Congrats! The gnu test ${LINE} is no longer ERROR!"
+                MSG="Congrats! The gnu test ${LINE} is no longer ERROR! (might be PASS or FAIL)"
                 echo "::warning ::$MSG"
                 echo $MSG >> ${COMMENT_LOG}
               fi
