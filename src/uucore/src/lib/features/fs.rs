@@ -20,6 +20,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::read_dir;
 use std::hash::Hash;
+use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
 #[cfg(unix)]
 use std::os::unix::{fs::MetadataExt, io::AsRawFd};
@@ -709,7 +710,7 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
     path.as_os_str()
         .as_bytes()
         .last()
-        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
+        .is_some_and(|&byte| byte == b'/' || byte == b'\\')
 }
 
 #[cfg(windows)]
@@ -719,6 +720,34 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
         .encode_wide()
         .last()
         .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
+}
+
+/// Checks if the standard input (stdin) is a directory.
+///
+/// # Arguments
+///
+/// * `stdin` - A reference to the standard input handle.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if stdin is a directory, `false` otherwise.
+pub fn is_stdin_directory(stdin: &Stdin) -> bool {
+    #[cfg(unix)]
+    {
+        use nix::sys::stat::fstat;
+        let mode = fstat(stdin.as_raw_fd()).unwrap().st_mode as mode_t;
+        has!(mode, S_IFDIR)
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        let handle = stdin.as_raw_handle();
+        if let Ok(metadata) = fs::metadata(format!("{}", handle as usize)) {
+            return metadata.is_dir();
+        }
+        false
+    }
 }
 
 pub mod sane_blksize {

@@ -1,8 +1,8 @@
 diff --git a/tests/factor/factor.pl b/tests/factor/factor.pl
-index 6e612e418..f19c06ca0 100755
+index b1406c266..3d97cd6a5 100755
 --- a/tests/factor/factor.pl
 +++ b/tests/factor/factor.pl
-@@ -61,12 +61,13 @@ my @Tests =
+@@ -61,12 +61,14 @@ my @Tests =
        # Map newer glibc diagnostic to expected.
        # Also map OpenBSD 5.1's "unknown option" to expected "invalid option".
        {ERR_SUBST => q!s/'1'/1/;s/unknown/invalid/!},
@@ -10,7 +10,8 @@ index 6e612e418..f19c06ca0 100755
 -       . "Try '$prog --help' for more information.\n"},
 +      {ERR => "error: unexpected argument '-1' found\n\n"
 +        . "  tip: to pass '-1' as a value, use '-- -1'\n\n"
-+        . "Usage: factor [OPTION]... [NUMBER]...\n"},
++        . "Usage: factor [OPTION]... [NUMBER]...\n\n"
++        . "For more information, try '--help'.\n"},
        {EXIT => 1}],
       ['cont', 'a 4',
        {OUT => "4: 2 2\n"},

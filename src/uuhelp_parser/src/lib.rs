@@ -73,7 +73,7 @@ pub fn parse_usage(content: &str) -> String {
 pub fn parse_section(section: &str, content: &str) -> Option<String> {
     fn is_section_header(line: &str, section: &str) -> bool {
         line.strip_prefix("##")
-            .map_or(false, |l| l.trim().to_lowercase() == section)
+            .is_some_and(|l| l.trim().to_lowercase() == section)
     }
 
     let section = &section.to_lowercase();

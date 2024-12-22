@@ -383,7 +383,7 @@ fn should_extract_obs_skip_chars(
         && posix_version().is_some_and(|v| v <= OBSOLETE)
         && !preceding_long_opt_req_value
         && !preceding_short_opt_req_value
-        && slice.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
+        && slice.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
 }
 
 /// Helper function to [`filter_args`]
