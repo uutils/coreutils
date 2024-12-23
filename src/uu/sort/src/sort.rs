@@ -225,8 +225,8 @@ impl Output {
         Ok(Self { file })
     }
 
-    fn into_write(self) -> BufWriter<Box<dyn Write>> {
-        BufWriter::new(match self.file {
+    fn writer<'a>(&'a self) -> BufWriter<Box<dyn Write + 'a>> {
+        BufWriter::new(match &self.file {
             Some((_name, file)) => {
                 // truncate the file
                 let _ = file.set_len(0);
@@ -1823,7 +1823,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     settings: &GlobalSettings,
     output: Output,
 ) {
-    let mut writer = output.into_write();
+    let mut writer = output.writer();
     for line in iter {
         line.print(&mut writer, settings);
     }
