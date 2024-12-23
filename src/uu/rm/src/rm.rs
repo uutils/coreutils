@@ -364,11 +364,12 @@ fn get_device_id(_p: &Path) -> Option<u64> {
 
 /// Checks if the given path is on the same device as its parent.
 /// Returns false if the `one_fs` option is enabled and devices differ.
-fn check_one_fs(path: &Path, options: &Options) -> bool {
+/*fn check_one_fs(path: &Path, options: &Options) -> bool {
     if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
         return true;
     }
-
+    println!("checking {}", path.display());
+    println!("parent: {:?}", fs::canonicalize(path).ok().and_then(|p| p.parent().map(Path::to_path_buf)));
     // as we can get relative path, we need to canonicalize
     // and manage potential errors
     let parent_device = fs::canonicalize(path)
@@ -377,6 +378,75 @@ fn check_one_fs(path: &Path, options: &Options) -> bool {
         .as_deref()
         .and_then(get_device_id);
     let current_device = get_device_id(path);
+    println!("parent_device: {:?}, current_device: {:?}", parent_device, current_device);
+    if parent_device != current_device {
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+        if options.preserve_root == PreserveRoot::YesAll {
+            show_error!("and --preserve-root=all is in effect");
+        }
+        return false;
+    }
+
+    true
+}*/
+/*
+fn check_one_fs(path: &Path, options: &Options) -> bool {
+    if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
+        return true;
+    }
+
+    let parent_device = path.parent().and_then(get_device_id);
+    let current_device = get_device_id(path);
+
+    println!("parent_device: {:?}, current_device: {:?}", parent_device, current_device);
+
+    if parent_device != current_device {
+
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+        if options.preserve_root == PreserveRoot::YesAll {
+            show_error!("and --preserve-root=all is in effect");
+        }
+        return false;
+    }
+
+    true
+}
+*/
+
+fn check_one_fs(path: &Path, options: &Options) -> bool {
+    if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
+        return true;
+    }
+
+    // Attempt to canonicalize the path
+    let path_canon = match path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => {
+            // If we can't canonicalize, fallback to original
+            // or handle the error differently
+            path.to_path_buf()
+        }
+    };
+
+    let parent_path = path_canon
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| path_canon.clone());
+
+    let parent_device = get_device_id(&parent_path);
+    let current_device = get_device_id(&path_canon);
+
+    println!(
+        "parent_device: {:?}, current_device: {:?}",
+        parent_device, current_device
+    );
+
     if parent_device != current_device {
         show_error!(
             "skipping {}, since it's on a different device",
@@ -395,16 +465,16 @@ fn check_one_fs(path: &Path, options: &Options) -> bool {
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
 
-    if !check_one_fs(path, options) {
-        return true;
-    }
-
     let path = clean_trailing_slashes(path);
     if path_is_current_or_parent_directory(path) {
         show_error!(
             "refusing to remove '.' or '..' directory: skipping '{}'",
             path.display()
         );
+        return true;
+    }
+
+    if !check_one_fs(path, options) {
         return true;
     }
 
