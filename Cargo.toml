@@ -34,6 +34,8 @@ windows = ["feat_os_windows"]
 nightly = []
 test_unimplemented = []
 expensive_tests = []
+# "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
+test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
 uudoc = ["zip", "dep:uuhelp_parser"]
 ## features

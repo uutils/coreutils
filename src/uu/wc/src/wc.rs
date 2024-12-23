@@ -255,13 +255,17 @@ impl<'a> Input<'a> {
     }
 
     /// Converts input to title that appears in stats.
-    fn to_title(&self) -> Option<Cow<str>> {
+    fn to_title(&self) -> Option<Cow<OsStr>> {
         match self {
-            Self::Path(path) => Some(match path.to_str() {
-                Some(s) if !s.contains('\n') => Cow::Borrowed(s),
-                _ => Cow::Owned(escape_name_wrapper(path.as_os_str())),
-            }),
-            Self::Stdin(StdinKind::Explicit) => Some(Cow::Borrowed(STDIN_REPR)),
+            Self::Path(path) => {
+                let path = path.as_os_str();
+                if path.to_string_lossy().contains('\n') {
+                    Some(Cow::Owned(quoting_style::escape_name(path, QS_ESCAPE)))
+                } else {
+                    Some(Cow::Borrowed(path))
+                }
+            }
+            Self::Stdin(StdinKind::Explicit) => Some(Cow::Borrowed(OsStr::new(STDIN_REPR))),
             Self::Stdin(StdinKind::Implicit) => None,
         }
     }
@@ -852,14 +856,17 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
             let maybe_title = input.to_title();
             let maybe_title_str = maybe_title.as_deref();
             if let Err(err) = print_stats(settings, &word_count, maybe_title_str, number_width) {
-                let title = maybe_title_str.unwrap_or("<stdin>");
-                show!(err.map_err_context(|| format!("failed to print result for {title}")));
+                let title = maybe_title_str.unwrap_or(OsStr::new("<stdin>"));
+                show!(err.map_err_context(|| format!(
+                    "failed to print result for {}",
+                    title.to_string_lossy()
+                )));
             }
         }
     }
 
     if settings.total_when.is_total_row_visible(num_inputs) {
-        let title = are_stats_visible.then_some("total");
+        let title = are_stats_visible.then_some(OsStr::new("total"));
         if let Err(err) = print_stats(settings, &total_word_count, title, number_width) {
             show!(err.map_err_context(|| "failed to print total".into()));
         }
@@ -873,7 +880,7 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
 fn print_stats(
     settings: &Settings,
     result: &WordCount,
-    title: Option<&str>,
+    title: Option<&OsStr>,
     number_width: usize,
 ) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
@@ -893,8 +900,8 @@ fn print_stats(
     }
 
     if let Some(title) = title {
-        writeln!(stdout, "{space}{title}")
-    } else {
-        writeln!(stdout)
+        write!(stdout, "{space}")?;
+        stdout.write_all(&uucore::os_str_as_bytes_lossy(title))?;
     }
+    writeln!(stdout)
 }
