@@ -86,7 +86,7 @@ where
 /// - `source` - source handle
 /// - `dest` - destination handle
 #[inline]
-fn splice_write<R, S>(source: &R, dest: &S) -> UResult<(u64, bool)>
+pub(crate) fn splice_write<R, S>(source: &R, dest: &S) -> UResult<(u64, bool)>
 where
     R: Read + AsFd + AsRawFd,
     S: AsRawFd + AsFd,
@@ -122,7 +122,11 @@ where
 /// Move exactly `num_bytes` bytes from `read_fd` to `write_fd` using the `read`
 /// and `write` calls.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn copy_exact(read_fd: RawFd, write_fd: &impl AsFd, num_bytes: usize) -> std::io::Result<usize> {
+pub(crate) fn copy_exact(
+    read_fd: RawFd,
+    write_fd: &impl AsFd,
+    num_bytes: usize,
+) -> std::io::Result<usize> {
     use nix::unistd;
 
     let mut left = num_bytes;
@@ -247,7 +251,7 @@ where
 /// Result with tuple containing a `u64` `0` indicating that no data had been
 /// written and a `true` indicating we have to fall back, if error is still
 /// recoverable. Returns an `Error` implementing `UError` otherwise.
-fn maybe_unsupported(error: nix::Error) -> Result<(u64, bool)> {
+pub(crate) fn maybe_unsupported(error: nix::Error) -> Result<(u64, bool)> {
     match error {
         Errno::EINVAL | Errno::ENOSYS | Errno::EBADF => Ok((0, true)),
         _ => Err(error.into()),
