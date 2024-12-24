@@ -219,8 +219,7 @@ fn test_hyphen_values_at_start() {
         .arg("-test")
         .arg("araba")
         .arg("-merci")
-        .run()
-        .success()
+        .succeeds()
         .stdout_does_not_contain("-E")
         .stdout_is("-test araba -merci\n");
 }
@@ -231,8 +230,7 @@ fn test_hyphen_values_between() {
         .arg("test")
         .arg("-E")
         .arg("araba")
-        .run()
-        .success()
+        .succeeds()
         .stdout_is("test -E araba\n");
 
     new_ucmd!()
@@ -240,8 +238,7 @@ fn test_hyphen_values_between() {
         .arg("dum dum dum")
         .arg("-e")
         .arg("dum")
-        .run()
-        .success()
+        .succeeds()
         .stdout_is("dumdum  dum dum dum -e dum\n");
 }
 
