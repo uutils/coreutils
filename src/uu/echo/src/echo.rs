@@ -255,9 +255,26 @@ fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlo
     Ok(ControlFlow::Continue(()))
 }
 
+// A workaround because clap interprets the first '--' as a marker that a value
+// follows. In order to use '--' as a value, we have to inject an additional '--'
+fn handle_double_hyphens(args: impl uucore::Args) -> impl uucore::Args {
+    let mut result = Vec::new();
+    let mut is_first_double_hyphen = true;
+
+    for arg in args {
+        if arg == "--" && is_first_double_hyphen {
+            result.push(OsString::from("--"));
+            is_first_double_hyphen = false;
+        }
+        result.push(arg);
+    }
+
+    result.into_iter()
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().get_matches_from(handle_double_hyphens(args));
 
     // TODO
     // "If the POSIXLY_CORRECT environment variable is set, then when echo’s first argument is not -n it outputs option-like arguments instead of treating them as options."

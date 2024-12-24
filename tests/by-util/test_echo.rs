@@ -243,6 +243,16 @@ fn test_hyphen_values_between() {
 }
 
 #[test]
+fn test_double_hyphens() {
+    new_ucmd!().arg("--").succeeds().stdout_only("--\n");
+    new_ucmd!()
+        .arg("--")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-- --\n");
+}
+
+#[test]
 fn wrapping_octal() {
     // Some odd behavior of GNU. Values of \0400 and greater do not fit in the
     // u8 that we write to stdout. So we test that it wraps:
