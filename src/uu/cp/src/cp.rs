@@ -17,7 +17,7 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
@@ -1605,11 +1605,11 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+        #[cfg(all(unix, not(target_os = "android")))]
         {
             copy_xattrs(source, dest)?;
         }
-        #[cfg(not(all(unix, not(any(target_os = "android", target_os = "macos")))))]
+        #[cfg(not(all(unix, not(target_os = "android"))))]
         {
             // The documentation for GNU cp states:
             //
