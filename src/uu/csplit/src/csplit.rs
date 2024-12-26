@@ -621,8 +621,9 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::QUIET)
-                .short('s')
+                .short('q')
                 .long(options::QUIET)
+                .visible_short_alias('s')
                 .visible_alias("silent")
                 .help("do not print counts of output file sizes")
                 .action(ArgAction::SetTrue),
