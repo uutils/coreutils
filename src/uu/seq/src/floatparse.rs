@@ -9,6 +9,9 @@ use crate::numberparse::ParseNumberError;
 use bigdecimal::BigDecimal;
 use num_traits::FromPrimitive;
 
+/// The base of the hex number system
+const HEX_RADIX: u32 = 16;
+
 ///  Parse a number from a floating-point hexadecimal exponent notation.
 ///
 /// # Errors
@@ -69,7 +72,7 @@ fn parse_float(s: &str) -> Result<f64, ParseNumberError> {
 
     // Read an integer part (if presented)
     let length = s.chars().take_while(|c| c.is_ascii_hexdigit()).count();
-    let integer = u64::from_str_radix(&s[..length], 16).unwrap_or(0);
+    let integer = u64::from_str_radix(&s[..length], HEX_RADIX).unwrap_or(0);
     s = &s[length..];
 
     // Read a fractional part (if presented)
@@ -134,16 +137,15 @@ fn parse_fractional_part(s: &str) -> Result<f64, ParseNumberError> {
         return Err(ParseNumberError::Float);
     }
 
-    const RADIX: u32 = 16;
-    let mut multiplier = 1.0 / RADIX as f64;
+    let mut multiplier = 1.0 / HEX_RADIX as f64;
     let mut total = 0.0;
     for c in s.chars() {
         let digit = c
-            .to_digit(RADIX)
+            .to_digit(HEX_RADIX)
             .map(|x| x as u8)
             .ok_or(ParseNumberError::Float)?;
         total += (digit as f64) * multiplier;
-        multiplier /= RADIX as f64;
+        multiplier /= HEX_RADIX as f64;
     }
     Ok(total)
 }
