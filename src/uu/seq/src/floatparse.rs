@@ -117,23 +117,33 @@ fn parse_float(s: &str) -> Result<f64, ParseNumberError> {
 
 /// Parse the fractional part in hexadecimal notation.
 ///
+/// The function calculates the sum of the digits after the '.' (dot) sign. Each Nth digit is
+/// interpreted as digit / 16^n, where n represents the position after the dot starting from 1.
+///
+/// For example, the number 0x1.234p2 has a fractional part 234, which can be interpreted as
+/// 2/16^1 + 3/16^2 + 4/16^3, where 16 is the radix of the hexadecimal number system. This equals
+/// 0.125 + 0.01171875 + 0.0009765625 = 0.1376953125 in decimal. And this is exactly what the
+/// function does.
+///
 /// # Errors
 ///
-/// This function returns an error if the string is empty or contains characters that are not hex digits.
+/// This function returns an error if the string is empty or contains characters that are not hex
+/// digits.
 fn parse_fractional_part(s: &str) -> Result<f64, ParseNumberError> {
     if s.is_empty() {
         return Err(ParseNumberError::Float);
     }
 
-    let mut multiplier = 1.0 / 16.0;
+    const RADIX: u32 = 16;
+    let mut multiplier = 1.0 / RADIX as f64;
     let mut total = 0.0;
     for c in s.chars() {
         let digit = c
-            .to_digit(16)
+            .to_digit(RADIX)
             .map(|x| x as u8)
             .ok_or(ParseNumberError::Float)?;
         total += (digit as f64) * multiplier;
-        multiplier /= 16.0;
+        multiplier /= RADIX as f64;
     }
     Ok(total)
 }
