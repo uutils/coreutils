@@ -56,11 +56,13 @@ pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberErro
 
     // Build a PreciseNumber
     let number = BigDecimal::from_f64(value).ok_or(ParseNumberError::Float)?;
-    let fractional_digits = i64::max(number.fractional_digit_count(), 0) as usize;
+    let fractional_digits = i64::max(number.fractional_digit_count(), 0);
+    let integral_digits =
+        number.digits() - fractional_digits as u64 + if sign < 0.0 { 1 } else { 0 };
     Ok(PreciseNumber::new(
         ExtendedBigDecimal::BigDecimal(number),
-        0,
-        fractional_digits,
+        integral_digits as usize,
+        fractional_digits as usize,
     ))
 }
 
@@ -159,13 +161,20 @@ mod tests {
 
     use super::parse_hexadecimal_float;
     use crate::{numberparse::ParseNumberError, ExtendedBigDecimal};
+    use bigdecimal::BigDecimal;
     use num_traits::ToPrimitive;
 
-    fn parse_f64(s: &str) -> Result<f64, ParseNumberError> {
+    fn parse_big_decimal(s: &str) -> Result<BigDecimal, ParseNumberError> {
         match parse_hexadecimal_float(s)?.number {
-            ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().ok_or(ParseNumberError::Float),
+            ExtendedBigDecimal::BigDecimal(bd) => Ok(bd),
             _ => Err(ParseNumberError::Float),
         }
+    }
+
+    fn parse_f64(s: &str) -> Result<f64, ParseNumberError> {
+        parse_big_decimal(s)?
+            .to_f64()
+            .ok_or(ParseNumberError::Float)
     }
 
     #[test]
@@ -243,5 +252,24 @@ mod tests {
         assert_eq!(parse_f64("0x1.1pk").unwrap_err(), expected_error);
         assert_eq!(parse_f64("0x1.8p2z").unwrap_err(), expected_error);
         assert_eq!(parse_f64("0x1p3.2").unwrap_err(), expected_error);
+    }
+
+    #[test]
+    fn test_parse_precise_number_count_digits() {
+        let precise_num = parse_hexadecimal_float("0x1.2").unwrap(); // 1.125 decimal
+        assert_eq!(precise_num.num_integral_digits, 1);
+        assert_eq!(precise_num.num_fractional_digits, 3);
+
+        let precise_num = parse_hexadecimal_float("-0x1.2").unwrap(); // -1.125 decimal
+        assert_eq!(precise_num.num_integral_digits, 2);
+        assert_eq!(precise_num.num_fractional_digits, 3);
+
+        let precise_num = parse_hexadecimal_float("0x123.8").unwrap(); // 291.5 decimal
+        assert_eq!(precise_num.num_integral_digits, 3);
+        assert_eq!(precise_num.num_fractional_digits, 1);
+
+        let precise_num = parse_hexadecimal_float("-0x123.8").unwrap(); // -291.5 decimal
+        assert_eq!(precise_num.num_integral_digits, 4);
+        assert_eq!(precise_num.num_fractional_digits, 1);
     }
 }
