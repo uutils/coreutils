@@ -387,18 +387,23 @@ fn test_option_keep() {
 
 #[test]
 fn test_option_quiet() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["--quiet", "numbers50.txt", "13", "%25%", "/0$/"])
-        .succeeds()
-        .no_stdout();
+    for arg in ["-q", "--quiet", "-s", "--silent"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&[arg, "numbers50.txt", "13", "%25%", "/0$/"])
+            .succeeds()
+            .no_stdout();
 
-    let count = glob(&at.plus_as_string("xx*"))
-        .expect("there should be splits created")
-        .count();
-    assert_eq!(count, 3);
-    assert_eq!(at.read("xx00"), generate(1, 13));
-    assert_eq!(at.read("xx01"), generate(25, 30));
-    assert_eq!(at.read("xx02"), generate(30, 51));
+        let count = glob(&at.plus_as_string("xx*"))
+            .expect("there should be splits created")
+            .count();
+        assert_eq!(count, 3);
+        assert_eq!(at.read("xx00"), generate(1, 13));
+        assert_eq!(at.read("xx01"), generate(25, 30));
+        assert_eq!(at.read("xx02"), generate(30, 51));
+        at.remove("xx00");
+        at.remove("xx01");
+        at.remove("xx02");
+    }
 }
 
 #[test]
