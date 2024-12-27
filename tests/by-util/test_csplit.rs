@@ -130,17 +130,21 @@ fn test_up_to_match_sequence() {
 
 #[test]
 fn test_up_to_match_offset() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["numbers50.txt", "/9$/+3"])
-        .succeeds()
-        .stdout_only("24\n117\n");
+    for offset in ["3", "+3"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["numbers50.txt", &format!("/9$/{offset}")])
+            .succeeds()
+            .stdout_only("24\n117\n");
 
-    let count = glob(&at.plus_as_string("xx*"))
-        .expect("there should be splits created")
-        .count();
-    assert_eq!(count, 2);
-    assert_eq!(at.read("xx00"), generate(1, 12));
-    assert_eq!(at.read("xx01"), generate(12, 51));
+        let count = glob(&at.plus_as_string("xx*"))
+            .expect("there should be splits created")
+            .count();
+        assert_eq!(count, 2);
+        assert_eq!(at.read("xx00"), generate(1, 12));
+        assert_eq!(at.read("xx01"), generate(12, 51));
+        at.remove("xx00");
+        at.remove("xx01");
+    }
 }
 
 #[test]
@@ -316,16 +320,19 @@ fn test_skip_to_match_sequence4() {
 
 #[test]
 fn test_skip_to_match_offset() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["numbers50.txt", "%23%+3"])
-        .succeeds()
-        .stdout_only("75\n");
+    for offset in ["3", "+3"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["numbers50.txt", &format!("%23%{offset}")])
+            .succeeds()
+            .stdout_only("75\n");
 
-    let count = glob(&at.plus_as_string("xx*"))
-        .expect("there should be splits created")
-        .count();
-    assert_eq!(count, 1);
-    assert_eq!(at.read("xx00"), generate(26, 51));
+        let count = glob(&at.plus_as_string("xx*"))
+            .expect("there should be splits created")
+            .count();
+        assert_eq!(count, 1);
+        assert_eq!(at.read("xx00"), generate(26, 51));
+        at.remove("xx00");
+    }
 }
 
 #[test]
