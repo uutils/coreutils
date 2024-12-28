@@ -288,11 +288,22 @@ fn test_empty_string_as_delimiter_with_output_delimiter() {
 
 #[test]
 fn test_newline_as_delimiter() {
+    for (field, expected_output) in [("1", "a:1\n"), ("2", "b:\n")] {
+        new_ucmd!()
+            .args(&["-f", field, "-d", "\n"])
+            .pipe_in("a:1\nb:")
+            .succeeds()
+            .stdout_only_bytes(expected_output);
+    }
+}
+
+#[test]
+fn test_newline_as_delimiter_with_output_delimiter() {
     new_ucmd!()
-        .args(&["-f", "1", "-d", "\n"])
-        .pipe_in("a:1\nb:")
+        .args(&["-f1-", "-d", "\n", "--output-delimiter=:"])
+        .pipe_in("a\nb\n")
         .succeeds()
-        .stdout_only_bytes("a:1\nb:\n");
+        .stdout_only_bytes("a:b\n");
 }
 
 #[test]

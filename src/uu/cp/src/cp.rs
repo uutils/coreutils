@@ -17,6 +17,8 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
+#[cfg(all(unix, not(target_os = "android")))]
+use uucore::fsxattr::copy_xattrs;
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use filetime::FileTime;
@@ -1605,12 +1607,7 @@ pub(crate) fn copy_attributes(
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
         #[cfg(all(unix, not(target_os = "android")))]
         {
-            let xattrs = xattr::list(source)?;
-            for attr in xattrs {
-                if let Some(attr_value) = xattr::get(source, attr.clone())? {
-                    xattr::set(dest, attr, &attr_value[..])?;
-                }
-            }
+            copy_xattrs(source, dest)?;
         }
         #[cfg(not(all(unix, not(target_os = "android"))))]
         {

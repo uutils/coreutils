@@ -9,7 +9,7 @@ use bstr::io::BufReadExt;
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, IsTerminal, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
@@ -267,10 +267,46 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
     Ok(())
 }
 
+// The input delimiter is identical to `newline_char`
+fn cut_fields_newline_char_delim<R: Read>(
+    reader: R,
+    ranges: &[Range],
+    newline_char: u8,
+    out_delim: &[u8],
+) -> UResult<()> {
+    let buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+
+    let segments: Vec<_> = buf_in.split(newline_char).filter_map(|x| x.ok()).collect();
+    let mut print_delim = false;
+
+    for &Range { low, high } in ranges {
+        for i in low..=high {
+            // "- 1" is necessary because fields start from 1 whereas a Vec starts from 0
+            if let Some(segment) = segments.get(i - 1) {
+                if print_delim {
+                    out.write_all(out_delim)?;
+                } else {
+                    print_delim = true;
+                }
+                out.write_all(segment.as_slice())?;
+            } else {
+                break;
+            }
+        }
+    }
+    out.write_all(&[newline_char])?;
+    Ok(())
+}
+
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
     let newline_char = opts.line_ending.into();
     let field_opts = opts.field_opts.as_ref().unwrap(); // it is safe to unwrap() here - field_opts will always be Some() for cut_fields() call
     match field_opts.delimiter {
+        Delimiter::Slice(delim) if delim == [newline_char] => {
+            let out_delim = opts.out_delimiter.unwrap_or(delim);
+            cut_fields_newline_char_delim(reader, ranges, newline_char, out_delim)
+        }
         Delimiter::Slice(delim) => {
             let matcher = ExactMatcher::new(delim);
             match opts.out_delimiter {
