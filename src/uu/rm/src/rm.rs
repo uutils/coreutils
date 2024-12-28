@@ -8,8 +8,7 @@
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, File, Metadata};
-use std::io::ErrorKind;
+use std::fs::{self, Metadata};
 use std::ops::BitOr;
 #[cfg(not(windows))]
 use std::os::unix::ffi::OsStrExt;
