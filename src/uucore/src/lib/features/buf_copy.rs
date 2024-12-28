@@ -28,19 +28,17 @@ mod tests {
     use tempfile::tempdir;
 
     #[cfg(unix)]
-    use crate::pipes;
-    #[cfg(unix)]
-    use std::fs::OpenOptions;
-    #[cfg(unix)]
-    use std::{
-        io::{Seek, SeekFrom},
-        thread,
+    use {
+        crate::pipes,
+        std::fs::OpenOptions,
+        std::{
+            io::{Seek, SeekFrom},
+            thread,
+        },
     };
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    use nix::unistd;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    use std::os::fd::AsRawFd;
+    use {nix::unistd, std::os::fd::AsRawFd};
 
     use std::io::{Read, Write};
 
