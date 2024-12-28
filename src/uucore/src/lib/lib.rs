@@ -99,7 +99,7 @@ pub use crate::features::wide;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
 
-#[cfg(all(unix, not(target_os = "macos"), feature = "fsxattr"))]
+#[cfg(all(unix, feature = "fsxattr"))]
 pub use crate::features::fsxattr;
 
 //## core functions

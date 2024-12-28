@@ -258,6 +258,7 @@ jobs:
             echo "REF_FAILING = ${REF_FAILING}"
             echo "CURRENT_RUN_FAILING = ${CURRENT_RUN_FAILING}"
             echo "REF_SKIP_PASS = ${REF_SKIP}"
+            echo "CURRENT_RUN_SKIP = ${CURRENT_RUN_SKIP}"
 
             # Compare failing and error tests
             for LINE in ${CURRENT_RUN_FAILING}

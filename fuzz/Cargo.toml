@@ -27,6 +27,7 @@ uu_cut = { path = "../src/uu/cut/" }
 uu_split = { path = "../src/uu/split/" }
 uu_tr = { path = "../src/uu/tr/" }
 uu_env = { path = "../src/uu/env/" }
+uu_cksum = { path = "../src/uu/cksum/" }
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -125,5 +126,11 @@ doc = false
 [[bin]]
 name = "fuzz_env"
 path = "fuzz_targets/fuzz_env.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_cksum"
+path = "fuzz_targets/fuzz_cksum.rs"
 test = false
 doc = false
