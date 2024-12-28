@@ -283,6 +283,32 @@ fn test_gnu_compatible_quotation() {
         .stdout_is("0 0 0 'some-dir1/12'$'\\n''34.txt'\n");
 }
 
+#[cfg(feature = "test_risky_names")]
+#[test]
+fn test_non_unicode_names() {
+    let scene = TestScenario::new(util_name!());
+    let target1 = uucore::os_str_from_bytes(b"some-dir1/1\xC0\n.txt")
+        .expect("Only unix platforms can test non-unicode names");
+    let target2 = uucore::os_str_from_bytes(b"some-dir1/2\xC0\t.txt")
+        .expect("Only unix platforms can test non-unicode names");
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.touch(&target1);
+    at.touch(&target2);
+    scene
+        .ucmd()
+        .args(&[target1, target2])
+        .run()
+        .stdout_is_bytes(
+            [
+                b"0 0 0 'some-dir1/1'$'\\300\\n''.txt'\n".to_vec(),
+                b"0 0 0 some-dir1/2\xC0\t.txt\n".to_vec(),
+                b"0 0 0 total\n".to_vec(),
+            ]
+            .concat(),
+        );
+}
+
 #[test]
 fn test_multiple_default() {
     new_ucmd!()
