@@ -65,6 +65,28 @@ fn test_invalid_user_spec() {
 }
 
 #[test]
+fn test_invalid_user() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let dir = "CHROOT_DIR";
+    at.mkdir(dir);
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "whoami"]) {
+        result.success().no_stderr().stdout_is("root");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &["--user=nobody:+65535", dir, "pwd"]) {
+        result
+            .failure()
+            .stderr_contains("no such user: nobody:+65535");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+}
+
+#[test]
 #[cfg(not(target_os = "android"))]
 fn test_preference_of_userspec() {
     let scene = TestScenario::new(util_name!());
