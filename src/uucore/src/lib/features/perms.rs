@@ -13,6 +13,7 @@ pub use crate::features::entries;
 use crate::show_error;
 use clap::{Arg, ArgMatches, Command};
 use libc::{gid_t, uid_t};
+use options::traverse;
 use walkdir::WalkDir;
 
 use std::io::Error as IOError;
@@ -632,6 +633,26 @@ pub fn chown_base(
         filter,
     };
     executor.exec()
+}
+
+pub fn traverse_args() -> Vec<Arg> {
+    vec![
+        Arg::new(traverse::TRAVERSE)
+            .short(traverse::TRAVERSE.chars().next().unwrap())
+            .help("if a command line argument is a symbolic link to a directory, traverse it")
+            .overrides_with_all([traverse::EVERY, traverse::NO_TRAVERSE])
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(traverse::EVERY)
+            .short(traverse::EVERY.chars().next().unwrap())
+            .help("traverse every symbolic link to a directory encountered")
+            .overrides_with_all([traverse::TRAVERSE, traverse::NO_TRAVERSE])
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(traverse::NO_TRAVERSE)
+            .short(traverse::NO_TRAVERSE.chars().next().unwrap())
+            .help("do not traverse any symbolic links (default)")
+            .overrides_with_all([traverse::TRAVERSE, traverse::EVERY])
+            .action(clap::ArgAction::SetTrue),
+    ]
 }
 
 #[cfg(test)]

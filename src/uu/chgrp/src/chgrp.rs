@@ -63,7 +63,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let mut cmd = Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -140,24 +140,12 @@ pub fn uu_app() -> Command {
                 .long(options::RECURSIVE)
                 .help("operate on files and directories recursively")
                 .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::TRAVERSE)
-                .short(options::traverse::TRAVERSE.chars().next().unwrap())
-                .help("if a command line argument is a symbolic link to a directory, traverse it")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::NO_TRAVERSE)
-                .short(options::traverse::NO_TRAVERSE.chars().next().unwrap())
-                .help("do not traverse any symbolic links (default)")
-                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::EVERY])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::EVERY)
-                .short(options::traverse::EVERY.chars().next().unwrap())
-                .help("traverse every symbolic link to a directory encountered")
-                .action(ArgAction::SetTrue),
-        )
+        );
+
+    // Add traverse-related arguments
+    for arg in uucore::perms::traverse_args() {
+        cmd = cmd.arg(arg);
+    }
+
+    cmd
 }

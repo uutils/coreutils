@@ -151,7 +151,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let mut cmd = Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -206,16 +206,24 @@ pub fn uu_app() -> Command {
                 .help("use RFILE's mode instead of MODE values"),
         )
         .arg(
-            Arg::new(options::MODE).required_unless_present(options::REFERENCE), // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
-                                                                                 // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
-                                                                                 // Only one positional argument with .multiple_occurrences(true) set is allowed per command
+            Arg::new(options::MODE).required_unless_present(options::REFERENCE),
+            // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
+            // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
+            // Only one positional argument with .multiple_occurrences(true) set is allowed per command
         )
         .arg(
             Arg::new(options::FILE)
                 .required_unless_present(options::MODE)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
-        )
+        );
+
+    // Add traverse-related arguments
+    for arg in uucore::perms::traverse_args() {
+        cmd = cmd.arg(arg);
+    }
+
+    cmd
 }
 
 struct Chmoder {

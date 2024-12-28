@@ -77,7 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let mut cmd = Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -166,33 +166,19 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::traverse::TRAVERSE)
-                .short(options::traverse::TRAVERSE.chars().next().unwrap())
-                .help("if a command line argument is a symbolic link to a directory, traverse it")
-                .overrides_with_all([options::traverse::EVERY, options::traverse::NO_TRAVERSE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::EVERY)
-                .short(options::traverse::EVERY.chars().next().unwrap())
-                .help("traverse every symbolic link to a directory encountered")
-                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::NO_TRAVERSE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::NO_TRAVERSE)
-                .short(options::traverse::NO_TRAVERSE.chars().next().unwrap())
-                .help("do not traverse any symbolic links (default)")
-                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::EVERY])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
             Arg::new(options::verbosity::VERBOSE)
                 .long(options::verbosity::VERBOSE)
                 .short('v')
                 .help("output a diagnostic for every file processed")
                 .action(ArgAction::SetTrue),
-        )
+        );
+
+    // Add traverse-related arguments
+    for arg in uucore::perms::traverse_args() {
+        cmd = cmd.arg(arg);
+    }
+
+    cmd
 }
 
 /// Parses the user string to extract the UID.
