@@ -15,8 +15,7 @@ const HEX_RADIX: u32 = 16;
 ///  Parse a number from a floating-point hexadecimal exponent notation.
 ///
 /// # Errors
-///
-/// This function returns an error if:
+/// Returns [`Err`] if:
 /// - the input string is not a valid hexadecimal string
 /// - the input data can't be interpreted as ['f64'] or ['BigDecimal']
 ///
@@ -32,16 +31,16 @@ const HEX_RADIX: u32 = 16;
 /// ```
 pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     // Parse floating point parts
-    let (sign, remain) = parse_sign(s.trim())?;
+    let (sign, remain) = parse_sign_multiplier(s.trim())?;
     let remain = parse_hex_prefix(remain)?;
     let (integer, remain) = parse_integral_part(remain)?;
     let (fractional, remain) = parse_fractional_part(remain)?;
-    let (power, remain) = parse_power_part(remain)?;
+    let (exponent, remain) = parse_exponent_part(remain)?;
 
     // Check parts:
-    // - Both 'fractional' and 'power' values cannot be 'None' at the same time.
+    // - Both 'fractional' and 'exponent' values cannot be 'None' at the same time.
     // - The entire string must be consumed; otherwise, there could be garbage symbols after the Hex float.
-    if fractional.is_none() && power.is_none() {
+    if fractional.is_none() && exponent.is_none() {
         return Err(ParseNumberError::Float);
     }
 
@@ -52,7 +51,7 @@ pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberErro
     // Build a number from parts
     let value = sign
         * (integer.unwrap_or(0.0) + fractional.unwrap_or(0.0))
-        * (2.0_f64).powi(power.unwrap_or(0));
+        * (2.0_f64).powi(exponent.unwrap_or(0));
 
     // Build a PreciseNumber
     let number = BigDecimal::from_f64(value).ok_or(ParseNumberError::Float)?;
@@ -66,16 +65,31 @@ pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberErro
     ))
 }
 
-fn parse_sign(s: &str) -> Result<(f64, &str), ParseNumberError> {
+/// Parse the sign multiplier.
+///
+/// If a sign is present, the function reads and converts it into a multiplier.
+/// If no sign is present, a multiplier of 1.0 is used.
+///
+/// # Errors
+///
+/// Returns [`Err`] if the input string does not start with a recognized sign or '0' symbol.
+fn parse_sign_multiplier(s: &str) -> Result<(f64, &str), ParseNumberError> {
     if let Some(remain) = s.strip_prefix('-') {
         Ok((-1.0, remain))
     } else if let Some(remain) = s.strip_prefix('+') {
         Ok((1.0, remain))
-    } else {
+    } else if s.starts_with('0') {
         Ok((1.0, s))
+    } else {
+        Err(ParseNumberError::Float)
     }
 }
 
+/// Parses the `0x` prefix in a case-insensitive manner.
+///
+/// # Errors
+///
+/// Returns [`Err`] if the input string does not contain the required prefix.
 fn parse_hex_prefix(s: &str) -> Result<&str, ParseNumberError> {
     if !(s.starts_with("0x") || s.starts_with("0X")) {
         return Err(ParseNumberError::Float);
@@ -83,6 +97,16 @@ fn parse_hex_prefix(s: &str) -> Result<&str, ParseNumberError> {
     Ok(&s[2..])
 }
 
+/// Parse the integral part in hexadecimal notation.
+///
+/// The integral part is hexadecimal number located after the '0x' prefix and before '.' or 'p'
+/// symbols. For example, the number 0x1.234p2 has an integral part 1.
+///
+/// This part is optional.
+///
+/// # Errors
+///
+/// Returns [`Err`] if the integral part is present but a hexadecimal number cannot be parsed from the input string.
 fn parse_integral_part(s: &str) -> Result<(Option<f64>, &str), ParseNumberError> {
     // This part is optional. Skip parsing if symbol is not a hex digit.
     let length = s.chars().take_while(|c| c.is_ascii_hexdigit()).count();
@@ -105,10 +129,11 @@ fn parse_integral_part(s: &str) -> Result<(Option<f64>, &str), ParseNumberError>
 /// 0.125 + 0.01171875 + 0.0009765625 = 0.1376953125 in decimal. And this is exactly what the
 /// function does.
 ///
+/// This part is optional.
+///
 /// # Errors
 ///
-/// This function returns an error if the string is empty or contains characters that are not hex
-/// digits.
+/// Returns [`Err`] if the fractional part is present but a hexadecimal number cannot be parsed from the input string.
 fn parse_fractional_part(s: &str) -> Result<(Option<f64>, &str), ParseNumberError> {
     // This part is optional and follows after the '.' symbol. Skip parsing if the dot is not present.
     if !s.starts_with('.') {
@@ -136,7 +161,18 @@ fn parse_fractional_part(s: &str) -> Result<(Option<f64>, &str), ParseNumberErro
     Ok((Some(total), &s[length..]))
 }
 
-fn parse_power_part(s: &str) -> Result<(Option<i32>, &str), ParseNumberError> {
+/// Parse the exponent part in hexadecimal notation.
+///
+/// The exponent part is a decimal number located after the 'p' symbol.
+/// For example, the number 0x1.234p2 has an exponent part 2.
+///
+/// This part is optional.
+///
+/// # Errors
+///
+/// Returns [`Err`] if the exponent part is presented but a decimal number cannot be parsed from
+/// the input string.
+fn parse_exponent_part(s: &str) -> Result<(Option<i32>, &str), ParseNumberError> {
     // This part is optional and follows after 'p' or 'P' symbols. Skip parsing if the symbols are not present
     if !(s.starts_with('p') || s.starts_with('P')) {
         return Ok((None, s));
