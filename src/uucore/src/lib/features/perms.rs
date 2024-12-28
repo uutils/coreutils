@@ -636,7 +636,7 @@ pub fn chown_base(
     executor.exec()
 }
 
-pub fn traverse_args() -> Vec<Arg> {
+pub fn common_args() -> Vec<Arg> {
     vec![
         Arg::new(traverse::TRAVERSE)
             .short(traverse::TRAVERSE.chars().next().unwrap())
@@ -652,6 +652,21 @@ pub fn traverse_args() -> Vec<Arg> {
             .short(traverse::NO_TRAVERSE.chars().next().unwrap())
             .help("do not traverse any symbolic links (default)")
             .overrides_with_all([traverse::TRAVERSE, traverse::EVERY])
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(options::dereference::DEREFERENCE)
+            .long(options::dereference::DEREFERENCE)
+            .help(
+                "affect the referent of each symbolic link (this is the default), \
+    rather than the symbolic link itself",
+            )
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(options::dereference::NO_DEREFERENCE)
+            .short('h')
+            .long(options::dereference::NO_DEREFERENCE)
+            .help(
+                "affect symbolic links instead of any referenced file \
+        (useful only on systems that can change the ownership of a symlink)",
+            )
             .action(clap::ArgAction::SetTrue),
     ]
 }

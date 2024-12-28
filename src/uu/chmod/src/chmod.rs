@@ -23,6 +23,7 @@ const USAGE: &str = help_usage!("chmod.md");
 const LONG_USAGE: &str = help_section!("after help", "chmod.md");
 
 mod options {
+    pub const HELP: &str = "help";
     pub const CHANGES: &str = "changes";
     pub const QUIET: &str = "quiet"; // visible_alias("silent")
     pub const VERBOSE: &str = "verbose";
@@ -158,6 +159,13 @@ pub fn uu_app() -> Command {
         .args_override_self(true)
         .infer_long_args(true)
         .no_binary_name(true)
+        .disable_help_flag(true)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
+                .action(ArgAction::Help),
+        )
         .arg(
             Arg::new(options::CHANGES)
                 .long(options::CHANGES)
@@ -218,8 +226,8 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath),
         );
 
-    // Add traverse-related arguments
-    for arg in uucore::perms::traverse_args() {
+    // Add common arguments with chgrp, chown & chmod
+    for arg in uucore::perms::common_args() {
         cmd = cmd.arg(arg);
     }
 

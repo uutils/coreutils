@@ -73,7 +73,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::HELP)
                 .long(options::HELP)
                 .help("Print help information.")
-                .action(ArgAction::Help)
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::verbosity::CHANGES)
@@ -102,20 +102,6 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::dereference::DEREFERENCE)
-                .long(options::dereference::DEREFERENCE)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-           Arg::new(options::dereference::NO_DEREFERENCE)
-               .short('h')
-               .long(options::dereference::NO_DEREFERENCE)
-               .help(
-                   "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
-               )
-               .action(ArgAction::SetTrue),
-        )
-        .arg(
             Arg::new(options::preserve_root::PRESERVE)
                 .long(options::preserve_root::PRESERVE)
                 .help("fail to operate recursively on '/'")
@@ -142,8 +128,8 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         );
 
-    // Add traverse-related arguments
-    for arg in uucore::perms::traverse_args() {
+    // Add common arguments with chgrp, chown & chmod
+    for arg in uucore::perms::common_args() {
         cmd = cmd.arg(arg);
     }
 
