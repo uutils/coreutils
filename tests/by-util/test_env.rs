@@ -10,6 +10,7 @@ use crate::common::util::TestScenario;
 use crate::common::util::UChild;
 #[cfg(unix)]
 use nix::sys::signal::Signal;
+#[cfg(feature = "echo")]
 use regex::Regex;
 use std::env;
 use std::path::Path;
@@ -35,13 +36,14 @@ impl Target {
         Self { child }
     }
     fn send_signal(&mut self, signal: Signal) {
-        Command::new("kill")
+        let _ = Command::new("kill")
             .args(&[
                 format!("-{}", signal as i32),
                 format!("{}", self.child.id()),
             ])
             .spawn()
-            .expect("failed to send signal");
+            .expect("failed to send signal")
+            .wait();
         self.child.delay(100);
     }
     fn is_alive(&mut self) -> bool {
@@ -98,6 +100,7 @@ fn test_if_windows_batch_files_can_be_executed() {
     assert!(result.stdout_str().contains("Hello Windows World!"));
 }
 
+#[cfg(feature = "echo")]
 #[test]
 fn test_debug_1() {
     let ts = TestScenario::new(util_name!());
@@ -118,6 +121,7 @@ fn test_debug_1() {
     );
 }
 
+#[cfg(feature = "echo")]
 #[test]
 fn test_debug_2() {
     let ts = TestScenario::new(util_name!());
@@ -144,6 +148,7 @@ fn test_debug_2() {
     );
 }
 
+#[cfg(feature = "echo")]
 #[test]
 fn test_debug1_part_of_string_arg() {
     let ts = TestScenario::new(util_name!());
@@ -165,6 +170,7 @@ fn test_debug1_part_of_string_arg() {
     );
 }
 
+#[cfg(feature = "echo")]
 #[test]
 fn test_debug2_part_of_string_arg() {
     let ts = TestScenario::new(util_name!());
@@ -651,7 +657,7 @@ fn test_env_with_empty_executable_double_quotes() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, feature = "dirname", feature = "echo"))]
 fn test_env_overwrite_arg0() {
     let ts = TestScenario::new(util_name!());
 
@@ -675,7 +681,7 @@ fn test_env_overwrite_arg0() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, feature = "echo"))]
 fn test_env_arg_argv0_overwrite() {
     let ts = TestScenario::new(util_name!());
 
@@ -723,7 +729,7 @@ fn test_env_arg_argv0_overwrite() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, feature = "echo"))]
 fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
     let ts = TestScenario::new(util_name!());
 

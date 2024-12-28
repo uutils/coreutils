@@ -23,6 +23,7 @@ use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
 use uucore::checksum::ChecksumError;
+use uucore::checksum::ChecksumOptions;
 use uucore::checksum::HashAlgorithm;
 use uucore::error::{FromIo, UResult};
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
@@ -239,18 +240,21 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
             |files| files.map(OsStr::new).collect::<Vec<_>>(),
         );
+        let opts = ChecksumOptions {
+            binary,
+            ignore_missing,
+            quiet,
+            status,
+            strict,
+            warn,
+        };
 
         // Execute the checksum validation
         return perform_checksum_validation(
             input.iter().copied(),
-            strict,
-            status,
-            warn,
-            binary,
-            ignore_missing,
-            quiet,
             Some(algo.name),
             Some(algo.bits),
+            opts,
         );
     } else if quiet {
         return Err(ChecksumError::QuietNotCheck.into());

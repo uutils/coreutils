@@ -102,20 +102,33 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     // displayed in decimal notation. For example, "1e-2" will be
     // displayed as "0.01", but "1e2" will be displayed as "100",
     // without a decimal point.
-    let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
+    let x: BigDecimal = {
+        let parsed_decimal = s
+            .parse::<BigDecimal>()
+            .map_err(|_| ParseNumberError::Float)?;
+        if parsed_decimal == BigDecimal::zero() {
+            BigDecimal::zero()
+        } else {
+            parsed_decimal
+        }
+    };
 
     let num_integral_digits = if is_minus_zero_float(s, &x) {
         if exponent > 0 {
-            2usize + exponent as usize
+            (2usize)
+                .checked_add(exponent as usize)
+                .ok_or(ParseNumberError::Float)?
         } else {
             2usize
         }
     } else {
-        let total = j as i64 + exponent;
+        let total = (j as i64)
+            .checked_add(exponent)
+            .ok_or(ParseNumberError::Float)?;
         let result = if total < 1 {
             1
         } else {
-            total.try_into().unwrap()
+            total.try_into().map_err(|_| ParseNumberError::Float)?
         };
         if x.sign() == Sign::Minus {
             result + 1
@@ -200,14 +213,25 @@ fn parse_decimal_and_exponent(
     // Because of the match guard, this subtraction will not underflow.
     let num_digits_between_decimal_point_and_e = (j - (i + 1)) as i64;
     let exponent: i64 = s[j + 1..].parse().map_err(|_| ParseNumberError::Float)?;
-    let val: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
+    let val: BigDecimal = {
+        let parsed_decimal = s
+            .parse::<BigDecimal>()
+            .map_err(|_| ParseNumberError::Float)?;
+        if parsed_decimal == BigDecimal::zero() {
+            BigDecimal::zero()
+        } else {
+            parsed_decimal
+        }
+    };
 
     let num_integral_digits = {
         let minimum: usize = {
             let integral_part: f64 = s[..j].parse().map_err(|_| ParseNumberError::Float)?;
             if integral_part.is_sign_negative() {
                 if exponent > 0 {
-                    2usize + exponent as usize
+                    2usize
+                        .checked_add(exponent as usize)
+                        .ok_or(ParseNumberError::Float)?
                 } else {
                     2usize
                 }
@@ -217,15 +241,20 @@ fn parse_decimal_and_exponent(
         };
         // Special case: if the string is "-.1e2", we need to treat it
         // as if it were "-0.1e2".
-        let total = if s.starts_with("-.") {
-            i as i64 + exponent + 1
-        } else {
-            i as i64 + exponent
+        let total = {
+            let total = (i as i64)
+                .checked_add(exponent)
+                .ok_or(ParseNumberError::Float)?;
+            if s.starts_with("-.") {
+                total.checked_add(1).ok_or(ParseNumberError::Float)?
+            } else {
+                total
+            }
         };
         if total < minimum as i64 {
             minimum
         } else {
-            total.try_into().unwrap()
+            total.try_into().map_err(|_| ParseNumberError::Float)?
         }
     };
 
@@ -312,7 +341,7 @@ impl FromStr for PreciseNumber {
         // Check if the string seems to be in hexadecimal format.
         //
         // May be 0x123 or -0x123, so the index `i` may be either 0 or 1.
-        if let Some(i) = s.to_lowercase().find("0x") {
+        if let Some(i) = s.find("0x").or_else(|| s.find("0X")) {
             if i <= 1 {
                 return parse_hexadecimal(s);
             }
@@ -322,7 +351,7 @@ impl FromStr for PreciseNumber {
         // number differently depending on its form. This is important
         // because the form of the input dictates how the output will be
         // presented.
-        match (s.find('.'), s.find('e')) {
+        match (s.find('.'), s.find(['e', 'E'])) {
             // For example, "123456" or "inf".
             (None, None) => parse_no_decimal_no_exponent(s),
             // For example, "123e456" or "1e-2".
@@ -381,6 +410,7 @@ mod tests {
     fn test_parse_big_int() {
         assert_eq!(parse("0"), ExtendedBigDecimal::zero());
         assert_eq!(parse("0.1e1"), ExtendedBigDecimal::one());
+        assert_eq!(parse("0.1E1"), ExtendedBigDecimal::one());
         assert_eq!(
             parse("1.0e1"),
             ExtendedBigDecimal::BigDecimal("10".parse::<BigDecimal>().unwrap())

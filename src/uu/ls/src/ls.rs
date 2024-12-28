@@ -21,7 +21,7 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     cmp::Reverse,
     error::Error,
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     fmt::{Display, Write as FmtWrite},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{stdout, BufWriter, ErrorKind, Stdout, Write},
@@ -55,7 +55,7 @@ use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
-use uucore::quoting_style::{escape_dir_name, escape_name, QuotingStyle};
+use uucore::quoting_style::{self, QuotingStyle};
 use uucore::{
     display::Quotable,
     error::{set_exit_code, UError, UResult},
@@ -2048,7 +2048,11 @@ impl PathData {
 /// file11
 /// ```
 fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
-    let escaped_name = escape_dir_name(path_data.p_buf.as_os_str(), &config.quoting_style);
+    // FIXME: replace this with appropriate behavior for literal unprintable bytes
+    let escaped_name =
+        quoting_style::escape_dir_name(path_data.p_buf.as_os_str(), &config.quoting_style)
+            .to_string_lossy()
+            .to_string();
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -3002,7 +3006,6 @@ use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
 use uucore::fs::FileInformation;
-use uucore::quoting_style;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {
@@ -3541,4 +3544,11 @@ fn calculate_padding_collection(
     }
 
     padding_collections
+}
+
+// FIXME: replace this with appropriate behavior for literal unprintable bytes
+fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+    quoting_style::escape_name(name, style)
+        .to_string_lossy()
+        .to_string()
 }

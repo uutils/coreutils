@@ -52,3 +52,50 @@ fn test_create_one_fifo_already_exists() {
         .fails()
         .stderr_is("mkfifo: cannot create fifo 'abcdef': File exists\n");
 }
+
+#[test]
+fn test_create_fifo_with_mode_and_umask() {
+    use uucore::fs::display_permissions;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let test_fifo_creation = |mode: &str, umask: u16, expected: &str| {
+        scene
+            .ucmd()
+            .arg("-m")
+            .arg(mode)
+            .arg(format!("fifo_test_{mode}"))
+            .umask(libc::mode_t::from(umask))
+            .succeeds();
+
+        let metadata = std::fs::metadata(at.subdir.join(format!("fifo_test_{mode}"))).unwrap();
+        let permissions = display_permissions(&metadata, true);
+        assert_eq!(permissions, expected.to_string());
+    };
+
+    test_fifo_creation("734", 0o077, "prwx-wxr--"); // spell-checker:disable-line
+    test_fifo_creation("706", 0o777, "prwx---rw-"); // spell-checker:disable-line
+}
+
+#[test]
+fn test_create_fifo_with_umask() {
+    use uucore::fs::display_permissions;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let test_fifo_creation = |umask: u16, expected: &str| {
+        scene
+            .ucmd()
+            .arg("fifo_test")
+            .umask(libc::mode_t::from(umask))
+            .succeeds();
+
+        let metadata = std::fs::metadata(at.subdir.join("fifo_test")).unwrap();
+        let permissions = display_permissions(&metadata, true);
+        assert_eq!(permissions, expected.to_string());
+        at.remove("fifo_test");
+    };
+
+    test_fifo_creation(0o022, "prw-r--r--"); // spell-checker:disable-line
+    test_fifo_creation(0o777, "p---------"); // spell-checker:disable-line
+}

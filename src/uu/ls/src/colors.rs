@@ -156,6 +156,26 @@ pub(crate) fn color_name(
     target_symlink: Option<&PathData>,
     wrap: bool,
 ) -> String {
+    // Check if the file has capabilities
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    {
+        // Skip checking capabilities if LS_COLORS=ca=:
+        let capabilities = style_manager
+            .colors
+            .style_for_indicator(Indicator::Capabilities);
+
+        let has_capabilities = if capabilities.is_none() {
+            false
+        } else {
+            uucore::fsxattr::has_acl(path.p_buf.as_path())
+        };
+
+        // If the file has capabilities, use a specific style for `ca` (capabilities)
+        if has_capabilities {
+            return style_manager.apply_style(capabilities, name, wrap);
+        }
+    }
+
     if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
         if let Some(de) = &path.de {

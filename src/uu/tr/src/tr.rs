@@ -8,17 +8,17 @@
 mod operation;
 mod unicode_table;
 
+use crate::operation::DeleteOperation;
 use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use operation::{
     translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
 };
 use std::ffi::OsString;
 use std::io::{stdin, stdout, BufWriter};
-use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show};
-
-use crate::operation::DeleteOperation;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::fs::is_stdin_directory;
+use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show};
 
 const ABOUT: &str = help_about!("tr.md");
 const AFTER_HELP: &str = help_section!("after help", "tr.md");
@@ -126,30 +126,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         translating,
     )?;
 
+    if is_stdin_directory(&stdin) {
+        return Err(USimpleError::new(1, "read error: Is a directory"));
+    }
+
     // '*_op' are the operations that need to be applied, in order.
     if delete_flag {
         if squeeze_flag {
             let delete_op = DeleteOperation::new(set1);
             let squeeze_op = SqueezeOperation::new(set2);
             let op = delete_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         } else {
             let op = DeleteOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         }
     } else if squeeze_flag {
         if sets_len < 2 {
             let op = SqueezeOperation::new(set1);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         } else {
             let translate_op = TranslateOperation::new(set1, set2.clone())?;
             let squeeze_op = SqueezeOperation::new(set2);
             let op = translate_op.chain(squeeze_op);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         }
     } else {
         let op = TranslateOperation::new(set1, set2)?;
-        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
     }
     Ok(())
 }

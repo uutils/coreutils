@@ -12,7 +12,6 @@ pub enum MvError {
     NoSuchFile(String),
     CannotStatNotADirectory(String),
     SameFile(String, String),
-    SelfSubdirectory(String),
     SelfTargetSubdirectory(String, String),
     DirectoryToNonDirectory(String),
     NonDirectoryToDirectory(String, String),
@@ -29,14 +28,9 @@ impl Display for MvError {
             Self::NoSuchFile(s) => write!(f, "cannot stat {s}: No such file or directory"),
             Self::CannotStatNotADirectory(s) => write!(f, "cannot stat {s}: Not a directory"),
             Self::SameFile(s, t) => write!(f, "{s} and {t} are the same file"),
-            Self::SelfSubdirectory(s) => write!(
-                f,
-                "cannot move '{s}' to a subdirectory of itself, '{s}/{s}'"
-            ),
-            Self::SelfTargetSubdirectory(s, t) => write!(
-                f,
-                "cannot move '{s}' to a subdirectory of itself, '{t}/{s}'"
-            ),
+            Self::SelfTargetSubdirectory(s, t) => {
+                write!(f, "cannot move {s} to a subdirectory of itself, {t}")
+            }
             Self::DirectoryToNonDirectory(t) => {
                 write!(f, "cannot overwrite directory {t} with non-directory")
             }

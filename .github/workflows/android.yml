@@ -79,6 +79,8 @@ jobs:
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Collect information about runner
       if: always()
       continue-on-error: true
@@ -176,7 +178,7 @@ jobs:
           util/android-commands.sh sync_host
           util/android-commands.sh build
           util/android-commands.sh tests
-          if [[ "${{ steps.rust-cache.outputs.cache-hit }}" != 'true' ]]; then util/android-commands.sh sync_image; fi; exit 0
+          if [ "${{ steps.rust-cache.outputs.cache-hit }}" != 'true' ]; then util/android-commands.sh sync_image; fi; exit 0
     - name: Collect information about runner ressources
       if: always()
       continue-on-error: true
