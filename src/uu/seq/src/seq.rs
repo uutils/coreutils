@@ -2,12 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) extendedbigdecimal numberparse floatparse
+// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse floatparse
 use std::ffi::OsString;
 use std::io::{stdout, ErrorKind, Write};
 
+use bigdecimal::BigDecimal;
 use clap::{crate_version, Arg, ArgAction, Command};
-use num_traits::{ToPrimitive, Zero};
+use num_traits::{FromPrimitive, ToPrimitive, Zero};
 
 use uucore::error::{FromIo, UResult};
 use uucore::format::{num_format, Format};
@@ -211,13 +212,92 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
     }
 }
 
+/// Reduce extra precision
+///
+/// Reduce the precision while rounded value is still equal to the original value. It will help to
+/// drop trailing zeroes.
+///
+/// Slowly and ineffective, but good enough for now :)
+fn reduce_precision_if_possible(value: &BigDecimal, precision: usize) -> usize {
+    let mut current_precision = precision as i64;
+    while current_precision != 0 {
+        if value.round(current_precision) == value.round(current_precision - 1) {
+            current_precision -= 1;
+        } else {
+            break;
+        }
+    }
+    current_precision as usize
+}
+
+/// GNU `seq` prints long double values using the "%Lg" format. Let's try to reproduce and collect
+/// these special cases in one place.
+///
+/// NOTE: The "%Lg" representation might vary depending on target-specific factors such as
+/// glibc/musl libraries, compilers, long double representations for specific platforms, and so on.
+/// It would be useful to gather and analyze more data on this.
+fn detect_printf_like_precision(value: &ExtendedBigDecimal) -> Option<usize> {
+    const DEFAULT_PRECISION: usize = 6;
+
+    let value = if let ExtendedBigDecimal::BigDecimal(bd) = value {
+        bd
+    } else {
+        return None;
+    };
+
+    // NOTE: The PreciseNumber already has this data. Possible, we can reuse it to avoid
+    // recalculation once again.
+    let num_fractional_digits = value.fractional_digit_count().max(0) as usize;
+    let num_integral_digits = if value.abs() < BigDecimal::from_i64(1).unwrap() {
+        0
+    } else {
+        value.digits() as usize - num_fractional_digits
+    };
+
+    // Special case #0: not a fractional number -> skip
+    if value.is_integer() {
+        return None;
+    }
+    // Special case #1: zero -> show as 0.0
+    if value.is_zero() {
+        return Some(1);
+    }
+    // Special case #2: |number| < 1 & number != 0 -> use default precision
+    if num_integral_digits == 0 {
+        return Some(reduce_precision_if_possible(value, DEFAULT_PRECISION));
+    }
+    // Special case #3: limit fractional size if number of digits >= 6
+    if num_integral_digits >= DEFAULT_PRECISION {
+        return Some(1);
+    }
+    // Special case #4: align fractional digits based on the number of integer digits
+    if num_integral_digits + num_fractional_digits >= DEFAULT_PRECISION {
+        // case where digits >= DEFAULT_PRECISION already handled above => we can be sure that DEFAULT_PRECISION - digit > 0
+        return Some(reduce_precision_if_possible(
+            value,
+            DEFAULT_PRECISION - num_integral_digits,
+        ));
+    }
+
+    None
+}
+
 /// Write a big decimal formatted according to the given parameters.
 fn write_value_float(
     writer: &mut impl Write,
     value: &ExtendedBigDecimal,
     width: usize,
     precision: usize,
+    pad: bool,
 ) -> std::io::Result<()> {
+    let precision = if !pad {
+        detect_printf_like_precision(value).unwrap_or(precision)
+    } else {
+        precision
+    };
+
+    // TODO: add switching to scientific representation like GNU seq does
+
     let value_as_str =
         if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
             format!("{value:>width$.precision$}")
@@ -274,7 +354,7 @@ fn print_seq(
                 };
                 f.fmt(&mut stdout, float)?;
             }
-            None => write_value_float(&mut stdout, &value, padding, largest_dec)?,
+            None => write_value_float(&mut stdout, &value, padding, largest_dec, pad)?,
         }
         // TODO Implement augmenting addition.
         value = value + increment.clone();
