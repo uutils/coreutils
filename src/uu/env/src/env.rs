@@ -370,6 +370,18 @@ impl EnvAppData {
                     self.had_string_argument = true;
                 }
                 _ => {
+                    let arg_str = arg.to_string_lossy();
+
+                    // Only long option is allowed to contain '='
+                    if arg_str.contains('=')
+                        && arg_str.starts_with('-')
+                        && !arg_str.starts_with("--")
+                    {
+                        return Err(USimpleError::new(
+                            125,
+                            format!("cannot unset '{}': Invalid argument", &arg_str[2..]),
+                        ));
+                    }
                     all_args.push(arg.clone());
                 }
             }
