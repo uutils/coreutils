@@ -34,6 +34,7 @@ pub enum VerbosityLevel {
     Verbose,
     Normal,
 }
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Verbosity {
     pub groups_only: bool,
