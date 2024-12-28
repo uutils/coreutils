@@ -55,9 +55,13 @@ pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberErro
 
     // Build a PreciseNumber
     let number = BigDecimal::from_f64(value).ok_or(ParseNumberError::Float)?;
-    let fractional_digits = i64::max(number.fractional_digit_count(), 0);
-    let integral_digits =
-        number.digits() - fractional_digits as u64 + if sign < 0.0 { 1 } else { 0 };
+    let fractional_digits = i64::max(number.fractional_digit_count(), 0) as u64;
+    let integral_digits = if value.abs() < 1.0 {
+        0
+    } else {
+        number.digits() - fractional_digits
+    } + if sign < 0.0 { 1 } else { 0 };
+
     Ok(PreciseNumber::new(
         ExtendedBigDecimal::BigDecimal(number),
         integral_digits as usize,
@@ -269,6 +273,8 @@ mod tests {
         assert_eq!(parse_f64("0x0.0").unwrap(), 0.0);
         assert_eq!(parse_f64("0x0p0").unwrap(), 0.0);
         assert_eq!(parse_f64("0x0.0p0").unwrap(), 0.0);
+        assert_eq!(parse_f64("-0x.1p-3").unwrap(), -0.0078125);
+        assert_eq!(parse_f64("-0x.ep-3").unwrap(), -0.109375);
     }
 
     #[test]
