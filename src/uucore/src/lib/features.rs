@@ -6,6 +6,8 @@
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "buf-copy")]
+pub mod buf_copy;
 #[cfg(feature = "checksum")]
 pub mod checksum;
 #[cfg(feature = "colors")]
@@ -39,8 +41,6 @@ pub mod version_cmp;
 pub mod mode;
 
 // ** unix-only
-#[cfg(all(any(target_os = "linux", target_os = "android"), feature = "buf-copy"))]
-pub mod buf_copy;
 #[cfg(all(unix, feature = "entries"))]
 pub mod entries;
 #[cfg(all(unix, feature = "perms"))]
