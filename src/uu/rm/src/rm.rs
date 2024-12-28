@@ -526,26 +526,16 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
         }
     }
     // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
-    match File::options().read(true).write(true).open(path) {
-        Ok(file) => {
-            let Ok(metadata) = file.metadata() else {
-                return true;
-            };
+    let Ok(metadata) = fs::metadata(path) else {
+        return true;
+    };
 
-            if options.interactive == InteractiveMode::Always && !metadata.permissions().readonly()
-            {
-                return if metadata.len() == 0 {
-                    prompt_yes!("remove regular empty file {}?", path.quote())
-                } else {
-                    prompt_yes!("remove file {}?", path.quote())
-                };
-            }
-        }
-        Err(err) => {
-            if err.kind() != ErrorKind::PermissionDenied {
-                return true;
-            }
-        }
+    if options.interactive == InteractiveMode::Always && !metadata.permissions().readonly() {
+        return if metadata.len() == 0 {
+            prompt_yes!("remove regular empty file {}?", path.quote())
+        } else {
+            prompt_yes!("remove file {}?", path.quote())
+        };
     }
     prompt_file_permission_readonly(path)
 }
