@@ -33,25 +33,33 @@ pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberErro
     // Parse floating point parts
     let (sign, remain) = parse_sign_multiplier(s.trim())?;
     let remain = parse_hex_prefix(remain)?;
-    let (integer, remain) = parse_integral_part(remain)?;
-    let (fractional, remain) = parse_fractional_part(remain)?;
-    let (exponent, remain) = parse_exponent_part(remain)?;
+    let (integral_part, remain) = parse_integral_part(remain)?;
+    let (fractional_part, remain) = parse_fractional_part(remain)?;
+    let (exponent_part, remain) = parse_exponent_part(remain)?;
 
-    // Check parts:
-    // - Both 'fractional' and 'exponent' values cannot be 'None' at the same time.
-    // - The entire string must be consumed; otherwise, there could be garbage symbols after the Hex float.
-    if fractional.is_none() && exponent.is_none() {
-        return Err(ParseNumberError::Float);
-    }
-
-    if !remain.is_empty() {
-        return Err(ParseNumberError::Float);
-    }
+    // Check parts. Rise error if:
+    // - The input string is not fully consumed
+    // - Only integral part is presented
+    // - Only exponent part is presented
+    // - All 3 parts are empty
+    match (
+        integral_part,
+        fractional_part,
+        exponent_part,
+        remain.is_empty(),
+    ) {
+        (_, _, _, false)
+        | (Some(_), None, None, _)
+        | (None, None, Some(_), _)
+        | (None, None, None, _) => return Err(ParseNumberError::Float),
+        _ => (),
+    };
 
     // Build a number from parts
-    let value = sign
-        * (integer.unwrap_or(0.0) + fractional.unwrap_or(0.0))
-        * (2.0_f64).powi(exponent.unwrap_or(0));
+    let integral_value = integral_part.unwrap_or(0.0);
+    let fractional_value = fractional_part.unwrap_or(0.0);
+    let exponent_value = (2.0_f64).powi(exponent_part.unwrap_or(0));
+    let value = sign * (integral_value + fractional_value) * exponent_value;
 
     // Build a PreciseNumber
     let number = BigDecimal::from_f64(value).ok_or(ParseNumberError::Float)?;
@@ -60,7 +68,8 @@ pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberErro
         0
     } else {
         number.digits() - num_fractional_digits
-    } + if sign < 0.0 { 1 } else { 0 };
+    };
+    let num_integral_digits = num_integral_digits + if sign < 0.0 { 1 } else { 0 };
 
     Ok(PreciseNumber::new(
         ExtendedBigDecimal::BigDecimal(number),
@@ -283,6 +292,10 @@ mod tests {
         assert_eq!(parse_f64("").unwrap_err(), expected_error);
         assert_eq!(parse_f64("1").unwrap_err(), expected_error);
         assert_eq!(parse_f64("1p").unwrap_err(), expected_error);
+        assert_eq!(parse_f64("0x").unwrap_err(), expected_error);
+        assert_eq!(parse_f64("0xG").unwrap_err(), expected_error);
+        assert_eq!(parse_f64("0xp").unwrap_err(), expected_error);
+        assert_eq!(parse_f64("0xp3").unwrap_err(), expected_error);
         assert_eq!(parse_f64("0x1").unwrap_err(), expected_error);
         assert_eq!(parse_f64("0x1.").unwrap_err(), expected_error);
         assert_eq!(parse_f64("0x1p").unwrap_err(), expected_error);
@@ -294,6 +307,7 @@ mod tests {
         assert_eq!(parse_f64("0x1.1pk").unwrap_err(), expected_error);
         assert_eq!(parse_f64("0x1.8p2z").unwrap_err(), expected_error);
         assert_eq!(parse_f64("0x1p3.2").unwrap_err(), expected_error);
+        assert_eq!(parse_f64("-0x.ep-3z").unwrap_err(), expected_error);
     }
 
     #[test]
