@@ -23,6 +23,7 @@ file_diff = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
+  "buf-copy",
   "fs",
   "mode",
   "perms",
