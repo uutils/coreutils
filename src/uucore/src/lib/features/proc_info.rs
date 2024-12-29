@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore exitstatus cmdline kworker pgrep pwait snice
+// spell-checker:ignore exitstatus cmdline kworker pgrep pwait snice procps
 
 //! Set of functions to manage IDs
 //!
@@ -18,6 +18,15 @@
 //! `pwait` (TBD)
 //! `snice` (TBD)
 //!
+
+// This file is currently flagged as dead code, because it isn't used anywhere
+// in the codebase. It may be useful in the future though, so we decide to keep
+// it.
+// The code was originally written in procps
+// (https://github.com/uutils/procps/blob/main/src/uu/pgrep/src/process.rs)
+// but was eventually moved here.
+// See https://github.com/uutils/coreutils/pull/6932 for discussion.
+#![allow(dead_code)]
 
 use crate::features::tty::Teletype;
 use std::hash::Hash;
