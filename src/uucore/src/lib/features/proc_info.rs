@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore exitstatus cmdline kworker pgrep pwait snice
+// spell-checker:ignore exitstatus cmdline kworker pgrep pwait snice procps
 
 //! Set of functions to manage IDs
 //!
