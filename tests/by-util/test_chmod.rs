@@ -229,7 +229,10 @@ fn test_chmod_ugoa() {
         },
     ];
     run_tests(tests);
+}
 
+#[test]
+fn test_chmod_error_permissions() {
     // check that we print an error if umask prevents us from removing a permission
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
