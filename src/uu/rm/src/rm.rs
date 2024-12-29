@@ -524,7 +524,7 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
             }
         }
     }
-    // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
+
     let Ok(metadata) = fs::metadata(path) else {
         return true;
     };
