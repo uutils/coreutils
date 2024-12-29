@@ -58,8 +58,6 @@ impl From<nix::Error> for Error {
 ///
 /// Result of operation and bytes successfully written (as a `u64`) when
 /// operation is successful.
-///
-
 pub fn copy_stream<R, S>(src: &mut R, dest: &mut S) -> UResult<u64>
 where
     R: Read + AsFd + AsRawFd,
