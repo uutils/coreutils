@@ -23,6 +23,7 @@ const USAGE: &str = help_usage!("chmod.md");
 const LONG_USAGE: &str = help_section!("after help", "chmod.md");
 
 mod options {
+    pub const HELP: &str = "help";
     pub const CHANGES: &str = "changes";
     pub const QUIET: &str = "quiet"; // visible_alias("silent")
     pub const VERBOSE: &str = "verbose";
@@ -158,6 +159,13 @@ pub fn uu_app() -> Command {
         .args_override_self(true)
         .infer_long_args(true)
         .no_binary_name(true)
+        .disable_help_flag(true)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
+                .action(ArgAction::Help),
+        )
         .arg(
             Arg::new(options::CHANGES)
                 .long(options::CHANGES)
@@ -206,9 +214,10 @@ pub fn uu_app() -> Command {
                 .help("use RFILE's mode instead of MODE values"),
         )
         .arg(
-            Arg::new(options::MODE).required_unless_present(options::REFERENCE), // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
-                                                                                 // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
-                                                                                 // Only one positional argument with .multiple_occurrences(true) set is allowed per command
+            Arg::new(options::MODE).required_unless_present(options::REFERENCE),
+            // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
+            // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
+            // Only one positional argument with .multiple_occurrences(true) set is allowed per command
         )
         .arg(
             Arg::new(options::FILE)
@@ -216,6 +225,8 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
+        // Add common arguments with chgrp, chown & chmod
+        .args(uucore::perms::common_args())
 }
 
 struct Chmoder {
