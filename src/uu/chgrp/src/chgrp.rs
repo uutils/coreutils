@@ -63,7 +63,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let mut cmd = Command::new(uucore::util_name())
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -126,12 +126,7 @@ pub fn uu_app() -> Command {
                 .long(options::RECURSIVE)
                 .help("operate on files and directories recursively")
                 .action(ArgAction::SetTrue),
-        );
-
-    // Add common arguments with chgrp, chown & chmod
-    for arg in uucore::perms::common_args() {
-        cmd = cmd.arg(arg);
-    }
-
-    cmd
+        )
+        // Add common arguments with chgrp, chown & chmod
+        .args(uucore::perms::common_args())
 }
