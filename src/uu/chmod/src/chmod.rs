@@ -16,6 +16,7 @@ use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::perms::TraverseSymlinks;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
 const ABOUT: &str = help_about!("chmod.md");
@@ -33,6 +34,11 @@ mod options {
     pub const RECURSIVE: &str = "recursive";
     pub const MODE: &str = "MODE";
     pub const FILE: &str = "FILE";
+    // TODO remove duplication with perms.rs
+    pub mod dereference {
+        pub const DEREFERENCE: &str = "dereference";
+        pub const NO_DEREFERENCE: &str = "no-dereference";
+    }
 }
 
 /// Extract negative modes (starting with '-') from the rest of the arguments.
@@ -99,7 +105,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let quiet = matches.get_flag(options::QUIET);
     let verbose = matches.get_flag(options::VERBOSE);
     let preserve_root = matches.get_flag(options::PRESERVE_ROOT);
-    let recursive = matches.get_flag(options::RECURSIVE);
     let fmode = match matches.get_one::<String>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode() & 0o7777),
@@ -138,6 +143,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
+    let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
+        Some(true) // Follow symlinks
+    } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
+        Some(false) // Do not follow symlinks
+    } else {
+        None // Default behavior
+    };
+
+    let mut traverse_symlinks = if matches.get_flag("L") {
+        TraverseSymlinks::All
+    } else if matches.get_flag("H") {
+        TraverseSymlinks::First
+    } else {
+        TraverseSymlinks::None
+    };
+
+    let recursive = matches.get_flag(options::RECURSIVE);
+    if recursive {
+        if traverse_symlinks == TraverseSymlinks::None {
+            if dereference == Some(true) {
+                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
+            }
+            dereference = Some(false);
+        }
+    } else {
+        traverse_symlinks = TraverseSymlinks::None;
+    }
+
     let chmoder = Chmoder {
         changes,
         quiet,
@@ -146,6 +179,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         recursive,
         fmode,
         cmode,
+        traverse_symlinks,
+        dereference: dereference.unwrap_or(true),
     };
 
     chmoder.chmod(&files)
@@ -237,6 +272,8 @@ struct Chmoder {
     recursive: bool,
     fmode: Option<u32>,
     cmode: Option<String>,
+    traverse_symlinks: TraverseSymlinks,
+    dereference: bool,
 }
 
 impl Chmoder {
@@ -248,12 +285,19 @@ impl Chmoder {
             let file = Path::new(filename);
             if !file.exists() {
                 if file.is_symlink() {
+                    if !self.dereference && !self.recursive {
+                        // The file is a symlink and we should not follow it
+                        // Don't try to change the mode of the symlink itself
+                        continue;
+                    }
                     if !self.quiet {
                         show!(USimpleError::new(
                             1,
                             format!("cannot operate on dangling symlink {}", filename.quote()),
                         ));
+                        set_exit_code(1);
                     }
+
                     if self.verbose {
                         println!(
                             "failed to change mode of {} from 0000 (---------) to 1500 (r-x-----T)",
@@ -272,6 +316,11 @@ impl Chmoder {
                 // GNU exits with exit code 1 even if -q or --quiet are passed
                 // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
                 set_exit_code(1);
+                continue;
+            } else if !self.dereference && file.is_symlink() {
+                // The file is a symlink and we should not follow it
+                // chmod 755 --no-dereference a/link
+                // should not change the permissions in this case
                 continue;
             }
             if self.recursive && self.preserve_root && filename == "/" {
@@ -294,11 +343,23 @@ impl Chmoder {
 
     fn walk_dir(&self, file_path: &Path) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
-        if !file_path.is_symlink() && file_path.is_dir() {
+        // Determine whether to traverse symlinks based on `self.traverse_symlinks`
+        let should_follow_symlink = match self.traverse_symlinks {
+            TraverseSymlinks::All => true,
+            TraverseSymlinks::First => {
+                file_path == file_path.canonicalize().unwrap_or(file_path.to_path_buf())
+            }
+            TraverseSymlinks::None => false,
+        };
+
+        // If the path is a directory (or we should follow symlinks), recurse into it
+        if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
             for dir_entry in file_path.read_dir()? {
                 let path = dir_entry?.path();
                 if !path.is_symlink() {
                     r = self.walk_dir(path.as_path());
+                } else if should_follow_symlink {
+                    r = self.chmod_file(path.as_path()).and(r);
                 }
             }
         }
@@ -316,17 +377,25 @@ impl Chmoder {
     fn chmod_file(&self, file: &Path) -> UResult<()> {
         use uucore::mode::get_umask;
 
-        let fperm = match fs::metadata(file) {
+        // Determine metadata based on dereference flag
+        let metadata = if self.dereference {
+            file.metadata() // Follow symlinks
+        } else {
+            file.symlink_metadata() // Act on the symlink itself
+        };
+
+        let fperm = match metadata {
             Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
-                if file.is_symlink() {
+                // Handle dangling symlinks or other errors
+                if file.is_symlink() && !self.dereference {
                     if self.verbose {
                         println!(
                             "neither symbolic link {} nor referent has been changed",
                             file.quote()
                         );
                     }
-                    return Ok(());
+                    return Ok(()); // Skip dangling symlinks
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
                     // These two filenames would normally be conditionally
                     // quoted, but GNU's tests expect them to always be quoted
@@ -339,6 +408,8 @@ impl Chmoder {
                 }
             }
         };
+
+        // Determine the new permissions to apply
         match self.fmode {
             Some(mode) => self.change_file(fperm, mode, file)?,
             None => {
