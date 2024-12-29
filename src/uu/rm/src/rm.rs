@@ -8,8 +8,7 @@
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, File, Metadata};
-use std::io::ErrorKind;
+use std::fs::{self, Metadata};
 use std::ops::BitOr;
 #[cfg(not(windows))]
 use std::os::unix::ffi::OsStrExt;
@@ -526,26 +525,16 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
         }
     }
     // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
-    match File::options().read(true).write(true).open(path) {
-        Ok(file) => {
-            let Ok(metadata) = file.metadata() else {
-                return true;
-            };
+    let Ok(metadata) = fs::metadata(path) else {
+        return true;
+    };
 
-            if options.interactive == InteractiveMode::Always && !metadata.permissions().readonly()
-            {
-                return if metadata.len() == 0 {
-                    prompt_yes!("remove regular empty file {}?", path.quote())
-                } else {
-                    prompt_yes!("remove file {}?", path.quote())
-                };
-            }
-        }
-        Err(err) => {
-            if err.kind() != ErrorKind::PermissionDenied {
-                return true;
-            }
-        }
+    if options.interactive == InteractiveMode::Always && !metadata.permissions().readonly() {
+        return if metadata.len() == 0 {
+            prompt_yes!("remove regular empty file {}?", path.quote())
+        } else {
+            prompt_yes!("remove file {}?", path.quote())
+        };
     }
     prompt_file_permission_readonly(path)
 }
