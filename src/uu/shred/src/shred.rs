@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
+use uucore::rand_read::{ReadRng, WrappedRng};
 use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
 
@@ -34,6 +35,7 @@ pub mod options {
     pub const VERBOSE: &str = "verbose";
     pub const EXACT: &str = "exact";
     pub const ZERO: &str = "zero";
+    pub const RANDOM_SOURCE: &str = "random-source";
 
     pub mod remove {
         pub const UNLINK: &str = "unlink";
@@ -261,6 +263,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let exact = matches.get_flag(options::EXACT) || size.is_some();
     let zero = matches.get_flag(options::ZERO);
     let verbose = matches.get_flag(options::VERBOSE);
+    let random_source = matches
+        .get_one::<String>(options::RANDOM_SOURCE)
+        .map(String::from);
 
     for path_str in matches.get_many::<String>(options::FILE).unwrap() {
         show_if_err!(wipe_file(
@@ -272,6 +277,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             zero,
             verbose,
             force,
+            &random_source
         ));
     }
     Ok(())
@@ -357,6 +363,13 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
+        .arg(
+            Arg::new(options::RANDOM_SOURCE)
+                .long(options::RANDOM_SOURCE)
+                .value_name("FILE")
+                .help("get random bytes from FILE")
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }
 
 fn get_size(size_str_opt: Option<String>) -> Option<u64> {
@@ -392,6 +405,7 @@ fn wipe_file(
     zero: bool,
     verbose: bool,
     force: bool,
+    random_source: &Option<String>,
 ) -> UResult<()> {
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
@@ -452,7 +466,17 @@ fn wipe_file(
             for pattern in PATTERNS.into_iter().take(remainder) {
                 pass_sequence.push(PassType::Pattern(pattern));
             }
-            let mut rng = rand::thread_rng();
+
+            let mut rng = match random_source {
+                Some(r) => {
+                    let file = File::open(&r[..]).map_err_context(|| {
+                        format!("failed to open random source {}", r.quote())
+                    })?;
+                    WrappedRng::RngFile(ReadRng::new(file))
+                }
+                None => WrappedRng::RngDefault(rand::thread_rng()),
+            };
+
             pass_sequence.shuffle(&mut rng); // randomize the order of application
 
             let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
@@ -501,6 +525,7 @@ fn wipe_file(
         do_remove(path, path_str, verbose, remove_method)
             .map_err_context(|| format!("{}: failed to remove file", path.maybe_quote()))?;
     }
+
     Ok(())
 }
 
