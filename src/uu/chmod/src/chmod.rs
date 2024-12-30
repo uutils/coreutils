@@ -344,14 +344,9 @@ impl Chmoder {
     }
     #[cfg(unix)]
     fn chmod_file(&self, file: &Path) -> UResult<()> {
-        use uucore::mode::get_umask;
+        use uucore::{mode::get_umask, perms::get_metadata};
 
-        // Determine metadata based on dereference flag
-        let metadata = if self.dereference {
-            file.metadata() // Follow symlinks
-        } else {
-            file.symlink_metadata() // Act on the symlink itself
-        };
+        let metadata = get_metadata(file, self.dereference);
 
         let fperm = match metadata {
             Ok(meta) => meta.mode() & 0o7777,

@@ -250,6 +250,14 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     false
 }
 
+pub fn get_metadata(file: &Path, follow: bool) -> Result<Metadata, std::io::Error> {
+    if follow {
+        file.metadata()
+    } else {
+        file.symlink_metadata()
+    }
+}
+
 impl ChownExecutor {
     pub fn exec(&self) -> UResult<()> {
         let mut ret = 0;
@@ -417,11 +425,9 @@ impl ChownExecutor {
 
     fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
         let path = path.as_ref();
-        let meta = if follow {
-            path.metadata()
-        } else {
-            path.symlink_metadata()
-        };
+
+        let meta = get_metadata(path, follow);
+
         match meta {
             Err(e) => {
                 match self.verbosity.level {
