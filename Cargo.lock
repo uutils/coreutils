@@ -3477,6 +3477,8 @@ dependencies = [
  "number_prefix",
  "once_cell",
  "os_display",
+ "rand",
+ "rand_core",
  "regex",
  "sha1",
  "sha2",

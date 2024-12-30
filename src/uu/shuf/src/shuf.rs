@@ -8,16 +8,15 @@
 use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::memchr_iter;
 use rand::prelude::SliceRandom;
-use rand::{Rng, RngCore};
+use rand::Rng;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Error, Read, Write};
 use std::ops::RangeInclusive;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::rand_read::{ReadRng, WrappedRng};
 use uucore::{format_usage, help_about, help_usage};
-
-mod rand_read_adapter;
 
 enum Mode {
     Default(String),
@@ -433,7 +432,7 @@ fn shuf_exec(input: &mut impl Shufable, opts: Options) -> UResult<()> {
         Some(r) => {
             let file = File::open(&r[..])
                 .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
-            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
+            WrappedRng::RngFile(ReadRng::new(file))
         }
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
@@ -492,41 +491,6 @@ fn parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
         }
     }
     Ok(result)
-}
-
-enum WrappedRng {
-    RngFile(rand_read_adapter::ReadRng<File>),
-    RngDefault(rand::rngs::ThreadRng),
-}
-
-impl RngCore for WrappedRng {
-    fn next_u32(&mut self) -> u32 {
-        match self {
-            Self::RngFile(r) => r.next_u32(),
-            Self::RngDefault(r) => r.next_u32(),
-        }
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        match self {
-            Self::RngFile(r) => r.next_u64(),
-            Self::RngDefault(r) => r.next_u64(),
-        }
-    }
-
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        match self {
-            Self::RngFile(r) => r.fill_bytes(dest),
-            Self::RngDefault(r) => r.fill_bytes(dest),
-        }
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-        match self {
-            Self::RngFile(r) => r.try_fill_bytes(dest),
-            Self::RngDefault(r) => r.try_fill_bytes(dest),
-        }
-    }
 }
 
 #[cfg(test)]

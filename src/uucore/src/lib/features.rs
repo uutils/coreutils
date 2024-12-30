@@ -24,6 +24,8 @@ pub mod fsext;
 pub mod lines;
 #[cfg(feature = "quoting-style")]
 pub mod quoting_style;
+#[cfg(feature = "rand-read")]
+pub mod rand_read;
 #[cfg(feature = "ranges")]
 pub mod ranges;
 #[cfg(feature = "ringbuffer")]
