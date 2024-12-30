@@ -516,6 +516,45 @@ pub struct GidUidOwnerFilter {
 }
 type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 
+/// Determines symbolic link traversal and recursion settings based on flags.
+/// Returns the updated `dereference` and `traverse_symlinks` values.
+pub fn configure_symlink_and_recursion(
+    matches: &ArgMatches,
+) -> Result<(bool, Option<bool>, TraverseSymlinks), Box<dyn crate::error::UError>> {
+    let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
+        Some(true) // Follow symlinks
+    } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
+        Some(false) // Do not follow symlinks
+    } else {
+        None // Default behavior
+    };
+
+    let mut traverse_symlinks = if matches.get_flag("L") {
+        TraverseSymlinks::All
+    } else if matches.get_flag("H") {
+        TraverseSymlinks::First
+    } else {
+        TraverseSymlinks::None
+    };
+
+    let recursive = matches.get_flag(options::RECURSIVE);
+    if recursive {
+        if traverse_symlinks == TraverseSymlinks::None {
+            if dereference == Some(true) {
+                return Err(USimpleError::new(
+                    1,
+                    "-R --dereference requires -H or -L".to_string(),
+                ));
+            }
+            dereference = Some(false);
+        }
+    } else {
+        traverse_symlinks = TraverseSymlinks::None;
+    }
+
+    Ok((recursive, dereference, traverse_symlinks))
+}
+
 /// Base implementation for `chgrp` and `chown`.
 ///
 /// An argument called `add_arg_if_not_reference` will be added to `command` if
@@ -571,34 +610,7 @@ pub fn chown_base(
         .unwrap_or_default();
 
     let preserve_root = matches.get_flag(options::preserve_root::PRESERVE);
-
-    let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
-        Some(true)
-    } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
-        Some(false)
-    } else {
-        None
-    };
-
-    let mut traverse_symlinks = if matches.get_flag(options::traverse::TRAVERSE) {
-        TraverseSymlinks::First
-    } else if matches.get_flag(options::traverse::EVERY) {
-        TraverseSymlinks::All
-    } else {
-        TraverseSymlinks::None
-    };
-
-    let recursive = matches.get_flag(options::RECURSIVE);
-    if recursive {
-        if traverse_symlinks == TraverseSymlinks::None {
-            if dereference == Some(true) {
-                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
-            }
-            dereference = Some(false);
-        }
-    } else {
-        traverse_symlinks = TraverseSymlinks::None;
-    }
+    let (recursive, dereference, traverse_symlinks) = configure_symlink_and_recursion(&matches)?;
 
     let verbosity_level = if matches.get_flag(options::verbosity::CHANGES) {
         VerbosityLevel::Changes
