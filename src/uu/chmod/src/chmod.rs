@@ -16,7 +16,7 @@ use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::perms::TraverseSymlinks;
+use uucore::perms::{configure_symlink_and_recursion, TraverseSymlinks};
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
 const ABOUT: &str = help_about!("chmod.md");
@@ -34,11 +34,6 @@ mod options {
     pub const RECURSIVE: &str = "recursive";
     pub const MODE: &str = "MODE";
     pub const FILE: &str = "FILE";
-    // TODO remove duplication with perms.rs
-    pub mod dereference {
-        pub const DEREFERENCE: &str = "dereference";
-        pub const NO_DEREFERENCE: &str = "no-dereference";
-    }
 }
 
 /// Extract negative modes (starting with '-') from the rest of the arguments.
@@ -143,33 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
-    let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
-        Some(true) // Follow symlinks
-    } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
-        Some(false) // Do not follow symlinks
-    } else {
-        None // Default behavior
-    };
-
-    let mut traverse_symlinks = if matches.get_flag("L") {
-        TraverseSymlinks::All
-    } else if matches.get_flag("H") {
-        TraverseSymlinks::First
-    } else {
-        TraverseSymlinks::None
-    };
-
-    let recursive = matches.get_flag(options::RECURSIVE);
-    if recursive {
-        if traverse_symlinks == TraverseSymlinks::None {
-            if dereference == Some(true) {
-                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
-            }
-            dereference = Some(false);
-        }
-    } else {
-        traverse_symlinks = TraverseSymlinks::None;
-    }
+    let (recursive, dereference, traverse_symlinks) = configure_symlink_and_recursion(&matches)?;
 
     let chmoder = Chmoder {
         changes,
