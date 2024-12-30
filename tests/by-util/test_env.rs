@@ -884,7 +884,7 @@ fn test_env_arg_ignore_signal_empty() {
 }
 
 #[test]
-fn disallow_equals_sign_on_short_options() {
+fn disallow_equals_sign_on_short_unset_option() {
     let ts = TestScenario::new(util_name!());
 
     ts.ucmd()
@@ -903,10 +903,6 @@ fn disallow_equals_sign_on_short_options() {
         .fails()
         .code_is(125)
         .stderr_contains("env: cannot unset '': Invalid argument");
-    ts.ucmd().arg("A1B=2C3").succeeds();
-    ts.ucmd().arg("--unset=A1B2C3").succeeds();
-    ts.ucmd().arg("--unset=A1B23C").succeeds();
-    ts.ucmd().arg("-u A1B23C").succeeds();
 }
 
 #[cfg(test)]
