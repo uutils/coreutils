@@ -281,7 +281,8 @@ fn set_groups_from_str(groups: &str) -> UResult<()> {
 
 fn set_user(user: &str) -> UResult<()> {
     if !user.is_empty() {
-        let user_id = entries::usr2uid(user).unwrap();
+        let user_id =
+            entries::usr2uid(user).map_err(|_| ChrootError::NoSuchUser(user.to_string()))?;
         let err = unsafe { setuid(user_id as libc::uid_t) };
         if err != 0 {
             return Err(
