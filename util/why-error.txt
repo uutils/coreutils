@@ -1,7 +1,7 @@
 This file documents why some tests are failing:
 
 gnu/tests/chgrp/from.sh
-gnu/tests/chmod/symlinks.sh
+gnu/tests/chmod/symlinks.sh - https://github.com/uutils/coreutils/pull/7025
 gnu/tests/chroot/chroot-credentials.sh
 gnu/tests/cp/cp-i.sh
 gnu/tests/cp/preserve-gid.sh
