@@ -838,127 +838,6 @@ fn test_chmod_no_dereference_symlink() {
 }
 
 #[test]
-fn test_chmod_traverse_symlink_h() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let target = "file";
-    let symlink = "symlink";
-    let directory = "dir";
-
-    at.mkdir(directory);
-    at.touch(target);
-    at.symlink_file(target, &format!("{directory}/{symlink}"));
-
-    set_permissions(at.plus(target), Permissions::from_mode(0o664)).unwrap();
-
-    // Use -H: should only follow symlinks specified as arguments
-    scene
-        .ucmd()
-        .arg("-R")
-        .arg("-H")
-        .arg("u+x")
-        .arg(directory)
-        .succeeds()
-        .no_stderr();
-
-    let target_permissions = at.metadata(target).permissions().mode();
-    assert_eq!(
-        target_permissions, 0o100_664,
-        "Expected target permissions to be 0o100_664, but got {:o}",
-        target_permissions
-    );
-
-    let symlink_path = format!("{directory}/{symlink}");
-    let symlink_permissions = at.symlink_metadata(&symlink_path).permissions().mode();
-    assert_eq!(
-        symlink_permissions,
-        get_expected_symlink_permissions(),
-        "Expected symlink permissions to be 0o120_777, but got {:o} for symlink at {}",
-        symlink_permissions,
-        symlink_path
-    );
-}
-
-#[test]
-fn test_chmod_traverse_symlink_l() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let target = "file";
-    let symlink = "symlink";
-    let directory = "dir";
-
-    at.mkdir(directory);
-    at.touch(target);
-    at.symlink_file(target, &format!("{directory}/{symlink}"));
-
-    set_permissions(at.plus(target), Permissions::from_mode(0o664)).unwrap();
-
-    // Use -L: should follow all symlinks
-    scene
-        .ucmd()
-        .arg("-R")
-        .arg("-L")
-        .arg("u+x")
-        .umask(0o022)
-        .arg(directory)
-        .succeeds()
-        .no_stderr();
-
-    let target_permissions = at.metadata(target).permissions().mode();
-    assert_eq!(
-        target_permissions, 0o100_764,
-        "Expected target permissions to be 0o100_764, but got {:o}",
-        target_permissions
-    );
-
-    let symlink_path = format!("{directory}/{symlink}");
-    let symlink_permissions = at.symlink_metadata(&symlink_path).permissions().mode();
-    assert_eq!(
-        symlink_permissions,
-        get_expected_symlink_permissions(),
-        "Expected symlink permissions to be 0o120_777, but got {:o} for symlink at {}",
-        symlink_permissions,
-        symlink_path
-    );
-}
-
-#[test]
-fn test_chmod_traverse_symlink_p() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    let target = "file";
-    let symlink = "symlink";
-    let directory = "dir";
-
-    at.mkdir(directory);
-    at.touch(target);
-    at.symlink_file(target, &format!("{directory}/{symlink}"));
-
-    set_permissions(at.plus(target), Permissions::from_mode(0o664)).unwrap();
-
-    // Use -P: should not follow any symlinks
-    scene
-        .ucmd()
-        .arg("-R")
-        .arg("-P")
-        .arg("u+x")
-        .umask(0o022)
-        .arg(directory)
-        .succeeds()
-        .no_stderr();
-    assert_eq!(at.metadata(target).permissions().mode(), 0o100_664);
-    assert_eq!(
-        at.symlink_metadata(&format!("{directory}/{symlink}"))
-            .permissions()
-            .mode(),
-        get_expected_symlink_permissions()
-    );
-}
-
-#[test]
 fn test_chmod_symlink_to_dangling_target_dereference() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1030,4 +909,67 @@ fn test_chmod_symlink_to_dangling_recursive() {
         get_expected_symlink_permissions(),
         at.symlink_metadata(symlink).permissions().mode()
     );
+}
+
+#[test]
+fn test_chmod_traverse_symlink_combo() {
+    let scenarios = [
+        (
+            vec!["-R", "-H"],
+            0o100_664,
+            get_expected_symlink_permissions(),
+        ),
+        (
+            vec!["-R", "-L"],
+            0o100_764,
+            get_expected_symlink_permissions(),
+        ),
+        (
+            vec!["-R", "-P"],
+            0o100_664,
+            get_expected_symlink_permissions(),
+        ),
+    ];
+
+    for (flags, expected_target_perms, expected_symlink_perms) in scenarios {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let directory = "dir";
+        let target = "file";
+        let symlink = "symlink";
+
+        at.mkdir(directory);
+        at.touch(target);
+        at.symlink_file(target, &format!("{directory}/{symlink}"));
+
+        set_permissions(at.plus(target), Permissions::from_mode(0o664)).unwrap();
+
+        let mut ucmd = scene.ucmd();
+        for f in &flags {
+            ucmd.arg(f);
+        }
+        ucmd.arg("u+x")
+            .umask(0o022)
+            .arg(directory)
+            .succeeds()
+            .no_stderr();
+
+        let actual_target = at.metadata(target).permissions().mode();
+        assert_eq!(
+            actual_target, expected_target_perms,
+            "For flags {:?}, expected target perms = {:o}, got = {:o}",
+            flags, expected_target_perms, actual_target
+        );
+
+        let actual_symlink = at
+            .symlink_metadata(&format!("{directory}/{symlink}"))
+            .permissions()
+            .mode();
+        assert_eq!(
+            actual_symlink, expected_symlink_perms,
+            "For flags {:?}, expected symlink perms = {:o}, got = {:o}",
+            flags, expected_symlink_perms, actual_symlink
+        );
+    }
 }
