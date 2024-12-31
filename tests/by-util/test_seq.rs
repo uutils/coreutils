@@ -787,6 +787,16 @@ fn test_invalid_format() {
         .fails()
         .no_stdout()
         .stderr_contains("format '%g%g' has too many % directives");
+    new_ucmd!()
+        .args(&["-f", "%g%", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("format '%g%' has too many % directives");
+    new_ucmd!()
+        .args(&["-f", "%", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("format '%' ends in %");
 }
 
 #[test]
