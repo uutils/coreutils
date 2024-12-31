@@ -88,6 +88,7 @@ nolinks
 nonblock
 nonportable
 nonprinting
+nonseekable
 notrunc
 noxfer
 ofile
@@ -145,6 +146,8 @@ xattrs
 consts
 deps
 dev
+fdlimit
+inacc
 maint
 proc
 procs
