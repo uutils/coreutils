@@ -158,6 +158,23 @@ fn test_negative_byte_syntax() {
 }
 
 #[test]
+fn test_negative_bytes_greater_than_input_size_stdin() {
+    new_ucmd!()
+        .args(&["-c", "-2"])
+        .pipe_in("a")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_negative_bytes_greater_than_input_size_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write_bytes("f", b"a");
+    ts.ucmd().args(&["-c", "-2", "f"]).succeeds().no_output();
+}
+
+#[test]
 fn test_negative_zero_lines() {
     new_ucmd!()
         .arg("--lines=-0")
