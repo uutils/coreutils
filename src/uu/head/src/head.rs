@@ -256,6 +256,7 @@ fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> 
     }
 }
 
+/// Print to stdout all but the last `n` bytes from the given reader.
 fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::Result<()> {
     if n == 0 {
         //prints everything
@@ -285,7 +286,7 @@ fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::
 
             if total_read <= n {
                 // Fill the ring buffer without exceeding n bytes
-                let overflow = total_read - n;
+                let overflow = n - total_read;
                 ring_buffer.extend_from_slice(&buffer[..read - overflow]);
             } else {
                 // Write the ring buffer and the part of the buffer that exceeds n
