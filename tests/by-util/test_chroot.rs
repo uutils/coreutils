@@ -55,13 +55,34 @@ fn test_no_such_directory() {
 
 #[test]
 fn test_invalid_user_spec() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = TestScenario::new(util_name!());
 
-    at.mkdir("a");
+    if let Ok(result) = run_ucmd_as_root(&ts, &["--userspec=ARABA:", "/"]) {
+        result
+            .failure()
+            .code_is(125)
+            .stderr_is("chroot: invalid user");
+    } else {
+        print!("Test skipped; requires root user");
+    }
 
-    let result = ucmd.arg("a").arg("--userspec=ARABA:").fails();
-    result.code_is(125);
-    assert!(result.stderr_str().starts_with("chroot: invalid userspec"));
+    if let Ok(result) = run_ucmd_as_root(&ts, &["--userspec=ARABA:ARABA", "/"]) {
+        result
+            .failure()
+            .code_is(125)
+            .stderr_is("chroot: invalid user");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &["--userspec=:ARABA", "/"]) {
+        result
+            .failure()
+            .code_is(125)
+            .stderr_is("chroot: invalid group");
+    } else {
+        print!("Test skipped; requires root user");
+    }
 }
 
 #[test]
@@ -77,10 +98,9 @@ fn test_invalid_user() {
         print!("Test skipped; requires root user");
     }
 
+    // `--user` is an abbreviation of `--userspec`.
     if let Ok(result) = run_ucmd_as_root(&ts, &["--user=nobody:+65535", dir, "pwd"]) {
-        result
-            .failure()
-            .stderr_contains("no such user: nobody:+65535");
+        result.failure().stderr_is("chroot: invalid user");
     } else {
         print!("Test skipped; requires root user");
     }
@@ -116,6 +136,7 @@ fn test_preference_of_userspec() {
 
     at.mkdir("a");
 
+    // `--user` is an abbreviation of `--userspec`.
     let result = ucmd
         .arg("a")
         .arg("--user")
