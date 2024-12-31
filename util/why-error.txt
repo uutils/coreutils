@@ -57,7 +57,6 @@ gnu/tests/printf/printf.sh
 gnu/tests/ptx/ptx-overrun.sh
 gnu/tests/ptx/ptx.pl
 gnu/tests/rm/empty-inacc.sh - https://github.com/uutils/coreutils/issues/7033
-gnu/tests/rm/fail-2eperm.sh
 gnu/tests/rm/ir-1.sh
 gnu/tests/rm/one-file-system.sh - https://github.com/uutils/coreutils/issues/7011
 gnu/tests/rm/rm1.sh
