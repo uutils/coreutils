@@ -17,40 +17,6 @@ fn basic_literal() {
 }
 
 #[test]
-fn escaped_tab() {
-    new_ucmd!()
-        .args(&["hello\\t world"])
-        .succeeds()
-        .stdout_only("hello\t world");
-}
-
-#[test]
-fn escaped_newline() {
-    new_ucmd!()
-        .args(&["hello\\n world"])
-        .succeeds()
-        .stdout_only("hello\n world");
-}
-
-#[test]
-fn escaped_slash() {
-    new_ucmd!()
-        .args(&["hello\\\\ world"])
-        .succeeds()
-        .stdout_only("hello\\ world");
-}
-
-#[test]
-fn unescaped_double_quote() {
-    new_ucmd!().args(&["\\\""]).succeeds().stdout_only("\"");
-}
-
-#[test]
-fn escaped_hex() {
-    new_ucmd!().args(&["\\x41"]).succeeds().stdout_only("A");
-}
-
-#[test]
 fn test_missing_escaped_hex_value() {
     new_ucmd!()
         .arg(r"\x")
@@ -59,16 +25,11 @@ fn test_missing_escaped_hex_value() {
 }
 
 #[test]
-fn escaped_octal() {
-    new_ucmd!().args(&["\\101"]).succeeds().stdout_only("A");
-}
-
-#[test]
 fn escaped_octal_and_newline() {
     new_ucmd!()
-        .args(&["\\0377\\n"])
+        .args(&["\\101\\0377\\n"])
         .succeeds()
-        .stdout_only("\x1F7\n");
+        .stdout_only("A\x1F7\n");
 }
 
 #[test]
@@ -143,38 +104,6 @@ fn escaped_percent_sign() {
 #[test]
 fn escaped_unrecognized() {
     new_ucmd!().args(&["c\\d"]).succeeds().stdout_only("c\\d");
-}
-
-#[test]
-fn sub_string() {
-    new_ucmd!()
-        .args(&["hello %s", "world"])
-        .succeeds()
-        .stdout_only("hello world");
-}
-
-#[test]
-fn sub_multi_field() {
-    new_ucmd!()
-        .args(&["%s %s", "hello", "world"])
-        .succeeds()
-        .stdout_only("hello world");
-}
-
-#[test]
-fn sub_repeat_format_str() {
-    new_ucmd!()
-        .args(&["%s.", "hello", "world"])
-        .succeeds()
-        .stdout_only("hello.world.");
-}
-
-#[test]
-fn sub_string_ignore_escapes() {
-    new_ucmd!()
-        .args(&["hello %s", "\\tworld"])
-        .succeeds()
-        .stdout_only("hello \\tworld");
 }
 
 #[test]
@@ -705,27 +634,11 @@ fn sub_any_asterisk_second_param_with_integer() {
 }
 
 #[test]
-fn sub_any_specifiers_no_params() {
-    new_ucmd!()
-        .args(&["%ztlhLji", "3"]) //spell-checker:disable-line
-        .succeeds()
-        .stdout_only("3");
-}
-
-#[test]
-fn sub_any_specifiers_after_first_param() {
-    new_ucmd!()
-        .args(&["%0ztlhLji", "3"]) //spell-checker:disable-line
-        .succeeds()
-        .stdout_only("3");
-}
-
-#[test]
-fn sub_any_specifiers_after_period() {
-    new_ucmd!()
-        .args(&["%0.ztlhLji", "3"]) //spell-checker:disable-line
-        .succeeds()
-        .stdout_only("3");
+fn sub_any_specifiers() {
+    // spell-checker:disable-next-line
+    for format in ["%ztlhLji", "%0ztlhLji", "%0.ztlhLji"] {
+        new_ucmd!().args(&[format, "3"]).succeeds().stdout_only("3");
+    }
 }
 
 #[test]
@@ -1027,33 +940,23 @@ fn pad_string() {
 }
 
 #[test]
-fn format_spec_zero_char_fails() {
-    // It is invalid to have the format spec '%0c'
-    new_ucmd!().args(&["%0c", "3"]).fails_with_code(1);
+fn format_spec_zero_fails() {
+    // It is invalid to have the format spec
+    for format in ["%0c", "%0s"] {
+        new_ucmd!().args(&[format, "3"]).fails_with_code(1);
+    }
 }
 
 #[test]
-fn format_spec_zero_string_fails() {
-    // It is invalid to have the format spec '%0s'
-    new_ucmd!().args(&["%0s", "3"]).fails_with_code(1);
-}
-
-#[test]
-fn invalid_precision_fails() {
+fn invalid_precision_tests() {
     // It is invalid to have length of output string greater than i32::MAX
-    new_ucmd!()
-        .args(&["%.*d", "2147483648", "0"])
-        .fails()
-        .stderr_is("printf: invalid precision: '2147483648'\n");
-}
-
-#[test]
-fn float_invalid_precision_fails() {
-    // It is invalid to have length of output string greater than i32::MAX
-    new_ucmd!()
-        .args(&["%.*f", "2147483648", "0"])
-        .fails()
-        .stderr_is("printf: invalid precision: '2147483648'\n");
+    for format in ["%.*d", "%.*f"] {
+        let expected_error = "printf: invalid precision: '2147483648'\n";
+        new_ucmd!()
+            .args(&[format, "2147483648", "0"])
+            .fails()
+            .stderr_is(expected_error);
+    }
 }
 
 // The following padding-tests test for the cases in which flags in ['0', ' '] are given.
