@@ -49,14 +49,24 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
             _ => b'\0',
         }
     }
-
     fn get_u64(&mut self) -> u64 {
         let Some(next) = self.next() else {
             return 0;
         };
         match next {
             FormatArgument::UnsignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_u64(s), s),
+            FormatArgument::Unparsed(s) => {
+                // Check if the string is a character literal enclosed in quotes
+                if s.starts_with(['"', '\'']) && s.len() > 2 {
+                    // Extract the content between the quotes safely
+                    let chars: Vec<char> =
+                        s.trim_matches(|c| c == '"' || c == '\'').chars().collect();
+                    if chars.len() == 1 {
+                        return chars[0] as u64; // Return the Unicode code point
+                    }
+                }
+                extract_value(ParsedNumber::parse_u64(s), s)
+            }
             _ => 0,
         }
     }
