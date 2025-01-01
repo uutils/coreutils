@@ -2100,6 +2100,30 @@ fn test_ls_order_time() {
 }
 
 #[test]
+fn test_ls_order_mtime() {
+    use std::time::SystemTime;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let f3 = at.make_file("test-3");
+    f3.set_modified(SystemTime::now()).unwrap();
+    let f4 = at.make_file("test-4");
+    f4.set_modified(SystemTime::now()).unwrap();
+    let f1 = at.make_file("test-1");
+    f1.set_modified(SystemTime::now()).unwrap();
+    let f2 = at.make_file("test-2");
+    f2.set_modified(SystemTime::now()).unwrap();
+
+    let result = scene.ucmd().arg("-t").arg("--time=mtime").succeeds();
+    result.stdout_only("test-2\ntest-1\ntest-4\ntest-3\n");
+    f3.set_modified(SystemTime::now()).unwrap();
+
+    f4.set_modified(SystemTime::now()).unwrap();
+    let result = scene.ucmd().arg("-t").arg("--time=mtime").succeeds();
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
+}
+
+#[test]
 fn test_ls_non_existing() {
     new_ucmd!().arg("doesntexist").fails();
 }

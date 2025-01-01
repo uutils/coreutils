@@ -536,6 +536,7 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
         match field.as_str() {
             "ctime" | "status" => Time::Change,
             "access" | "atime" | "use" => Time::Access,
+            "mtime" | "modification" => Time::Modification,
             "birth" | "creation" => Time::Birth,
             // below should never happen as clap already restricts the values.
             _ => unreachable!("Invalid field for --time"),
@@ -1442,12 +1443,14 @@ pub fn uu_app() -> Command {
                     "Show time in <field>:\n\
                         \taccess time (-u): atime, access, use;\n\
                         \tchange time (-t): ctime, status.\n\
+                        \tmodification time: mtime, modification.\n\
                         \tbirth time: birth, creation;",
                 )
                 .value_name("field")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("atime").alias("access").alias("use"),
                     PossibleValue::new("ctime").alias("status"),
+                    PossibleValue::new("mtime").alias("modification"),
                     PossibleValue::new("birth").alias("creation"),
                 ]))
                 .hide_possible_values(true)
