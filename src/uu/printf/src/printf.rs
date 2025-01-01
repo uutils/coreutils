@@ -5,6 +5,10 @@
 use clap::{Arg, ArgAction, Command};
 use std::io::stdout;
 use std::ops::ControlFlow;
+#[cfg(unix)]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
 use uucore::error::{UResult, UUsageError};
 use uucore::format::{FormatArgument, FormatItem, parse_spec_and_escape};
 use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
@@ -19,23 +23,50 @@ mod options {
     pub const FORMAT: &str = "FORMAT";
     pub const ARGUMENT: &str = "ARGUMENT";
 }
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let format = matches
-        .get_one::<String>(options::FORMAT)
+        .get_one::<std::ffi::OsString>(options::FORMAT)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
 
-    let values: Vec<_> = match matches.get_many::<String>(options::ARGUMENT) {
-        Some(s) => s.map(|s| FormatArgument::Unparsed(s.to_string())).collect(),
+    #[cfg(unix)]
+    let format = format.as_bytes();
+
+    #[cfg(windows)]
+    let format_vec: Vec<u8> = format
+        .encode_wide()
+        .flat_map(|wchar| wchar.to_le_bytes())
+        .collect();
+    #[cfg(windows)]
+    let format = format_vec.as_slice();
+
+    let values: Vec<_> = match matches.get_many::<std::ffi::OsString>(options::ARGUMENT) {
+        Some(s) => s
+            .map(|os_str| {
+                #[cfg(unix)]
+                let raw_bytes: Vec<u8> = os_str.clone().into_vec();
+
+                #[cfg(windows)]
+                let raw_bytes: Vec<u8> = os_str
+                    .encode_wide()
+                    .flat_map(|wchar| wchar.to_le_bytes())
+                    .collect();
+                FormatArgument::Unparsed(
+                    String::from_utf8(raw_bytes.clone())
+                        .unwrap_or_else(|_| raw_bytes.iter().map(|&b| b as char).collect()),
+                )
+            })
+            .collect(),
         None => vec![],
     };
 
     let mut format_seen = false;
     let mut args = values.iter().peekable();
-    for item in parse_spec_and_escape(format.as_ref()) {
+
+    // Parse and process the format string
+    for item in parse_spec_and_escape(format) {
         if let Ok(FormatItem::Spec(_)) = item {
             format_seen = true;
         }
@@ -58,7 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     while args.peek().is_some() {
-        for item in parse_spec_and_escape(format.as_ref()) {
+        for item in parse_spec_and_escape(format) {
             match item?.write(stdout(), &mut args)? {
                 ControlFlow::Continue(()) => {}
                 ControlFlow::Break(()) => return Ok(()),
@@ -90,6 +121,10 @@ pub fn uu_app() -> Command {
                 .help("Print version information")
                 .action(ArgAction::Version),
         )
-        .arg(Arg::new(options::FORMAT))
-        .arg(Arg::new(options::ARGUMENT).action(ArgAction::Append))
+        .arg(Arg::new(options::FORMAT).value_parser(clap::value_parser!(std::ffi::OsString)))
+        .arg(
+            Arg::new(options::ARGUMENT)
+                .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(std::ffi::OsString)),
+        )
 }
