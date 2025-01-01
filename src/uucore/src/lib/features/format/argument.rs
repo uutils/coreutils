@@ -58,7 +58,18 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::UnsignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(u64::extended_parse(s), s),
+            FormatArgument::Unparsed(s) => {
+                // Check if the string is a character literal enclosed in quotes
+                if s.starts_with(['"', '\'']) && s.len() > 2 {
+                    // Extract the content between the quotes safely
+                    let chars: Vec<char> =
+                        s.trim_matches(|c| c == '"' || c == '\'').chars().collect();
+                    if chars.len() == 1 {
+                        return chars[0] as u64; // Return the Unicode code point
+                    }
+                }
+                extract_value(u64::extended_parse(s), s)
+            }
             _ => 0,
         }
     }

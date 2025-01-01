@@ -1385,3 +1385,13 @@ fn float_arg_with_whitespace() {
         .fails()
         .stderr_contains("expected a numeric value");
 }
+
+#[test]
+fn mb_input() {
+    for format in ["\"á", "\'á"] {
+        new_ucmd!()
+            .args(&["%04x\n", format])
+            .succeeds()
+            .stdout_only("00e1\n");
+    }
+}
