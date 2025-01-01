@@ -916,3 +916,50 @@ fn float_flag_position_space_padding() {
         .succeeds()
         .stdout_only(" +1.0");
 }
+
+#[test]
+fn float_abs_value_less_than_one() {
+    new_ucmd!()
+        .args(&["%g", "0.1171875"])
+        .succeeds()
+        .stdout_only("0.117188");
+
+    // The original value from #7031 issue
+    new_ucmd!()
+        .args(&["%g", "-0.1171875"])
+        .succeeds()
+        .stdout_only("-0.117188");
+
+    new_ucmd!()
+        .args(&["%g", "0.01171875"])
+        .succeeds()
+        .stdout_only("0.0117188");
+
+    new_ucmd!()
+        .args(&["%g", "-0.01171875"])
+        .succeeds()
+        .stdout_only("-0.0117188");
+
+    new_ucmd!()
+        .args(&["%g", "0.001171875001"])
+        .succeeds()
+        .stdout_only("0.00117188");
+
+    new_ucmd!()
+        .args(&["%g", "-0.001171875001"])
+        .succeeds()
+        .stdout_only("-0.00117188");
+}
+
+#[test]
+fn float_switch_switch_decimal_scientific() {
+    new_ucmd!()
+        .args(&["%g", "0.0001"])
+        .succeeds()
+        .stdout_only("0.0001");
+
+    new_ucmd!()
+        .args(&["%g", "0.00001"])
+        .succeeds()
+        .stdout_only("1e-05");
+}
