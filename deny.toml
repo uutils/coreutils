@@ -109,6 +109,8 @@ skip = [
   { name = "thiserror", version = "1.0.69" },
   # thiserror
   { name = "thiserror-impl", version = "1.0.69" },
+  # bindgen
+  { name = "itertools", version = "0.13.0" },
 ]
 # spell-checker: enable
 
