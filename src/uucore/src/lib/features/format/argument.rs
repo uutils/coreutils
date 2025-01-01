@@ -60,13 +60,21 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
             FormatArgument::UnsignedInt(n) => *n,
             FormatArgument::Unparsed(s) => {
                 // Check if the string is a character literal enclosed in quotes
-                if s.starts_with(['"', '\'']) && s.len() > 2 {
-                    // Extract the content between the quotes safely
-                    let chars: Vec<char> =
-                        s.trim_matches(|c| c == '"' || c == '\'').chars().collect();
-                    if chars.len() == 1 {
-                        return chars[0] as u64; // Return the Unicode code point
+                if s.starts_with(['"', '\'']) {
+                    // Extract the content between the quotes safely using chars
+                    let mut chars = s.trim_matches(|c| c == '"' || c == '\'').chars();
+                    if let Some(first_char) = chars.next() {
+                        if chars.clone().count() > 0 {
+                            // Emit a warning if there are additional characters
+                            let remaining: String = chars.collect();
+                            show_warning!(
+                                "{}: character(s) following character constant have been ignored",
+                                remaining
+                            );
+                        }
+                        return first_char as u64; // Use only the first character
                     }
+                    return 0; // Empty quotes
                 }
                 extract_value(u64::extended_parse(s), s)
             }
