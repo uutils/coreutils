@@ -869,11 +869,26 @@ fn float_switch_switch_decimal_scientific() {
 
 #[test]
 fn mb_input() {
-    for format in ["\"á", "\'á"] {
+    for format in ["\"á", "\'á", "'\u{e1}"] {
         new_ucmd!()
             .args(&["%04x\n", format])
             .succeeds()
             .stdout_only("00e1\n");
+    }
+
+    let cases = vec![
+        ("\"á=", "="),
+        ("\'á-", "-"),
+        ("\'á=-==", "=-=="),
+        ("'\u{e1}++", "++"),
+    ];
+
+    for (format, expected) in cases {
+        new_ucmd!()
+            .args(&["%04x\n", format])
+            .succeeds()
+            .stdout_is("00e1\n")
+            .stderr_is(format!("printf: warning: {expected}: character(s) following character constant have been ignored\n"));
     }
 }
 
