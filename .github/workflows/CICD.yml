@@ -979,7 +979,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
+        # windows-latest - https://github.com/uutils/coreutils/issues/7044
     steps:
     - uses: actions/checkout@v4
       with:
