@@ -1002,3 +1002,13 @@ fn float_switch_switch_decimal_scientific() {
         .succeeds()
         .stdout_only("1e-05");
 }
+
+#[test]
+fn mb_input() {
+    for format in ["\"á", "\'á"] {
+        new_ucmd!()
+            .args(&["%04x\n", format])
+            .succeeds()
+            .stdout_only("00e1\n");
+    }
+}
