@@ -28,10 +28,10 @@ pub enum ChrootError {
     MissingNewRoot,
 
     /// Failed to find the specified user.
-    NoSuchUser(String),
+    NoSuchUser,
 
     /// Failed to find the specified group.
-    NoSuchGroup(String),
+    NoSuchGroup,
 
     /// The given directory does not exist.
     NoSuchDirectory(String),
@@ -74,8 +74,8 @@ impl Display for ChrootError {
                 "Missing operand: NEWROOT\nTry '{} --help' for more information.",
                 uucore::execution_phrase(),
             ),
-            Self::NoSuchUser(s) => write!(f, "no such user: {}", s.maybe_quote(),),
-            Self::NoSuchGroup(s) => write!(f, "no such group: {}", s.maybe_quote(),),
+            Self::NoSuchUser => write!(f, "invalid user"),
+            Self::NoSuchGroup => write!(f, "invalid group"),
             Self::NoSuchDirectory(s) => write!(
                 f,
                 "cannot change root directory to {}: no such directory",
