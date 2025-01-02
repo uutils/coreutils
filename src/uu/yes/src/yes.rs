@@ -147,8 +147,8 @@ pub fn exec(bytes: &[u8]) -> UResult<()> {
     #[cfg(unix)]
     enable_pipe_errors()?;
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    loop_splice_data(bytes, &stdout)?;
+    // #[cfg(any(target_os = "linux", target_os = "android"))]
+    // loop_splice_data(bytes, &stdout)?;
 
     loop {
         stdout.write_all(bytes)?;
