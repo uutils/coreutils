@@ -5587,3 +5587,34 @@ fn test_ls_capabilities() {
         .stdout_contains("\x1b[30;41mcap_pos") // spell-checker:disable-line
         .stdout_does_not_contain("0;41mtest/dir/cap_neg"); // spell-checker:disable-line
 }
+
+#[cfg(feature = "test_risky_names")]
+#[test]
+fn test_non_unicode_names() {
+    // more extensive unit tests for correct escaping etc. are in the quoting_style module
+    let scene = TestScenario::new(util_name!());
+    let target_file = uucore::os_str_from_bytes(b"some-dir1/\xC0.file")
+        .expect("Only unix platforms can test non-unicode names");
+    let target_dir = uucore::os_str_from_bytes(b"some-dir1/\xC0.dir")
+        .expect("Only unix platforms can test non-unicode names");
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.touch(target_file);
+    at.mkdir(target_dir);
+
+    scene
+        .ucmd()
+        .arg("--quoting-style=shell-escape")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains("''$'\\300''.dir'")
+        .stdout_contains("''$'\\300''.file'");
+
+    scene
+        .ucmd()
+        .arg("--quoting-style=literal")
+        .arg("--show-control-chars")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_is_bytes(b"\xC0.dir\n\xC0.file\n");
+}
