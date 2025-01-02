@@ -199,11 +199,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::USERSPEC)
                 .long(options::USERSPEC)
-                .help(
-                    "Colon-separated user and group to switch to. \
-                     Same as -u USER -g GROUP. \
-                     Userspec has higher preference than -u and/or -g",
-                )
+                .help("Colon-separated user and group to switch to.")
                 .value_name("USER:GROUP"),
         )
         .arg(
