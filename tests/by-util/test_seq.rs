@@ -826,3 +826,21 @@ fn test_parse_scientific_zero() {
         .succeeds()
         .stdout_only("0\n1\n");
 }
+
+// Requires f128 code
+//#[test]
+//fn test_rejects_not_f128() {
+//    new_ucmd!()
+//        .args(&["12e4931", "12e4931"])
+//        .fails()
+//        .no_stdout()
+//        .stderr_contains("invalid argument");
+//}
+
+#[test]
+fn test_accepts_f128() {
+    new_ucmd!()
+        .args(&["11e4931", "11e4931"])
+        .succeeds()
+        .stdout_only("11e+4931\n");
+}
