@@ -8,10 +8,10 @@ use std::io::{stdout, ErrorKind, Write};
 
 use bigdecimal::BigDecimal;
 use clap::{crate_version, Arg, ArgAction, Command};
-use num_traits::{FromPrimitive, ToPrimitive, Zero};
-
+use num_traits::{ToPrimitive, Zero};
 use uucore::error::{FromIo, UResult};
 use uucore::format::{num_format, Format};
+use uucore::format::{sprintf, FormatArgument};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
@@ -212,74 +212,29 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
     }
 }
 
-/// Reduce extra precision
-///
-/// Reduce the precision while rounded value is still equal to the original value. It will help to
-/// drop trailing zeroes.
-///
-/// Slowly and ineffective, but good enough for now :)
-fn reduce_precision_if_possible(value: &BigDecimal, precision: usize) -> usize {
-    let mut current_precision = precision as i64;
-    while current_precision != 0 {
-        if value.round(current_precision) == value.round(current_precision - 1) {
-            current_precision -= 1;
-        } else {
-            break;
-        }
+/// Formats a BigDecimal value and returns it as a string.
+fn format_value_bigdecimal(
+    value: &BigDecimal,
+    width: usize,
+    precision: usize,
+    pad: bool,
+) -> Option<String> {
+    if pad || value.is_integer() {
+        // Use a "default" format for padded values and integers.
+        return Some(format!("{value:>0width$.precision$}"));
     }
-    current_precision as usize
-}
-
-/// GNU `seq` prints long double values using the "%Lg" format. Let's try to reproduce and collect
-/// these special cases in one place.
-///
-/// NOTE: The "%Lg" representation might vary depending on target-specific factors such as
-/// glibc/musl libraries, compilers, long double representations for specific platforms, and so on.
-/// It would be useful to gather and analyze more data on this.
-fn detect_printf_like_precision(value: &ExtendedBigDecimal) -> Option<usize> {
-    const DEFAULT_PRECISION: usize = 6;
-
-    let value = if let ExtendedBigDecimal::BigDecimal(bd) = value {
-        bd
+    let value_as_f64 = value.to_f64()?;
+    let value_as_str = if value.fractional_digit_count() == 1 {
+        // The issue with "%g" is that it formats "1.0" as "1".
+        // To address this, handle such cases separately by specifying format options.
+        format!("{value_as_f64:.precision$}")
     } else {
-        return None;
+        // Call sprintf and let it decide how to format the number
+        let format_arguments = &[FormatArgument::Float(value_as_f64)];
+        let value_as_bytes = sprintf("%g", format_arguments).ok()?;
+        String::from_utf8(value_as_bytes).ok()?
     };
-
-    // NOTE: The PreciseNumber already has this data. Possible, we can reuse it to avoid
-    // recalculation once again.
-    let num_fractional_digits = value.fractional_digit_count().max(0) as usize;
-    let num_integral_digits = if value.abs() < BigDecimal::from_i64(1).unwrap() {
-        0
-    } else {
-        value.digits() as usize - num_fractional_digits
-    };
-
-    // Special case #0: not a fractional number -> skip
-    if value.is_integer() {
-        return None;
-    }
-    // Special case #1: zero -> show as 0.0
-    if value.is_zero() {
-        return Some(1);
-    }
-    // Special case #2: |number| < 1 & number != 0 -> use default precision
-    if num_integral_digits == 0 {
-        return Some(reduce_precision_if_possible(value, DEFAULT_PRECISION));
-    }
-    // Special case #3: limit fractional size if number of digits >= 6
-    if num_integral_digits >= DEFAULT_PRECISION {
-        return Some(1);
-    }
-    // Special case #4: align fractional digits based on the number of integer digits
-    if num_integral_digits + num_fractional_digits >= DEFAULT_PRECISION {
-        // case where digits >= DEFAULT_PRECISION already handled above => we can be sure that DEFAULT_PRECISION - digit > 0
-        return Some(reduce_precision_if_possible(
-            value,
-            DEFAULT_PRECISION - num_integral_digits,
-        ));
-    }
-
-    None
+    Some(value_as_str)
 }
 
 /// Write a big decimal formatted according to the given parameters.
@@ -290,20 +245,15 @@ fn write_value_float(
     precision: usize,
     pad: bool,
 ) -> std::io::Result<()> {
-    let precision = if !pad {
-        detect_printf_like_precision(value).unwrap_or(precision)
-    } else {
-        precision
-    };
-
-    // TODO: add switching to scientific representation like GNU seq does
-
-    let value_as_str =
-        if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
+    let value_as_str = match value {
+        ExtendedBigDecimal::BigDecimal(bd) => {
+            format_value_bigdecimal(bd, width, precision, pad).unwrap_or_else(|| format!("{value}"))
+        }
+        ExtendedBigDecimal::Infinity | ExtendedBigDecimal::MinusInfinity => {
             format!("{value:>width$.precision$}")
-        } else {
-            format!("{value:>0width$.precision$}")
-        };
+        }
+        _ => format!("{value:>0width$.precision$}"),
+    };
     write!(writer, "{value_as_str}")
 }
 
