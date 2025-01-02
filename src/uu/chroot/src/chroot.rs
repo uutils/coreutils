@@ -192,7 +192,6 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::GROUPS)
-                .short('G')
                 .long(options::GROUPS)
                 .help("Comma-separated list of groups to switch to")
                 .value_name("GROUP1,GROUP2..."),
