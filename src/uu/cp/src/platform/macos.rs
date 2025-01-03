@@ -4,12 +4,14 @@
 // file that was distributed with this source code.
 // spell-checker:ignore reflink
 use std::ffi::CString;
-use std::fs::{self, File};
-use std::io;
+use std::fs::{self, File, OpenOptions};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
 use quick_error::ResultExt;
+use uucore::buf_copy;
+use uucore::mode::get_umask;
 
 use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
 
@@ -24,6 +26,7 @@ pub(crate) fn copy_on_write(
     sparse_mode: SparseMode,
     context: &str,
     source_is_fifo: bool,
+    source_is_stream: bool,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
         return Err("--sparse is only supported on linux".to_string().into());
@@ -85,10 +88,23 @@ pub(crate) fn copy_on_write(
             }
             _ => {
                 copy_debug.reflink = OffloadReflinkDebug::Yes;
-                if source_is_fifo {
+                if source_is_stream {
                     let mut src_file = File::open(source)?;
-                    let mut dst_file = File::create(dest)?;
-                    io::copy(&mut src_file, &mut dst_file).context(context)?
+                    let mode = 0o622 & !get_umask();
+                    let mut dst_file = OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .mode(mode)
+                        .open(dest)?;
+
+                    let context = buf_copy::copy_stream(&mut src_file, &mut dst_file)
+                        .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
+                        .context(context)?;
+
+                    if source_is_fifo {
+                        dst_file.set_permissions(src_file.metadata()?.permissions())?;
+                    }
+                    context
                 } else {
                     fs::copy(source, dest).context(context)?
                 }
