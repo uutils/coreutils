@@ -43,7 +43,7 @@ struct Options {
     /// Whether to change to the new root directory.
     skip_chdir: bool,
     /// List of groups under which the command will be run.
-    groups: Vec<String>,
+    groups: Option<Vec<String>>,
     /// The user and group (each optional) under which the command will be run.
     userspec: Option<UserSpec>,
 }
@@ -133,12 +133,12 @@ impl Options {
             None => return Err(ChrootError::MissingNewRoot.into()),
         };
         let groups = match matches.get_one::<String>(options::GROUPS) {
-            None => vec![],
+            None => None,
             Some(s) => {
                 if s.is_empty() {
-                    vec![]
+                    Some(vec![])
                 } else {
-                    parse_group_list(s)?
+                    Some(parse_group_list(s)?)
                 }
             }
         };
@@ -288,7 +288,9 @@ pub fn uu_app() -> Command {
 
 fn set_context(options: &Options) -> UResult<()> {
     enter_chroot(&options.newroot, options.skip_chdir)?;
-    set_groups_from_str(&options.groups)?;
+    if let Some(groups) = &options.groups {
+        set_groups_from_str(groups)?;
+    }
     match &options.userspec {
         None | Some(UserSpec::NeitherGroupNorUser) => {}
         Some(UserSpec::UserOnly(user)) => set_user(user)?,
