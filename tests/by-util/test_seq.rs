@@ -881,6 +881,20 @@ fn test_parse_valid_hexadecimal_float() {
         .stdout_only("1024\n");
 }
 
+#[test]
+fn test_parse_float_gnu_coreutils() {
+    // some values from GNU coreutils tests
+    new_ucmd!()
+        .args(&[".89999", "1e-7", ".8999901"])
+        .succeeds()
+        .stdout_only("0.8999900\n0.8999901\n");
+
+    new_ucmd!()
+        .args(&["0", "0.000001", "0.000003"])
+        .succeeds()
+        .stdout_only("0.000000\n0.000001\n0.000002\n0.000003\n");
+}
+
 #[ignore]
 #[test]
 fn test_parse_valid_hexadecimal_float_format_issues() {
