@@ -141,7 +141,7 @@ fn test_preference_of_userspec() {
         .arg("a")
         .arg("--user")
         .arg("fake")
-        .arg("-G")
+        .arg("--groups")
         .arg("ABC,DEF")
         .arg(format!("--userspec={username}:{group_name}"))
         .fails();
