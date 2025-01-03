@@ -56,6 +56,8 @@ pub use crate::features::fs;
 pub use crate::features::lines;
 #[cfg(feature = "quoting-style")]
 pub use crate::features::quoting_style;
+#[cfg(feature = "rand-read")]
+pub use crate::features::rand_read;
 #[cfg(feature = "ranges")]
 pub use crate::features::ranges;
 #[cfg(feature = "ringbuffer")]
