@@ -16,7 +16,7 @@ use std::process;
 use uucore::error::{set_exit_code, UClapError, UResult, UUsageError};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-use uucore::{entries, format_usage, help_about, help_usage};
+use uucore::{entries, format_usage, help_about, help_usage, show};
 
 static ABOUT: &str = help_about!("chroot.md");
 static USAGE: &str = help_usage!("chroot.md");
@@ -71,6 +71,60 @@ fn parse_userspec(spec: &str) -> UResult<UserSpec> {
     }
 }
 
+// Pre-condition: `list_str` is non-empty.
+fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
+    let split: Vec<&str> = list_str.split(",").collect();
+    if split.len() == 1 {
+        let name = split[0].trim();
+        if name.is_empty() {
+            // --groups=" "
+            // chroot: invalid group ‘ ’
+            Err(ChrootError::InvalidGroup(name.to_string()))
+        } else {
+            // --groups="blah"
+            Ok(vec![name.to_string()])
+        }
+    } else if split.iter().all(|s| s.is_empty()) {
+        // --groups=","
+        // chroot: invalid group list ‘,’
+        Err(ChrootError::InvalidGroupList(list_str.to_string()))
+    } else {
+        let mut result = vec![];
+        let mut err = false;
+        for name in split {
+            let trimmed_name = name.trim();
+            if trimmed_name.is_empty() {
+                if name.is_empty() {
+                    // --groups=","
+                    continue;
+                } else {
+                    // --groups=", "
+                    // chroot: invalid group ‘ ’
+                    show!(ChrootError::InvalidGroup(name.to_string()));
+                    err = true;
+                }
+            } else {
+                // TODO Figure out a better condition here.
+                if trimmed_name.starts_with(char::is_numeric)
+                    && trimmed_name.ends_with(|c: char| !c.is_numeric())
+                {
+                    // --groups="0trail"
+                    // chroot: invalid group ‘0trail’
+                    show!(ChrootError::InvalidGroup(name.to_string()));
+                    err = true;
+                } else {
+                    result.push(trimmed_name.to_string());
+                }
+            }
+        }
+        if err {
+            Err(ChrootError::GroupsParsingFailed)
+        } else {
+            Ok(result)
+        }
+    }
+}
+
 impl Options {
     /// Parse parameters from the command-line arguments.
     fn from(matches: &clap::ArgMatches) -> UResult<Self> {
@@ -80,7 +134,13 @@ impl Options {
         };
         let groups = match matches.get_one::<String>(options::GROUPS) {
             None => vec![],
-            Some(s) => s.split(",").map(str::to_string).collect(),
+            Some(s) => {
+                if s.is_empty() {
+                    vec![]
+                } else {
+                    parse_group_list(s)?
+                }
+            }
         };
         let skip_chdir = matches.get_flag(options::SKIP_CHDIR);
         let userspec = match matches.get_one::<String>(options::USERSPEC) {

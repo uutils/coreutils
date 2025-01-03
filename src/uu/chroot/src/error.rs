@@ -21,6 +21,12 @@ pub enum ChrootError {
     /// Failed to find the specified command.
     CommandNotFound(String, Error),
 
+    GroupsParsingFailed,
+
+    InvalidGroup(String),
+
+    InvalidGroupList(String),
+
     /// The given user and group specification was invalid.
     InvalidUserspec(String),
 
@@ -68,6 +74,9 @@ impl Display for ChrootError {
             Self::CommandFailed(s, e) | Self::CommandNotFound(s, e) => {
                 write!(f, "failed to run command {}: {}", s.to_string().quote(), e,)
             }
+            Self::GroupsParsingFailed => write!(f, "--groups parsing failed"),
+            Self::InvalidGroup(s) => write!(f, "invalid group: {}", s.quote()),
+            Self::InvalidGroupList(s) => write!(f, "invalid group list: {}", s.quote()),
             Self::InvalidUserspec(s) => write!(f, "invalid userspec: {}", s.quote(),),
             Self::MissingNewRoot => write!(
                 f,
