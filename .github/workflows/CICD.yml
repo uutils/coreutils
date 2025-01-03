@@ -199,6 +199,11 @@ jobs:
         # * ensure '.clippy.toml' MSRV configuration setting is equal to ${{ env.RUST_MIN_SRV }}
         CLIPPY_MSRV=$(grep -P "(?i)^\s*msrv\s*=\s*" .clippy.toml | grep -oP "\d+([.]\d+)+")
         if [ "${CLIPPY_MSRV}" != "${{ env.RUST_MIN_SRV }}" ]; then { echo "::error file=.clippy.toml::Incorrect MSRV configuration for clippy (found '${CLIPPY_MSRV}'; should be '${{ env.RUST_MIN_SRV }}'); update '.clippy.toml' with 'msrv = \"${{ env.RUST_MIN_SRV }}\"'" ; exit 1 ; } ; fi
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        # Install a package for one of the tests
+        sudo apt-get -y update ; sudo apt-get -y install attr
     - name: Info
       shell: bash
       run: |
