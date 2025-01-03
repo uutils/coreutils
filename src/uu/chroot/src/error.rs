@@ -8,6 +8,7 @@ use std::fmt::Display;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
+use uucore::libc;
 
 /// Errors that can happen while executing chroot.
 #[derive(Debug)]
@@ -32,6 +33,8 @@ pub enum ChrootError {
 
     /// The new root directory was not given.
     MissingNewRoot,
+
+    NoGroupSpecified(libc::uid_t),
 
     /// Failed to find the specified user.
     NoSuchUser,
@@ -83,6 +86,7 @@ impl Display for ChrootError {
                 "Missing operand: NEWROOT\nTry '{} --help' for more information.",
                 uucore::execution_phrase(),
             ),
+            Self::NoGroupSpecified(uid) => write!(f, "no group specified for unknown uid: {}", uid),
             Self::NoSuchUser => write!(f, "invalid user"),
             Self::NoSuchGroup => write!(f, "invalid group"),
             Self::NoSuchDirectory(s) => write!(

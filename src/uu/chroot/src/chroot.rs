@@ -13,10 +13,11 @@ use std::io::Error;
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process;
+use uucore::entries::{grp2gid, usr2uid, Locate, Passwd};
 use uucore::error::{set_exit_code, UClapError, UResult, UUsageError};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-use uucore::{entries, format_usage, help_about, help_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
 static ABOUT: &str = help_about!("chroot.md");
 static USAGE: &str = help_usage!("chroot.md");
@@ -286,18 +287,156 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Get the UID for the given username, falling back to numeric parsing.
+///
+/// According to the documentation of GNU `chroot`, "POSIX requires that
+/// these commands first attempt to resolve the specified string as a
+/// name, and only once that fails, then try to interpret it as an ID."
+fn name_to_uid(name: &str) -> Result<libc::uid_t, ChrootError> {
+    match usr2uid(name) {
+        Ok(uid) => Ok(uid),
+        Err(_) => name
+            .parse::<libc::uid_t>()
+            .map_err(|_| ChrootError::NoSuchUser),
+    }
+}
+
+/// Get the GID for the given group name, falling back to numeric parsing.
+///
+/// According to the documentation of GNU `chroot`, "POSIX requires that
+/// these commands first attempt to resolve the specified string as a
+/// name, and only once that fails, then try to interpret it as an ID."
+fn name_to_gid(name: &str) -> Result<libc::gid_t, ChrootError> {
+    match grp2gid(name) {
+        Ok(gid) => Ok(gid),
+        Err(_) => name
+            .parse::<libc::gid_t>()
+            .map_err(|_| ChrootError::NoSuchGroup),
+    }
+}
+
+/// Get the list of group IDs for the given user.
+///
+/// According to the GNU documentation, "the supplementary groups are
+/// set according to the system defined list for that user". This
+/// function gets that list.
+fn supplemental_gids(uid: libc::uid_t) -> Vec<libc::gid_t> {
+    match Passwd::locate(uid) {
+        Err(_) => vec![],
+        Ok(passwd) => passwd.belongs_to(),
+    }
+}
+
+/// Set the supplemental group IDs for this process.
+fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "openbsd"))]
+    let n = gids.len() as libc::c_int;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let n = gids.len() as libc::size_t;
+    let err = unsafe { setgroups(n, gids.as_ptr()) };
+    if err == 0 {
+        Ok(())
+    } else {
+        Err(Error::last_os_error())
+    }
+}
+
+/// Set the group ID of this process.
+fn set_gid(gid: libc::gid_t) -> std::io::Result<()> {
+    let err = unsafe { setgid(gid) };
+    if err == 0 {
+        Ok(())
+    } else {
+        Err(Error::last_os_error())
+    }
+}
+
+/// Set the user ID of this process.
+fn set_uid(uid: libc::uid_t) -> std::io::Result<()> {
+    let err = unsafe { setuid(uid) };
+    if err == 0 {
+        Ok(())
+    } else {
+        Err(Error::last_os_error())
+    }
+}
+
+/// What to do when the `--groups` argument is missing.
+enum Strategy {
+    /// Do nothing.
+    Nothing,
+    /// Use the list of supplemental groups for the given user.
+    ///
+    /// If the `bool` parameter is `false` and the list of groups for
+    /// the given user is empty, then this will result in an error.
+    FromUID(libc::uid_t, bool),
+}
+
+/// Set supplemental groups when the `--groups` argument is not specified.
+fn handle_missing_groups(strategy: Strategy) -> Result<(), ChrootError> {
+    match strategy {
+        Strategy::Nothing => Ok(()),
+        Strategy::FromUID(uid, false) => {
+            let gids = supplemental_gids(uid);
+            if gids.is_empty() {
+                Err(ChrootError::NoGroupSpecified(uid))
+            } else {
+                set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
+            }
+        }
+        Strategy::FromUID(uid, true) => {
+            let gids = supplemental_gids(uid);
+            set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
+        }
+    }
+}
+
+/// Set supplemental groups for this process.
+fn set_supplemental_gids_with_strategy(
+    strategy: Strategy,
+    groups: &Option<Vec<String>>,
+) -> Result<(), ChrootError> {
+    match groups {
+        None => handle_missing_groups(strategy),
+        Some(groups) => {
+            let mut gids = vec![];
+            for group in groups {
+                gids.push(name_to_gid(group)?);
+            }
+            set_supplemental_gids(&gids).map_err(ChrootError::SetGroupsFailed)
+        }
+    }
+}
+
+/// Change the root, set the user ID, and set the group IDs for this process.
 fn set_context(options: &Options) -> UResult<()> {
     enter_chroot(&options.newroot, options.skip_chdir)?;
-    if let Some(groups) = &options.groups {
-        set_groups_from_str(groups)?;
-    }
     match &options.userspec {
-        None | Some(UserSpec::NeitherGroupNorUser) => {}
-        Some(UserSpec::UserOnly(user)) => set_user(user)?,
-        Some(UserSpec::GroupOnly(group)) => set_main_group(group)?,
+        None | Some(UserSpec::NeitherGroupNorUser) => {
+            let strategy = Strategy::Nothing;
+            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+        }
+        Some(UserSpec::UserOnly(user)) => {
+            let uid = name_to_uid(user)?;
+            let gid = uid as libc::gid_t;
+            let strategy = Strategy::FromUID(uid, false);
+            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_string(), e))?;
+            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
+        }
+        Some(UserSpec::GroupOnly(group)) => {
+            let gid = name_to_gid(group)?;
+            let strategy = Strategy::Nothing;
+            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
+        }
         Some(UserSpec::UserAndGroup(user, group)) => {
-            set_main_group(group)?;
-            set_user(user)?;
+            let uid = name_to_uid(user)?;
+            let gid = name_to_gid(group)?;
+            let strategy = Strategy::FromUID(uid, true);
+            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
+            set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
         }
     }
     Ok(())
@@ -321,61 +460,4 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
     } else {
         Err(ChrootError::CannotEnter(format!("{}", root.display()), Error::last_os_error()).into())
     }
-}
-
-fn set_main_group(group: &str) -> UResult<()> {
-    if !group.is_empty() {
-        let group_id = match entries::grp2gid(group) {
-            Ok(g) => g,
-            _ => return Err(ChrootError::NoSuchGroup.into()),
-        };
-        let err = unsafe { setgid(group_id) };
-        if err != 0 {
-            return Err(
-                ChrootError::SetGidFailed(group_id.to_string(), Error::last_os_error()).into(),
-            );
-        }
-    }
-    Ok(())
-}
-
-#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "openbsd"))]
-fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
-    unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
-    unsafe { setgroups(groups.len() as libc::size_t, groups.as_ptr()) }
-}
-
-fn set_groups_from_str(groups: &[String]) -> UResult<()> {
-    if !groups.is_empty() {
-        let mut groups_vec = vec![];
-        for group in groups {
-            let gid = match entries::grp2gid(group) {
-                Ok(g) => g,
-                Err(_) => return Err(ChrootError::NoSuchGroup.into()),
-            };
-            groups_vec.push(gid);
-        }
-        let err = set_groups(&groups_vec);
-        if err != 0 {
-            return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
-        }
-    }
-    Ok(())
-}
-
-fn set_user(user: &str) -> UResult<()> {
-    if !user.is_empty() {
-        let user_id = entries::usr2uid(user).map_err(|_| ChrootError::NoSuchUser)?;
-        let err = unsafe { setuid(user_id as libc::uid_t) };
-        if err != 0 {
-            return Err(
-                ChrootError::SetUserFailed(user.to_string(), Error::last_os_error()).into(),
-            );
-        }
-    }
-    Ok(())
 }
