@@ -125,7 +125,8 @@ pub fn uu_app() -> Command {
                 .short_alias('n') // For bash compatibility, like in GNU coreutils
                 .long(options::SIGNAL)
                 .value_name("signal")
-                .help("Sends given signal instead of SIGTERM"),
+                .help("Sends given signal instead of SIGTERM")
+                .conflicts_with_all([options::LIST, options::TABLE]),
         )
         .arg(
             Arg::new(options::PIDS_OR_SIGNALS)
