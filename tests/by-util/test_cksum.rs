@@ -352,6 +352,18 @@ fn test_length_not_supported() {
         .no_stdout()
         .stderr_contains("--length is only supported with --algorithm=blake2b")
         .code_is(1);
+
+    new_ucmd!()
+        .arg("-l")
+        .arg("158")
+        .arg("-c")
+        .arg("-a")
+        .arg("crc")
+        .arg("/tmp/xxx")
+        .fails()
+        .no_stdout()
+        .stderr_contains("--length is only supported with --algorithm=blake2b")
+        .code_is(1);
 }
 
 #[test]
