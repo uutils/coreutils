@@ -235,22 +235,21 @@ fn write_value_float(
     width: usize,
     precision: Option<usize>,
 ) -> std::io::Result<()> {
-    let value_as_str = if let Some(precision) = precision {
+    let value_as_str = match precision {
         // format with precision: decimal floats and integers
-        match value {
+        Some(precision) => match value {
             ExtendedBigDecimal::Infinity | ExtendedBigDecimal::MinusInfinity => {
                 format!("{value:>width$.precision$}")
             }
             _ => format!("{value:>0width$.precision$}"),
-        }
-    } else {
+        },
         // format without precision: hexadecimal floats
-        match value {
+        None => match value {
             ExtendedBigDecimal::BigDecimal(bd) => {
-                format_bigdecimal(bd).unwrap_or("{value}".to_owned())
+                format_bigdecimal(bd).unwrap_or_else(|| "{value}".to_owned())
             }
             _ => format!("{value:>0width$}"),
-        }
+        },
     };
     write!(writer, "{value_as_str}")
 }
