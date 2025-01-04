@@ -276,10 +276,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    if ["bsd", "crc", "sysv"].contains(&algo_name) && check {
-        return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
-    }
-
     let input_length = matches.get_one::<usize>(options::LENGTH);
 
     let length = match input_length {
@@ -292,6 +288,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         None => None,
     };
+
+    if ["bsd", "crc", "sysv"].contains(&algo_name) && check {
+        return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
+    }
 
     if check {
         let text_flag = matches.get_flag(options::TEXT);
