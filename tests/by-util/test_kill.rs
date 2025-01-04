@@ -307,3 +307,25 @@ fn test_kill_with_signal_number_hidden_compatibility_option() {
         .succeeds();
     assert_eq!(target.wait_for_signal(), Some(9));
 }
+
+#[test]
+fn test_kill_with_signal_and_list() {
+    let target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("EXIT")
+        .arg(format!("{}", target.pid()))
+        .arg("-l")
+        .fails();
+}
+
+#[test]
+fn test_kill_with_signal_and_table() {
+    let target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("EXIT")
+        .arg(format!("{}", target.pid()))
+        .arg("-t")
+        .fails();
+}
