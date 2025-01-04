@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse floatparse
+// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat
 use std::ffi::OsString;
 use std::io::{stdout, ErrorKind, Write};
 
@@ -15,8 +15,9 @@ use uucore::{format_usage, help_about, help_usage};
 
 mod error;
 mod extendedbigdecimal;
+mod hexadecimalfloat;
+
 // public to allow fuzzing
-mod floatparse;
 #[cfg(fuzzing)]
 pub mod number;
 #[cfg(not(fuzzing))]
@@ -114,7 +115,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (first, first_precision) = if numbers.len() > 1 {
         match numbers[0].parse() {
-            Ok(num) => (num, floatparse::detect_precision(numbers[0])),
+            Ok(num) => (num, hexadecimalfloat::parse_precision(numbers[0])),
             Err(e) => return Err(SeqError::ParseError(numbers[0].to_string(), e).into()),
         }
     } else {
@@ -122,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
     let (increment, increment_precision) = if numbers.len() > 2 {
         match numbers[1].parse() {
-            Ok(num) => (num, floatparse::detect_precision(numbers[1])),
+            Ok(num) => (num, hexadecimalfloat::parse_precision(numbers[1])),
             Err(e) => return Err(SeqError::ParseError(numbers[1].to_string(), e).into()),
         }
     } else {
@@ -137,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // `uu_app()`.
         let n: usize = numbers.len();
         match numbers[n - 1].parse() {
-            Ok(num) => (num, floatparse::detect_precision(numbers[n - 1])),
+            Ok(num) => (num, hexadecimalfloat::parse_precision(numbers[n - 1])),
             Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_string(), e).into()),
         }
     };

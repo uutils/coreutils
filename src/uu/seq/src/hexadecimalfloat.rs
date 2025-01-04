@@ -24,12 +24,12 @@ const HEX_RADIX: u32 = 16;
 /// ```rust,ignore
 /// let input = "0x1.4p-2";
 /// let expected = 0.3125;
-/// match input.parse::<PreciseNumber>().unwrap().number {
+/// match input.parse_number::<PreciseNumber>().unwrap().number {
 ///     ExtendedBigDecimal::BigDecimal(bd)  => assert_eq!(bd.to_f64().unwrap(),expected),
 ///     _ => unreachable!()
 /// };
 /// ```
-pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberError> {
+pub fn parse_number(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     // Parse floating point parts
     let (sign, remain) = parse_sign_multiplier(s.trim())?;
     let remain = parse_hex_prefix(remain)?;
@@ -80,7 +80,7 @@ pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberErro
 
 // Detect number precision similar to GNU coreutils. Refer to scan_arg in seq.c. There are still
 // some differences from the GNU version, but this should be sufficient to test the idea.
-pub fn detect_precision(s: &str) -> Option<usize> {
+pub fn parse_precision(s: &str) -> Option<usize> {
     let hex_index = s.find(['x', 'X']);
     let point_index = s.find('.');
 
@@ -254,13 +254,13 @@ fn parse_exponent_part(s: &str) -> Result<(Option<i32>, &str), ParseNumberError>
 #[cfg(test)]
 mod tests {
 
-    use super::{detect_precision, parse_hexadecimal_float};
+    use super::{parse_number, parse_precision};
     use crate::{numberparse::ParseNumberError, ExtendedBigDecimal};
     use bigdecimal::BigDecimal;
     use num_traits::ToPrimitive;
 
     fn parse_big_decimal(s: &str) -> Result<BigDecimal, ParseNumberError> {
-        match parse_hexadecimal_float(s)?.number {
+        match parse_number(s)?.number {
             ExtendedBigDecimal::BigDecimal(bd) => Ok(bd),
             _ => Err(ParseNumberError::Float),
         }
@@ -358,47 +358,47 @@ mod tests {
 
     #[test]
     fn test_parse_precise_number_count_digits() {
-        let precise_num = parse_hexadecimal_float("0x1.2").unwrap(); // 1.125 decimal
+        let precise_num = parse_number("0x1.2").unwrap(); // 1.125 decimal
         assert_eq!(precise_num.num_integral_digits, 1);
         assert_eq!(precise_num.num_fractional_digits, 3);
 
-        let precise_num = parse_hexadecimal_float("-0x1.2").unwrap(); // -1.125 decimal
+        let precise_num = parse_number("-0x1.2").unwrap(); // -1.125 decimal
         assert_eq!(precise_num.num_integral_digits, 2);
         assert_eq!(precise_num.num_fractional_digits, 3);
 
-        let precise_num = parse_hexadecimal_float("0x123.8").unwrap(); // 291.5 decimal
+        let precise_num = parse_number("0x123.8").unwrap(); // 291.5 decimal
         assert_eq!(precise_num.num_integral_digits, 3);
         assert_eq!(precise_num.num_fractional_digits, 1);
 
-        let precise_num = parse_hexadecimal_float("-0x123.8").unwrap(); // -291.5 decimal
+        let precise_num = parse_number("-0x123.8").unwrap(); // -291.5 decimal
         assert_eq!(precise_num.num_integral_digits, 4);
         assert_eq!(precise_num.num_fractional_digits, 1);
     }
 
     #[test]
-    fn test_detect_precision() {
-        assert_eq!(detect_precision("1"), Some(0));
-        assert_eq!(detect_precision("0x1"), Some(0));
-        assert_eq!(detect_precision("0x1.1"), None);
-        assert_eq!(detect_precision("0x1.1p2"), None);
-        assert_eq!(detect_precision("0x1.1p-2"), None);
-        assert_eq!(detect_precision(".1"), Some(1));
-        assert_eq!(detect_precision("1.1"), Some(1));
-        assert_eq!(detect_precision("1.12"), Some(2));
-        assert_eq!(detect_precision("1.12345678"), Some(8));
-        assert_eq!(detect_precision("1.12345678e-3"), Some(11));
-        assert_eq!(detect_precision("1.1e-1"), Some(2));
-        assert_eq!(detect_precision("1.1e-3"), Some(4));
+    fn test_parse_precision_valid_values() {
+        assert_eq!(parse_precision("1"), Some(0));
+        assert_eq!(parse_precision("0x1"), Some(0));
+        assert_eq!(parse_precision("0x1.1"), None);
+        assert_eq!(parse_precision("0x1.1p2"), None);
+        assert_eq!(parse_precision("0x1.1p-2"), None);
+        assert_eq!(parse_precision(".1"), Some(1));
+        assert_eq!(parse_precision("1.1"), Some(1));
+        assert_eq!(parse_precision("1.12"), Some(2));
+        assert_eq!(parse_precision("1.12345678"), Some(8));
+        assert_eq!(parse_precision("1.12345678e-3"), Some(11));
+        assert_eq!(parse_precision("1.1e-1"), Some(2));
+        assert_eq!(parse_precision("1.1e-3"), Some(4));
     }
 
     #[test]
-    fn test_detect_precision_invalid() {
-        // Just to make sure it's not crash on incomplete values/bad format
+    fn test_parse_precision_invalid_values() {
+        // Just to make sure it doesn't crash on incomplete values/bad format
         // Good enough for now.
-        assert_eq!(detect_precision("1."), Some(0));
-        assert_eq!(detect_precision("1e"), Some(0));
-        assert_eq!(detect_precision("1e-"), Some(0));
-        assert_eq!(detect_precision("1e+"), Some(0));
-        assert_eq!(detect_precision("1em"), Some(0));
+        assert_eq!(parse_precision("1."), Some(0));
+        assert_eq!(parse_precision("1e"), Some(0));
+        assert_eq!(parse_precision("1e-"), Some(0));
+        assert_eq!(parse_precision("1e+"), Some(0));
+        assert_eq!(parse_precision("1em"), Some(0));
     }
 }

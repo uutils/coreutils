@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore extendedbigdecimal bigdecimal numberparse floatparse
+// spell-checker:ignore extendedbigdecimal bigdecimal numberparse hexadecimalfloat
 //! Parsing numbers for use in `seq`.
 //!
 //! This module provides an implementation of [`FromStr`] for the
@@ -16,7 +16,7 @@ use num_traits::Num;
 use num_traits::Zero;
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
-use crate::floatparse;
+use crate::hexadecimalfloat;
 use crate::number::PreciseNumber;
 
 /// An error returned when parsing a number fails.
@@ -298,7 +298,7 @@ fn parse_decimal_and_exponent(
 /// ```
 fn parse_hexadecimal(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     if s.find(['.', 'p', 'P']).is_some() {
-        floatparse::parse_hexadecimal_float(s)
+        hexadecimalfloat::parse_number(s)
     } else {
         parse_hexadecimal_integer(s)
     }
