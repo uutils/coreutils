@@ -7,7 +7,7 @@ use crate::extendedbigdecimal::ExtendedBigDecimal;
 use crate::number::PreciseNumber;
 use crate::numberparse::ParseNumberError;
 use bigdecimal::BigDecimal;
-use num_traits::{Float, FromPrimitive};
+use num_traits::FromPrimitive;
 
 /// The base of the hex number system
 const HEX_RADIX: u32 = 16;

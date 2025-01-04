@@ -837,7 +837,7 @@ fn test_parse_valid_hexadecimal_float() {
     new_ucmd!()
         .args(&["1", "0x1p-1", "2"])
         .succeeds()
-        .stdout_only("1.0\n1.5\n2.0\n");
+        .stdout_only("1\n1.5\n2\n");
 
     new_ucmd!()
         .args(&["0x3.4p-1", "0x4p-1", "4"])

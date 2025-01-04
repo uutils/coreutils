@@ -19,6 +19,8 @@ use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub struct PreciseNumber {
     pub number: ExtendedBigDecimal,
     pub num_integral_digits: usize,
+
+    #[allow(dead_code)]
     pub num_fractional_digits: usize,
 }
 
