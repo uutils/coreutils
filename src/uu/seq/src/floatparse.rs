@@ -7,7 +7,7 @@ use crate::extendedbigdecimal::ExtendedBigDecimal;
 use crate::number::PreciseNumber;
 use crate::numberparse::ParseNumberError;
 use bigdecimal::BigDecimal;
-use num_traits::FromPrimitive;
+use num_traits::{Float, FromPrimitive};
 
 /// The base of the hex number system
 const HEX_RADIX: u32 = 16;
@@ -76,6 +76,51 @@ pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberErro
         num_integral_digits as usize,
         num_fractional_digits as usize,
     ))
+}
+
+// Detect number precision similar to GNU coreutils. Refer to scan_arg in seq.c. There are still
+// some differences from the GNU version, but this should be sufficient to test the idea.
+pub fn detect_precision(s: &str) -> Option<usize> {
+    let mut precision: Option<i32> = None;
+    let decimal_point_index = s.find('.');
+    let hex_index = s.find(['x', 'X']);
+    let power_index = s.find(['p', 'P']);
+    if decimal_point_index.is_none() && power_index.is_none() {
+        precision = Some(0);
+    }
+
+    if hex_index.is_none() {
+        let fractional_length = if let Some(decimal) = decimal_point_index {
+            s[decimal..]
+                .chars()
+                .skip(1)
+                .take_while(|x| x.is_ascii_digit())
+                .count()
+        } else {
+            0
+        };
+
+        precision = Some(fractional_length as i32);
+
+        if let Some(exponent) = s.find(['e', 'E']) {
+            let length = s[exponent..]
+                .chars()
+                .skip(1)
+                .take_while(|x| x.is_ascii_digit() || *x == '-' || *x == '+')
+                .count();
+
+            if length > 0 {
+                let exponent_value: i32 =
+                    s[exponent + 1..exponent + length + 1].parse().unwrap_or(0);
+                if exponent_value < 0 {
+                    precision = precision.map(|x| x + exponent_value.abs());
+                } else {
+                    precision = precision.map(|x| x - x.min(exponent_value));
+                }
+            }
+        }
+    }
+    precision.map(|x| x as usize)
 }
 
 /// Parse the sign multiplier.
@@ -209,7 +254,7 @@ fn parse_exponent_part(s: &str) -> Result<(Option<i32>, &str), ParseNumberError>
 mod tests {
 
     use super::parse_hexadecimal_float;
-    use crate::{numberparse::ParseNumberError, ExtendedBigDecimal};
+    use crate::{floatparse::detect_precision, numberparse::ParseNumberError, ExtendedBigDecimal};
     use bigdecimal::BigDecimal;
     use num_traits::ToPrimitive;
 
@@ -327,5 +372,21 @@ mod tests {
         let precise_num = parse_hexadecimal_float("-0x123.8").unwrap(); // -291.5 decimal
         assert_eq!(precise_num.num_integral_digits, 4);
         assert_eq!(precise_num.num_fractional_digits, 1);
+    }
+    #[test]
+    fn test_detect_precision() {
+        assert_eq!(detect_precision("1"), Some(0));
+        assert_eq!(detect_precision("0x1"), Some(0));
+        assert_eq!(detect_precision("0x1.1"), None);
+        assert_eq!(detect_precision("0x1.1p2"), None);
+        assert_eq!(detect_precision("0x1.1p-2"), None);
+        assert_eq!(detect_precision("0x1.1p-2"), None);
+        assert_eq!(detect_precision(".1"), Some(1));
+        assert_eq!(detect_precision("1.1"), Some(1));
+        assert_eq!(detect_precision("1.12"), Some(2));
+        assert_eq!(detect_precision("1.12345678"), Some(8));
+        assert_eq!(detect_precision("1.1e-1"), Some(2));
+        assert_eq!(detect_precision("1.1e-3"), Some(4));
+        assert_eq!(detect_precision("1.1e-3"), Some(4));
     }
 }
