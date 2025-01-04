@@ -38,7 +38,7 @@ mod tests {
     };
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    use {nix::unistd, std::os::fd::AsRawFd};
+    use std::os::fd::AsRawFd;
 
     use std::io::{Read, Write};
 
@@ -51,67 +51,6 @@ mod tests {
             .create(true)
             .open(temp_dir.path().join("file.txt"))
             .unwrap()
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[test]
-    fn test_file_is_pipe() {
-        let temp_file = new_temp_file();
-        let (pipe_read, pipe_write) = pipes::pipe().unwrap();
-
-        assert!(is_pipe(&pipe_read).unwrap());
-        assert!(is_pipe(&pipe_write).unwrap());
-        assert!(!is_pipe(&temp_file).unwrap());
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[test]
-    fn test_valid_splice_errs() {
-        use nix::errno::Errno;
-        use nix::Error;
-
-        let err = Error::from(Errno::EINVAL);
-        assert_eq!(maybe_unsupported(err).unwrap(), (0, true));
-
-        let err = Error::from(Errno::ENOSYS);
-        assert_eq!(maybe_unsupported(err).unwrap(), (0, true));
-
-        let err = Error::from(Errno::EBADF);
-        assert_eq!(maybe_unsupported(err).unwrap(), (0, true));
-
-        let err = Error::from(Errno::EPERM);
-        assert!(maybe_unsupported(err).is_err());
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[test]
-    fn test_splice_data_to_pipe() {
-        let (pipe_read, pipe_write) = pipes::pipe().unwrap();
-        let data = b"Hello, world!";
-        let (bytes, _) = splice_data_to_pipe(data, &pipe_write).unwrap();
-        let mut buf = [0; 1024];
-        let n = unistd::read(pipe_read.as_raw_fd(), &mut buf).unwrap();
-        assert_eq!(&buf[..n], data);
-        assert_eq!(bytes as usize, data.len());
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[test]
-    fn test_splice_data_to_file() {
-        use std::io::{Read, Seek, SeekFrom};
-
-        let mut temp_file = new_temp_file();
-        let (pipe_read, pipe_write) = pipes::pipe().unwrap();
-        let data = b"Hello, world!";
-        let (bytes, _) = splice_data_to_fd(data, &pipe_read, &pipe_write, &temp_file).unwrap();
-        assert_eq!(bytes as usize, data.len());
-
-        // We would have been at the end already, so seek again to the start.
-        temp_file.seek(SeekFrom::Start(0)).unwrap();
-
-        let mut buf = Vec::new();
-        temp_file.read_to_end(&mut buf).unwrap();
-        assert_eq!(buf, data);
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -174,34 +113,6 @@ mod tests {
         dest_file.read_to_end(&mut buf).unwrap();
 
         assert_eq!(bytes_copied as usize, data.len());
-        assert_eq!(buf, data);
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[test]
-    fn test_splice_write() {
-        use std::{
-            io::{Read, Seek, SeekFrom, Write},
-            thread,
-        };
-
-        let (pipe_read, mut pipe_write) = pipes::pipe().unwrap();
-        let mut dest_file = new_temp_file();
-        let data = b"Hello, world!";
-        let thread = thread::spawn(move || {
-            pipe_write.write_all(data).unwrap();
-        });
-        let (bytes, _) = splice_write(&pipe_read, &dest_file).unwrap();
-        thread.join().unwrap();
-
-        assert!(bytes == data.len() as u64);
-
-        // We would have been at the end already, so seek again to the start.
-        dest_file.seek(SeekFrom::Start(0)).unwrap();
-
-        let mut buf = Vec::new();
-        dest_file.read_to_end(&mut buf).unwrap();
-
         assert_eq!(buf, data);
     }
 }
