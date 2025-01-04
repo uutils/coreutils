@@ -6,18 +6,17 @@
 use std::ffi::OsString;
 use std::io::{stdout, ErrorKind, Write};
 
-use bigdecimal::BigDecimal;
 use clap::{crate_version, Arg, ArgAction, Command};
 use num_traits::{ToPrimitive, Zero};
+
 use uucore::error::{FromIo, UResult};
 use uucore::format::{num_format, Format};
-use uucore::format::{sprintf, FormatArgument};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
 mod extendedbigdecimal;
-mod floatparse;
 // public to allow fuzzing
+mod floatparse;
 #[cfg(fuzzing)]
 pub mod number;
 #[cfg(not(fuzzing))]
@@ -212,48 +211,19 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
     }
 }
 
-/// Formats a BigDecimal value and returns it as a string.
-fn format_value_bigdecimal(
-    value: &BigDecimal,
-    width: usize,
-    precision: usize,
-    pad: bool,
-) -> Option<String> {
-    if pad || value.is_integer() {
-        // Use a "default" format for padded values and integers.
-        return Some(format!("{value:>0width$.precision$}"));
-    }
-    let value_as_f64 = value.to_f64()?;
-    let value_as_str = if value.fractional_digit_count() == 1 {
-        // The issue with "%g" is that it formats "1.0" as "1".
-        // To address this, handle such cases separately by specifying format options.
-        format!("{value_as_f64:.precision$}")
-    } else {
-        // Call sprintf and let it decide how to format the number
-        let format_arguments = &[FormatArgument::Float(value_as_f64)];
-        let value_as_bytes = sprintf("%g", format_arguments).ok()?;
-        String::from_utf8(value_as_bytes).ok()?
-    };
-    Some(value_as_str)
-}
-
 /// Write a big decimal formatted according to the given parameters.
 fn write_value_float(
     writer: &mut impl Write,
     value: &ExtendedBigDecimal,
     width: usize,
     precision: usize,
-    pad: bool,
 ) -> std::io::Result<()> {
-    let value_as_str = match value {
-        ExtendedBigDecimal::BigDecimal(bd) => {
-            format_value_bigdecimal(bd, width, precision, pad).unwrap_or_else(|| format!("{value}"))
-        }
-        ExtendedBigDecimal::Infinity | ExtendedBigDecimal::MinusInfinity => {
+    let value_as_str =
+        if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
             format!("{value:>width$.precision$}")
-        }
-        _ => format!("{value:>0width$.precision$}"),
-    };
+        } else {
+            format!("{value:>0width$.precision$}")
+        };
     write!(writer, "{value_as_str}")
 }
 
@@ -304,7 +274,7 @@ fn print_seq(
                 };
                 f.fmt(&mut stdout, float)?;
             }
-            None => write_value_float(&mut stdout, &value, padding, largest_dec, pad)?,
+            None => write_value_float(&mut stdout, &value, padding, largest_dec)?,
         }
         // TODO Implement augmenting addition.
         value = value + increment.clone();
