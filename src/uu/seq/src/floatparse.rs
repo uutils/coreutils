@@ -81,45 +81,47 @@ pub fn parse_hexadecimal_float(s: &str) -> Result<PreciseNumber, ParseNumberErro
 // Detect number precision similar to GNU coreutils. Refer to scan_arg in seq.c. There are still
 // some differences from the GNU version, but this should be sufficient to test the idea.
 pub fn detect_precision(s: &str) -> Option<usize> {
-    let mut precision: Option<i32> = None;
-    let decimal_point_index = s.find('.');
     let hex_index = s.find(['x', 'X']);
-    let power_index = s.find(['p', 'P']);
-    if decimal_point_index.is_none() && power_index.is_none() {
-        precision = Some(0);
-    }
+    let point_index = s.find('.');
 
-    if hex_index.is_none() {
-        let fractional_length = if let Some(decimal) = decimal_point_index {
-            s[decimal..]
-                .chars()
-                .skip(1)
-                .take_while(|x| x.is_ascii_digit())
-                .count()
+    if hex_index.is_some() {
+        // Hex value. Returns:
+        // - 0 for a hexadecimal integer (filled above)
+        // - None for a hexadecimal floating-point number (the default value of precision)
+        let power_index = s.find(['p', 'P']);
+        if point_index.is_none() && power_index.is_none() {
+            // No decimal point and no 'p' (power) => integer => precision = 0
+            return Some(0);
         } else {
-            0
-        };
-
-        precision = Some(fractional_length as i32);
-
-        if let Some(exponent) = s.find(['e', 'E']) {
-            let length = s[exponent..]
-                .chars()
-                .skip(1)
-                .take_while(|x| x.is_ascii_digit() || *x == '-' || *x == '+')
-                .count();
-
-            if length > 0 {
-                let exponent_value: i32 = s[exponent + 1..=exponent + length].parse().unwrap_or(0);
-                if exponent_value < 0 {
-                    precision = precision.map(|x| x + exponent_value.abs());
-                } else {
-                    precision = precision.map(|x| x - x.min(exponent_value));
-                }
-            }
+            return None;
         }
     }
-    precision.map(|x| x as usize)
+
+    // This is a decimal floating point. The precision depends on two parameters:
+    // - the number of fractional digits
+    // - the exponent
+    // Let's detect the number of fractional digits
+    let fractional_length = if let Some(point_index) = point_index {
+        s[point_index + 1..]
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .count()
+    } else {
+        0
+    };
+
+    let mut precision = Some(fractional_length);
+
+    // Let's update the precision if exponent is present
+    if let Some(exponent_index) = s.find(['e', 'E']) {
+        let exponent_value: i32 = s[exponent_index + 1..].parse().unwrap_or(0);
+        if exponent_value < 0 {
+            precision = precision.map(|p| p + exponent_value.unsigned_abs() as usize);
+        } else {
+            precision = precision.map(|p| p - p.min(exponent_value as usize));
+        }
+    }
+    precision
 }
 
 /// Parse the sign multiplier.
@@ -372,6 +374,7 @@ mod tests {
         assert_eq!(precise_num.num_integral_digits, 4);
         assert_eq!(precise_num.num_fractional_digits, 1);
     }
+
     #[test]
     fn test_detect_precision() {
         assert_eq!(detect_precision("1"), Some(0));
@@ -383,7 +386,19 @@ mod tests {
         assert_eq!(detect_precision("1.1"), Some(1));
         assert_eq!(detect_precision("1.12"), Some(2));
         assert_eq!(detect_precision("1.12345678"), Some(8));
+        assert_eq!(detect_precision("1.12345678e-3"), Some(11));
         assert_eq!(detect_precision("1.1e-1"), Some(2));
         assert_eq!(detect_precision("1.1e-3"), Some(4));
+    }
+
+    #[test]
+    fn test_detect_precision_invalid() {
+        // Just to make sure it's not crash on incomplete values/bad format
+        // Good enough for now.
+        assert_eq!(detect_precision("1."), Some(0));
+        assert_eq!(detect_precision("1e"), Some(0));
+        assert_eq!(detect_precision("1e-"), Some(0));
+        assert_eq!(detect_precision("1e+"), Some(0));
+        assert_eq!(detect_precision("1em"), Some(0));
     }
 }
