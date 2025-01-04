@@ -110,8 +110,7 @@ pub fn detect_precision(s: &str) -> Option<usize> {
                 .count();
 
             if length > 0 {
-                let exponent_value: i32 =
-                    s[exponent + 1..exponent + length + 1].parse().unwrap_or(0);
+                let exponent_value: i32 = s[exponent + 1..=exponent + length].parse().unwrap_or(0);
                 if exponent_value < 0 {
                     precision = precision.map(|x| x + exponent_value.abs());
                 } else {
@@ -253,8 +252,8 @@ fn parse_exponent_part(s: &str) -> Result<(Option<i32>, &str), ParseNumberError>
 #[cfg(test)]
 mod tests {
 
-    use super::parse_hexadecimal_float;
-    use crate::{floatparse::detect_precision, numberparse::ParseNumberError, ExtendedBigDecimal};
+    use super::{detect_precision, parse_hexadecimal_float};
+    use crate::{numberparse::ParseNumberError, ExtendedBigDecimal};
     use bigdecimal::BigDecimal;
     use num_traits::ToPrimitive;
 
@@ -380,13 +379,11 @@ mod tests {
         assert_eq!(detect_precision("0x1.1"), None);
         assert_eq!(detect_precision("0x1.1p2"), None);
         assert_eq!(detect_precision("0x1.1p-2"), None);
-        assert_eq!(detect_precision("0x1.1p-2"), None);
         assert_eq!(detect_precision(".1"), Some(1));
         assert_eq!(detect_precision("1.1"), Some(1));
         assert_eq!(detect_precision("1.12"), Some(2));
         assert_eq!(detect_precision("1.12345678"), Some(8));
         assert_eq!(detect_precision("1.1e-1"), Some(2));
-        assert_eq!(detect_precision("1.1e-3"), Some(4));
         assert_eq!(detect_precision("1.1e-3"), Some(4));
     }
 }

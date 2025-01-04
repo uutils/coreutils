@@ -247,7 +247,7 @@ fn write_value_float(
         // format without precision: hexadecimal floats
         match value {
             ExtendedBigDecimal::BigDecimal(bd) => {
-                format_bigdecimal(&bd).unwrap_or("{value}".to_owned())
+                format_bigdecimal(bd).unwrap_or("{value}".to_owned())
             }
             _ => format!("{value:>0width$}"),
         }
