@@ -3,11 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) BUFWRITER seekable
+// spell-checker:ignore (vars) seekable
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 use thiserror::Error;
 use uucore::display::Quotable;
@@ -17,9 +17,6 @@ use uucore::lines::lines;
 use uucore::{format_usage, help_about, help_usage, show};
 
 const BUF_SIZE: usize = 65536;
-
-/// The capacity in bytes for buffered writers.
-const BUFWRITER_CAPACITY: usize = 16_384; // 16 kilobytes
 
 const ABOUT: &str = help_about!("head.md");
 const USAGE: &str = help_usage!("head.md");
@@ -255,6 +252,11 @@ where
 
     io::copy(&mut reader, &mut stdout)?;
 
+    // Make sure we finish writing everything to the target before
+    // exiting. Otherwise, when Rust is implicitly flushing, any
+    // error will be silently ignored.
+    stdout.flush()?;
+
     Ok(())
 }
 
@@ -263,11 +265,14 @@ fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std
     let mut reader = take_lines(input, n, separator);
 
     // Write those bytes to `stdout`.
-    let stdout = std::io::stdout();
-    let stdout = stdout.lock();
-    let mut writer = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout);
+    let mut stdout = std::io::stdout();
 
-    io::copy(&mut reader, &mut writer)?;
+    io::copy(&mut reader, &mut stdout)?;
+
+    // Make sure we finish writing everything to the target before
+    // exiting. Otherwise, when Rust is implicitly flushing, any
+    // error will be silently ignored.
+    stdout.flush()?;
 
     Ok(())
 }
