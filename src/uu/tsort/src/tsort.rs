@@ -5,9 +5,6 @@
 //spell-checker:ignore TAOCP
 use clap::{crate_version, Arg, Command};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fmt::Write;
-use std::fs::File;
-use std::io::{stdin, BufReader, Read};
 use std::fmt::Display;
 use std::path::Path;
 use uucore::display::Quotable;
@@ -66,25 +63,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>(options::FILE)
         .expect("Value is required by clap");
 
-    let mut stdin_buf;
-    let mut file_buf;
-    let mut reader = BufReader::new(if input == "-" {
-        stdin_buf = stdin();
-        &mut stdin_buf as &mut dyn Read
+    let data = if input == "-" {
+        let stdin = std::io::stdin();
+        std::io::read_to_string(stdin)?
     } else {
         let path = Path::new(&input);
         if path.is_dir() {
             return Err(TsortError::IsDir(input.to_string()).into());
         }
-        file_buf = File::open(path).map_err_context(|| input.to_string())?;
-        &mut file_buf as &mut dyn Read
-    });
+        std::fs::read_to_string(path)?
+    };
 
-    let mut input_buffer = String::new();
-    reader.read_to_string(&mut input_buffer)?;
     let mut g = Graph::default();
 
-    for line in input_buffer.lines() {
+    for line in data.lines() {
         let tokens: Vec<_> = line.split_whitespace().collect();
         if tokens.is_empty() {
             break;
