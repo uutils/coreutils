@@ -8,16 +8,54 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Write;
 use std::fs::File;
 use std::io::{stdin, BufReader, Read};
+use std::fmt::Display;
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::error::{UError, UResult};
+use uucore::{format_usage, help_about, help_usage, show};
 
 const ABOUT: &str = help_about!("tsort.md");
 const USAGE: &str = help_usage!("tsort.md");
 
 mod options {
     pub const FILE: &str = "file";
+}
+
+#[derive(Debug)]
+enum TsortError {
+    /// The input file is actually a directory.
+    IsDir(String),
+
+    /// The number of tokens in the input data is odd.
+    ///
+    /// The list of edges must be even because each edge has two
+    /// components: a source node and a target node.
+    NumTokensOdd(String),
+
+    /// The graph contains a cycle.
+    Loop(String),
+
+    /// A particular node in a cycle. (This is mainly used for printing.)
+    LoopNode(String),
+}
+
+impl std::error::Error for TsortError {}
+
+impl UError for TsortError {}
+
+impl Display for TsortError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::IsDir(d) => write!(f, "{d}: read error: Is a directory"),
+            Self::NumTokensOdd(i) => write!(
+                f,
+                "{}: input contains an odd number of tokens",
+                i.maybe_quote()
+            ),
+            Self::Loop(i) => write!(f, "{i}: input contains a loop:"),
+            Self::LoopNode(v) => write!(f, "{v}"),
+        }
+    }
 }
 
 #[uucore::main]
@@ -36,10 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         let path = Path::new(&input);
         if path.is_dir() {
-            return Err(USimpleError::new(
-                1,
-                format!("{input}: read error: Is a directory"),
-            ));
+            return Err(TsortError::IsDir(input.to_string()).into());
         }
         file_buf = File::open(path).map_err_context(|| input.to_string())?;
         &mut file_buf as &mut dyn Read
@@ -57,32 +92,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for ab in tokens.chunks(2) {
             match ab.len() {
                 2 => g.add_edge(ab[0], ab[1]),
-                _ => {
-                    return Err(USimpleError::new(
-                        1,
-                        format!(
-                            "{}: input contains an odd number of tokens",
-                            input.maybe_quote()
-                        ),
-                    ))
-                }
+                _ => return Err(TsortError::NumTokensOdd(input.to_string()).into()),
             }
         }
     }
 
     match g.run_tsort() {
         Err(cycle) => {
-            let mut error_message = format!(
-                "{}: {}: input contains a loop:\n",
-                uucore::util_name(),
-                input
-            );
+            show!(TsortError::Loop(input.to_string()));
             for node in &cycle {
-                writeln!(error_message, "{}: {}", uucore::util_name(), node).unwrap();
+                show!(TsortError::LoopNode(node.to_string()));
             }
-            eprint!("{}", error_message);
             println!("{}", cycle.join("\n"));
-            Err(USimpleError::new(1, ""))
+            Ok(())
         }
         Ok(ordering) => {
             println!("{}", ordering.join("\n"));
