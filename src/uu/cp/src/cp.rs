@@ -1518,6 +1518,42 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<
     Ok(())
 }
 
+/// Copies extended attributes (xattrs) from `source` to `dest`, ensuring that `dest` is temporarily
+/// user-writable if needed and restoring its original permissions afterward. This avoids “Operation
+/// not permitted” errors on read-only files. Returns an error if permission or metadata operations fail,
+/// or if xattr copying fails.
+#[cfg(all(unix, not(target_os = "android")))]
+fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
+    let metadata = fs::symlink_metadata(dest)?;
+
+    // Check if the destination file is currently read-only for the user.
+    let mut perms = metadata.permissions();
+    let was_readonly = perms.readonly();
+
+    // Temporarily grant user write if it was read-only.
+    if was_readonly {
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        fs::set_permissions(dest, perms)?;
+    }
+
+    // Perform the xattr copy and capture any potential error,
+    // so we can restore permissions before returning.
+    let copy_xattrs_result = copy_xattrs(source, dest);
+
+    // Restore read-only if we changed it.
+    if was_readonly {
+        let mut revert_perms = fs::symlink_metadata(dest)?.permissions();
+        revert_perms.set_readonly(true);
+        fs::set_permissions(dest, revert_perms)?;
+    }
+
+    // If copying xattrs failed, propagate that error now.
+    copy_xattrs_result?;
+
+    Ok(())
+}
+
 /// Copy the specified attributes from one path to another.
 pub(crate) fn copy_attributes(
     source: &Path,
@@ -1607,7 +1643,7 @@ pub(crate) fn copy_attributes(
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
         #[cfg(all(unix, not(target_os = "android")))]
         {
-            copy_xattrs(source, dest)?;
+            copy_extended_attrs(source, dest)?;
         }
         #[cfg(not(all(unix, not(target_os = "android"))))]
         {

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG getfattr
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -5919,4 +5919,87 @@ fn test_cp_no_file() {
     ucmd.fails()
         .code_is(1)
         .stderr_contains("error: the following required arguments were not provided:");
+}
+
+#[test]
+#[cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
+))]
+fn test_cp_preserve_xattr_readonly_source() {
+    use crate::common::util::compare_xattrs;
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source_file = "a";
+    let dest_file = "e";
+
+    at.touch(source_file);
+
+    let xattr_key = "user.test";
+    match Command::new("setfattr")
+        .args([
+            "-n",
+            xattr_key,
+            "-v",
+            "value",
+            &at.plus_as_string(source_file),
+        ])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfattr failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfattr failed with {e}");
+            return;
+        }
+    }
+
+    let getfattr_output = Command::new("getfattr")
+        .args([&at.plus_as_string(source_file)])
+        .output()
+        .expect("Failed to run `getfattr` on the destination file");
+
+    assert!(
+        getfattr_output.status.success(),
+        "getfattr did not run successfully: {}",
+        String::from_utf8_lossy(&getfattr_output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
+    assert!(
+        stdout.contains(xattr_key),
+        "Expected '{}' not found in getfattr output:\n{}",
+        xattr_key,
+        stdout
+    );
+
+    at.set_readonly(source_file);
+    assert!(scene
+        .fixtures
+        .metadata(source_file)
+        .permissions()
+        .readonly());
+
+    scene
+        .ucmd()
+        .args(&[
+            "--preserve=xattr",
+            &at.plus_as_string(source_file),
+            &at.plus_as_string(dest_file),
+        ])
+        .succeeds()
+        .no_output();
+
+    assert!(scene.fixtures.metadata(dest_file).permissions().readonly());
+    assert!(
+        compare_xattrs(&at.plus(source_file), &at.plus(dest_file)),
+        "Extended attributes were not preserved"
+    );
 }
