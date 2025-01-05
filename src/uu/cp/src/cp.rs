@@ -932,6 +932,16 @@ impl Options {
         };
         let update_mode = update_control::determine_update_mode(matches);
 
+        if backup_mode != BackupMode::NoBackup
+            && matches
+                .get_one::<String>(update_control::arguments::OPT_UPDATE)
+                .map_or(false, |v| v == "none" || v == "none-fail")
+        {
+            return Err(Error::InvalidArgument(
+                "--backup is mutually exclusive with -n or --update=none-fail".to_string(),
+            ));
+        }
+
         let backup_suffix = backup_control::determine_backup_suffix(matches);
 
         let overwrite = OverwriteMode::from_matches(matches);

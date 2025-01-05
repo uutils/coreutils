@@ -2423,6 +2423,18 @@ fn test_cp_reflink_bad() {
 }
 
 #[test]
+fn test_cp_conflicting_update() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    let _result = ucmd
+        .arg("-b")
+        .arg("--update=none")
+        .arg("a")
+        .arg("b")
+        .fails()
+        .stderr_contains("--backup is mutually exclusive with -n or --update=none-fail");
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_reflink_insufficient_permission() {
     let (at, mut ucmd) = at_and_ucmd!();
