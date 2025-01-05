@@ -301,8 +301,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let warn = matches.get_flag(options::WARN);
         let ignore_missing = matches.get_flag(options::IGNORE_MISSING);
         let quiet = matches.get_flag(options::QUIET);
+        let tag = matches.get_flag(options::TAG);
 
-        if binary_flag || text_flag {
+        if tag || binary_flag || text_flag {
             return Err(ChecksumError::BinaryTextConflict.into());
         }
         // Determine the appropriate algorithm option to pass
@@ -426,8 +427,7 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long(options::CHECK)
                 .help("read hashsums from the FILEs and check them")
-                .action(ArgAction::SetTrue)
-                .conflicts_with("tag"),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BASE64)
