@@ -74,18 +74,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         std::fs::read_to_string(path)?
     };
 
+    // Create the directed graph from pairs of tokens in the input data.
     let mut g = Graph::default();
-
-    for line in data.lines() {
-        let tokens: Vec<_> = line.split_whitespace().collect();
-        if tokens.is_empty() {
-            break;
-        }
-        for ab in tokens.chunks(2) {
-            match ab.len() {
-                2 => g.add_edge(ab[0], ab[1]),
-                _ => return Err(TsortError::NumTokensOdd(input.to_string()).into()),
-            }
+    for ab in data.split_whitespace().collect::<Vec<&str>>().chunks(2) {
+        match ab {
+            [a, b] => g.add_edge(a, b),
+            _ => return Err(TsortError::NumTokensOdd(input.to_string()).into()),
         }
     }
 
