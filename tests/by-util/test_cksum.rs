@@ -748,6 +748,19 @@ fn test_conflicting_options() {
             "cksum: the --binary and --text options are meaningless when verifying checksums",
         )
         .code_is(1);
+
+    scene
+        .ucmd()
+        .arg("--tag")
+        .arg("-c")
+        .arg("-a")
+        .arg("md5")
+        .fails()
+        .no_stdout()
+        .stderr_contains(
+            "cksum: the --binary and --text options are meaningless when verifying checksums",
+        )
+        .code_is(1);
 }
 
 #[test]
