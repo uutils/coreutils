@@ -200,17 +200,22 @@ impl BytesWriter {
         }
     }
 
-    fn bytes_for_pass(&mut self, size: usize) -> &[u8] {
+    fn bytes_for_pass(&mut self, size: usize) -> Result<&[u8], std::io::Error> {
         match self {
             Self::Random { rng, buffer } => {
                 let bytes = &mut buffer[..size];
-                rng.fill(bytes);
-                bytes
+                match rng.try_fill(bytes) {
+                    Ok(()) => Ok(bytes),
+                    Err(err) => Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        err.to_string(),
+                    )),
+                }
             }
             Self::Pattern { offset, buffer } => {
                 let bytes = &buffer[*offset..size + *offset];
                 *offset = (*offset + size) % PATTERN_LENGTH;
-                bytes
+                Ok(bytes)
             }
         }
     }
@@ -236,8 +241,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
         None => unreachable!(),
     };
-
-    // TODO: implement --random-source
 
     let remove_method = if matches.get_flag(options::WIPESYNC) {
         RemoveMethod::WipeSync
@@ -504,6 +507,29 @@ fn wipe_file(
         None => metadata.len(),
     };
 
+    // Random source errors
+    if let Some(random_source_str) = random_source {
+        let random_source_path = Path::new(random_source_str.as_str());
+        if !random_source_path.exists() {
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "{}: No such file or directory",
+                    random_source_path.maybe_quote()
+                ),
+            ));
+        }
+        if !random_source_path.is_file() {
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "{}: read error: Is a directory",
+                    random_source_path.maybe_quote()
+                ),
+            ));
+        }
+    }
+
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
         if verbose {
             let pass_name = pass_name(&pass_type);
@@ -517,7 +543,7 @@ fn wipe_file(
         }
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
-        show_if_err!(do_pass(&mut file, &pass_type, exact, size)
+        show_if_err!(do_pass(&mut file, &pass_type, exact, size, random_source)
             .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
     }
 
@@ -534,6 +560,7 @@ fn do_pass(
     pass_type: &PassType,
     exact: bool,
     file_size: u64,
+    random_source: &Option<String>,
 ) -> Result<(), io::Error> {
     // We might be at the end of the file due to a previous iteration, so rewind.
     file.rewind()?;
@@ -542,7 +569,15 @@ fn do_pass(
 
     // We start by writing BLOCK_SIZE times as many time as possible.
     for _ in 0..(file_size / BLOCK_SIZE as u64) {
-        let block = writer.bytes_for_pass(BLOCK_SIZE);
+        let data = writer.bytes_for_pass(BLOCK_SIZE);
+        let Ok(block) = data else {
+            let random_source_path = random_source
+                .clone()
+                .expect("random_source should be Some is None");
+            let path = Path::new(&random_source_path);
+            show_error!("{}: end of file", path.maybe_quote());
+            std::process::exit(1);
+        };
         file.write_all(block)?;
     }
 
@@ -551,7 +586,15 @@ fn do_pass(
     let bytes_left = (file_size % BLOCK_SIZE as u64) as usize;
     if bytes_left > 0 {
         let size = if exact { bytes_left } else { BLOCK_SIZE };
-        let block = writer.bytes_for_pass(size);
+        let data = writer.bytes_for_pass(size);
+        let Ok(block) = data else {
+            let random_source_path = random_source
+                .clone()
+                .expect("random_source should be Some is None");
+            let path = Path::new(&random_source_path);
+            show_error!("{}: end of file", path.maybe_quote());
+            std::process::exit(1);
+        };
         file.write_all(block)?;
     }
 

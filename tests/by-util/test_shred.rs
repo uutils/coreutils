@@ -183,19 +183,36 @@ fn test_shred_empty() {
 
 #[test]
 fn test_random_source() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
     let file = "test_random_source";
     let file_original_content = "test_shred file content";
 
     at.write(file, file_original_content);
 
+    // File is missing
+    scene
+        .ucmd()
+        .arg("--random-source=test_random_file")
+        .arg(file)
+        .succeeds();
+
     // Write to random file
     let random_file = "test_random_file";
     at.touch(random_file);
+
+    scene
+        .ucmd()
+        .arg("--random-source=test_random_file")
+        .arg(file)
+        .succeeds();
+
     at.write(random_file, "random contents");
 
-    ucmd.arg("--random-source=test_random_file")
+    scene
+        .ucmd()
+        .arg("--random-source=test_random_file")
         .arg(file)
         .succeeds();
 
