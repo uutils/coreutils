@@ -380,7 +380,10 @@ macro_rules! prompt_yes(
         eprint!("{}: ", uucore::util_name());
         eprint!($($args)+);
         eprint!(" ");
-        uucore::crash_if_err!(1, std::io::stderr().flush());
+        let res = std::io::stderr().flush().map_err(|err| {
+            $crate::error::USimpleError::new(1, err.to_string())
+        });
+        uucore::show_if_err!(res);
         uucore::read_yes()
     })
 );

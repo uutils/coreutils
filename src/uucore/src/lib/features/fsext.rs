@@ -587,7 +587,7 @@ impl FsUsage {
         let mut number_of_free_clusters = 0;
         let mut total_number_of_clusters = 0;
 
-        let success = unsafe {
+        unsafe {
             let path = to_nul_terminated_wide_string(path);
             GetDiskFreeSpaceW(
                 path.as_ptr(),
@@ -595,15 +595,7 @@ impl FsUsage {
                 &mut bytes_per_sector,
                 &mut number_of_free_clusters,
                 &mut total_number_of_clusters,
-            )
-        };
-        if 0 == success {
-            // Fails in case of CD for example
-            // crash!(
-            //     EXIT_ERR,
-            //     "GetDiskFreeSpaceW failed: {}",
-            //     IOError::last_os_error()
-            // );
+            );
         }
 
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
