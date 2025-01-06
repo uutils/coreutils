@@ -2424,8 +2424,7 @@ fn test_cp_reflink_bad() {
 
 #[test]
 fn test_cp_conflicting_update() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let _result = ucmd
+    new_ucmd!()
         .arg("-b")
         .arg("--update=none")
         .arg("a")
