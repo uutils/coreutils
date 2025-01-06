@@ -6031,3 +6031,19 @@ fn test_cp_preserve_xattr_readonly_source() {
         "Extended attributes were not preserved"
     );
 }
+
+#[test]
+#[cfg(unix)]
+fn test_cp_from_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let target = "target";
+    let test_string = "Hello, World!\n";
+
+    ucmd.arg("/dev/fd/0")
+        .arg(target)
+        .pipe_in(test_string)
+        .succeeds();
+
+    assert!(at.file_exists(target));
+    assert_eq!(at.read(target), test_string);
+}
