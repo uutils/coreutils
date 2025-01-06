@@ -3,21 +3,20 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) BUFWRITER seekable
+// spell-checker:ignore (vars) seekable
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::num::TryFromIntError;
+use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::line_ending::LineEnding;
 use uucore::lines::lines;
 use uucore::{format_usage, help_about, help_usage, show};
 
 const BUF_SIZE: usize = 65536;
-
-/// The capacity in bytes for buffered writers.
-const BUFWRITER_CAPACITY: usize = 16_384; // 16 kilobytes
 
 const ABOUT: &str = help_about!("head.md");
 const USAGE: &str = help_usage!("head.md");
@@ -36,6 +35,36 @@ mod parse;
 mod take;
 use take::take_all_but;
 use take::take_lines;
+
+#[derive(Error, Debug)]
+enum HeadError {
+    /// Wrapper around `io::Error`
+    #[error("error reading {name}: {err}")]
+    Io { name: String, err: io::Error },
+
+    #[error("parse error: {0}")]
+    ParseError(String),
+
+    #[error("bad argument encoding")]
+    BadEncoding,
+
+    #[error("{0}: number of -bytes or -lines is too large")]
+    NumTooLarge(#[from] TryFromIntError),
+
+    #[error("clap error: {0}")]
+    Clap(#[from] clap::Error),
+
+    #[error("{0}")]
+    MatchOption(String),
+}
+
+impl UError for HeadError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
+
+type HeadResult<T> = Result<T, HeadError>;
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
@@ -152,7 +181,7 @@ impl Mode {
 
 fn arg_iterate<'a>(
     mut args: impl uucore::Args + 'a,
-) -> UResult<Box<dyn Iterator<Item = OsString> + 'a>> {
+) -> HeadResult<Box<dyn Iterator<Item = OsString> + 'a>> {
     // argv[0] is always present
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
@@ -160,22 +189,19 @@ fn arg_iterate<'a>(
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
                 Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(USimpleError::new(
-                        1,
-                        format!("bad argument format: {}", s.quote()),
-                    )),
-                    parse::ParseError::Overflow => Err(USimpleError::new(
-                        1,
-                        format!(
-                            "invalid argument: {} Value too large for defined datatype",
-                            s.quote()
-                        ),
-                    )),
+                    parse::ParseError::Syntax => Err(HeadError::ParseError(format!(
+                        "bad argument format: {}",
+                        s.quote()
+                    ))),
+                    parse::ParseError::Overflow => Err(HeadError::ParseError(format!(
+                        "invalid argument: {} Value too large for defined datatype",
+                        s.quote()
+                    ))),
                 },
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
-            Err(USimpleError::new(1, "bad argument encoding".to_owned()))
+            Err(HeadError::BadEncoding)
         }
     } else {
         Ok(Box::new(vec![first].into_iter()))
@@ -226,6 +252,11 @@ where
 
     io::copy(&mut reader, &mut stdout)?;
 
+    // Make sure we finish writing everything to the target before
+    // exiting. Otherwise, when Rust is implicitly flushing, any
+    // error will be silently ignored.
+    stdout.flush()?;
+
     Ok(())
 }
 
@@ -234,11 +265,14 @@ fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std
     let mut reader = take_lines(input, n, separator);
 
     // Write those bytes to `stdout`.
-    let stdout = std::io::stdout();
-    let stdout = stdout.lock();
-    let mut writer = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout);
+    let mut stdout = std::io::stdout();
 
-    io::copy(&mut reader, &mut writer)?;
+    io::copy(&mut reader, &mut stdout)?;
+
+    // Make sure we finish writing everything to the target before
+    // exiting. Otherwise, when Rust is implicitly flushing, any
+    // error will be silently ignored.
+    stdout.flush()?;
 
     Ok(())
 }
@@ -247,10 +281,7 @@ fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> 
     match usize::try_from(n) {
         Ok(value) => Some(value),
         Err(e) => {
-            show!(USimpleError::new(
-                1,
-                format!("{e}: number of -bytes or -lines is too large")
-            ));
+            show!(HeadError::NumTooLarge(e));
             None
         }
     }
@@ -511,16 +542,17 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 head_file(&mut file, options)
             }
         };
-        if res.is_err() {
+        if let Err(e) = res {
             let name = if file.as_str() == "-" {
                 "standard input"
             } else {
                 file
             };
-            show!(USimpleError::new(
-                1,
-                format!("error reading {name}: Input/output error")
-            ));
+            return Err(HeadError::Io {
+                name: name.to_string(),
+                err: e,
+            }
+            .into());
         }
         first = false;
     }
@@ -537,7 +569,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match HeadOptions::get_from(&matches) {
         Ok(o) => o,
         Err(s) => {
-            return Err(USimpleError::new(1, s));
+            return Err(HeadError::MatchOption(s).into());
         }
     };
     uu_head(&args)

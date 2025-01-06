@@ -475,3 +475,25 @@ fn test_all_but_last_lines() {
         .succeeds()
         .stdout_is_fixture("lorem_ipsum_backwards_15_lines.expected");
 }
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[test]
+fn test_write_to_dev_full() {
+    use std::fs::OpenOptions;
+
+    for append in [true, false] {
+        {
+            let dev_full = OpenOptions::new()
+                .write(true)
+                .append(append)
+                .open("/dev/full")
+                .unwrap();
+
+            new_ucmd!()
+                .pipe_in_fixture(INPUT)
+                .set_stdout(dev_full)
+                .run()
+                .stderr_contains("No space left on device");
+        }
+    }
+}

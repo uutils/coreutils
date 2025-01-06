@@ -19,6 +19,7 @@ path = "src/head.rs"
 [dependencies]
 clap = { workspace = true }
 memchr = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = ["ringbuffer", "lines", "fs"] }
 
 [[bin]]
