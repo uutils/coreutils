@@ -390,3 +390,55 @@ fn slash_eight_off_by_one() {
         .succeeds()
         .stdout_only(r"\8");
 }
+
+mod posixly_correct {
+    use super::*;
+
+    #[test]
+    fn ignore_options() {
+        for arg in ["--help", "--version", "-E -n 'foo'", "-nE 'foo'"] {
+            new_ucmd!()
+                .env("POSIXLY_CORRECT", "1")
+                .arg(arg)
+                .succeeds()
+                .stdout_only(format!("{arg}\n"));
+        }
+    }
+
+    #[test]
+    fn process_n_option() {
+        new_ucmd!()
+            .env("POSIXLY_CORRECT", "1")
+            .args(&["-n", "foo"])
+            .succeeds()
+            .stdout_only("foo");
+
+        // ignore -E & process escapes
+        new_ucmd!()
+            .env("POSIXLY_CORRECT", "1")
+            .args(&["-n", "-E", "foo\\cbar"])
+            .succeeds()
+            .stdout_only("foo");
+    }
+
+    #[test]
+    fn process_escapes() {
+        new_ucmd!()
+            .env("POSIXLY_CORRECT", "1")
+            .arg("foo\\n")
+            .succeeds()
+            .stdout_only("foo\n\n");
+
+        new_ucmd!()
+            .env("POSIXLY_CORRECT", "1")
+            .arg("foo\\tbar")
+            .succeeds()
+            .stdout_only("foo\tbar\n");
+
+        new_ucmd!()
+            .env("POSIXLY_CORRECT", "1")
+            .arg("foo\\ctbar")
+            .succeeds()
+            .stdout_only("foo");
+    }
+}
