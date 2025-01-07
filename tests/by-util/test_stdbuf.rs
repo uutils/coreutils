@@ -10,6 +10,16 @@ fn invalid_input() {
     new_ucmd!().arg("-/").fails().code_is(125);
 }
 
+#[test]
+fn test_permission() {
+    new_ucmd!()
+        .arg("-o1")
+        .arg(".")
+        .fails()
+        .code_is(126)
+        .stderr_contains("Permission denied");
+}
+
 #[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
 #[test]
 fn test_stdbuf_unbuffered_stdout() {

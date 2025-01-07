@@ -157,9 +157,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     set_command_env(&mut command, "_STDBUF_E", &options.stderr);
     command.args(command_params);
 
-    let mut process = command
-        .spawn()
-        .map_err_context(|| "failed to execute process".to_string())?;
+    let mut process = match command.spawn() {
+        Ok(process) => process,
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            return Err(USimpleError::new(
+                126,
+                "failed to execute process: Permission denied",
+            ));
+        }
+        Err(e) => {
+            return Err(USimpleError::new(
+                1,
+                format!("failed to execute process: {}", e),
+            ));
+        }
+    };
+
     let status = process.wait().map_err_context(String::new)?;
     match status.code() {
         Some(i) => {
