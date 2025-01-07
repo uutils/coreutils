@@ -34,17 +34,17 @@ This file documents why some tests are failing:
 * gnu/tests/misc/comm.pl
 * gnu/tests/misc/dircolors.pl
 * gnu/tests/misc/echo.sh
-* gnu/tests/misc/kill.sh
+* gnu/tests/misc/kill.sh - https://github.com/uutils/coreutils/issues/7066 https://github.com/uutils/coreutils/issues/7067
 * gnu/tests/misc/nohup.sh
 * gnu/tests/misc/numfmt.pl
-* gnu/tests/misc/stdbuf.sh
-* gnu/tests/misc/tee.sh
+* gnu/tests/misc/stdbuf.sh - https://github.com/uutils/coreutils/issues/7072
+* gnu/tests/misc/tee.sh - https://github.com/uutils/coreutils/issues/7073
 * gnu/tests/misc/time-style.sh
-* gnu/tests/misc/tsort.pl
+* gnu/tests/misc/tsort.pl - https://github.com/uutils/coreutils/issues/7074
 * gnu/tests/misc/write-errors.sh
 * gnu/tests/misc/xattr.sh - https://github.com/uutils/coreutils/pull/7009
 * gnu/tests/mv/hard-link-1.sh
-* gnu/tests/mv/mv-special-1.sh
+* gnu/tests/mv/mv-special-1.sh - https://github.com/uutils/coreutils/issues/7076
 * gnu/tests/mv/part-fail.sh
 * gnu/tests/mv/part-hardlink.sh
 * gnu/tests/od/od-N.sh
