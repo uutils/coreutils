@@ -1379,7 +1379,7 @@ fn no_such_file() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["in", "0"])
         .fails()
-        .stderr_contains("cannot access 'in': No such file or directory");
+        .stderr_contains("cannot open 'in' for reading: No such file or directory");
 }
 
 #[test]
