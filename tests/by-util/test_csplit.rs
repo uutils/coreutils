@@ -1454,8 +1454,14 @@ fn test_directory_input_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("test_directory");
 
+    #[cfg(unix)]
     ucmd.args(&["test_directory", "1"])
         .fails()
         .code_is(1)
         .stderr_only("csplit: read error: Is a directory\n");
+    #[cfg(windows)]
+    ucmd.args(&["test_directory", "1"])
+        .fails()
+        .code_is(1)
+        .stderr_only("csplit: cannot open 'test_directory' for reading: Permission denied\n");
 }
