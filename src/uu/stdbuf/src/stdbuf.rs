@@ -157,28 +157,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     set_command_env(&mut command, "_STDBUF_E", &options.stderr);
     command.args(command_params);
 
+    const EXEC_ERROR: &str = "failed to execute process:";
     let mut process = match command.spawn() {
-        Ok(process) => process,
-        Err(e) => match e.kind() {
-            std::io::ErrorKind::PermissionDenied => {
-                return Err(USimpleError::new(
+        Ok(p) => p,
+        Err(e) => {
+            return match e.kind() {
+                std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
                     126,
-                    "failed to execute process: Permission denied",
-                ));
-            }
-            std::io::ErrorKind::NotFound => {
-                return Err(USimpleError::new(
+                    format!("{EXEC_ERROR} Permission denied"),
+                )),
+                std::io::ErrorKind::NotFound => Err(USimpleError::new(
                     127,
-                    "failed to execute process: No such file or directory",
-                ));
+                    format!("{EXEC_ERROR} No such file or directory"),
+                )),
+                _ => Err(USimpleError::new(1, format!("{EXEC_ERROR} {}", e))),
             }
-            _ => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("failed to execute process: {}", e),
-                ));
-            }
-        },
+        }
     };
 
     let status = process.wait().map_err_context(String::new)?;
