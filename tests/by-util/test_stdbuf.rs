@@ -20,6 +20,16 @@ fn test_permission() {
         .stderr_contains("Permission denied");
 }
 
+#[test]
+fn test_no_such() {
+    new_ucmd!()
+        .arg("-o1")
+        .arg("no_such")
+        .fails()
+        .code_is(127)
+        .stderr_contains("No such file or directory");
+}
+
 #[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
 #[test]
 fn test_stdbuf_unbuffered_stdout() {
