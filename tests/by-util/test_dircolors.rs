@@ -253,3 +253,14 @@ fn test_repeated() {
         new_ucmd!().arg(arg).arg(arg).succeeds().no_stderr();
     }
 }
+
+#[test]
+fn test_colorterm_empty_with_wildcard() {
+    new_ucmd!()
+        .env("COLORTERM", "")
+        .pipe_in("COLORTERM ?*\nowt 40;33\n")
+        .args(&["-b", "-"])
+        .succeeds()
+        .stdout_is("LS_COLORS='';\nexport LS_COLORS\n")
+        .no_stderr();
+}

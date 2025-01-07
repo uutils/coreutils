@@ -374,6 +374,7 @@ where
 
     let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
     let term = term.as_str();
+    let colorterm = env::var("COLORTERM").unwrap_or_default();
 
     let mut state = ParseState::Global;
 
@@ -396,8 +397,20 @@ where
             ));
         }
         let lower = key.to_lowercase();
+
         if lower == "term" || lower == "colorterm" {
-            if term.fnmatch(val) {
+            let should_match = if lower == "colorterm" {
+                // For COLORTERM ?*, only match if COLORTERM is non-empty
+                if val == "?*" {
+                    !colorterm.is_empty()
+                } else {
+                    colorterm.fnmatch(val)
+                }
+            } else {
+                term.fnmatch(val)
+            };
+
+            if should_match {
                 state = ParseState::Matched;
             } else if state != ParseState::Matched {
                 state = ParseState::Pass;
