@@ -585,7 +585,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(csplit(&options, &patterns, stdin.lock())?)
     } else {
         let file = File::open(file_name)
-            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
+            .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
         Ok(csplit(&options, &patterns, BufReader::new(file))?)
     }
 }
