@@ -1445,7 +1445,7 @@ fn create_named_pipe_with_writer(path: &str, data: &str) -> std::process::Child 
     nix::unistd::mkfifo(path, nix::sys::stat::Mode::S_IRWXU).unwrap();
     std::process::Command::new("sh")
         .arg("-c")
-        .arg(format!("echo -n '{}' > {path}", data))
+        .arg(format!("printf '{}' > {path}", data))
         .spawn()
         .unwrap()
 }
