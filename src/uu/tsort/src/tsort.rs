@@ -114,20 +114,13 @@ pub fn uu_app() -> Command {
 
 // We use String as a representation of node here
 // but using integer may improve performance.
-
+#[derive(Default)]
 struct Node<'input> {
     successor_names: Vec<&'input str>,
     predecessor_count: usize,
 }
 
 impl<'input> Node<'input> {
-    fn new() -> Self {
-        Node {
-            successor_names: Vec::new(),
-            predecessor_count: 0,
-        }
-    }
-
     fn add_successor(&mut self, successor_name: &'input str) {
         self.successor_names.push(successor_name);
     }
@@ -139,7 +132,7 @@ struct Graph<'input> {
 
 impl<'input> Graph<'input> {
     fn add_node(&mut self, name: &'input str) {
-        self.nodes.entry(name).or_insert_with(Node::new);
+        self.nodes.entry(name).or_default();
     }
 
     fn add_edge(&mut self, from: &'input str, to: &'input str) {
