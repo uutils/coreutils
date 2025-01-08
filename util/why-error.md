@@ -3,7 +3,6 @@ This file documents why some tests are failing:
 * gnu/tests/chgrp/from.sh - https://github.com/uutils/coreutils/issues/7039
 * gnu/tests/chmod/symlinks.sh - https://github.com/uutils/coreutils/pull/7025
 * gnu/tests/chroot/chroot-credentials.sh - https://github.com/uutils/coreutils/issues/7040
-* gnu/tests/cp/cp-i.sh
 * gnu/tests/cp/preserve-gid.sh
 * gnu/tests/csplit/csplit-suppress-matched.pl
 * gnu/tests/date/date-debug.sh
@@ -27,13 +26,11 @@ This file documents why some tests are failing:
 * gnu/tests/head/head-write-error.sh
 * gnu/tests/help/help-version-getopt.sh
 * gnu/tests/help/help-version.sh
-* gnu/tests/id/setgid.sh
 * gnu/tests/ls/ls-misc.pl
 * gnu/tests/ls/stat-free-symlinks.sh
 * gnu/tests/misc/close-stdout.sh
 * gnu/tests/misc/comm.pl
 * gnu/tests/misc/dircolors.pl
-* gnu/tests/misc/echo.sh
 * gnu/tests/misc/kill.sh - https://github.com/uutils/coreutils/issues/7066 https://github.com/uutils/coreutils/issues/7067
 * gnu/tests/misc/nohup.sh
 * gnu/tests/misc/numfmt.pl
@@ -42,7 +39,6 @@ This file documents why some tests are failing:
 * gnu/tests/misc/time-style.sh
 * gnu/tests/misc/tsort.pl - https://github.com/uutils/coreutils/issues/7074
 * gnu/tests/misc/write-errors.sh
-* gnu/tests/misc/xattr.sh - https://github.com/uutils/coreutils/pull/7009
 * gnu/tests/mv/hard-link-1.sh
 * gnu/tests/mv/mv-special-1.sh - https://github.com/uutils/coreutils/issues/7076
 * gnu/tests/mv/part-fail.sh
@@ -79,8 +75,5 @@ This file documents why some tests are failing:
 * gnu/tests/tail/follow-stdin.sh
 * gnu/tests/tail/inotify-rotate-resources.sh
 * gnu/tests/tail/symlink.sh
-* gnu/tests/touch/now-owned-by-other.sh
 * gnu/tests/touch/obsolescent.sh
-* gnu/tests/truncate/truncate-owned-by-other.sh
 * gnu/tests/tty/tty-eof.pl
-* gnu/tests/uniq/uniq.pl
