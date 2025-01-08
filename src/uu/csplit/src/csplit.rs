@@ -431,18 +431,18 @@ impl SplitWriter<'_> {
                     for line in input_iter.shrink_buffer_to_size() {
                         self.writeln(&line)?;
                     }
-                    if !self.options.suppress_matched {
+                    if self.options.suppress_matched {
+                        // since offset_usize is for sure greater than 0
+                        // the first element of the buffer should be removed and this
+                        // line inserted to be coherent with GNU implementation
+                        input_iter.add_line_to_buffer(ln, l);
+                    } else {
                         // add 1 to the buffer size to make place for the matched line
                         input_iter.set_size_of_buffer(offset_usize + 1);
                         assert!(
                             input_iter.add_line_to_buffer(ln, l).is_none(),
                             "should be big enough to hold every lines"
                         );
-                    } else {
-                        // since offset_usize is for sure greater than 0
-                        // the first element of the buffer should be removed and this
-                        // line inserted to be coherent with GNU implementation
-                        input_iter.add_line_to_buffer(ln, l);
                     }
 
                     self.finish_split();
