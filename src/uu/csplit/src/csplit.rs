@@ -16,7 +16,7 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{crash_if_err, format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 mod csplit_error;
 mod patterns;
@@ -51,26 +51,23 @@ pub struct CsplitOptions {
 }
 
 impl CsplitOptions {
-    fn new(matches: &ArgMatches) -> Self {
+    fn new(matches: &ArgMatches) -> Result<Self, CsplitError> {
         let keep_files = matches.get_flag(options::KEEP_FILES);
         let quiet = matches.get_flag(options::QUIET);
         let elide_empty_files = matches.get_flag(options::ELIDE_EMPTY_FILES);
         let suppress_matched = matches.get_flag(options::SUPPRESS_MATCHED);
 
-        Self {
-            split_name: crash_if_err!(
-                1,
-                SplitName::new(
-                    matches.get_one::<String>(options::PREFIX).cloned(),
-                    matches.get_one::<String>(options::SUFFIX_FORMAT).cloned(),
-                    matches.get_one::<String>(options::DIGITS).cloned()
-                )
-            ),
+        Ok(Self {
+            split_name: SplitName::new(
+                matches.get_one::<String>(options::PREFIX).cloned(),
+                matches.get_one::<String>(options::SUFFIX_FORMAT).cloned(),
+                matches.get_one::<String>(options::DIGITS).cloned(),
+            )?,
             keep_files,
             quiet,
             elide_empty_files,
             suppress_matched,
-        }
+        })
     }
 }
 
@@ -578,7 +575,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap()
         .map(|s| s.to_string())
         .collect();
-    let options = CsplitOptions::new(&matches);
+    let options = CsplitOptions::new(&matches)?;
     if file_name == "-" {
         let stdin = io::stdin();
         Ok(csplit(&options, &patterns, stdin.lock())?)

@@ -81,6 +81,15 @@ fn test_env_version() {
 }
 
 #[test]
+fn test_env_permissions() {
+    new_ucmd!()
+        .arg(".")
+        .fails()
+        .code_is(126)
+        .stderr_is("env: '.': Permission denied\n");
+}
+
+#[test]
 fn test_echo() {
     #[cfg(target_os = "windows")]
     let args = ["cmd", "/d/c", "echo"];

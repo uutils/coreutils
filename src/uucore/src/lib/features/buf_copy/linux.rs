@@ -3,20 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use nix::sys::stat::fstat;
-use nix::{errno::Errno, libc::S_IFIFO};
+//! Buffer-based copying implementation for Linux and Android.
 
-type Result<T> = std::result::Result<T, Error>;
-
-/// Buffer-based copying utilities for Linux and Android.
 use crate::{
     error::UResult,
-    pipes::{pipe, splice, splice_exact, vmsplice},
+    pipes::{pipe, splice, splice_exact},
 };
 
 /// Buffer-based copying utilities for unix (excluding Linux).
 use std::{
-    fs::File,
     io::{Read, Write},
     os::fd::{AsFd, AsRawFd, RawFd},
 };
@@ -51,8 +46,9 @@ impl From<nix::Error> for Error {
 /// not use any intermediate user-space buffer. It falls backs to
 /// `std::io::copy` when the call fails and is still recoverable.
 ///
-/// # Arguments * `source` - `Read` implementor to copy data from. * `dest` -
-/// `Write` implementor to copy data to.
+/// # Arguments
+/// * `source` - `Read` implementor to copy data from.
+/// * `dest` - `Write` implementor to copy data to.
 ///
 /// # Returns
 ///
@@ -145,118 +141,4 @@ pub(crate) fn copy_exact(
         left -= read;
     }
     Ok(written)
-}
-
-// The generalization of this function (and other splice_data functions) is not trivial as most
-// utilities will just write data finitely. However, `yes`, which is the sole crate using these
-// functions as of now, continuously loops the data write. Coupling the `is_pipe` check together
-// with the data write logic means that the check has to be done for every single write, which adds
-// unnecessary overhead.
-//
-/// Helper function to determine whether a given handle (such as a file) is a pipe or not. Can be
-/// used to determine whether to use the `splice_data_to_pipe` or the `splice_data_to_fd` function.
-/// This function is available exclusively to Linux and Android as it is meant to be used at the
-/// scope of splice operations.
-///
-///
-/// # Arguments
-/// * `out` - path of handle
-///
-/// # Returns
-/// A `bool` indicating whether the given handle is a pipe or not.
-#[inline]
-pub fn is_pipe<P>(path: &P) -> Result<bool>
-where
-    P: AsRawFd,
-{
-    Ok(fstat(path.as_raw_fd())?.st_mode as nix::libc::mode_t & S_IFIFO != 0)
-}
-
-/// Write input `bytes` to a handle using a temporary pipe. A `vmsplice()` call
-/// is issued to write to the temporary pipe, which then gets written to the
-/// final destination using `splice()`.
-///
-/// # Arguments * `bytes` - data to be written * `dest` - destination handle
-///
-/// # Returns When write succeeds, the amount of bytes written is returned as a
-/// `u64`. The `bool` indicates if we need to fall back to normal copying or
-/// not. `true` means we need to fall back, `false` means we don't have to.
-///
-/// A `UError` error is returned when the operation is not supported or when an
-/// I/O error occurs.
-pub fn splice_data_to_fd<T: AsFd>(
-    bytes: &[u8],
-    read_pipe: &File,
-    write_pipe: &File,
-    dest: &T,
-) -> UResult<(u64, bool)> {
-    let mut n_bytes: u64 = 0;
-    let mut bytes = bytes;
-    while !bytes.is_empty() {
-        let len = match vmsplice(&write_pipe, bytes) {
-            Ok(n) => n,
-            Err(e) => return Ok(maybe_unsupported(e)?),
-        };
-        if let Err(e) = splice_exact(&read_pipe, dest, len) {
-            return Ok(maybe_unsupported(e)?);
-        }
-        bytes = &bytes[len..];
-        n_bytes += len as u64;
-    }
-    Ok((n_bytes, false))
-}
-
-/// Write input `bytes` to a file descriptor. This uses the Linux-specific
-/// `vmsplice()` call to write into a file descriptor directly, which only works
-/// if the destination is a pipe.
-///
-/// # Arguments
-/// * `bytes` - data to be written
-/// * `dest` - destination handle
-///
-/// # Returns
-/// When write succeeds, the amount of bytes written is returned as a
-/// `u64`. The `bool` indicates if we need to fall back to normal copying or
-/// not. `true` means we need to fall back, `false` means we don't have to.
-///
-/// A `UError` error is returned when the operation is not supported or when an
-/// I/O error occurs.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_data_to_pipe<T>(bytes: &[u8], dest: &T) -> UResult<(u64, bool)>
-where
-    T: AsRawFd + AsFd,
-{
-    let mut n_bytes: u64 = 0;
-    let mut bytes = bytes;
-    while !bytes.is_empty() {
-        let len = match vmsplice(dest, bytes) {
-            Ok(n) => n,
-            // The maybe_unsupported call below may emit an error, when the
-            // error is considered as unrecoverable error (ones that won't make
-            // us fall back to other method)
-            Err(e) => return Ok(maybe_unsupported(e)?),
-        };
-        bytes = &bytes[len..];
-        n_bytes += len as u64;
-    }
-    Ok((n_bytes, false))
-}
-
-/// Several error values from `nix::Error` (`EINVAL`, `ENOSYS`, and `EBADF`) get
-/// treated as errors indicating that the `splice` call is not available, i.e we
-/// can still recover from the error. Thus, return the final result of the call
-/// as `Result` and indicate that we have to fall back using other write method.
-///
-/// # Arguments
-/// * `error` - the `nix::Error` received
-///
-/// # Returns
-/// Result with tuple containing a `u64` `0` indicating that no data had been
-/// written and a `true` indicating we have to fall back, if error is still
-/// recoverable. Returns an `Error` implementing `UError` otherwise.
-pub(crate) fn maybe_unsupported(error: nix::Error) -> Result<(u64, bool)> {
-    match error {
-        Errno::EINVAL | Errno::ENOSYS | Errno::EBADF => Ok((0, true)),
-        _ => Err(error.into()),
-    }
 }
