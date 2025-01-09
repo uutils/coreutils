@@ -1379,7 +1379,7 @@ fn no_such_file() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["in", "0"])
         .fails()
-        .stderr_contains("cannot access 'in': No such file or directory");
+        .stderr_contains("cannot open 'in' for reading: No such file or directory");
 }
 
 #[test]
@@ -1416,4 +1416,53 @@ fn repeat_everything() {
     assert_eq!(at.read("xxz_003"), generate(28, 35 + 1));
     assert_eq!(at.read("xxz_004"), generate(37, 44 + 1));
     assert_eq!(at.read("xxz_005"), generate(46, 50 + 1));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_named_pipe_input_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let mut fifo_writer =
+        create_named_pipe_with_writer(&at.plus_as_string("fifo"), &generate(1, 51));
+
+    let result = ucmd.args(&["fifo", "10"]).succeeds();
+    fifo_writer.kill().unwrap();
+    fifo_writer.wait().unwrap();
+    result.stdout_only("18\n123\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 2);
+    assert_eq!(at.read("xx00"), generate(1, 10));
+    assert_eq!(at.read("xx01"), generate(10, 51));
+}
+
+#[cfg(unix)]
+fn create_named_pipe_with_writer(path: &str, data: &str) -> std::process::Child {
+    // cSpell:ignore IRWXU
+    nix::unistd::mkfifo(path, nix::sys::stat::Mode::S_IRWXU).unwrap();
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("printf '{}' > {path}", data))
+        .spawn()
+        .unwrap()
+}
+
+#[test]
+fn test_directory_input_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("test_directory");
+
+    #[cfg(unix)]
+    ucmd.args(&["test_directory", "1"])
+        .fails()
+        .code_is(1)
+        .stderr_only("csplit: read error: Is a directory\n");
+    #[cfg(windows)]
+    ucmd.args(&["test_directory", "1"])
+        .fails()
+        .code_is(1)
+        .stderr_only("csplit: cannot open 'test_directory' for reading: Permission denied\n");
 }

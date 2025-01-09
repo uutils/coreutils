@@ -87,7 +87,11 @@ pub fn csplit<T>(options: &CsplitOptions, patterns: &[String], input: T) -> Resu
 where
     T: BufRead,
 {
-    let mut input_iter = InputSplitter::new(input.lines().enumerate());
+    let enumerated_input_lines = input
+        .lines()
+        .map(|line| line.map_err_context(|| "read error".to_string()))
+        .enumerate();
+    let mut input_iter = InputSplitter::new(enumerated_input_lines);
     let mut split_writer = SplitWriter::new(options);
     let patterns: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
     let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
@@ -117,7 +121,7 @@ fn do_csplit<I>(
     input_iter: &mut InputSplitter<I>,
 ) -> Result<(), CsplitError>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, UResult<String>)>,
 {
     // split the file based on patterns
     for pattern in patterns {
@@ -305,7 +309,7 @@ impl SplitWriter<'_> {
         input_iter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
     where
-        I: Iterator<Item = (usize, io::Result<String>)>,
+        I: Iterator<Item = (usize, UResult<String>)>,
     {
         input_iter.rewind_buffer();
         input_iter.set_size_of_buffer(1);
@@ -358,7 +362,7 @@ impl SplitWriter<'_> {
         input_iter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
     where
-        I: Iterator<Item = (usize, io::Result<String>)>,
+        I: Iterator<Item = (usize, UResult<String>)>,
     {
         if offset >= 0 {
             // The offset is zero or positive, no need for a buffer on the lines read.
@@ -470,7 +474,7 @@ impl SplitWriter<'_> {
 /// This is used to pass matching lines to the next split and to support patterns with a negative offset.
 struct InputSplitter<I>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, UResult<String>)>,
 {
     iter: I,
     buffer: Vec<<I as Iterator>::Item>,
@@ -483,7 +487,7 @@ where
 
 impl<I> InputSplitter<I>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, UResult<String>)>,
 {
     fn new(iter: I) -> Self {
         Self {
@@ -547,7 +551,7 @@ where
 
 impl<I> Iterator for InputSplitter<I>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, UResult<String>)>,
 {
     type Item = <I as Iterator>::Item;
 
@@ -581,13 +585,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(csplit(&options, &patterns, stdin.lock())?)
     } else {
         let file = File::open(file_name)
-            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
-        let file_metadata = file
-            .metadata()
-            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
-        if !file_metadata.is_file() {
-            return Err(CsplitError::NotRegularFile(file_name.to_string()).into());
-        }
+            .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
         Ok(csplit(&options, &patterns, BufReader::new(file))?)
     }
 }
