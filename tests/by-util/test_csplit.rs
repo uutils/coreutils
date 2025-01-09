@@ -1376,8 +1376,8 @@ fn zero_error() {
 
 #[test]
 fn no_such_file() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["in", "0"])
+    new_ucmd!()
+        .args(&["in", "0"])
         .fails()
         .stderr_contains("cannot open 'in' for reading: No such file or directory");
 }
