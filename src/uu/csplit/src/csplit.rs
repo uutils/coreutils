@@ -372,6 +372,7 @@ impl SplitWriter<'_> {
             while let Some((ln, line)) = input_iter.next() {
                 let l = line?;
                 if regex.is_match(&l) {
+                    let mut next_line_suppress_matched = false;
                     match (self.options.suppress_matched, offset) {
                         // no offset, add the line to the next split
                         (false, 0) => {
@@ -382,6 +383,11 @@ impl SplitWriter<'_> {
                         }
                         // a positive offset, some more lines need to be added to the current split
                         (false, _) => self.writeln(&l)?,
+                        // suppress matched option true, but there is a positive offset, so the line is printed
+                        (true, 1..) => {
+                            next_line_suppress_matched = true;
+                            self.writeln(&l)?;
+                        }
                         _ => (),
                     };
                     offset -= 1;
@@ -402,6 +408,11 @@ impl SplitWriter<'_> {
                         offset -= 1;
                     }
                     self.finish_split();
+
+                    // if we have to suppress one line after we take the next and do nothing
+                    if next_line_suppress_matched {
+                        input_iter.next();
+                    }
                     return Ok(());
                 }
                 self.writeln(&l)?;
@@ -420,7 +431,12 @@ impl SplitWriter<'_> {
                     for line in input_iter.shrink_buffer_to_size() {
                         self.writeln(&line)?;
                     }
-                    if !self.options.suppress_matched {
+                    if self.options.suppress_matched {
+                        // since offset_usize is for sure greater than 0
+                        // the first element of the buffer should be removed and this
+                        // line inserted to be coherent with GNU implementation
+                        input_iter.add_line_to_buffer(ln, l);
+                    } else {
                         // add 1 to the buffer size to make place for the matched line
                         input_iter.set_size_of_buffer(offset_usize + 1);
                         assert!(
@@ -428,6 +444,7 @@ impl SplitWriter<'_> {
                             "should be big enough to hold every lines"
                         );
                     }
+
                     self.finish_split();
                     if input_iter.buffer_len() < offset_usize {
                         return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));

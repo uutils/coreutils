@@ -469,14 +469,14 @@ fn test_up_to_match_offset_option_suppress_matched() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "--suppress-matched", "/10/+4"])
         .succeeds()
-        .stdout_only("27\n111\n");
+        .stdout_only("30\n108\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
         .count();
     assert_eq!(count, 2);
-    assert_eq!(at.read("xx00"), generate(1, 10) + &generate(11, 14));
-    assert_eq!(at.read("xx01"), generate(14, 51));
+    assert_eq!(at.read("xx00"), generate(1, 14));
+    assert_eq!(at.read("xx01"), generate(15, 51));
 }
 
 #[test]
@@ -484,14 +484,14 @@ fn test_up_to_match_negative_offset_option_suppress_matched() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "--suppress-matched", "/10/-4"])
         .succeeds()
-        .stdout_only("10\n128\n");
+        .stdout_only("10\n129\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
         .count();
     assert_eq!(count, 2);
     assert_eq!(at.read("xx00"), generate(1, 6));
-    assert_eq!(at.read("xx01"), generate(6, 10) + &generate(11, 51));
+    assert_eq!(at.read("xx01"), generate(7, 51));
 }
 
 #[test]
