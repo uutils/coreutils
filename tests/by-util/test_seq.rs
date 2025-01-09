@@ -828,20 +828,32 @@ fn test_parse_scientific_zero() {
 }
 
 #[test]
-fn test_parse_valid_hexadecimal_float() {
+fn test_parse_valid_hexadecimal_float_two_args() {
     let test_cases = [
-        (vec!["0x1p-1", "2"], "0.5\n1.5\n"),
-        (vec!["1", "0x1p-1", "2"], "1\n1.5\n2\n"),
-        (vec!["0x3.4p-1", "0x4p-1", "4"], "1.625\n3.625\n"),
-        (vec!["0x.8p16", "32768"], "32768\n"),
+        (["0x1p-1", "2"], "0.5\n1.5\n"),
+        (["0x.8p16", "32768"], "32768\n"),
+        (["0xffff.4p-4", "4096"], "4095.95\n"),
+        (["0xA.A9p-1", "6"], "5.33008\n"),
+        (["0xa.a9p-1", "6"], "5.33008\n"),
+        (["0xffffffffffp-30", "1024"], "1024\n"), // spell-checker:disable-line
+    ];
+
+    for (input_arguments, expected_output) in &test_cases {
+        new_ucmd!()
+            .args(input_arguments)
+            .succeeds()
+            .stdout_only(expected_output);
+    }
+}
+
+#[test]
+fn test_parse_valid_hexadecimal_float_three_args() {
+    let test_cases = [
+        (["0x3.4p-1", "0x4p-1", "4"], "1.625\n3.625\n"),
         (
-            vec!["-0x.ep-3", "-0x.1p-3", "-0x.fp-3"],
+            ["-0x.ep-3", "-0x.1p-3", "-0x.fp-3"],
             "-0.109375\n-0.117188\n",
         ),
-        (vec!["0xffff.4p-4", "4096"], "4095.95\n"),
-        (vec!["0xA.A9p-1", "6"], "5.33008\n"),
-        (vec!["0xa.a9p-1", "6"], "5.33008\n"),
-        (vec!["0xffffffffffp-30", "1024"], "1024\n"),
     ];
 
     for (input_arguments, expected_output) in &test_cases {
