@@ -845,11 +845,6 @@ fn test_parse_valid_hexadecimal_float() {
         .stdout_only("1.625\n3.625\n");
 
     new_ucmd!()
-        .args(&["0x3.4p-1", "0x4p-1", "4"])
-        .succeeds()
-        .stdout_only("1.625\n3.625\n");
-
-    new_ucmd!()
         .args(&["0x.8p16", "32768"])
         .succeeds()
         .stdout_only("32768\n");
