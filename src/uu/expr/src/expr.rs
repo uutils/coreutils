@@ -34,6 +34,7 @@ pub enum ExprError {
     DivisionByZero,
     InvalidRegexExpression,
     ExpectedClosingBraceAfter(String),
+    ExpectedClosingBrace(String),
 }
 
 impl Display for ExprError {
@@ -51,6 +52,9 @@ impl Display for ExprError {
             Self::InvalidRegexExpression => write!(f, "Invalid regex expression"),
             Self::ExpectedClosingBraceAfter(s) => {
                 write!(f, "syntax error: expecting ')' after {}", s.quote())
+            }
+            Self::ExpectedClosingBrace(s) => {
+                write!(f, "syntax error: expecting ')' instead of {}", s.quote())
             }
         }
     }

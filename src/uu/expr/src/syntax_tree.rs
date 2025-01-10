@@ -450,11 +450,8 @@ impl<'a> Parser<'a> {
                 }
                 let close_paren = self.next()?;
                 if close_paren != ")" {
-                    // Since we have parsed at least a '(', there will be a token
-                    // at `self.index - 1`. So this indexing won't panic.
-                    return Err(ExprError::ExpectedClosingBraceAfter(
-                        self.input[self.index - 1].to_string(),
-                    ));
+                    // We found another token when we expected a closing parenthesis
+                    return Err(ExprError::ExpectedClosingBrace(close_paren.to_string()));
                 }
                 s
             }

@@ -123,6 +123,12 @@ fn test_missing_parenthesis() {
         .fails()
         .code_is(2)
         .stderr_only("expr: syntax error: expecting ')' after '2'\n");
+
+    new_ucmd!()
+        .args(&["(", "2", "a"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: expecting ')' instead of 'a'\n");
 }
 
 #[test]
