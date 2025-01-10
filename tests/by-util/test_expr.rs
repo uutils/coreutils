@@ -117,6 +117,15 @@ fn test_parenthesis() {
 }
 
 #[test]
+fn test_missing_parenthesis() {
+    new_ucmd!()
+        .args(&["(", "2"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: expecting ')' after '2'\n");
+}
+
+#[test]
 fn test_or() {
     new_ucmd!()
         .args(&["0", "|", "foo"])

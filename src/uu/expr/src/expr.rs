@@ -50,7 +50,7 @@ impl Display for ExprError {
             Self::DivisionByZero => write!(f, "division by zero"),
             Self::InvalidRegexExpression => write!(f, "Invalid regex expression"),
             Self::ExpectedClosingBraceAfter(s) => {
-                write!(f, "expected ')' after {}", s.quote())
+                write!(f, "syntax error: expecting ')' after {}", s.quote())
             }
         }
     }
