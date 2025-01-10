@@ -2524,7 +2524,7 @@ fn test_cp_sparse_always_non_empty() {
     const BUFFER_SIZE: usize = 4096 * 16 + 3;
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+    let mut buf = vec![0; BUFFER_SIZE].into_boxed_slice();
     let blocks_to_touch = [buf.len() / 3, 2 * (buf.len() / 3)];
 
     for i in blocks_to_touch {
@@ -2540,7 +2540,7 @@ fn test_cp_sparse_always_non_empty() {
     let touched_block_count =
         blocks_to_touch.len() as u64 * at.metadata("dst_file_sparse").blksize() / 512;
 
-    assert_eq!(at.read_bytes("dst_file_sparse"), buf);
+    assert_eq!(at.read_bytes("dst_file_sparse").into_boxed_slice(), buf);
     assert_eq!(at.metadata("dst_file_sparse").blocks(), touched_block_count);
 }
 
