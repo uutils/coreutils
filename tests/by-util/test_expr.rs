@@ -132,6 +132,39 @@ fn test_missing_parenthesis() {
 }
 
 #[test]
+fn test_regexp_unmatched() {
+    new_ucmd!()
+        .args(&["_", ":", "a\\("])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Unmatched ( or \\(\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\)"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Unmatched ) or \\)\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\{1"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Unmatched \\{\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\}1"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Unmatched \\}\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\{1a\\}"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Invalid content of \\{\\}\n");
+}
+
+#[test]
 fn test_or() {
     new_ucmd!()
         .args(&["0", "|", "foo"])

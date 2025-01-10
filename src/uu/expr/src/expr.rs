@@ -35,6 +35,23 @@ pub enum ExprError {
     InvalidRegexExpression,
     ExpectedClosingBraceAfter(String),
     ExpectedClosingBrace(String),
+    UnmatchedBrace(BraceType),
+    InvalidBraceContent,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum BraceType {
+    OpenParen,  // ( or \(
+    CloseParen, // ) or \)
+    OpenCurly,  // \{
+    CloseCurly, // \}
+}
+
+#[derive(Debug)]
+enum BraceContent {
+    Valid,
+    Invalid,
+    Unmatched(BraceType),
 }
 
 impl Display for ExprError {
@@ -56,6 +73,13 @@ impl Display for ExprError {
             Self::ExpectedClosingBrace(s) => {
                 write!(f, "syntax error: expecting ')' instead of {}", s.quote())
             }
+            Self::UnmatchedBrace(btype) => match btype {
+                BraceType::OpenParen => write!(f, "Unmatched ( or \\("),
+                BraceType::CloseParen => write!(f, "Unmatched ) or \\)"),
+                BraceType::OpenCurly => write!(f, "Unmatched \\{{"),
+                BraceType::CloseCurly => write!(f, "Unmatched \\}}"),
+            },
+            Self::InvalidBraceContent => write!(f, "Invalid content of \\{{\\}}"),
         }
     }
 }

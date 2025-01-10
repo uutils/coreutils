@@ -9,7 +9,7 @@ use num_bigint::{BigInt, ParseBigIntError};
 use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
 
-use crate::{ExprError, ExprResult};
+use crate::{BraceContent, BraceType, ExprError, ExprResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
@@ -140,12 +140,21 @@ impl StringOp {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
                 let re_string = format!("^{right}");
+
+                // Check for unmatched braces and invalid content
+                match check_brace_content_and_matching(&re_string) {
+                    BraceContent::Invalid => return Err(ExprError::InvalidBraceContent),
+                    BraceContent::Unmatched(brace) => return Err(ExprError::UnmatchedBrace(brace)),
+                    BraceContent::Valid => {}
+                }
+
                 let re = Regex::with_options(
                     &re_string,
                     RegexOptions::REGEX_OPTION_NONE,
                     Syntax::grep(),
                 )
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
+
                 Ok(if re.captures_len() > 0 {
                     re.captures(&left)
                         .map(|captures| captures.at(1).unwrap())
@@ -196,6 +205,79 @@ const PRECEDENCE: &[&[(&str, BinOp)]] = &[
     ],
     &[(":", BinOp::String(StringOp::Match))],
 ];
+
+fn check_brace_content_and_matching(s: &str) -> BraceContent {
+    let mut chars = s.chars().peekable();
+    let mut paren_stack = Vec::new();
+    let mut curly_stack = Vec::new();
+    let mut in_curly = false;
+    let mut curly_content = String::new();
+
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                match chars.next() {
+                    Some('(') => paren_stack.push('('),
+                    Some(')') if paren_stack.pop().is_none() => {
+                        return BraceContent::Unmatched(BraceType::CloseParen)
+                    }
+                    Some('{') => {
+                        curly_stack.push('{');
+                        in_curly = true;
+                    }
+                    Some('}') => {
+                        if curly_stack.pop().is_none() {
+                            return BraceContent::Unmatched(BraceType::CloseCurly);
+                        }
+                        // Validate content when closing a curly brace
+                        if in_curly {
+                            if !is_valid_curly_content(&curly_content) {
+                                return BraceContent::Invalid;
+                            }
+                            curly_content.clear();
+                            in_curly = false;
+                        }
+                    }
+                    _ => {
+                        if in_curly {
+                            curly_content.push(c)
+                        }
+                    }
+                }
+            }
+            '(' => paren_stack.push('('),
+            ')' if paren_stack.pop().is_none() => {
+                return BraceContent::Unmatched(BraceType::CloseParen)
+            }
+            _ => {
+                if in_curly {
+                    curly_content.push(c)
+                }
+            }
+        }
+    }
+
+    if !curly_stack.is_empty() {
+        BraceContent::Unmatched(BraceType::OpenCurly)
+    } else if !paren_stack.is_empty() {
+        BraceContent::Unmatched(BraceType::OpenParen)
+    } else {
+        BraceContent::Valid
+    }
+}
+
+fn is_valid_curly_content(content: &str) -> bool {
+    // Valid content should be either a single number
+    // or two numbers separated by a comma
+    let parts: Vec<&str> = content.split(',').collect();
+    match parts.len() {
+        1 => parts[0].trim().chars().all(|c| c.is_ascii_digit()),
+        2 => parts
+            .iter()
+            .all(|p| p.trim().chars().all(|c| c.is_ascii_digit())),
+        _ => false,
+    }
+}
 
 #[derive(Debug)]
 pub enum NumOrStr {
@@ -487,7 +569,11 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::{AstNode, BinOp, NumericOp, RelationOp, StringOp};
+    use crate::BraceContent;
+
+    use super::{
+        check_brace_content_and_matching, AstNode, BinOp, NumericOp, RelationOp, StringOp,
+    };
 
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {
@@ -589,5 +675,39 @@ mod test {
                 "3"
             )),
         );
+    }
+
+    #[test]
+    fn test_brace_content() {
+        let test_cases = vec![
+            // Valid cases
+            ("abc", BraceContent::Valid),
+            ("\\{1\\}", BraceContent::Valid),
+            ("\\{1,2\\}", BraceContent::Valid),
+            ("a\\{10\\}", BraceContent::Valid),
+            ("a\\{1,10\\}", BraceContent::Valid),
+            // Invalid content cases
+            ("\\{1a\\}", BraceContent::Invalid),
+            ("\\{a\\}", BraceContent::Invalid),
+            ("\\{1,a\\}", BraceContent::Invalid),
+            ("\\{a,1\\}", BraceContent::Invalid),
+            ("\\{1,2,3\\}", BraceContent::Invalid),
+            ("\\{,\\}", BraceContent::Invalid),
+            ("\\{1a2\\}", BraceContent::Invalid),
+            // Unmatched cases
+            ("\\{1", BraceContent::Unmatched(BraceType::OpenCurly)),
+            ("\\}", BraceContent::Unmatched(BraceType::CloseCurly)),
+            ("a\\{1", BraceContent::Unmatched(BraceType::OpenCurly)),
+            ("a\\{1a", BraceContent::Unmatched(BraceType::OpenCurly)),
+        ];
+
+        for (input, expected) in test_cases {
+            assert!(
+                matches!(check_brace_content_and_matching(input), expected),
+                "Failed for input: {:?}, expected: {:?}",
+                input,
+                expected
+            );
+        }
     }
 }
