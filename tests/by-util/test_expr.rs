@@ -162,6 +162,24 @@ fn test_regexp_unmatched() {
         .fails()
         .code_is(2)
         .stderr_only("expr: Invalid content of \\{\\}\n");
+
+    new_ucmd!().args(&["a", ":", "\\(b\\)*"]).fails().code_is(1);
+    // TODO bring back
+    // .no_output();
+}
+
+#[test]
+fn test_checks() {
+    new_ucmd!()
+        .args(&["a\nb", ":", "a\\$"])
+        .fails()
+        .code_is(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["a(", ":", "a("])
+        .succeeds()
+        .stdout_only("2\n");
 }
 
 #[test]

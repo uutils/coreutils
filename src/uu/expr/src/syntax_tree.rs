@@ -155,11 +155,14 @@ impl StringOp {
                 )
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
 
-                Ok(if re.captures_len() > 0 {
-                    re.captures(&left)
-                        .map(|captures| captures.at(1).unwrap())
-                        .unwrap_or("")
-                        .to_string()
+                Ok(if re.captures_len() > 1 {
+                    match re.captures(&left) {
+                        Some(captures) => captures
+                            .at(1) // Only try to get capture group 1 if it exists
+                            .unwrap_or("")
+                            .to_string(),
+                        None => "".to_string(),
+                    }
                 } else {
                     re.find(&left)
                         .map_or("0".to_string(), |(start, end)| (end - start).to_string())
@@ -245,10 +248,7 @@ fn check_brace_content_and_matching(s: &str) -> BraceContent {
                     }
                 }
             }
-            '(' => paren_stack.push('('),
-            ')' if paren_stack.pop().is_none() => {
-                return BraceContent::Unmatched(BraceType::CloseParen)
-            }
+            '(' | ')' => {} // Ignore unescaped parentheses
             _ => {
                 if in_curly {
                     curly_content.push(c)
@@ -569,7 +569,7 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::BraceContent;
+    use crate::{BraceContent, BraceType};
 
     use super::{
         check_brace_content_and_matching, AstNode, BinOp, NumericOp, RelationOp, StringOp,
@@ -704,6 +704,54 @@ mod test {
         for (input, expected) in test_cases {
             assert!(
                 matches!(check_brace_content_and_matching(input), expected),
+                "Failed for input: {:?}, expected: {:?}",
+                input,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_check_braces() {
+        let test_cases = vec![
+            // Regular unescaped parentheses
+            ("a(", BraceContent::Valid),
+            ("a(b", BraceContent::Valid),
+            ("a)", BraceContent::Valid),
+            ("a()b", BraceContent::Valid),
+            ("((()))", BraceContent::Valid),
+            // Basic string cases
+            ("abc", BraceContent::Valid),
+            // Escaped parentheses
+            ("\\(abc\\)", BraceContent::Valid),
+            ("\\(abc", BraceContent::Unmatched(BraceType::OpenParen)),
+            ("abc\\)", BraceContent::Unmatched(BraceType::CloseParen)),
+            // Mixed parentheses cases
+            ("(a\\(b)", BraceContent::Unmatched(BraceType::OpenParen)),
+            ("(a\\)b)", BraceContent::Unmatched(BraceType::CloseParen)),
+            // Valid curly brace cases
+            ("\\{1\\}", BraceContent::Valid),
+            ("\\{1,2\\}", BraceContent::Valid),
+            ("a\\{10\\}", BraceContent::Valid),
+            ("a\\{1,10\\}", BraceContent::Valid),
+            // Invalid curly brace content
+            ("\\{1a\\}", BraceContent::Invalid),
+            ("\\{a\\}", BraceContent::Invalid),
+            ("\\{1,a\\}", BraceContent::Invalid),
+            ("\\{a,1\\}", BraceContent::Invalid),
+            ("\\{1,2,3\\}", BraceContent::Invalid),
+            ("\\{,\\}", BraceContent::Invalid),
+            ("\\{1a2\\}", BraceContent::Invalid),
+            // Unmatched curly braces
+            ("\\{1", BraceContent::Unmatched(BraceType::OpenCurly)),
+            ("\\}", BraceContent::Unmatched(BraceType::CloseCurly)),
+            ("a\\{1", BraceContent::Unmatched(BraceType::OpenCurly)),
+            ("a\\{1a", BraceContent::Unmatched(BraceType::OpenCurly)),
+        ];
+
+        for (input, expected) in test_cases {
+            assert!(
+                check_brace_content_and_matching(input) == expected,
                 "Failed for input: {:?}, expected: {:?}",
                 input,
                 expected

@@ -47,7 +47,7 @@ pub enum BraceType {
     CloseCurly, // \}
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum BraceContent {
     Valid,
     Invalid,
