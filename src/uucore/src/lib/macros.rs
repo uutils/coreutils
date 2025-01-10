@@ -20,7 +20,7 @@
 //! fully qualified name like this:
 //!
 //! ```no_run
-//! use uucore::{show, crash};
+//! use uucore::show;
 //! ```
 //!
 //! Here's an overview of the macros sorted by purpose
