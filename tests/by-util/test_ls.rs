@@ -1096,13 +1096,16 @@ fn test_ls_long() {
     let at = &scene.fixtures;
     at.touch(at.plus_as_string("test-long"));
 
+    #[cfg(not(windows))]
+    let regex = r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*";
+    #[cfg(windows)]
+    let regex = r"[-dl](r[w-]x){3}.*";
+
+    let re = &Regex::new(regex).unwrap();
+
     for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).arg("test-long").succeeds();
-        #[cfg(not(windows))]
-        result.stdout_matches(&Regex::new(r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*").unwrap());
-
-        #[cfg(windows)]
-        result.stdout_matches(&Regex::new(r"[-dl](r[w-]x){3}.*").unwrap());
+        result.stdout_matches(re);
     }
 }
 
@@ -1115,23 +1118,30 @@ fn test_ls_long_format() {
     at.touch(at.plus_as_string("test-long-dir/test-long-file"));
     at.mkdir(at.plus_as_string("test-long-dir/test-long-dir"));
 
-    for arg in LONG_ARGS {
-        // Assuming sane username do not have spaces within them.
-        // A line of the output should be:
-        // One of the characters -bcCdDlMnpPsStTx?
-        // rwx, with - for missing permissions, thrice.
-        // Zero or one "." for indicating a file with security context
-        // A number, preceded by column whitespace, and followed by a single space.
-        // A username, currently [^ ], followed by column whitespace, twice (or thrice for Hurd).
-        // A number, followed by a single space.
-        // A month, followed by a single space.
-        // A day, preceded by column whitespace, and followed by a single space.
-        // Either a year or a time, currently [0-9:]+, preceded by column whitespace,
-        // and followed by a single space.
-        // Whatever comes after is irrelevant to this specific test.
-        scene.ucmd().arg(arg).arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
+    // Assuming sane username do not have spaces within them.
+    // A line of the output should be:
+    // One of the characters -bcCdDlMnpPsStTx?
+    // rwx, with - for missing permissions, thrice.
+    // Zero or one "." for indicating a file with security context
+    // A number, preceded by column whitespace, and followed by a single space.
+    // A username, currently [^ ], followed by column whitespace, twice (or thrice for Hurd).
+    // A number, followed by a single space.
+    // A month, followed by a single space.
+    // A day, preceded by column whitespace, and followed by a single space.
+    // Either a year or a time, currently [0-9:]+, preceded by column whitespace,
+    // and followed by a single space.
+    // Whatever comes after is irrelevant to this specific test.
+    let re = &Regex::new(
             r"\n[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}\.? +\d+ [^ ]+ +[^ ]+( +[^ ]+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ "
-        ).unwrap());
+        ).unwrap();
+
+    for arg in LONG_ARGS {
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg("test-long-dir")
+            .succeeds()
+            .stdout_matches(re);
     }
 
     // This checks for the line with the .. entry. The uname and group should be digits.

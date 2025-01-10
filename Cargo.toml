@@ -564,6 +564,8 @@ multiple_crate_versions = "allow"
 cargo_common_metadata = "allow"
 uninlined_format_args = "allow"
 missing_panics_doc = "allow"
+# TODO remove when https://github.com/rust-lang/rust-clippy/issues/13774 is fixed
+large_stack_arrays = "allow"
 
 use_self = "warn"
 needless_pass_by_value = "warn"

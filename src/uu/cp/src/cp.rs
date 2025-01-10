@@ -935,7 +935,7 @@ impl Options {
         if backup_mode != BackupMode::NoBackup
             && matches
                 .get_one::<String>(update_control::arguments::OPT_UPDATE)
-                .map_or(false, |v| v == "none" || v == "none-fail")
+                .is_some_and(|v| v == "none" || v == "none-fail")
         {
             return Err(Error::InvalidArgument(
                 "--backup is mutually exclusive with -n or --update=none-fail".to_string(),

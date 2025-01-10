@@ -64,7 +64,7 @@ pub(crate) fn copy_on_write(
                 // clonefile(2) fails if the destination exists.  Remove it and try again.  Do not
                 // bother to check if removal worked because we're going to try to clone again.
                 // first lets make sure the dest file is not read only
-                if fs::metadata(dest).map_or(false, |md| !md.permissions().readonly()) {
+                if fs::metadata(dest).is_ok_and(|md| !md.permissions().readonly()) {
                     // remove and copy again
                     // TODO: rewrite this to better match linux behavior
                     // linux first opens the source file and destination file then uses the file
