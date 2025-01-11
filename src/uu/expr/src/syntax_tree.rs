@@ -271,23 +271,23 @@ fn is_valid_curly_content(content: &str) -> bool {
     // or two numbers separated by a comma where first <= second
     let parts: Vec<&str> = content.split(',').collect();
     match parts.len() {
-        1 => parts[0].trim().chars().all(|c| c.is_ascii_digit()),
-        2 => {
-            // Check if both parts are valid numbers
-            if !parts
-                .iter()
-                .all(|p| p.trim().chars().all(|c| c.is_ascii_digit()))
-            {
-                return false;
+        1 => {
+            let num = parts[0].trim();
+            // Check if it's a valid positive number and within reasonable range
+            if let Ok(n) = num.parse::<u32>() {
+                // Add additional validation for specific range if needed
+                n <= 32767 // Restrict to 15-bit positive integers
+            } else {
+                false
             }
-
-            // Parse the numbers and compare them
+        }
+        2 => {
             if let (Ok(first), Ok(second)) = (
-                parts[0].trim().parse::<usize>(),
-                parts[1].trim().parse::<usize>(),
+                parts[0].trim().parse::<u32>(),
+                parts[1].trim().parse::<u32>(),
             ) {
-                // First number should not be greater than second number
-                first <= second
+                // Ensure both numbers are within valid range and first <= second
+                first <= second && first <= 32767 && second <= 32767
             } else {
                 false
             }
