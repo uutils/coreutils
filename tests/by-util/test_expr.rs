@@ -180,6 +180,28 @@ fn test_checks() {
         .args(&["a(", ":", "a("])
         .succeeds()
         .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["a(", ":", "a("])
+        .succeeds()
+        .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\{1,0\\}"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Invalid content of \\{\\}\n");
+    /*
+    new_ucmd!()
+        .args(&["a^b", ":", "a^b"])
+        .succeeds()
+        .stdout_only("3\n");
+
+    new_ucmd!()
+        .args(&["ab", ":", "a\\(\\)b"])
+        .fails()
+        .code_is(1)
+        .no_output();*/
 }
 
 #[test]

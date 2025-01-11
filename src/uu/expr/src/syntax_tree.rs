@@ -268,13 +268,30 @@ fn check_brace_content_and_matching(s: &str) -> BraceContent {
 
 fn is_valid_curly_content(content: &str) -> bool {
     // Valid content should be either a single number
-    // or two numbers separated by a comma
+    // or two numbers separated by a comma where first <= second
     let parts: Vec<&str> = content.split(',').collect();
     match parts.len() {
         1 => parts[0].trim().chars().all(|c| c.is_ascii_digit()),
-        2 => parts
-            .iter()
-            .all(|p| p.trim().chars().all(|c| c.is_ascii_digit())),
+        2 => {
+            // Check if both parts are valid numbers
+            if !parts
+                .iter()
+                .all(|p| p.trim().chars().all(|c| c.is_ascii_digit()))
+            {
+                return false;
+            }
+
+            // Parse the numbers and compare them
+            if let (Ok(first), Ok(second)) = (
+                parts[0].trim().parse::<usize>(),
+                parts[1].trim().parse::<usize>(),
+            ) {
+                // First number should not be greater than second number
+                first <= second
+            } else {
+                false
+            }
+        }
         _ => false,
     }
 }
