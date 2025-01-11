@@ -526,7 +526,7 @@ type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 /// Returns the updated `dereference` and `traverse_symlinks` values.
 pub fn configure_symlink_and_recursion(
     matches: &ArgMatches,
-) -> Result<(bool, Option<bool>, TraverseSymlinks), Box<dyn crate::error::UError>> {
+) -> Result<(bool, bool, TraverseSymlinks), Box<dyn crate::error::UError>> {
     let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
         Some(true) // Follow symlinks
     } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
@@ -558,7 +558,7 @@ pub fn configure_symlink_and_recursion(
         traverse_symlinks = TraverseSymlinks::None;
     }
 
-    Ok((recursive, dereference, traverse_symlinks))
+    Ok((recursive, dereference.unwrap_or(true), traverse_symlinks))
 }
 
 /// Base implementation for `chgrp` and `chown`.
@@ -646,7 +646,7 @@ pub fn chown_base(
             level: verbosity_level,
         },
         recursive,
-        dereference: dereference.unwrap_or(true),
+        dereference,
         preserve_root,
         files,
         filter,

@@ -149,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         fmode,
         cmode,
         traverse_symlinks,
-        dereference: dereference.unwrap_or(true),
+        dereference,
     };
 
     chmoder.chmod(&files)
