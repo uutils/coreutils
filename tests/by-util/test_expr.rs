@@ -103,6 +103,21 @@ fn test_complex_arithmetic() {
 }
 
 #[test]
+fn test_missing_argument() {
+    new_ucmd!()
+        .args(&["2", "+"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: missing argument after '+'\n");
+
+    new_ucmd!()
+        .args(&["length"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: missing argument after 'length'\n");
+}
+
+#[test]
 fn test_parenthesis() {
     new_ucmd!()
         .args(&["(", "1", "+", "1", ")", "*", "2"])
