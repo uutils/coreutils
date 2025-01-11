@@ -54,6 +54,22 @@ fn test_no_such_directory() {
 }
 
 #[test]
+fn test_multiple_group_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("id");
+
+    if let Ok(result) = run_ucmd_as_root(
+        &ts,
+        &["--groups='invalid ignored'", "--groups=''", "/", "id", "-G"],
+    ) {
+        result.success().stdout_is("0");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+}
+
+#[test]
 fn test_invalid_user_spec() {
     let ts = TestScenario::new(util_name!());
 
