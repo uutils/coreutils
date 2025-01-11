@@ -3,12 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::fmt::Display;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use syntax_tree::AstNode;
+use thiserror::Error;
 use uucore::{
-    display::Quotable,
     error::{UError, UResult},
     format_usage, help_about, help_section, help_usage,
 };
@@ -25,26 +23,52 @@ mod options {
 
 pub type ExprResult<T> = Result<T, ExprError>;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum ExprError {
+    #[error("syntax error: unexpected argument '{0}'")]
     UnexpectedArgument(String),
+
+    #[error("syntax error: missing argument after '{0}'")]
     MissingArgument(String),
+
+    #[error("non-integer argument")]
     NonIntegerArgument,
+
+    #[error("missing operand")]
     MissingOperand,
+
+    #[error("division by zero")]
     DivisionByZero,
+
+    #[error("Invalid regex expression")]
     InvalidRegexExpression,
+
+    #[error("syntax error: expecting ')' after '{0}'")]
     ExpectedClosingBraceAfter(String),
+
+    #[error("syntax error: expecting ')' instead of '{0}'")]
     ExpectedClosingBrace(String),
-    UnmatchedBrace(BraceType),
+
+    #[error("{0}")]
+    UnmatchedBrace(#[from] BraceType),
+
+    #[error("Invalid content of \\{{\\}}")]
     InvalidBraceContent,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum BraceType {
-    OpenParen,  // ( or \(
-    CloseParen, // ) or \)
-    OpenCurly,  // \{
-    CloseCurly, // \}
+    #[error("Unmatched ( or \\(")]
+    OpenParen,
+
+    #[error("Unmatched ) or \\)")]
+    CloseParen,
+
+    #[error("Unmatched \\{{")]
+    OpenCurly,
+
+    #[error("Unmatched \\}}")]
+    CloseCurly,
 }
 
 #[derive(Debug, PartialEq)]
@@ -53,38 +77,6 @@ enum BraceContent {
     Invalid,
     Unmatched(BraceType),
 }
-
-impl Display for ExprError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnexpectedArgument(s) => {
-                write!(f, "syntax error: unexpected argument {}", s.quote())
-            }
-            Self::MissingArgument(s) => {
-                write!(f, "syntax error: missing argument after {}", s.quote())
-            }
-            Self::NonIntegerArgument => write!(f, "non-integer argument"),
-            Self::MissingOperand => write!(f, "missing operand"),
-            Self::DivisionByZero => write!(f, "division by zero"),
-            Self::InvalidRegexExpression => write!(f, "Invalid regex expression"),
-            Self::ExpectedClosingBraceAfter(s) => {
-                write!(f, "syntax error: expecting ')' after {}", s.quote())
-            }
-            Self::ExpectedClosingBrace(s) => {
-                write!(f, "syntax error: expecting ')' instead of {}", s.quote())
-            }
-            Self::UnmatchedBrace(btype) => match btype {
-                BraceType::OpenParen => write!(f, "Unmatched ( or \\("),
-                BraceType::CloseParen => write!(f, "Unmatched ) or \\)"),
-                BraceType::OpenCurly => write!(f, "Unmatched \\{{"),
-                BraceType::CloseCurly => write!(f, "Unmatched \\}}"),
-            },
-            Self::InvalidBraceContent => write!(f, "Invalid content of \\{{\\}}"),
-        }
-    }
-}
-
-impl std::error::Error for ExprError {}
 
 impl UError for ExprError {
     fn code(&self) -> i32 {

@@ -776,7 +776,7 @@ mod test {
         assert!(is_truthy(&NumOrStr::Str("0a".to_string()))); // Not just zeros
         assert!(is_truthy(&NumOrStr::Str("a0".to_string())));
     }
-    
+
     #[test]
     fn test_is_valid_curly_content() {
         // Single number cases - valid
