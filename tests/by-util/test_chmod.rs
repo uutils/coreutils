@@ -822,7 +822,6 @@ fn test_chmod_no_dereference_symlink() {
     set_permissions(at.plus(target), Permissions::from_mode(0o664)).unwrap();
     at.symlink_file(target, symlink);
 
-    // Use --no-dereference: should modify the symlink itself
     scene
         .ucmd()
         .arg("--no-dereference")
@@ -894,7 +893,6 @@ fn test_chmod_symlink_to_dangling_recursive() {
 
     at.symlink_file(dangling_target, symlink);
 
-    // Use --no-dereference: should succeed and modify the symlink itself
     scene
         .ucmd()
         .arg("755")
