@@ -585,7 +585,12 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::{BraceContent, BraceType};
+    use num_bigint::BigInt;
+
+    use crate::{
+        syntax_tree::{is_truthy, is_valid_curly_content, NumOrStr},
+        BraceContent, BraceType,
+    };
 
     use super::{
         check_brace_content_and_matching, AstNode, BinOp, NumericOp, RelationOp, StringOp,
@@ -739,5 +744,82 @@ mod test {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn test_is_truthy() {
+        // Numeric cases
+        assert!(is_truthy(&NumOrStr::Num(BigInt::from(1))));
+        assert!(is_truthy(&NumOrStr::Num(BigInt::from(-1))));
+        assert!(is_truthy(&NumOrStr::Num(BigInt::from(42))));
+        assert!(!is_truthy(&NumOrStr::Num(BigInt::from(0))));
+
+        // String cases - Numbers as strings
+        assert!(is_truthy(&NumOrStr::Str("1".to_string())));
+        assert!(is_truthy(&NumOrStr::Str("42".to_string())));
+        assert!(is_truthy(&NumOrStr::Str("-1".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str("0".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str("00".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str("000".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str("-0".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str("-00".to_string())));
+
+        // Edge cases
+        assert!(is_truthy(&NumOrStr::Str("-".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str(String::new())));
+
+        // Non-numeric strings
+        assert!(is_truthy(&NumOrStr::Str("abc".to_string())));
+        assert!(is_truthy(&NumOrStr::Str("false".to_string())));
+        assert!(is_truthy(&NumOrStr::Str("true".to_string())));
+        assert!(is_truthy(&NumOrStr::Str(" ".to_string())));
+        assert!(is_truthy(&NumOrStr::Str("0a".to_string()))); // Not just zeros
+        assert!(is_truthy(&NumOrStr::Str("a0".to_string())));
+    }
+    
+    #[test]
+    fn test_is_valid_curly_content() {
+        // Single number cases - valid
+        assert!(is_valid_curly_content("0"));
+        assert!(is_valid_curly_content("1"));
+        assert!(is_valid_curly_content("32767"));
+        assert!(is_valid_curly_content(" 123 "));
+
+        // Single number cases - invalid
+        assert!(!is_valid_curly_content("32768"));
+        assert!(!is_valid_curly_content("-1"));
+        assert!(!is_valid_curly_content("abc"));
+        assert!(!is_valid_curly_content(""));
+        assert!(!is_valid_curly_content(" "));
+        assert!(!is_valid_curly_content("12.34"));
+        assert!(!is_valid_curly_content("1a"));
+
+        // Range cases - valid
+        assert!(is_valid_curly_content("0,1"));
+        assert!(is_valid_curly_content("1,1"));
+        assert!(is_valid_curly_content("1,32767"));
+        assert!(is_valid_curly_content("0,32767"));
+        assert!(is_valid_curly_content(" 1 , 2 "));
+        assert!(is_valid_curly_content("100,200"));
+
+        // Range cases - invalid
+        assert!(!is_valid_curly_content("2,1"));
+        assert!(!is_valid_curly_content("32768,32769"));
+        assert!(!is_valid_curly_content("1,32768"));
+        assert!(!is_valid_curly_content("32768,1"));
+        assert!(!is_valid_curly_content("-1,5"));
+        assert!(!is_valid_curly_content("1,-5"));
+        assert!(!is_valid_curly_content("a,b"));
+        assert!(!is_valid_curly_content("1,b"));
+        assert!(!is_valid_curly_content("a,1"));
+        assert!(!is_valid_curly_content(","));
+        assert!(!is_valid_curly_content("1,"));
+        assert!(!is_valid_curly_content(",1"));
+
+        // Invalid formats
+        assert!(!is_valid_curly_content("1,2,3"));
+        assert!(!is_valid_curly_content("1,2,"));
+        assert!(!is_valid_curly_content("1.5,2.5"));
+        assert!(!is_valid_curly_content("0xFF,0xFF"));
     }
 }
