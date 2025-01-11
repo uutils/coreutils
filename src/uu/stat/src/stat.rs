@@ -121,6 +121,13 @@ impl std::str::FromStr for QuotingStyle {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum Precision {
+    NotSpecified,
+    NoNumber,
+    Number(usize),
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum Token {
     Char(char),
@@ -128,7 +135,7 @@ enum Token {
     Directive {
         flag: Flags,
         width: usize,
-        precision: Option<usize>,
+        precision: Precision,
         format: char,
     },
 }
@@ -239,10 +246,10 @@ struct Stater {
 /// * `output` - A reference to the OutputType enum containing the value to be printed.
 /// * `flags` - A Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed output.
-/// * `precision` - An Option containing the precision value.
+/// * `precision` - How many digits of precision, if any.
 ///
 /// This function delegates the printing process to more specialized functions depending on the output type.
-fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<usize>) {
+fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precision) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -272,7 +279,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<u
     // A sign (+ or -) should always be placed before a number produced by a signed conversion.
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
-    let padding_char = determine_padding_char(&flags, &precision);
+    let padding_char = determine_padding_char(&flags);
 
     match output {
         OutputType::Str(s) => print_str(s, &flags, width, precision),
@@ -296,13 +303,12 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<u
 /// # Arguments
 ///
 /// * `flags` - A reference to the Flags struct containing formatting flags.
-/// * `precision` - An Option containing the precision value.
 ///
 /// # Returns
 ///
 /// * Padding - An instance of the Padding enum representing the padding character.
-fn determine_padding_char(flags: &Flags, precision: &Option<usize>) -> Padding {
-    if flags.zero && !flags.left && precision.is_none() {
+fn determine_padding_char(flags: &Flags) -> Padding {
+    if flags.zero && !flags.left {
         Padding::Zero
     } else {
         Padding::Space
@@ -316,10 +322,10 @@ fn determine_padding_char(flags: &Flags, precision: &Option<usize>) -> Padding {
 /// * `s` - The string to be printed.
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed string.
-/// * `precision` - An Option containing the precision value.
-fn print_str(s: &str, flags: &Flags, width: usize, precision: Option<usize>) {
+/// * `precision` - How many digits of precision, if any.
+fn print_str(s: &str, flags: &Flags, width: usize, precision: Precision) {
     let s = match precision {
-        Some(p) if p < s.len() => &s[..p],
+        Precision::Number(p) if p < s.len() => &s[..p],
         _ => s,
     };
     pad_and_print(s, flags.left, width, Padding::Space);
@@ -419,13 +425,13 @@ fn process_token_filesystem(t: &Token, meta: StatFs, display_name: &str) {
 /// * `num` - The integer value to be printed.
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed integer.
-/// * `precision` - An Option containing the precision value.
+/// * `precision` - How many digits of precision, if any.
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_integer(
     num: i64,
     flags: &Flags,
     width: usize,
-    precision: Option<usize>,
+    precision: Precision,
     padding_char: Padding,
 ) {
     let num = num.to_string();
@@ -441,15 +447,16 @@ fn print_integer(
     } else {
         ""
     };
-    let extended = format!(
-        "{prefix}{arg:0>precision$}",
-        precision = precision.unwrap_or(0)
-    );
+    let extended = match precision {
+        Precision::NotSpecified => format!("{prefix}{arg}"),
+        Precision::NoNumber => format!("{prefix}{arg}"),
+        Precision::Number(p) => format!("{prefix}{arg:0>precision$}", precision = p),
+    };
     pad_and_print(&extended, flags.left, width, padding_char);
 }
 
 /// Truncate a float to the given number of digits after the decimal point.
-fn precision_trunc(num: f64, precision: usize) -> String {
+fn precision_trunc(num: f64, precision: Precision) -> String {
     // GNU `stat` doesn't round, it just seems to truncate to the
     // given precision:
     //
@@ -473,21 +480,21 @@ fn precision_trunc(num: f64, precision: usize) -> String {
     let num_str = num.to_string();
     let n = num_str.len();
     match (num_str.find('.'), precision) {
-        (None, 0) => num_str,
-        (None, p) => format!("{num_str}.{zeros}", zeros = "0".repeat(p)),
-        (Some(i), 0) => num_str[..i].to_string(),
-        (Some(i), p) if p < n - i => num_str[..i + 1 + p].to_string(),
-        (Some(i), p) => format!("{num_str}{zeros}", zeros = "0".repeat(p - (n - i - 1))),
+        (None, Precision::NotSpecified) => num_str,
+        (None, Precision::NoNumber) => num_str,
+        (None, Precision::Number(0)) => num_str,
+        (None, Precision::Number(p)) => format!("{num_str}.{zeros}", zeros = "0".repeat(p)),
+        (Some(i), Precision::NotSpecified) => num_str[..i].to_string(),
+        (Some(_), Precision::NoNumber) => num_str,
+        (Some(i), Precision::Number(0)) => num_str[..i].to_string(),
+        (Some(i), Precision::Number(p)) if p < n - i => num_str[..i + 1 + p].to_string(),
+        (Some(i), Precision::Number(p)) => {
+            format!("{num_str}{zeros}", zeros = "0".repeat(p - (n - i - 1)))
+        }
     }
 }
 
-fn print_float(
-    num: f64,
-    flags: &Flags,
-    width: usize,
-    precision: Option<usize>,
-    padding_char: Padding,
-) {
+fn print_float(num: f64, flags: &Flags, width: usize, precision: Precision, padding_char: Padding) {
     let prefix = if flags.sign {
         "+"
     } else if flags.space {
@@ -495,7 +502,7 @@ fn print_float(
     } else {
         ""
     };
-    let num_str = precision_trunc(num, precision.unwrap_or(0));
+    let num_str = precision_trunc(num, precision);
     let extended = format!("{prefix}{num_str}");
     pad_and_print(&extended, flags.left, width, padding_char)
 }
@@ -507,13 +514,13 @@ fn print_float(
 /// * `num` - The unsigned integer value to be printed.
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed unsigned integer.
-/// * `precision` - An Option containing the precision value.
+/// * `precision` - How many digits of precision, if any.
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned(
     num: u64,
     flags: &Flags,
     width: usize,
-    precision: Option<usize>,
+    precision: Precision,
     padding_char: Padding,
 ) {
     let num = num.to_string();
@@ -522,7 +529,11 @@ fn print_unsigned(
     } else {
         Cow::Borrowed(num.as_str())
     };
-    let s = format!("{s:0>precision$}", precision = precision.unwrap_or(0));
+    let s = match precision {
+        Precision::NotSpecified => s,
+        Precision::NoNumber => s,
+        Precision::Number(p) => format!("{s:0>precision$}", precision = p).into(),
+    };
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
@@ -533,20 +544,21 @@ fn print_unsigned(
 /// * `num` - The unsigned octal integer value to be printed.
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed unsigned octal integer.
-/// * `precision` - An Option containing the precision value.
+/// * `precision` - How many digits of precision, if any.
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_oct(
     num: u32,
     flags: &Flags,
     width: usize,
-    precision: Option<usize>,
+    precision: Precision,
     padding_char: Padding,
 ) {
     let prefix = if flags.alter { "0" } else { "" };
-    let s = format!(
-        "{prefix}{num:0>precision$o}",
-        precision = precision.unwrap_or(0)
-    );
+    let s = match precision {
+        Precision::NotSpecified => format!("{prefix}{num:o}"),
+        Precision::NoNumber => format!("{prefix}{num:o}"),
+        Precision::Number(p) => format!("{prefix}{num:0>precision$o}", precision = p),
+    };
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
@@ -557,20 +569,21 @@ fn print_unsigned_oct(
 /// * `num` - The unsigned hexadecimal integer value to be printed.
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed unsigned hexadecimal integer.
-/// * `precision` - An Option containing the precision value.
+/// * `precision` - How many digits of precision, if any.
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_hex(
     num: u64,
     flags: &Flags,
     width: usize,
-    precision: Option<usize>,
+    precision: Precision,
     padding_char: Padding,
 ) {
     let prefix = if flags.alter { "0x" } else { "" };
-    let s = format!(
-        "{prefix}{num:0>precision$x}",
-        precision = precision.unwrap_or(0)
-    );
+    let s = match precision {
+        Precision::NotSpecified => format!("{prefix}{num:x}"),
+        Precision::NoNumber => format!("{prefix}{num:x}"),
+        Precision::Number(p) => format!("{prefix}{num:0>precision$x}", precision = p),
+    };
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
@@ -586,6 +599,10 @@ impl Stater {
                 '0' => flag.zero = true,
                 '-' => flag.left = true,
                 ' ' => flag.space = true,
+                // This is not documented but the behavior seems to be
+                // the same as a space. For example `stat -c "%I5s" f`
+                // prints "    0".
+                'I' => flag.space = true,
                 '+' => flag.sign = true,
                 '\'' => flag.group = true,
                 _ => break,
@@ -616,7 +633,7 @@ impl Stater {
         Self::process_flags(chars, i, bound, &mut flag);
 
         let mut width = 0;
-        let mut precision = None;
+        let mut precision = Precision::NotSpecified;
         let mut j = *i;
 
         if let Some((field_width, offset)) = format_str[j..].scan_num::<usize>() {
@@ -641,11 +658,11 @@ impl Stater {
             match format_str[j..].scan_num::<i32>() {
                 Some((value, offset)) => {
                     if value >= 0 {
-                        precision = Some(value as usize);
+                        precision = Precision::Number(value as usize);
                     }
                     j += offset;
                 }
-                None => precision = Some(0),
+                None => precision = Precision::NoNumber,
             }
             check_bound(format_str, bound, old, j)?;
         }
@@ -960,9 +977,17 @@ impl Stater {
                         let tm =
                             chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
                         let tm: DateTime<Local> = tm.into();
-                        let micros = tm.timestamp_micros();
-                        let secs = micros as f64 / 1_000_000.0;
-                        OutputType::Float(secs)
+                        match tm.timestamp_nanos_opt() {
+                            None => {
+                                let micros = tm.timestamp_micros();
+                                let secs = micros as f64 / 1_000_000.0;
+                                OutputType::Float(secs)
+                            }
+                            Some(ns) => {
+                                let secs = ns as f64 / 1_000_000_000.0;
+                                OutputType::Float(secs)
+                            }
+                        }
                     }
                     // time of last status change, human-readable
                     'z' => OutputType::Str(pretty_time(meta.ctime(), meta.ctime_nsec())),
@@ -1172,7 +1197,7 @@ fn pretty_time(sec: i64, nsec: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{group_num, precision_trunc, Flags, ScanUtil, Stater, Token};
+    use super::{group_num, precision_trunc, Flags, Precision, ScanUtil, Stater, Token};
 
     #[test]
     fn test_scanners() {
@@ -1220,7 +1245,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 10,
-                precision: Some(2),
+                precision: Precision::Number(2),
                 format: 'a',
             },
             Token::Char('c'),
@@ -1231,7 +1256,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 5,
-                precision: Some(0),
+                precision: Precision::NoNumber,
                 format: 'w',
             },
             Token::Char('\n'),
@@ -1251,7 +1276,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 15,
-                precision: None,
+                precision: Precision::NotSpecified,
                 format: 'a',
             },
             Token::Byte(b'\t'),
@@ -1270,7 +1295,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 20,
-                precision: None,
+                precision: Precision::NotSpecified,
                 format: 'w',
             },
             Token::Byte(b'\x12'),
@@ -1284,11 +1309,13 @@ mod tests {
 
     #[test]
     fn test_precision_trunc() {
-        assert_eq!(precision_trunc(123.456, 0), "123");
-        assert_eq!(precision_trunc(123.456, 1), "123.4");
-        assert_eq!(precision_trunc(123.456, 2), "123.45");
-        assert_eq!(precision_trunc(123.456, 3), "123.456");
-        assert_eq!(precision_trunc(123.456, 4), "123.4560");
-        assert_eq!(precision_trunc(123.456, 5), "123.45600");
+        assert_eq!(precision_trunc(123.456, Precision::NotSpecified), "123");
+        assert_eq!(precision_trunc(123.456, Precision::NoNumber), "123.456");
+        assert_eq!(precision_trunc(123.456, Precision::Number(0)), "123");
+        assert_eq!(precision_trunc(123.456, Precision::Number(1)), "123.4");
+        assert_eq!(precision_trunc(123.456, Precision::Number(2)), "123.45");
+        assert_eq!(precision_trunc(123.456, Precision::Number(3)), "123.456");
+        assert_eq!(precision_trunc(123.456, Precision::Number(4)), "123.4560");
+        assert_eq!(precision_trunc(123.456, Precision::Number(5)), "123.45600");
     }
 }
