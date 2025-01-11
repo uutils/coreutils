@@ -198,6 +198,11 @@ fn test_checks() {
         .code_is(2)
         .stderr_only("expr: Invalid content of \\{\\}\n");
 
+    new_ucmd!()
+        .args(&["a*b", ":", "a\\(*\\)b"])
+        .succeeds()
+        .stdout_only("*\n");
+
     /*
     new_ucmd!()
         .args(&["a^b", ":", "a^b"])

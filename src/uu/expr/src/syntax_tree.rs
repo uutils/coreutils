@@ -155,13 +155,12 @@ impl StringOp {
                 )
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
 
-                Ok(if re.captures_len() > 1 {
+                let has_capture = re_string.contains("\\(") && re_string.contains("\\)");
+
+                Ok(if has_capture {
                     match re.captures(&left) {
-                        Some(captures) => captures
-                            .at(1) // Only try to get capture group 1 if it exists
-                            .unwrap_or("")
-                            .to_string(),
-                        None => "".to_string(),
+                        Some(captures) => captures.at(1).unwrap_or("").to_string(),
+                        None => String::new(),
                     }
                 } else {
                     re.find(&left)
@@ -692,40 +691,6 @@ mod test {
                 "3"
             )),
         );
-    }
-
-    #[test]
-    fn test_brace_content() {
-        let test_cases = vec![
-            // Valid cases
-            ("abc", BraceContent::Valid),
-            ("\\{1\\}", BraceContent::Valid),
-            ("\\{1,2\\}", BraceContent::Valid),
-            ("a\\{10\\}", BraceContent::Valid),
-            ("a\\{1,10\\}", BraceContent::Valid),
-            // Invalid content cases
-            ("\\{1a\\}", BraceContent::Invalid),
-            ("\\{a\\}", BraceContent::Invalid),
-            ("\\{1,a\\}", BraceContent::Invalid),
-            ("\\{a,1\\}", BraceContent::Invalid),
-            ("\\{1,2,3\\}", BraceContent::Invalid),
-            ("\\{,\\}", BraceContent::Invalid),
-            ("\\{1a2\\}", BraceContent::Invalid),
-            // Unmatched cases
-            ("\\{1", BraceContent::Unmatched(BraceType::OpenCurly)),
-            ("\\}", BraceContent::Unmatched(BraceType::CloseCurly)),
-            ("a\\{1", BraceContent::Unmatched(BraceType::OpenCurly)),
-            ("a\\{1a", BraceContent::Unmatched(BraceType::OpenCurly)),
-        ];
-
-        for (input, expected) in test_cases {
-            assert!(
-                matches!(check_brace_content_and_matching(input), expected),
-                "Failed for input: {:?}, expected: {:?}",
-                input,
-                expected
-            );
-        }
     }
 
     #[test]
