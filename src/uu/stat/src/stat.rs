@@ -94,6 +94,7 @@ pub enum OutputType {
     Unsigned(u64),
     UnsignedHex(u64),
     UnsignedOct(u32),
+    Float(f64),
     Unknown,
 }
 
@@ -283,6 +284,9 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<u
         OutputType::UnsignedHex(num) => {
             print_unsigned_hex(*num, &flags, width, precision, padding_char);
         }
+        OutputType::Float(num) => {
+            print_float(*num, &flags, width, precision, padding_char);
+        }
         OutputType::Unknown => print!("?"),
     }
 }
@@ -442,6 +446,58 @@ fn print_integer(
         precision = precision.unwrap_or(0)
     );
     pad_and_print(&extended, flags.left, width, padding_char);
+}
+
+/// Truncate a float to the given number of digits after the decimal point.
+fn precision_trunc(num: f64, precision: usize) -> String {
+    // GNU `stat` doesn't round, it just seems to truncate to the
+    // given precision:
+    //
+    //     $ stat -c "%.5Y" /dev/pts/ptmx
+    //     1736344012.76399
+    //     $ stat -c "%.4Y" /dev/pts/ptmx
+    //     1736344012.7639
+    //     $ stat -c "%.3Y" /dev/pts/ptmx
+    //     1736344012.763
+    //
+    // Contrast this with `printf`, which seems to round the
+    // numbers:
+    //
+    //     $ printf "%.5f\n" 1736344012.76399
+    //     1736344012.76399
+    //     $ printf "%.4f\n" 1736344012.76399
+    //     1736344012.7640
+    //     $ printf "%.3f\n" 1736344012.76399
+    //     1736344012.764
+    //
+    let num_str = num.to_string();
+    let n = num_str.len();
+    match (num_str.find('.'), precision) {
+        (None, 0) => num_str,
+        (None, p) => format!("{num_str}.{zeros}", zeros = "0".repeat(p)),
+        (Some(i), 0) => num_str[..i].to_string(),
+        (Some(i), p) if p < n - i => num_str[..i + 1 + p].to_string(),
+        (Some(i), p) => format!("{num_str}{zeros}", zeros = "0".repeat(p - (n - i - 1))),
+    }
+}
+
+fn print_float(
+    num: f64,
+    flags: &Flags,
+    width: usize,
+    precision: Option<usize>,
+    padding_char: Padding,
+) {
+    let prefix = if flags.sign {
+        "+"
+    } else if flags.space {
+        " "
+    } else {
+        ""
+    };
+    let num_str = precision_trunc(num, precision.unwrap_or(0));
+    let extended = format!("{prefix}{num_str}");
+    pad_and_print(&extended, flags.left, width, padding_char)
 }
 
 /// Prints an unsigned integer value based on the provided flags, width, and precision.
@@ -898,7 +954,16 @@ impl Stater {
                     // time of last data modification, human-readable
                     'y' => OutputType::Str(pretty_time(meta.mtime(), meta.mtime_nsec())),
                     // time of last data modification, seconds since Epoch
-                    'Y' => OutputType::Integer(meta.mtime()),
+                    'Y' => {
+                        let sec = meta.mtime();
+                        let nsec = meta.mtime_nsec();
+                        let tm =
+                            chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
+                        let tm: DateTime<Local> = tm.into();
+                        let micros = tm.timestamp_micros();
+                        let secs = micros as f64 / 1_000_000.0;
+                        OutputType::Float(secs)
+                    }
                     // time of last status change, human-readable
                     'z' => OutputType::Str(pretty_time(meta.ctime(), meta.ctime_nsec())),
                     // time of last status change, seconds since Epoch
@@ -1107,7 +1172,7 @@ fn pretty_time(sec: i64, nsec: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{group_num, Flags, ScanUtil, Stater, Token};
+    use super::{group_num, precision_trunc, Flags, ScanUtil, Stater, Token};
 
     #[test]
     fn test_scanners() {
@@ -1215,5 +1280,15 @@ mod tests {
             Token::Byte(b'\n'),
         ];
         assert_eq!(&expected, &Stater::generate_tokens(s, true).unwrap());
+    }
+
+    #[test]
+    fn test_precision_trunc() {
+        assert_eq!(precision_trunc(123.456, 0), "123");
+        assert_eq!(precision_trunc(123.456, 1), "123.4");
+        assert_eq!(precision_trunc(123.456, 2), "123.45");
+        assert_eq!(precision_trunc(123.456, 3), "123.456");
+        assert_eq!(precision_trunc(123.456, 4), "123.4560");
+        assert_eq!(precision_trunc(123.456, 5), "123.45600");
     }
 }

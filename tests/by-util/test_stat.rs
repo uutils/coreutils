@@ -184,6 +184,17 @@ fn test_char() {
     ];
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    eprintln!("{expected_stdout}");
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_printf_mtime_precision() {
+    let args = ["-c", "%.0Y %.1Y %.2Y %.3Y %.4Y", "/dev/pts/ptmx"];
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    eprintln!("{expected_stdout}");
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
