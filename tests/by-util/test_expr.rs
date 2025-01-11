@@ -217,33 +217,6 @@ fn test_checks() {
         .args(&["a*b", ":", "a\\(*\\)b"])
         .succeeds()
         .stdout_only("*\n");
-
-    /*
-    new_ucmd!()
-        .args(&["X*", ":", "X\\(*\\)", ":", "(", "X*", ":", "X\\(*\\)", ")"])
-        .succeeds()
-        .stdout_only("1\n");
-
-    new_ucmd!()
-        .args(&["a", ":", "a\\{,2\\}"])
-        .succeeds()
-        .stdout_only("1\n");
-
-    new_ucmd!()
-        .args(&["*a", ":", "*a"])
-        .succeeds()
-        .stdout_only("2\n");
-
-    new_ucmd!()
-        .args(&["a^b", ":", "a^b"])
-        .succeeds()
-        .stdout_only("3\n");
-
-    new_ucmd!()
-        .args(&["ab", ":", "a\\(\\)b"])
-        .fails()
-        .code_is(1)
-        .no_output();*/
 }
 
 #[test]
@@ -402,11 +375,6 @@ fn test_length_mb() {
 
 #[test]
 fn test_regex() {
-    // FixME: [2022-12-19; rivy] test disabled as it currently fails due to 'oniguruma' bug (see GH:kkos/oniguruma/issues/279)
-    // new_ucmd!()
-    //     .args(&["a^b", ":", "a^b"])
-    //     .succeeds()
-    //     .stdout_only("3\n");
     new_ucmd!()
         .args(&["a^b", ":", "a\\^b"])
         .succeeds()
@@ -499,4 +467,86 @@ fn test_num_str_comparison() {
         .args(&["1a", "<", "1", "+", "1"])
         .succeeds()
         .stdout_is("1\n");
+}
+
+#[test]
+#[ignore = "Not working yet"]
+fn test_bre_anchors_and_special_chars() {
+    // bre10: Test caret matching literally
+    new_ucmd!()
+        .args(&["a^b", ":", "a^b"])
+        .succeeds()
+        .stdout_only("3\n");
+
+    // bre11: Test dollar matching literally
+    new_ucmd!()
+        .args(&["a$b", ":", "a$b"])
+        .succeeds()
+        .stdout_only("3\n");
+
+    // bre15: Test asterisk in parentheses with pattern validation
+    new_ucmd!()
+        .args(&["X*", ":", "X\\(*\\)", ":", "(", "X*", ":", "X\\(*\\)", ")"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // bre17: Test literal curly brace matching
+    new_ucmd!()
+        .args(&["{1}a", ":", "\\(\\{1\\}a\\)"])
+        .succeeds()
+        .stdout_only("{1}a\n");
+
+    // bre18: Test asterisk with quantifier pattern
+    new_ucmd!()
+        .args(&["X*", ":", "X\\(*\\)", ":", "^*"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // bre19: Test start-anchored curly brace match
+    new_ucmd!()
+        .args(&["{1}", ":", "^\\{1\\}"])
+        .succeeds()
+        .stdout_only("3\n");
+
+    // bre36: Test literal asterisk at start
+    new_ucmd!()
+        .args(&["*a", ":", "*a"])
+        .succeeds()
+        .stdout_only("2\n");
+
+    // bre37: Test multiple literal asterisks
+    new_ucmd!()
+        .args(&["a", ":", "**a"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // bre38: Test three literal asterisks
+    new_ucmd!()
+        .args(&["a", ":", "***a"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // bre40: Test curly brace quantifier with minimum only
+    new_ucmd!()
+        .args(&["ab", ":", "a\\{1,\\}b"])
+        .succeeds()
+        .stdout_only("2\n");
+
+    // bre45: Test curly brace quantifier with maximum only
+    new_ucmd!()
+        .args(&["a", ":", "a\\{,2\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // bre46: Test curly brace quantifier with no bounds
+    new_ucmd!()
+        .args(&["a", ":", "a\\{,\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["ab", ":", "a\\(\\)b"])
+        .fails()
+        .code_is(1)
+        .no_output();
 }
