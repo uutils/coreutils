@@ -57,30 +57,12 @@ skip = [
   { name = "linux-raw-sys", version = "0.3.8" },
   # terminal_size
   { name = "rustix", version = "0.37.26" },
-  # notify
-  { name = "windows-sys", version = "0.45.0" },
   # various crates
   { name = "windows-sys", version = "0.48.0" },
   # various crates
   { name = "windows-sys", version = "0.52.0" },
   # windows-sys
-  { name = "windows-targets", version = "0.42.2" },
-  # windows-sys
   { name = "windows-targets", version = "0.48.0" },
-  # windows-targets
-  { name = "windows_aarch64_gnullvm", version = "0.42.2" },
-  # windows-targets
-  { name = "windows_aarch64_msvc", version = "0.42.2" },
-  # windows-targets
-  { name = "windows_i686_gnu", version = "0.42.2" },
-  # windows-targets
-  { name = "windows_i686_msvc", version = "0.42.2" },
-  # windows-targets
-  { name = "windows_x86_64_gnu", version = "0.42.2" },
-  # windows-targets
-  { name = "windows_x86_64_gnullvm", version = "0.42.2" },
-  # windows-targets
-  { name = "windows_x86_64_msvc", version = "0.42.2" },
   # windows-targets
   { name = "windows_aarch64_gnullvm", version = "0.48.0" },
   # windows-targets
@@ -103,8 +85,6 @@ skip = [
   { name = "terminal_size", version = "0.2.6" },
   # ansi-width, console, os_display
   { name = "unicode-width", version = "0.1.13" },
-  # notify
-  { name = "mio", version = "0.8.11" },
   # various crates
   { name = "thiserror", version = "1.0.69" },
   # thiserror
