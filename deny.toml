@@ -26,6 +26,8 @@ allow = [
   "BSL-1.0",
   "CC0-1.0",
   "Unicode-DFS-2016",
+  "Unicode-3.0",
+  "Zlib",
 ]
 confidence-threshold = 0.8
 
@@ -91,6 +93,8 @@ skip = [
   { name = "thiserror-impl", version = "1.0.69" },
   # bindgen
   { name = "itertools", version = "0.13.0" },
+  # indexmap
+  { name = "hashbrown", version = "0.14.5" },
 ]
 # spell-checker: enable
 
