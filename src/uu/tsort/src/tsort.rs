@@ -105,13 +105,10 @@ fn remove<T>(vec: &mut Vec<T>, x: T) -> Option<usize>
 where
     T: PartialEq,
 {
-    for i in 0..vec.len() {
-        if vec[i] == x {
-            vec.remove(i);
-            return Some(i);
-        }
-    }
-    None
+        vec.iter().position(|item| *item == x).map(|i| {
+        vec.remove(i);
+        i
+    })
 }
 
 // We use String as a representation of node here
