@@ -105,9 +105,8 @@ fn remove<T>(vec: &mut Vec<T>, x: T) -> Option<usize>
 where
     T: PartialEq,
 {
-        vec.iter().position(|item| *item == x).map(|i| {
-        vec.remove(i);
-        i
+    vec.iter().position(|item| *item == x).inspect(|i| {
+        vec.remove(*i);
     })
 }
 
