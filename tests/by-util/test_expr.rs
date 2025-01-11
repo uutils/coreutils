@@ -205,6 +205,21 @@ fn test_checks() {
 
     /*
     new_ucmd!()
+        .args(&["X*", ":", "X\\(*\\)", ":", "(", "X*", ":", "X\\(*\\)", ")"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["a", ":", "a\\{,2\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["*a", ":", "*a"])
+        .succeeds()
+        .stdout_only("2\n");
+
+    new_ucmd!()
         .args(&["a^b", ":", "a^b"])
         .succeeds()
         .stdout_only("3\n");
