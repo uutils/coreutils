@@ -131,6 +131,24 @@ fn test_base16_decode() {
 }
 
 #[test]
+fn test_base16_decode_lowercase() {
+    new_ucmd!()
+        .args(&["--base16", "-d"])
+        .pipe_in("48656c6c6f2c20576f726c6421")
+        .succeeds()
+        .stdout_only("Hello, World!");
+}
+
+#[test]
+fn test_base16_decode_and_ignore_garbage_lowercase() {
+    new_ucmd!()
+        .args(&["--base16", "-d", "-i"])
+        .pipe_in("48656c6c6f2c20576f726c6421")
+        .succeeds()
+        .stdout_only("Hello, World!");
+}
+
+#[test]
 fn test_base2msbf() {
     new_ucmd!()
         .arg("--base2msbf")

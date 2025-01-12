@@ -5,6 +5,7 @@
 use super::get_metadata_with_deref_opt;
 use super::PathData;
 use lscolors::{Indicator, LsColors, Style};
+use std::ffi::OsString;
 use std::fs::{DirEntry, Metadata};
 use std::io::{BufWriter, Stdout};
 
@@ -31,9 +32,9 @@ impl<'a> StyleManager<'a> {
     pub(crate) fn apply_style(
         &mut self,
         new_style: Option<&Style>,
-        name: &str,
+        name: OsString,
         wrap: bool,
-    ) -> String {
+    ) -> OsString {
         let mut style_code = String::new();
         let mut force_suffix_reset: bool = false;
 
@@ -50,14 +51,14 @@ impl<'a> StyleManager<'a> {
             // normal style is to be printed we could skip printing new color
             // codes
             if !self.is_current_style(new_style) {
-                style_code.push_str(&self.reset(!self.initial_reset_is_done));
+                style_code.push_str(self.reset(!self.initial_reset_is_done));
                 style_code.push_str(&self.get_style_code(new_style));
             }
         }
         // if new style is None and current style is Normal we should reset it
         else if matches!(self.get_normal_style().copied(), Some(norm_style) if self.is_current_style(&norm_style))
         {
-            style_code.push_str(&self.reset(false));
+            style_code.push_str(self.reset(false));
             // even though this is an unnecessary reset for gnu compatibility we allow it here
             force_suffix_reset = true;
         }
@@ -69,16 +70,17 @@ impl<'a> StyleManager<'a> {
         // till the end of line
         let clear_to_eol = if wrap { "\x1b[K" } else { "" };
 
-        format!(
-            "{style_code}{name}{}{clear_to_eol}",
-            self.reset(force_suffix_reset),
-        )
+        let mut ret: OsString = style_code.into();
+        ret.push(name);
+        ret.push(self.reset(force_suffix_reset));
+        ret.push(clear_to_eol);
+        ret
     }
 
     /// Resets the current style and returns the default ANSI reset code to
     /// reset all text formatting attributes. If `force` is true, the reset is
     /// done even if the reset has been applied before.
-    pub(crate) fn reset(&mut self, force: bool) -> String {
+    pub(crate) fn reset(&mut self, force: bool) -> &str {
         // todo:
         // We need to use style from `Indicator::Reset` but as of now ls colors
         // uses a fallback mechanism and because of that if `Indicator::Reset`
@@ -87,9 +89,9 @@ impl<'a> StyleManager<'a> {
         if self.current_style.is_some() || force {
             self.initial_reset_is_done = true;
             self.current_style = None;
-            return "\x1b[0m".to_string();
+            return "\x1b[0m";
         }
-        String::new()
+        ""
     }
 
     pub(crate) fn get_style_code(&mut self, new_style: &Style) -> String {
@@ -124,9 +126,9 @@ impl<'a> StyleManager<'a> {
         &mut self,
         path: &PathData,
         md_option: Option<&Metadata>,
-        name: &str,
+        name: OsString,
         wrap: bool,
-    ) -> String {
+    ) -> OsString {
         let style = self
             .colors
             .style_for_path_with_metadata(&path.p_buf, md_option);
@@ -136,9 +138,9 @@ impl<'a> StyleManager<'a> {
     pub(crate) fn apply_style_based_on_dir_entry(
         &mut self,
         dir_entry: &DirEntry,
-        name: &str,
+        name: OsString,
         wrap: bool,
-    ) -> String {
+    ) -> OsString {
         let style = self.colors.style_for(dir_entry);
         self.apply_style(style, name, wrap)
     }
@@ -149,13 +151,33 @@ impl<'a> StyleManager<'a> {
 /// unnecessary calls to stat()
 /// and manages the symlink errors
 pub(crate) fn color_name(
-    name: &str,
+    name: OsString,
     path: &PathData,
     style_manager: &mut StyleManager,
     out: &mut BufWriter<Stdout>,
     target_symlink: Option<&PathData>,
     wrap: bool,
-) -> String {
+) -> OsString {
+    // Check if the file has capabilities
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    {
+        // Skip checking capabilities if LS_COLORS=ca=:
+        let capabilities = style_manager
+            .colors
+            .style_for_indicator(Indicator::Capabilities);
+
+        let has_capabilities = if capabilities.is_none() {
+            false
+        } else {
+            uucore::fsxattr::has_acl(path.p_buf.as_path())
+        };
+
+        // If the file has capabilities, use a specific style for `ca` (capabilities)
+        if has_capabilities {
+            return style_manager.apply_style(capabilities, name, wrap);
+        }
+    }
+
     if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
         if let Some(de) = &path.de {

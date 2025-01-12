@@ -75,3 +75,11 @@ fn test_error_on_dir() {
         .fails()
         .stderr_contains("tsort: tsort_test_dir: read error: Is a directory");
 }
+
+#[test]
+fn test_split_on_any_whitespace() {
+    new_ucmd!()
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only("a\nb\n");
+}

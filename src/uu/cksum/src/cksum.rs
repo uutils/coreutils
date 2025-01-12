@@ -244,16 +244,16 @@ fn had_reset(args: &[OsString]) -> bool {
  * and "easier" to understand
  */
 fn handle_tag_text_binary_flags(matches: &clap::ArgMatches) -> UResult<(bool, bool)> {
-    let untagged: bool = matches.get_flag(options::UNTAGGED);
-    let tag: bool = matches.get_flag(options::TAG);
-    let tag: bool = tag || !untagged;
+    let untagged = matches.get_flag(options::UNTAGGED);
+    let tag = matches.get_flag(options::TAG);
+    let tag = tag || !untagged;
 
-    let binary_flag: bool = matches.get_flag(options::BINARY);
+    let binary_flag = matches.get_flag(options::BINARY);
 
     let args: Vec<OsString> = std::env::args_os().collect();
     let had_reset = had_reset(&args);
 
-    let asterisk: bool = prompt_asterisk(tag, binary_flag, had_reset);
+    let asterisk = prompt_asterisk(tag, binary_flag, had_reset);
 
     Ok((tag, asterisk))
 }
@@ -276,10 +276,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    if ["bsd", "crc", "sysv"].contains(&algo_name) && check {
-        return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
-    }
-
     let input_length = matches.get_one::<usize>(options::LENGTH);
 
     let length = match input_length {
@@ -293,6 +289,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => None,
     };
 
+    if ["bsd", "crc", "sysv"].contains(&algo_name) && check {
+        return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
+    }
+
     if check {
         let text_flag = matches.get_flag(options::TEXT);
         let binary_flag = matches.get_flag(options::BINARY);
@@ -301,8 +301,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let warn = matches.get_flag(options::WARN);
         let ignore_missing = matches.get_flag(options::IGNORE_MISSING);
         let quiet = matches.get_flag(options::QUIET);
+        let tag = matches.get_flag(options::TAG);
 
-        if binary_flag || text_flag {
+        if tag || binary_flag || text_flag {
             return Err(ChecksumError::BinaryTextConflict.into());
         }
         // Determine the appropriate algorithm option to pass
@@ -426,8 +427,7 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long(options::CHECK)
                 .help("read hashsums from the FILEs and check them")
-                .action(ArgAction::SetTrue)
-                .conflicts_with("tag"),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BASE64)

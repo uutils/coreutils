@@ -13,6 +13,7 @@ pub use crate::features::entries;
 use crate::show_error;
 use clap::{Arg, ArgMatches, Command};
 use libc::{gid_t, uid_t};
+use options::traverse;
 use walkdir::WalkDir;
 
 use std::io::Error as IOError;
@@ -33,6 +34,7 @@ pub enum VerbosityLevel {
     Verbose,
     Normal,
 }
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Verbosity {
     pub groups_only: bool,
@@ -248,6 +250,14 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     false
 }
 
+pub fn get_metadata(file: &Path, follow: bool) -> Result<Metadata, std::io::Error> {
+    if follow {
+        file.metadata()
+    } else {
+        file.symlink_metadata()
+    }
+}
+
 impl ChownExecutor {
     pub fn exec(&self) -> UResult<()> {
         let mut ret = 0;
@@ -415,11 +425,9 @@ impl ChownExecutor {
 
     fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
         let path = path.as_ref();
-        let meta = if follow {
-            path.metadata()
-        } else {
-            path.symlink_metadata()
-        };
+
+        let meta = get_metadata(path, follow);
+
         match meta {
             Err(e) => {
                 match self.verbosity.level {
@@ -514,6 +522,45 @@ pub struct GidUidOwnerFilter {
 }
 type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 
+/// Determines symbolic link traversal and recursion settings based on flags.
+/// Returns the updated `dereference` and `traverse_symlinks` values.
+pub fn configure_symlink_and_recursion(
+    matches: &ArgMatches,
+) -> Result<(bool, bool, TraverseSymlinks), Box<dyn crate::error::UError>> {
+    let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
+        Some(true) // Follow symlinks
+    } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
+        Some(false) // Do not follow symlinks
+    } else {
+        None // Default behavior
+    };
+
+    let mut traverse_symlinks = if matches.get_flag("L") {
+        TraverseSymlinks::All
+    } else if matches.get_flag("H") {
+        TraverseSymlinks::First
+    } else {
+        TraverseSymlinks::None
+    };
+
+    let recursive = matches.get_flag(options::RECURSIVE);
+    if recursive {
+        if traverse_symlinks == TraverseSymlinks::None {
+            if dereference == Some(true) {
+                return Err(USimpleError::new(
+                    1,
+                    "-R --dereference requires -H or -L".to_string(),
+                ));
+            }
+            dereference = Some(false);
+        }
+    } else {
+        traverse_symlinks = TraverseSymlinks::None;
+    }
+
+    Ok((recursive, dereference.unwrap_or(true), traverse_symlinks))
+}
+
 /// Base implementation for `chgrp` and `chown`.
 ///
 /// An argument called `add_arg_if_not_reference` will be added to `command` if
@@ -569,34 +616,7 @@ pub fn chown_base(
         .unwrap_or_default();
 
     let preserve_root = matches.get_flag(options::preserve_root::PRESERVE);
-
-    let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
-        Some(true)
-    } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
-        Some(false)
-    } else {
-        None
-    };
-
-    let mut traverse_symlinks = if matches.get_flag(options::traverse::TRAVERSE) {
-        TraverseSymlinks::First
-    } else if matches.get_flag(options::traverse::EVERY) {
-        TraverseSymlinks::All
-    } else {
-        TraverseSymlinks::None
-    };
-
-    let recursive = matches.get_flag(options::RECURSIVE);
-    if recursive {
-        if traverse_symlinks == TraverseSymlinks::None {
-            if dereference == Some(true) {
-                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
-            }
-            dereference = Some(false);
-        }
-    } else {
-        traverse_symlinks = TraverseSymlinks::None;
-    }
+    let (recursive, dereference, traverse_symlinks) = configure_symlink_and_recursion(&matches)?;
 
     let verbosity_level = if matches.get_flag(options::verbosity::CHANGES) {
         VerbosityLevel::Changes
@@ -626,12 +646,47 @@ pub fn chown_base(
             level: verbosity_level,
         },
         recursive,
-        dereference: dereference.unwrap_or(true),
+        dereference,
         preserve_root,
         files,
         filter,
     };
     executor.exec()
+}
+
+pub fn common_args() -> Vec<Arg> {
+    vec![
+        Arg::new(traverse::TRAVERSE)
+            .short(traverse::TRAVERSE.chars().next().unwrap())
+            .help("if a command line argument is a symbolic link to a directory, traverse it")
+            .overrides_with_all([traverse::EVERY, traverse::NO_TRAVERSE])
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(traverse::EVERY)
+            .short(traverse::EVERY.chars().next().unwrap())
+            .help("traverse every symbolic link to a directory encountered")
+            .overrides_with_all([traverse::TRAVERSE, traverse::NO_TRAVERSE])
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(traverse::NO_TRAVERSE)
+            .short(traverse::NO_TRAVERSE.chars().next().unwrap())
+            .help("do not traverse any symbolic links (default)")
+            .overrides_with_all([traverse::TRAVERSE, traverse::EVERY])
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(options::dereference::DEREFERENCE)
+            .long(options::dereference::DEREFERENCE)
+            .help(
+                "affect the referent of each symbolic link (this is the default), \
+    rather than the symbolic link itself",
+            )
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(options::dereference::NO_DEREFERENCE)
+            .short('h')
+            .long(options::dereference::NO_DEREFERENCE)
+            .help(
+                "affect symbolic links instead of any referenced file \
+        (useful only on systems that can change the ownership of a symlink)",
+            )
+            .action(clap::ArgAction::SetTrue),
+    ]
 }
 
 #[cfg(test)]

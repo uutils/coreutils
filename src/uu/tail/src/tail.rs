@@ -65,12 +65,14 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     // Add `path` and `reader` to `files` map if `--follow` is selected.
     for input in &settings.inputs.clone() {
         match input.kind() {
-            InputKind::File(path) if cfg!(not(unix)) || path != &PathBuf::from(text::DEV_STDIN) => {
-                tail_file(settings, &mut printer, input, path, &mut observer, 0)?;
-            }
-            // File points to /dev/stdin here
-            InputKind::File(_) | InputKind::Stdin => {
+            InputKind::Stdin => {
                 tail_stdin(settings, &mut printer, input, &mut observer)?;
+            }
+            InputKind::File(path) if cfg!(unix) && path == &PathBuf::from(text::DEV_STDIN) => {
+                tail_stdin(settings, &mut printer, input, &mut observer)?;
+            }
+            InputKind::File(path) => {
+                tail_file(settings, &mut printer, input, path, &mut observer, 0)?;
             }
         }
     }
@@ -85,7 +87,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-        if !settings.has_only_stdin() {
+        if !settings.has_only_stdin() || settings.pid != 0 {
             follow::follow(observer, settings)?;
         }
     }

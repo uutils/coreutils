@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG getfattr
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -2423,6 +2423,17 @@ fn test_cp_reflink_bad() {
 }
 
 #[test]
+fn test_cp_conflicting_update() {
+    new_ucmd!()
+        .arg("-b")
+        .arg("--update=none")
+        .arg("a")
+        .arg("b")
+        .fails()
+        .stderr_contains("--backup is mutually exclusive with -n or --update=none-fail");
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_reflink_insufficient_permission() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2513,7 +2524,7 @@ fn test_cp_sparse_always_non_empty() {
     const BUFFER_SIZE: usize = 4096 * 16 + 3;
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+    let mut buf = vec![0; BUFFER_SIZE].into_boxed_slice();
     let blocks_to_touch = [buf.len() / 3, 2 * (buf.len() / 3)];
 
     for i in blocks_to_touch {
@@ -2529,7 +2540,7 @@ fn test_cp_sparse_always_non_empty() {
     let touched_block_count =
         blocks_to_touch.len() as u64 * at.metadata("dst_file_sparse").blksize() / 512;
 
-    assert_eq!(at.read_bytes("dst_file_sparse"), buf);
+    assert_eq!(at.read_bytes("dst_file_sparse").into_boxed_slice(), buf);
     assert_eq!(at.metadata("dst_file_sparse").blocks(), touched_block_count);
 }
 
@@ -3363,6 +3374,29 @@ fn test_copy_dir_preserve_permissions() {
     let metadata1 = at.metadata("d1");
     let metadata2 = at.metadata("d2");
     assert_metadata_eq!(metadata1, metadata2);
+}
+
+/// cp should preserve attributes of subdirectories when copying recursively.
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[test]
+fn test_copy_dir_preserve_subdir_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a1");
+    at.mkdir("a1/a2");
+    // Use different permissions for a better test
+    at.set_mode("a1/a2", 0o0555);
+    at.set_mode("a1", 0o0777);
+
+    ucmd.args(&["-p", "-r", "a1", "b1"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    // Make sure everything is preserved
+    assert!(at.dir_exists("b1"));
+    assert!(at.dir_exists("b1/a2"));
+    assert_metadata_eq!(at.metadata("a1"), at.metadata("b1"));
+    assert_metadata_eq!(at.metadata("a1/a2"), at.metadata("b1/a2"));
 }
 
 /// Test for preserving permissions when copying a directory, even in
@@ -5616,7 +5650,7 @@ mod link_deref {
 // which could be problematic if we aim to preserve ownership or mode. For example, when
 // copying a directory, the destination directory could temporarily be setgid on some filesystems.
 // This temporary setgid status could grant access to other users who share the same group
-// ownership as the newly created directory.To mitigate this issue, when creating a directory we
+// ownership as the newly created directory. To mitigate this issue, when creating a directory we
 // disable these excessive permissions.
 #[test]
 #[cfg(unix)]
@@ -5919,4 +5953,87 @@ fn test_cp_no_file() {
     ucmd.fails()
         .code_is(1)
         .stderr_contains("error: the following required arguments were not provided:");
+}
+
+#[test]
+#[cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
+))]
+fn test_cp_preserve_xattr_readonly_source() {
+    use crate::common::util::compare_xattrs;
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source_file = "a";
+    let dest_file = "e";
+
+    at.touch(source_file);
+
+    let xattr_key = "user.test";
+    match Command::new("setfattr")
+        .args([
+            "-n",
+            xattr_key,
+            "-v",
+            "value",
+            &at.plus_as_string(source_file),
+        ])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfattr failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfattr failed with {e}");
+            return;
+        }
+    }
+
+    let getfattr_output = Command::new("getfattr")
+        .args([&at.plus_as_string(source_file)])
+        .output()
+        .expect("Failed to run `getfattr` on the destination file");
+
+    assert!(
+        getfattr_output.status.success(),
+        "getfattr did not run successfully: {}",
+        String::from_utf8_lossy(&getfattr_output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
+    assert!(
+        stdout.contains(xattr_key),
+        "Expected '{}' not found in getfattr output:\n{}",
+        xattr_key,
+        stdout
+    );
+
+    at.set_readonly(source_file);
+    assert!(scene
+        .fixtures
+        .metadata(source_file)
+        .permissions()
+        .readonly());
+
+    scene
+        .ucmd()
+        .args(&[
+            "--preserve=xattr",
+            &at.plus_as_string(source_file),
+            &at.plus_as_string(dest_file),
+        ])
+        .succeeds()
+        .no_output();
+
+    assert!(scene.fixtures.metadata(dest_file).permissions().readonly());
+    assert!(
+        compare_xattrs(&at.plus(source_file), &at.plus(dest_file)),
+        "Extended attributes were not preserved"
+    );
 }

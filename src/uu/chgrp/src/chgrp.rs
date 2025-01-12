@@ -73,7 +73,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::HELP)
                 .long(options::HELP)
                 .help("Print help information.")
-                .action(ArgAction::Help)
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::verbosity::CHANGES)
@@ -102,20 +102,6 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::dereference::DEREFERENCE)
-                .long(options::dereference::DEREFERENCE)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-           Arg::new(options::dereference::NO_DEREFERENCE)
-               .short('h')
-               .long(options::dereference::NO_DEREFERENCE)
-               .help(
-                   "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
-               )
-               .action(ArgAction::SetTrue),
-        )
-        .arg(
             Arg::new(options::preserve_root::PRESERVE)
                 .long(options::preserve_root::PRESERVE)
                 .help("fail to operate recursively on '/'")
@@ -141,23 +127,6 @@ pub fn uu_app() -> Command {
                 .help("operate on files and directories recursively")
                 .action(ArgAction::SetTrue),
         )
-        .arg(
-            Arg::new(options::traverse::TRAVERSE)
-                .short(options::traverse::TRAVERSE.chars().next().unwrap())
-                .help("if a command line argument is a symbolic link to a directory, traverse it")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::NO_TRAVERSE)
-                .short(options::traverse::NO_TRAVERSE.chars().next().unwrap())
-                .help("do not traverse any symbolic links (default)")
-                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::EVERY])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::EVERY)
-                .short(options::traverse::EVERY.chars().next().unwrap())
-                .help("traverse every symbolic link to a directory encountered")
-                .action(ArgAction::SetTrue),
-        )
+        // Add common arguments with chgrp, chown & chmod
+        .args(uucore::perms::common_args())
 }

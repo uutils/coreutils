@@ -48,12 +48,12 @@ fn test_hex_rejects_sign_after_identifier() {
         .args(&["-0x-123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("unexpected argument '-0' found");
+        .usage_error("invalid floating point argument: '-0x-123ABC'");
     new_ucmd!()
         .args(&["-0x+123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("unexpected argument '-0' found");
+        .usage_error("invalid floating point argument: '-0x+123ABC'");
 }
 
 #[test]
@@ -303,18 +303,15 @@ fn test_preserve_negative_zero_start() {
     new_ucmd!()
         .args(&["-0", "1"])
         .succeeds()
-        .stdout_is("-0\n1\n")
-        .no_stderr();
+        .stdout_only("-0\n1\n");
     new_ucmd!()
         .args(&["-0", "1", "2"])
         .succeeds()
-        .stdout_is("-0\n1\n2\n")
-        .no_stderr();
+        .stdout_only("-0\n1\n2\n");
     new_ucmd!()
         .args(&["-0", "1", "2.0"])
         .succeeds()
-        .stdout_is("-0\n1\n2\n")
-        .no_stderr();
+        .stdout_only("-0\n1\n2\n");
 }
 
 #[test]
@@ -322,8 +319,7 @@ fn test_drop_negative_zero_end() {
     new_ucmd!()
         .args(&["1", "-1", "-0"])
         .succeeds()
-        .stdout_is("1\n0\n")
-        .no_stderr();
+        .stdout_only("1\n0\n");
 }
 
 #[test]
@@ -331,8 +327,11 @@ fn test_width_scientific_notation() {
     new_ucmd!()
         .args(&["-w", "999", "1e3"])
         .succeeds()
-        .stdout_is("0999\n1000\n")
-        .no_stderr();
+        .stdout_only("0999\n1000\n");
+    new_ucmd!()
+        .args(&["-w", "999", "1E3"])
+        .succeeds()
+        .stdout_only("0999\n1000\n");
 }
 
 #[test]
@@ -340,18 +339,15 @@ fn test_width_negative_zero() {
     new_ucmd!()
         .args(&["-w", "-0", "1"])
         .succeeds()
-        .stdout_is("-0\n01\n")
-        .no_stderr();
+        .stdout_only("-0\n01\n");
     new_ucmd!()
         .args(&["-w", "-0", "1", "2"])
         .succeeds()
-        .stdout_is("-0\n01\n02\n")
-        .no_stderr();
+        .stdout_only("-0\n01\n02\n");
     new_ucmd!()
         .args(&["-w", "-0", "1", "2.0"])
         .succeeds()
-        .stdout_is("-0\n01\n02\n")
-        .no_stderr();
+        .stdout_only("-0\n01\n02\n");
 }
 
 #[test]
@@ -359,33 +355,27 @@ fn test_width_negative_zero_decimal_notation() {
     new_ucmd!()
         .args(&["-w", "-0.0", "1"])
         .succeeds()
-        .stdout_is("-0.0\n01.0\n")
-        .no_stderr();
+        .stdout_only("-0.0\n01.0\n");
     new_ucmd!()
         .args(&["-w", "-0.0", "1.0"])
         .succeeds()
-        .stdout_is("-0.0\n01.0\n")
-        .no_stderr();
+        .stdout_only("-0.0\n01.0\n");
     new_ucmd!()
         .args(&["-w", "-0.0", "1", "2"])
         .succeeds()
-        .stdout_is("-0.0\n01.0\n02.0\n")
-        .no_stderr();
+        .stdout_only("-0.0\n01.0\n02.0\n");
     new_ucmd!()
         .args(&["-w", "-0.0", "1", "2.0"])
         .succeeds()
-        .stdout_is("-0.0\n01.0\n02.0\n")
-        .no_stderr();
+        .stdout_only("-0.0\n01.0\n02.0\n");
     new_ucmd!()
         .args(&["-w", "-0.0", "1.0", "2"])
         .succeeds()
-        .stdout_is("-0.0\n01.0\n02.0\n")
-        .no_stderr();
+        .stdout_only("-0.0\n01.0\n02.0\n");
     new_ucmd!()
         .args(&["-w", "-0.0", "1.0", "2.0"])
         .succeeds()
-        .stdout_is("-0.0\n01.0\n02.0\n")
-        .no_stderr();
+        .stdout_only("-0.0\n01.0\n02.0\n");
 }
 
 #[test]
@@ -393,98 +383,80 @@ fn test_width_negative_zero_scientific_notation() {
     new_ucmd!()
         .args(&["-w", "-0e0", "1"])
         .succeeds()
-        .stdout_is("-0\n01\n")
-        .no_stderr();
+        .stdout_only("-0\n01\n");
     new_ucmd!()
         .args(&["-w", "-0e0", "1", "2"])
         .succeeds()
-        .stdout_is("-0\n01\n02\n")
-        .no_stderr();
+        .stdout_only("-0\n01\n02\n");
     new_ucmd!()
         .args(&["-w", "-0e0", "1", "2.0"])
         .succeeds()
-        .stdout_is("-0\n01\n02\n")
-        .no_stderr();
+        .stdout_only("-0\n01\n02\n");
 
     new_ucmd!()
         .args(&["-w", "-0e+1", "1"])
         .succeeds()
-        .stdout_is("-00\n001\n")
-        .no_stderr();
+        .stdout_only("-00\n001\n");
     new_ucmd!()
         .args(&["-w", "-0e+1", "1", "2"])
         .succeeds()
-        .stdout_is("-00\n001\n002\n")
-        .no_stderr();
+        .stdout_only("-00\n001\n002\n");
     new_ucmd!()
         .args(&["-w", "-0e+1", "1", "2.0"])
         .succeeds()
-        .stdout_is("-00\n001\n002\n")
-        .no_stderr();
+        .stdout_only("-00\n001\n002\n");
 
     new_ucmd!()
         .args(&["-w", "-0.000e0", "1"])
         .succeeds()
-        .stdout_is("-0.000\n01.000\n")
-        .no_stderr();
+        .stdout_only("-0.000\n01.000\n");
     new_ucmd!()
         .args(&["-w", "-0.000e0", "1", "2"])
         .succeeds()
-        .stdout_is("-0.000\n01.000\n02.000\n")
-        .no_stderr();
+        .stdout_only("-0.000\n01.000\n02.000\n");
     new_ucmd!()
         .args(&["-w", "-0.000e0", "1", "2.0"])
         .succeeds()
-        .stdout_is("-0.000\n01.000\n02.000\n")
-        .no_stderr();
+        .stdout_only("-0.000\n01.000\n02.000\n");
 
     new_ucmd!()
         .args(&["-w", "-0.000e-2", "1"])
         .succeeds()
-        .stdout_is("-0.00000\n01.00000\n")
-        .no_stderr();
+        .stdout_only("-0.00000\n01.00000\n");
     new_ucmd!()
         .args(&["-w", "-0.000e-2", "1", "2"])
         .succeeds()
-        .stdout_is("-0.00000\n01.00000\n02.00000\n")
-        .no_stderr();
+        .stdout_only("-0.00000\n01.00000\n02.00000\n");
     new_ucmd!()
         .args(&["-w", "-0.000e-2", "1", "2.0"])
         .succeeds()
-        .stdout_is("-0.00000\n01.00000\n02.00000\n")
-        .no_stderr();
+        .stdout_only("-0.00000\n01.00000\n02.00000\n");
 
     new_ucmd!()
         .args(&["-w", "-0.000e5", "1"])
         .succeeds()
-        .stdout_is("-000000\n0000001\n")
-        .no_stderr();
+        .stdout_only("-000000\n0000001\n");
     new_ucmd!()
         .args(&["-w", "-0.000e5", "1", "2"])
         .succeeds()
-        .stdout_is("-000000\n0000001\n0000002\n")
-        .no_stderr();
+        .stdout_only("-000000\n0000001\n0000002\n");
     new_ucmd!()
         .args(&["-w", "-0.000e5", "1", "2.0"])
         .succeeds()
-        .stdout_is("-000000\n0000001\n0000002\n")
-        .no_stderr();
+        .stdout_only("-000000\n0000001\n0000002\n");
 
     new_ucmd!()
         .args(&["-w", "-0.000e5", "1"])
         .succeeds()
-        .stdout_is("-000000\n0000001\n")
-        .no_stderr();
+        .stdout_only("-000000\n0000001\n");
     new_ucmd!()
         .args(&["-w", "-0.000e5", "1", "2"])
         .succeeds()
-        .stdout_is("-000000\n0000001\n0000002\n")
-        .no_stderr();
+        .stdout_only("-000000\n0000001\n0000002\n");
     new_ucmd!()
         .args(&["-w", "-0.000e5", "1", "2.0"])
         .succeeds()
-        .stdout_is("-000000\n0000001\n0000002\n")
-        .no_stderr();
+        .stdout_only("-000000\n0000001\n0000002\n");
 }
 
 #[test]
@@ -492,14 +464,12 @@ fn test_width_decimal_scientific_notation_increment() {
     new_ucmd!()
         .args(&["-w", ".1", "1e-2", ".11"])
         .succeeds()
-        .stdout_is("0.10\n0.11\n")
-        .no_stderr();
+        .stdout_only("0.10\n0.11\n");
 
     new_ucmd!()
         .args(&["-w", ".0", "1.500e-1", ".2"])
         .succeeds()
-        .stdout_is("0.0000\n0.1500\n")
-        .no_stderr();
+        .stdout_only("0.0000\n0.1500\n");
 }
 
 /// Test that trailing zeros in the start argument contribute to precision.
@@ -508,8 +478,7 @@ fn test_width_decimal_scientific_notation_trailing_zeros_start() {
     new_ucmd!()
         .args(&["-w", ".1000", "1e-2", ".11"])
         .succeeds()
-        .stdout_is("0.1000\n0.1100\n")
-        .no_stderr();
+        .stdout_only("0.1000\n0.1100\n");
 }
 
 /// Test that trailing zeros in the increment argument contribute to precision.
@@ -518,8 +487,7 @@ fn test_width_decimal_scientific_notation_trailing_zeros_increment() {
     new_ucmd!()
         .args(&["-w", "1e-1", "0.0100", ".11"])
         .succeeds()
-        .stdout_is("0.1000\n0.1100\n")
-        .no_stderr();
+        .stdout_only("0.1000\n0.1100\n");
 }
 
 #[test]
@@ -527,8 +495,7 @@ fn test_width_negative_decimal_notation() {
     new_ucmd!()
         .args(&["-w", "-.1", ".1", ".11"])
         .succeeds()
-        .stdout_is("-0.1\n00.0\n00.1\n")
-        .no_stderr();
+        .stdout_only("-0.1\n00.0\n00.1\n");
 }
 
 #[test]
@@ -536,22 +503,19 @@ fn test_width_negative_scientific_notation() {
     new_ucmd!()
         .args(&["-w", "-1e-3", "1"])
         .succeeds()
-        .stdout_is("-0.001\n00.999\n")
-        .no_stderr();
+        .stdout_only("-0.001\n00.999\n");
     new_ucmd!()
         .args(&["-w", "-1.e-3", "1"])
         .succeeds()
-        .stdout_is("-0.001\n00.999\n")
-        .no_stderr();
+        .stdout_only("-0.001\n00.999\n");
     new_ucmd!()
         .args(&["-w", "-1.0e-4", "1"])
         .succeeds()
-        .stdout_is("-0.00010\n00.99990\n")
-        .no_stderr();
+        .stdout_only("-0.00010\n00.99990\n");
     new_ucmd!()
         .args(&["-w", "-.1e2", "10", "100"])
         .succeeds()
-        .stdout_is(
+        .stdout_only(
             "-010
 0000
 0010
@@ -565,12 +529,11 @@ fn test_width_negative_scientific_notation() {
 0090
 0100
 ",
-        )
-        .no_stderr();
+        );
     new_ucmd!()
         .args(&["-w", "-0.1e2", "10", "100"])
         .succeeds()
-        .stdout_is(
+        .stdout_only(
             "-010
 0000
 0010
@@ -584,8 +547,7 @@ fn test_width_negative_scientific_notation() {
 0090
 0100
 ",
-        )
-        .no_stderr();
+        );
 }
 
 /// Test that trailing zeros in the end argument do not contribute to width.
@@ -594,8 +556,7 @@ fn test_width_decimal_scientific_notation_trailing_zeros_end() {
     new_ucmd!()
         .args(&["-w", "1e-1", "1e-2", ".1100"])
         .succeeds()
-        .stdout_is("0.10\n0.11\n")
-        .no_stderr();
+        .stdout_only("0.10\n0.11\n");
 }
 
 #[test]
@@ -603,8 +564,7 @@ fn test_width_floats() {
     new_ucmd!()
         .args(&["-w", "9.0", "10.0"])
         .succeeds()
-        .stdout_is("09.0\n10.0\n")
-        .no_stderr();
+        .stdout_only("09.0\n10.0\n");
 }
 
 // TODO This is duplicated from `test_yes.rs`; refactor them.
@@ -656,11 +616,7 @@ fn test_neg_inf_width() {
 
 #[test]
 fn test_ignore_leading_whitespace() {
-    new_ucmd!()
-        .arg("   1")
-        .succeeds()
-        .stdout_is("1\n")
-        .no_stderr();
+    new_ucmd!().arg("   1").succeeds().stdout_only("1\n");
 }
 
 #[test]
@@ -679,8 +635,7 @@ fn test_negative_zero_int_start_float_increment() {
     new_ucmd!()
         .args(&["-0", "0.1", "0.1"])
         .succeeds()
-        .stdout_is("-0.0\n0.1\n")
-        .no_stderr();
+        .stdout_only("-0.0\n0.1\n");
 }
 
 #[test]
@@ -688,7 +643,7 @@ fn test_float_precision_increment() {
     new_ucmd!()
         .args(&["999", "0.1", "1000.1"])
         .succeeds()
-        .stdout_is(
+        .stdout_only(
             "999.0
 999.1
 999.2
@@ -702,8 +657,7 @@ fn test_float_precision_increment() {
 1000.0
 1000.1
 ",
-        )
-        .no_stderr();
+        );
 }
 
 /// Test for floating point precision issues.
@@ -712,8 +666,7 @@ fn test_negative_increment_decimal() {
     new_ucmd!()
         .args(&["0.1", "-0.1", "-0.2"])
         .succeeds()
-        .stdout_is("0.1\n0.0\n-0.1\n-0.2\n")
-        .no_stderr();
+        .stdout_only("0.1\n0.0\n-0.1\n-0.2\n");
 }
 
 #[test]
@@ -721,8 +674,7 @@ fn test_zero_not_first() {
     new_ucmd!()
         .args(&["-w", "-0.1", "0.1", "0.1"])
         .succeeds()
-        .stdout_is("-0.1\n00.0\n00.1\n")
-        .no_stderr();
+        .stdout_only("-0.1\n00.0\n00.1\n");
 }
 
 #[test]
@@ -730,8 +682,7 @@ fn test_rounding_end() {
     new_ucmd!()
         .args(&["1", "-1", "0.1"])
         .succeeds()
-        .stdout_is("1\n")
-        .no_stderr();
+        .stdout_only("1\n");
 }
 
 #[test]
@@ -759,7 +710,7 @@ fn test_format_option() {
 }
 
 #[test]
-#[ignore = "Need issue #6233 to be fixed"]
+#[ignore = "Need issue #2660 to be fixed"]
 fn test_auto_precision() {
     new_ucmd!()
         .args(&["1", "0x1p-1", "2"])
@@ -768,7 +719,7 @@ fn test_auto_precision() {
 }
 
 #[test]
-#[ignore = "Need issue #6234 to be fixed"]
+#[ignore = "Need issue #3318 to be fixed"]
 fn test_undefined() {
     new_ucmd!()
         .args(&["1e-9223372036854775808"])
@@ -836,4 +787,42 @@ fn test_invalid_format() {
         .fails()
         .no_stdout()
         .stderr_contains("format '%g%g' has too many % directives");
+    new_ucmd!()
+        .args(&["-f", "%g%", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("format '%g%' has too many % directives");
+    new_ucmd!()
+        .args(&["-f", "%", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("format '%' ends in %");
+}
+
+#[test]
+fn test_parse_scientific_zero() {
+    new_ucmd!()
+        .args(&["0e15", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+    new_ucmd!()
+        .args(&["0.0e15", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+    new_ucmd!()
+        .args(&["0", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+    new_ucmd!()
+        .args(&["-w", "0e15", "1"])
+        .succeeds()
+        .stdout_only("0000000000000000\n0000000000000001\n");
+    new_ucmd!()
+        .args(&["-w", "0.0e15", "1"])
+        .succeeds()
+        .stdout_only("0000000000000000\n0000000000000001\n");
+    new_ucmd!()
+        .args(&["-w", "0", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
 }

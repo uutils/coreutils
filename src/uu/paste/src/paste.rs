@@ -200,7 +200,7 @@ fn parse_delimiters(delimiters: &str) -> UResult<Box<[Box<[u8]>]>> {
     let mut add_single_char_delimiter = |vec: &mut Vec<Box<[u8]>>, ch: char| {
         let delimiter_encoded = ch.encode_utf8(&mut buffer);
 
-        vec.push(Box::from(delimiter_encoded.as_bytes()));
+        vec.push(Box::<[u8]>::from(delimiter_encoded.as_bytes()));
     };
 
     let mut vec = Vec::<Box<[u8]>>::with_capacity(delimiters.len());
@@ -311,7 +311,7 @@ impl<'a> DelimiterState<'a> {
             DelimiterState::MultipleDelimiters {
                 current_delimiter, ..
             } => current_delimiter.len(),
-            _ => {
+            DelimiterState::NoDelimiters => {
                 return;
             }
         };
@@ -350,7 +350,7 @@ impl<'a> DelimiterState<'a> {
 
                 *current_delimiter = bo;
             }
-            _ => {}
+            DelimiterState::NoDelimiters => {}
         }
     }
 }
@@ -363,8 +363,8 @@ enum InputSource {
 impl InputSource {
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
         let us = match self {
-            Self::File(bu) => bu.read_until(byte, buf)?,
-            Self::StandardInput(rc) => rc
+            InputSource::File(bu) => bu.read_until(byte, buf)?,
+            InputSource::StandardInput(rc) => rc
                 .try_borrow()
                 .map_err(|bo| USimpleError::new(1, format!("{bo}")))?
                 .lock()

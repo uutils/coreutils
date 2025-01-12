@@ -1172,3 +1172,13 @@ fn gnu_tests() {
         }
     }
 }
+
+#[test]
+fn test_stdin_w1_multibyte() {
+    let input = "à\ná\n";
+    new_ucmd!()
+        .args(&["-w1"])
+        .pipe_in(input)
+        .run()
+        .stdout_is("à\ná\n");
+}

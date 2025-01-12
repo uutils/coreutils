@@ -158,6 +158,23 @@ fn test_negative_byte_syntax() {
 }
 
 #[test]
+fn test_negative_bytes_greater_than_input_size_stdin() {
+    new_ucmd!()
+        .args(&["-c", "-2"])
+        .pipe_in("a")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_negative_bytes_greater_than_input_size_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write_bytes("f", b"a");
+    ts.ucmd().args(&["-c", "-2", "f"]).succeeds().no_output();
+}
+
+#[test]
 fn test_negative_zero_lines() {
     new_ucmd!()
         .arg("--lines=-0")
@@ -457,4 +474,26 @@ fn test_all_but_last_lines() {
         .args(&["-n", "-15", "lorem_ipsum.txt"])
         .succeeds()
         .stdout_is_fixture("lorem_ipsum_backwards_15_lines.expected");
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[test]
+fn test_write_to_dev_full() {
+    use std::fs::OpenOptions;
+
+    for append in [true, false] {
+        {
+            let dev_full = OpenOptions::new()
+                .write(true)
+                .append(append)
+                .open("/dev/full")
+                .unwrap();
+
+            new_ucmd!()
+                .pipe_in_fixture(INPUT)
+                .set_stdout(dev_full)
+                .run()
+                .stderr_contains("No space left on device");
+        }
+    }
 }

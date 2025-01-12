@@ -171,7 +171,7 @@ impl Stat {
             Ok(Self {
                 path: path.to_path_buf(),
                 is_dir: metadata.is_dir(),
-                size: if path.is_dir() { 0 } else { metadata.len() },
+                size: if metadata.is_dir() { 0 } else { metadata.len() },
                 blocks: metadata.blocks(),
                 inodes: 1,
                 inode: Some(file_info),
@@ -189,7 +189,7 @@ impl Stat {
             Ok(Self {
                 path: path.to_path_buf(),
                 is_dir: metadata.is_dir(),
-                size: if path.is_dir() { 0 } else { metadata.len() },
+                size: if metadata.is_dir() { 0 } else { metadata.len() },
                 blocks: size_on_disk / 1024 * 2,
                 inodes: 1,
                 inode: file_info,
@@ -533,7 +533,7 @@ impl StatPrinter {
 
                         if !self
                             .threshold
-                            .map_or(false, |threshold| threshold.should_exclude(size))
+                            .is_some_and(|threshold| threshold.should_exclude(size))
                             && self
                                 .max_depth
                                 .map_or(true, |max_depth| stat_info.depth <= max_depth)

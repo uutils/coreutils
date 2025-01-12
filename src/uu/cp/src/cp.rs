@@ -17,6 +17,8 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
+#[cfg(all(unix, not(target_os = "android")))]
+use uucore::fsxattr::copy_xattrs;
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use filetime::FileTime;
@@ -172,7 +174,7 @@ pub enum CopyMode {
 /// For full compatibility with GNU, these options should also combine. We
 /// currently only do a best effort imitation of that behavior, because it is
 /// difficult to achieve in clap, especially with `--no-preserve`.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Attributes {
     #[cfg(unix)]
     pub ownership: Preserve,
@@ -930,6 +932,16 @@ impl Options {
         };
         let update_mode = update_control::determine_update_mode(matches);
 
+        if backup_mode != BackupMode::NoBackup
+            && matches
+                .get_one::<String>(update_control::arguments::OPT_UPDATE)
+                .is_some_and(|v| v == "none" || v == "none-fail")
+        {
+            return Err(Error::InvalidArgument(
+                "--backup is mutually exclusive with -n or --update=none-fail".to_string(),
+            ));
+        }
+
         let backup_suffix = backup_control::determine_backup_suffix(matches);
 
         let overwrite = OverwriteMode::from_matches(matches);
@@ -1516,6 +1528,42 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<
     Ok(())
 }
 
+/// Copies extended attributes (xattrs) from `source` to `dest`, ensuring that `dest` is temporarily
+/// user-writable if needed and restoring its original permissions afterward. This avoids “Operation
+/// not permitted” errors on read-only files. Returns an error if permission or metadata operations fail,
+/// or if xattr copying fails.
+#[cfg(all(unix, not(target_os = "android")))]
+fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
+    let metadata = fs::symlink_metadata(dest)?;
+
+    // Check if the destination file is currently read-only for the user.
+    let mut perms = metadata.permissions();
+    let was_readonly = perms.readonly();
+
+    // Temporarily grant user write if it was read-only.
+    if was_readonly {
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        fs::set_permissions(dest, perms)?;
+    }
+
+    // Perform the xattr copy and capture any potential error,
+    // so we can restore permissions before returning.
+    let copy_xattrs_result = copy_xattrs(source, dest);
+
+    // Restore read-only if we changed it.
+    if was_readonly {
+        let mut revert_perms = fs::symlink_metadata(dest)?.permissions();
+        revert_perms.set_readonly(true);
+        fs::set_permissions(dest, revert_perms)?;
+    }
+
+    // If copying xattrs failed, propagate that error now.
+    copy_xattrs_result?;
+
+    Ok(())
+}
+
 /// Copy the specified attributes from one path to another.
 pub(crate) fn copy_attributes(
     source: &Path,
@@ -1605,12 +1653,7 @@ pub(crate) fn copy_attributes(
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
         #[cfg(all(unix, not(target_os = "android")))]
         {
-            let xattrs = xattr::list(source)?;
-            for attr in xattrs {
-                if let Some(attr_value) = xattr::get(source, attr.clone())? {
-                    xattr::set(dest, attr, &attr_value[..])?;
-                }
-            }
+            copy_extended_attrs(source, dest)?;
         }
         #[cfg(not(all(unix, not(target_os = "android"))))]
         {

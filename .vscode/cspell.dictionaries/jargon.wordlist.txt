@@ -10,6 +10,7 @@ bytewise
 canonicalization
 canonicalize
 canonicalizing
+capget
 codepoint
 codepoints
 codegen
@@ -65,6 +66,7 @@ kibi
 kibibytes
 libacl
 lcase
+llistxattr
 lossily
 lstat
 mebi
@@ -86,6 +88,7 @@ nolinks
 nonblock
 nonportable
 nonprinting
+nonseekable
 notrunc
 noxfer
 ofile
@@ -108,7 +111,9 @@ seedable
 semver
 semiprime
 semiprimes
+setcap
 setfacl
+setfattr
 shortcode
 shortcodes
 siginfo
@@ -142,6 +147,8 @@ xattrs
 consts
 deps
 dev
+fdlimit
+inacc
 maint
 proc
 procs
@@ -157,6 +164,8 @@ retval
 subdir
 val
 vals
+inval
+nofield
 
 # * clippy
 uninlined
