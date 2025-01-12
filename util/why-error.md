@@ -12,7 +12,6 @@ This file documents why some tests are failing:
 * gnu/tests/dd/nocache_eof.sh
 * gnu/tests/dd/skip-seek-past-file.sh
 * gnu/tests/dd/stderr.sh
-* gnu/tests/df/over-mount-device.sh
 * gnu/tests/du/long-from-unreadable.sh
 * gnu/tests/du/move-dir-while-traversing.sh
 * gnu/tests/expr/expr-multibyte.pl
