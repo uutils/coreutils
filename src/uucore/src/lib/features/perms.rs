@@ -457,30 +457,18 @@ impl ChownExecutor {
 
     fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) {
         if self.verbosity.level == VerbosityLevel::Verbose {
-            match (self.dest_uid, self.dest_gid, gid) {
-                (Some(_), Some(_), Some(gid)) => {
-                    println!(
-                        "ownership of {} retained as {}:{}",
-                        path.quote(),
-                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                    );
-                }
+            let ownership = match (self.dest_uid, self.dest_gid, gid) {
+                (Some(_), Some(_), Some(gid)) => format!(
+                    "{}:{}",
+                    entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                    entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
+                ),
                 (None, Some(_), Some(gid)) => {
-                    println!(
-                        "ownership of {} retained as {}",
-                        path.quote(),
-                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                    );
+                    entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
                 }
-                (_, _, _) => {
-                    println!(
-                        "ownership of {} retained as {}",
-                        path.quote(),
-                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                    );
-                }
-            }
+                _ => entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+            };
+            println!("ownership of {} retained as {}", path.quote(), ownership);
         }
     }
 }
