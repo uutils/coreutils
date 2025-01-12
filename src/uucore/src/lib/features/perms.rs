@@ -468,7 +468,11 @@ impl ChownExecutor {
                 }
                 _ => entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
             };
-            println!("ownership of {} retained as {}", path.quote(), ownership);
+            if self.verbosity.groups_only {
+                println!("group of {} retained as {}", path.quote(), ownership);
+            } else {
+                println!("ownership of {} retained as {}", path.quote(), ownership);
+            }
         }
     }
 }
