@@ -19,6 +19,24 @@ use std::os::unix::fs::MetadataExt;
 const ABOUT: &str = help_about!("chgrp.md");
 const USAGE: &str = help_usage!("chgrp.md");
 
+fn parse_gid_from_str(group: &str) -> Result<u32, String> {
+    if let Some(gid_str) = group.strip_prefix(':') {
+        // Handle :gid format
+        gid_str
+            .parse::<u32>()
+            .map_err(|_| format!("invalid group id: '{}'", gid_str))
+    } else {
+        // Try as group name first
+        match entries::grp2gid(group) {
+            Ok(g) => Ok(g),
+            // If group name lookup fails, try parsing as raw number
+            Err(_) => group
+                .parse::<u32>()
+                .map_err(|_| format!("invalid group: '{}'", group)),
+        }
+    }
+}
+
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     let mut raw_group: String = String::new();
     let dest_gid = if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
@@ -38,26 +56,21 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
         if group.is_empty() {
             None
         } else {
-            match entries::grp2gid(group) {
+            match parse_gid_from_str(group) {
                 Ok(g) => Some(g),
-                _ => {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid group: {}", group.quote()),
-                    ))
-                }
+                Err(e) => return Err(USimpleError::new(1, e)),
             }
         }
     };
 
     // Handle --from option
     let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
-        match entries::grp2gid(from_group) {
+        match parse_gid_from_str(from_group) {
             Ok(g) => IfFrom::Group(g),
-            _ => {
+            Err(_) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("invalid group: {}", from_group.quote()),
+                    format!("invalid user: '{}'", from_group),
                 ))
             }
         }

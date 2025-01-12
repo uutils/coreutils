@@ -547,3 +547,49 @@ fn test_from_with_reference() {
     let ref_gid = at.plus("ref_file").metadata().unwrap().gid();
     assert_eq!(new_gid, ref_gid);
 }
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_numeric_group_formats() {
+    use std::os::unix::fs::MetadataExt;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let groups = nix::unistd::getgroups().unwrap();
+    if groups.len() < 2 {
+        return;
+    }
+    let (first_group, second_group) = (groups[0], groups[1]);
+
+    at.touch("test_file");
+
+    scene
+        .ucmd()
+        .arg(first_group.to_string())
+        .arg("test_file")
+        .succeeds();
+
+    // Test :gid format in --from
+    scene
+        .ucmd()
+        .arg(format!("--from=:{}", first_group.as_raw()))
+        .arg(second_group.to_string())
+        .arg("test_file")
+        .succeeds()
+        .no_stderr();
+
+    let new_gid = at.plus("test_file").metadata().unwrap().gid();
+    assert_eq!(new_gid, second_group.as_raw());
+
+    // Test :gid format in target group
+    scene
+        .ucmd()
+        .arg(format!("--from={}", second_group.as_raw()))
+        .arg(format!(":{}", first_group.as_raw()))
+        .arg("test_file")
+        .succeeds()
+        .no_stderr();
+
+    let final_gid = at.plus("test_file").metadata().unwrap().gid();
+    assert_eq!(final_gid, first_group.as_raw());
+}
