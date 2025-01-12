@@ -184,7 +184,72 @@ fn test_char() {
     ];
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    eprintln!("{expected_stdout}");
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_printf_mtime_precision() {
+    // TODO Higher precision numbers (`%.3Y`, `%.4Y`, etc.) are
+    // formatted correctly, but we are not precise enough when we do
+    // some `mtime` computations, so we get `.7640` instead of
+    // `.7639`. This can be fixed by being more careful when
+    // transforming the number from `Metadata::mtime_nsec()` to the form
+    // used in rendering.
+    let args = ["-c", "%.0Y %.1Y %.2Y", "/dev/pts/ptmx"];
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    eprintln!("{expected_stdout}");
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_timestamp_format() {
+    let ts = TestScenario::new(util_name!());
+
+    // Create a file with a specific timestamp for testing
+    ts.ccmd("touch")
+        .args(&["-d", "1970-01-01 18:43:33.023456789", "k"])
+        .succeeds()
+        .no_stderr();
+
+    let test_cases = vec![
+        // Basic timestamp formats
+        ("%Y", "67413"),
+        ("%.Y", "67413.023456789"),
+        ("%.1Y", "67413.0"),
+        ("%.3Y", "67413.023"),
+        ("%.6Y", "67413.023456"),
+        ("%.9Y", "67413.023456789"),
+        // Width and padding tests
+        ("%13.6Y", " 67413.023456"),
+        ("%013.6Y", "067413.023456"),
+        ("%-13.6Y", "67413.023456 "),
+        // Longer width/precision combinations
+        ("%18.10Y", "  67413.0234567890"),
+        ("%I18.10Y", "  67413.0234567890"),
+        ("%018.10Y", "0067413.0234567890"),
+        ("%-18.10Y", "67413.0234567890  "),
+    ];
+
+    for (format_str, expected) in test_cases {
+        let result = ts
+            .ucmd()
+            .args(&["-c", format_str, "k"])
+            .succeeds()
+            .stdout_move_str();
+
+        assert_eq!(
+            result,
+            format!("{expected}\n"),
+            "Format '{}' failed.\nExpected: '{}'\nGot: '{}'",
+            format_str,
+            expected,
+            result,
+        );
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
