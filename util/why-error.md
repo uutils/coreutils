@@ -1,7 +1,6 @@
 This file documents why some tests are failing:
 
 * gnu/tests/chgrp/from.sh - https://github.com/uutils/coreutils/issues/7039
-* gnu/tests/chroot/chroot-credentials.sh - https://github.com/uutils/coreutils/issues/7040
 * gnu/tests/cp/preserve-gid.sh
 * gnu/tests/csplit/csplit-suppress-matched.pl
 * gnu/tests/date/date-debug.sh
