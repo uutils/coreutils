@@ -49,11 +49,27 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
             }
         }
     };
+
+    // Handle --from option
+    let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
+        match entries::grp2gid(from_group) {
+            Ok(g) => IfFrom::Group(g),
+            _ => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid group: {}", from_group.quote()),
+                ))
+            }
+        }
+    } else {
+        IfFrom::All
+    };
+
     Ok(GidUidOwnerFilter {
         dest_gid,
         dest_uid: None,
         raw_owner: raw_group,
-        filter: IfFrom::All,
+        filter,
     })
 }
 
@@ -119,6 +135,12 @@ pub fn uu_app() -> Command {
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .help("use RFILE's group rather than specifying GROUP values"),
+        )
+        .arg(
+            Arg::new(options::FROM)
+                .long(options::FROM)
+                .value_name("GROUP")
+                .help("change the group only if its current group matches GROUP"),
         )
         .arg(
             Arg::new(options::RECURSIVE)
