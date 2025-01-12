@@ -56,7 +56,7 @@ fn test_invalid_group() {
 }
 
 #[test]
-fn test_1() {
+fn test_error_1() {
     if getegid() != 0 {
         new_ucmd!().arg("bin").arg(DIR).fails().stderr_contains(
             // linux fails with "Operation not permitted (os error 1)"
