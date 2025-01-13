@@ -1973,3 +1973,20 @@ fn test_split_separator_same_multiple() {
         .args(&["-t:", "-t:", "-t,", "fivelines.txt"])
         .fails();
 }
+
+#[test]
+fn test_long_lines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let line1 = format!("{:131070}\n", "");
+    let line2 = format!("{:1}\n", "");
+    let line3 = format!("{:131071}\n", "");
+    let infile = [line1, line2, line3].concat();
+    ucmd.args(&["-C", "131072"])
+        .pipe_in(infile)
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa").len(), 131_071);
+    assert_eq!(at.read("xab").len(), 2);
+    assert_eq!(at.read("xac").len(), 131_072);
+    assert!(!at.plus("xad").exists());
+}
