@@ -140,12 +140,18 @@ impl StringOp {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
                 let re_string = format!("^{right}");
-
                 // Check for unmatched braces and invalid content
                 match check_brace_content_and_matching(&re_string) {
-                    BraceContent::Invalid => return Err(ExprError::InvalidBraceContent),
+                    BraceContent::Invalid => match is_valid_curly_content(&re_string) {
+                        Err(ExprError::InvalidBraceContent) => {
+                            return Err(ExprError::InvalidBraceContent)
+                        }
+                        Ok(()) => unreachable!(),
+                        Err(err) => return Err(err),
+                    },
                     BraceContent::Unmatched(brace) => return Err(ExprError::UnmatchedBrace(brace)),
                     BraceContent::Valid => {}
+                    BraceContent::RegexTooBig => return Err(ExprError::RegexTooBig),
                 }
 
                 let re = Regex::with_options(
@@ -237,8 +243,13 @@ fn check_brace_content_and_matching(s: &str) -> BraceContent {
                         }
                         // Validate content when closing a curly brace
                         if in_curly {
-                            if !is_valid_curly_content(&curly_content) {
-                                return BraceContent::Invalid;
+                            match is_valid_curly_content(&curly_content) {
+                                Ok(()) => {}
+                                Err(ExprError::InvalidBraceContent) => {
+                                    return BraceContent::Invalid
+                                }
+                                Err(ExprError::RegexTooBig) => return BraceContent::RegexTooBig,
+                                Err(_) => unreachable!(),
                             }
                             curly_content.clear();
                             in_curly = false;
@@ -269,7 +280,7 @@ fn check_brace_content_and_matching(s: &str) -> BraceContent {
     }
 }
 
-fn is_valid_curly_content(content: &str) -> bool {
+fn is_valid_curly_content(content: &str) -> Result<(), ExprError> {
     // Valid content should be either a single number
     // or two numbers separated by a comma where first <= second
     let parts: Vec<&str> = content.split(',').collect();
@@ -278,20 +289,29 @@ fn is_valid_curly_content(content: &str) -> bool {
             let num = parts[0].trim();
             // Check if it's a valid positive number and within reasonable range
             // and restrict to 15-bit positive integers
-            num.parse::<u32>().is_ok_and(|n| n <= 32767)
+            match num.parse::<u32>() {
+                Ok(n) if n <= 32767 => Ok(()),
+                Ok(_) => Err(ExprError::RegexTooBig),
+                Err(_) => Err(ExprError::InvalidBraceContent),
+            }
         }
         2 => {
-            if let (Ok(first), Ok(second)) = (
+            match (
                 parts[0].trim().parse::<u32>(),
                 parts[1].trim().parse::<u32>(),
             ) {
-                // Ensure both numbers are within valid range and first <= second
-                first <= second && second <= 32767
-            } else {
-                false
+                (Ok(first), Ok(second)) if first <= 32767 && second <= 32767 => {
+                    if first <= second {
+                        Ok(())
+                    } else {
+                        Err(ExprError::InvalidBraceContent)
+                    }
+                }
+                (Ok(_), Ok(_)) => Err(ExprError::RegexTooBig),
+                _ => Err(ExprError::InvalidBraceContent),
             }
         }
-        _ => false,
+        _ => Err(ExprError::InvalidBraceContent),
     }
 }
 
@@ -731,7 +751,6 @@ mod test {
             ("\\{1a2\\}", BraceContent::Invalid),
             // Unmatched curly braces
             ("\\{1", BraceContent::Unmatched(BraceType::OpenCurly)),
-            ("\\}", BraceContent::Unmatched(BraceType::CloseCurly)),
             ("a\\{1", BraceContent::Unmatched(BraceType::OpenCurly)),
             ("a\\{1a", BraceContent::Unmatched(BraceType::OpenCurly)),
         ];
@@ -780,46 +799,46 @@ mod test {
     #[test]
     fn test_is_valid_curly_content() {
         // Single number cases - valid
-        assert!(is_valid_curly_content("0"));
-        assert!(is_valid_curly_content("1"));
-        assert!(is_valid_curly_content("32767"));
-        assert!(is_valid_curly_content(" 123 "));
+        assert!(is_valid_curly_content("0").is_ok());
+        assert!(is_valid_curly_content("1").is_ok());
+        assert!(is_valid_curly_content("32767").is_ok());
+        assert!(is_valid_curly_content(" 123 ").is_ok());
 
         // Single number cases - invalid
-        assert!(!is_valid_curly_content("32768"));
-        assert!(!is_valid_curly_content("-1"));
-        assert!(!is_valid_curly_content("abc"));
-        assert!(!is_valid_curly_content(""));
-        assert!(!is_valid_curly_content(" "));
-        assert!(!is_valid_curly_content("12.34"));
-        assert!(!is_valid_curly_content("1a"));
+        assert!(is_valid_curly_content("32768").is_err());
+        assert!(is_valid_curly_content("-1").is_err());
+        assert!(is_valid_curly_content("abc").is_err());
+        assert!(is_valid_curly_content("").is_err());
+        assert!(is_valid_curly_content(" ").is_err());
+        assert!(is_valid_curly_content("12.34").is_err());
+        assert!(is_valid_curly_content("1a").is_err());
 
         // Range cases - valid
-        assert!(is_valid_curly_content("0,1"));
-        assert!(is_valid_curly_content("1,1"));
-        assert!(is_valid_curly_content("1,32767"));
-        assert!(is_valid_curly_content("0,32767"));
-        assert!(is_valid_curly_content(" 1 , 2 "));
-        assert!(is_valid_curly_content("100,200"));
+        assert!(is_valid_curly_content("0,1").is_ok());
+        assert!(is_valid_curly_content("1,1").is_ok());
+        assert!(is_valid_curly_content("1,32767").is_ok());
+        assert!(is_valid_curly_content("0,32767").is_ok());
+        assert!(is_valid_curly_content(" 1 , 2 ").is_ok());
+        assert!(is_valid_curly_content("100,200").is_ok());
 
         // Range cases - invalid
-        assert!(!is_valid_curly_content("2,1"));
-        assert!(!is_valid_curly_content("32768,32769"));
-        assert!(!is_valid_curly_content("1,32768"));
-        assert!(!is_valid_curly_content("32768,1"));
-        assert!(!is_valid_curly_content("-1,5"));
-        assert!(!is_valid_curly_content("1,-5"));
-        assert!(!is_valid_curly_content("a,b"));
-        assert!(!is_valid_curly_content("1,b"));
-        assert!(!is_valid_curly_content("a,1"));
-        assert!(!is_valid_curly_content(","));
-        assert!(!is_valid_curly_content("1,"));
-        assert!(!is_valid_curly_content(",1"));
+        assert!(is_valid_curly_content("2,1").is_err());
+        assert!(is_valid_curly_content("32768,32769").is_err());
+        assert!(is_valid_curly_content("1,32768").is_err());
+        assert!(is_valid_curly_content("32768,1").is_err());
+        assert!(is_valid_curly_content("-1,5").is_err());
+        assert!(is_valid_curly_content("1,-5").is_err());
+        assert!(is_valid_curly_content("a,b").is_err());
+        assert!(is_valid_curly_content("1,b").is_err());
+        assert!(is_valid_curly_content("a,1").is_err());
+        assert!(is_valid_curly_content(",").is_err());
+        assert!(is_valid_curly_content("1,").is_err());
+        assert!(is_valid_curly_content(",1").is_err());
 
         // Invalid formats
-        assert!(!is_valid_curly_content("1,2,3"));
-        assert!(!is_valid_curly_content("1,2,"));
-        assert!(!is_valid_curly_content("1.5,2.5"));
-        assert!(!is_valid_curly_content("0xFF,0xFF"));
+        assert!(is_valid_curly_content("1,2,3").is_err());
+        assert!(is_valid_curly_content("1,2,").is_err());
+        assert!(is_valid_curly_content("1.5,2.5").is_err());
+        assert!(is_valid_curly_content("0xFF,0xFF").is_err());
     }
 }

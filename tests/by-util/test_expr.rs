@@ -208,7 +208,7 @@ fn test_checks() {
         .args(&["_", ":", "a\\{32768\\}"])
         .fails()
         .code_is(2)
-        .stderr_only("expr: Invalid content of \\{\\}\n");
+        .stderr_only("expr: Regular expression too big\n");
 
     new_ucmd!()
         .args(&["a*b", ":", "a\\(*\\)b"])

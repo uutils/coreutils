@@ -54,6 +54,9 @@ pub enum ExprError {
 
     #[error("Invalid content of \\{{\\}}")]
     InvalidBraceContent,
+
+    #[error("Regular expression too big")]
+    RegexTooBig,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -76,6 +79,7 @@ enum BraceContent {
     Valid,
     Invalid,
     Unmatched(BraceType),
+    RegexTooBig,
 }
 
 impl UError for ExprError {
