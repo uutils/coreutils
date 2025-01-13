@@ -3471,15 +3471,9 @@ fn test_same_file_force_backup() {
 }
 
 /// Test for copying the contents of a FIFO as opposed to the FIFO object itself.
-#[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[cfg(unix)]
 #[test]
 fn test_copy_contents_fifo() {
-    // TODO this test should work on FreeBSD, but the command was
-    // causing an error:
-    //
-    // cp: 'fifo' -> 'outfile': the source path is neither a regular file nor a symlink to a regular file
-    //
-    // the underlying `std::fs:copy` doesn't support copying fifo on freeBSD
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
 
@@ -6036,4 +6030,20 @@ fn test_cp_preserve_xattr_readonly_source() {
         compare_xattrs(&at.plus(source_file), &at.plus(dest_file)),
         "Extended attributes were not preserved"
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_from_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let target = "target";
+    let test_string = "Hello, World!\n";
+
+    ucmd.arg("/dev/fd/0")
+        .arg(target)
+        .pipe_in(test_string)
+        .succeeds();
+
+    assert!(at.file_exists(target));
+    assert_eq!(at.read(target), test_string);
 }
