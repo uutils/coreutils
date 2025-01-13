@@ -65,7 +65,6 @@ This file documents why some tests are failing:
 * gnu/tests/sort/sort-merge-fdlimit.sh
 * gnu/tests/sort/sort-month.sh
 * gnu/tests/sort/sort.pl
-* gnu/tests/split/line-bytes.sh
 * gnu/tests/stat/stat-nanoseconds.sh
 * gnu/tests/tac/tac-2-nonseekable.sh
 * gnu/tests/tail/end-of-device.sh
