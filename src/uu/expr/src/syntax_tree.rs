@@ -209,7 +209,7 @@ const PRECEDENCE: &[&[(&str, BinOp)]] = &[
 ];
 
 fn check_brace_content_and_matching(s: &str) -> BraceContent {
-    let mut chars = s.chars().peekable();
+    let mut chars = s.chars();
     let mut paren_stack = Vec::new();
     let mut curly_stack = Vec::new();
     let mut in_curly = false;
@@ -273,12 +273,8 @@ fn is_valid_curly_content(content: &str) -> bool {
         1 => {
             let num = parts[0].trim();
             // Check if it's a valid positive number and within reasonable range
-            if let Ok(n) = num.parse::<u32>() {
-                // Add additional validation for specific range if needed
-                n <= 32767 // Restrict to 15-bit positive integers
-            } else {
-                false
-            }
+            // and restrict to 15-bit positive integers
+            num.parse::<u32>().is_ok_and(|n| n <= 32767)
         }
         2 => {
             if let (Ok(first), Ok(second)) = (
@@ -286,7 +282,7 @@ fn is_valid_curly_content(content: &str) -> bool {
                 parts[1].trim().parse::<u32>(),
             ) {
                 // Ensure both numbers are within valid range and first <= second
-                first <= second && first <= 32767 && second <= 32767
+                first <= second && second <= 32767
             } else {
                 false
             }

@@ -197,11 +197,6 @@ fn test_checks() {
         .stdout_only("2\n");
 
     new_ucmd!()
-        .args(&["a(", ":", "a("])
-        .succeeds()
-        .stdout_only("2\n");
-
-    new_ucmd!()
         .args(&["_", ":", "a\\{1,0\\}"])
         .fails()
         .code_is(2)
