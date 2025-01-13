@@ -229,6 +229,10 @@ fn check_brace_content_and_matching(s: &str) -> BraceContent {
                     }
                     Some('}') => {
                         if curly_stack.pop().is_none() {
+                            // Allow unmatched \} for StringOp::Match
+                            if !in_curly {
+                                continue;
+                            }
                             return BraceContent::Unmatched(BraceType::CloseCurly);
                         }
                         // Validate content when closing a curly brace

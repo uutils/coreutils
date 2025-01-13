@@ -169,8 +169,8 @@ fn test_regexp_unmatched() {
     new_ucmd!()
         .args(&["_", ":", "a\\}1"])
         .fails()
-        .code_is(2)
-        .stderr_only("expr: Unmatched \\}\n");
+        .code_is(1)
+        .stdout_is("0\n");
 
     new_ucmd!()
         .args(&["_", ":", "a\\{1a\\}"])
@@ -178,9 +178,11 @@ fn test_regexp_unmatched() {
         .code_is(2)
         .stderr_only("expr: Invalid content of \\{\\}\n");
 
-    new_ucmd!().args(&["a", ":", "\\(b\\)*"]).fails().code_is(1);
-    // TODO bring back
-    // .no_output();
+    new_ucmd!()
+        .args(&["a", ":", "\\(b\\)*"])
+        .fails()
+        .code_is(1)
+        .stdout_is("\n");
 }
 
 #[test]
