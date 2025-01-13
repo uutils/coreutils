@@ -134,51 +134,51 @@ else
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
     "${MAKE}" -j "$("${NPROC}")"
+
+    # Handle generated factor tests
+    t_first=00
+    t_max=36
+    # t_max_release=20
+    # if test "${UU_MAKE_PROFILE}" != "debug"; then
+    #     # Generate the factor tests, so they can be fixed
+    #     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
+    #     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
+    #     seq=$(
+    #         i=${t_first}
+    #         while test "${i}" -le "${t_max_release}"; do
+    #             printf '%02d ' $i
+    #             i=$((i + 1))
+    #         done
+    #     )
+    #     for i in ${seq}; do
+    #         "${MAKE}" "tests/factor/t${i}.sh"
+    #     done
+    #     cat
+    #     sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*.sh
+    #     t_first=$((t_max_release + 1))
+    # fi
+    # strip all (debug) or just the longer (release) factor tests from Makefile
+    seq=$(
+        i=${t_first}
+        while test "${i}" -le "${t_max}"; do
+            printf '%02d ' ${i}
+            i=$((i + 1))
+        done
+       )
+    for i in ${seq}; do
+        echo "strip t${i}.sh from Makefile"
+        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
+    done
+
+    # Remove tests checking for --version & --help
+    # Not really interesting for us and logs are too big
+    sed -i -e '/tests\/help\/help-version.sh/ D' \
+        -e '/tests\/help\/help-version-getopt.sh/ D' \
+        Makefile
     touch gnu-built
 fi
 
-# Handle generated factor tests
-t_first=00
-t_max=36
-# t_max_release=20
-# if test "${UU_MAKE_PROFILE}" != "debug"; then
-#     # Generate the factor tests, so they can be fixed
-#     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
-#     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
-#     seq=$(
-#         i=${t_first}
-#         while test "${i}" -le "${t_max_release}"; do
-#             printf '%02d ' $i
-#             i=$((i + 1))
-#         done
-#     )
-#     for i in ${seq}; do
-#         "${MAKE}" "tests/factor/t${i}.sh"
-#     done
-#     cat
-#     sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*.sh
-#     t_first=$((t_max_release + 1))
-# fi
-# strip all (debug) or just the longer (release) factor tests from Makefile
-seq=$(
-    i=${t_first}
-    while test "${i}" -le "${t_max}"; do
-        printf '%02d ' ${i}
-        i=$((i + 1))
-    done
-)
-for i in ${seq}; do
-    echo "strip t${i}.sh from Makefile"
-    sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
-done
-
 grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
-
-# Remove tests checking for --version & --help
-# Not really interesting for us and logs are too big
-sed -i -e '/tests\/help\/help-version.sh/ D' \
-    -e '/tests\/help\/help-version-getopt.sh/ D' \
-    Makefile
 
 # printf doesn't limit the values used in its arg, so this produced ~2GB of output
 sed -i '/INT_OFLOW/ D' tests/printf/printf.sh
