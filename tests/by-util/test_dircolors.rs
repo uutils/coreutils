@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore overridable
+// spell-checker:ignore overridable colorterm
 use crate::common::util::TestScenario;
 
 use dircolors::{guess_syntax, OutputFmt, StrUtils};
