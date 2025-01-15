@@ -280,7 +280,7 @@ chrono = { version = "0.4.38", default-features = false, features = [
 ] }
 clap = { version = "4.5", features = ["wrap_help", "cargo"] }
 clap_complete = "4.4"
-chrono-tz = "0.8.3"
+chrono-tz = "0.10.0"
 iana-time-zone = "0.1.57"
 clap_mangen = "0.2"
 compare = "0.1.0"
