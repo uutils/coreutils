@@ -15,7 +15,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, parse_glob};
 
 mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -358,7 +358,6 @@ enum ParseState {
     Pass,
 }
 
-use uucore::{format_usage, parse_glob};
 fn parse<T>(user_input: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,
