@@ -27,7 +27,6 @@ This file documents why some tests are failing:
 * gnu/tests/ls/stat-free-symlinks.sh
 * gnu/tests/misc/close-stdout.sh
 * gnu/tests/misc/comm.pl
-* gnu/tests/misc/dircolors.pl
 * gnu/tests/misc/kill.sh - https://github.com/uutils/coreutils/issues/7066 https://github.com/uutils/coreutils/issues/7067
 * gnu/tests/misc/nohup.sh
 * gnu/tests/misc/numfmt.pl
