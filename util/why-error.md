@@ -53,7 +53,6 @@ This file documents why some tests are failing:
 * gnu/tests/rm/one-file-system.sh - https://github.com/uutils/coreutils/issues/7011
 * gnu/tests/rm/rm1.sh
 * gnu/tests/rm/rm2.sh
-* gnu/tests/seq/seq-precision.sh
 * gnu/tests/shred/shred-passes.sh
 * gnu/tests/sort/sort-continue.sh
 * gnu/tests/sort/sort-debug-keys.sh
