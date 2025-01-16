@@ -878,6 +878,16 @@ fn test_parse_float_gnu_coreutils() {
         .stdout_only("0.000000\n0.000001\n0.000002\n0.000003\n");
 }
 
+#[test]
+fn test_parse_out_of_bounds_exponents() {
+    // The value 1e-9223372036854775808 is used in GNU Coreutils and BigDecimal tests to verify
+    // overflows and undefined behavior. Let's test the value too.
+    new_ucmd!()
+        .args(&["1e-9223372036854775808"])
+        .succeeds()
+        .stdout_only("");
+}
+
 #[ignore]
 #[test]
 fn test_parse_valid_hexadecimal_float_format_issues() {

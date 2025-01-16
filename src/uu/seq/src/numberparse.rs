@@ -103,15 +103,18 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     // displayed in decimal notation. For example, "1e-2" will be
     // displayed as "0.01", but "1e2" will be displayed as "100",
     // without a decimal point.
-    let x: BigDecimal = {
-        let parsed_decimal = s
-            .parse::<BigDecimal>()
-            .map_err(|_| ParseNumberError::Float)?;
-        if parsed_decimal == BigDecimal::zero() {
-            BigDecimal::zero()
-        } else {
-            parsed_decimal
-        }
+
+    // In ['BigDecimal'], a positive scale represents a negative power of 10.
+    // This means the exponent value from the number must be inverted. However,
+    // since the |i64::MIN| > |i64::MAX| (i.e. |−2^63| > |2^63−1|) inverting a
+    // valid negative value could result in an overflow. To prevent this, we
+    // limit the minimal value with i64::MIN + 1.
+    let exponent = exponent.max(i64::MIN + 1);
+    let base: BigInt = s[..j].parse().map_err(|_| ParseNumberError::Float)?;
+    let x = if base.is_zero() {
+        BigDecimal::zero()
+    } else {
+        BigDecimal::from_bigint(base, -exponent)
     };
 
     let num_integral_digits = if is_minus_zero_float(s, &x) {
@@ -598,5 +601,19 @@ mod tests {
         assert_eq!(num_fractional_digits("-0.0"), 1);
         assert_eq!(num_fractional_digits("-0e-1"), 1);
         assert_eq!(num_fractional_digits("-0.0e-1"), 2);
+    }
+
+    #[test]
+    fn test_parse_min_exponents() {
+        // Make sure exponents <= i64::MIN do not cause errors
+        assert!("1e-9223372036854775807".parse::<PreciseNumber>().is_ok());
+        assert!("1e-9223372036854775808".parse::<PreciseNumber>().is_ok());
+    }
+
+    #[test]
+    fn test_parse_max_exponents() {
+        // Make sure exponents >= i64::MAX cause errors
+        assert!("1e9223372036854775807".parse::<PreciseNumber>().is_err());
+        assert!("1e9223372036854775808".parse::<PreciseNumber>().is_err());
     }
 }
