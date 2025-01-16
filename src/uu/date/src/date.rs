@@ -288,7 +288,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
                     let format_string = &format_string
                         .replace("%N", "%f")
-                        .replace("%Z", tz_abbreviation);
+                        .replace("%Z", tz_abbreviation.unwrap_or("UTC"));
                     // Refuse to pass this string to chrono as it is crashing in this crate
                     if format_string.contains("%#z") {
                         return Err(USimpleError::new(
