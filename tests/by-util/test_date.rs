@@ -482,3 +482,12 @@ fn test_date_from_stdin() {
              Sat Apr 15 18:30:00 UTC 2023\n",
         );
 }
+
+#[test]
+fn test_date_empty_tz() {
+    new_ucmd!()
+        .env("TZ", "")
+        .arg("+%Z")
+        .succeeds()
+        .stdout_only("UTC\n");
+}

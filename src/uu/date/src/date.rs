@@ -277,7 +277,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     // TODO - Revisit when chrono 0.5 is released. https://github.com/chronotope/chrono/issues/970
                     let tz = match std::env::var("TZ") {
                         // TODO Support other time zones...
-                        Ok(s) if s == "UTC0" => Tz::Etc__UTC,
+                        Ok(s) if s == "UTC0" || s.is_empty() => Tz::Etc__UTC,
                         _ => match get_timezone() {
                             Ok(tz_str) => tz_str.parse().unwrap(),
                             Err(_) => Tz::Etc__UTC,
