@@ -101,9 +101,9 @@ checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
 
 [[package]]
 name = "bigdecimal"
-version = "0.4.3"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9324c8014cd04590682b34f1e9448d38f0674d0f7b2dc553331016ef0e4e9ebc"
+checksum = "7f31f3af01c5c65a07985c804d3366560e6fa7883d640a122819b14ec327482c"
 dependencies = [
  "autocfg",
  "libm",
@@ -228,6 +228,28 @@ dependencies = [
  "iana-time-zone",
  "num-traits",
  "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "chrono-tz"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d59ae0466b83e838b81a54256c39d5d7c20b9d7daa10510a242d9b75abd5936e"
+dependencies = [
+ "chrono",
+ "chrono-tz-build",
+ "phf",
+]
+
+[[package]]
+name = "chrono-tz-build"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "433e39f13c9a060046954e0592a8d0a4bcb1040125cbf91cb8ee58964cfb350f"
+dependencies = [
+ "parse-zoneinfo",
+ "phf",
+ "phf_codegen",
 ]
 
 [[package]]
@@ -723,6 +745,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "parse-zoneinfo"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f2a05b18d44e2957b88f96ba460715e295bc1d7510468a2f3d3b44535d26c24"
+dependencies = [
+ "regex",
+]
+
+[[package]]
 name = "parse_datetime"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -731,6 +762,44 @@ dependencies = [
  "chrono",
  "nom",
  "regex",
+]
+
+[[package]]
+name = "phf"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
+dependencies = [
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_codegen"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aef8048c789fa5e851558d709946d6d79a8ff88c0440c587967f8e94bfb1216a"
+dependencies = [
+ "phf_generator",
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_generator"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
+dependencies = [
+ "phf_shared",
+ "rand",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
+dependencies = [
+ "siphasher",
 ]
 
 [[package]]
@@ -937,6 +1006,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1de1d4f81173b03af4c0cbed3c898f6bff5b870e4a7f5d6f4057d62a7a4b686e"
 
 [[package]]
+name = "siphasher"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
+
+[[package]]
 name = "sm3"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1064,7 +1139,7 @@ checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
 
 [[package]]
 name = "uu_cksum"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "clap",
  "hex",
@@ -1074,7 +1149,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cut"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "bstr",
  "clap",
@@ -1084,10 +1159,12 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "chrono",
+ "chrono-tz",
  "clap",
+ "iana-time-zone",
  "libc",
  "parse_datetime",
  "uucore",
@@ -1096,7 +1173,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "clap",
  "uucore",
@@ -1104,7 +1181,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "clap",
  "nix 0.29.0",
@@ -1114,7 +1191,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "clap",
  "num-bigint",
@@ -1125,7 +1202,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "clap",
  "uucore",
@@ -1133,7 +1210,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -1144,7 +1221,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "binary-heap-plus",
  "clap",
@@ -1164,7 +1241,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "clap",
  "memchr",
@@ -1173,7 +1250,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "clap",
  "libc",
@@ -1182,7 +1259,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "clap",
  "nom",
@@ -1191,7 +1268,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "bytecount",
  "clap",
@@ -1204,7 +1281,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "blake2b_simd",
  "blake3",
@@ -1264,7 +1341,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.0.28"
+version = "0.0.29"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1273,7 +1350,7 @@ dependencies = [
 
 [[package]]
 name = "uuhelp_parser"
-version = "0.0.28"
+version = "0.0.29"
 
 [[package]]
 name = "version_check"
