@@ -1011,7 +1011,6 @@ fn copy_file(
     }
 }
 
-// For GNU compatibility, this function does not report any errors that occur within it.
 #[allow(unused_variables)]
 fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) {
     // Copy file permissions
@@ -1048,7 +1047,9 @@ fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) {
 
     // Copy xattrs.
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    fsxattr::copy_xattrs(src, dest).ok();
+    if let Err(err) = fsxattr::copy_xattrs(src, dest) {
+        show_error!("preserving permissions for {}: {}", dest.quote(), err);
+    }
 }
 
 #[cfg(test)]
