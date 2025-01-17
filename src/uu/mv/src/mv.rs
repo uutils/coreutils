@@ -27,8 +27,8 @@ use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{
-    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file, disk_usage,
-    path_ends_with_terminator,canonicalize,MissingHandling,ResolveMode
+    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file, canonicalize,
+    disk_usage, path_ends_with_terminator, MissingHandling, ResolveMode,
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
