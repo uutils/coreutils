@@ -6,10 +6,12 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
+use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, TimeZone, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
+use chrono_tz::{OffsetName, Tz};
 use clap::{crate_version, Arg, ArgAction, Command};
+use iana_time_zone::get_timezone;
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
@@ -272,8 +274,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for date in dates {
             match date {
                 Ok(date) => {
+                    // TODO - Revisit when chrono 0.5 is released. https://github.com/chronotope/chrono/issues/970
+                    let tz = match std::env::var("TZ") {
+                        // TODO Support other time zones...
+                        Ok(s) if s == "UTC0" || s.is_empty() => Tz::Etc__UTC,
+                        _ => match get_timezone() {
+                            Ok(tz_str) => tz_str.parse().unwrap(),
+                            Err(_) => Tz::Etc__UTC,
+                        },
+                    };
+                    let offset = tz.offset_from_utc_date(&Utc::now().date_naive());
+                    let tz_abbreviation = offset.abbreviation();
                     // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
-                    let format_string = &format_string.replace("%N", "%f");
+                    let format_string = &format_string
+                        .replace("%N", "%f")
+                        .replace("%Z", tz_abbreviation.unwrap_or("UTC"));
                     // Refuse to pass this string to chrono as it is crashing in this crate
                     if format_string.contains("%#z") {
                         return Err(USimpleError::new(
@@ -403,7 +418,7 @@ fn make_format_string(settings: &Settings) -> &str {
             Rfc3339Format::Ns => "%F %T.%f%:z",
         },
         Format::Custom(ref fmt) => fmt,
-        Format::Default => "%c",
+        Format::Default => "%a %b %e %X %Z %Y",
     }
 }
 

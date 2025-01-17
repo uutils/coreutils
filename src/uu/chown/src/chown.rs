@@ -97,25 +97,6 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::dereference::DEREFERENCE)
-                .long(options::dereference::DEREFERENCE)
-                .help(
-                    "affect the referent of each symbolic link (this is the default), \
-                    rather than the symbolic link itself",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::dereference::NO_DEREFERENCE)
-                .short('h')
-                .long(options::dereference::NO_DEREFERENCE)
-                .help(
-                    "affect symbolic links instead of any referenced file \
-                    (useful only on systems that can change the ownership of a symlink)",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
             Arg::new(options::FROM)
                 .long(options::FROM)
                 .help(
@@ -166,33 +147,14 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::traverse::TRAVERSE)
-                .short(options::traverse::TRAVERSE.chars().next().unwrap())
-                .help("if a command line argument is a symbolic link to a directory, traverse it")
-                .overrides_with_all([options::traverse::EVERY, options::traverse::NO_TRAVERSE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::EVERY)
-                .short(options::traverse::EVERY.chars().next().unwrap())
-                .help("traverse every symbolic link to a directory encountered")
-                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::NO_TRAVERSE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::NO_TRAVERSE)
-                .short(options::traverse::NO_TRAVERSE.chars().next().unwrap())
-                .help("do not traverse any symbolic links (default)")
-                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::EVERY])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
             Arg::new(options::verbosity::VERBOSE)
                 .long(options::verbosity::VERBOSE)
                 .short('v')
                 .help("output a diagnostic for every file processed")
                 .action(ArgAction::SetTrue),
         )
+        // Add common arguments with chgrp, chown & chmod
+        .args(uucore::perms::common_args())
 }
 
 /// Parses the user string to extract the UID.

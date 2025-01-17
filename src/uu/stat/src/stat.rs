@@ -9,7 +9,9 @@ use uucore::error::{UResult, USimpleError};
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
 use uucore::fs::display_permissions;
-use uucore::fsext::{pretty_filetype, pretty_fstype, read_fs_list, statfs, BirthTime, FsMeta};
+use uucore::fsext::{
+    pretty_filetype, pretty_fstype, read_fs_list, statfs, BirthTime, FsMeta, StatFs,
+};
 use uucore::libc::mode_t;
 use uucore::{
     entries, format_usage, help_about, help_section, help_usage, show_error, show_warning,
@@ -19,10 +21,12 @@ use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
-use std::fs;
+use std::fs::{FileType, Metadata};
+use std::io::Write;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
+use std::{env, fs};
 
 const ABOUT: &str = help_about!("stat.md");
 const USAGE: &str = help_usage!("stat.md");
@@ -90,16 +94,48 @@ pub enum OutputType {
     Unsigned(u64),
     UnsignedHex(u64),
     UnsignedOct(u32),
+    Float(f64),
     Unknown,
+}
+
+#[derive(Default)]
+enum QuotingStyle {
+    Locale,
+    Shell,
+    #[default]
+    ShellEscapeAlways,
+    Quote,
+}
+
+impl std::str::FromStr for QuotingStyle {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "locale" => Ok(QuotingStyle::Locale),
+            "shell" => Ok(QuotingStyle::Shell),
+            "shell-escape-always" => Ok(QuotingStyle::ShellEscapeAlways),
+            // The others aren't exposed to the user
+            _ => Err(format!("Invalid quoting style: {}", s)),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum Precision {
+    NotSpecified,
+    NoNumber,
+    Number(usize),
 }
 
 #[derive(Debug, PartialEq, Eq)]
 enum Token {
     Char(char),
+    Byte(u8),
     Directive {
         flag: Flags,
         width: usize,
-        precision: Option<usize>,
+        precision: Precision,
         format: char,
     },
 }
@@ -210,10 +246,10 @@ struct Stater {
 /// * `output` - A reference to the OutputType enum containing the value to be printed.
 /// * `flags` - A Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed output.
-/// * `precision` - An Option containing the precision value.
+/// * `precision` - How many digits of precision, if any.
 ///
 /// This function delegates the printing process to more specialized functions depending on the output type.
-fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<usize>) {
+fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precision) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -243,7 +279,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<u
     // A sign (+ or -) should always be placed before a number produced by a signed conversion.
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
-    let padding_char = determine_padding_char(&flags, &precision);
+    let padding_char = determine_padding_char(&flags);
 
     match output {
         OutputType::Str(s) => print_str(s, &flags, width, precision),
@@ -255,6 +291,9 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<u
         OutputType::UnsignedHex(num) => {
             print_unsigned_hex(*num, &flags, width, precision, padding_char);
         }
+        OutputType::Float(num) => {
+            print_float(*num, &flags, width, precision, padding_char);
+        }
         OutputType::Unknown => print!("?"),
     }
 }
@@ -264,13 +303,12 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<u
 /// # Arguments
 ///
 /// * `flags` - A reference to the Flags struct containing formatting flags.
-/// * `precision` - An Option containing the precision value.
 ///
 /// # Returns
 ///
 /// * Padding - An instance of the Padding enum representing the padding character.
-fn determine_padding_char(flags: &Flags, precision: &Option<usize>) -> Padding {
-    if flags.zero && !flags.left && precision.is_none() {
+fn determine_padding_char(flags: &Flags) -> Padding {
+    if flags.zero && !flags.left {
         Padding::Zero
     } else {
         Padding::Space
@@ -284,13 +322,100 @@ fn determine_padding_char(flags: &Flags, precision: &Option<usize>) -> Padding {
 /// * `s` - The string to be printed.
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed string.
-/// * `precision` - An Option containing the precision value.
-fn print_str(s: &str, flags: &Flags, width: usize, precision: Option<usize>) {
+/// * `precision` - How many digits of precision, if any.
+fn print_str(s: &str, flags: &Flags, width: usize, precision: Precision) {
     let s = match precision {
-        Some(p) if p < s.len() => &s[..p],
+        Precision::Number(p) if p < s.len() => &s[..p],
         _ => s,
     };
     pad_and_print(s, flags.left, width, Padding::Space);
+}
+
+fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
+    match quoting_style {
+        QuotingStyle::Locale | QuotingStyle::Shell => {
+            let escaped = file_name.replace('\'', r"\'");
+            format!("'{}'", escaped)
+        }
+        QuotingStyle::ShellEscapeAlways => format!("\"{}\"", file_name),
+        QuotingStyle::Quote => file_name.to_string(),
+    }
+}
+
+fn get_quoted_file_name(
+    display_name: &str,
+    file: &OsString,
+    file_type: &FileType,
+    from_user: bool,
+) -> Result<String, i32> {
+    let quoting_style = env::var("QUOTING_STYLE")
+        .ok()
+        .and_then(|style| style.parse().ok())
+        .unwrap_or_default();
+
+    if file_type.is_symlink() {
+        let quoted_display_name = quote_file_name(display_name, &quoting_style);
+        match fs::read_link(file) {
+            Ok(dst) => {
+                let quoted_dst = quote_file_name(&dst.to_string_lossy(), &quoting_style);
+                Ok(format!("{quoted_display_name} -> {quoted_dst}"))
+            }
+            Err(e) => {
+                show_error!("{e}");
+                Err(1)
+            }
+        }
+    } else {
+        let style = if from_user {
+            quoting_style
+        } else {
+            QuotingStyle::Quote
+        };
+        Ok(quote_file_name(display_name, &style))
+    }
+}
+
+fn process_token_filesystem(t: &Token, meta: StatFs, display_name: &str) {
+    match *t {
+        Token::Byte(byte) => write_raw_byte(byte),
+        Token::Char(c) => print!("{c}"),
+        Token::Directive {
+            flag,
+            width,
+            precision,
+            format,
+        } => {
+            let output = match format {
+                // free blocks available to non-superuser
+                'a' => OutputType::Unsigned(meta.avail_blocks()),
+                // total data blocks in file system
+                'b' => OutputType::Unsigned(meta.total_blocks()),
+                // total file nodes in file system
+                'c' => OutputType::Unsigned(meta.total_file_nodes()),
+                // free file nodes in file system
+                'd' => OutputType::Unsigned(meta.free_file_nodes()),
+                // free blocks in file system
+                'f' => OutputType::Unsigned(meta.free_blocks()),
+                // file system ID in hex
+                'i' => OutputType::UnsignedHex(meta.fsid()),
+                // maximum length of filenames
+                'l' => OutputType::Unsigned(meta.namelen()),
+                // file name
+                'n' => OutputType::Str(display_name.to_string()),
+                // block size (for faster transfers)
+                's' => OutputType::Unsigned(meta.io_size()),
+                // fundamental block size (for block counts)
+                'S' => OutputType::Integer(meta.block_size()),
+                // file system type in hex
+                't' => OutputType::UnsignedHex(meta.fs_type() as u64),
+                // file system type in human readable form
+                'T' => OutputType::Str(pretty_fstype(meta.fs_type()).into()),
+                _ => OutputType::Unknown,
+            };
+
+            print_it(&output, flag, width, precision);
+        }
+    }
 }
 
 /// Prints an integer value based on the provided flags, width, and precision.
@@ -300,13 +425,13 @@ fn print_str(s: &str, flags: &Flags, width: usize, precision: Option<usize>) {
 /// * `num` - The integer value to be printed.
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed integer.
-/// * `precision` - An Option containing the precision value.
+/// * `precision` - How many digits of precision, if any.
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_integer(
     num: i64,
     flags: &Flags,
     width: usize,
-    precision: Option<usize>,
+    precision: Precision,
     padding_char: Padding,
 ) {
     let num = num.to_string();
@@ -322,11 +447,64 @@ fn print_integer(
     } else {
         ""
     };
-    let extended = format!(
-        "{prefix}{arg:0>precision$}",
-        precision = precision.unwrap_or(0)
-    );
+    let extended = match precision {
+        Precision::NotSpecified => format!("{prefix}{arg}"),
+        Precision::NoNumber => format!("{prefix}{arg}"),
+        Precision::Number(p) => format!("{prefix}{arg:0>precision$}", precision = p),
+    };
     pad_and_print(&extended, flags.left, width, padding_char);
+}
+
+/// Truncate a float to the given number of digits after the decimal point.
+fn precision_trunc(num: f64, precision: Precision) -> String {
+    // GNU `stat` doesn't round, it just seems to truncate to the
+    // given precision:
+    //
+    //     $ stat -c "%.5Y" /dev/pts/ptmx
+    //     1736344012.76399
+    //     $ stat -c "%.4Y" /dev/pts/ptmx
+    //     1736344012.7639
+    //     $ stat -c "%.3Y" /dev/pts/ptmx
+    //     1736344012.763
+    //
+    // Contrast this with `printf`, which seems to round the
+    // numbers:
+    //
+    //     $ printf "%.5f\n" 1736344012.76399
+    //     1736344012.76399
+    //     $ printf "%.4f\n" 1736344012.76399
+    //     1736344012.7640
+    //     $ printf "%.3f\n" 1736344012.76399
+    //     1736344012.764
+    //
+    let num_str = num.to_string();
+    let n = num_str.len();
+    match (num_str.find('.'), precision) {
+        (None, Precision::NotSpecified) => num_str,
+        (None, Precision::NoNumber) => num_str,
+        (None, Precision::Number(0)) => num_str,
+        (None, Precision::Number(p)) => format!("{num_str}.{zeros}", zeros = "0".repeat(p)),
+        (Some(i), Precision::NotSpecified) => num_str[..i].to_string(),
+        (Some(_), Precision::NoNumber) => num_str,
+        (Some(i), Precision::Number(0)) => num_str[..i].to_string(),
+        (Some(i), Precision::Number(p)) if p < n - i => num_str[..i + 1 + p].to_string(),
+        (Some(i), Precision::Number(p)) => {
+            format!("{num_str}{zeros}", zeros = "0".repeat(p - (n - i - 1)))
+        }
+    }
+}
+
+fn print_float(num: f64, flags: &Flags, width: usize, precision: Precision, padding_char: Padding) {
+    let prefix = if flags.sign {
+        "+"
+    } else if flags.space {
+        " "
+    } else {
+        ""
+    };
+    let num_str = precision_trunc(num, precision);
+    let extended = format!("{prefix}{num_str}");
+    pad_and_print(&extended, flags.left, width, padding_char)
 }
 
 /// Prints an unsigned integer value based on the provided flags, width, and precision.
@@ -336,13 +514,13 @@ fn print_integer(
 /// * `num` - The unsigned integer value to be printed.
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed unsigned integer.
-/// * `precision` - An Option containing the precision value.
+/// * `precision` - How many digits of precision, if any.
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned(
     num: u64,
     flags: &Flags,
     width: usize,
-    precision: Option<usize>,
+    precision: Precision,
     padding_char: Padding,
 ) {
     let num = num.to_string();
@@ -351,7 +529,11 @@ fn print_unsigned(
     } else {
         Cow::Borrowed(num.as_str())
     };
-    let s = format!("{s:0>precision$}", precision = precision.unwrap_or(0));
+    let s = match precision {
+        Precision::NotSpecified => s,
+        Precision::NoNumber => s,
+        Precision::Number(p) => format!("{s:0>precision$}", precision = p).into(),
+    };
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
@@ -362,20 +544,21 @@ fn print_unsigned(
 /// * `num` - The unsigned octal integer value to be printed.
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed unsigned octal integer.
-/// * `precision` - An Option containing the precision value.
+/// * `precision` - How many digits of precision, if any.
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_oct(
     num: u32,
     flags: &Flags,
     width: usize,
-    precision: Option<usize>,
+    precision: Precision,
     padding_char: Padding,
 ) {
     let prefix = if flags.alter { "0" } else { "" };
-    let s = format!(
-        "{prefix}{num:0>precision$o}",
-        precision = precision.unwrap_or(0)
-    );
+    let s = match precision {
+        Precision::NotSpecified => format!("{prefix}{num:o}"),
+        Precision::NoNumber => format!("{prefix}{num:o}"),
+        Precision::Number(p) => format!("{prefix}{num:0>precision$o}", precision = p),
+    };
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
@@ -386,24 +569,48 @@ fn print_unsigned_oct(
 /// * `num` - The unsigned hexadecimal integer value to be printed.
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed unsigned hexadecimal integer.
-/// * `precision` - An Option containing the precision value.
+/// * `precision` - How many digits of precision, if any.
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_hex(
     num: u64,
     flags: &Flags,
     width: usize,
-    precision: Option<usize>,
+    precision: Precision,
     padding_char: Padding,
 ) {
     let prefix = if flags.alter { "0x" } else { "" };
-    let s = format!(
-        "{prefix}{num:0>precision$x}",
-        precision = precision.unwrap_or(0)
-    );
+    let s = match precision {
+        Precision::NotSpecified => format!("{prefix}{num:x}"),
+        Precision::NoNumber => format!("{prefix}{num:x}"),
+        Precision::Number(p) => format!("{prefix}{num:0>precision$x}", precision = p),
+    };
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
+fn write_raw_byte(byte: u8) {
+    std::io::stdout().write_all(&[byte]).unwrap();
+}
+
 impl Stater {
+    fn process_flags(chars: &[char], i: &mut usize, bound: usize, flag: &mut Flags) {
+        while *i < bound {
+            match chars[*i] {
+                '#' => flag.alter = true,
+                '0' => flag.zero = true,
+                '-' => flag.left = true,
+                ' ' => flag.space = true,
+                // This is not documented but the behavior seems to be
+                // the same as a space. For example `stat -c "%I5s" f`
+                // prints "    0".
+                'I' => flag.space = true,
+                '+' => flag.sign = true,
+                '\'' => flag.group = true,
+                _ => break,
+            }
+            *i += 1;
+        }
+    }
+
     fn handle_percent_case(
         chars: &[char],
         i: &mut usize,
@@ -423,28 +630,24 @@ impl Stater {
 
         let mut flag = Flags::default();
 
-        while *i < bound {
-            match chars[*i] {
-                '#' => flag.alter = true,
-                '0' => flag.zero = true,
-                '-' => flag.left = true,
-                ' ' => flag.space = true,
-                '+' => flag.sign = true,
-                '\'' => flag.group = true,
-                'I' => unimplemented!(),
-                _ => break,
-            }
-            *i += 1;
-        }
-        check_bound(format_str, bound, old, *i)?;
+        Self::process_flags(chars, i, bound, &mut flag);
 
         let mut width = 0;
-        let mut precision = None;
+        let mut precision = Precision::NotSpecified;
         let mut j = *i;
 
         if let Some((field_width, offset)) = format_str[j..].scan_num::<usize>() {
             width = field_width;
             j += offset;
+
+            // Reject directives like `%<NUMBER>` by checking if width has been parsed.
+            if j >= bound || chars[j] == '%' {
+                let invalid_directive: String = chars[old..=j.min(bound - 1)].iter().collect();
+                return Err(USimpleError::new(
+                    1,
+                    format!("{}: invalid directive", invalid_directive.quote()),
+                ));
+            }
         }
         check_bound(format_str, bound, old, j)?;
 
@@ -455,19 +658,37 @@ impl Stater {
             match format_str[j..].scan_num::<i32>() {
                 Some((value, offset)) => {
                     if value >= 0 {
-                        precision = Some(value as usize);
+                        precision = Precision::Number(value as usize);
                     }
                     j += offset;
                 }
-                None => precision = Some(0),
+                None => precision = Precision::NoNumber,
             }
             check_bound(format_str, bound, old, j)?;
         }
 
         *i = j;
+
+        // Check for multi-character specifiers (e.g., `%Hd`, `%Lr`)
+        if *i + 1 < bound {
+            if let Some(&next_char) = chars.get(*i + 1) {
+                if (chars[*i] == 'H' || chars[*i] == 'L') && (next_char == 'd' || next_char == 'r')
+                {
+                    let specifier = format!("{}{}", chars[*i], next_char);
+                    *i += 1;
+                    return Ok(Token::Directive {
+                        flag,
+                        width,
+                        precision,
+                        format: specifier.chars().next().unwrap(),
+                    });
+                }
+            }
+        }
+
         Ok(Token::Directive {
-            width,
             flag,
+            width,
             precision,
             format: chars[*i],
         })
@@ -485,33 +706,49 @@ impl Stater {
             return Token::Char('\\');
         }
         match chars[*i] {
-            'x' if *i + 1 < bound => {
-                if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
-                    *i += offset;
-                    Token::Char(c)
+            'a' => Token::Byte(0x07),   // BEL
+            'b' => Token::Byte(0x08),   // Backspace
+            'f' => Token::Byte(0x0C),   // Form feed
+            'n' => Token::Byte(0x0A),   // Line feed
+            'r' => Token::Byte(0x0D),   // Carriage return
+            't' => Token::Byte(0x09),   // Horizontal tab
+            '\\' => Token::Byte(b'\\'), // Backslash
+            '\'' => Token::Byte(b'\''), // Single quote
+            '"' => Token::Byte(b'"'),   // Double quote
+            '0'..='7' => {
+                // Parse octal escape sequence (up to 3 digits)
+                let mut value = 0u8;
+                let mut count = 0;
+                while *i < bound && count < 3 {
+                    if let Some(digit) = chars[*i].to_digit(8) {
+                        value = value * 8 + digit as u8;
+                        *i += 1;
+                        count += 1;
+                    } else {
+                        break;
+                    }
+                }
+                *i -= 1; // Adjust index to account for the outer loop increment
+                Token::Byte(value)
+            }
+            'x' => {
+                // Parse hexadecimal escape sequence
+                if *i + 1 < bound {
+                    if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
+                        *i += offset;
+                        Token::Byte(c as u8)
+                    } else {
+                        show_warning!("unrecognized escape '\\x'");
+                        Token::Byte(b'x')
+                    }
                 } else {
-                    show_warning!("unrecognized escape '\\x'");
-                    Token::Char('x')
+                    show_warning!("incomplete hex escape '\\x'");
+                    Token::Byte(b'x')
                 }
             }
-            '0'..='7' => {
-                let (c, offset) = format_str[*i..].scan_char(8).unwrap();
-                *i += offset - 1;
-                Token::Char(c)
-            }
-            '"' => Token::Char('"'),
-            '\\' => Token::Char('\\'),
-            'a' => Token::Char('\x07'),
-            'b' => Token::Char('\x08'),
-            'e' => Token::Char('\x1B'),
-            'f' => Token::Char('\x0C'),
-            'n' => Token::Char('\n'),
-            'r' => Token::Char('\r'),
-            't' => Token::Char('\t'),
-            'v' => Token::Char('\x0B'),
-            c => {
-                show_warning!("unrecognized escape '\\{}'", c);
-                Token::Char(c)
+            other => {
+                show_warning!("unrecognized escape '\\{}'", other);
+                Token::Byte(other as u8)
             }
         }
     }
@@ -634,7 +871,145 @@ impl Stater {
         ret
     }
 
-    #[allow(clippy::cognitive_complexity)]
+    fn process_token_files(
+        &self,
+        t: &Token,
+        meta: &Metadata,
+        display_name: &str,
+        file: &OsString,
+        file_type: &FileType,
+        from_user: bool,
+    ) -> Result<(), i32> {
+        match *t {
+            Token::Byte(byte) => write_raw_byte(byte),
+            Token::Char(c) => print!("{c}"),
+
+            Token::Directive {
+                flag,
+                width,
+                precision,
+                format,
+            } => {
+                let output = match format {
+                    // access rights in octal
+                    'a' => OutputType::UnsignedOct(0o7777 & meta.mode()),
+                    // access rights in human readable form
+                    'A' => OutputType::Str(display_permissions(meta, true)),
+                    // number of blocks allocated (see %B)
+                    'b' => OutputType::Unsigned(meta.blocks()),
+
+                    // the size in bytes of each block reported by %b
+                    // FIXME: blocksize differs on various platform
+                    // See coreutils/gnulib/lib/stat-size.h ST_NBLOCKSIZE // spell-checker:disable-line
+                    'B' => OutputType::Unsigned(512),
+
+                    // device number in decimal
+                    'd' => OutputType::Unsigned(meta.dev()),
+                    // device number in hex
+                    'D' => OutputType::UnsignedHex(meta.dev()),
+                    // raw mode in hex
+                    'f' => OutputType::UnsignedHex(meta.mode() as u64),
+                    // file type
+                    'F' => OutputType::Str(
+                        pretty_filetype(meta.mode() as mode_t, meta.len()).to_owned(),
+                    ),
+                    // group ID of owner
+                    'g' => OutputType::Unsigned(meta.gid() as u64),
+                    // group name of owner
+                    'G' => {
+                        let group_name =
+                            entries::gid2grp(meta.gid()).unwrap_or_else(|_| "UNKNOWN".to_owned());
+                        OutputType::Str(group_name)
+                    }
+                    // number of hard links
+                    'h' => OutputType::Unsigned(meta.nlink()),
+                    // inode number
+                    'i' => OutputType::Unsigned(meta.ino()),
+                    // mount point
+                    'm' => OutputType::Str(self.find_mount_point(file).unwrap()),
+                    // file name
+                    'n' => OutputType::Str(display_name.to_string()),
+                    // quoted file name with dereference if symbolic link
+                    'N' => {
+                        let file_name =
+                            get_quoted_file_name(display_name, file, file_type, from_user)?;
+                        OutputType::Str(file_name)
+                    }
+                    // optimal I/O transfer size hint
+                    'o' => OutputType::Unsigned(meta.blksize()),
+                    // total size, in bytes
+                    's' => OutputType::Integer(meta.len() as i64),
+                    // major device type in hex, for character/block device special
+                    // files
+                    't' => OutputType::UnsignedHex(meta.rdev() >> 8),
+                    // minor device type in hex, for character/block device special
+                    // files
+                    'T' => OutputType::UnsignedHex(meta.rdev() & 0xff),
+                    // user ID of owner
+                    'u' => OutputType::Unsigned(meta.uid() as u64),
+                    // user name of owner
+                    'U' => {
+                        let user_name =
+                            entries::uid2usr(meta.uid()).unwrap_or_else(|_| "UNKNOWN".to_owned());
+                        OutputType::Str(user_name)
+                    }
+
+                    // time of file birth, human-readable; - if unknown
+                    'w' => OutputType::Str(
+                        meta.birth()
+                            .map(|(sec, nsec)| pretty_time(sec as i64, nsec as i64))
+                            .unwrap_or(String::from("-")),
+                    ),
+
+                    // time of file birth, seconds since Epoch; 0 if unknown
+                    'W' => OutputType::Unsigned(meta.birth().unwrap_or_default().0),
+
+                    // time of last access, human-readable
+                    'x' => OutputType::Str(pretty_time(meta.atime(), meta.atime_nsec())),
+                    // time of last access, seconds since Epoch
+                    'X' => OutputType::Integer(meta.atime()),
+                    // time of last data modification, human-readable
+                    'y' => OutputType::Str(pretty_time(meta.mtime(), meta.mtime_nsec())),
+                    // time of last data modification, seconds since Epoch
+                    'Y' => {
+                        let sec = meta.mtime();
+                        let nsec = meta.mtime_nsec();
+                        let tm =
+                            chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
+                        let tm: DateTime<Local> = tm.into();
+                        match tm.timestamp_nanos_opt() {
+                            None => {
+                                let micros = tm.timestamp_micros();
+                                let secs = micros as f64 / 1_000_000.0;
+                                OutputType::Float(secs)
+                            }
+                            Some(ns) => {
+                                let secs = ns as f64 / 1_000_000_000.0;
+                                OutputType::Float(secs)
+                            }
+                        }
+                    }
+                    // time of last status change, human-readable
+                    'z' => OutputType::Str(pretty_time(meta.ctime(), meta.ctime_nsec())),
+                    // time of last status change, seconds since Epoch
+                    'Z' => OutputType::Integer(meta.ctime()),
+                    'R' => {
+                        let major = meta.rdev() >> 8;
+                        let minor = meta.rdev() & 0xff;
+                        OutputType::Str(format!("{},{}", major, minor))
+                    }
+                    'r' => OutputType::Unsigned(meta.rdev()),
+                    'H' => OutputType::Unsigned(meta.rdev() >> 8), // Major in decimal
+                    'L' => OutputType::Unsigned(meta.rdev() & 0xff), // Minor in decimal
+
+                    _ => OutputType::Unknown,
+                };
+                print_it(&output, flag, width, precision);
+            }
+        }
+        Ok(())
+    }
+
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> i32 {
         let display_name = file.to_string_lossy();
         let file = if cfg!(unix) && display_name == "-" {
@@ -659,46 +1034,9 @@ impl Stater {
                 Ok(meta) => {
                     let tokens = &self.default_tokens;
 
+                    // Usage
                     for t in tokens {
-                        match *t {
-                            Token::Char(c) => print!("{c}"),
-                            Token::Directive {
-                                flag,
-                                width,
-                                precision,
-                                format,
-                            } => {
-                                let output = match format {
-                                    // free blocks available to non-superuser
-                                    'a' => OutputType::Unsigned(meta.avail_blocks()),
-                                    // total data blocks in file system
-                                    'b' => OutputType::Unsigned(meta.total_blocks()),
-                                    // total file nodes in file system
-                                    'c' => OutputType::Unsigned(meta.total_file_nodes()),
-                                    // free file nodes in file system
-                                    'd' => OutputType::Unsigned(meta.free_file_nodes()),
-                                    // free blocks in file system
-                                    'f' => OutputType::Unsigned(meta.free_blocks()),
-                                    // file system ID in hex
-                                    'i' => OutputType::UnsignedHex(meta.fsid()),
-                                    // maximum length of filenames
-                                    'l' => OutputType::Unsigned(meta.namelen()),
-                                    // file name
-                                    'n' => OutputType::Str(display_name.to_string()),
-                                    // block size (for faster transfers)
-                                    's' => OutputType::Unsigned(meta.io_size()),
-                                    // fundamental block size (for block counts)
-                                    'S' => OutputType::Integer(meta.block_size()),
-                                    // file system type in hex
-                                    't' => OutputType::UnsignedHex(meta.fs_type() as u64),
-                                    // file system type in human readable form
-                                    'T' => OutputType::Str(pretty_fstype(meta.fs_type()).into()),
-                                    _ => OutputType::Unknown,
-                                };
-
-                                print_it(&output, flag, width, precision);
-                            }
-                        }
+                        process_token_filesystem(t, meta, &display_name);
                     }
                 }
                 Err(e) => {
@@ -728,125 +1066,15 @@ impl Stater {
                     };
 
                     for t in tokens {
-                        match *t {
-                            Token::Char(c) => print!("{c}"),
-                            Token::Directive {
-                                flag,
-                                width,
-                                precision,
-                                format,
-                            } => {
-                                let output = match format {
-                                    // access rights in octal
-                                    'a' => OutputType::UnsignedOct(0o7777 & meta.mode()),
-                                    // access rights in human readable form
-                                    'A' => OutputType::Str(display_permissions(&meta, true)),
-                                    // number of blocks allocated (see %B)
-                                    'b' => OutputType::Unsigned(meta.blocks()),
-
-                                    // the size in bytes of each block reported by %b
-                                    // FIXME: blocksize differs on various platform
-                                    // See coreutils/gnulib/lib/stat-size.h ST_NBLOCKSIZE // spell-checker:disable-line
-                                    'B' => OutputType::Unsigned(512),
-
-                                    // device number in decimal
-                                    'd' => OutputType::Unsigned(meta.dev()),
-                                    // device number in hex
-                                    'D' => OutputType::UnsignedHex(meta.dev()),
-                                    // raw mode in hex
-                                    'f' => OutputType::UnsignedHex(meta.mode() as u64),
-                                    // file type
-                                    'F' => OutputType::Str(
-                                        pretty_filetype(meta.mode() as mode_t, meta.len())
-                                            .to_owned(),
-                                    ),
-                                    // group ID of owner
-                                    'g' => OutputType::Unsigned(meta.gid() as u64),
-                                    // group name of owner
-                                    'G' => {
-                                        let group_name = entries::gid2grp(meta.gid())
-                                            .unwrap_or_else(|_| "UNKNOWN".to_owned());
-                                        OutputType::Str(group_name)
-                                    }
-                                    // number of hard links
-                                    'h' => OutputType::Unsigned(meta.nlink()),
-                                    // inode number
-                                    'i' => OutputType::Unsigned(meta.ino()),
-                                    // mount point
-                                    'm' => OutputType::Str(self.find_mount_point(&file).unwrap()),
-                                    // file name
-                                    'n' => OutputType::Str(display_name.to_string()),
-                                    // quoted file name with dereference if symbolic link
-                                    'N' => {
-                                        let file_name = if file_type.is_symlink() {
-                                            let dst = match fs::read_link(&file) {
-                                                Ok(path) => path,
-                                                Err(e) => {
-                                                    println!("{e}");
-                                                    return 1;
-                                                }
-                                            };
-                                            format!("{} -> {}", display_name.quote(), dst.quote())
-                                        } else {
-                                            display_name.to_string()
-                                        };
-                                        OutputType::Str(file_name)
-                                    }
-                                    // optimal I/O transfer size hint
-                                    'o' => OutputType::Unsigned(meta.blksize()),
-                                    // total size, in bytes
-                                    's' => OutputType::Integer(meta.len() as i64),
-                                    // major device type in hex, for character/block device special
-                                    // files
-                                    't' => OutputType::UnsignedHex(meta.rdev() >> 8),
-                                    // minor device type in hex, for character/block device special
-                                    // files
-                                    'T' => OutputType::UnsignedHex(meta.rdev() & 0xff),
-                                    // user ID of owner
-                                    'u' => OutputType::Unsigned(meta.uid() as u64),
-                                    // user name of owner
-                                    'U' => {
-                                        let user_name = entries::uid2usr(meta.uid())
-                                            .unwrap_or_else(|_| "UNKNOWN".to_owned());
-                                        OutputType::Str(user_name)
-                                    }
-
-                                    // time of file birth, human-readable; - if unknown
-                                    'w' => OutputType::Str(
-                                        meta.birth()
-                                            .map(|(sec, nsec)| pretty_time(sec as i64, nsec as i64))
-                                            .unwrap_or(String::from("-")),
-                                    ),
-
-                                    // time of file birth, seconds since Epoch; 0 if unknown
-                                    'W' => OutputType::Unsigned(meta.birth().unwrap_or_default().0),
-
-                                    // time of last access, human-readable
-                                    'x' => OutputType::Str(pretty_time(
-                                        meta.atime(),
-                                        meta.atime_nsec(),
-                                    )),
-                                    // time of last access, seconds since Epoch
-                                    'X' => OutputType::Integer(meta.atime()),
-                                    // time of last data modification, human-readable
-                                    'y' => OutputType::Str(pretty_time(
-                                        meta.mtime(),
-                                        meta.mtime_nsec(),
-                                    )),
-                                    // time of last data modification, seconds since Epoch
-                                    'Y' => OutputType::Integer(meta.mtime()),
-                                    // time of last status change, human-readable
-                                    'z' => OutputType::Str(pretty_time(
-                                        meta.ctime(),
-                                        meta.ctime_nsec(),
-                                    )),
-                                    // time of last status change, seconds since Epoch
-                                    'Z' => OutputType::Integer(meta.ctime()),
-
-                                    _ => OutputType::Unknown,
-                                };
-                                print_it(&output, flag, width, precision);
-                            }
+                        if let Err(code) = self.process_token_files(
+                            t,
+                            &meta,
+                            &display_name,
+                            &file,
+                            &file_type,
+                            self.from_user,
+                        ) {
+                            return code;
                         }
                     }
                 }
@@ -969,7 +1197,7 @@ fn pretty_time(sec: i64, nsec: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{group_num, Flags, ScanUtil, Stater, Token};
+    use super::{group_num, precision_trunc, Flags, Precision, ScanUtil, Stater, Token};
 
     #[test]
     fn test_scanners() {
@@ -1017,7 +1245,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 10,
-                precision: Some(2),
+                precision: Precision::Number(2),
                 format: 'a',
             },
             Token::Char('c'),
@@ -1028,7 +1256,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 5,
-                precision: Some(0),
+                precision: Precision::NoNumber,
                 format: 'w',
             },
             Token::Char('\n'),
@@ -1038,7 +1266,7 @@ mod tests {
 
     #[test]
     fn printf_format() {
-        let s = r#"%-# 15a\t\r\"\\\a\b\e\f\v%+020.-23w\x12\167\132\112\n"#;
+        let s = r#"%-# 15a\t\r\"\\\a\b\x1B\f\x0B%+020.-23w\x12\167\132\112\n"#;
         let expected = vec![
             Token::Directive {
                 flag: Flags {
@@ -1048,18 +1276,18 @@ mod tests {
                     ..Default::default()
                 },
                 width: 15,
-                precision: None,
+                precision: Precision::NotSpecified,
                 format: 'a',
             },
-            Token::Char('\t'),
-            Token::Char('\r'),
-            Token::Char('"'),
-            Token::Char('\\'),
-            Token::Char('\x07'),
-            Token::Char('\x08'),
-            Token::Char('\x1B'),
-            Token::Char('\x0C'),
-            Token::Char('\x0B'),
+            Token::Byte(b'\t'),
+            Token::Byte(b'\r'),
+            Token::Byte(b'"'),
+            Token::Byte(b'\\'),
+            Token::Byte(b'\x07'),
+            Token::Byte(b'\x08'),
+            Token::Byte(b'\x1B'),
+            Token::Byte(b'\x0C'),
+            Token::Byte(b'\x0B'),
             Token::Directive {
                 flag: Flags {
                     sign: true,
@@ -1067,15 +1295,27 @@ mod tests {
                     ..Default::default()
                 },
                 width: 20,
-                precision: None,
+                precision: Precision::NotSpecified,
                 format: 'w',
             },
-            Token::Char('\x12'),
-            Token::Char('w'),
-            Token::Char('Z'),
-            Token::Char('J'),
-            Token::Char('\n'),
+            Token::Byte(b'\x12'),
+            Token::Byte(b'w'),
+            Token::Byte(b'Z'),
+            Token::Byte(b'J'),
+            Token::Byte(b'\n'),
         ];
         assert_eq!(&expected, &Stater::generate_tokens(s, true).unwrap());
+    }
+
+    #[test]
+    fn test_precision_trunc() {
+        assert_eq!(precision_trunc(123.456, Precision::NotSpecified), "123");
+        assert_eq!(precision_trunc(123.456, Precision::NoNumber), "123.456");
+        assert_eq!(precision_trunc(123.456, Precision::Number(0)), "123");
+        assert_eq!(precision_trunc(123.456, Precision::Number(1)), "123.4");
+        assert_eq!(precision_trunc(123.456, Precision::Number(2)), "123.45");
+        assert_eq!(precision_trunc(123.456, Precision::Number(3)), "123.456");
+        assert_eq!(precision_trunc(123.456, Precision::Number(4)), "123.4560");
+        assert_eq!(precision_trunc(123.456, Precision::Number(5)), "123.45600");
     }
 }

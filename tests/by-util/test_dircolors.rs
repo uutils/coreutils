@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore overridable
+// spell-checker:ignore overridable colorterm
 use crate::common::util::TestScenario;
 
 use dircolors::{guess_syntax, OutputFmt, StrUtils};
@@ -252,4 +252,15 @@ fn test_repeated() {
     for arg in ["-b", "-c", "--print-database", "--print-ls-colors"] {
         new_ucmd!().arg(arg).arg(arg).succeeds().no_stderr();
     }
+}
+
+#[test]
+fn test_colorterm_empty_with_wildcard() {
+    new_ucmd!()
+        .env("COLORTERM", "")
+        .pipe_in("COLORTERM ?*\nowt 40;33\n")
+        .args(&["-b", "-"])
+        .succeeds()
+        .stdout_is("LS_COLORS='';\nexport LS_COLORS\n")
+        .no_stderr();
 }

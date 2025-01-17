@@ -1567,8 +1567,7 @@ fn exec(
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
     if settings.merge {
-        let file_merger = merge::merge(files, settings, output.as_output_name(), tmp_dir)?;
-        file_merger.write_all(settings, output)
+        merge::merge(files, settings, output, tmp_dir)
     } else if settings.check {
         if files.len() > 1 {
             Err(UUsageError::new(2, "only one file allowed with -c"))

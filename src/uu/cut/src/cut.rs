@@ -9,7 +9,7 @@ use bstr::io::BufReadExt;
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, IsTerminal, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
@@ -131,8 +131,9 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
 
         if delim_search.peek().is_none() {
             if !only_delimited {
+                // Always write the entire line, even if it doesn't end with `newline_char`
                 out.write_all(line)?;
-                if line[line.len() - 1] != newline_char {
+                if line.is_empty() || line[line.len() - 1] != newline_char {
                     out.write_all(&[newline_char])?;
                 }
             }
@@ -214,8 +215,9 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
 
         if delim_search.peek().is_none() {
             if !only_delimited {
+                // Always write the entire line, even if it doesn't end with `newline_char`
                 out.write_all(line)?;
-                if line[line.len() - 1] != newline_char {
+                if line.is_empty() || line[line.len() - 1] != newline_char {
                     out.write_all(&[newline_char])?;
                 }
             }
@@ -265,10 +267,46 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
     Ok(())
 }
 
+// The input delimiter is identical to `newline_char`
+fn cut_fields_newline_char_delim<R: Read>(
+    reader: R,
+    ranges: &[Range],
+    newline_char: u8,
+    out_delim: &[u8],
+) -> UResult<()> {
+    let buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+
+    let segments: Vec<_> = buf_in.split(newline_char).filter_map(|x| x.ok()).collect();
+    let mut print_delim = false;
+
+    for &Range { low, high } in ranges {
+        for i in low..=high {
+            // "- 1" is necessary because fields start from 1 whereas a Vec starts from 0
+            if let Some(segment) = segments.get(i - 1) {
+                if print_delim {
+                    out.write_all(out_delim)?;
+                } else {
+                    print_delim = true;
+                }
+                out.write_all(segment.as_slice())?;
+            } else {
+                break;
+            }
+        }
+    }
+    out.write_all(&[newline_char])?;
+    Ok(())
+}
+
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
     let newline_char = opts.line_ending.into();
     let field_opts = opts.field_opts.as_ref().unwrap(); // it is safe to unwrap() here - field_opts will always be Some() for cut_fields() call
     match field_opts.delimiter {
+        Delimiter::Slice(delim) if delim == [newline_char] => {
+            let out_delim = opts.out_delimiter.unwrap_or(delim);
+            cut_fields_newline_char_delim(reader, ranges, newline_char, out_delim)
+        }
         Delimiter::Slice(delim) => {
             let matcher = ExactMatcher::new(delim);
             match opts.out_delimiter {
@@ -348,10 +386,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
 
 // Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
 // Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
-fn get_delimiters(
-    matches: &ArgMatches,
-    delimiter_is_equal: bool,
-) -> UResult<(Delimiter, Option<&[u8]>)> {
+fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
     let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
     let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
     let delim = match delim_opt {
@@ -362,12 +397,7 @@ fn get_delimiters(
             ));
         }
         Some(os_string) => {
-            // GNU's `cut` supports `-d=` to set the delimiter to `=`.
-            // Clap parsing is limited in this situation, see:
-            // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-            if delimiter_is_equal {
-                Delimiter::Slice(b"=")
-            } else if os_string == "''" || os_string.is_empty() {
+            if os_string == "''" || os_string.is_empty() {
                 // treat `''` as empty delimiter
                 Delimiter::Slice(b"\0")
             } else {
@@ -421,15 +451,26 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect::<Vec<OsString>>();
+    // GNU's `cut` supports `-d=` to set the delimiter to `=`.
+    // Clap parsing is limited in this situation, see:
+    // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+    let args: Vec<OsString> = args
+        .into_iter()
+        .map(|x| {
+            if x == "-d=" {
+                "--delimiter==".into()
+            } else {
+                x
+            }
+        })
+        .collect();
 
-    let delimiter_is_equal = args.contains(&OsString::from("-d=")); // special case
     let matches = uu_app().try_get_matches_from(args)?;
 
     let complement = matches.get_flag(options::COMPLEMENT);
     let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
 
-    let (delimiter, out_delimiter) = get_delimiters(&matches, delimiter_is_equal)?;
+    let (delimiter, out_delimiter) = get_delimiters(&matches)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
 
     // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,

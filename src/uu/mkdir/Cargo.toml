@@ -1,6 +1,6 @@
 [package]
 name = "uu_mkdir"
-version = "0.0.28"
+version = "0.0.29"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mkdir ~ (uutils) create DIRECTORY"

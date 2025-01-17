@@ -6,6 +6,8 @@
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "buf-copy")]
+pub mod buf_copy;
 #[cfg(feature = "checksum")]
 pub mod checksum;
 #[cfg(feature = "colors")]
@@ -43,7 +45,7 @@ pub mod mode;
 pub mod entries;
 #[cfg(all(unix, feature = "perms"))]
 pub mod perms;
-#[cfg(all(unix, feature = "pipes"))]
+#[cfg(all(unix, any(feature = "pipes", feature = "buf-copy")))]
 pub mod pipes;
 #[cfg(all(target_os = "linux", feature = "proc-info"))]
 pub mod proc_info;
@@ -52,7 +54,7 @@ pub mod process;
 #[cfg(all(target_os = "linux", feature = "tty"))]
 pub mod tty;
 
-#[cfg(all(unix, not(target_os = "macos"), feature = "fsxattr"))]
+#[cfg(all(unix, feature = "fsxattr"))]
 pub mod fsxattr;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;

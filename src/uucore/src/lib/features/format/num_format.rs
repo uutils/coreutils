@@ -404,8 +404,10 @@ fn format_float_shortest(
         };
     }
 
-    let mut exponent = f.log10().floor() as i32;
-    if f != 0.0 && exponent <= -4 || exponent > precision as i32 {
+    // Retrieve the exponent. Note that log10 is undefined for negative numbers.
+    // To avoid NaN or zero (due to i32 conversion), use the absolute value of f.
+    let mut exponent = f.abs().log10().floor() as i32;
+    if f != 0.0 && exponent < -4 || exponent > precision as i32 {
         // Scientific-ish notation (with a few differences)
         let mut normalized = f / 10.0_f64.powi(exponent);
 
@@ -664,5 +666,35 @@ mod test {
         assert_eq!(&f("1000."), "1000");
         assert_eq!(&f("1000.02030"), "1000.0203");
         assert_eq!(&f("1000.00000"), "1000");
+    }
+
+    #[test]
+    fn shortest_float_abs_value_less_than_one() {
+        use super::format_float_shortest;
+        let f = |x| format_float_shortest(x, 6, Case::Lowercase, ForceDecimal::No);
+        assert_eq!(f(0.1171875), "0.117188");
+        assert_eq!(f(0.01171875), "0.0117188");
+        assert_eq!(f(0.001171875), "0.00117187");
+        assert_eq!(f(0.0001171875), "0.000117187");
+        assert_eq!(f(0.001171875001), "0.00117188");
+        assert_eq!(f(-0.1171875), "-0.117188");
+        assert_eq!(f(-0.01171875), "-0.0117188");
+        assert_eq!(f(-0.001171875), "-0.00117187");
+        assert_eq!(f(-0.0001171875), "-0.000117187");
+        assert_eq!(f(-0.001171875001), "-0.00117188");
+    }
+
+    #[test]
+    fn shortest_float_switch_decimal_scientific() {
+        use super::format_float_shortest;
+        let f = |x| format_float_shortest(x, 6, Case::Lowercase, ForceDecimal::No);
+        assert_eq!(f(0.001), "0.001");
+        assert_eq!(f(0.0001), "0.0001");
+        assert_eq!(f(0.00001), "1e-05");
+        assert_eq!(f(0.000001), "1e-06");
+        assert_eq!(f(-0.001), "-0.001");
+        assert_eq!(f(-0.0001), "-0.0001");
+        assert_eq!(f(-0.00001), "-1e-05");
+        assert_eq!(f(-0.000001), "-1e-06");
     }
 }

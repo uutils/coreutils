@@ -2,7 +2,7 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo
 
 set -e
 
@@ -122,6 +122,8 @@ if test -f gnu-built; then
     echo "'rm -f $(pwd)/gnu-built' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
+    # Disable useless checks
+    sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     ./bootstrap --skip-po
     ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references
     #Add timeout to to protect against hangs
@@ -132,55 +134,51 @@ else
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
     "${MAKE}" -j "$("${NPROC}")"
+
+    # Handle generated factor tests
+    t_first=00
+    t_max=36
+    # t_max_release=20
+    # if test "${UU_MAKE_PROFILE}" != "debug"; then
+    #     # Generate the factor tests, so they can be fixed
+    #     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
+    #     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
+    #     seq=$(
+    #         i=${t_first}
+    #         while test "${i}" -le "${t_max_release}"; do
+    #             printf '%02d ' $i
+    #             i=$((i + 1))
+    #         done
+    #     )
+    #     for i in ${seq}; do
+    #         "${MAKE}" "tests/factor/t${i}.sh"
+    #     done
+    #     cat
+    #     sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*.sh
+    #     t_first=$((t_max_release + 1))
+    # fi
+    # strip all (debug) or just the longer (release) factor tests from Makefile
+    seq=$(
+        i=${t_first}
+        while test "${i}" -le "${t_max}"; do
+            printf '%02d ' ${i}
+            i=$((i + 1))
+        done
+       )
+    for i in ${seq}; do
+        echo "strip t${i}.sh from Makefile"
+        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
+    done
+
+    # Remove tests checking for --version & --help
+    # Not really interesting for us and logs are too big
+    sed -i -e '/tests\/help\/help-version.sh/ D' \
+        -e '/tests\/help\/help-version-getopt.sh/ D' \
+        Makefile
     touch gnu-built
 fi
 
-# Handle generated factor tests
-t_first=00
-t_max=36
-# t_max_release=20
-# if test "${UU_MAKE_PROFILE}" != "debug"; then
-#     # Generate the factor tests, so they can be fixed
-#     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
-#     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
-#     seq=$(
-#         i=${t_first}
-#         while test "${i}" -le "${t_max_release}"; do
-#             printf '%02d ' $i
-#             i=$((i + 1))
-#         done
-#     )
-#     for i in ${seq}; do
-#         "${MAKE}" "tests/factor/t${i}.sh"
-#     done
-#     cat
-#     sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*.sh
-#     t_first=$((t_max_release + 1))
-# fi
-# strip all (debug) or just the longer (release) factor tests from Makefile
-seq=$(
-    i=${t_first}
-    while test "${i}" -le "${t_max}"; do
-        printf '%02d ' ${i}
-        i=$((i + 1))
-    done
-)
-for i in ${seq}; do
-    echo "strip t${i}.sh from Makefile"
-    sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
-done
-
 grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
-
-# Remove tests checking for --version & --help
-# Not really interesting for us and logs are too big
-sed -i -e '/tests\/help\/help-version.sh/ D' \
-    -e '/tests\/help\/help-version-getopt.sh/ D' \
-    Makefile
-
-# logs are clotted because of this test
-sed -i -e '/tests\/seq\/seq-precision.sh/ D' \
-    Makefile
 
 # printf doesn't limit the values used in its arg, so this produced ~2GB of output
 sed -i '/INT_OFLOW/ D' tests/printf/printf.sh
@@ -204,6 +202,9 @@ sed -i "s|cp: target directory 'symlink': Permission denied|cp: 'symlink' is not
 # Our message is a bit better
 sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is not a directory|" tests/mv/trailing-slash.sh
 
+# Our message is better
+sed -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/stat/stat-printf.pl
+
 sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
 sed -i 's|paste |/usr/bin/paste |' tests/od/od-endian.sh
 sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh
@@ -223,8 +224,6 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r sed -Ei
 eval cat "$path_UUTILS/util/gnu-patches/*.patch" | patch -N -r - -d "$path_GNU" -p 1 -i - || true
 
 sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-eacces.sh
-
-sed -i -e "s|rm: cannot remove 'a/b'|rm: cannot remove 'a'|g" tests/rm/fail-2eperm.sh
 
 sed -i -e "s|rm: cannot remove 'a/b/file'|rm: cannot remove 'a'|g" tests/rm/cycle.sh
 
@@ -264,7 +263,7 @@ sed -i "s/\(\(b2[ml]_[69]\|b32h_[56]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"
 sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/basenc/basenc.pl
 
 # basenc: swap out error message for unexpected arg
-sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: Found argument '--foobar' which wasn't expected, or isn't valid in this context\n\n  If you tried to supply '--foobar' as a value rather than a flag, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information try '--help'\n\"}]/" tests/basenc/basenc.pl
+sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: unexpected argument '--foobar' found\n\n  tip: to pass '--foobar' as a value, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information, try '--help'.\n\"}]/" tests/basenc/basenc.pl
 sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/basenc/basenc.pl
 
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
@@ -301,7 +300,7 @@ sed -i -e "s/ginstall: creating directory/install: creating directory/g" tests/i
 "${SED}" -i -Ez "s/\n([^\n#]*pad-3\.2[^\n]*)\n([^\n]*)\n([^\n]*)/\n# uutils\/numfmt supports padding = LONG_MIN\n#\1\n#\2\n#\3/" tests/misc/numfmt.pl
 
 # Update the GNU error message to match the one generated by clap
-sed -i -e "s/\$prog: multiple field specifications/error: The argument '--field <FIELDS>' was provided more than once, but cannot be used multiple times\n\nUsage: numfmt [OPTION]... [NUMBER]...\n\n\nFor more information try '--help'/g" tests/misc/numfmt.pl
+sed -i -e "s/\$prog: multiple field specifications/error: the argument '--field <FIELDS>' cannot be used multiple times\n\nUsage: numfmt [OPTION]... [NUMBER]...\n\nFor more information, try '--help'./g" tests/misc/numfmt.pl
 sed -i -e "s/Try 'mv --help' for more information/For more information, try '--help'/g" -e "s/mv: missing file operand/error: the following required arguments were not provided:\n  <files>...\n\nUsage: mv [OPTION]... [-T] SOURCE DEST\n       mv [OPTION]... SOURCE... DIRECTORY\n       mv [OPTION]... -t DIRECTORY SOURCE...\n/g" -e "s/mv: missing destination file operand after 'no-file'/error: The argument '<files>...' requires at least 2 values, but only 1 was provided\n\nUsage: mv [OPTION]... [-T] SOURCE DEST\n       mv [OPTION]... SOURCE... DIRECTORY\n       mv [OPTION]... -t DIRECTORY SOURCE...\n/g" tests/mv/diag.sh
 
 # our error message is better
@@ -311,7 +310,7 @@ sed -i -e "s|mv: cannot overwrite 'a/t': Directory not empty|mv: cannot move 'b/
 # disable these test cases
 sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/printf/printf-cov.pl
 
-sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du: option requires an argument/error: a value is required for '--threshold <SIZE>' but none was supplied/" -e "/Try 'du --help' for more information./d" tests/du/threshold.sh
+sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du: option requires an argument/error: a value is required for '--threshold <SIZE>' but none was supplied/" -e "s/Try 'du --help' for more information./\nFor more information, try '--help'./" tests/du/threshold.sh
 
 # Remove the extra output check
 sed -i -e "s|Try '\$prog --help' for more information.\\\n||" tests/du/files0-from.pl

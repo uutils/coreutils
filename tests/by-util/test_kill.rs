@@ -296,3 +296,36 @@ fn test_kill_with_signal_exit_new_form() {
         .arg(format!("{}", target.pid()))
         .succeeds();
 }
+
+#[test]
+fn test_kill_with_signal_number_hidden_compatibility_option() {
+    let mut target = Target::new();
+    new_ucmd!()
+        .arg("-n")
+        .arg("9")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+    assert_eq!(target.wait_for_signal(), Some(9));
+}
+
+#[test]
+fn test_kill_with_signal_and_list() {
+    let target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("EXIT")
+        .arg(format!("{}", target.pid()))
+        .arg("-l")
+        .fails();
+}
+
+#[test]
+fn test_kill_with_signal_and_table() {
+    let target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("EXIT")
+        .arg(format!("{}", target.pid()))
+        .arg("-t")
+        .fails();
+}

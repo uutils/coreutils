@@ -8,6 +8,7 @@ use std::fmt::Display;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
+use uucore::libc;
 
 /// Errors that can happen while executing chroot.
 #[derive(Debug)]
@@ -21,14 +22,25 @@ pub enum ChrootError {
     /// Failed to find the specified command.
     CommandNotFound(String, Error),
 
+    GroupsParsingFailed,
+
+    InvalidGroup(String),
+
+    InvalidGroupList(String),
+
     /// The given user and group specification was invalid.
     InvalidUserspec(String),
 
     /// The new root directory was not given.
     MissingNewRoot,
 
+    NoGroupSpecified(libc::uid_t),
+
+    /// Failed to find the specified user.
+    NoSuchUser,
+
     /// Failed to find the specified group.
-    NoSuchGroup(String),
+    NoSuchGroup,
 
     /// The given directory does not exist.
     NoSuchDirectory(String),
@@ -65,13 +77,18 @@ impl Display for ChrootError {
             Self::CommandFailed(s, e) | Self::CommandNotFound(s, e) => {
                 write!(f, "failed to run command {}: {}", s.to_string().quote(), e,)
             }
+            Self::GroupsParsingFailed => write!(f, "--groups parsing failed"),
+            Self::InvalidGroup(s) => write!(f, "invalid group: {}", s.quote()),
+            Self::InvalidGroupList(s) => write!(f, "invalid group list: {}", s.quote()),
             Self::InvalidUserspec(s) => write!(f, "invalid userspec: {}", s.quote(),),
             Self::MissingNewRoot => write!(
                 f,
                 "Missing operand: NEWROOT\nTry '{} --help' for more information.",
                 uucore::execution_phrase(),
             ),
-            Self::NoSuchGroup(s) => write!(f, "no such group: {}", s.maybe_quote(),),
+            Self::NoGroupSpecified(uid) => write!(f, "no group specified for unknown uid: {}", uid),
+            Self::NoSuchUser => write!(f, "invalid user"),
+            Self::NoSuchGroup => write!(f, "invalid group"),
             Self::NoSuchDirectory(s) => write!(
                 f,
                 "cannot change root directory to {}: no such directory",

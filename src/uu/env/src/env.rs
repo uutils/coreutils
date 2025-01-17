@@ -370,6 +370,19 @@ impl EnvAppData {
                     self.had_string_argument = true;
                 }
                 _ => {
+                    let arg_str = arg.to_string_lossy();
+
+                    // Short unset option (-u) is not allowed to contain '='
+                    if arg_str.contains('=')
+                        && arg_str.starts_with("-u")
+                        && !arg_str.starts_with("--")
+                    {
+                        return Err(USimpleError::new(
+                            125,
+                            format!("cannot unset '{}': Invalid argument", &arg_str[2..]),
+                        ));
+                    }
+
                     all_args.push(arg.clone());
                 }
             }
@@ -526,16 +539,19 @@ impl EnvAppData {
                 }
                 return Err(exit.code().unwrap().into());
             }
-            Err(ref err)
-                if (err.kind() == io::ErrorKind::NotFound)
-                    || (err.kind() == io::ErrorKind::InvalidInput) =>
-            {
-                return Err(self.make_error_no_such_file_or_dir(prog.deref()));
-            }
-            Err(e) => {
-                uucore::show_error!("unknown error: {:?}", e);
-                return Err(126.into());
-            }
+            Err(ref err) => match err.kind() {
+                io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => {
+                    return Err(self.make_error_no_such_file_or_dir(prog.deref()));
+                }
+                io::ErrorKind::PermissionDenied => {
+                    uucore::show_error!("{}: Permission denied", prog.quote());
+                    return Err(126.into());
+                }
+                _ => {
+                    uucore::show_error!("unknown error: {:?}", err);
+                    return Err(126.into());
+                }
+            },
             Ok(_) => (),
         }
         Ok(())

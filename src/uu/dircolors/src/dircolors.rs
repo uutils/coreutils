@@ -3,12 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid colorterm
+// spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid colorterm disp
 
 use std::borrow::Borrow;
 use std::env;
 use std::fs::File;
-//use std::io::IsTerminal;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
@@ -16,7 +15,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, parse_glob};
 
 mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -359,9 +358,6 @@ enum ParseState {
     Pass,
 }
 
-use uucore::{format_usage, parse_glob};
-
-#[allow(clippy::cognitive_complexity)]
 fn parse<T>(user_input: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,
@@ -372,10 +368,12 @@ where
 
     result.push_str(&prefix);
 
+    // Get environment variables once at the start
     let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
-    let term = term.as_str();
+    let colorterm = env::var("COLORTERM").unwrap_or_default();
 
     let mut state = ParseState::Global;
+    let mut saw_colorterm_match = false;
 
     for (num, line) in user_input.into_iter().enumerate() {
         let num = num + 1;
@@ -395,52 +393,38 @@ where
                 num
             ));
         }
-        let lower = key.to_lowercase();
-        if lower == "term" || lower == "colorterm" {
-            if term.fnmatch(val) {
-                state = ParseState::Matched;
-            } else if state != ParseState::Matched {
-                state = ParseState::Pass;
-            }
-        } else {
-            if state == ParseState::Matched {
-                // prevent subsequent mismatched TERM from
-                // cancelling the input
-                state = ParseState::Continue;
-            }
-            if state != ParseState::Pass {
-                let search_key = lower.as_str();
 
-                if key.starts_with('.') {
-                    if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{val}m*{key}\t{val}\x1b[0m\n").as_str());
-                    } else {
-                        result.push_str(format!("*{key}={val}:").as_str());
-                    }
-                } else if key.starts_with('*') {
-                    if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{val}m{key}\t{val}\x1b[0m\n").as_str());
-                    } else {
-                        result.push_str(format!("{key}={val}:").as_str());
-                    }
-                } else if lower == "options" || lower == "color" || lower == "eightbit" {
-                    // Slackware only. Ignore
-                } else if let Some((_, s)) = FILE_ATTRIBUTE_CODES
-                    .iter()
-                    .find(|&&(key, _)| key == search_key)
-                {
-                    if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{val}m{s}\t{val}\x1b[0m\n").as_str());
-                    } else {
-                        result.push_str(format!("{s}={val}:").as_str());
-                    }
+        let lower = key.to_lowercase();
+        match lower.as_str() {
+            "term" => {
+                if term.fnmatch(val) {
+                    state = ParseState::Matched;
+                } else if state == ParseState::Global {
+                    state = ParseState::Pass;
+                }
+            }
+            "colorterm" => {
+                // For COLORTERM ?*, only match if COLORTERM is non-empty
+                let matches = if val == "?*" {
+                    !colorterm.is_empty()
                 } else {
-                    return Err(format!(
-                        "{}:{}: unrecognized keyword {}",
-                        fp.maybe_quote(),
-                        num,
-                        key
-                    ));
+                    colorterm.fnmatch(val)
+                };
+                if matches {
+                    state = ParseState::Matched;
+                    saw_colorterm_match = true;
+                } else if !saw_colorterm_match && state == ParseState::Global {
+                    state = ParseState::Pass;
+                }
+            }
+            _ => {
+                if state == ParseState::Matched {
+                    // prevent subsequent mismatched TERM from
+                    // cancelling the input
+                    state = ParseState::Continue;
+                }
+                if state != ParseState::Pass {
+                    append_entry(&mut result, fmt, key, &lower, val)?;
                 }
             }
         }
@@ -453,6 +437,46 @@ where
     result.push_str(&suffix);
 
     Ok(result)
+}
+
+fn append_entry(
+    result: &mut String,
+    fmt: &OutputFmt,
+    key: &str,
+    lower: &str,
+    val: &str,
+) -> Result<(), String> {
+    if key.starts_with(['.', '*']) {
+        let entry = if key.starts_with('.') {
+            format!("*{key}")
+        } else {
+            key.to_string()
+        };
+        let disp = if *fmt == OutputFmt::Display {
+            format!("\x1b[{val}m{entry}\t{val}\x1b[0m\n")
+        } else {
+            format!("{entry}={val}:")
+        };
+        result.push_str(&disp);
+        return Ok(());
+    }
+
+    match lower {
+        "options" | "color" | "eightbit" => Ok(()), // Slackware only, ignore
+        _ => {
+            if let Some((_, s)) = FILE_ATTRIBUTE_CODES.iter().find(|&&(key, _)| key == lower) {
+                let disp = if *fmt == OutputFmt::Display {
+                    format!("\x1b[{val}m{s}\t{val}\x1b[0m\n")
+                } else {
+                    format!("{s}={val}:")
+                };
+                result.push_str(&disp);
+                Ok(())
+            } else {
+                Err(format!("unrecognized keyword {key}"))
+            }
+        }
+    }
 }
 
 /// Escape single quotes because they are not allowed between single quotes in shell code, and code

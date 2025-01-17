@@ -4,8 +4,8 @@
 // file that was distributed with this source code.
 
 use clap::builder::ValueParser;
-use clap::parser::ValuesRef;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
 use std::iter::Peekable;
@@ -208,13 +208,6 @@ fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlo
         }
 
         if let Some(next) = iter.next() {
-            // For extending lifetime
-            // Unnecessary when using Rust >= 1.79.0
-            // https://github.com/rust-lang/rust/pull/121346
-            // TODO: when we have a MSRV >= 1.79.0, delete these "hold" bindings
-            let hold_one_byte_outside_of_match: [u8; 1_usize];
-            let hold_two_bytes_outside_of_match: [u8; 2_usize];
-
             let unescaped: &[u8] = match *next {
                 b'\\' => br"\",
                 b'a' => b"\x07",
@@ -230,12 +223,7 @@ fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlo
                     if let Some(parsed_hexadecimal_number) =
                         parse_backslash_number(&mut iter, BackslashNumberType::Hexadecimal)
                     {
-                        // TODO: remove when we have a MSRV >= 1.79.0
-                        hold_one_byte_outside_of_match = [parsed_hexadecimal_number];
-
-                        // TODO: when we have a MSRV >= 1.79.0, return reference to a temporary array:
-                        // &[parsed_hexadecimal_number]
-                        &hold_one_byte_outside_of_match
+                        &[parsed_hexadecimal_number]
                     } else {
                         // "\x" with any non-hexadecimal digit after means "\x" is treated literally
                         br"\x"
@@ -246,12 +234,7 @@ fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlo
                         &mut iter,
                         BackslashNumberType::OctalStartingWithZero,
                     ) {
-                        // TODO: remove when we have a MSRV >= 1.79.0
-                        hold_one_byte_outside_of_match = [parsed_octal_number];
-
-                        // TODO: when we have a MSRV >= 1.79.0, return reference to a temporary array:
-                        // &[parsed_octal_number]
-                        &hold_one_byte_outside_of_match
+                        &[parsed_octal_number]
                     } else {
                         // "\0" with any non-octal digit after it means "\0" is treated as ASCII '\0' (NUL), 0x00
                         b"\0"
@@ -259,9 +242,7 @@ fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlo
                 }
                 other_byte => {
                     // Backslash and the following byte are treated literally
-                    hold_two_bytes_outside_of_match = [b'\\', other_byte];
-
-                    &hold_two_bytes_outside_of_match
+                    &[b'\\', other_byte]
                 }
             };
 
@@ -274,35 +255,54 @@ fn print_escaped(input: &[u8], output: &mut StdoutLock) -> io::Result<ControlFlo
     Ok(ControlFlow::Continue(()))
 }
 
+// A workaround because clap interprets the first '--' as a marker that a value
+// follows. In order to use '--' as a value, we have to inject an additional '--'
+fn handle_double_hyphens(args: impl uucore::Args) -> impl uucore::Args {
+    let mut result = Vec::new();
+    let mut is_first_double_hyphen = true;
+
+    for arg in args {
+        if arg == "--" && is_first_double_hyphen {
+            result.push(OsString::from("--"));
+            is_first_double_hyphen = false;
+        }
+        result.push(arg);
+    }
+
+    result.into_iter()
+}
+
+fn collect_args(matches: &ArgMatches) -> Vec<OsString> {
+    matches
+        .get_many::<OsString>(options::STRING)
+        .map_or_else(Vec::new, |values| values.cloned().collect())
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let is_posixly_correct = env::var("POSIXLY_CORRECT").is_ok();
 
-    // TODO
-    // "If the POSIXLY_CORRECT environment variable is set, then when echo’s first argument is not -n it outputs option-like arguments instead of treating them as options."
-    // https://www.gnu.org/software/coreutils/manual/html_node/echo-invocation.html
+    let (args, trailing_newline, escaped) = if is_posixly_correct {
+        let mut args_iter = args.skip(1).peekable();
 
-    let trailing_newline = !matches.get_flag(options::NO_NEWLINE);
-    let escaped = matches.get_flag(options::ENABLE_BACKSLASH_ESCAPE);
+        if args_iter.peek() == Some(&OsString::from("-n")) {
+            let matches = uu_app().get_matches_from(handle_double_hyphens(args_iter));
+            let args = collect_args(&matches);
+            (args, false, true)
+        } else {
+            let args: Vec<_> = args_iter.collect();
+            (args, true, true)
+        }
+    } else {
+        let matches = uu_app().get_matches_from(handle_double_hyphens(args.into_iter()));
+        let trailing_newline = !matches.get_flag(options::NO_NEWLINE);
+        let escaped = matches.get_flag(options::ENABLE_BACKSLASH_ESCAPE);
+        let args = collect_args(&matches);
+        (args, trailing_newline, escaped)
+    };
 
     let mut stdout_lock = io::stdout().lock();
-
-    match matches.get_many::<OsString>(options::STRING) {
-        Some(arguments_after_options) => {
-            execute(
-                &mut stdout_lock,
-                trailing_newline,
-                escaped,
-                arguments_after_options,
-            )?;
-        }
-        None => {
-            // No strings to print, so just handle newline setting
-            if trailing_newline {
-                stdout_lock.write_all(b"\n")?;
-            }
-        }
-    }
+    execute(&mut stdout_lock, args, trailing_newline, escaped)?;
 
     Ok(())
 }
@@ -350,11 +350,11 @@ pub fn uu_app() -> Command {
 
 fn execute(
     stdout_lock: &mut StdoutLock,
+    arguments_after_options: Vec<OsString>,
     trailing_newline: bool,
     escaped: bool,
-    arguments_after_options: ValuesRef<'_, OsString>,
 ) -> UResult<()> {
-    for (i, input) in arguments_after_options.enumerate() {
+    for (i, input) in arguments_after_options.into_iter().enumerate() {
         let Some(bytes) = bytes_from_os_string(input.as_os_str()) else {
             return Err(USimpleError::new(
                 1,

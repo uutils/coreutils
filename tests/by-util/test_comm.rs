@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) defaultcheck nocheck
+// spell-checker:ignore (words) defaultcheck nocheck helpb helpz nwordb nwordwordz wordtotal
 
 use crate::common::util::TestScenario;
 
@@ -13,111 +13,184 @@ fn test_invalid_arg() {
 
 #[test]
 fn ab_no_args() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+
+    scene
+        .ucmd()
         .args(&["a", "b"])
         .succeeds()
-        .stdout_only_fixture("ab.expected");
+        .stdout_is("a\n\tb\n\t\tz\n");
 }
 
 #[test]
 fn ab_dash_one() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+
+    scene
+        .ucmd()
         .args(&["a", "b", "-1"])
         .succeeds()
-        .stdout_only_fixture("ab1.expected");
+        .stdout_is("b\n\tz\n");
 }
 
 #[test]
 fn ab_dash_two() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+
+    scene
+        .ucmd()
         .args(&["a", "b", "-2"])
         .succeeds()
-        .stdout_only_fixture("ab2.expected");
+        .stdout_is("a\n\tz\n");
 }
 
 #[test]
 fn ab_dash_three() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+
+    scene
+        .ucmd()
         .args(&["a", "b", "-3"])
         .succeeds()
-        .stdout_only_fixture("ab3.expected");
+        .stdout_is("a\n\tb\n");
 }
 
 #[test]
 fn a_empty() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.touch("empty");
+    scene
+        .ucmd()
         .args(&["a", "empty"])
         .succeeds()
-        .stdout_only_fixture("aempty.expected"); // spell-checker:disable-line
+        .stdout_is("a\nz\n");
 }
 
 #[test]
 fn empty_empty() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("empty");
+    scene
+        .ucmd()
         .args(&["empty", "empty"])
         .succeeds()
-        .stdout_only_fixture("emptyempty.expected"); // spell-checker:disable-line
+        .no_output();
 }
 
 #[test]
 fn total() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&["--total", "a", "b"])
         .succeeds()
-        .stdout_is_fixture("ab_total.expected");
+        .stdout_is("a\n\tb\n\t\tz\n1\t1\t1\ttotal\n");
 }
 
 #[test]
 fn total_with_suppressed_regular_output() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&["--total", "-123", "a", "b"])
         .succeeds()
-        .stdout_is_fixture("ab_total_suppressed_regular_output.expected");
+        .stdout_is("1\t1\t1\ttotal\n");
 }
 
 #[test]
 fn repeated_flags() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&["--total", "-123123", "--total", "a", "b"])
         .succeeds()
-        .stdout_is_fixture("ab_total_suppressed_regular_output.expected");
+        .stdout_is("1\t1\t1\ttotal\n");
 }
 
 #[test]
 fn total_with_output_delimiter() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&["--total", "--output-delimiter=word", "a", "b"])
         .succeeds()
-        .stdout_is_fixture("ab_total_delimiter_word.expected");
+        .stdout_is("a\nwordb\nwordwordz\n1word1word1wordtotal\n");
 }
 
 #[test]
 fn output_delimiter() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&["--output-delimiter=word", "a", "b"])
         .succeeds()
-        .stdout_only_fixture("ab_delimiter_word.expected");
+        .stdout_is("a\nwordb\nwordwordz\n");
 }
 
 #[test]
 fn output_delimiter_hyphen_one() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&["--output-delimiter", "-1", "a", "b"])
         .succeeds()
-        .stdout_only_fixture("ab_delimiter_hyphen_one.expected");
+        .stdout_is("a\n-1b\n-1-1z\n");
 }
 
 #[test]
 fn output_delimiter_hyphen_help() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&["--output-delimiter", "--help", "a", "b"])
         .succeeds()
-        .stdout_only_fixture("ab_delimiter_hyphen_help.expected");
+        .stdout_is("a\n--helpb\n--help--helpz\n");
 }
 
 #[test]
 fn output_delimiter_multiple_identical() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&[
             "--output-delimiter=word",
             "--output-delimiter=word",
@@ -125,12 +198,17 @@ fn output_delimiter_multiple_identical() {
             "b",
         ])
         .succeeds()
-        .stdout_only_fixture("ab_delimiter_word.expected");
+        .stdout_is("a\nwordb\nwordwordz\n");
 }
 
 #[test]
 fn output_delimiter_multiple_different() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&[
             "--output-delimiter=word",
             "--output-delimiter=other",
@@ -147,7 +225,12 @@ fn output_delimiter_multiple_different() {
 #[test]
 #[ignore = "This is too weird; deviate intentionally."]
 fn output_delimiter_multiple_different_prevents_help() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&[
             "--output-delimiter=word",
             "--output-delimiter=other",
@@ -164,59 +247,92 @@ fn output_delimiter_multiple_different_prevents_help() {
 
 #[test]
 fn output_delimiter_nul() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("a", "a\nz\n");
+    at.write("b", "b\nz\n");
+    scene
+        .ucmd()
         .args(&["--output-delimiter=", "a", "b"])
         .succeeds()
-        .stdout_only_fixture("ab_delimiter_nul.expected");
+        .stdout_is("a\n\0b\n\0\0z\n");
 }
 
 #[test]
 fn zero_terminated() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a_nul", "a\0z\0");
+    at.write("b_nul", "b\0z\0");
     for param in ["-z", "--zero-terminated"] {
-        new_ucmd!()
+        scene
+            .ucmd()
             .args(&[param, "a_nul", "b_nul"])
             .succeeds()
-            .stdout_only_fixture("ab_nul.expected");
+            .stdout_is("a\0\tb\0\t\tz\0");
     }
 }
 
 #[test]
 fn zero_terminated_provided_multiple_times() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a_nul", "a\0z\0");
+    at.write("b_nul", "b\0z\0");
     for param in ["-z", "--zero-terminated"] {
-        new_ucmd!()
+        scene
+            .ucmd()
             .args(&[param, param, param, "a_nul", "b_nul"])
             .succeeds()
-            .stdout_only_fixture("ab_nul.expected");
+            .stdout_is("a\0\tb\0\t\tz\0");
     }
 }
 
 #[test]
 fn zero_terminated_with_total() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a_nul", "a\0z\0");
+    at.write("b_nul", "b\0z\0");
+
     for param in ["-z", "--zero-terminated"] {
-        new_ucmd!()
+        scene
+            .ucmd()
             .args(&[param, "--total", "a_nul", "b_nul"])
             .succeeds()
-            .stdout_only_fixture("ab_nul_total.expected");
+            .stdout_is("a\0\tb\0\t\tz\x001\t1\t1\ttotal\0");
     }
 }
 
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn check_order() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("bad_order_1", "e\nd\nb\na\n");
+    at.write("bad_order_2", "e\nc\nb\na\n");
+    scene
+        .ucmd()
         .args(&["--check-order", "bad_order_1", "bad_order_2"])
         .fails()
-        .stdout_is_fixture("bad_order12.check_order.expected")
+        .stdout_is("\t\te")
         .stderr_is("error to be defined");
 }
 
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn nocheck_order() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("bad_order_1", "e\nd\nb\na\n");
+    at.write("bad_order_2", "e\nc\nb\na\n");
     new_ucmd!()
         .args(&["--nocheck-order", "bad_order_1", "bad_order_2"])
         .succeeds()
-        .stdout_only_fixture("bad_order12.nocheck_order.expected");
+        .stdout_is("\t\te\n\tc\n\tb\n\ta\nd\nb\na\n");
 }
 
 // when neither --check-order nor --no-check-order is provided,
@@ -225,6 +341,9 @@ fn nocheck_order() {
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn defaultcheck_order() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("bad_order_1", "e\nd\nb\na\n");
     new_ucmd!()
         .args(&["a", "bad_order_1"])
         .fails()
@@ -240,19 +359,28 @@ fn defaultcheck_order() {
 
 #[test]
 fn defaultcheck_order_identical_bad_order_files() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("bad_order_1", "e\nd\nb\na\n");
+    scene
+        .ucmd()
         .args(&["bad_order_1", "bad_order_1"])
         .succeeds()
-        .stdout_only_fixture("bad_order11.defaultcheck_order.expected");
+        .stdout_is("\t\te\n\t\td\n\t\tb\n\t\ta\n");
 }
 
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn defaultcheck_order_two_different_bad_order_files() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("bad_order_1", "e\nd\nb\na\n");
+    at.write("bad_order_2", "e\nc\nb\na\n");
+    scene
+        .ucmd()
         .args(&["bad_order_1", "bad_order_2"])
         .fails()
-        .stdout_is_fixture("bad_order12.nocheck_order.expected")
+        .stdout_is("\t\te\n\tc\n\tb\n\ta\nd\nb\na\n")
         .stderr_is("error to be defined");
 }
 
@@ -269,10 +397,15 @@ fn defaultcheck_order_two_different_bad_order_files() {
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn unintuitive_default_behavior_1() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("defaultcheck_unintuitive_1", "m\nh\nn\no\nc\np\n");
+    at.write("defaultcheck_unintuitive_2", "m\nh\nn\no\np\n");
+    scene
+        .ucmd()
         .args(&["defaultcheck_unintuitive_1", "defaultcheck_unintuitive_2"])
         .succeeds()
-        .stdout_only_fixture("defaultcheck_unintuitive.expected");
+        .stdout_is("\t\tm\n\t\th\n\t\tn\n\t\to\nc\n\t\tp\n");
 }
 
 #[test]

@@ -144,11 +144,12 @@ fn test_date_utc() {
 #[test]
 fn test_date_utc_issue_6495() {
     new_ucmd!()
+        .env("TZ", "UTC0")
         .arg("-u")
         .arg("-d")
         .arg("@0")
         .succeeds()
-        .stdout_is("Thu Jan  1 00:00:00 1970\n");
+        .stdout_is("Thu Jan  1 00:00:00 UTC 1970\n");
 }
 
 #[test]
@@ -423,16 +424,18 @@ fn test_invalid_date_string() {
 #[test]
 fn test_date_one_digit_date() {
     new_ucmd!()
+        .env("TZ", "UTC0")
         .arg("-d")
         .arg("2000-1-1")
         .succeeds()
-        .stdout_contains("Sat Jan  1 00:00:00 2000");
+        .stdout_only("Sat Jan  1 00:00:00 UTC 2000\n");
 
     new_ucmd!()
+        .env("TZ", "UTC0")
         .arg("-d")
         .arg("2000-1-4")
         .succeeds()
-        .stdout_contains("Tue Jan  4 00:00:00 2000");
+        .stdout_only("Tue Jan  4 00:00:00 UTC 2000\n");
 }
 
 #[test]
@@ -464,6 +467,7 @@ fn test_date_parse_from_format() {
 #[test]
 fn test_date_from_stdin() {
     new_ucmd!()
+        .env("TZ", "UTC0")
         .arg("-f")
         .arg("-")
         .pipe_in(
@@ -473,8 +477,17 @@ fn test_date_from_stdin() {
         )
         .succeeds()
         .stdout_is(
-            "Mon Mar 27 08:30:00 2023\n\
-             Sat Apr  1 12:00:00 2023\n\
-             Sat Apr 15 18:30:00 2023\n",
+            "Mon Mar 27 08:30:00 UTC 2023\n\
+             Sat Apr  1 12:00:00 UTC 2023\n\
+             Sat Apr 15 18:30:00 UTC 2023\n",
         );
+}
+
+#[test]
+fn test_date_empty_tz() {
+    new_ucmd!()
+        .env("TZ", "")
+        .arg("+%Z")
+        .succeeds()
+        .stdout_only("UTC\n");
 }
