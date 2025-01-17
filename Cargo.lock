@@ -2942,7 +2942,7 @@ dependencies = [
  "indicatif",
  "libc",
  "uucore",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
