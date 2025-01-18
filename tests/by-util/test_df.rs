@@ -357,6 +357,10 @@ fn test_include_exclude_same_type() {
         );
 }
 
+#[cfg_attr(
+    all(target_arch = "aarch64", target_os = "linux"),
+    ignore = "Issue #7158 - Test not supported on ARM64 Linux"
+)]
 #[test]
 fn test_total() {
     // Example output:
