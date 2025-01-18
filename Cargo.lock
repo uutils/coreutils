@@ -2871,9 +2871,11 @@ version = "0.0.29"
 dependencies = [
  "ansi-width",
  "chrono",
+ "chrono-tz",
  "clap",
  "glob",
  "hostname",
+ "iana-time-zone",
  "lscolors",
  "number_prefix",
  "once_cell",

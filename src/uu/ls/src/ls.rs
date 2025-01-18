@@ -5,19 +5,9 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
 
-use clap::{
-    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
-    crate_version, Arg, ArgAction, Command,
-};
-use glob::{MatchOptions, Pattern};
-use lscolors::LsColors;
-
-use ansi_width::ansi_width;
-use std::{cell::OnceCell, num::IntErrorKind};
-use std::{collections::HashSet, io::IsTerminal};
-
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use std::{cell::OnceCell, num::IntErrorKind};
 use std::{
     cmp::Reverse,
     error::Error,
@@ -34,7 +24,20 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
+use std::{collections::HashSet, io::IsTerminal};
+
+use ansi_width::ansi_width;
+use chrono::{DateTime, Local, TimeDelta, TimeZone, Utc};
+use chrono_tz::{OffsetName, Tz};
+use clap::{
+    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
+    crate_version, Arg, ArgAction, Command,
+};
+use glob::{MatchOptions, Pattern};
+use iana_time_zone::get_timezone;
+use lscolors::LsColors;
 use term_grid::{Direction, Filling, Grid, GridOptions};
+
 use uucore::error::USimpleError;
 use uucore::format::human::{human_readable, SizeFormat};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
@@ -67,10 +70,12 @@ use uucore::{
     version_cmp::version_cmp,
 };
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
+
 mod dired;
 use dired::{is_dired_arg_present, DiredOutput};
 mod colors;
 use colors::{color_name, StyleManager};
+
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
@@ -332,6 +337,58 @@ enum TimeStyle {
     Iso,
     Locale,
     Format(String),
+}
+
+/// Whether the given date is considered recent (i.e., in the last 6 months).
+fn is_recent(time: DateTime<Local>) -> bool {
+    // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
+    time + TimeDelta::try_seconds(31_556_952 / 2).unwrap() > Local::now()
+}
+
+/// Get the alphabetic abbreviation of the current timezone.
+///
+/// For example, "UTC" or "CET" or "PDT".
+fn timezone_abbrev() -> String {
+    let tz = match std::env::var("TZ") {
+        // TODO Support other time zones...
+        Ok(s) if s == "UTC0" || s.is_empty() => Tz::Etc__UTC,
+        _ => match get_timezone() {
+            Ok(tz_str) => tz_str.parse().unwrap(),
+            Err(_) => Tz::Etc__UTC,
+        },
+    };
+    let offset = tz.offset_from_utc_date(&Utc::now().date_naive());
+    offset.abbreviation().unwrap_or("UTC").to_string()
+}
+
+/// Format the given time according to a custom format string.
+fn custom_time_format(fmt: &str, time: DateTime<Local>) -> String {
+    // TODO Refactor the common code from `ls` and `date` for rendering dates.
+    // TODO - Revisit when chrono 0.5 is released. https://github.com/chronotope/chrono/issues/970
+    // GNU `date` uses `%N` for nano seconds, however the `chrono` crate uses `%f`.
+    let fmt = fmt.replace("%N", "%f").replace("%Z", &timezone_abbrev());
+    time.format(&fmt).to_string()
+}
+
+impl TimeStyle {
+    /// Format the given time according to this time format style.
+    fn format(&self, time: DateTime<Local>) -> String {
+        let recent = is_recent(time);
+        match (self, recent) {
+            (Self::FullIso, _) => time.format("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
+            (Self::LongIso, _) => time.format("%Y-%m-%d %H:%M").to_string(),
+            (Self::Iso, true) => time.format("%m-%d %H:%M").to_string(),
+            (Self::Iso, false) => time.format("%Y-%m-%d ").to_string(),
+            // spell-checker:ignore (word) datetime
+            //In this version of chrono translating can be done
+            //The function is chrono::datetime::DateTime::format_localized
+            //However it's currently still hard to get the current pure-rust-locale
+            //So it's not yet implemented
+            (Self::Locale, true) => time.format("%b %e %H:%M").to_string(),
+            (Self::Locale, false) => time.format("%b %e  %Y").to_string(),
+            (Self::Format(e), _) => custom_time_format(e, time),
+        }
+    }
 }
 
 fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
@@ -3115,31 +3172,7 @@ fn get_time(md: &Metadata, config: &Config) -> Option<chrono::DateTime<chrono::L
 
 fn display_date(metadata: &Metadata, config: &Config) -> String {
     match get_time(metadata, config) {
-        Some(time) => {
-            //Date is recent if from past 6 months
-            //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            let recent = time + chrono::TimeDelta::try_seconds(31_556_952 / 2).unwrap()
-                > chrono::Local::now();
-
-            match &config.time_style {
-                TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
-                TimeStyle::LongIso => time.format("%Y-%m-%d %H:%M"),
-                TimeStyle::Iso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
-                TimeStyle::Locale => {
-                    let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
-
-                    // spell-checker:ignore (word) datetime
-                    //In this version of chrono translating can be done
-                    //The function is chrono::datetime::DateTime::format_localized
-                    //However it's currently still hard to get the current pure-rust-locale
-                    //So it's not yet implemented
-
-                    time.format(fmt)
-                }
-                TimeStyle::Format(e) => time.format(e),
-            }
-            .to_string()
-        }
+        Some(time) => config.time_style.format(time),
         None => "???".into(),
     }
 }
