@@ -496,7 +496,6 @@ jobs:
         job:
           # - { os , target , cargo-options , features , use-cross , toolchain, skip-tests }
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
-          - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
           - { os: ubuntu-22.04-arm  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-musl  , features: feat_os_unix_musl      , use-cross: use-cross , skip-tests: true }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
