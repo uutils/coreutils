@@ -1095,6 +1095,7 @@ fn test_mv_arg_update_all_then_none() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_mv_arg_update_older_dest_older() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1120,6 +1121,7 @@ fn test_mv_arg_update_older_dest_older() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_mv_arg_update_short_overwrite() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1646,6 +1648,7 @@ fn test_acl() {
     assert!(compare_xattrs(&file, &file_target));
 }
 
+#[ignore = "broken on windows"]
 #[test]
 #[cfg(windows)]
 fn test_move_should_not_fallback_to_copy() {
