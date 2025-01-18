@@ -19,7 +19,7 @@ path = "src/chmod.rs"
 [dependencies]
 clap = { workspace = true }
 libc = { workspace = true }
-uucore = { workspace = true, features = ["fs", "mode", "perms"] }
+uucore = { workspace = true, features = ["entries", "fs", "mode", "perms"] }
 
 [[bin]]
 name = "chmod"
