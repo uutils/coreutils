@@ -352,11 +352,9 @@ fn defaultcheck_order() {
 
 // * the first: if both files are not in order, the default behavior is the only
 // behavior that will provide an error message
-
 // * the second: if two rows are paired but are out of order,
 // it won't matter if all rows in the two files are exactly the same.
 // This is specified in the documentation
-
 #[test]
 fn defaultcheck_order_identical_bad_order_files() {
     let scene = TestScenario::new(util_name!());
@@ -367,21 +365,13 @@ fn defaultcheck_order_identical_bad_order_files() {
         .args(&["bad_order_1", "bad_order_1"])
         .succeeds()
         .stdout_is("\t\te\n\t\td\n\t\tb\n\t\ta\n");
-}
-
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
-#[test]
-fn defaultcheck_order_two_different_bad_order_files() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    at.write("bad_order_1", "e\nd\nb\na\n");
-    at.write("bad_order_2", "e\nc\nb\na\n");
     scene
         .ucmd()
-        .args(&["bad_order_1", "bad_order_2"])
+        .arg("--check-order")
+        .args(&["bad_order_1", "bad_order_1"])
         .fails()
-        .stdout_is("\t\te\n\tc\n\tb\n\ta\nd\nb\na\n")
-        .stderr_is("error to be defined");
+        .stdout_is("\t\te\n")
+        .stderr_is("comm: file 1 is not in sorted order\n");
 }
 
 // * the third: (it is not know whether this is a bug or not)
@@ -389,22 +379,20 @@ fn defaultcheck_order_two_different_bad_order_files() {
 // where both lines are different and one or both file lines being
 // compared are out of order from the preceding line,
 // it is ignored and no errors occur.
-
 // * the fourth: (it is not known whether this is a bug or not)
 // there are additional, not-yet-understood circumstances where an out-of-order
 // pair is ignored and is not counted against the 1 maximum out-of-order line.
-
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn unintuitive_default_behavior_1() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.write("defaultcheck_unintuitive_1", "m\nh\nn\no\nc\np\n");
     at.write("defaultcheck_unintuitive_2", "m\nh\nn\no\np\n");
+    // Here, GNU does not fail, but uutils does
     scene
         .ucmd()
         .args(&["defaultcheck_unintuitive_1", "defaultcheck_unintuitive_2"])
-        .succeeds()
+        .fails()
         .stdout_is("\t\tm\n\t\th\n\t\tn\n\t\to\nc\n\t\tp\n");
 }
 
@@ -457,4 +445,133 @@ fn test_is_dir() {
         .args(&["file", "."])
         .fails()
         .stderr_only("comm: .: Is a directory\n");
+}
+
+#[test]
+fn test_sorted() {
+    let expected_stderr =
+        "comm: file 2 is not in sorted order\ncomm: input is not in sorted order\n";
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("comm1", "1\n3");
+    at.write("comm2", "3\n2");
+    scene
+        .ucmd()
+        .args(&["comm1", "comm2"])
+        .fails()
+        .code_is(1)
+        .stdout_is("1\n\t\t3\n\t2\n")
+        .stderr_is(expected_stderr);
+}
+
+#[test]
+fn test_sorted_check_order() {
+    let expected_stderr = "comm: file 2 is not in sorted order\n";
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("comm1", "1\n3");
+    at.write("comm2", "3\n2");
+    scene
+        .ucmd()
+        .arg("--check-order")
+        .args(&["comm1", "comm2"])
+        .fails()
+        .code_is(1)
+        .stdout_is("1\n\t\t3\n")
+        .stderr_is(expected_stderr);
+}
+
+#[test]
+fn test_both_inputs_out_of_order() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("file_a", "3\n1\n0\n");
+    at.write("file_b", "3\n2\n0\n");
+
+    scene
+        .ucmd()
+        .args(&["file_a", "file_b"])
+        .fails()
+        .code_is(1)
+        .stdout_is("\t\t3\n1\n0\n\t2\n\t0\n")
+        .stderr_is(
+            "comm: file 1 is not in sorted order\n\
+             comm: file 2 is not in sorted order\n\
+             comm: input is not in sorted order\n",
+        );
+}
+
+#[test]
+fn test_both_inputs_out_of_order_last_pair() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("file_a", "3\n1\n");
+    at.write("file_b", "3\n2\n");
+
+    scene
+        .ucmd()
+        .args(&["file_a", "file_b"])
+        .fails()
+        .code_is(1)
+        .stdout_is("\t\t3\n1\n\t2\n")
+        .stderr_is(
+            "comm: file 1 is not in sorted order\n\
+             comm: file 2 is not in sorted order\n\
+             comm: input is not in sorted order\n",
+        );
+}
+
+#[test]
+fn test_first_input_out_of_order_extended() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("file_a", "0\n3\n1\n");
+    at.write("file_b", "2\n3\n");
+
+    scene
+        .ucmd()
+        .args(&["file_a", "file_b"])
+        .fails()
+        .code_is(1)
+        .stdout_is("0\n\t2\n\t\t3\n1\n")
+        .stderr_is(
+            "comm: file 1 is not in sorted order\n\
+             comm: input is not in sorted order\n",
+        );
+}
+
+#[test]
+fn test_out_of_order_input_nocheck() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create input files
+    at.write("file_a", "1\n3\n");
+    at.write("file_b", "3\n2\n");
+
+    scene
+        .ucmd()
+        .arg("--nocheck-order")
+        .args(&["file_a", "file_b"])
+        .succeeds()
+        .stdout_is("1\n\t\t3\n\t2\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_both_inputs_out_of_order_but_identical() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("file_a", "2\n1\n0\n");
+    at.write("file_b", "2\n1\n0\n");
+
+    scene
+        .ucmd()
+        .args(&["file_a", "file_b"])
+        .succeeds()
+        .stdout_is("\t\t2\n\t\t1\n\t\t0\n")
+        .no_stderr();
 }
