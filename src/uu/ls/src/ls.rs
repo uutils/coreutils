@@ -334,6 +334,27 @@ enum TimeStyle {
     Format(String),
 }
 
+impl TimeStyle {
+    /// Format the given time according to this time format style.
+    fn format(&self, time: DateTime<Local>) -> String {
+        let recent = is_recent(time);
+        match (self, recent) {
+            (Self::FullIso, _) => time.format("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
+            (Self::LongIso, _) => time.format("%Y-%m-%d %H:%M").to_string(),
+            (Self::Iso, true) => time.format("%m-%d %H:%M").to_string(),
+            (Self::Iso, false) => time.format("%Y-%m-%d ").to_string(),
+            // spell-checker:ignore (word) datetime
+            //In this version of chrono translating can be done
+            //The function is chrono::datetime::DateTime::format_localized
+            //However it's currently still hard to get the current pure-rust-locale
+            //So it's not yet implemented
+            (Self::Locale, true) => time.format("%b %e %H:%M").to_string(),
+            (Self::Locale, false) => time.format("%b %e  %Y").to_string(),
+            (Self::Format(e), _) => time.format(e).to_string(),
+        }
+    }
+}
+
 fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
     let possible_time_styles = vec![
         "full-iso".to_string(),
@@ -3115,31 +3136,7 @@ fn get_time(md: &Metadata, config: &Config) -> Option<chrono::DateTime<chrono::L
 
 fn display_date(metadata: &Metadata, config: &Config) -> String {
     match get_time(metadata, config) {
-        Some(time) => {
-            //Date is recent if from past 6 months
-            //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            let recent = time + chrono::TimeDelta::try_seconds(31_556_952 / 2).unwrap()
-                > chrono::Local::now();
-
-            match &config.time_style {
-                TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
-                TimeStyle::LongIso => time.format("%Y-%m-%d %H:%M"),
-                TimeStyle::Iso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
-                TimeStyle::Locale => {
-                    let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
-
-                    // spell-checker:ignore (word) datetime
-                    //In this version of chrono translating can be done
-                    //The function is chrono::datetime::DateTime::format_localized
-                    //However it's currently still hard to get the current pure-rust-locale
-                    //So it's not yet implemented
-
-                    time.format(fmt)
-                }
-                TimeStyle::Format(e) => time.format(e),
-            }
-            .to_string()
-        }
+        Some(time) => config.time_style.format(time),
         None => "???".into(),
     }
 }
