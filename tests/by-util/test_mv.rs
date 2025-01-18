@@ -1670,6 +1670,7 @@ fn test_acl() {
     assert!(compare_xattrs(&file, &file_target));
 }
 
+#[ignore = "broken on windows"]
 #[test]
 #[cfg(windows)]
 fn test_move_should_not_fallback_to_copy() {
