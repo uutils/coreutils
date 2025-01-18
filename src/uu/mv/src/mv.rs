@@ -801,7 +801,7 @@ fn rename_with_fallback(
                 };
             }
         } else {
-            if to.is_symlink() {
+            if to.exists() {
                 fs::remove_file(to).map_err(|err| {
                     let to = to.to_string_lossy();
                     let from = from.to_string_lossy();
