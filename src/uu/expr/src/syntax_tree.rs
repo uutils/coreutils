@@ -188,6 +188,7 @@ impl StringOp {
 /// regular expression through the Oniguruma bindings. This method is
 /// intended to just identify a few situations for which GNU coreutils
 /// has specific error messages.
+
 fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
     let mut escaped_parens: u64 = 0;
     let mut escaped_braces: u64 = 0;
@@ -195,6 +196,7 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
 
     let mut repeating_pattern_text = String::new();
     let mut invalid_content_error = false;
+    let mut regex_too_big_error = false;
 
     for c in pattern.chars() {
         match (escaped, c) {
@@ -223,18 +225,29 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
                         invalid_content_error = true;
                     }
                     (x, None) | (x, Some("")) => {
-                        if x.parse::<i16>().is_err() {
+                        if let Ok(num) = x.parse::<i32>() {
+                            if num > 32767 {
+                                regex_too_big_error = true;
+                            }
+                        } else {
                             invalid_content_error = true;
                         }
                     }
                     ("", Some(x)) => {
-                        if x.parse::<i16>().is_err() {
+                        if let Ok(num) = x.parse::<i32>() {
+                            if num > 32767 {
+                                regex_too_big_error = true;
+                            }
+                        } else {
                             invalid_content_error = true;
                         }
                     }
                     (f, Some(l)) => {
-                        if let (Ok(f), Ok(l)) = (f.parse::<i16>(), l.parse::<i16>()) {
+                        if let (Ok(f), Ok(l)) = (f.parse::<i32>(), l.parse::<i32>()) {
                             invalid_content_error = invalid_content_error || f > l;
+                            if f > 32767 || l > 32767 {
+                                regex_too_big_error = true;
+                            }
                         } else {
                             invalid_content_error = true;
                         }
@@ -256,6 +269,11 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
         }
         escaped = !escaped && c == '\\';
     }
+
+    if regex_too_big_error {
+        return Err(ExprError::RegexTooBig);
+    }
+
     match (
         escaped_parens.is_zero(),
         escaped_braces.is_zero(),

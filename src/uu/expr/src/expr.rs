@@ -40,6 +40,7 @@ pub enum ExprError {
     UnmatchedOpeningBrace,
     UnmatchedClosingBrace,
     InvalidContent(String),
+    RegexTooBig,
 }
 
 impl Display for ExprError {
@@ -75,6 +76,9 @@ impl Display for ExprError {
             }
             Self::InvalidContent(s) => {
                 write!(f, "Invalid content of {}", s)
+            }
+            Self::RegexTooBig => {
+                write!(f, "Regular expression too big")
             }
         }
     }
