@@ -2940,6 +2940,7 @@ dependencies = [
  "clap",
  "fs_extra",
  "indicatif",
+ "thiserror 2.0.11",
  "uucore",
 ]
 
