@@ -181,16 +181,9 @@ fi
 grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
-sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/sort/sort-compress-proc.sh
-sed -i 's|ls -|/usr/bin/ls -|' tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
-sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail/tail-n0f.sh tests/cp/fail-perm.sh tests/mv/i-2.sh tests/shuf/shuf.sh
-sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/test/test-N.sh
-sed -i 's|split |/usr/bin/split |' tests/factor/factor-parallel.sh
-sed -i 's|id -|/usr/bin/id -|' tests/runcon/runcon-no-reorder.sh
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
 # tests/ls/abmon-align.sh - https://github.com/uutils/coreutils/issues/3505
-sed -i 's|touch |/usr/bin/touch |' tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh tests/ls/ls-time.sh tests/stat/stat-nanoseconds.sh tests/misc/time-style.sh tests/test/test-N.sh tests/ls/abmon-align.sh
-sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
+sed -i 's|touch |/usr/bin/touch |' tests/mv/update.sh tests/ls/ls-time.sh tests/misc/time-style.sh tests/test/test-N.sh tests/ls/abmon-align.sh
 
 # our messages are better
 sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
@@ -202,8 +195,6 @@ sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is n
 # Our message is better
 sed -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/stat/stat-printf.pl
 
-sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
-sed -i 's|paste |/usr/bin/paste |' tests/od/od-endian.sh
 sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh
 
 # Add specific timeout to tests that currently hang to limit time spent waiting
