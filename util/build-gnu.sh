@@ -197,9 +197,6 @@ sed -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/st
 
 sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh
 
-# Add specific timeout to tests that currently hang to limit time spent waiting
-sed -i 's|\(^\s*\)seq \$|\1'"${SYSTEM_TIMEOUT}"' 0.1 seq \$|' tests/seq/seq-precision.sh tests/seq/seq-long-double.sh
-
 # Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs -r sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
 grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r sed -Ei 's|/usr/local/bin/\s?/usr/local/bin/|/usr/local/bin/|g'
