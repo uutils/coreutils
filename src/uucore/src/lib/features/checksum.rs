@@ -23,7 +23,7 @@ use crate::{
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
     sum::{
         Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224,
-        Sha3_256, Sha3_384, Sha3_512, Sha512, Shake128, Shake256, Sm3, BSD, CRC, SYSV,
+        Sha3_256, Sha3_384, Sha3_512, Sha512, Shake128, Shake256, Sm3, BSD, CRC, CRC32B, SYSV,
     },
     util_name,
 };
@@ -32,6 +32,7 @@ use thiserror::Error;
 pub const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
 pub const ALGORITHM_OPTIONS_BSD: &str = "bsd";
 pub const ALGORITHM_OPTIONS_CRC: &str = "crc";
+pub const ALGORITHM_OPTIONS_CRC32B: &str = "crc32b";
 pub const ALGORITHM_OPTIONS_MD5: &str = "md5";
 pub const ALGORITHM_OPTIONS_SHA1: &str = "sha1";
 pub const ALGORITHM_OPTIONS_SHA3: &str = "sha3";
@@ -46,10 +47,11 @@ pub const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 pub const ALGORITHM_OPTIONS_SHAKE128: &str = "shake128";
 pub const ALGORITHM_OPTIONS_SHAKE256: &str = "shake256";
 
-pub const SUPPORTED_ALGORITHMS: [&str; 15] = [
+pub const SUPPORTED_ALGORITHMS: [&str; 16] = [
     ALGORITHM_OPTIONS_SYSV,
     ALGORITHM_OPTIONS_BSD,
     ALGORITHM_OPTIONS_CRC,
+    ALGORITHM_OPTIONS_CRC32B,
     ALGORITHM_OPTIONS_MD5,
     ALGORITHM_OPTIONS_SHA1,
     ALGORITHM_OPTIONS_SHA3,
@@ -183,7 +185,7 @@ pub enum ChecksumError {
     LengthOnlyForBlake2b,
     #[error("the --binary and --text options are meaningless when verifying checksums")]
     BinaryTextConflict,
-    #[error("--check is not supported with --algorithm={{bsd,sysv,crc}}")]
+    #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
     AlgorithmNotSupportedWithCheck,
     #[error("You cannot combine multiple hash algorithms!")]
     CombineMultipleAlgorithms,
@@ -333,6 +335,11 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             name: ALGORITHM_OPTIONS_CRC,
             create_fn: Box::new(|| Box::new(CRC::new())),
             bits: 256,
+        }),
+        ALGORITHM_OPTIONS_CRC32B => Ok(HashAlgorithm {
+            name: ALGORITHM_OPTIONS_CRC32B,
+            create_fn: Box::new(|| Box::new(CRC32B::new())),
+            bits: 32,
         }),
         ALGORITHM_OPTIONS_MD5 | "md5sum" => Ok(HashAlgorithm {
             name: ALGORITHM_OPTIONS_MD5,

@@ -14,7 +14,7 @@ use std::path::Path;
 use uucore::checksum::{
     calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
     ChecksumError, ChecksumOptions, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD,
-    ALGORITHM_OPTIONS_CRC, ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
+    ALGORITHM_OPTIONS_CRC, ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
 };
 use uucore::{
     encoding,
@@ -113,7 +113,10 @@ where
             }
             OutputFormat::Hexadecimal => sum_hex,
             OutputFormat::Base64 => match options.algo_name {
-                ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => sum_hex,
+                ALGORITHM_OPTIONS_CRC
+                | ALGORITHM_OPTIONS_CRC32B
+                | ALGORITHM_OPTIONS_SYSV
+                | ALGORITHM_OPTIONS_BSD => sum_hex,
                 _ => encoding::for_cksum::BASE64.encode(&hex::decode(sum_hex).unwrap()),
             },
         };
@@ -140,7 +143,7 @@ where
                 !not_file,
                 String::new(),
             ),
-            ALGORITHM_OPTIONS_CRC => (
+            ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_CRC32B => (
                 format!("{sum} {sz}{}", if not_file { "" } else { " " }),
                 !not_file,
                 String::new(),
@@ -289,7 +292,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => None,
     };
 
-    if ["bsd", "crc", "sysv"].contains(&algo_name) && check {
+    if ["bsd", "crc", "sysv", "crc32b"].contains(&algo_name) && check {
         return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
     }
 
