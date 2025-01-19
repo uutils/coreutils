@@ -3123,6 +3123,7 @@ dependencies = [
  "clap",
  "num-bigint",
  "num-traits",
+ "thiserror 2.0.11",
  "uucore",
 ]
 
@@ -3172,6 +3173,7 @@ dependencies = [
  "rayon",
  "self_cell",
  "tempfile",
+ "thiserror 2.0.11",
  "unicode-width 0.2.0",
  "uucore",
 ]
@@ -3304,6 +3306,7 @@ dependencies = [
  "clap",
  "filetime",
  "parse_datetime",
+ "thiserror 2.0.11",
  "uucore",
  "windows-sys 0.59.0",
 ]
