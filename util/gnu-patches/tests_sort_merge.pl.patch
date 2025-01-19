@@ -1,7 +1,7 @@
-diff --git a/tests/sort/sort-merge.pl b/tests/sort/sort-merge.pl
-index 89eed0c64..c2f5aa7e5 100755
---- a/tests/sort/sort-merge.pl
-+++ b/tests/sort/sort-merge.pl
+Index: gnu/tests/sort/sort-merge.pl
+===================================================================
+--- gnu.orig/tests/sort/sort-merge.pl
++++ gnu/tests/sort/sort-merge.pl
 @@ -43,22 +43,22 @@ my @Tests =
       # check validation of --batch-size option
       ['nmerge-0', "-m --batch-size=0", @inputs,

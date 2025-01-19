@@ -1,7 +1,7 @@
-diff --git a/tests/misc/tsort.pl b/tests/misc/tsort.pl
-index 70bdc474c..4fd420a4e 100755
---- a/tests/misc/tsort.pl
-+++ b/tests/misc/tsort.pl
+Index: gnu/tests/misc/tsort.pl
+===================================================================
+--- gnu.orig/tests/misc/tsort.pl
++++ gnu/tests/misc/tsort.pl
 @@ -54,8 +54,10 @@ my @Tests =
  
     ['only-one', {IN => {f => ""}}, {IN => {g => ""}},

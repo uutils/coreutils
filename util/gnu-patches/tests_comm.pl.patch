@@ -1,7 +1,7 @@
-diff --git a/tests/misc/comm.pl b/tests/misc/comm.pl
-index 5bd5f56d7..8322d92ba 100755
---- a/tests/misc/comm.pl
-+++ b/tests/misc/comm.pl
+Index: gnu/tests/misc/comm.pl
+===================================================================
+--- gnu.orig/tests/misc/comm.pl
++++ gnu/tests/misc/comm.pl
 @@ -73,18 +73,24 @@ my @Tests =
  
     # invalid missing command line argument (1)
