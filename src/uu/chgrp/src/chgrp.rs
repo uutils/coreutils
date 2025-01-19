@@ -37,8 +37,8 @@ fn parse_gid_from_str(group: &str) -> Result<u32, String> {
     }
 }
 
-fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
-    let mut raw_group: String = String::new();
+fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
+    let mut raw_group = String::new();
     let dest_gid = if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
         fs::metadata(file)
             .map(|meta| {
@@ -62,6 +62,11 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
             }
         }
     };
+    Ok((dest_gid, raw_group))
+}
+
+fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
+    let (dest_gid, raw_group) = get_dest_gid(matches)?;
 
     // Handle --from option
     let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
