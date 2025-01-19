@@ -210,8 +210,8 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
                 escaped_braces = escaped_braces
                     .checked_sub(1)
                     .ok_or(ExprError::UnmatchedClosingBrace)?;
-                let mut repetition = repeating_pattern_text[..repeating_pattern_text.len() - 1]
-                    .splitn(2, ',');
+                let mut repetition =
+                    repeating_pattern_text[..repeating_pattern_text.len() - 1].splitn(2, ',');
                 match (
                     repetition
                         .next()
