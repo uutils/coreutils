@@ -180,9 +180,6 @@ fi
 
 grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 
-# printf doesn't limit the values used in its arg, so this produced ~2GB of output
-sed -i '/INT_OFLOW/ D' tests/printf/printf.sh
-
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/sort/sort-compress-proc.sh
 sed -i 's|ls -|/usr/bin/ls -|' tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
