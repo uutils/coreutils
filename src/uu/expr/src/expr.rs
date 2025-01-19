@@ -49,22 +49,36 @@ pub enum ExprError {
     #[error("syntax error: expecting ')' instead of '{0}'")]
     ExpectedClosingBraceInsteadOf(String),
 
-    #[error("Unmatched ( or \\(")]
-    UnmatchedOpeningParenthesis,
+    #[error("{0}")]
+    UnmatchedBrace(#[from] BraceType),
 
-    #[error("Unmatched ) or \\)")]
-    UnmatchedClosingParenthesis,
-
-    #[error("Unmatched \\{{")]
-    UnmatchedOpeningBrace,
-
-    #[error("Unmatched ) or \\}}")]
-    UnmatchedClosingBrace,
-
-    #[error("Invalid content of {0}")]
-    InvalidContent(String),
+    #[error("Invalid content of \\{{\\}}")]
+    InvalidBraceContent,
 
     #[error("Regular expression too big")]
+    RegexTooBig,
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum BraceType {
+    #[error("Unmatched ( or \\(")]
+    OpenParen,
+
+    #[error("Unmatched ) or \\)")]
+    CloseParen,
+
+    #[error("Unmatched \\{{")]
+    OpenCurly,
+
+    #[error("Unmatched \\}}")]
+    CloseCurly,
+}
+
+#[derive(Debug, PartialEq)]
+enum BraceContent {
+    Valid,
+    Invalid,
+    Unmatched(BraceType),
     RegexTooBig,
 }
 
@@ -77,6 +91,7 @@ impl UError for ExprError {
         matches!(self, Self::MissingOperand)
     }
 }
+
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())

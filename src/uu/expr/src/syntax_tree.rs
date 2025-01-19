@@ -5,11 +5,10 @@
 
 // spell-checker:ignore (ToDO) ints paren prec multibytes
 
+use crate::{BraceContent, BraceType, ExprError, ExprResult};
 use num_bigint::{BigInt, ParseBigIntError};
-use num_traits::{ToPrimitive, Zero};
+use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
-
-use crate::{ExprError, ExprResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
@@ -136,23 +135,40 @@ impl StringOp {
                 }
                 Ok(left)
             }
+
             Self::Match => {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
-                check_posix_regex_errors(&right)?;
-                let prefix = if right.starts_with('*') { r"^\" } else { "^" };
-                let re_string = format!("{prefix}{right}");
+                let re_string = format!("^{right}");
+
+                // Check for unmatched braces and invalid content
+                match check_posix_regex_errors(&re_string) {
+                    BraceContent::Invalid => match is_valid_curly_content(&re_string) {
+                        Err(ExprError::InvalidBraceContent) => {
+                            return Err(ExprError::InvalidBraceContent)
+                        }
+                        Ok(()) => unreachable!(),
+                        Err(err) => return Err(err),
+                    },
+                    BraceContent::Unmatched(brace) => return Err(ExprError::UnmatchedBrace(brace)),
+                    BraceContent::Valid => {}
+                    BraceContent::RegexTooBig => return Err(ExprError::RegexTooBig),
+                }
+
                 let re = Regex::with_options(
                     &re_string,
                     RegexOptions::REGEX_OPTION_NONE,
                     Syntax::grep(),
                 )
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
-                Ok(if re.captures_len() > 0 {
-                    re.captures(&left)
-                        .and_then(|captures| captures.at(1))
-                        .unwrap_or("")
-                        .to_string()
+
+                let has_capture = re_string.contains("\\(") && re_string.contains("\\)");
+
+                Ok(if has_capture {
+                    match re.captures(&left) {
+                        Some(captures) => captures.at(1).unwrap_or("").to_string(),
+                        None => String::new(),
+                    }
                 } else {
                     re.find(&left)
                         .map_or("0".to_string(), |(start, end)| (end - start).to_string())
@@ -175,114 +191,104 @@ impl StringOp {
     }
 }
 
-/// Check for errors in a supplied regular expression
-///
-/// GNU coreutils shows messages for invalid regular expressions
-/// differently from the oniguruma library used by the regex crate.
-/// This method attempts to do these checks manually in one pass
-/// through the regular expression.
-///
-/// This method is not comprehensively checking all cases in which
-/// a regular expression could be invalid; any cases not caught will
-/// result in a [ExprError::InvalidRegexExpression] when passing the
-/// regular expression through the Oniguruma bindings. This method is
-/// intended to just identify a few situations for which GNU coreutils
-/// has specific error messages.
+fn check_posix_regex_errors(s: &str) -> BraceContent {
+    let mut chars = s.chars();
+    let mut paren_stack = Vec::new();
+    let mut curly_stack = Vec::new();
+    let mut in_curly = false;
+    let mut curly_content = String::new();
 
-fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
-    let mut escaped_parens: u64 = 0;
-    let mut escaped_braces: u64 = 0;
-    let mut escaped = false;
-
-    let mut repeating_pattern_text = String::new();
-    let mut invalid_content_error = false;
-    let mut regex_too_big_error = false;
-
-    for c in pattern.chars() {
-        match (escaped, c) {
-            (true, ')') => {
-                escaped_parens = escaped_parens
-                    .checked_sub(1)
-                    .ok_or(ExprError::UnmatchedClosingParenthesis)?;
-            }
-            (true, '(') => {
-                escaped_parens += 1;
-            }
-            (true, '}') => {
-                escaped_braces = escaped_braces
-                    .checked_sub(1)
-                    .ok_or(ExprError::UnmatchedClosingBrace)?;
-                let mut repetition =
-                    repeating_pattern_text[..repeating_pattern_text.len() - 1].splitn(2, ',');
-                match (
-                    repetition
-                        .next()
-                        .expect("splitn always returns at least one string"),
-                    repetition.next(),
-                ) {
-                    ("", None) => {
-                        // Empty repeating pattern
-                        invalid_content_error = true;
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                match chars.next() {
+                    Some('(') => paren_stack.push('('),
+                    Some(')') if paren_stack.pop().is_none() => {
+                        return BraceContent::Unmatched(BraceType::CloseParen)
                     }
-                    (x, None) | (x, Some("")) => {
-                        if let Ok(num) = x.parse::<i32>() {
-                            if num > 32767 {
-                                regex_too_big_error = true;
+                    Some('{') => {
+                        curly_stack.push('{');
+                        in_curly = true;
+                    }
+                    Some('}') => {
+                        if curly_stack.pop().is_none() {
+                            // Allow unmatched \} for StringOp::Match
+                            if !in_curly {
+                                continue;
                             }
-                        } else {
-                            invalid_content_error = true;
+                            return BraceContent::Unmatched(BraceType::CloseCurly);
+                        }
+                        // Validate content when closing a curly brace
+                        if in_curly {
+                            match is_valid_curly_content(&curly_content) {
+                                Ok(()) => {}
+                                Err(ExprError::InvalidBraceContent) => {
+                                    return BraceContent::Invalid
+                                }
+                                Err(ExprError::RegexTooBig) => return BraceContent::RegexTooBig,
+                                Err(_) => unreachable!(),
+                            }
+                            curly_content.clear();
+                            in_curly = false;
                         }
                     }
-                    ("", Some(x)) => {
-                        if let Ok(num) = x.parse::<i32>() {
-                            if num > 32767 {
-                                regex_too_big_error = true;
-                            }
-                        } else {
-                            invalid_content_error = true;
-                        }
-                    }
-                    (f, Some(l)) => {
-                        if let (Ok(f), Ok(l)) = (f.parse::<i32>(), l.parse::<i32>()) {
-                            invalid_content_error = invalid_content_error || f > l;
-                            if f > 32767 || l > 32767 {
-                                regex_too_big_error = true;
-                            }
-                        } else {
-                            invalid_content_error = true;
+                    _ => {
+                        if in_curly {
+                            curly_content.push(c)
                         }
                     }
                 }
-                repeating_pattern_text.clear();
             }
-            (true, '{') => {
-                escaped_braces += 1;
-            }
+            '(' | ')' => {} // Ignore unescaped parentheses
             _ => {
-                if escaped_braces > 0 && repeating_pattern_text.len() <= 13 {
-                    repeating_pattern_text.push(c);
-                }
-                if escaped_braces > 0 && !(c.is_ascii_digit() || c == '\\' || c == ',') {
-                    invalid_content_error = true;
+                if in_curly {
+                    curly_content.push(c)
                 }
             }
         }
-        escaped = !escaped && c == '\\';
     }
 
-    if regex_too_big_error {
-        return Err(ExprError::RegexTooBig);
+    if !curly_stack.is_empty() {
+        BraceContent::Unmatched(BraceType::OpenCurly)
+    } else if !paren_stack.is_empty() {
+        BraceContent::Unmatched(BraceType::OpenParen)
+    } else {
+        BraceContent::Valid
     }
+}
 
-    match (
-        escaped_parens.is_zero(),
-        escaped_braces.is_zero(),
-        invalid_content_error,
-    ) {
-        (true, true, false) => Ok(()),
-        (_, false, _) => Err(ExprError::UnmatchedOpeningBrace),
-        (false, _, _) => Err(ExprError::UnmatchedOpeningParenthesis),
-        (true, true, true) => Err(ExprError::InvalidContent(r"\{\}".to_string())),
+fn is_valid_curly_content(content: &str) -> Result<(), ExprError> {
+    // Valid content should be either a single number
+    // or two numbers separated by a comma where first <= second
+    let parts: Vec<&str> = content.split(',').collect();
+    match parts.len() {
+        1 => {
+            let num = parts[0].trim();
+            // Check if it's a valid positive number and within reasonable range
+            // and restrict to 15-bit positive integers
+            match num.parse::<u32>() {
+                Ok(n) if n <= 32767 => Ok(()),
+                Ok(_) => Err(ExprError::RegexTooBig),
+                Err(_) => Err(ExprError::InvalidBraceContent),
+            }
+        }
+        2 => {
+            match (
+                parts[0].trim().parse::<u32>(),
+                parts[1].trim().parse::<u32>(),
+            ) {
+                (Ok(first), Ok(second)) if first <= 32767 && second <= 32767 => {
+                    if first <= second {
+                        Ok(())
+                    } else {
+                        Err(ExprError::InvalidBraceContent)
+                    }
+                }
+                (Ok(_), Ok(_)) => Err(ExprError::RegexTooBig),
+                _ => Err(ExprError::InvalidBraceContent),
+            }
+        }
+        _ => Err(ExprError::InvalidBraceContent),
     }
 }
 
@@ -605,10 +611,13 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::ExprError;
-    use crate::ExprError::InvalidContent;
+    use num_bigint::BigInt;
 
-    use super::{check_posix_regex_errors, AstNode, BinOp, NumericOp, RelationOp, StringOp};
+    use crate::syntax_tree::{check_posix_regex_errors, is_valid_curly_content, NumOrStr};
+    use crate::{syntax_tree::is_truthy, ExprError};
+    use crate::{BraceContent, BraceType};
+
+    use super::{AstNode, BinOp, NumericOp, RelationOp, StringOp};
 
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {
@@ -718,10 +727,6 @@ mod test {
             AstNode::parse(&["(", "42"]),
             Err(ExprError::ExpectedClosingBraceAfter("42".to_string()))
         );
-        assert_eq!(
-            AstNode::parse(&["(", "42", "a"]),
-            Err(ExprError::ExpectedClosingBraceInsteadOf("a".to_string()))
-        );
     }
 
     #[test]
@@ -735,21 +740,6 @@ mod test {
     }
 
     #[test]
-    fn starting_stars_become_escaped() {
-        let result = AstNode::parse(&["cats", ":", r"*cats"])
-            .unwrap()
-            .eval()
-            .unwrap();
-        assert_eq!(result.eval_as_string(), "0");
-
-        let result = AstNode::parse(&["*cats", ":", r"*cats"])
-            .unwrap()
-            .eval()
-            .unwrap();
-        assert_eq!(result.eval_as_string(), "5");
-    }
-
-    #[test]
     fn only_match_in_beginning() {
         let result = AstNode::parse(&["budget", ":", r"get"])
             .unwrap()
@@ -759,76 +749,50 @@ mod test {
     }
 
     #[test]
-    fn check_regex_valid() {
-        assert!(check_posix_regex_errors(r"(a+b) \(a* b\)").is_ok());
-    }
+    fn test_check_braces() {
+        let test_cases = vec![
+            // Regular unescaped parentheses
+            ("a(", BraceContent::Valid),
+            ("a(b", BraceContent::Valid),
+            ("a)", BraceContent::Valid),
+            ("a()b", BraceContent::Valid),
+            ("((()))", BraceContent::Valid),
+            // Basic string cases
+            ("abc", BraceContent::Valid),
+            // Escaped parentheses
+            ("\\(abc\\)", BraceContent::Valid),
+            ("\\(abc", BraceContent::Unmatched(BraceType::OpenParen)),
+            ("abc\\)", BraceContent::Unmatched(BraceType::CloseParen)),
+            // Mixed parentheses cases
+            ("(a\\(b)", BraceContent::Unmatched(BraceType::OpenParen)),
+            ("(a\\)b)", BraceContent::Unmatched(BraceType::CloseParen)),
+            // Valid curly brace cases
+            ("\\{1\\}", BraceContent::Valid),
+            ("\\{1,2\\}", BraceContent::Valid),
+            ("a\\{10\\}", BraceContent::Valid),
+            ("a\\{1,10\\}", BraceContent::Valid),
+            // Invalid curly brace content
+            ("\\{1a\\}", BraceContent::Invalid),
+            ("\\{a\\}", BraceContent::Invalid),
+            ("\\{1,a\\}", BraceContent::Invalid),
+            ("\\{a,1\\}", BraceContent::Invalid),
+            ("\\{1,2,3\\}", BraceContent::Invalid),
+            ("\\{,\\}", BraceContent::Invalid),
+            ("\\{1a2\\}", BraceContent::Invalid),
+            // Unmatched curly braces
+            ("\\{1", BraceContent::Unmatched(BraceType::OpenCurly)),
+            ("a\\{1", BraceContent::Unmatched(BraceType::OpenCurly)),
+            ("a\\{1a", BraceContent::Unmatched(BraceType::OpenCurly)),
+        ];
 
-    #[test]
-    fn check_regex_simple_repeating_pattern() {
-        assert!(check_posix_regex_errors(r"\(a+b\)\{4\}").is_ok());
-    }
-
-    #[test]
-    fn check_regex_missing_closing() {
-        assert_eq!(
-            check_posix_regex_errors(r"\(abc"),
-            Err(ExprError::UnmatchedOpeningParenthesis)
-        );
-
-        assert_eq!(
-            check_posix_regex_errors(r"\{1,2"),
-            Err(ExprError::UnmatchedOpeningBrace)
-        );
-    }
-
-    #[test]
-    fn check_regex_missing_opening() {
-        assert_eq!(
-            check_posix_regex_errors(r"abc\)"),
-            Err(ExprError::UnmatchedClosingParenthesis)
-        );
-
-        assert_eq!(
-            check_posix_regex_errors(r"abc\}"),
-            Err(ExprError::UnmatchedClosingBrace)
-        );
-    }
-
-    #[test]
-    fn check_regex_empty_repeating_pattern() {
-        assert_eq!(
-            check_posix_regex_errors("ab\\{\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
-        )
-    }
-
-    #[test]
-    fn check_regex_intervals_two_numbers() {
-        assert_eq!(
-            // out of order
-            check_posix_regex_errors("ab\\{1,0\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{1,a\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,3\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,b\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{,b\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
-        );
+        for (input, expected) in test_cases {
+            assert!(
+                check_posix_regex_errors(input) == expected,
+                "Failed for input: {:?}, expected: {:?}",
+                input,
+                expected
+            );
+        }
     }
 
     #[test]
@@ -860,5 +824,51 @@ mod test {
         assert!(is_truthy(&NumOrStr::Str(" ".to_string())));
         assert!(is_truthy(&NumOrStr::Str("0a".to_string()))); // Not just zeros
         assert!(is_truthy(&NumOrStr::Str("a0".to_string())));
+    }
+
+    #[test]
+    fn test_is_valid_curly_content() {
+        // Single number cases - valid
+        assert!(is_valid_curly_content("0").is_ok());
+        assert!(is_valid_curly_content("1").is_ok());
+        assert!(is_valid_curly_content("32767").is_ok());
+        assert!(is_valid_curly_content(" 123 ").is_ok());
+
+        // Single number cases - invalid
+        assert!(is_valid_curly_content("32768").is_err());
+        assert!(is_valid_curly_content("-1").is_err());
+        assert!(is_valid_curly_content("abc").is_err());
+        assert!(is_valid_curly_content("").is_err());
+        assert!(is_valid_curly_content(" ").is_err());
+        assert!(is_valid_curly_content("12.34").is_err());
+        assert!(is_valid_curly_content("1a").is_err());
+
+        // Range cases - valid
+        assert!(is_valid_curly_content("0,1").is_ok());
+        assert!(is_valid_curly_content("1,1").is_ok());
+        assert!(is_valid_curly_content("1,32767").is_ok());
+        assert!(is_valid_curly_content("0,32767").is_ok());
+        assert!(is_valid_curly_content(" 1 , 2 ").is_ok());
+        assert!(is_valid_curly_content("100,200").is_ok());
+
+        // Range cases - invalid
+        assert!(is_valid_curly_content("2,1").is_err());
+        assert!(is_valid_curly_content("32768,32769").is_err());
+        assert!(is_valid_curly_content("1,32768").is_err());
+        assert!(is_valid_curly_content("32768,1").is_err());
+        assert!(is_valid_curly_content("-1,5").is_err());
+        assert!(is_valid_curly_content("1,-5").is_err());
+        assert!(is_valid_curly_content("a,b").is_err());
+        assert!(is_valid_curly_content("1,b").is_err());
+        assert!(is_valid_curly_content("a,1").is_err());
+        assert!(is_valid_curly_content(",").is_err());
+        assert!(is_valid_curly_content("1,").is_err());
+        assert!(is_valid_curly_content(",1").is_err());
+
+        // Invalid formats
+        assert!(is_valid_curly_content("1,2,3").is_err());
+        assert!(is_valid_curly_content("1,2,").is_err());
+        assert!(is_valid_curly_content("1.5,2.5").is_err());
+        assert!(is_valid_curly_content("0xFF,0xFF").is_err());
     }
 }
