@@ -830,4 +830,35 @@ mod test {
             Err(InvalidContent(r"\{\}".to_string()))
         );
     }
+
+    #[test]
+    fn test_is_truthy() {
+        // Numeric cases
+        assert!(is_truthy(&NumOrStr::Num(BigInt::from(1))));
+        assert!(is_truthy(&NumOrStr::Num(BigInt::from(-1))));
+        assert!(is_truthy(&NumOrStr::Num(BigInt::from(42))));
+        assert!(!is_truthy(&NumOrStr::Num(BigInt::from(0))));
+
+        // String cases - Numbers as strings
+        assert!(is_truthy(&NumOrStr::Str("1".to_string())));
+        assert!(is_truthy(&NumOrStr::Str("42".to_string())));
+        assert!(is_truthy(&NumOrStr::Str("-1".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str("0".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str("00".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str("000".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str("-0".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str("-00".to_string())));
+
+        // Edge cases
+        assert!(is_truthy(&NumOrStr::Str("-".to_string())));
+        assert!(!is_truthy(&NumOrStr::Str(String::new())));
+
+        // Non-numeric strings
+        assert!(is_truthy(&NumOrStr::Str("abc".to_string())));
+        assert!(is_truthy(&NumOrStr::Str("false".to_string())));
+        assert!(is_truthy(&NumOrStr::Str("true".to_string())));
+        assert!(is_truthy(&NumOrStr::Str(" ".to_string())));
+        assert!(is_truthy(&NumOrStr::Str("0a".to_string()))); // Not just zeros
+        assert!(is_truthy(&NumOrStr::Str("a0".to_string())));
+    }
 }
