@@ -301,7 +301,7 @@ fn test_check_algo() {
         .arg("lorem_ipsum.txt")
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
         .code_is(1);
     new_ucmd!()
         .arg("-a=sysv")
@@ -309,7 +309,7 @@ fn test_check_algo() {
         .arg("lorem_ipsum.txt")
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
         .code_is(1);
     new_ucmd!()
         .arg("-a=crc")
@@ -317,7 +317,15 @@ fn test_check_algo() {
         .arg("lorem_ipsum.txt")
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
+        .code_is(1);
+    new_ucmd!()
+        .arg("-a=crc32b")
+        .arg("--check")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
         .code_is(1);
 }
 
@@ -1661,10 +1669,11 @@ mod gnu_cksum_base64 {
     use super::*;
     use crate::common::util::log_info;
 
-    const PAIRS: [(&str, &str); 11] = [
+    const PAIRS: [(&str, &str); 12] = [
         ("sysv", "0 0 f"),
         ("bsd", "00000     0 f"),
         ("crc", "4294967295 0 f"),
+        ("crc32b", "0 0 f"),
         ("md5", "1B2M2Y8AsgTpgAmY7PhCfg=="),
         ("sha1", "2jmj7l5rSw0yVb/vlWAYkK/YBwk="),
         ("sha224", "0UoCjCo6K8lHYQK7KII0xBWisB+CjqYqxbPkLw=="),
@@ -1693,7 +1702,7 @@ mod gnu_cksum_base64 {
     }
 
     fn output_format(algo: &str, digest: &str) -> String {
-        if ["sysv", "bsd", "crc"].contains(&algo) {
+        if ["sysv", "bsd", "crc", "crc32b"].contains(&algo) {
             digest.to_string()
         } else {
             format!("{} (f) = {}", algo.to_uppercase(), digest).replace("BLAKE2B", "BLAKE2b")
@@ -1706,6 +1715,7 @@ mod gnu_cksum_base64 {
         let scene = make_scene();
 
         for (algo, digest) in PAIRS {
+            log_info("ALGORITHM", algo);
             scene
                 .ucmd()
                 .arg("--base64")
@@ -1724,8 +1734,17 @@ mod gnu_cksum_base64 {
         let scene = make_scene();
 
         for (algo, digest) in PAIRS {
-            if ["sysv", "bsd", "crc"].contains(&algo) {
+            if ["sysv", "bsd", "crc", "crc32b"].contains(&algo) {
                 // These algorithms do not accept `--check`
+                scene
+                    .ucmd()
+                    .arg("--check")
+                    .arg("-a")
+                    .arg(algo)
+                    .fails()
+                    .stderr_only(
+                        "cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}\n",
+                    );
                 continue;
             }
 

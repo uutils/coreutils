@@ -356,6 +356,7 @@ sha3 = "0.10.8"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = "0.4.2"
+crc32fast = "1.4.2"
 digest = "0.10.7"
 
 uucore = { version = "0.0.29", package = "uucore", path = "src/uucore" }
