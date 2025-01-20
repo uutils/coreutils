@@ -151,7 +151,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let format = options
         .format
-        .map(|f| Format::<num_format::Float>::parse(f))
+        .map(Format::<num_format::Float>::parse)
         .transpose()?;
 
     let result = print_seq(
