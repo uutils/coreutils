@@ -370,3 +370,185 @@ fn test_num_str_comparison() {
         .succeeds()
         .stdout_is("1\n");
 }
+
+#[test]
+fn test_missing_argument() {
+    new_ucmd!()
+        .args(&["2", "+"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: missing argument after '+'\n");
+
+    new_ucmd!()
+        .args(&["length"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: missing argument after 'length'\n");
+}
+
+#[test]
+fn test_missing_parenthesis() {
+    new_ucmd!()
+        .args(&["(", "2"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: expecting ')' after '2'\n");
+
+    new_ucmd!()
+        .args(&["(", "2", "a"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: expecting ')' instead of 'a'\n");
+}
+
+#[test]
+fn test_regexp_unmatched() {
+    new_ucmd!()
+        .args(&["_", ":", "a\\("])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Unmatched ( or \\(\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\)"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Unmatched ) or \\)\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\{1"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Unmatched \\{\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\}1"])
+        .fails()
+        .code_is(1)
+        .stdout_is("0\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\{1a\\}"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Invalid content of \\{\\}\n");
+
+    new_ucmd!()
+        .args(&["a", ":", "\\(b\\)*"])
+        .fails()
+        .code_is(1)
+        .stdout_is("\n");
+}
+
+#[test]
+fn test_checks() {
+    new_ucmd!()
+        .args(&["a\nb", ":", "a\\$"])
+        .fails()
+        .code_is(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["a(", ":", "a("])
+        .succeeds()
+        .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\{1,0\\}"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Invalid content of \\{\\}\n");
+
+    new_ucmd!()
+        .args(&["_", ":", "a\\{32768\\}"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: Regular expression too big\n");
+
+    new_ucmd!()
+        .args(&["a*b", ":", "a\\(*\\)b"])
+        .succeeds()
+        .stdout_only("*\n");
+}
+
+#[test]
+#[ignore = "Not working yet"]
+fn test_bre_anchors_and_special_chars() {
+    // bre10: Test caret matching literally
+    new_ucmd!()
+        .args(&["a^b", ":", "a^b"])
+        .succeeds()
+        .stdout_only("3\n");
+
+    // bre11: Test dollar matching literally
+    new_ucmd!()
+        .args(&["a$b", ":", "a$b"])
+        .succeeds()
+        .stdout_only("3\n");
+
+    // bre15: Test asterisk in parentheses with pattern validation
+    new_ucmd!()
+        .args(&["X*", ":", "X\\(*\\)", ":", "(", "X*", ":", "X\\(*\\)", ")"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // bre17: Test literal curly brace matching
+    new_ucmd!()
+        .args(&["{1}a", ":", "\\(\\{1\\}a\\)"])
+        .succeeds()
+        .stdout_only("{1}a\n");
+
+    // bre18: Test asterisk with quantifier pattern
+    new_ucmd!()
+        .args(&["X*", ":", "X\\(*\\)", ":", "^*"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // bre19: Test start-anchored curly brace match
+    new_ucmd!()
+        .args(&["{1}", ":", "^\\{1\\}"])
+        .succeeds()
+        .stdout_only("3\n");
+
+    // bre36: Test literal asterisk at start
+    new_ucmd!()
+        .args(&["*a", ":", "*a"])
+        .succeeds()
+        .stdout_only("2\n");
+
+    // bre37: Test multiple literal asterisks
+    new_ucmd!()
+        .args(&["a", ":", "**a"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // bre38: Test three literal asterisks
+    new_ucmd!()
+        .args(&["a", ":", "***a"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // bre40: Test curly brace quantifier with minimum only
+    new_ucmd!()
+        .args(&["ab", ":", "a\\{1,\\}b"])
+        .succeeds()
+        .stdout_only("2\n");
+
+    // bre45: Test curly brace quantifier with maximum only
+    new_ucmd!()
+        .args(&["a", ":", "a\\{,2\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    // bre46: Test curly brace quantifier with no bounds
+    new_ucmd!()
+        .args(&["a", ":", "a\\{,\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["ab", ":", "a\\(\\)b"])
+        .fails()
+        .code_is(1)
+        .no_output();
+}
