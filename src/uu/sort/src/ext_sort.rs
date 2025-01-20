@@ -224,11 +224,8 @@ fn read_write_loop<I: WriteableTmpFile>(
     let mut sender_option = Some(sender);
     let mut tmp_files = vec![];
     loop {
-        let chunk = match receiver.recv() {
-            Ok(it) => it,
-            _ => {
-                return Ok(ReadResult::WroteChunksToFile { tmp_files });
-            }
+        let Ok(chunk) = receiver.recv() else {
+            return Ok(ReadResult::WroteChunksToFile { tmp_files });
         };
 
         let tmp_file = write::<I>(
