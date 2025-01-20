@@ -79,7 +79,7 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::list(file).map_or(false, |acl| acl.count() > 0)
+    xattr::list(file).is_ok_and(|acl| acl.count() > 0)
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
