@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (paths) gnutest
+// spell-checker:ignore (paths) gnutest ronna quetta
 
 use crate::common::util::TestScenario;
 
@@ -239,18 +239,31 @@ fn test_should_report_invalid_empty_number_on_blank_stdin() {
 }
 
 #[test]
-fn test_should_report_invalid_suffix_on_stdin() {
-    for c in b'a'..=b'z' {
-        new_ucmd!()
-            .args(&["--from=auto"])
-            .pipe_in(format!("1{}", c as char))
-            .fails()
-            .stderr_is(format!(
-                "numfmt: invalid suffix in input: '1{}'\n",
-                c as char
-            ));
-    }
+fn test_suffixes() {
+    // TODO add support for ronna (R) and quetta (Q)
+    let valid_suffixes = ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y' /*'R' , 'Q'*/];
 
+    // TODO implement special handling of 'K'
+    for c in ('A'..='Z').chain('a'..='z') {
+        let args = ["--from=si", "--to=si", &format!("1{c}")];
+
+        if valid_suffixes.contains(&c) {
+            new_ucmd!()
+                .args(&args)
+                .succeeds()
+                .stdout_only(format!("1.0{c}\n"));
+        } else {
+            new_ucmd!()
+                .args(&args)
+                .fails()
+                .code_is(2)
+                .stderr_only(format!("numfmt: invalid suffix in input: '1{c}'\n"));
+        }
+    }
+}
+
+#[test]
+fn test_should_report_invalid_suffix_on_nan() {
     // GNU numfmt reports this one as “invalid number”
     new_ucmd!()
         .args(&["--from=auto"])

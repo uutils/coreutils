@@ -13,6 +13,7 @@ DIGEST determines the digest algorithm and default output format:
 - `sysv`:    (equivalent to sum -s)
 - `bsd`:     (equivalent to sum -r)
 - `crc`:     (equivalent to cksum)
+- `crc32b`:  (only available through cksum)
 - `md5`:     (equivalent to md5sum)
 - `sha1`:    (equivalent to sha1sum)
 - `sha224`:  (equivalent to sha224sum)

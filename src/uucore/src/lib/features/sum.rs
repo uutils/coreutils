@@ -207,6 +207,37 @@ impl Digest for CRC {
     }
 }
 
+pub struct CRC32B(crc32fast::Hasher);
+impl Digest for CRC32B {
+    fn new() -> Self {
+        Self(crc32fast::Hasher::new())
+    }
+
+    fn hash_update(&mut self, input: &[u8]) {
+        self.0.update(input);
+    }
+
+    fn hash_finalize(&mut self, out: &mut [u8]) {
+        let result = self.0.clone().finalize();
+        let slice = result.to_be_bytes();
+        out.copy_from_slice(&slice);
+    }
+
+    fn reset(&mut self) {
+        self.0.reset();
+    }
+
+    fn output_bits(&self) -> usize {
+        32
+    }
+
+    fn result_str(&mut self) -> String {
+        let mut out = [0; 4];
+        self.hash_finalize(&mut out);
+        format!("{}", u32::from_be_bytes(out))
+    }
+}
+
 pub struct BSD {
     state: u16,
 }

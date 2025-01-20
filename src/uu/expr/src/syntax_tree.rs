@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) ints paren prec multibytes
 
 use num_bigint::{BigInt, ParseBigIntError};
-use num_traits::ToPrimitive;
+use num_traits::{ToPrimitive, Zero};
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::{ExprError, ExprResult};
@@ -139,7 +139,9 @@ impl StringOp {
             Self::Match => {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
-                let re_string = format!("^{right}");
+                check_posix_regex_errors(&right)?;
+                let prefix = if right.starts_with('*') { r"^\" } else { "^" };
+                let re_string = format!("{prefix}{right}");
                 let re = Regex::with_options(
                     &re_string,
                     RegexOptions::REGEX_OPTION_NONE,
@@ -148,7 +150,7 @@ impl StringOp {
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
                 Ok(if re.captures_len() > 0 {
                     re.captures(&left)
-                        .map(|captures| captures.at(1).unwrap())
+                        .and_then(|captures| captures.at(1))
                         .unwrap_or("")
                         .to_string()
                 } else {
@@ -170,6 +172,99 @@ impl StringOp {
                 Ok(0.into())
             }
         }
+    }
+}
+
+/// Check for errors in a supplied regular expression
+///
+/// GNU coreutils shows messages for invalid regular expressions
+/// differently from the oniguruma library used by the regex crate.
+/// This method attempts to do these checks manually in one pass
+/// through the regular expression.
+///
+/// This method is not comprehensively checking all cases in which
+/// a regular expression could be invalid; any cases not caught will
+/// result in a [ExprError::InvalidRegexExpression] when passing the
+/// regular expression through the Oniguruma bindings. This method is
+/// intended to just identify a few situations for which GNU coreutils
+/// has specific error messages.
+fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
+    let mut escaped_parens: u64 = 0;
+    let mut escaped_braces: u64 = 0;
+    let mut escaped = false;
+
+    let mut repeating_pattern_text = String::new();
+    let mut invalid_content_error = false;
+
+    for c in pattern.chars() {
+        match (escaped, c) {
+            (true, ')') => {
+                escaped_parens = escaped_parens
+                    .checked_sub(1)
+                    .ok_or(ExprError::UnmatchedClosingParenthesis)?;
+            }
+            (true, '(') => {
+                escaped_parens += 1;
+            }
+            (true, '}') => {
+                escaped_braces = escaped_braces
+                    .checked_sub(1)
+                    .ok_or(ExprError::UnmatchedClosingBrace)?;
+                let mut repetition =
+                    repeating_pattern_text[..repeating_pattern_text.len() - 1].splitn(2, ',');
+                match (
+                    repetition
+                        .next()
+                        .expect("splitn always returns at least one string"),
+                    repetition.next(),
+                ) {
+                    ("", None) => {
+                        // Empty repeating pattern
+                        invalid_content_error = true;
+                    }
+                    (x, None) | (x, Some("")) => {
+                        if x.parse::<i16>().is_err() {
+                            invalid_content_error = true;
+                        }
+                    }
+                    ("", Some(x)) => {
+                        if x.parse::<i16>().is_err() {
+                            invalid_content_error = true;
+                        }
+                    }
+                    (f, Some(l)) => {
+                        if let (Ok(f), Ok(l)) = (f.parse::<i16>(), l.parse::<i16>()) {
+                            invalid_content_error = invalid_content_error || f > l;
+                        } else {
+                            invalid_content_error = true;
+                        }
+                    }
+                }
+                repeating_pattern_text.clear();
+            }
+            (true, '{') => {
+                escaped_braces += 1;
+            }
+            _ => {
+                if escaped_braces > 0 && repeating_pattern_text.len() <= 13 {
+                    repeating_pattern_text.push(c);
+                }
+                if escaped_braces > 0 && !(c.is_ascii_digit() || c == '\\' || c == ',') {
+                    invalid_content_error = true;
+                }
+            }
+        }
+        escaped = !escaped && c == '\\';
+    }
+    match (
+        escaped_parens.is_zero(),
+        escaped_braces.is_zero(),
+        invalid_content_error,
+    ) {
+        (true, true, false) => Ok(()),
+        (_, false, _) => Err(ExprError::UnmatchedOpeningBrace),
+        (false, _, _) => Err(ExprError::UnmatchedOpeningParenthesis),
+        (true, true, true) => Err(ExprError::InvalidContent(r"\{\}".to_string())),
     }
 }
 
@@ -442,13 +537,21 @@ impl<'a> Parser<'a> {
             },
             "(" => {
                 let s = self.parse_expression()?;
-                let close_paren = self.next()?;
-                if close_paren != ")" {
+                match self.next() {
+                    Ok(")") => {}
                     // Since we have parsed at least a '(', there will be a token
                     // at `self.index - 1`. So this indexing won't panic.
-                    return Err(ExprError::ExpectedClosingBraceAfter(
-                        self.input[self.index - 1].into(),
-                    ));
+                    Ok(_) => {
+                        return Err(ExprError::ExpectedClosingBraceInsteadOf(
+                            self.input[self.index - 1].into(),
+                        ));
+                    }
+                    Err(ExprError::MissingArgument(_)) => {
+                        return Err(ExprError::ExpectedClosingBraceAfter(
+                            self.input[self.index - 1].into(),
+                        ));
+                    }
+                    Err(e) => return Err(e),
                 }
                 s
             }
@@ -484,7 +587,10 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::{AstNode, BinOp, NumericOp, RelationOp, StringOp};
+    use crate::ExprError;
+    use crate::ExprError::InvalidContent;
+
+    use super::{check_posix_regex_errors, AstNode, BinOp, NumericOp, RelationOp, StringOp};
 
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {
@@ -585,6 +691,125 @@ mod test {
                 op(BinOp::Numeric(NumericOp::Mul), "1", "2"),
                 "3"
             )),
+        );
+    }
+
+    #[test]
+    fn missing_closing_parenthesis() {
+        assert_eq!(
+            AstNode::parse(&["(", "42"]),
+            Err(ExprError::ExpectedClosingBraceAfter("42".to_string()))
+        );
+        assert_eq!(
+            AstNode::parse(&["(", "42", "a"]),
+            Err(ExprError::ExpectedClosingBraceInsteadOf("a".to_string()))
+        );
+    }
+
+    #[test]
+    fn empty_substitution() {
+        // causes a panic in 0.0.25
+        let result = AstNode::parse(&["a", ":", r"\(b\)*"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "");
+    }
+
+    #[test]
+    fn starting_stars_become_escaped() {
+        let result = AstNode::parse(&["cats", ":", r"*cats"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "0");
+
+        let result = AstNode::parse(&["*cats", ":", r"*cats"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "5");
+    }
+
+    #[test]
+    fn only_match_in_beginning() {
+        let result = AstNode::parse(&["budget", ":", r"get"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "0");
+    }
+
+    #[test]
+    fn check_regex_valid() {
+        assert!(check_posix_regex_errors(r"(a+b) \(a* b\)").is_ok());
+    }
+
+    #[test]
+    fn check_regex_simple_repeating_pattern() {
+        assert!(check_posix_regex_errors(r"\(a+b\)\{4\}").is_ok());
+    }
+
+    #[test]
+    fn check_regex_missing_closing() {
+        assert_eq!(
+            check_posix_regex_errors(r"\(abc"),
+            Err(ExprError::UnmatchedOpeningParenthesis)
+        );
+
+        assert_eq!(
+            check_posix_regex_errors(r"\{1,2"),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+    }
+
+    #[test]
+    fn check_regex_missing_opening() {
+        assert_eq!(
+            check_posix_regex_errors(r"abc\)"),
+            Err(ExprError::UnmatchedClosingParenthesis)
+        );
+
+        assert_eq!(
+            check_posix_regex_errors(r"abc\}"),
+            Err(ExprError::UnmatchedClosingBrace)
+        );
+    }
+
+    #[test]
+    fn check_regex_empty_repeating_pattern() {
+        assert_eq!(
+            check_posix_regex_errors("ab\\{\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        )
+    }
+
+    #[test]
+    fn check_regex_intervals_two_numbers() {
+        assert_eq!(
+            // out of order
+            check_posix_regex_errors("ab\\{1,0\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
+        assert_eq!(
+            check_posix_regex_errors("ab\\{1,a\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
+        assert_eq!(
+            check_posix_regex_errors("ab\\{a,3\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
+        assert_eq!(
+            check_posix_regex_errors("ab\\{a,b\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
+        assert_eq!(
+            check_posix_regex_errors("ab\\{a,\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
+        assert_eq!(
+            check_posix_regex_errors("ab\\{,b\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
         );
     }
 }
