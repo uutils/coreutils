@@ -327,6 +327,9 @@ pub enum ParseSizeError {
 
     /// Overflow
     SizeTooBig(String),
+
+    /// Could not determine total physical memory size.
+    PhysicalMem(String),
 }
 
 impl Error for ParseSizeError {
@@ -335,6 +338,7 @@ impl Error for ParseSizeError {
             Self::InvalidSuffix(ref s) => s,
             Self::ParseFailure(ref s) => s,
             Self::SizeTooBig(ref s) => s,
+            Self::PhysicalMem(ref s) => s,
         }
     }
 }
@@ -342,7 +346,10 @@ impl Error for ParseSizeError {
 impl fmt::Display for ParseSizeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let s = match self {
-            Self::InvalidSuffix(s) | Self::ParseFailure(s) | Self::SizeTooBig(s) => s,
+            Self::InvalidSuffix(s)
+            | Self::ParseFailure(s)
+            | Self::SizeTooBig(s)
+            | Self::PhysicalMem(s) => s,
         };
         write!(f, "{s}")
     }
