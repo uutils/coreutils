@@ -20,6 +20,7 @@ path = "src/mktemp.rs"
 clap = { workspace = true }
 rand = { workspace = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true }
 
 [[bin]]
