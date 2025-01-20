@@ -273,18 +273,15 @@ impl ChownExecutor {
     #[allow(clippy::cognitive_complexity)]
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let path = root.as_ref();
-        let meta = match self.obtain_meta(path, self.dereference) {
-            Some(m) => m,
-            _ => {
-                if self.verbosity.level == VerbosityLevel::Verbose {
-                    println!(
-                        "failed to change ownership of {} to {}",
-                        path.quote(),
-                        self.raw_owner
-                    );
-                }
-                return 1;
+        let Some(meta) = self.obtain_meta(path, self.dereference) else {
+            if self.verbosity.level == VerbosityLevel::Verbose {
+                println!(
+                    "failed to change ownership of {} to {}",
+                    path.quote(),
+                    self.raw_owner
+                );
             }
+            return 1;
         };
 
         if self.recursive
@@ -370,17 +367,15 @@ impl ChownExecutor {
                 Ok(entry) => entry,
             };
             let path = entry.path();
-            let meta = match self.obtain_meta(path, self.dereference) {
-                Some(m) => m,
-                _ => {
-                    ret = 1;
-                    if entry.file_type().is_dir() {
-                        // Instruct walkdir to skip this directory to avoid getting another error
-                        // when walkdir tries to query the children of this directory.
-                        iterator.skip_current_dir();
-                    }
-                    continue;
+
+            let Some(meta) = self.obtain_meta(path, self.dereference) else {
+                ret = 1;
+                if entry.file_type().is_dir() {
+                    // Instruct walkdir to skip this directory to avoid getting another error
+                    // when walkdir tries to query the children of this directory.
+                    iterator.skip_current_dir();
                 }
+                continue;
             };
 
             if self.preserve_root && is_root(path, self.traverse_symlinks == TraverseSymlinks::All)
@@ -425,24 +420,18 @@ impl ChownExecutor {
 
     fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
         let path = path.as_ref();
-
-        let meta = get_metadata(path, follow);
-
-        match meta {
-            Err(e) => {
-                match self.verbosity.level {
-                    VerbosityLevel::Silent => (),
-                    _ => show_error!(
+        get_metadata(path, follow)
+            .inspect_err(|e| {
+                if self.verbosity.level != VerbosityLevel::Silent {
+                    show_error!(
                         "cannot {} {}: {}",
                         if follow { "dereference" } else { "access" },
                         path.quote(),
-                        strip_errno(&e)
-                    ),
+                        strip_errno(e)
+                    );
                 }
-                None
-            }
-            Ok(meta) => Some(meta),
-        }
+            })
+            .ok()
     }
 
     #[inline]

@@ -379,8 +379,8 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
         if options.get_flag(options::FULL_TIME)
-            && options.indices_of(options::FULL_TIME).unwrap().last()
-                > options.indices_of(options::TIME_STYLE).unwrap().last()
+            && options.indices_of(options::FULL_TIME).unwrap().next_back()
+                > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
             Ok(TimeStyle::FullIso)
         } else {
