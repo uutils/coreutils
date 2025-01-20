@@ -26,6 +26,7 @@ uucore = { workspace = true, features = [
   "fsxattr",
   "update-control",
 ] }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "mv"
