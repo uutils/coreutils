@@ -8,9 +8,69 @@
 
 use std::error::Error;
 use std::fmt;
-use std::num::IntErrorKind;
+#[cfg(target_os = "linux")]
+use std::io::BufRead;
+use std::num::{IntErrorKind, ParseIntError};
 
 use crate::display::Quotable;
+
+/// Error arising from trying to compute system memory.
+enum SystemError {
+    IOError,
+    ParseError,
+    NotFound,
+}
+
+impl From<std::io::Error> for SystemError {
+    fn from(_: std::io::Error) -> Self {
+        Self::IOError
+    }
+}
+
+impl From<ParseIntError> for SystemError {
+    fn from(_: ParseIntError) -> Self {
+        Self::ParseError
+    }
+}
+
+/// Get the total number of bytes of physical memory.
+///
+/// The information is read from the `/proc/meminfo` file.
+///
+/// # Errors
+///
+/// If there is a problem reading the file or finding the appropriate
+/// entry in the file.
+#[cfg(target_os = "linux")]
+fn total_physical_memory() -> Result<u128, SystemError> {
+    // On Linux, the `/proc/meminfo` file has a table with information
+    // about memory usage. For example,
+    //
+    //     MemTotal:        7811500 kB
+    //     MemFree:         1487876 kB
+    //     MemAvailable:    3857232 kB
+    //     ...
+    //
+    // We just need to extract the number of `MemTotal`
+    let table = std::fs::read("/proc/meminfo")?;
+    for line in table.lines() {
+        let line = line?;
+        if line.starts_with("MemTotal:") && line.ends_with("kB") {
+            let num_kilobytes: u128 = line[9..line.len() - 2].trim().parse()?;
+            let num_bytes = 1024 * num_kilobytes;
+            return Ok(num_bytes);
+        }
+    }
+    Err(SystemError::NotFound)
+}
+
+/// Get the total number of bytes of physical memory.
+///
+/// TODO Implement this for non-Linux systems.
+#[cfg(not(target_os = "linux"))]
+fn total_physical_memory() -> Result<u128, SystemError> {
+    Err(SystemError::NotFound)
+}
 
 /// Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 ///
@@ -131,6 +191,16 @@ impl<'parser> Parser<'parser> {
                 }
                 return Err(ParseSizeError::invalid_suffix(size));
             }
+        }
+
+        // Special case: for percentage, just compute the given fraction
+        // of the total physical memory on the machine, if possible.
+        if unit == "%" {
+            let number: u128 = Self::parse_number(&numeric_string, 10, size)?;
+            return match total_physical_memory() {
+                Ok(total) => Ok((number / 100) * total),
+                Err(_) => Err(ParseSizeError::PhysicalMem(size.to_string())),
+            };
         }
 
         // Compute the factor the unit represents.
@@ -687,5 +757,17 @@ mod tests {
         assert_eq!(Ok(10), parse_size_u64("0xA"));
         assert_eq!(Ok(94722), parse_size_u64("0x17202"));
         assert_eq!(Ok(44251 * 1024), parse_size_u128("0xACDBK"));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn parse_percent() {
+        assert!(parse_size_u64("0%").is_ok());
+        assert!(parse_size_u64("50%").is_ok());
+        assert!(parse_size_u64("100%").is_ok());
+        assert!(parse_size_u64("100000%").is_ok());
+        assert!(parse_size_u64("-1%").is_err());
+        assert!(parse_size_u64("1.0%").is_err());
+        assert!(parse_size_u64("0x1%").is_err());
     }
 }

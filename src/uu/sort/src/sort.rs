@@ -288,7 +288,7 @@ impl GlobalSettings {
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
         let size = Parser::default()
             .with_allow_list(&[
-                "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y",
+                "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y", "%",
             ])
             .with_default_unit("K")
             .with_b_byte_count(true)
