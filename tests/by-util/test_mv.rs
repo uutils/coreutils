@@ -1095,7 +1095,6 @@ fn test_mv_arg_update_all_then_none() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_mv_arg_update_older_dest_older() {
     let (at, mut ucmd) = at_and_ucmd!();
 
