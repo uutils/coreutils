@@ -1144,7 +1144,6 @@ fn test_mv_arg_update_older_dest_older_interactive() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_mv_arg_update_short_overwrite() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
