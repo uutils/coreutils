@@ -7,6 +7,8 @@ use std::fmt::{Display, Formatter, Result};
 
 use uucore::error::UError;
 
+use fs_extra::error::Error as FsXError;
+
 #[derive(Debug)]
 pub enum MvError {
     NoSuchFile(String),
@@ -18,6 +20,8 @@ pub enum MvError {
     NotADirectory(String),
     TargetNotADirectory(String),
     FailedToAccessNotADirectory(String),
+    FsXError(FsXError),
+    NotAllFilesMoved,
 }
 
 impl Error for MvError {}
@@ -43,6 +47,18 @@ impl Display for MvError {
             Self::FailedToAccessNotADirectory(t) => {
                 write!(f, "failed to access {t}: Not a directory")
             }
+            Self::FsXError(err) => {
+                write!(f, "{err}")
+            }
+            Self::NotAllFilesMoved => {
+                write!(f, "failed to move all files")
+            }
         }
+    }
+}
+
+impl From<FsXError> for MvError {
+    fn from(err: FsXError) -> Self {
+        Self::FsXError(err)
     }
 }
