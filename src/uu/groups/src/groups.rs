@@ -2,13 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
-// ============================================================================
-// Test suite summary for GNU coreutils 8.32.162-4eda
-// ============================================================================
-// PASS: tests/misc/groups-dash.sh
-// PASS: tests/misc/groups-process-all.sh
-// PASS: tests/misc/groups-version.sh
 
 // spell-checker:ignore (ToDO) passwd
 
