@@ -99,6 +99,10 @@ fn test_uptime_with_non_existent_file() {
 // This will pass
 #[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "macos")))]
+#[cfg_attr(
+    all(target_arch = "aarch64", target_os = "linux"),
+    ignore = "Issue #7159 - Test not supported on ARM64 Linux"
+)]
 #[allow(clippy::too_many_lines, clippy::items_after_statements)]
 fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
     // This test will pass for freebsd but we currently don't support changing the utmpx file for
