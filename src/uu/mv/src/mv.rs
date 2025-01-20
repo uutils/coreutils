@@ -650,6 +650,17 @@ fn rename(
     Ok(())
 }
 
+#[cfg(unix)]
+fn is_err_not_same_device(err: &std::io::Error) -> bool {
+    matches!(err.raw_os_error(), Some(libc::EXDEV))
+}
+
+#[cfg(windows)]
+fn is_err_not_same_device(err: &std::io::Error) -> bool {
+    let errno = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as i32;
+    matches!(err.raw_os_error(), Some(e) if e == errno)
+}
+
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
 fn rename_with_fallback(
@@ -657,7 +668,12 @@ fn rename_with_fallback(
     to: &Path,
     multi_progress: Option<&MultiProgress>,
 ) -> io::Result<()> {
-    if fs::rename(from, to).is_err() {
+    if let Err(err) = fs::rename(from, to) {
+        // We will only copy if they're not on the same device, otherwise we'll report an error.
+        if !is_err_not_same_device(&err) {
+            return Err(err);
+        }
+
         // Get metadata without following symlinks
         let metadata = from.symlink_metadata()?;
         let file_type = metadata.file_type();
