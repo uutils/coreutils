@@ -648,12 +648,11 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
 fn identify_algo_name_and_length(
     line_info: &LineInfo,
     algo_name_input: Option<&str>,
+    last_algo: &mut Option<String>,
 ) -> Option<(String, Option<usize>)> {
-    let algorithm = line_info
-        .algo_name
-        .clone()
-        .unwrap_or_default()
-        .to_lowercase();
+    let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
+    let algorithm = algo_from_line.to_lowercase();
+    *last_algo = Some(algo_from_line);
 
     // check if we are called with XXXsum (example: md5sum) but we detected a different algo parsing the file
     // (for example SHA1 (f) = d...)
@@ -726,11 +725,13 @@ fn process_algo_based_line(
     line_info: &LineInfo,
     cli_algo_name: Option<&str>,
     opts: ChecksumOptions,
+    last_algo: &mut Option<String>,
 ) -> Result<(), LineCheckError> {
     let filename_to_check = line_info.filename.as_slice();
 
-    let (algo_name, algo_byte_len) = identify_algo_name_and_length(line_info, cli_algo_name)
-        .ok_or(LineCheckError::ImproperlyFormatted)?;
+    let (algo_name, algo_byte_len) =
+        identify_algo_name_and_length(line_info, cli_algo_name, last_algo)
+            .ok_or(LineCheckError::ImproperlyFormatted)?;
 
     // If the digest bitlen is known, we can check the format of the expected
     // checksum with it.
@@ -795,6 +796,7 @@ fn process_checksum_line(
     cli_algo_length: Option<usize>,
     opts: ChecksumOptions,
     cached_regex: &mut Option<LineFormat>,
+    last_algo: &mut Option<String>,
 ) -> Result<(), LineCheckError> {
     let line_bytes = os_str_as_bytes(line)?;
 
@@ -810,7 +812,7 @@ fn process_checksum_line(
     };
 
     if line_info.format == LineFormat::AlgoBased {
-        process_algo_based_line(&line_info, cli_algo_name, opts)
+        process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
     } else if let Some(cli_algo) = cli_algo_name {
         // If we match a non-algo based regex, we expect a cli argument
         // to give us the algorithm to use
@@ -852,6 +854,10 @@ fn process_checksum_file(
     // cached_regex is used to ensure that several non algo-based checksum line
     // will use the same regex.
     let mut cached_regex = None;
+    // last_algo caches the algorithm used in the last line to print a warning
+    // message for the current line if improperly formatted.
+    // Behavior tested in gnu_cksum_c::test_warn
+    let mut last_algo = None;
 
     for (i, line) in lines.iter().enumerate() {
         let line_result = process_checksum_line(
@@ -861,6 +867,7 @@ fn process_checksum_file(
             cli_algo_length,
             opts,
             &mut cached_regex,
+            &mut last_algo,
         );
 
         // Match a first time to elude critical UErrors, and increment the total
@@ -882,6 +889,8 @@ fn process_checksum_file(
                 if opts.warn {
                     let algo = if let Some(algo_name_input) = cli_algo_name {
                         Cow::Owned(algo_name_input.to_uppercase())
+                    } else if let Some(algo) = &last_algo {
+                        Cow::Borrowed(algo.as_str())
                     } else {
                         Cow::Borrowed("Unknown algorithm")
                     };
