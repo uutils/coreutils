@@ -789,7 +789,6 @@ fn process_non_algo_based_line(
 /// matched the expected.
 /// If the comparison didn't happen, return a `LineChecksumError`.
 fn process_checksum_line(
-    filename_input: &OsStr,
     line: &OsStr,
     i: usize,
     cli_algo_name: Option<&str>,
@@ -806,34 +805,19 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    if let Some(line_info) = LineInfo::parse(line, cached_regex) {
-        if line_info.format == LineFormat::AlgoBased {
-            process_algo_based_line(&line_info, cli_algo_name, opts)
-        } else if let Some(cli_algo) = cli_algo_name {
-            // If we match a non-algo based regex, we expect a cli argument
-            // to give us the algorithm to use
-            process_non_algo_based_line(i, &line_info, cli_algo, cli_algo_length, opts)
-        } else {
-            // We have no clue of what algorithm to use
-            return Err(LineCheckError::ImproperlyFormatted);
-        }
-    } else {
-        if opts.warn {
-            let algo = if let Some(algo_name_input) = cli_algo_name {
-                algo_name_input.to_uppercase()
-            } else {
-                "Unknown algorithm".to_string()
-            };
-            eprintln!(
-                "{}: {}: {}: improperly formatted {} checksum line",
-                util_name(),
-                &filename_input.maybe_quote(),
-                i + 1,
-                algo
-            );
-        }
+    let Some(line_info) = LineInfo::parse(line, cached_regex) else {
+        return Err(LineCheckError::ImproperlyFormatted);
+    };
 
-        Err(LineCheckError::ImproperlyFormatted)
+    if line_info.format == LineFormat::AlgoBased {
+        process_algo_based_line(&line_info, cli_algo_name, opts)
+    } else if let Some(cli_algo) = cli_algo_name {
+        // If we match a non-algo based regex, we expect a cli argument
+        // to give us the algorithm to use
+        process_non_algo_based_line(i, &line_info, cli_algo, cli_algo_length, opts)
+    } else {
+        // We have no clue of what algorithm to use
+        return Err(LineCheckError::ImproperlyFormatted);
     }
 }
 
@@ -871,7 +855,6 @@ fn process_checksum_file(
 
     for (i, line) in lines.iter().enumerate() {
         let line_result = process_checksum_line(
-            filename_input,
             line,
             i,
             cli_algo_name,
@@ -893,7 +876,24 @@ fn process_checksum_file(
         match line_result {
             Ok(()) => res.correct += 1,
             Err(DigestMismatch) => res.failed_cksum += 1,
-            Err(ImproperlyFormatted) => res.bad_format += 1,
+            Err(ImproperlyFormatted) => {
+                res.bad_format += 1;
+
+                if opts.warn {
+                    let algo = if let Some(algo_name_input) = cli_algo_name {
+                        Cow::Owned(algo_name_input.to_uppercase())
+                    } else {
+                        Cow::Borrowed("Unknown algorithm")
+                    };
+                    eprintln!(
+                        "{}: {}: {}: improperly formatted {} checksum line",
+                        util_name(),
+                        &filename_input.maybe_quote(),
+                        i + 1,
+                        algo
+                    );
+                }
+            }
             Err(CantOpenFile | FileIsDirectory) => res.failed_open_file += 1,
             Err(FileNotFound) if !opts.ignore_missing => res.failed_open_file += 1,
             _ => continue,
