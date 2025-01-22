@@ -34,6 +34,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::num::IntErrorKind;
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
@@ -696,9 +697,17 @@ impl KeyPosition {
             .ok_or_else(|| format!("invalid key {}", key.quote()))?;
         let char = field_and_char.next();
 
-        let field = field
-            .parse()
-            .map_err(|e| format!("failed to parse field index {}: {}", field.quote(), e))?;
+        let field = match field.parse::<usize>() {
+            Ok(f) => f,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
+            Err(e) => {
+                return Err(format!(
+                    "failed to parse field index {} {}",
+                    field.quote(),
+                    e
+                ))
+            }
+        };
         if field == 0 {
             return Err("field index can not be 0".to_string());
         }
