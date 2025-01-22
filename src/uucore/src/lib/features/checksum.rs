@@ -19,7 +19,7 @@ use std::{
 };
 
 use crate::{
-    error::{set_exit_code, FromIo, UError, UResult, USimpleError},
+    error::{FromIo, UError, UResult, USimpleError},
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
     sum::{
         Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224,
@@ -130,10 +130,12 @@ impl From<ChecksumError> for LineCheckError {
 enum FileCheckError {
     /// a generic UError was encountered in sub-functions
     UError(Box<dyn UError>),
-    /// the checksum file is improperly formatted.
-    ImproperlyFormatted,
     /// reading of the checksum file failed
     CantOpenChecksumFile,
+    /// processing of the file is considered as a failure regarding the
+    /// provided flags. This however does not stop the processing of
+    /// further files.
+    Failed,
 }
 
 impl From<Box<dyn UError>> for FileCheckError {
@@ -883,7 +885,6 @@ fn process_checksum_file(
             Err(e) => {
                 // Could not read the file, show the error and continue to the next file
                 show_error!("{e}");
-                set_exit_code(1);
                 return Err(FileCheckError::CantOpenChecksumFile);
             }
         }
@@ -956,8 +957,7 @@ fn process_checksum_file(
         if opts.verbose.over_status() {
             log_no_properly_formatted(get_filename_for_output(filename_input, input_is_stdin));
         }
-        set_exit_code(1);
-        return Err(FileCheckError::ImproperlyFormatted);
+        return Err(FileCheckError::Failed);
     }
 
     // if any incorrectly formatted line, show it
@@ -975,18 +975,22 @@ fn process_checksum_file(
                 filename_input.maybe_quote(),
             );
         }
-        set_exit_code(1);
+        return Err(FileCheckError::Failed);
     }
 
     // strict means that we should have an exit code.
     if opts.strict && res.bad_format > 0 {
-        set_exit_code(1);
+        return Err(FileCheckError::Failed);
     }
 
-    // if we have any failed checksum verification, we set an exit code
-    // except if we have ignore_missing
-    if (res.failed_cksum > 0 || res.failed_open_file > 0) && !opts.ignore_missing {
-        set_exit_code(1);
+    // If a file was missing, return an error unless we explicitly ignore it.
+    if res.failed_open_file > 0 && !opts.ignore_missing {
+        return Err(FileCheckError::Failed);
+    }
+
+    // Obviously, if a checksum failed at some point, report the error.
+    if res.failed_cksum > 0 {
+        return Err(FileCheckError::Failed);
     }
 
     Ok(())
@@ -1004,16 +1008,23 @@ pub fn perform_checksum_validation<'a, I>(
 where
     I: Iterator<Item = &'a OsStr>,
 {
+    let mut failed = false;
+
     // if cksum has several input files, it will print the result for each file
     for filename_input in files {
         use FileCheckError::*;
         match process_checksum_file(filename_input, algo_name_input, length_input, opts) {
             Err(UError(e)) => return Err(e),
-            Err(CantOpenChecksumFile | ImproperlyFormatted) | Ok(_) => continue,
+            Err(Failed | CantOpenChecksumFile) => failed = true,
+            Ok(_) => continue,
         }
     }
 
-    Ok(())
+    if failed {
+        Err(USimpleError::new(1, ""))
+    } else {
+        Ok(())
+    }
 }
 
 pub fn digest_reader<T: Read>(
