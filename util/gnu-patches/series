@@ -1,0 +1,10 @@
+tests_factor_factor.pl.patch
+tests_cksum_base64.patch
+tests_comm.pl.patch
+tests_cut_error_msg.patch
+tests_dup_source.patch
+tests_env_env-S.pl.patch
+tests_invalid_opt.patch
+tests_ls_no_cap.patch
+tests_sort_merge.pl.patch
+tests_tsort.patch
