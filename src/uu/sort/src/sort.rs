@@ -1371,14 +1371,14 @@ pub fn uu_app() -> Command {
                     options::check::QUIET,
                     options::check::DIAGNOSE_FIRST,
                 ]))
-                .conflicts_with(options::OUTPUT)
+                .conflicts_with_all([options::OUTPUT, options::check::CHECK_SILENT])
                 .help("check for sorted input; do not sort"),
         )
         .arg(
             Arg::new(options::check::CHECK_SILENT)
                 .short('C')
                 .long(options::check::CHECK_SILENT)
-                .conflicts_with(options::OUTPUT)
+                .conflicts_with_all([options::OUTPUT, options::check::CHECK])
                 .help(
                     "exit successfully if the given file is already sorted, \
                 and exit with status 1 otherwise.",
