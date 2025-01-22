@@ -652,7 +652,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         }
 
         let mut targetpath = target_dir.to_path_buf();
-        let filename = sourcepath.components().last().unwrap();
+        let filename = sourcepath.components().next_back().unwrap();
         targetpath.push(filename);
 
         show_if_err!(copy(sourcepath, &targetpath, b));
