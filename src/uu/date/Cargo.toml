@@ -20,10 +20,8 @@ path = "src/date.rs"
 [dependencies]
 chrono = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["custom-tz-fmt"] }
 parse_datetime = { workspace = true }
-chrono-tz = { workspace = true }
-iana-time-zone = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
