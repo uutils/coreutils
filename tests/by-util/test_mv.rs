@@ -1106,6 +1106,7 @@ fn test_mv_arg_update_older_dest_older() {
     let mut f = at.make_file(old);
     f.write_all(old_content.as_bytes()).unwrap();
     f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    drop(f);
 
     at.write(new, new_content);
 
@@ -1132,7 +1133,7 @@ fn test_mv_arg_update_short_overwrite() {
     let mut f = at.make_file(old);
     f.write_all(old_content.as_bytes()).unwrap();
     f.set_modified(std::time::UNIX_EPOCH).unwrap();
-
+    drop(f);
     at.write(new, new_content);
 
     ucmd.arg(new)
