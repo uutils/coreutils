@@ -154,12 +154,7 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
 }
 
 fn table() {
-    // GNU kill doesn't list the EXIT signal with --table, so we ignore it, too
-    for (idx, signal) in ALL_SIGNALS
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| **s != "EXIT")
-    {
+    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
         println!("{idx: >#2} {signal}");
     }
 }
@@ -183,8 +178,7 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
 }
 
 fn print_signals() {
-    // GNU kill doesn't list the EXIT signal with --list, so we ignore it, too
-    for signal in ALL_SIGNALS.iter().filter(|x| **x != "EXIT") {
+    for signal in ALL_SIGNALS {
         println!("{signal}");
     }
 }

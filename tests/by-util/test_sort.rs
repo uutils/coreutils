@@ -1302,3 +1302,14 @@ fn test_same_sort_mode_twice() {
 fn test_args_override() {
     new_ucmd!().args(&["-f", "-f"]).pipe_in("foo").succeeds();
 }
+
+#[test]
+fn test_k_overflow() {
+    let input = "2\n1\n";
+    let output = "1\n2\n";
+    new_ucmd!()
+        .args(&["-k", "18446744073709551616"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}

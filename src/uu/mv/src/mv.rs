@@ -668,13 +668,6 @@ fn rename(
     let to = &to;
 
     if to.exists() {
-        if opts.update == UpdateMode::ReplaceIfOlder && opts.overwrite == OverwriteMode::Interactive
-        {
-            // `mv -i --update old new` when `new` exists doesn't move anything
-            // and exit with 0
-            return Ok(());
-        }
-
         if opts.update == UpdateMode::ReplaceNone {
             if opts.debug {
                 println!("skipped {}", to.quote());
