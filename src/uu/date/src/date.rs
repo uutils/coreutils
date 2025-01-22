@@ -6,17 +6,16 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use chrono_tz::{OffsetName, Tz};
 use clap::{crate_version, Arg, ArgAction, Command};
-use iana_time_zone::get_timezone;
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use uucore::custom_tz_fmt::custom_time_format;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
@@ -274,21 +273,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for date in dates {
             match date {
                 Ok(date) => {
-                    // TODO - Revisit when chrono 0.5 is released. https://github.com/chronotope/chrono/issues/970
-                    let tz = match std::env::var("TZ") {
-                        // TODO Support other time zones...
-                        Ok(s) if s == "UTC0" || s.is_empty() => Tz::Etc__UTC,
-                        _ => match get_timezone() {
-                            Ok(tz_str) => tz_str.parse().unwrap(),
-                            Err(_) => Tz::Etc__UTC,
-                        },
-                    };
-                    let offset = tz.offset_from_utc_date(&Utc::now().date_naive());
-                    let tz_abbreviation = offset.abbreviation();
-                    // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
-                    let format_string = &format_string
-                        .replace("%N", "%f")
-                        .replace("%Z", tz_abbreviation.unwrap_or("UTC"));
+                    let format_string = custom_time_format(format_string);
                     // Refuse to pass this string to chrono as it is crashing in this crate
                     if format_string.contains("%#z") {
                         return Err(USimpleError::new(
@@ -298,7 +283,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                     // Hack to work around panic in chrono,
                     // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
-                    let format_items = StrftimeItems::new(format_string);
+                    let format_items = StrftimeItems::new(format_string.as_str());
                     if format_items.clone().any(|i| i == Item::Error) {
                         return Err(USimpleError::new(
                             1,
