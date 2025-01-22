@@ -273,7 +273,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for date in dates {
             match date {
                 Ok(date) => {
-                    let format_string = custom_time_format(&format_string);
+                    let format_string = custom_time_format(format_string);
                     // Refuse to pass this string to chrono as it is crashing in this crate
                     if format_string.contains("%#z") {
                         return Err(USimpleError::new(

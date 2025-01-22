@@ -2877,7 +2877,6 @@ version = "0.0.29"
 dependencies = [
  "ansi-width",
  "chrono",
- "chrono-tz",
  "clap",
  "glob",
  "hostname",

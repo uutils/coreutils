@@ -360,11 +360,9 @@ impl TimeStyle {
             //So it's not yet implemented
             (Self::Locale, true) => time.format("%b %e %H:%M").to_string(),
             (Self::Locale, false) => time.format("%b %e  %Y").to_string(),
-            (Self::Format(fmt), _) => {
-                // this line can be replaced with the one in timzone_date.rs
-                time.format(custom_tz_fmt::custom_time_format(fmt).as_str())
-                    .to_string()
-            }
+            (Self::Format(fmt), _) => time
+                .format(custom_tz_fmt::custom_time_format(fmt).as_str())
+                .to_string(),
         }
     }
 }

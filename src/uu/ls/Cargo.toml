@@ -19,7 +19,6 @@ path = "src/ls.rs"
 [dependencies]
 ansi-width = { workspace = true }
 chrono = { workspace = true }
-chrono-tz = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
 hostname = { workspace = true }
