@@ -148,15 +148,57 @@ impl From<ChecksumError> for FileCheckError {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy)]
+pub enum ChecksumVerbose {
+    Status,
+    Quiet,
+    Normal,
+    Warning,
+}
+
+impl ChecksumVerbose {
+    pub fn new(status: bool, quiet: bool, warn: bool) -> Self {
+        use ChecksumVerbose::*;
+
+        // Assume only one of the three booleans will be enabled at once.
+        // This is ensured by clap's overriding arguments.
+        match (status, quiet, warn) {
+            (true, _, _) => Status,
+            (_, true, _) => Quiet,
+            (_, _, true) => Warning,
+            _ => Normal,
+        }
+    }
+
+    #[inline]
+    pub fn over_status(self) -> bool {
+        self > Self::Status
+    }
+
+    #[inline]
+    pub fn over_quiet(self) -> bool {
+        self > Self::Quiet
+    }
+
+    #[inline]
+    pub fn at_least_warning(self) -> bool {
+        self >= Self::Warning
+    }
+}
+
+impl Default for ChecksumVerbose {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
 /// This struct regroups CLI flags.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ChecksumOptions {
     pub binary: bool,
     pub ignore_missing: bool,
-    pub quiet: bool,
-    pub status: bool,
     pub strict: bool,
-    pub warn: bool,
+    pub verbose: ChecksumVerbose,
 }
 
 #[derive(Debug, Error)]
@@ -235,20 +277,19 @@ pub fn create_sha3(bits: Option<usize>) -> UResult<HashAlgorithm> {
 }
 
 #[allow(clippy::comparison_chain)]
-fn cksum_output(res: &ChecksumResult, status: bool) {
+fn print_cksum_report(res: &ChecksumResult) {
     if res.bad_format == 1 {
         show_warning_caps!("{} line is improperly formatted", res.bad_format);
     } else if res.bad_format > 1 {
         show_warning_caps!("{} lines are improperly formatted", res.bad_format);
     }
 
-    if !status {
-        if res.failed_cksum == 1 {
-            show_warning_caps!("{} computed checksum did NOT match", res.failed_cksum);
-        } else if res.failed_cksum > 1 {
-            show_warning_caps!("{} computed checksums did NOT match", res.failed_cksum);
-        }
+    if res.failed_cksum == 1 {
+        show_warning_caps!("{} computed checksum did NOT match", res.failed_cksum);
+    } else if res.failed_cksum > 1 {
+        show_warning_caps!("{} computed checksums did NOT match", res.failed_cksum);
     }
+
     if res.failed_open_file == 1 {
         show_warning_caps!("{} listed file could not be read", res.failed_open_file);
     } else if res.failed_open_file > 1 {
@@ -284,10 +325,10 @@ impl FileChecksumResult {
 
     /// The cli options might prevent to display on the outcome of the
     /// comparison on STDOUT.
-    fn can_display(&self, opts: ChecksumOptions) -> bool {
+    fn can_display(&self, verbose: ChecksumVerbose) -> bool {
         match self {
-            FileChecksumResult::Ok => !opts.status && !opts.quiet,
-            FileChecksumResult::Failed => !opts.status,
+            FileChecksumResult::Ok => verbose.over_quiet(),
+            FileChecksumResult::Failed => verbose.over_status(),
             FileChecksumResult::CantOpen => true,
         }
     }
@@ -310,9 +351,9 @@ fn print_file_report<W: Write>(
     filename: &[u8],
     result: FileChecksumResult,
     prefix: &str,
-    opts: ChecksumOptions,
+    verbose: ChecksumVerbose,
 ) {
-    if result.can_display(opts) {
+    if result.can_display(verbose) {
         let _ = write!(w, "{prefix}");
         let _ = w.write_all(filename);
         let _ = writeln!(w, ": {result}");
@@ -589,7 +630,7 @@ fn get_file_to_check(
                 filename_bytes,
                 FileChecksumResult::CantOpen,
                 "",
-                opts,
+                opts.verbose,
             );
         };
         match File::open(filename) {
@@ -710,7 +751,7 @@ fn compute_and_check_digest_from_file(
         filename,
         FileChecksumResult::from_bool(checksum_correct),
         prefix,
-        opts,
+        opts.verbose,
     );
 
     if checksum_correct {
@@ -886,7 +927,7 @@ fn process_checksum_file(
             Err(ImproperlyFormatted) => {
                 res.bad_format += 1;
 
-                if opts.warn {
+                if opts.verbose.at_least_warning() {
                     let algo = if let Some(algo_name_input) = cli_algo_name {
                         Cow::Owned(algo_name_input.to_uppercase())
                     } else if let Some(algo) = &last_algo {
@@ -912,7 +953,7 @@ fn process_checksum_file(
     // not a single line correctly formatted found
     // return an error
     if res.total_properly_formatted() == 0 {
-        if !opts.status {
+        if opts.verbose.over_status() {
             log_no_properly_formatted(get_filename_for_output(filename_input, input_is_stdin));
         }
         set_exit_code(1);
@@ -920,16 +961,20 @@ fn process_checksum_file(
     }
 
     // if any incorrectly formatted line, show it
-    cksum_output(&res, opts.status);
+    if opts.verbose.over_status() {
+        print_cksum_report(&res);
+    }
 
     if opts.ignore_missing && res.correct == 0 {
         // we have only bad format
         // and we had ignore-missing
-        eprintln!(
-            "{}: {}: no file was verified",
-            util_name(),
-            filename_input.maybe_quote(),
-        );
+        if opts.verbose.over_status() {
+            eprintln!(
+                "{}: {}: no file was verified",
+                util_name(),
+                filename_input.maybe_quote(),
+            );
+        }
         set_exit_code(1);
     }
 
@@ -1425,7 +1470,7 @@ mod tests {
 
         for (filename, result, prefix, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
-            print_file_report(&mut buffer, filename, *result, prefix, opts);
+            print_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
             assert_eq!(&buffer, expected)
         }
     }
