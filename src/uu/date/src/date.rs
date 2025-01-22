@@ -275,6 +275,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             match date {
                 Ok(date) => {
                     // TODO - Revisit when chrono 0.5 is released. https://github.com/chronotope/chrono/issues/970
+                    // From this line to line 292 can be refactored in the timezone_date.rs module
+                    // custom_time_format(format_string, Utc::now().date_naive());
                     let tz = match std::env::var("TZ") {
                         // TODO Support other time zones...
                         Ok(s) if s == "UTC0" || s.is_empty() => Tz::Etc__UTC,
@@ -284,11 +286,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         },
                     };
                     let offset = tz.offset_from_utc_date(&Utc::now().date_naive());
-                    let tz_abbreviation = offset.abbreviation();
+                    let tz_abbreviation = offset.abbreviation().unwrap_or("UTC");
                     // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
                     let format_string = &format_string
                         .replace("%N", "%f")
-                        .replace("%Z", tz_abbreviation.unwrap_or("UTC"));
+                        .replace("%Z", tz_abbreviation);
                     // Refuse to pass this string to chrono as it is crashing in this crate
                     if format_string.contains("%#z") {
                         return Err(USimpleError::new(

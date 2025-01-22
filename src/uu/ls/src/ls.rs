@@ -386,7 +386,10 @@ impl TimeStyle {
             //So it's not yet implemented
             (Self::Locale, true) => time.format("%b %e %H:%M").to_string(),
             (Self::Locale, false) => time.format("%b %e  %Y").to_string(),
-            (Self::Format(e), _) => custom_time_format(e, time),
+            (Self::Format(e), _) => {
+                // this line can be replaced with the one in timzone_date.rs
+                custom_time_format(e, time)
+            }
         }
     }
 }
