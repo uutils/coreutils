@@ -1324,3 +1324,8 @@ fn test_human_blocks_r_and_q() {
         .succeeds()
         .stdout_is(output);
 }
+
+#[test]
+fn test_args_check_conflict() {
+    new_ucmd!().arg("-c").arg("-C").fails();
+}
