@@ -1313,3 +1313,14 @@ fn test_k_overflow() {
         .succeeds()
         .stdout_is(output);
 }
+
+#[test]
+fn test_human_blocks_r_and_q() {
+    let input = "1Q\n1R\n";
+    let output = "1R\n1Q\n";
+    new_ucmd!()
+        .args(&["-h"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
