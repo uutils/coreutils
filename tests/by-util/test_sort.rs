@@ -1315,3 +1315,30 @@ fn test_same_sort_mode_twice() {
 fn test_args_override() {
     new_ucmd!().args(&["-f", "-f"]).pipe_in("foo").succeeds();
 }
+
+#[test]
+fn test_k_overflow() {
+    let input = "2\n1\n";
+    let output = "1\n2\n";
+    new_ucmd!()
+        .args(&["-k", "18446744073709551616"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_human_blocks_r_and_q() {
+    let input = "1Q\n1R\n";
+    let output = "1R\n1Q\n";
+    new_ucmd!()
+        .args(&["-h"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_args_check_conflict() {
+    new_ucmd!().arg("-c").arg("-C").fails();
+}

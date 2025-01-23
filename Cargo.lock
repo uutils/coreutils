@@ -337,18 +337,18 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.26"
+version = "4.5.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8eb5e908ef3a6efbe1ed62520fb7287959888c88485abe072543190ecc66783"
+checksum = "769b0145982b4b48713e01ec42d61614425f27b7058bda7180a3a41f30104796"
 dependencies = [
  "clap_builder",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.5.26"
+version = "4.5.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96b01801b5fc6a0a232407abc821660c9c6d25a1cafc0d4f85f29fb8d9afc121"
+checksum = "1b26884eb4b57140e4d2d93652abfa49498b938b3c9179f9fc487b0acc3edad7"
 dependencies = [
  "anstream",
  "anstyle",
@@ -861,7 +861,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1276,7 +1276,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -1996,7 +1996,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2241,7 +2241,7 @@ dependencies = [
  "getrandom",
  "once_cell",
  "rustix 0.38.43",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2617,9 +2617,7 @@ name = "uu_date"
 version = "0.0.29"
 dependencies = [
  "chrono",
- "chrono-tz",
  "clap",
- "iana-time-zone",
  "libc",
  "parse_datetime",
  "uucore",
@@ -2879,11 +2877,9 @@ version = "0.0.29"
 dependencies = [
  "ansi-width",
  "chrono",
- "chrono-tz",
  "clap",
  "glob",
  "hostname",
- "iana-time-zone",
  "lscolors",
  "number_prefix",
  "once_cell",
@@ -3472,6 +3468,8 @@ version = "0.0.29"
 dependencies = [
  "blake2b_simd",
  "blake3",
+ "chrono",
+ "chrono-tz",
  "clap",
  "crc32fast",
  "data-encoding",
@@ -3481,6 +3479,7 @@ dependencies = [
  "dunce",
  "glob",
  "hex",
+ "iana-time-zone",
  "itertools 0.14.0",
  "lazy_static",
  "libc",
@@ -3656,7 +3655,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

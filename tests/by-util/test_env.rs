@@ -950,7 +950,7 @@ mod tests_split_iterator {
                 | '*' | '?' | '[' | '#' | '˜' | '=' | '%' => {
                     special = true;
                 }
-                _ => continue,
+                _ => (),
             }
         }
 

@@ -101,8 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = SeqOptions {
         separator: matches
             .get_one::<String>(OPT_SEPARATOR)
-            .map(|s| s.as_str())
-            .unwrap_or("\n")
+            .map_or("\n", |s| s.as_str())
             .to_string(),
         terminator: matches
             .get_one::<String>(OPT_TERMINATOR)
@@ -150,13 +149,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let precision = select_precision(first_precision, increment_precision, last_precision);
 
-    let format = match options.format {
-        Some(f) => {
-            let f = Format::<num_format::Float>::parse(f)?;
-            Some(f)
-        }
-        None => None,
-    };
+    let format = options
+        .format
+        .map(Format::<num_format::Float>::parse)
+        .transpose()?;
+
     let result = print_seq(
         (first.number, increment.number, last.number),
         precision,
@@ -164,12 +161,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         &options.terminator,
         options.equal_width,
         padding,
-        &format,
+        format.as_ref(),
     );
     match result {
-        Ok(_) => Ok(()),
+        Ok(()) => Ok(()),
         Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
-        Err(e) => Err(e.map_err_context(|| "write error".into())),
+        Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
 }
 
@@ -263,7 +260,7 @@ fn print_seq(
     terminator: &str,
     pad: bool,
     padding: usize,
-    format: &Option<Format<num_format::Float>>,
+    format: Option<&Format<num_format::Float>>,
 ) -> std::io::Result<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();

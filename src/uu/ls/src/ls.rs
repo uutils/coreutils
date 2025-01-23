@@ -27,14 +27,12 @@ use std::{
 use std::{collections::HashSet, io::IsTerminal};
 
 use ansi_width::ansi_width;
-use chrono::{DateTime, Local, TimeDelta, TimeZone, Utc};
-use chrono_tz::{OffsetName, Tz};
+use chrono::{DateTime, Local, TimeDelta};
 use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
-use iana_time_zone::get_timezone;
 use lscolors::LsColors;
 use term_grid::{Direction, Filling, Grid, GridOptions};
 
@@ -60,6 +58,7 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{self, escape_name, QuotingStyle};
 use uucore::{
+    custom_tz_fmt,
     display::Quotable,
     error::{set_exit_code, UError, UResult},
     format_usage,
@@ -345,31 +344,6 @@ fn is_recent(time: DateTime<Local>) -> bool {
     time + TimeDelta::try_seconds(31_556_952 / 2).unwrap() > Local::now()
 }
 
-/// Get the alphabetic abbreviation of the current timezone.
-///
-/// For example, "UTC" or "CET" or "PDT".
-fn timezone_abbrev() -> String {
-    let tz = match std::env::var("TZ") {
-        // TODO Support other time zones...
-        Ok(s) if s == "UTC0" || s.is_empty() => Tz::Etc__UTC,
-        _ => match get_timezone() {
-            Ok(tz_str) => tz_str.parse().unwrap(),
-            Err(_) => Tz::Etc__UTC,
-        },
-    };
-    let offset = tz.offset_from_utc_date(&Utc::now().date_naive());
-    offset.abbreviation().unwrap_or("UTC").to_string()
-}
-
-/// Format the given time according to a custom format string.
-fn custom_time_format(fmt: &str, time: DateTime<Local>) -> String {
-    // TODO Refactor the common code from `ls` and `date` for rendering dates.
-    // TODO - Revisit when chrono 0.5 is released. https://github.com/chronotope/chrono/issues/970
-    // GNU `date` uses `%N` for nano seconds, however the `chrono` crate uses `%f`.
-    let fmt = fmt.replace("%N", "%f").replace("%Z", &timezone_abbrev());
-    time.format(&fmt).to_string()
-}
-
 impl TimeStyle {
     /// Format the given time according to this time format style.
     fn format(&self, time: DateTime<Local>) -> String {
@@ -386,7 +360,9 @@ impl TimeStyle {
             //So it's not yet implemented
             (Self::Locale, true) => time.format("%b %e %H:%M").to_string(),
             (Self::Locale, false) => time.format("%b %e  %Y").to_string(),
-            (Self::Format(e), _) => custom_time_format(e, time),
+            (Self::Format(fmt), _) => time
+                .format(custom_tz_fmt::custom_time_format(fmt).as_str())
+                .to_string(),
         }
     }
 }
@@ -403,8 +379,8 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
         if options.get_flag(options::FULL_TIME)
-            && options.indices_of(options::FULL_TIME).unwrap().last()
-                > options.indices_of(options::TIME_STYLE).unwrap().last()
+            && options.indices_of(options::FULL_TIME).unwrap().next_back()
+                > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
             Ok(TimeStyle::FullIso)
         } else {

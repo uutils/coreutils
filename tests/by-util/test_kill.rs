@@ -63,7 +63,7 @@ fn test_kill_list_all_signals() {
         .stdout_contains("KILL")
         .stdout_contains("TERM")
         .stdout_contains("HUP")
-        .stdout_does_not_contain("EXIT");
+        .stdout_contains("EXIT");
 }
 
 #[test]
@@ -80,15 +80,16 @@ fn test_kill_list_all_signals_as_table() {
         .succeeds()
         .stdout_contains("KILL")
         .stdout_contains("TERM")
-        .stdout_contains("HUP");
+        .stdout_contains("HUP")
+        .stdout_contains("EXIT");
 }
 
 #[test]
-fn test_kill_table_starts_at_1() {
+fn test_kill_table_starts_at_0() {
     new_ucmd!()
         .arg("-t")
         .succeeds()
-        .stdout_matches(&Regex::new("^\\s?1\\sHUP").unwrap());
+        .stdout_matches(&Regex::new("^\\s?0\\sEXIT").unwrap());
 }
 
 #[test]
@@ -104,6 +105,7 @@ fn test_kill_table_lists_all_vertically() {
     assert!(signals.contains(&"KILL"));
     assert!(signals.contains(&"TERM"));
     assert!(signals.contains(&"HUP"));
+    assert!(signals.contains(&"EXIT"));
 }
 
 #[test]
@@ -143,6 +145,7 @@ fn test_kill_list_all_vertically() {
     assert!(signals.contains(&"KILL"));
     assert!(signals.contains(&"TERM"));
     assert!(signals.contains(&"HUP"));
+    assert!(signals.contains(&"EXIT"));
 }
 
 #[test]

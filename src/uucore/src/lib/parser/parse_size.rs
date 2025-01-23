@@ -269,16 +269,9 @@ impl<'parser> Parser<'parser> {
 
     /// Same as `parse()` but tries to return u64
     pub fn parse_u64(&self, size: &str) -> Result<u64, ParseSizeError> {
-        match self.parse(size) {
-            Ok(num_u128) => {
-                let num_u64 = match u64::try_from(num_u128) {
-                    Ok(n) => n,
-                    Err(_) => return Err(ParseSizeError::size_too_big(size)),
-                };
-                Ok(num_u64)
-            }
-            Err(e) => Err(e),
-        }
+        self.parse(size).and_then(|num_u128| {
+            u64::try_from(num_u128).map_err(|_| ParseSizeError::size_too_big(size))
+        })
     }
 
     /// Same as `parse_u64()`, except returns `u64::MAX` on overflow

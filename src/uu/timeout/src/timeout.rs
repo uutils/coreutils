@@ -129,6 +129,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FOREGROUND)
                 .long(options::FOREGROUND)
+                .short('f')
                 .help(
                     "when not running timeout directly from a shell prompt, allow \
                 COMMAND to read from the TTY and get TTY signals; in this mode, \
@@ -148,6 +149,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::PRESERVE_STATUS)
                 .long(options::PRESERVE_STATUS)
+                .short('p')
                 .help("exit with the same status as COMMAND, even when the command times out")
                 .action(ArgAction::SetTrue),
         )

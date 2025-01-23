@@ -34,6 +34,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::num::IntErrorKind;
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
@@ -288,7 +289,7 @@ impl GlobalSettings {
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
         let size = Parser::default()
             .with_allow_list(&[
-                "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y", "%",
+                "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y", "R", "Q", "%",
             ])
             .with_default_unit("K")
             .with_b_byte_count(true)
@@ -534,8 +535,9 @@ impl<'a> Line<'a> {
                     } else {
                         // include a trailing si unit
                         if selector.settings.mode == SortMode::HumanNumeric
-                            && self.line[selection.end..initial_selection.end]
-                                .starts_with(&['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][..])
+                            && self.line[selection.end..initial_selection.end].starts_with(
+                                &['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q'][..],
+                            )
                         {
                             selection.end += 1;
                         }
@@ -696,9 +698,17 @@ impl KeyPosition {
             .ok_or_else(|| format!("invalid key {}", key.quote()))?;
         let char = field_and_char.next();
 
-        let field = field
-            .parse()
-            .map_err(|e| format!("failed to parse field index {}: {}", field.quote(), e))?;
+        let field = match field.parse::<usize>() {
+            Ok(f) => f,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
+            Err(e) => {
+                return Err(format!(
+                    "failed to parse field index {} {}",
+                    field.quote(),
+                    e
+                ))
+            }
+        };
         if field == 0 {
             return Err("field index can not be 0".to_string());
         }
@@ -1361,14 +1371,14 @@ pub fn uu_app() -> Command {
                     options::check::QUIET,
                     options::check::DIAGNOSE_FIRST,
                 ]))
-                .conflicts_with(options::OUTPUT)
+                .conflicts_with_all([options::OUTPUT, options::check::CHECK_SILENT])
                 .help("check for sorted input; do not sort"),
         )
         .arg(
             Arg::new(options::check::CHECK_SILENT)
                 .short('C')
                 .long(options::check::CHECK_SILENT)
-                .conflicts_with(options::OUTPUT)
+                .conflicts_with_all([options::OUTPUT, options::check::CHECK])
                 .help(
                     "exit successfully if the given file is already sorted, \
                 and exit with status 1 otherwise.",
