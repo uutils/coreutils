@@ -83,14 +83,27 @@ fn test_command_empty_args() {
 }
 
 #[test]
+fn test_foreground() {
+    for arg in ["-f", "--foreground"] {
+        new_ucmd!()
+            .args(&[arg, ".1", "sleep", "10"])
+            .fails()
+            .code_is(124)
+            .no_output();
+    }
+}
+
+#[test]
 fn test_preserve_status() {
-    new_ucmd!()
-        .args(&["--preserve-status", ".1", "sleep", "10"])
-        .fails()
-        // 128 + SIGTERM = 128 + 15
-        .code_is(128 + 15)
-        .no_stderr()
-        .no_stdout();
+    for arg in ["-p", "--preserve-status"] {
+        new_ucmd!()
+            .args(&[arg, ".1", "sleep", "10"])
+            .fails()
+            // 128 + SIGTERM = 128 + 15
+            .code_is(128 + 15)
+            .no_stderr()
+            .no_stdout();
+    }
 }
 
 #[test]
