@@ -48,7 +48,7 @@ rand = "0.8.3"
 ```rust
 use rand::prelude::*;
 fn main() {
-    let suffixes = ['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
+    let suffixes = ['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q'];
     let mut rng = thread_rng();
     for _ in 0..100000 {
         println!(
