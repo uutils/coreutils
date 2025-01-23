@@ -65,13 +65,11 @@ fn test_zero_timeout() {
     new_ucmd!()
         .args(&["-v", "0", "sleep", ".1"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     new_ucmd!()
         .args(&["-v", "0", "-s0", "-k0", "sleep", ".1"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[test]
@@ -101,8 +99,7 @@ fn test_preserve_status() {
             .fails()
             // 128 + SIGTERM = 128 + 15
             .code_is(128 + 15)
-            .no_stderr()
-            .no_stdout();
+            .no_output();
     }
 }
 
@@ -115,8 +112,7 @@ fn test_preserve_status_even_when_send_signal() {
             .args(&["-s", cont_spelling, "--preserve-status", ".1", "sleep", "2"])
             .succeeds()
             .code_is(0)
-            .no_stderr()
-            .no_stdout();
+            .no_output();
     }
 }
 
@@ -126,14 +122,12 @@ fn test_dont_overflow() {
         .args(&["9223372036854775808d", "sleep", "0"])
         .succeeds()
         .code_is(0)
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     new_ucmd!()
         .args(&["-k", "9223372036854775808d", "10", "sleep", "0"])
         .succeeds()
         .code_is(0)
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[test]
@@ -166,8 +160,7 @@ fn test_kill_after_long() {
     new_ucmd!()
         .args(&["--kill-after=1", "1", "sleep", "0"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 }
 
 #[test]
