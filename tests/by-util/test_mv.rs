@@ -1684,17 +1684,24 @@ fn test_acl() {
 // mv: try to overwrite 'b', overriding mode 0444 (r--r--r--)? y
 // 'a' -> 'b'
 
+// Currently, these tests cannot be run on any OS other than Linux in CI. We
+// could run them locally by pointing `REMOTE_TEMP_DIR` to a remote file system.
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
-    use crate::common::util::TestScenario;
+    use crate::common::util::{PathSeparatorReplace, TestScenario};
     use std::ffi::OsString;
     use std::fs::{read_to_string, set_permissions, write, File};
+    #[cfg(unix)]
     use std::os::unix::fs::{symlink, FileTypeExt, MetadataExt, PermissionsExt};
     use std::time::Duration;
     use tempfile::TempDir;
     use uucore::display::Quotable;
+    #[cfg(unix)]
     use uucore::fsxattr::retrieve_xattrs;
+    #[cfg(unix)]
     use xattr::FileExt;
+
+    const REMOTE_TEMP_DIR: &str = "/dev/shm/";
     // Ensure that the copying code used in an inter-partition move preserve dir structure.
     #[test]
     fn test_inter_partition_copying_folder() {
@@ -1706,7 +1713,7 @@ mod inter_partition_copying {
 
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
 
         // mv to other partition
         scene
@@ -1732,6 +1739,7 @@ mod inter_partition_copying {
     }
 
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
+    #[cfg(unix)]
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink() {
         let scene = TestScenario::new(util_name!());
@@ -1742,7 +1750,7 @@ mod inter_partition_copying {
 
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
 
         // create a file inside that folder.
         let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
@@ -1781,6 +1789,7 @@ mod inter_partition_copying {
 
     // In an inter-partition move if unlinking the destination symlink fails, ensure
     // that it would output the proper error message.
+    #[cfg(unix)]
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
         let scene = TestScenario::new(util_name!());
@@ -1791,7 +1800,7 @@ mod inter_partition_copying {
 
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
 
         // create a file inside that folder.
         let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
@@ -1829,7 +1838,7 @@ mod inter_partition_copying {
 
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
 
         // mv to other partition
         scene
@@ -1865,13 +1874,13 @@ mod inter_partition_copying {
     fn test_inter_partition_copying_folder_with_verbose() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
-        at.mkdir_all("a/b/c");
-        at.write("a/b/d", "d");
-        at.write("a/b/c/e", "e");
+        at.mkdir_all(&"a/b/c".replace_path_separator());
+        at.write(&"a/b/d".replace_path_separator(), "d");
+        at.write(&"a/b/c/e".replace_path_separator(), "e");
 
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
 
         // mv to other partition
         scene
@@ -1888,20 +1897,23 @@ mod inter_partition_copying {
                 "created directory {}",
                 other_fs_tempdir
                     .path()
-                    .join("a/b/c")
+                    .join("a/b/c".replace_path_separator())
                     .to_string_lossy()
                     .quote()
             ))
-            .stdout_contains(format!(
-                "copied 'a/b/d' -> {}",
-                other_fs_tempdir
-                    .path()
-                    .join("a/b/d")
-                    .to_string_lossy()
-                    .quote()
-            ))
-            .stdout_contains("removed 'a/b/c/e'")
-            .stdout_contains("removed directory 'a/b'");
+            .stdout_contains(
+                format!(
+                    "copied 'a/b/d' -> {}",
+                    other_fs_tempdir
+                        .path()
+                        .join("a/b/d")
+                        .to_string_lossy()
+                        .quote()
+                )
+                .replace_path_separator(),
+            )
+            .stdout_contains("removed 'a/b/c/e'".replace_path_separator())
+            .stdout_contains("removed directory 'a/b'".replace_path_separator());
     }
     #[test]
     fn test_inter_partition_copying_file_with_verbose() {
@@ -1911,7 +1923,7 @@ mod inter_partition_copying {
 
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
 
         // mv to other partition
         scene
@@ -1943,6 +1955,7 @@ mod inter_partition_copying {
             .stdout_contains("removed 'a'");
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_inter_partition_copying_dir_without_read_permission_to_sub_dir() {
         let scene = TestScenario::new(util_name!());
@@ -1956,7 +1969,7 @@ mod inter_partition_copying {
         at.set_mode("a/b/f", 0);
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
 
         // mv to other partition
         scene
@@ -1980,6 +1993,7 @@ mod inter_partition_copying {
         at.file_exists("a/b/h");
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_inter_partition_copying_directory_metadata_for_file() {
         let scene = TestScenario::new(util_name!());
@@ -2006,7 +2020,7 @@ mod inter_partition_copying {
             .expect("couldn't get accessed time for src file");
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
 
         // https://github.com/Stebalien/xattr/issues/24#issuecomment-1279682009
         let mut dest_fs_xattr_support = true;
@@ -2066,6 +2080,7 @@ mod inter_partition_copying {
     // this test would fail if progress bar flag is set to true because we need
     // to traverse directory in order to find the size that would change the
     // access time.
+    #[cfg(unix)]
     #[test]
     fn test_inter_partition_copying_directory_metadata_for_directory() {
         let scene = TestScenario::new(util_name!());
@@ -2092,7 +2107,7 @@ mod inter_partition_copying {
             .expect("couldn't get accessed time for src file");
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
         // make sure to wait for a second so that when the dest file is created, it
         // would have a different filetime so that the only way the dest file
         // would have a same timestamp is by copying the timestamp of src file.
@@ -2148,6 +2163,7 @@ mod inter_partition_copying {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_inter_partition_removing_source_without_permission() {
         let scene = TestScenario::new(util_name!());
@@ -2158,7 +2174,7 @@ mod inter_partition_copying {
         at.set_mode("a/aa/", 0o555);
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
         // mv to other partition
         scene
             .ucmd()
@@ -2174,6 +2190,7 @@ mod inter_partition_copying {
         assert!(other_fs_tempdir.path().join("a/aa/aa1").exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_inter_partition_removing_source_without_permission_2() {
         let scene = TestScenario::new(util_name!());
@@ -2186,7 +2203,7 @@ mod inter_partition_copying {
         at.set_mode("a/aa/", 0o555);
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
         // mv to other partition
         scene
             .ucmd()
@@ -2204,6 +2221,7 @@ mod inter_partition_copying {
         assert!(other_fs_tempdir.path().join("a/aa/aa1").exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_inter_partition_removing_source_without_permission_3() {
         let scene = TestScenario::new(util_name!());
@@ -2215,7 +2233,7 @@ mod inter_partition_copying {
         at.set_mode("a/aa/", 0o555);
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
         // mv to other partition
         scene
             .ucmd()
@@ -2230,6 +2248,7 @@ mod inter_partition_copying {
         assert!(other_fs_tempdir.path().join("a/aa/aa1").exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_inter_partition_removing_source_without_permission_4() {
         let scene = TestScenario::new(util_name!());
@@ -2243,7 +2262,7 @@ mod inter_partition_copying {
         at.set_mode("a/aa/", 0o555);
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
         // mv to other partition
         scene
             .ucmd()
