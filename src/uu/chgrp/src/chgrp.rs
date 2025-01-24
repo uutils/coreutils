@@ -19,8 +19,26 @@ use std::os::unix::fs::MetadataExt;
 const ABOUT: &str = help_about!("chgrp.md");
 const USAGE: &str = help_usage!("chgrp.md");
 
-fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
-    let mut raw_group: String = String::new();
+fn parse_gid_from_str(group: &str) -> Result<u32, String> {
+    if let Some(gid_str) = group.strip_prefix(':') {
+        // Handle :gid format
+        gid_str
+            .parse::<u32>()
+            .map_err(|_| format!("invalid group id: '{}'", gid_str))
+    } else {
+        // Try as group name first
+        match entries::grp2gid(group) {
+            Ok(g) => Ok(g),
+            // If group name lookup fails, try parsing as raw number
+            Err(_) => group
+                .parse::<u32>()
+                .map_err(|_| format!("invalid group: '{}'", group)),
+        }
+    }
+}
+
+fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
+    let mut raw_group = String::new();
     let dest_gid = if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
         fs::metadata(file)
             .map(|meta| {
@@ -38,22 +56,38 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
         if group.is_empty() {
             None
         } else {
-            match entries::grp2gid(group) {
+            match parse_gid_from_str(group) {
                 Ok(g) => Some(g),
-                _ => {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid group: {}", group.quote()),
-                    ))
-                }
+                Err(e) => return Err(USimpleError::new(1, e)),
             }
         }
     };
+    Ok((dest_gid, raw_group))
+}
+
+fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
+    let (dest_gid, raw_group) = get_dest_gid(matches)?;
+
+    // Handle --from option
+    let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
+        match parse_gid_from_str(from_group) {
+            Ok(g) => IfFrom::Group(g),
+            Err(_) => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid user: '{}'", from_group),
+                ))
+            }
+        }
+    } else {
+        IfFrom::All
+    };
+
     Ok(GidUidOwnerFilter {
         dest_gid,
         dest_uid: None,
         raw_owner: raw_group,
-        filter: IfFrom::All,
+        filter,
     })
 }
 
@@ -119,6 +153,12 @@ pub fn uu_app() -> Command {
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .help("use RFILE's group rather than specifying GROUP values"),
+        )
+        .arg(
+            Arg::new(options::FROM)
+                .long(options::FROM)
+                .value_name("GROUP")
+                .help("change the group only if its current group matches GROUP"),
         )
         .arg(
             Arg::new(options::RECURSIVE)
