@@ -150,7 +150,7 @@ else
 
     # Handle generated factor tests
     t_first=00
-    t_max=36
+    t_max=37
     # t_max_release=20
     # if test "${UU_MAKE_PROFILE}" != "debug"; then
     #     # Generate the factor tests, so they can be fixed
