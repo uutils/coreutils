@@ -141,6 +141,10 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
         // Old signal can only be in the first argument position
         let slice = args[1].as_str();
         if let Some(signal) = slice.strip_prefix('-') {
+            // With '-', a signal name must start with an uppercase char
+            if signal.chars().next().is_some_and(|c| c.is_lowercase()) {
+                return None;
+            }
             // Check if it is a valid signal
             let opt_signal = signal_by_name_or_value(signal);
             if opt_signal.is_some() {

@@ -198,12 +198,24 @@ fn test_kill_with_signal_number_old_form() {
 
 #[test]
 fn test_kill_with_signal_name_old_form() {
-    let mut target = Target::new();
+    for arg in ["-Kill", "-KILL"] {
+        let mut target = Target::new();
+        new_ucmd!()
+            .arg(arg)
+            .arg(format!("{}", target.pid()))
+            .succeeds();
+        assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+    }
+}
+
+#[test]
+fn test_kill_with_lower_case_signal_name_old_form() {
+    let target = Target::new();
     new_ucmd!()
-        .arg("-KILL")
+        .arg("-kill")
         .arg(format!("{}", target.pid()))
-        .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+        .fails()
+        .stderr_contains("unexpected argument");
 }
 
 #[test]
