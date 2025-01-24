@@ -5,13 +5,9 @@
 use clap::{Arg, ArgAction, Command};
 use std::io::stdout;
 use std::ops::ControlFlow;
-#[cfg(unix)]
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
-#[cfg(windows)]
-use std::os::windows::ffi::OsStrExt;
 use uucore::error::{UResult, UUsageError};
 use uucore::format::{FormatArgument, FormatItem, parse_spec_and_escape};
-use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
+use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show_warning};
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
@@ -30,33 +26,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format = matches
         .get_one::<std::ffi::OsString>(options::FORMAT)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
-
-    #[cfg(unix)]
-    let format = format.as_bytes();
-
-    #[cfg(windows)]
-    let format_vec: Vec<u8> = format
-        .encode_wide()
-        .flat_map(|wchar| wchar.to_le_bytes())
-        .collect();
-    #[cfg(windows)]
-    let format = format_vec.as_slice();
+    let format = os_str_as_bytes(format)?;
 
     let values: Vec<_> = match matches.get_many::<std::ffi::OsString>(options::ARGUMENT) {
+        // FIXME: use os_str_as_bytes once FormatArgument supports Vec<u8>
         Some(s) => s
-            .map(|os_str| {
-                #[cfg(unix)]
-                let raw_bytes: Vec<u8> = os_str.clone().into_vec();
-
-                #[cfg(windows)]
-                let raw_bytes: Vec<u8> = os_str
-                    .encode_wide()
-                    .flat_map(|wchar| wchar.to_le_bytes())
-                    .collect();
-                FormatArgument::Unparsed(
-                    String::from_utf8(raw_bytes.clone())
-                        .unwrap_or_else(|_| raw_bytes.iter().map(|&b| b as char).collect()),
-                )
+            .map(|os_string| {
+                FormatArgument::Unparsed(std::ffi::OsStr::to_string_lossy(os_string).to_string())
             })
             .collect(),
         None => vec![],
