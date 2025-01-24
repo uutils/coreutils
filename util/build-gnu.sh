@@ -97,7 +97,14 @@ fi
 # Set up quilt for patch management
 export QUILT_PATCHES="${ME_dir}/gnu-patches/"
 cd "$path_GNU"
-quilt push -a
+
+# Check if all patches are already applied
+if [ "$(quilt applied | wc -l)" -eq "$(quilt series | wc -l)" ]; then
+    echo "All patches are already applied"
+else
+    # Push all patches
+    quilt push -a || { echo "Failed to apply patches"; exit 1; }
+fi
 cd -
 
 "${MAKE}" PROFILE="${UU_MAKE_PROFILE}"
@@ -143,27 +150,7 @@ else
 
     # Handle generated factor tests
     t_first=00
-    t_max=36
-    # t_max_release=20
-    # if test "${UU_MAKE_PROFILE}" != "debug"; then
-    #     # Generate the factor tests, so they can be fixed
-    #     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
-    #     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
-    #     seq=$(
-    #         i=${t_first}
-    #         while test "${i}" -le "${t_max_release}"; do
-    #             printf '%02d ' $i
-    #             i=$((i + 1))
-    #         done
-    #     )
-    #     for i in ${seq}; do
-    #         "${MAKE}" "tests/factor/t${i}.sh"
-    #     done
-    #     cat
-    #     sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*.sh
-    #     t_first=$((t_max_release + 1))
-    # fi
-    # strip all (debug) or just the longer (release) factor tests from Makefile
+    t_max=37
     seq=$(
         i=${t_first}
         while test "${i}" -le "${t_max}"; do
