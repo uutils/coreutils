@@ -30,7 +30,7 @@ use uucore::fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file, canonicalize,
     disk_usage, path_ends_with_terminator, MissingHandling, ResolveMode,
 };
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+#[cfg(all(unix, not(any( target_os = "redox"))))]
 use uucore::fsxattr;
 #[cfg(unix)]
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
@@ -1082,7 +1082,7 @@ fn copy_metadata(src: &Path, dest: &Path, src_metadata: &fs::Metadata) {
     }
 
     // Copy xattrs.
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    #[cfg(all(unix, not(target_os = "redox")))]
     if let Err(err) = fsxattr::copy_xattrs(src, dest) {
         show_error!("preserving permissions for {}: {}", dest.quote(), err);
     }
