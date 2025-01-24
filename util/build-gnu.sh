@@ -97,7 +97,14 @@ fi
 # Set up quilt for patch management
 export QUILT_PATCHES="${ME_dir}/gnu-patches/"
 cd "$path_GNU"
-quilt push -a
+
+# Check if all patches are already applied
+if [ "$(quilt applied | wc -l)" -eq "$(quilt series | wc -l)" ]; then
+    echo "All patches are already applied"
+else
+    # Push all patches
+    quilt push -a || { echo "Failed to apply patches"; exit 1; }
+fi
 cd -
 
 "${MAKE}" PROFILE="${UU_MAKE_PROFILE}"
