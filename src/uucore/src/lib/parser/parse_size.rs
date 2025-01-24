@@ -8,9 +8,69 @@
 
 use std::error::Error;
 use std::fmt;
-use std::num::IntErrorKind;
+#[cfg(target_os = "linux")]
+use std::io::BufRead;
+use std::num::{IntErrorKind, ParseIntError};
 
 use crate::display::Quotable;
+
+/// Error arising from trying to compute system memory.
+enum SystemError {
+    IOError,
+    ParseError,
+    NotFound,
+}
+
+impl From<std::io::Error> for SystemError {
+    fn from(_: std::io::Error) -> Self {
+        Self::IOError
+    }
+}
+
+impl From<ParseIntError> for SystemError {
+    fn from(_: ParseIntError) -> Self {
+        Self::ParseError
+    }
+}
+
+/// Get the total number of bytes of physical memory.
+///
+/// The information is read from the `/proc/meminfo` file.
+///
+/// # Errors
+///
+/// If there is a problem reading the file or finding the appropriate
+/// entry in the file.
+#[cfg(target_os = "linux")]
+fn total_physical_memory() -> Result<u128, SystemError> {
+    // On Linux, the `/proc/meminfo` file has a table with information
+    // about memory usage. For example,
+    //
+    //     MemTotal:        7811500 kB
+    //     MemFree:         1487876 kB
+    //     MemAvailable:    3857232 kB
+    //     ...
+    //
+    // We just need to extract the number of `MemTotal`
+    let table = std::fs::read("/proc/meminfo")?;
+    for line in table.lines() {
+        let line = line?;
+        if line.starts_with("MemTotal:") && line.ends_with("kB") {
+            let num_kilobytes: u128 = line[9..line.len() - 2].trim().parse()?;
+            let num_bytes = 1024 * num_kilobytes;
+            return Ok(num_bytes);
+        }
+    }
+    Err(SystemError::NotFound)
+}
+
+/// Get the total number of bytes of physical memory.
+///
+/// TODO Implement this for non-Linux systems.
+#[cfg(not(target_os = "linux"))]
+fn total_physical_memory() -> Result<u128, SystemError> {
+    Err(SystemError::NotFound)
+}
 
 /// Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 ///
@@ -133,6 +193,16 @@ impl<'parser> Parser<'parser> {
             }
         }
 
+        // Special case: for percentage, just compute the given fraction
+        // of the total physical memory on the machine, if possible.
+        if unit == "%" {
+            let number: u128 = Self::parse_number(&numeric_string, 10, size)?;
+            return match total_physical_memory() {
+                Ok(total) => Ok((number / 100) * total),
+                Err(_) => Err(ParseSizeError::PhysicalMem(size.to_string())),
+            };
+        }
+
         // Compute the factor the unit represents.
         // empty string means the factor is 1.
         //
@@ -199,16 +269,9 @@ impl<'parser> Parser<'parser> {
 
     /// Same as `parse()` but tries to return u64
     pub fn parse_u64(&self, size: &str) -> Result<u64, ParseSizeError> {
-        match self.parse(size) {
-            Ok(num_u128) => {
-                let num_u64 = match u64::try_from(num_u128) {
-                    Ok(n) => n,
-                    Err(_) => return Err(ParseSizeError::size_too_big(size)),
-                };
-                Ok(num_u64)
-            }
-            Err(e) => Err(e),
-        }
+        self.parse(size).and_then(|num_u128| {
+            u64::try_from(num_u128).map_err(|_| ParseSizeError::size_too_big(size))
+        })
     }
 
     /// Same as `parse_u64()`, except returns `u64::MAX` on overflow
@@ -327,6 +390,9 @@ pub enum ParseSizeError {
 
     /// Overflow
     SizeTooBig(String),
+
+    /// Could not determine total physical memory size.
+    PhysicalMem(String),
 }
 
 impl Error for ParseSizeError {
@@ -335,6 +401,7 @@ impl Error for ParseSizeError {
             Self::InvalidSuffix(ref s) => s,
             Self::ParseFailure(ref s) => s,
             Self::SizeTooBig(ref s) => s,
+            Self::PhysicalMem(ref s) => s,
         }
     }
 }
@@ -342,7 +409,10 @@ impl Error for ParseSizeError {
 impl fmt::Display for ParseSizeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let s = match self {
-            Self::InvalidSuffix(s) | Self::ParseFailure(s) | Self::SizeTooBig(s) => s,
+            Self::InvalidSuffix(s)
+            | Self::ParseFailure(s)
+            | Self::SizeTooBig(s)
+            | Self::PhysicalMem(s) => s,
         };
         write!(f, "{s}")
     }
@@ -680,5 +750,17 @@ mod tests {
         assert_eq!(Ok(10), parse_size_u64("0xA"));
         assert_eq!(Ok(94722), parse_size_u64("0x17202"));
         assert_eq!(Ok(44251 * 1024), parse_size_u128("0xACDBK"));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn parse_percent() {
+        assert!(parse_size_u64("0%").is_ok());
+        assert!(parse_size_u64("50%").is_ok());
+        assert!(parse_size_u64("100%").is_ok());
+        assert!(parse_size_u64("100000%").is_ok());
+        assert!(parse_size_u64("-1%").is_err());
+        assert!(parse_size_u64("1.0%").is_err());
+        assert!(parse_size_u64("0x1%").is_err());
     }
 }

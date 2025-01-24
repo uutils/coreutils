@@ -2617,9 +2617,7 @@ name = "uu_date"
 version = "0.0.29"
 dependencies = [
  "chrono",
- "chrono-tz",
  "clap",
- "iana-time-zone",
  "libc",
  "parse_datetime",
  "uucore",
@@ -2879,11 +2877,9 @@ version = "0.0.29"
 dependencies = [
  "ansi-width",
  "chrono",
- "chrono-tz",
  "clap",
  "glob",
  "hostname",
- "iana-time-zone",
  "lscolors",
  "number_prefix",
  "once_cell",
@@ -3475,6 +3471,8 @@ version = "0.0.29"
 dependencies = [
  "blake2b_simd",
  "blake3",
+ "chrono",
+ "chrono-tz",
  "clap",
  "crc32fast",
  "data-encoding",
@@ -3484,6 +3482,7 @@ dependencies = [
  "dunce",
  "glob",
  "hex",
+ "iana-time-zone",
  "itertools 0.14.0",
  "lazy_static",
  "libc",

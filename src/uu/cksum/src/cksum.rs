@@ -13,8 +13,9 @@ use std::iter;
 use std::path::Path;
 use uucore::checksum::{
     calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
-    ChecksumError, ChecksumOptions, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD,
-    ALGORITHM_OPTIONS_CRC, ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
+    ChecksumError, ChecksumOptions, ChecksumVerbose, ALGORITHM_OPTIONS_BLAKE2B,
+    ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC, ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV,
+    SUPPORTED_ALGORITHMS,
 };
 use uucore::{
     encoding,
@@ -322,13 +323,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
             |files| files.map(OsStr::new).collect::<Vec<_>>(),
         );
+
+        let verbose = ChecksumVerbose::new(status, quiet, warn);
+
         let opts = ChecksumOptions {
             binary: binary_flag,
             ignore_missing,
-            quiet,
-            status,
             strict,
-            warn,
+            verbose,
         };
 
         return perform_checksum_validation(files.iter().copied(), algo_option, length, opts);
@@ -462,19 +464,22 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long("warn")
                 .help("warn about improperly formatted checksum lines")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with_all([options::STATUS, options::QUIET]),
         )
         .arg(
             Arg::new(options::STATUS)
                 .long("status")
                 .help("don't output anything, status code shows success")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with_all([options::WARN, options::QUIET]),
         )
         .arg(
             Arg::new(options::QUIET)
                 .long(options::QUIET)
                 .help("don't print OK for each successfully verified file")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with_all([options::WARN, options::STATUS]),
         )
         .arg(
             Arg::new(options::IGNORE_MISSING)

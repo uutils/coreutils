@@ -1408,18 +1408,15 @@ where
         };
 
         let bytes = line.as_slice();
-        match kth_chunk {
-            Some(chunk_number) => {
-                if (i % num_chunks) == (chunk_number - 1) as usize {
-                    stdout_writer.write_all(bytes)?;
-                }
+        if let Some(chunk_number) = kth_chunk {
+            if (i % num_chunks) == (chunk_number - 1) as usize {
+                stdout_writer.write_all(bytes)?;
             }
-            None => {
-                let writer = out_files.get_writer(i % num_chunks, settings)?;
-                let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
-                if !writer_stdin_open {
-                    closed_writers += 1;
-                }
+        } else {
+            let writer = out_files.get_writer(i % num_chunks, settings)?;
+            let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
+            if !writer_stdin_open {
+                closed_writers += 1;
             }
         }
         i += 1;

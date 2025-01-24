@@ -29,6 +29,10 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 
 #[test]
 fn test_buffer_sizes() {
+    #[cfg(target_os = "linux")]
+    let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "0%", "10%"];
+    // TODO Percentage sizes are not yet supported beyond Linux.
+    #[cfg(not(target_os = "linux"))]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
         TestScenario::new(util_name!())
@@ -72,6 +76,15 @@ fn test_invalid_buffer_size() {
         .fails()
         .code_is(2)
         .stderr_only("sort: invalid suffix in --buffer-size argument '100f'\n");
+
+    // TODO Percentage sizes are not yet supported beyond Linux.
+    #[cfg(target_os = "linux")]
+    new_ucmd!()
+        .arg("-S")
+        .arg("0x123%")
+        .fails()
+        .code_is(2)
+        .stderr_only("sort: invalid --buffer-size argument '0x123%'\n");
 
     new_ucmd!()
         .arg("-n")
@@ -1312,4 +1325,20 @@ fn test_k_overflow() {
         .pipe_in(input)
         .succeeds()
         .stdout_is(output);
+}
+
+#[test]
+fn test_human_blocks_r_and_q() {
+    let input = "1Q\n1R\n";
+    let output = "1R\n1Q\n";
+    new_ucmd!()
+        .args(&["-h"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_args_check_conflict() {
+    new_ucmd!().arg("-c").arg("-C").fails();
 }

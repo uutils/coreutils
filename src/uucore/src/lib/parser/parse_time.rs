@@ -49,9 +49,8 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
     if len == 0 {
         return Err("empty string".to_owned());
     }
-    let slice = match string.get(..len - 1) {
-        Some(s) => s,
-        None => return Err(format!("invalid time interval {}", string.quote())),
+    let Some(slice) = string.get(..len - 1) else {
+        return Err(format!("invalid time interval {}", string.quote()));
     };
     let (numstr, times) = match string.chars().next_back().unwrap() {
         's' => (slice, 1),

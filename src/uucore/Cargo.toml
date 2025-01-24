@@ -18,6 +18,8 @@ edition = "2021"
 path = "src/lib/lib.rs"
 
 [dependencies]
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
 clap = { workspace = true }
 uucore_procs = { workspace = true }
 number_prefix = { workspace = true }
@@ -25,6 +27,7 @@ dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
 wild = "2.2.1"
 glob = { workspace = true }
+iana-time-zone = { workspace = true }
 lazy_static = "1.4.0"
 # * optional
 itertools = { workspace = true, optional = true }
@@ -114,4 +117,5 @@ utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []
 wide = []
+custom-tz-fmt = []
 tty = []

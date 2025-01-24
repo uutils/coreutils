@@ -130,14 +130,11 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
         }
     });
     for sig in sig_vec {
-        let sig_str = match sig.to_str() {
-            Some(s) => s,
-            None => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("{}: invalid signal", sig.quote()),
-                ))
-            }
+        let Some(sig_str) = sig.to_str() else {
+            return Err(USimpleError::new(
+                1,
+                format!("{}: invalid signal", sig.quote()),
+            ));
         };
         let sig_val = parse_signal_value(sig_str)?;
         if !opts.ignore_signal.contains(&sig_val) {

@@ -289,7 +289,7 @@ impl GlobalSettings {
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
         let size = Parser::default()
             .with_allow_list(&[
-                "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y",
+                "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y", "R", "Q", "%",
             ])
             .with_default_unit("K")
             .with_b_byte_count(true)
@@ -535,8 +535,9 @@ impl<'a> Line<'a> {
                     } else {
                         // include a trailing si unit
                         if selector.settings.mode == SortMode::HumanNumeric
-                            && self.line[selection.end..initial_selection.end]
-                                .starts_with(&['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][..])
+                            && self.line[selection.end..initial_selection.end].starts_with(
+                                &['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q'][..],
+                            )
                         {
                             selection.end += 1;
                         }
@@ -1370,14 +1371,14 @@ pub fn uu_app() -> Command {
                     options::check::QUIET,
                     options::check::DIAGNOSE_FIRST,
                 ]))
-                .conflicts_with(options::OUTPUT)
+                .conflicts_with_all([options::OUTPUT, options::check::CHECK_SILENT])
                 .help("check for sorted input; do not sort"),
         )
         .arg(
             Arg::new(options::check::CHECK_SILENT)
                 .short('C')
                 .long(options::check::CHECK_SILENT)
-                .conflicts_with(options::OUTPUT)
+                .conflicts_with_all([options::OUTPUT, options::check::CHECK])
                 .help(
                     "exit successfully if the given file is already sorted, \
                 and exit with status 1 otherwise.",
@@ -1854,7 +1855,9 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
         ParseSizeError::InvalidSuffix(_) => {
             format!("invalid suffix in --{} argument {}", option, s.quote())
         }
-        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
+        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
+            format!("invalid --{} argument {}", option, s.quote())
+        }
         ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }
 }

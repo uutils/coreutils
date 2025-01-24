@@ -1,7 +1,7 @@
-diff --git a/tests/env/env-S.pl b/tests/env/env-S.pl
-index 710ca82cf..af7cf6efa 100755
---- a/tests/env/env-S.pl
-+++ b/tests/env/env-S.pl
+Index: gnu/tests/env/env-S.pl
+===================================================================
+--- gnu.orig/tests/env/env-S.pl
++++ gnu/tests/env/env-S.pl
 @@ -209,27 +209,28 @@ my @Tests =
        {ERR=>"$prog: no terminating quote in -S string\n"}],
       ['err5', q[-S'A=B\\q'], {EXIT=>125},
