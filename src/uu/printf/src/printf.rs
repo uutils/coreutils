@@ -36,21 +36,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format = format.as_bytes();
 
     #[cfg(windows)]
-    let format = as_os_str().as_bytes_lossy();
+    let format = format.as_os_str().as_bytes_lossy();
 
     let values: Vec<_> = match matches.get_many::<std::ffi::OsString>(options::ARGUMENT) {
         Some(s) => s
             .map(|os_str| {
-                let raw_bytes: Vec<u8> = os_str.clone().into_vec();
                 #[cfg(unix)]
                 {
+                    let raw_bytes: Vec<u8> = os_str.clone().into_vec();
                     FormatArgument::Unparsed(
                         String::from_utf8(raw_bytes.clone())
                             .unwrap_or_else(|_| raw_bytes.iter().map(|&b| b as char).collect()),
                     )
                 }
                 #[cfg(windows)]
-                FormatArgument::Unparsed(String::from_utf8_lossy(&raw_bytes).into_owned())
+                {
+                    let raw_bytes: Vec<u8> = os_str.as_os_str().as_bytes().to_vec();
+                    FormatArgument::Unparsed(String::from_utf8_lossy(&raw_bytes).into_owned())
+                }
             })
             .collect(),
         None => vec![],
