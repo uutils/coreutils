@@ -2678,6 +2678,7 @@ dependencies = [
  "chrono",
  "clap",
  "glob",
+ "thiserror 2.0.11",
  "uucore",
  "windows-sys 0.59.0",
 ]
@@ -2764,6 +2765,7 @@ name = "uu_groups"
 version = "0.0.29"
 dependencies = [
  "clap",
+ "thiserror 2.0.11",
  "uucore",
 ]
 
@@ -2922,6 +2924,7 @@ dependencies = [
  "clap",
  "rand",
  "tempfile",
+ "thiserror 2.0.11",
  "uucore",
 ]
 
@@ -2973,6 +2976,7 @@ version = "0.0.29"
 dependencies = [
  "clap",
  "libc",
+ "thiserror 2.0.11",
  "uucore",
 ]
 
@@ -3346,6 +3350,7 @@ name = "uu_tsort"
 version = "0.0.29"
 dependencies = [
  "clap",
+ "thiserror 2.0.11",
  "uucore",
 ]
 
