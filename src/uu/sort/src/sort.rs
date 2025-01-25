@@ -1027,6 +1027,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    // Add check for multiple output files early in the function
+    if matches.get_many::<String>(options::OUTPUT).map_or(0, |v| v.count()) > 1 {
+        return Err(USimpleError::new(
+            1, 
+            "multiple output files specified"
+        ));
+    }
+
     settings.debug = matches.get_flag(options::DEBUG);
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
@@ -1418,7 +1426,8 @@ pub fn uu_app() -> Command {
                 .long(options::OUTPUT)
                 .help("write output to FILENAME instead of stdout")
                 .value_name("FILENAME")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::REVERSE)
