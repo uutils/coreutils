@@ -5,8 +5,8 @@
 //spell-checker:ignore TAOCP indegree
 use clap::{crate_version, Arg, Command};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fmt::Display;
 use std::path::Path;
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 use uucore::{format_usage, help_about, help_usage, show};
@@ -18,42 +18,29 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum TsortError {
     /// The input file is actually a directory.
+    #[error("{0}: read error: Is a directory")]
     IsDir(String),
 
     /// The number of tokens in the input data is odd.
     ///
     /// The list of edges must be even because each edge has two
     /// components: a source node and a target node.
+    #[error("{input}: input contains an odd number of tokens", input = .0.maybe_quote())]
     NumTokensOdd(String),
 
     /// The graph contains a cycle.
+    #[error("{0}: input contains a loop:")]
     Loop(String),
 
     /// A particular node in a cycle. (This is mainly used for printing.)
+    #[error("{0}")]
     LoopNode(String),
 }
 
-impl std::error::Error for TsortError {}
-
 impl UError for TsortError {}
-
-impl Display for TsortError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::IsDir(d) => write!(f, "{d}: read error: Is a directory"),
-            Self::NumTokensOdd(i) => write!(
-                f,
-                "{}: input contains an odd number of tokens",
-                i.maybe_quote()
-            ),
-            Self::Loop(i) => write!(f, "{i}: input contains a loop:"),
-            Self::LoopNode(v) => write!(f, "{v}"),
-        }
-    }
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
