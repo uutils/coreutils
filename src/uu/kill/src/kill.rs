@@ -164,13 +164,19 @@ fn table() {
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
+    let lower_5_bits = |x: usize| x & 0b11111;
+    let option_num_parse = signal_name_or_value.parse::<usize>().ok();
+
     for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
         if signal.eq_ignore_ascii_case(signal_name_or_value)
             || format!("SIG{signal}").eq_ignore_ascii_case(signal_name_or_value)
         {
             println!("{value}");
             return Ok(());
-        } else if signal_name_or_value == value.to_string() {
+        } else if signal_name_or_value == value.to_string()
+            || option_num_parse
+                .is_some_and(|signal_value| lower_5_bits(signal_value) == lower_5_bits(value))
+        {
             println!("{signal}");
             return Ok(());
         }
