@@ -1,0 +1,27 @@
+name: zizmor
+
+on:
+  push:
+  pull_request:
+
+
+jobs:
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # pin@v4
+        with:
+          persist-credentials: false
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # pin@v4
+
+      - name: Run zizmor 🌈
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          uvx zizmor --gh-token "$GH_TOKEN" .github/workflows/*.yml
+
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
