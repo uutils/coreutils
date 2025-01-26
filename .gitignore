@@ -15,3 +15,6 @@ lib*.a
 *.iml
 ### macOS ###
 .DS_Store
+
+### direnv ###
+/.direnv/
