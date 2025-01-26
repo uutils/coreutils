@@ -164,7 +164,7 @@ fn test_shred_empty() {
         .arg("-uv")
         .arg(file_a)
         .succeeds()
-        .stderr_does_not_contain("1/3 (random)");
+        .stderr_does_not_contain("pass 1/3 (random)");
 
     assert!(!at.file_exists(file_a));
 
@@ -176,7 +176,7 @@ fn test_shred_empty() {
         .arg("-uv")
         .arg(file_a)
         .succeeds()
-        .stderr_contains("1/3 (random)");
+        .stderr_contains("pass 1/3 (random)");
 
     assert!(!at.file_exists(file_a));
 }
@@ -204,4 +204,45 @@ fn test_shred_fail_no_perm() {
         .arg(path)
         .fails()
         .stderr_contains("Couldn't rename to");
+}
+
+#[test]
+fn test_random_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let random_source = "random";
+    at.write(random_source, "random content");
+
+    let file = "test_src";
+    // Create a file and write 1 MB of data to it
+    let content = vec![0u8; 1024 * 1024]; // 1 MB of zeros, change as needed
+    std::fs::write(at.plus(file), content).unwrap();
+    // Get the updated file size
+    let metadata = std::fs::metadata(at.plus(file)).unwrap();
+    assert!(metadata.len() >= 1024 * 1024);
+
+    ucmd.arg("--verbose")
+        .arg("--random-source")
+        .arg(file)
+        .arg(random_source)
+        .succeeds()
+        .stderr_contains("1/3 (random)");
+}
+
+#[test]
+fn test_random_source_eof() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let test_file = "test_file";
+    at.write(test_file, "abc");
+
+    let random_source = "source";
+    at.touch(random_source);
+
+    ucmd.arg("--verbose")
+        .arg("--random-source=source")
+        .arg(test_file)
+        .fails()
+        .stderr_contains("end of file")
+        .code_is(1);
 }
