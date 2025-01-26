@@ -335,6 +335,15 @@ fn test_kill_with_signal_and_list() {
 }
 
 #[test]
+fn test_kill_with_list_lower_bits() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("143")
+        .succeeds()
+        .stdout_matches(&Regex::new("TERM").unwrap());
+}
+
+#[test]
 fn test_kill_with_signal_and_table() {
     let target = Target::new();
     new_ucmd!()
