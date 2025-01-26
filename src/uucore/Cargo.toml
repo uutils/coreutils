@@ -14,6 +14,9 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [lib]
 path = "src/lib/lib.rs"
 
