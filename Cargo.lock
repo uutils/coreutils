@@ -2827,6 +2827,7 @@ dependencies = [
  "file_diff",
  "filetime",
  "libc",
+ "thiserror 2.0.11",
  "uucore",
 ]
 
