@@ -269,10 +269,12 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 
 if changes are not reflected in the report then run `cargo clean` and run the above commands.
 
-### Using Stable Rust
+### Using [cargo llvm-cov](https://github.com/taiki-e/cargo-llvm-cov)
 
-If you are using stable version of Rust that doesn't enable code coverage instrumentation by default
-then add `-Z-Zinstrument-coverage` flag to `RUSTFLAGS` env variable specified above.
+```bash
+cargo llvm-cov --html -p uu_sort
+cargo llvm-cov --html run factor -- 1234567 
+```
 
 ## Tips for setting up on Mac
 
