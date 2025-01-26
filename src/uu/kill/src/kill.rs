@@ -177,7 +177,7 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     }
     Err(USimpleError::new(
         1,
-        format!("unknown signal name {}", signal_name_or_value.quote()),
+        format!("{}: invalid signal", signal_name_or_value.quote()),
     ))
 }
 
@@ -205,7 +205,7 @@ fn parse_signal_value(signal_name: &str) -> UResult<usize> {
         Some(x) => Ok(x),
         None => Err(USimpleError::new(
             1,
-            format!("unknown signal name {}", signal_name.quote()),
+            format!("{}: invalid signal", signal_name.quote()),
         )),
     }
 }
