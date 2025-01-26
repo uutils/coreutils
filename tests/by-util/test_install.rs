@@ -1767,3 +1767,34 @@ fn test_install_from_stdin() {
     assert!(at.file_exists(target));
     assert_eq!(at.read(target), test_string);
 }
+
+#[test]
+fn test_install_symlink_dest() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "source_file";
+    let symlink = "symlink";
+    at.write(file, "test1");
+    at.write("target", "test2");
+    at.symlink_file("target", symlink);
+
+    scene
+        .ucmd()
+        .arg("-Cv")
+        .arg(file)
+        .arg(symlink)
+        .succeeds()
+        .stdout_contains(format!("removed '{symlink}'\n'{file}' -> '{symlink}'"));
+
+    scene
+        .ucmd()
+        .arg("-Cv")
+        .arg(file)
+        .arg(symlink)
+        .succeeds()
+        .no_stdout();
+
+    assert!(at.file_exists(file));
+    assert!(!at.is_symlink(symlink));
+    assert!(at.file_exists(symlink));
+}

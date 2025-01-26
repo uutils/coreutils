@@ -900,7 +900,11 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
 fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
-    if b.compare && !need_copy(from, to, b)? {
+    let to_is_symlink = fs::symlink_metadata(to)
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false);
+
+    if !to_is_symlink && b.compare && !need_copy(from, to, b)? {
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
