@@ -35,6 +35,13 @@ pub enum InteractiveMode {
     PromptProtected,
 }
 
+#[derive(PartialEq, Debug)]
+pub enum PreserveRoot {
+    Default,
+    YesAll,
+    No,
+}
+
 /// Options for the `rm` command
 ///
 /// All options are public so that the options can be programmatically
@@ -57,11 +64,10 @@ pub struct Options {
     /// If no other option sets this mode, [`InteractiveMode::PromptProtected`]
     /// is used
     pub interactive: InteractiveMode,
-    #[allow(dead_code)]
     /// `--one-file-system`
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`
-    pub preserve_root: bool,
+    pub preserve_root: PreserveRoot,
     /// `-r`, `--recursive`
     pub recursive: bool,
     /// `-d`, `--dir`
@@ -89,6 +95,7 @@ static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 static ARG_FILES: &str = "files";
 
 #[uucore::main]
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
@@ -141,7 +148,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             },
             one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
-            preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
+            preserve_root: if matches.get_flag(OPT_NO_PRESERVE_ROOT) {
+                PreserveRoot::No
+            } else {
+                match matches
+                    .get_one::<String>(OPT_PRESERVE_ROOT)
+                    .unwrap()
+                    .as_str()
+                {
+                    "all" => PreserveRoot::YesAll,
+                    _ => PreserveRoot::Default,
+                }
+            },
             recursive: matches.get_flag(OPT_RECURSIVE),
             dir: matches.get_flag(OPT_DIR),
             verbose: matches.get_flag(OPT_VERBOSE),
@@ -220,8 +238,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_ONE_FILE_SYSTEM)
                 .help(
                     "when removing a hierarchy recursively, skip any directory that is on a file \
-                    system different from that of the corresponding command line argument (NOT \
-                    IMPLEMENTED)",
+                    system different from that of the corresponding command line argument",
                 ).action(ArgAction::SetTrue),
         )
         .arg(
@@ -234,7 +251,10 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
                 .help("do not remove '/' (default)")
-                .action(ArgAction::SetTrue),
+                .value_parser(["all"])
+                .default_value("all")
+                .default_missing_value("all")
+                .hide_default_value(true)
         )
         .arg(
             Arg::new(OPT_RECURSIVE)
@@ -328,6 +348,118 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     had_err
 }
 
+#[cfg(not(windows))]
+fn get_device_id(p: &Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    p.symlink_metadata()
+        .ok()
+        .map(|metadata| MetadataExt::dev(&metadata))
+}
+
+#[cfg(windows)]
+fn get_device_id(_p: &Path) -> Option<u64> {
+    unimplemented!()
+}
+
+/// Checks if the given path is on the same device as its parent.
+/// Returns false if the `one_fs` option is enabled and devices differ.
+/*fn check_one_fs(path: &Path, options: &Options) -> bool {
+    if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
+        return true;
+    }
+    println!("checking {}", path.display());
+    println!("parent: {:?}", fs::canonicalize(path).ok().and_then(|p| p.parent().map(Path::to_path_buf)));
+    // as we can get relative path, we need to canonicalize
+    // and manage potential errors
+    let parent_device = fs::canonicalize(path)
+        .ok()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .as_deref()
+        .and_then(get_device_id);
+    let current_device = get_device_id(path);
+    println!("parent_device: {:?}, current_device: {:?}", parent_device, current_device);
+    if parent_device != current_device {
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+        if options.preserve_root == PreserveRoot::YesAll {
+            show_error!("and --preserve-root=all is in effect");
+        }
+        return false;
+    }
+
+    true
+}*/
+/*
+fn check_one_fs(path: &Path, options: &Options) -> bool {
+    if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
+        return true;
+    }
+
+    let parent_device = path.parent().and_then(get_device_id);
+    let current_device = get_device_id(path);
+
+    println!("parent_device: {:?}, current_device: {:?}", parent_device, current_device);
+
+    if parent_device != current_device {
+
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+        if options.preserve_root == PreserveRoot::YesAll {
+            show_error!("and --preserve-root=all is in effect");
+        }
+        return false;
+    }
+
+    true
+}
+*/
+
+fn check_one_fs(path: &Path, options: &Options) -> bool {
+    if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
+        return true;
+    }
+
+    // Attempt to canonicalize the path
+    let path_canon = match path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => {
+            // If we can't canonicalize, fallback to original
+            // or handle the error differently
+            path.to_path_buf()
+        }
+    };
+
+    let parent_path = path_canon
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| path_canon.clone());
+
+    let parent_device = get_device_id(&parent_path);
+    let current_device = get_device_id(&path_canon);
+
+    println!(
+        "parent_device: {:?}, current_device: {:?}",
+        parent_device, current_device
+    );
+
+    if parent_device != current_device {
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+        if options.preserve_root == PreserveRoot::YesAll {
+            show_error!("and --preserve-root=all is in effect");
+        }
+        return false;
+    }
+
+    true
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
@@ -341,8 +473,12 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
         return true;
     }
 
+    if !check_one_fs(path, options) {
+        return true;
+    }
+
     let is_root = path.has_root() && path.parent().is_none();
-    if options.recursive && (!is_root || !options.preserve_root) {
+    if options.recursive && (!is_root || options.preserve_root == PreserveRoot::No) {
         if options.interactive != InteractiveMode::Always && !options.verbose {
             if let Err(e) = fs::remove_dir_all(path) {
                 // GNU compatibility (rm/empty-inacc.sh)
@@ -408,7 +544,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
                 had_err = remove_dir(dir.path(), options).bitor(had_err);
             }
         }
-    } else if options.dir && (!is_root || !options.preserve_root) {
+    } else if options.dir && (!is_root || options.preserve_root == PreserveRoot::No) {
         had_err = remove_dir(path, options).bitor(had_err);
     } else if options.recursive {
         show_error!(

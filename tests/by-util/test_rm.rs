@@ -775,3 +775,65 @@ fn test_non_utf8() {
     ucmd.arg(file).succeeds();
     assert!(!at.file_exists(file));
 }
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_rm_one_file_system() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        return;
+    }
+    let src = "a/b";
+    let dst = "t/y";
+    at.mkdir_all(src);
+    at.mkdir_all(dst);
+
+    scene
+        .cmd("mount")
+        .arg("--bind")
+        .arg("t")
+        .arg("a/b")
+        .succeeds();
+    scene
+        .ucmd()
+        .arg("--one-file-system")
+        .arg("-rf")
+        .arg("a")
+        .fails()
+        .stderr_contains("rm: skipping 'a', since it's on a different device");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_rm_preserve_root() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        return;
+    }
+    let src = "a/b";
+    let dst = "t/y";
+    at.mkdir_all(src);
+    at.mkdir_all(dst);
+
+    scene
+        .cmd("mount")
+        .arg("--bind")
+        .arg("t")
+        .arg("a/b")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("--preserve-root=all")
+        .arg("-rf")
+        .arg("a")
+        .fails()
+        .stderr_contains("rm: skipping 'a', since it's on a different device")
+        .stderr_contains("rm: and --preserve-root=all is in effect");
+}
