@@ -503,6 +503,14 @@ fn test_install_failing_omitting_directory() {
         .fails()
         .code_is(1)
         .stderr_contains("omitting directory");
+
+    scene
+        .ucmd()
+        .arg(".")
+        .arg(".")
+        .fails()
+        .code_is(1)
+        .stderr_contains("omitting directory '.'");
 }
 
 #[test]
