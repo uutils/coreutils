@@ -13,7 +13,7 @@ use nom::{
     combinator::{map, map_opt, peek, recognize, value},
     multi::{many0, many_m_n},
     sequence::{delimited, preceded, separated_pair},
-    IResult,
+    IResult, Parser,
 };
 use std::{
     char,
@@ -298,7 +298,8 @@ impl Sequence {
             map(Self::parse_backslash_or_char_with_warning, |s| {
                 Ok(Self::Char(s))
             }),
-        )))(input)
+        )))
+        .parse(input)
         .map(|(_, r)| r)
         .unwrap()
         .into_iter()
@@ -308,7 +309,7 @@ impl Sequence {
     fn parse_octal(input: &[u8]) -> IResult<&[u8], u8> {
         // For `parse_char_range`, `parse_char_star`, `parse_char_repeat`, `parse_char_equal`.
         // Because in these patterns, there's no ambiguous cases.
-        preceded(tag("\\"), Self::parse_octal_up_to_three_digits)(input)
+        preceded(tag("\\"), Self::parse_octal_up_to_three_digits).parse(input)
     }
 
     fn parse_octal_with_warning(input: &[u8]) -> IResult<&[u8], u8> {
@@ -321,7 +322,8 @@ impl Sequence {
                 // See test `test_multibyte_octal_sequence`
                 Self::parse_octal_two_digits,
             )),
-        )(input)
+        )
+        .parse(input)
     }
 
     fn parse_octal_up_to_three_digits(input: &[u8]) -> IResult<&[u8], u8> {
@@ -331,7 +333,8 @@ impl Sequence {
                 let str_to_parse = std::str::from_utf8(out).unwrap();
                 u8::from_str_radix(str_to_parse, 8).ok()
             },
-        )(input)
+        )
+        .parse(input)
     }
 
     fn parse_octal_up_to_three_digits_with_warning(input: &[u8]) -> IResult<&[u8], u8> {
@@ -353,34 +356,37 @@ impl Sequence {
                 }
                 result
             },
-        )(input)
+        ).parse(input)
     }
 
     fn parse_octal_two_digits(input: &[u8]) -> IResult<&[u8], u8> {
         map_opt(
             recognize(many_m_n(2, 2, one_of("01234567"))),
             |out: &[u8]| u8::from_str_radix(std::str::from_utf8(out).unwrap(), 8).ok(),
-        )(input)
+        )
+        .parse(input)
     }
 
     fn parse_backslash(input: &[u8]) -> IResult<&[u8], u8> {
-        preceded(tag("\\"), Self::single_char)(input).map(|(l, a)| {
-            let c = match a {
-                b'a' => unicode_table::BEL,
-                b'b' => unicode_table::BS,
-                b'f' => unicode_table::FF,
-                b'n' => unicode_table::LF,
-                b'r' => unicode_table::CR,
-                b't' => unicode_table::HT,
-                b'v' => unicode_table::VT,
-                x => x,
-            };
-            (l, c)
-        })
+        preceded(tag("\\"), Self::single_char)
+            .parse(input)
+            .map(|(l, a)| {
+                let c = match a {
+                    b'a' => unicode_table::BEL,
+                    b'b' => unicode_table::BS,
+                    b'f' => unicode_table::FF,
+                    b'n' => unicode_table::LF,
+                    b'r' => unicode_table::CR,
+                    b't' => unicode_table::HT,
+                    b'v' => unicode_table::VT,
+                    x => x,
+                };
+                (l, c)
+            })
     }
 
     fn parse_backslash_or_char(input: &[u8]) -> IResult<&[u8], u8> {
-        alt((Self::parse_octal, Self::parse_backslash, Self::single_char))(input)
+        alt((Self::parse_octal, Self::parse_backslash, Self::single_char)).parse(input)
     }
 
     fn parse_backslash_or_char_with_warning(input: &[u8]) -> IResult<&[u8], u8> {
@@ -388,7 +394,8 @@ impl Sequence {
             Self::parse_octal_with_warning,
             Self::parse_backslash,
             Self::single_char,
-        ))(input)
+        ))
+        .parse(input)
     }
 
     fn single_char(input: &[u8]) -> IResult<&[u8], u8> {
@@ -400,7 +407,8 @@ impl Sequence {
             Self::parse_backslash_or_char,
             tag("-"),
             Self::parse_backslash_or_char,
-        )(input)
+        )
+        .parse(input)
         .map(|(l, (a, b))| {
             (l, {
                 let (start, end) = (u32::from(a), u32::from(b));
@@ -417,7 +425,8 @@ impl Sequence {
     }
 
     fn parse_char_star(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
-        delimited(tag("["), Self::parse_backslash_or_char, tag("*]"))(input)
+        delimited(tag("["), Self::parse_backslash_or_char, tag("*]"))
+            .parse(input)
             .map(|(l, a)| (l, Ok(Self::CharStar(a))))
     }
 
@@ -433,7 +442,8 @@ impl Sequence {
                 take_till(|ue| matches!(ue, b']' | b'\\')),
             ),
             tag("]"),
-        )(input)
+        )
+        .parse(input)
         .map(|(l, (c, cnt_str))| {
             let s = String::from_utf8_lossy(cnt_str);
             let result = if cnt_str.starts_with(b"0") {
@@ -477,7 +487,8 @@ impl Sequence {
                 value(Err(BadSequence::MissingCharClassName), tag("")),
             )),
             tag(":]"),
-        )(input)
+        )
+        .parse(input)
     }
 
     fn parse_char_equal(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
@@ -491,7 +502,8 @@ impl Sequence {
                 map(Self::parse_backslash_or_char, |c| Ok(Self::Char(c))),
             )),
             tag("=]"),
-        )(input)
+        )
+        .parse(input)
     }
 }
 
