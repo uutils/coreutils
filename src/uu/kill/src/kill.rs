@@ -17,6 +17,11 @@ use uucore::{format_usage, help_about, help_usage, show};
 static ABOUT: &str = help_about!("kill.md");
 const USAGE: &str = help_usage!("kill.md");
 
+// When the -l option is selected, the program displays the type of signal related to a certain
+// value or string. In case of a value, the program should control the lower 8 bits, but there is
+// a particular case in which if the value is in range [128, 159], it is translated to a signal
+const OFFSET: usize = 128;
+
 pub mod options {
     pub static PIDS_OR_SIGNALS: &str = "pids_or_signals";
     pub static LIST: &str = "list";
@@ -164,10 +169,12 @@ fn table() {
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
-    // Closure used to track the last 7 bits of the signal value
-    // when the -l option is passed only the lower 7 bits are important
+    // Closure used to track the last 8 bits of the signal value
+    // when the -l option is passed only the lower 8 bits are important
+    // or the value is in range [128, 159]
     // Example: kill -l 143 => TERM because 143 = 15 + 128
-    let lower_7_bits = |x: usize| x & 0b1111111;
+    // Example: kill -l 2304 => EXIT
+    let lower_8_bits = |x: usize| x & 0xff;
     let option_num_parse = signal_name_or_value.parse::<usize>().ok();
 
     for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
@@ -177,7 +184,8 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
             println!("{value}");
             return Ok(());
         } else if signal_name_or_value == value.to_string()
-            || option_num_parse.is_some_and(|signal_value| lower_7_bits(signal_value) == value)
+            || option_num_parse.is_some_and(|signal_value| lower_8_bits(signal_value) == value)
+            || option_num_parse.is_some_and(|signal_value| signal_value == value + OFFSET)
         {
             println!("{signal}");
             return Ok(());

@@ -338,15 +338,21 @@ fn test_kill_with_signal_and_list() {
 fn test_kill_with_list_lower_bits() {
     new_ucmd!()
         .arg("-l")
+        .arg("128")
+        .succeeds()
+        .stdout_contains("EXIT");
+
+    new_ucmd!()
+        .arg("-l")
         .arg("143")
         .succeeds()
         .stdout_contains("TERM");
 
     new_ucmd!()
         .arg("-l")
-        .arg("145")
+        .arg("256")
         .succeeds()
-        .stdout_contains("CHLD");
+        .stdout_contains("EXIT");
 
     new_ucmd!()
         .arg("-l")
@@ -358,6 +364,7 @@ fn test_kill_with_list_lower_bits() {
 #[test]
 fn test_kill_with_list_lower_bits_unrecognized() {
     new_ucmd!().arg("-l").arg("111").fails();
+    new_ucmd!().arg("-l").arg("384").fails();
 }
 
 #[test]
