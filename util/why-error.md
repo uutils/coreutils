@@ -26,7 +26,7 @@ This file documents why some tests are failing:
 * gnu/tests/ls/stat-free-symlinks.sh
 * gnu/tests/misc/close-stdout.sh
 * gnu/tests/misc/comm.pl
-* gnu/tests/misc/kill.sh - https://github.com/uutils/coreutils/issues/7066 https://github.com/uutils/coreutils/issues/7067 https://github.com/uutils/coreutils/issues/7218
+* gnu/tests/misc/kill.sh - https://github.com/uutils/coreutils/issues/7218
 * gnu/tests/misc/nohup.sh
 * gnu/tests/misc/numfmt.pl - https://github.com/uutils/coreutils/issues/7219 / https://github.com/uutils/coreutils/issues/7221
 * gnu/tests/misc/stdbuf.sh - https://github.com/uutils/coreutils/issues/7072
