@@ -22,6 +22,7 @@ This file documents why some tests are failing:
 * gnu/tests/head/head-write-error.sh
 * gnu/tests/help/help-version-getopt.sh
 * gnu/tests/help/help-version.sh
+* gnu/tests/install/install-C.sh - https://github.com/uutils/coreutils/pull/7215
 * gnu/tests/ls/ls-misc.pl
 * gnu/tests/ls/stat-free-symlinks.sh
 * gnu/tests/misc/close-stdout.sh
