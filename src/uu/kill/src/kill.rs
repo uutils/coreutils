@@ -164,7 +164,10 @@ fn table() {
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
-    let lower_5_bits = |x: usize| x & 0b11111;
+    // Closure used to track the last 7 bits of the signal value
+    // when the -l option is passed only the lower 7 bits are important
+    // Example: kill -l 143 => TERM because 143 = 15 + 128
+    let lower_7_bits = |x: usize| x & 0b1111111;
     let option_num_parse = signal_name_or_value.parse::<usize>().ok();
 
     for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
@@ -174,8 +177,7 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
             println!("{value}");
             return Ok(());
         } else if signal_name_or_value == value.to_string()
-            || option_num_parse
-                .is_some_and(|signal_value| lower_5_bits(signal_value) == lower_5_bits(value))
+            || option_num_parse.is_some_and(|signal_value| lower_7_bits(signal_value) == value)
         {
             println!("{signal}");
             return Ok(());

@@ -340,7 +340,24 @@ fn test_kill_with_list_lower_bits() {
         .arg("-l")
         .arg("143")
         .succeeds()
-        .stdout_matches(&Regex::new("TERM").unwrap());
+        .stdout_contains("TERM");
+
+    new_ucmd!()
+        .arg("-l")
+        .arg("145")
+        .succeeds()
+        .stdout_contains("CHLD");
+
+    new_ucmd!()
+        .arg("-l")
+        .arg("2304")
+        .succeeds()
+        .stdout_contains("EXIT");
+}
+
+#[test]
+fn test_kill_with_list_lower_bits_unrecognized() {
+    new_ucmd!().arg("-l").arg("111").fails();
 }
 
 #[test]
