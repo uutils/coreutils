@@ -13,8 +13,8 @@
 
 //! A wrapper around any Read to treat it as an RNG.
 
-use std::fmt;
 use std::io::Read;
+use std::{fmt, fs::File};
 
 use rand_core::{impls, Error, RngCore};
 
@@ -86,6 +86,42 @@ impl fmt::Display for ReadError {
 impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.0)
+    }
+}
+
+/// Generic interface for both ThreadRng and ReadRng
+pub enum WrappedRng {
+    RngFile(ReadRng<File>),
+    RngDefault(rand::rngs::ThreadRng),
+}
+
+impl RngCore for WrappedRng {
+    fn next_u32(&mut self) -> u32 {
+        match self {
+            Self::RngFile(r) => r.next_u32(),
+            Self::RngDefault(r) => r.next_u32(),
+        }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        match self {
+            Self::RngFile(r) => r.next_u64(),
+            Self::RngDefault(r) => r.next_u64(),
+        }
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        match self {
+            Self::RngFile(r) => r.fill_bytes(dest),
+            Self::RngDefault(r) => r.fill_bytes(dest),
+        }
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+        match self {
+            Self::RngFile(r) => r.try_fill_bytes(dest),
+            Self::RngDefault(r) => r.try_fill_bytes(dest),
+        }
     }
 }
 

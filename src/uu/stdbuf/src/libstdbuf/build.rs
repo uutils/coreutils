@@ -7,5 +7,8 @@
 use cpp_build::Config;
 
 fn main() {
-    Config::new().pic(true).build("src/libstdbuf.rs");
+    Config::new()
+        .compiler("clang++")
+        .pic(true)
+        .build("src/libstdbuf.rs");
 }

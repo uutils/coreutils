@@ -21,7 +21,7 @@ clap = { workspace = true }
 memchr = { workspace = true }
 rand = { workspace = true }
 rand_core = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["rand-read"] }
 
 [[bin]]
 name = "shuf"
