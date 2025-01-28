@@ -520,7 +520,6 @@ procfs = { version = "0.17", default-features = false }
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["process", "signal", "user", "term"] }
 rlimit = "0.10.1"
-rand_pcg = "0.3.1"
 xattr = { workspace = true }
 
 # Specifically used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
