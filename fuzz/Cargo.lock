@@ -333,6 +333,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "crc32fast"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "crossbeam-deque"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -580,9 +589,9 @@ checksum = "b5aba8db14291edd000dfcc4d620c7ebfb122c613afb886ca8803fa4e128a20a"
 
 [[package]]
 name = "libfuzzer-sys"
-version = "0.4.8"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b9569d2f74e257076d8c6bfa73fb505b46b851e51ddaecc825944aa3bed17fa"
+checksum = "cf78f52d400cf2d84a3a973a78a592b4adc535739e0a5597a0da6f0c357adc75"
 dependencies = [
  "arbitrary",
  "cc",
@@ -660,6 +669,15 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "nom"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -754,12 +772,12 @@ dependencies = [
 
 [[package]]
 name = "parse_datetime"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8720474e3dd4af20cea8716703498b9f3b690f318fa9d9d9e2e38eaf44b96d0"
+checksum = "ae130e79b384861c193d6016a46baa2733a6f8f17486eb36a5c098c577ce01e8"
 dependencies = [
  "chrono",
- "nom",
+ "nom 7.1.3",
  "regex",
 ]
 
@@ -1161,9 +1179,7 @@ name = "uu_date"
 version = "0.0.29"
 dependencies = [
  "chrono",
- "chrono-tz",
  "clap",
- "iana-time-zone",
  "libc",
  "parse_datetime",
  "uucore",
@@ -1215,6 +1231,7 @@ dependencies = [
  "clap",
  "num-bigint",
  "num-traits",
+ "thiserror",
  "uucore",
 ]
 
@@ -1234,6 +1251,7 @@ dependencies = [
  "rayon",
  "self_cell",
  "tempfile",
+ "thiserror",
  "unicode-width 0.2.0",
  "uucore",
 ]
@@ -1261,7 +1279,7 @@ name = "uu_tr"
 version = "0.0.29"
 dependencies = [
  "clap",
- "nom",
+ "nom 8.0.0",
  "uucore",
 ]
 
@@ -1284,13 +1302,17 @@ version = "0.0.29"
 dependencies = [
  "blake2b_simd",
  "blake3",
+ "chrono",
+ "chrono-tz",
  "clap",
+ "crc32fast",
  "data-encoding",
  "data-encoding-macro",
  "digest",
  "dunce",
  "glob",
  "hex",
+ "iana-time-zone",
  "itertools",
  "lazy_static",
  "libc",
