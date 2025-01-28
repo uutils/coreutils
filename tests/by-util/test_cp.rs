@@ -2907,7 +2907,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     //               target name    link name
     at.symlink_file("no-such-file", "dangle");
     // to check if access time and modification time didn't change
-    sleep(Duration::from_millis(5000));
+    sleep(Duration::from_millis(100));
     //          don't dereference the link
     //           |    copy permissions, too
     //           |      |    from the link
