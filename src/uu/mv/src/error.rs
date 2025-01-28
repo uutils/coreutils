@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use fs_extra::error::Error as FsXError;
 use thiserror::Error;
 use uucore::error::UError;
 
@@ -33,6 +34,18 @@ pub enum MvError {
 
     #[error("failed to access {0}: Not a directory")]
     FailedToAccessNotADirectory(String),
+
+    #[error("{0}")]
+    FsXError(FsXError),
+
+    #[error("failed to move all files")]
+    NotAllFilesMoved,
 }
 
 impl UError for MvError {}
+
+impl From<FsXError> for MvError {
+    fn from(err: FsXError) -> Self {
+        Self::FsXError(err)
+    }
+}

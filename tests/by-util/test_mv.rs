@@ -1106,6 +1106,7 @@ fn test_mv_arg_update_older_dest_older() {
     let mut f = at.make_file(old);
     f.write_all(old_content.as_bytes()).unwrap();
     f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    drop(f);
 
     at.write(new, new_content);
 
@@ -1156,7 +1157,7 @@ fn test_mv_arg_update_short_overwrite() {
     let mut f = at.make_file(old);
     f.write_all(old_content.as_bytes()).unwrap();
     f.set_modified(std::time::UNIX_EPOCH).unwrap();
-
+    drop(f);
     at.write(new, new_content);
 
     ucmd.arg(new)
@@ -1683,14 +1684,62 @@ fn test_acl() {
 // mv: try to overwrite 'b', overriding mode 0444 (r--r--r--)? y
 // 'a' -> 'b'
 
+// Currently, these tests cannot be run on any OS other than Linux in CI. We
+// could run them locally by pointing `REMOTE_TEMP_DIR` to a remote file system.
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
-    use crate::common::util::TestScenario;
-    use std::fs::{read_to_string, set_permissions, write};
-    use std::os::unix::fs::{symlink, PermissionsExt};
+    use crate::common::util::{PathSeparatorReplace, TestScenario};
+    use std::ffi::OsString;
+    use std::fs::{read_to_string, set_permissions, write, File};
+    #[cfg(unix)]
+    use std::os::unix::fs::{symlink, FileTypeExt, MetadataExt, PermissionsExt};
+    use std::time::Duration;
     use tempfile::TempDir;
+    use uucore::display::Quotable;
+    #[cfg(unix)]
+    use uucore::fsxattr::retrieve_xattrs;
+    #[cfg(unix)]
+    use xattr::FileExt;
+
+    const REMOTE_TEMP_DIR: &str = "/dev/shm/";
+    // Ensure that the copying code used in an inter-partition move preserve dir structure.
+    #[test]
+    fn test_inter_partition_copying_folder() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/b/c");
+        at.write("a/b/d", "d");
+        at.write("a/b/c/e", "e");
+
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds();
+
+        // make sure that a got removed.
+        assert!(!at.dir_exists("a"));
+
+        // Ensure that the folder structure is preserved, files are copied, and their contents remain intact.
+        assert_eq!(
+            read_to_string(other_fs_tempdir.path().join("a/b/d"),)
+                .expect("Unable to read other_fs_file"),
+            "d"
+        );
+        assert_eq!(
+            read_to_string(other_fs_tempdir.path().join("a/b/c/e"),)
+                .expect("Unable to read other_fs_file"),
+            "e"
+        );
+    }
 
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
+    #[cfg(unix)]
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink() {
         let scene = TestScenario::new(util_name!());
@@ -1701,7 +1750,7 @@ mod inter_partition_copying {
 
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
 
         // create a file inside that folder.
         let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
@@ -1740,6 +1789,7 @@ mod inter_partition_copying {
 
     // In an inter-partition move if unlinking the destination symlink fails, ensure
     // that it would output the proper error message.
+    #[cfg(unix)]
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
         let scene = TestScenario::new(util_name!());
@@ -1750,7 +1800,7 @@ mod inter_partition_copying {
 
         // create a folder in another partition.
         let other_fs_tempdir =
-            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
 
         // create a file inside that folder.
         let other_fs_file_path = other_fs_tempdir.path().join("other_fs_file");
@@ -1775,6 +1825,478 @@ mod inter_partition_copying {
             .stderr_contains("inter-device move failed:")
             .stderr_contains("Permission denied");
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_inter_partition_copying_folder_with_fifo() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/b/c");
+        at.write("a/b/d", "d");
+        at.write("a/b/c/e", "e");
+        at.mkfifo("a/b/c/f");
+
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds();
+
+        // make sure that a got removed.
+        assert!(!at.dir_exists("a"));
+
+        // Ensure that the folder structure is preserved, files are copied, and their contents remain intact.
+        assert_eq!(
+            read_to_string(other_fs_tempdir.path().join("a/b/d"),)
+                .expect("Unable to read other_fs_file"),
+            "d"
+        );
+        assert_eq!(
+            read_to_string(other_fs_tempdir.path().join("a/b/c/e"),)
+                .expect("Unable to read other_fs_file"),
+            "e"
+        );
+        assert!(other_fs_tempdir
+            .path()
+            .join("a/b/c/f")
+            .metadata()
+            .expect("")
+            .file_type()
+            .is_fifo());
+    }
+
+    #[test]
+    fn test_inter_partition_copying_folder_with_verbose() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all(&"a/b/c".replace_path_separator());
+        at.write(&"a/b/d".replace_path_separator(), "d");
+        at.write(&"a/b/c/e".replace_path_separator(), "e");
+
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .stdout_contains(format!(
+                "created directory {}",
+                other_fs_tempdir.path().join("a").to_string_lossy().quote()
+            ))
+            .stdout_contains(format!(
+                "created directory {}",
+                other_fs_tempdir
+                    .path()
+                    .join("a/b/c".replace_path_separator())
+                    .to_string_lossy()
+                    .quote()
+            ))
+            .stdout_contains(
+                format!(
+                    "copied 'a/b/d' -> {}",
+                    other_fs_tempdir
+                        .path()
+                        .join("a/b/d")
+                        .to_string_lossy()
+                        .quote()
+                )
+                .replace_path_separator(),
+            )
+            .stdout_contains("removed 'a/b/c/e'".replace_path_separator())
+            .stdout_contains("removed directory 'a/b'".replace_path_separator());
+    }
+    #[test]
+    fn test_inter_partition_copying_file_with_verbose() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.write("a", "file_contents");
+
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .stdout_contains(format!(
+                "copied 'a' -> {}",
+                other_fs_tempdir.path().join("a").to_string_lossy().quote()
+            ))
+            .stdout_contains("removed 'a'");
+
+        at.write("a", "file_contents");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-vb")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .stdout_contains(format!(
+                "copied 'a' -> {} (backup: {})",
+                other_fs_tempdir.path().join("a").to_string_lossy().quote(),
+                other_fs_tempdir.path().join("a~").to_string_lossy().quote()
+            ))
+            .stdout_contains("removed 'a'");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_inter_partition_copying_dir_without_read_permission_to_sub_dir() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/b/c");
+        at.write("a/b/d", "d");
+        at.write("a/b/c/e", "e");
+        at.mkdir_all("a/b/f");
+        at.write("a/b/f/g", "g");
+        at.write("a/b/h", "h");
+        at.set_mode("a/b/f", 0);
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            // check error occurred
+            .stderr_contains("cannot access 'a/b/f': Permission denied");
+
+        // make sure mv kept on going after error
+        assert_eq!(
+            read_to_string(other_fs_tempdir.path().join("a/b/h"),)
+                .expect("Unable to read other_fs_file"),
+            "h"
+        );
+
+        // make sure mv didn't remove src because an error occurred
+        at.dir_exists("a");
+        at.file_exists("a/b/h");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_inter_partition_copying_directory_metadata_for_file() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("dir");
+        let file = at.make_file("dir/file");
+        at.set_mode("dir/file", 0o100_700);
+
+        // Set xattrs for the source file
+        let test_attr = "user.test_attr";
+        let test_value = b"test value";
+        file.set_xattr(test_attr, test_value)
+            .expect("couldn't set xattr for src file");
+
+        // Get file times for the source file
+        let src_metadata = file
+            .metadata()
+            .expect("couldn't get metadata for source file");
+        let modified_time = src_metadata
+            .modified()
+            .expect("couldn't get modified time for src file");
+        let accessed_time = src_metadata
+            .accessed()
+            .expect("couldn't get accessed time for src file");
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+
+        // https://github.com/Stebalien/xattr/issues/24#issuecomment-1279682009
+        let mut dest_fs_xattr_support = true;
+        let tempfile_path = other_fs_tempdir.path().join("temp_file");
+        let tf = File::create(&tempfile_path).expect("couldn't create tempfile");
+        if let Err(err) = tf.set_xattr(test_attr, test_value) {
+            dest_fs_xattr_support = false;
+            println!("no fs xattr support: {err}");
+        }
+
+        // make sure to wait for a second so that when the dest file is created, it
+        // would have a different filetime so that the only way the dest file
+        // would have a same timestamp is by copying the timestamp of src file.
+        std::thread::sleep(Duration::from_secs(1));
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("dir")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds();
+
+        let dest_metadata = other_fs_tempdir
+            .path()
+            .join("dir/file")
+            .metadata()
+            .expect("couldn't get metadata of dest file");
+        let mode = dest_metadata.mode();
+        assert_eq!(mode, 0o100_700, "permission doesn't match");
+        assert_eq!(
+            dest_metadata
+                .modified()
+                .expect("couldn't get modified time for dest file"),
+            modified_time
+        );
+        assert_eq!(
+            dest_metadata
+                .accessed()
+                .expect("couldn't get accessed time for dest file"),
+            accessed_time
+        );
+
+        if dest_fs_xattr_support {
+            // Verify that the xattrs were copied
+            let retrieved_xattrs =
+                retrieve_xattrs(other_fs_tempdir.path().join("dir/file")).unwrap();
+            assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+            assert_eq!(
+                retrieved_xattrs
+                    .get(OsString::from(test_attr).as_os_str())
+                    .expect("couldn't find xattr with name user.test_attr"),
+                test_value
+            );
+        }
+    }
+
+    // this test would fail if progress bar flag is set to true because we need
+    // to traverse directory in order to find the size that would change the
+    // access time.
+    #[cfg(unix)]
+    #[test]
+    fn test_inter_partition_copying_directory_metadata_for_directory() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("dir");
+        at.make_file("dir/file");
+        at.set_mode("dir", 0o40700);
+
+        // Set xattrs for the source file
+        let test_attr = "user.test_attr";
+        let test_value = b"test value";
+        xattr::set(at.plus("dir"), test_attr, test_value).expect("couldn't set xattr for src file");
+
+        // Get file times for the source dir
+        let src_metadata = at
+            .plus("dir")
+            .metadata()
+            .expect("couldn't get metadata for source file");
+        let modified_time = src_metadata
+            .modified()
+            .expect("couldn't get modified time for src file");
+        let accessed_time = src_metadata
+            .accessed()
+            .expect("couldn't get accessed time for src file");
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+        // make sure to wait for a second so that when the dest file is created, it
+        // would have a different filetime so that the only way the dest file
+        // would have a same timestamp is by copying the timestamp of src file.
+
+        // https://github.com/Stebalien/xattr/issues/24#issuecomment-1279682009
+        let mut dest_fs_xattr_support = true;
+        let tempfile_path = other_fs_tempdir.path().join("temp_file");
+        let tf = File::create(&tempfile_path).expect("couldn't create tempfile");
+        if let Err(err) = tf.set_xattr(test_attr, test_value) {
+            dest_fs_xattr_support = false;
+            println!("no fs xattr support: {err}");
+        }
+
+        std::thread::sleep(Duration::from_secs(1));
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("dir")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds();
+
+        let dest_metadata = other_fs_tempdir
+            .path()
+            .join("dir")
+            .metadata()
+            .expect("couldn't get metadata of dest file");
+        let mode = dest_metadata.mode();
+        assert_eq!(mode, 0o40700, "permission doesn't match");
+        assert_eq!(
+            dest_metadata
+                .modified()
+                .expect("couldn't get modified time for dest file"),
+            modified_time
+        );
+        assert_eq!(
+            dest_metadata
+                .accessed()
+                .expect("couldn't get accessed time for dest file"),
+            accessed_time
+        );
+
+        if dest_fs_xattr_support {
+            // Verify that the xattrs were copied
+            let retrieved_xattrs = retrieve_xattrs(other_fs_tempdir.path().join("dir")).unwrap();
+            assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+            assert_eq!(
+                retrieved_xattrs
+                    .get(OsString::from(test_attr).as_os_str())
+                    .expect("couldn't find xattr with name user.test_attr"),
+                test_value
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_inter_partition_removing_source_without_permission() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/aa/");
+        at.write("a/aa/aa1", "file contents");
+        //remove write permission for the subdir
+        at.set_mode("a/aa/", 0o555);
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            // check error occurred
+            .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied")
+            //make sure mv doesn't print errors for the parent directories
+            .stderr_does_not_contain("'a/aa'");
+        assert!(at.file_exists("a/aa/aa1"));
+        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_inter_partition_removing_source_without_permission_2() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/aa/");
+        at.mkdir_all("a/aa/aaa");
+        at.write("a/aa/aa1", "file contents");
+        at.write("a/aa/aa2", "file contents");
+        //remove write permission for the subdir
+        at.set_mode("a/aa/", 0o555);
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            // make sure mv prints error message for each entry where error occurs
+            .stderr_contains("mv: cannot remove 'a/aa/aaa': Permission denied")
+            .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied")
+            .stderr_contains("mv: cannot remove 'a/aa/aa2': Permission denied");
+        assert!(at.file_exists("a/aa/aa1"));
+        assert!(at.file_exists("a/aa/aa2"));
+        assert!(at.dir_exists("a/aa/aaa"));
+        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_inter_partition_removing_source_without_permission_3() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/aa/");
+        at.write("a/a1", "file contents");
+        at.write("a/aa/aa1", "file contents");
+        //remove write permission for the subdir
+        at.set_mode("a/aa/", 0o555);
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied");
+        assert!(at.file_exists("a/aa/aa1"));
+        // file that doesn't belong to the branch that error occurred didn't got removed
+        assert!(!at.file_exists("a/a1"));
+        assert!(other_fs_tempdir.path().join("a/aa/aa1").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_inter_partition_removing_source_without_permission_4() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir_all("a/aa/");
+        at.mkdir_all("a/ab/");
+        at.write("a/aa/aa1", "file contents");
+        at.write("a/ab/ab1", "file contents");
+
+        //remove write permission for the subdir
+        at.set_mode("a/aa/", 0o555);
+        // create a folder in another partition.
+        let other_fs_tempdir =
+            TempDir::new_in(REMOTE_TEMP_DIR).expect("Unable to create temp directory");
+        // mv to other partition
+        scene
+            .ucmd()
+            .arg("-v")
+            .arg("a")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .fails()
+            .stderr_contains("mv: cannot remove 'a/aa/aa1': Permission denied");
+        assert!(at.file_exists("a/aa/aa1"));
+        // folder that doesn't belong to the branch that error occurred didn't got removed
+        assert!(!at.dir_exists("a/ab"));
+        assert!(other_fs_tempdir.path().join("a/ab/ab1").exists());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn test_mv_backup_when_dest_has_trailing_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("D");
+    at.mkdir("E");
+    at.touch("D/d_file");
+    at.touch("E/e_file");
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg("--backup=numbered")
+        .arg("D")
+        .arg("E/")
+        .succeeds();
+    assert!(at.dir_exists("E.~1~"), "Backup folder not created");
+    assert!(at.file_exists("E.~1~/e_file"), "Backup file not created");
+    assert!(at.file_exists("E/d_file"), "source file didn't move");
 }
 
 #[test]

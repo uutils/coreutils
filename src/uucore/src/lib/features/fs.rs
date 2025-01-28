@@ -810,6 +810,49 @@ pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
 }
 
+// "Copies" a FIFO by creating a new one. This workaround is because Rust's
+// built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
+#[cfg(all(unix, not(target_os = "redox")))]
+pub fn create_fifo(dest: &Path) -> std::io::Result<()> {
+    nix::unistd::mkfifo(dest, nix::sys::stat::Mode::S_IRUSR).map_err(|err| err.into())
+}
+
+/// Get the total size of a slice of files and directories.
+///
+/// This function is much like the `du` utility, by recursively getting the sizes of files in directories.
+/// Files are not deduplicated when appearing in multiple sources. If `recursive` is set to `false`, the
+/// directories in `paths` will be ignored.
+pub fn disk_usage<P: AsRef<Path>>(paths: &[P], recursive: bool) -> IOResult<u64> {
+    let mut total = 0;
+    for p in paths {
+        let md = fs::metadata(p)?;
+        if md.file_type().is_dir() {
+            if recursive {
+                total += disk_usage_directory(p)?;
+            }
+        } else {
+            total += md.len();
+        }
+    }
+    Ok(total)
+}
+
+/// A helper for `disk_usage` specialized for directories.
+fn disk_usage_directory<P: AsRef<Path>>(p: P) -> IOResult<u64> {
+    let mut total = 0;
+
+    for entry in fs::read_dir(p)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            total += disk_usage_directory(entry.path())?;
+        } else {
+            total += entry.metadata()?.len();
+        }
+    }
+
+    Ok(total)
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -1050,5 +1093,88 @@ mod tests {
     fn test_get_file_name() {
         let file_path = PathBuf::from("~/foo.txt");
         assert!(matches!(get_filename(&file_path), Some("foo.txt")));
+    }
+
+    #[cfg(all(unix, not(target_os = "redox")))]
+    #[test]
+    fn test_create_fifo_success() {
+        let dir = tempdir().unwrap();
+        let fifo_path = dir.path().join("test_fifo");
+
+        // Call the function to create a FIFO
+        create_fifo(&fifo_path).unwrap();
+
+        // Check if the FIFO was created successfully
+        let metadata = fs::metadata(&fifo_path).unwrap();
+        assert!(unix::fs::FileTypeExt::is_fifo(&metadata.file_type()));
+    }
+
+    #[test]
+    fn calculates_total_size_of_single_file() {
+        let dir = tempdir().unwrap();
+        let file_path1 = dir.path().join("file1.txt");
+
+        let mut file1 = fs::File::create(&file_path1).unwrap();
+        writeln!(file1, "Hello, world!").unwrap();
+
+        let paths = vec![file_path1];
+
+        let actual_len = file1
+            .metadata()
+            .expect("couldn't get metadata for file1")
+            .len();
+
+        let total_size = disk_usage(&paths, false).unwrap();
+
+        assert_eq!(total_size, actual_len);
+    }
+    #[test]
+    fn calculates_total_size_of_files() {
+        let dir = tempdir().unwrap();
+        let file_path1 = dir.path().join("file1.txt");
+        let file_path2 = dir.path().join("file2.txt");
+
+        let mut file1 = fs::File::create(&file_path1).unwrap();
+        writeln!(file1, "Hello, world!").unwrap();
+
+        let mut file2 = fs::File::create(&file_path2).unwrap();
+        writeln!(file2, "Rust programming!").unwrap();
+
+        let paths = vec![file_path1, file_path2];
+
+        let file_1_len = file1
+            .metadata()
+            .expect("couldn't get metadata for file1")
+            .len();
+        let file_2_len = file2
+            .metadata()
+            .expect("couldn't get metadata for file1")
+            .len();
+        let actual_len = file_1_len + file_2_len;
+
+        let total_size = disk_usage(&paths, false).unwrap();
+
+        assert_eq!(total_size, actual_len);
+    }
+    #[test]
+    fn test_disk_usage_recursive() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("file1.txt");
+        let mut file = fs::File::create(&file_path).unwrap();
+        writeln!(file, "Hello, world!").unwrap();
+
+        let subdir_path = dir.path().join("subdir");
+        fs::create_dir(&subdir_path).unwrap();
+        let sub_file_path = subdir_path.join("file2.txt");
+        let mut sub_file = fs::File::create(&sub_file_path).unwrap();
+        writeln!(sub_file, "Hello, again!").unwrap();
+
+        let paths: Vec<PathBuf> = vec![dir.path().to_path_buf()];
+        let total_size = disk_usage(&paths, true).unwrap();
+
+        assert_eq!(
+            total_size,
+            file_path.metadata().unwrap().len() + sub_file_path.metadata().unwrap().len()
+        );
     }
 }

@@ -41,9 +41,7 @@ use std::os::unix::process::CommandExt;
 use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
-#[cfg(windows)]
-use std::path::MAIN_SEPARATOR_STR;
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -2913,6 +2911,22 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
     }
 }
 
+pub(crate) trait PathSeparatorReplace {
+    fn replace_path_separator(&self) -> String;
+}
+
+impl PathSeparatorReplace for str {
+    /// On Windows, this function replaces all occurrences of `/` with `\`.
+    /// On Unix-like systems (Linux, macOS), the input is returned unchanged.
+    fn replace_path_separator(&self) -> String {
+        if cfg!(windows) {
+            self.replace('/', MAIN_SEPARATOR_STR)
+        } else {
+            self.to_string()
+        }
+    }
+}
+
 /// Sanity checks for test utils
 #[cfg(test)]
 mod tests {
@@ -4006,5 +4020,17 @@ mod tests {
             .succeeds()
             .stdout_is(expected);
         std::assert_eq!(p_umask, get_umask()); // make sure parent umask didn't change
+    }
+
+    #[test]
+    fn test_replace_path_separator() {
+        let unix_path = "/some/unix/style/path";
+        let platform_path = &unix_path.replace_path_separator();
+
+        if cfg!(windows) {
+            std::assert_eq!(platform_path, r"\some\unix\style\path");
+        } else {
+            std::assert_eq!(platform_path, "/some/unix/style/path");
+        }
     }
 }

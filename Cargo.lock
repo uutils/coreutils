@@ -2944,10 +2944,13 @@ name = "uu_mv"
 version = "0.0.29"
 dependencies = [
  "clap",
+ "filetime",
  "fs_extra",
  "indicatif",
+ "tempfile",
  "thiserror 2.0.11",
  "uucore",
+ "walkdir",
 ]
 
 [[package]]
