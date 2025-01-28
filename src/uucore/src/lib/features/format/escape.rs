@@ -25,9 +25,15 @@ enum Base {
 }
 
 impl Base {
-    fn max_digits(&self) -> u8 {
+    fn max_digits(&self, octal_0: bool) -> u8 {
         match self {
-            Self::Oct => 3,
+            Self::Oct => {
+                if octal_0 {
+                    3
+                } else {
+                    2
+                }
+            }
             Self::Hex => 2,
         }
     }
@@ -52,7 +58,7 @@ impl Base {
 }
 
 /// Parse the numeric part of the `\xHHH` and `\0NNN` escape sequences
-fn parse_code(input: &mut &[u8], base: Base) -> Option<u8> {
+fn parse_code(input: &mut &[u8], base: Base, octal_0: bool) -> Option<u8> {
     // All arithmetic on `ret` needs to be wrapping, because octal input can
     // take 3 digits, which is 9 bits, and therefore more than what fits in a
     // `u8`. GNU just seems to wrap these values.
@@ -63,7 +69,7 @@ fn parse_code(input: &mut &[u8], base: Base) -> Option<u8> {
     let mut ret = base.convert_digit(*c)?;
     *input = rest;
 
-    for _ in 1..base.max_digits() {
+    for _ in 1..base.max_digits(octal_0) {
         let [c, rest @ ..] = input else { break };
         let Some(n) = base.convert_digit(*c) else {
             break;
@@ -100,7 +106,7 @@ pub fn parse_escape_code(rest: &mut &[u8]) -> EscapedChar {
         // Note that '0' is intentionally omitted because that
         // would be the \0NNN syntax.
         if let b'1'..=b'7' = c {
-            if let Some(parsed) = parse_code(rest, Base::Oct) {
+            if let Some(parsed) = parse_code(rest, Base::Oct, true) {
                 return EscapedChar::Byte(parsed);
             }
         }
@@ -119,13 +125,13 @@ pub fn parse_escape_code(rest: &mut &[u8]) -> EscapedChar {
             b't' => EscapedChar::Byte(b'\t'),
             b'v' => EscapedChar::Byte(b'\x0b'),
             b'x' => {
-                if let Some(c) = parse_code(rest, Base::Hex) {
+                if let Some(c) = parse_code(rest, Base::Hex, false) {
                     EscapedChar::Byte(c)
                 } else {
                     EscapedChar::Backslash(b'x')
                 }
             }
-            b'0' => EscapedChar::Byte(parse_code(rest, Base::Oct).unwrap_or(b'\0')),
+            b'0' => EscapedChar::Byte(parse_code(rest, Base::Oct, false).unwrap_or(b'\0')),
             b'u' => EscapedChar::Char(parse_unicode(rest, 4).unwrap_or('\0')),
             b'U' => EscapedChar::Char(parse_unicode(rest, 8).unwrap_or('\0')),
             c => EscapedChar::Backslash(*c),
