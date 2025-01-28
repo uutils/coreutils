@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore IAMNOTASIGNAL
+
 use crate::common::util::TestScenario;
 use regex::Regex;
 use std::os::unix::process::ExitStatusExt;
@@ -109,6 +112,24 @@ fn test_kill_table_lists_all_vertically() {
 }
 
 #[test]
+fn test_kill_list_one_signal_from_number() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("9")
+        .succeeds()
+        .stdout_only("KILL\n");
+}
+
+#[test]
+fn test_kill_list_one_signal_from_invalid_number() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("99")
+        .fails()
+        .stderr_contains("'99': invalid signal");
+}
+
+#[test]
 fn test_kill_list_one_signal_from_name() {
     // Use SIGKILL because it is 9 on all unixes.
     new_ucmd!()
@@ -162,11 +183,11 @@ fn test_kill_list_two_signal_from_name() {
 fn test_kill_list_three_signal_first_unknown() {
     new_ucmd!()
         .arg("-l")
-        .arg("IAMNOTASIGNAL") // spell-checker:disable-line
+        .arg("IAMNOTASIGNAL")
         .arg("INT")
         .arg("KILL")
         .fails()
-        .stderr_contains("unknown signal")
+        .stderr_contains("'IAMNOTASIGNAL': invalid signal")
         .stdout_matches(&Regex::new("\\d\n\\d").unwrap());
 }
 
@@ -174,9 +195,9 @@ fn test_kill_list_three_signal_first_unknown() {
 fn test_kill_set_bad_signal_name() {
     new_ucmd!()
         .arg("-s")
-        .arg("IAMNOTASIGNAL") // spell-checker:disable-line
+        .arg("IAMNOTASIGNAL")
         .fails()
-        .stderr_contains("unknown signal");
+        .stderr_contains("'IAMNOTASIGNAL': invalid signal");
 }
 
 #[test]
@@ -291,8 +312,7 @@ fn test_kill_with_signal_name_new_form_unknown_must_match_input_case() {
         .arg("IaMnOtAsIgNaL")
         .arg(format!("{}", target.pid()))
         .fails()
-        .stderr_contains("unknown signal")
-        .stderr_contains("IaMnOtAsIgNaL");
+        .stderr_contains("'IaMnOtAsIgNaL': invalid signal");
 }
 
 #[test]
