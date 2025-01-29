@@ -679,7 +679,11 @@ fn char_as_byte() {
 
 #[test]
 fn no_infinite_loop() {
-    new_ucmd!().args(&["a", "b"]).succeeds().stdout_only("a");
+    new_ucmd!()
+        .args(&["a", "b"])
+        .succeeds()
+        .stdout_is("a")
+        .stderr_contains("warning: ignoring excess arguments, starting with 'b'");
 }
 
 #[test]
