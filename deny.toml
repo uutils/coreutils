@@ -98,6 +98,14 @@ skip = [
   { name = "getrandom", version = "0.2.15" },
   # getrandom, mio
   { name = "wasi", version = "0.11.0+wasi-snapshot-preview1" },
+  # num-bigint, num-prime, phf_generator
+  { name = "rand", version = "0.8.5" },
+  # rand
+  { name = "rand_chacha", version = "0.3.1" },
+  # rand
+  { name = "rand_core", version = "0.6.4" },
+  # ppv-lite86, utmp-classic, utmp-classic-raw
+  { name = "zerocopy", version = "0.7.35" },
 ]
 # spell-checker: enable
 
