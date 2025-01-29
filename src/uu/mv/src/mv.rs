@@ -672,7 +672,7 @@ fn rename_with_fallback(
     to: &Path,
     multi_progress: Option<&MultiProgress>,
 ) -> io::Result<()> {
-    if let Err(err) = fs::rename(from, to) {
+    fs::rename(from, to).or_else(|err| {
         #[cfg(windows)]
         const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
         #[cfg(unix)]
@@ -687,131 +687,139 @@ fn rename_with_fallback(
         if !should_fallback {
             return Err(err);
         }
-
         // Get metadata without following symlinks
         let metadata = from.symlink_metadata()?;
         let file_type = metadata.file_type();
-
         if file_type.is_symlink() {
-            rename_symlink_fallback(from, to)?;
+            rename_symlink_fallback(from, to)
         } else if file_type.is_dir() {
-            // We remove the destination directory if it exists to match the
-            // behavior of `fs::rename`. As far as I can tell, `fs_extra`'s
-            // `move_dir` would otherwise behave differently.
-            if to.exists() {
-                fs::remove_dir_all(to)?;
-            }
-            let options = DirCopyOptions {
-                // From the `fs_extra` documentation:
-                // "Recursively copy a directory with a new name or place it
-                // inside the destination. (same behaviors like cp -r in Unix)"
-                copy_inside: true,
-                ..DirCopyOptions::new()
-            };
-
-            // Calculate total size of directory
-            // Silently degrades:
-            //    If finding the total size fails for whatever reason,
-            //    the progress bar wont be shown for this file / dir.
-            //    (Move will probably fail due to permission error later?)
-            let total_size = dir_get_size(from).ok();
-
-            let progress_bar =
-                if let (Some(multi_progress), Some(total_size)) = (multi_progress, total_size) {
-                    let bar = ProgressBar::new(total_size).with_style(
-                        ProgressStyle::with_template(
-                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
-                        )
-                        .unwrap(),
-                    );
-
-                    Some(multi_progress.add(bar))
-                } else {
-                    None
-                };
-
-            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            let xattrs =
-                fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
-
-            let result = if let Some(ref pb) = progress_bar {
-                move_dir_with_progress(from, to, &options, |process_info: TransitProcess| {
-                    pb.set_position(process_info.copied_bytes);
-                    pb.set_message(process_info.file_name);
-                    TransitProcessResult::ContinueOrAbort
-                })
-            } else {
-                move_dir(from, to, &options)
-            };
-
-            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            fsxattr::apply_xattrs(to, xattrs)?;
-
-            if let Err(err) = result {
-                return match err.kind {
-                    fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "Permission denied",
-                    )),
-                    _ => Err(io::Error::other(format!("{err:?}"))),
-                };
-            }
+            rename_dir_fallback(from, to, multi_progress)
         } else {
-            if to.is_symlink() {
-                fs::remove_file(to).map_err(|err| {
-                    let to = to.to_string_lossy();
-                    let from = from.to_string_lossy();
-                    io::Error::new(
-                        err.kind(),
-                        format!(
-                            "inter-device move failed: '{from}' to '{to}'\
-                            ; unable to remove target: {err}"
-                        ),
-                    )
-                })?;
-            }
-            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            fs::copy(from, to)
-                .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-                .and_then(|_| fs::remove_file(from))?;
-            #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-            fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
+            rename_file_fallback(from, to)
         }
-    }
-    Ok(())
+    })
 }
 
 /// Move the given symlink to the given destination. On Windows, dangling
 /// symlinks return an error.
-#[inline]
+#[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
-    #[cfg(unix)]
-    {
-        unix::fs::symlink(path_symlink_points_to, to).and_then(|_| fs::remove_file(from))?;
-    }
-    #[cfg(windows)]
-    {
-        if path_symlink_points_to.exists() {
-            if path_symlink_points_to.is_dir() {
-                windows::fs::symlink_dir(&path_symlink_points_to, to)?;
-            } else {
-                windows::fs::symlink_file(&path_symlink_points_to, to)?;
-            }
-            fs::remove_file(from)?;
+    unix::fs::symlink(path_symlink_points_to, to).and_then(|_| fs::remove_file(from))
+}
+
+#[cfg(windows)]
+fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
+    let path_symlink_points_to = fs::read_link(from)?;
+    if path_symlink_points_to.exists() {
+        if path_symlink_points_to.is_dir() {
+            windows::fs::symlink_dir(&path_symlink_points_to, to)?;
         } else {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "can't determine symlink type, since it is dangling",
-            ));
+            windows::fs::symlink_file(&path_symlink_points_to, to)?;
         }
+        fs::remove_file(from)
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "can't determine symlink type, since it is dangling",
+        ))
     }
-    #[cfg(not(any(windows, unix)))]
-    {
-        return Err(io::Error::other(
-            "your operating system does not support symlinks",
-        ));
+}
+
+#[cfg(not(any(windows, unix)))]
+fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
+    let path_symlink_points_to = fs::read_link(from)?;
+    Err(io::Error::new(
+        io::ErrorKind::Other,
+        "your operating system does not support symlinks",
+    ))
+}
+
+fn rename_dir_fallback(
+    from: &Path,
+    to: &Path,
+    multi_progress: Option<&MultiProgress>,
+) -> io::Result<()> {
+    // We remove the destination directory if it exists to match the
+    // behavior of `fs::rename`. As far as I can tell, `fs_extra`'s
+    // `move_dir` would otherwise behave differently.
+    if to.exists() {
+        fs::remove_dir_all(to)?;
     }
+    let options = DirCopyOptions {
+        // From the `fs_extra` documentation:
+        // "Recursively copy a directory with a new name or place it
+        // inside the destination. (same behaviors like cp -r in Unix)"
+        copy_inside: true,
+        ..DirCopyOptions::new()
+    };
+
+    // Calculate total size of directory
+    // Silently degrades:
+    //    If finding the total size fails for whatever reason,
+    //    the progress bar wont be shown for this file / dir.
+    //    (Move will probably fail due to permission error later?)
+    let total_size = dir_get_size(from).ok();
+
+    let progress_bar = match (multi_progress, total_size) {
+        (Some(multi_progress), Some(total_size)) => {
+            let template = "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}";
+            let style = ProgressStyle::with_template(template).unwrap();
+            let bar = ProgressBar::new(total_size).with_style(style);
+            Some(multi_progress.add(bar))
+        }
+        (_, _) => None,
+    };
+
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    let xattrs =
+        fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
+
+    let result = if let Some(ref pb) = progress_bar {
+        move_dir_with_progress(from, to, &options, |process_info: TransitProcess| {
+            pb.set_position(process_info.copied_bytes);
+            pb.set_message(process_info.file_name);
+            TransitProcessResult::ContinueOrAbort
+        })
+    } else {
+        move_dir(from, to, &options)
+    };
+
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    fsxattr::apply_xattrs(to, xattrs)?;
+
+    match result {
+        Err(err) => match err.kind {
+            fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Permission denied",
+            )),
+            _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
+        },
+        _ => Ok(()),
+    }
+}
+
+fn rename_file_fallback(from: &Path, to: &Path) -> io::Result<()> {
+    if to.is_symlink() {
+        fs::remove_file(to).map_err(|err| {
+            let to = to.to_string_lossy();
+            let from = from.to_string_lossy();
+            io::Error::new(
+                err.kind(),
+                format!(
+                    "inter-device move failed: '{from}' to '{to}'\
+                            ; unable to remove target: {err}"
+                ),
+            )
+        })?;
+    }
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    fs::copy(from, to)
+        .and_then(|_| fsxattr::copy_xattrs(&from, &to))
+        .and_then(|_| fs::remove_file(from))?;
+    #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
+    fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
     Ok(())
 }
 
