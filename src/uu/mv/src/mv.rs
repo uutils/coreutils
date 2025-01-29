@@ -7,19 +7,27 @@
 
 mod error;
 
-use clap::builder::ValueParser;
-use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{absolute, Path, PathBuf};
+
+use clap::builder::ValueParser;
+use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+#[cfg(unix)]
+use libc::mkfifo;
+
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
@@ -650,6 +658,16 @@ fn rename(
     Ok(())
 }
 
+#[cfg(unix)]
+fn is_fifo(filetype: fs::FileType) -> bool {
+    filetype.is_fifo()
+}
+
+#[cfg(not(unix))]
+fn is_fifo(_filetype: fs::FileType) -> bool {
+    false
+}
+
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
 fn rename_with_fallback(
@@ -665,10 +683,37 @@ fn rename_with_fallback(
             rename_symlink_fallback(from, to)
         } else if file_type.is_dir() {
             rename_dir_fallback(from, to, multi_progress)
+        } else if is_fifo(file_type) {
+            rename_fifo_fallback(from, to)
         } else {
             rename_file_fallback(from, to)
         }
     })
+}
+
+#[cfg(unix)]
+fn make_fifo(path: &Path) -> io::Result<()> {
+    let name = CString::new(path.to_str().unwrap()).unwrap();
+    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
+    if err == -1 {
+        Err(std::io::Error::from_raw_os_error(err))
+    } else {
+        Ok(())
+    }
+}
+
+/// Replace the destination with a new pipe with the same name as the source.
+#[cfg(unix)]
+fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
+    if to.try_exists()? {
+        std::fs::remove_file(to)?;
+    }
+    make_fifo(to).and_then(|_| std::fs::remove_file(from))
+}
+
+#[cfg(not(unix))]
+fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+    Ok(())
 }
 
 /// Move the given symlink to the given destination. On Windows, dangling
