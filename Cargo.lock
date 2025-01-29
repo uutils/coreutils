@@ -2958,6 +2958,7 @@ dependencies = [
  "clap",
  "fs_extra",
  "indicatif",
+ "libc",
  "thiserror 2.0.11",
  "uucore",
 ]

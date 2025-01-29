@@ -8,6 +8,8 @@ use crate::common::util::TestScenario;
 use filetime::FileTime;
 use rstest::rstest;
 use std::io::Write;
+#[cfg(not(windows))]
+use std::path::Path;
 
 #[test]
 fn test_mv_invalid_arg() {
@@ -1790,4 +1792,17 @@ fn test_mv_error_msg_with_multiple_sources_that_does_not_exist() {
         .fails()
         .stderr_contains("mv: cannot stat 'a': No such file or directory")
         .stderr_contains("mv: cannot stat 'b/': No such file or directory");
+}
+
+#[cfg(not(windows))]
+#[ignore = "requires access to a different filesystem"]
+#[test]
+fn test_special_file_different_filesystem() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("f");
+    std::fs::create_dir("/dev/shm/tmp").unwrap();
+    ucmd.args(&["f", "/dev/shm/tmp"]).succeeds().no_output();
+    assert!(!at.file_exists("f"));
+    assert!(Path::new("/dev/shm/tmp/f").exists());
+    std::fs::remove_dir_all("/dev/shm/tmp").unwrap();
 }
