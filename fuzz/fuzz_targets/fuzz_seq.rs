@@ -19,23 +19,23 @@ use crate::fuzz_common::{
 static CMD_PATH: &str = "seq";
 
 fn generate_seq() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // Generate 1 to 3 numbers for seq arguments
-    let arg_count = rng.gen_range(1..=3);
+    let arg_count = rng.random_range(1..=3);
     let mut args = Vec::new();
 
     for _ in 0..arg_count {
-        if rng.gen_ratio(1, 100) {
+        if rng.random_ratio(1, 100) {
             // 1% chance to add a random string
-            args.push(generate_random_string(rng.gen_range(1..=10)));
+            args.push(generate_random_string(rng.random_range(1..=10)));
         } else {
             // 99% chance to add a numeric value
-            match rng.gen_range(0..=3) {
-                0 => args.push(rng.gen_range(-10000..=10000).to_string()), // Large or small integers
-                1 => args.push(rng.gen_range(-100.0..100.0).to_string()),  // Floating-point numbers
-                2 => args.push(rng.gen_range(-100..0).to_string()),        // Negative integers
-                _ => args.push(rng.gen_range(1..=100).to_string()),        // Regular integers
+            match rng.random_range(0..=3) {
+                0 => args.push(rng.random_range(-10000..=10000).to_string()), // Large or small integers
+                1 => args.push(rng.random_range(-100.0..100.0).to_string()), // Floating-point numbers
+                2 => args.push(rng.random_range(-100..0).to_string()),       // Negative integers
+                _ => args.push(rng.random_range(1..=100).to_string()),       // Regular integers
             }
         }
     }

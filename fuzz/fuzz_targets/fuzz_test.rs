@@ -8,7 +8,7 @@
 use libfuzzer_sys::fuzz_target;
 use uu_test::uumain;
 
-use rand::seq::SliceRandom;
+use rand::prelude::IndexedRandom;
 use rand::Rng;
 use std::ffi::OsString;
 
@@ -39,7 +39,7 @@ struct TestArg {
 }
 
 fn generate_random_path(rng: &mut dyn rand::RngCore) -> &'static str {
-    match rng.gen_range(0..=3) {
+    match rng.random_range(0..=3) {
         0 => "/dev/null",
         1 => "/dev/random",
         2 => "/tmp",
@@ -113,15 +113,15 @@ fn generate_test_args() -> Vec<TestArg> {
 }
 
 fn generate_test_arg() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let test_args = generate_test_args();
     let mut arg = String::new();
 
-    let choice = rng.gen_range(0..=5);
+    let choice = rng.random_range(0..=5);
 
     match choice {
         0 => {
-            arg.push_str(&rng.gen_range(-100..=100).to_string());
+            arg.push_str(&rng.random_range(-100..=100).to_string());
         }
         1..=3 => {
             let test_arg = test_args
@@ -130,20 +130,20 @@ fn generate_test_arg() -> String {
             if test_arg.arg_type == ArgType::INTEGER {
                 arg.push_str(&format!(
                     "{} {} {}",
-                    &rng.gen_range(-100..=100).to_string(),
+                    &rng.random_range(-100..=100).to_string(),
                     test_arg.arg,
-                    &rng.gen_range(-100..=100).to_string()
+                    &rng.random_range(-100..=100).to_string()
                 ));
             } else if test_arg.arg_type == ArgType::STRINGSTRING {
-                let random_str = generate_random_string(rng.gen_range(1..=10));
-                let random_str2 = generate_random_string(rng.gen_range(1..=10));
+                let random_str = generate_random_string(rng.random_range(1..=10));
+                let random_str2 = generate_random_string(rng.random_range(1..=10));
 
                 arg.push_str(&format!(
                     "{} {} {}",
                     &random_str, test_arg.arg, &random_str2
                 ));
             } else if test_arg.arg_type == ArgType::STRING {
-                let random_str = generate_random_string(rng.gen_range(1..=10));
+                let random_str = generate_random_string(rng.random_range(1..=10));
                 arg.push_str(&format!("{} {}", test_arg.arg, &random_str));
             } else if test_arg.arg_type == ArgType::FILEFILE {
                 let path = generate_random_path(&mut rng);
@@ -155,7 +155,7 @@ fn generate_test_arg() -> String {
             }
         }
         4 => {
-            let random_str = generate_random_string(rng.gen_range(1..=10));
+            let random_str = generate_random_string(rng.random_range(1..=10));
             arg.push_str(&random_str);
         }
         _ => {
@@ -177,8 +177,8 @@ fn generate_test_arg() -> String {
 }
 
 fuzz_target!(|_data: &[u8]| {
-    let mut rng = rand::thread_rng();
-    let max_args = rng.gen_range(1..=6);
+    let mut rng = rand::rng();
+    let max_args = rng.random_range(1..=6);
     let mut args = vec![OsString::from("test")];
 
     for _ in 0..max_args {
