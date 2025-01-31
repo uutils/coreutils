@@ -314,15 +314,17 @@ impl Spec {
     ) -> Result<(), FormatError> {
         match self {
             Self::Char { width, align_left } => {
-                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
-                write_padded(writer, &[args.get_char()], width, *align_left)
+                let (width, neg_width) =
+                    resolve_asterisk_maybe_negative(*width, &mut args)?.unwrap_or_default();
+                write_padded(writer, &[args.get_char()], width, *align_left || neg_width)
             }
             Self::String {
                 width,
                 align_left,
                 precision,
             } => {
-                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
+                let (width, neg_width) =
+                    resolve_asterisk_maybe_negative(*width, &mut args)?.unwrap_or_default();
 
                 // GNU does do this truncation on a byte level, see for instance:
                 //     printf "%.1s" 🙃
@@ -336,7 +338,12 @@ impl Spec {
                     Some(p) if p < s.len() => &s[..p],
                     _ => s,
                 };
-                write_padded(writer, truncated.as_bytes(), width, *align_left)
+                write_padded(
+                    writer,
+                    truncated.as_bytes(),
+                    width,
+                    *align_left || neg_width,
+                )
             }
             Self::EscapedString => {
                 let s = args.get_str();
@@ -455,6 +462,24 @@ fn resolve_asterisk<'a>(
         None => None,
         Some(CanAsterisk::Asterisk) => Some(usize::try_from(args.get_u64()).ok().unwrap_or(0)),
         Some(CanAsterisk::Fixed(w)) => Some(w),
+    })
+}
+
+fn resolve_asterisk_maybe_negative<'a>(
+    option: Option<CanAsterisk<usize>>,
+    mut args: impl ArgumentIter<'a>,
+) -> Result<Option<(usize, bool)>, FormatError> {
+    Ok(match option {
+        None => None,
+        Some(CanAsterisk::Asterisk) => {
+            let nb = args.get_i64();
+            if nb < 0 {
+                Some((usize::try_from(-(nb as isize)).ok().unwrap_or(0), true))
+            } else {
+                Some((usize::try_from(nb).ok().unwrap_or(0), false))
+            }
+        }
+        Some(CanAsterisk::Fixed(w)) => Some((w, false)),
     })
 }
 
