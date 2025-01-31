@@ -611,7 +611,7 @@ fn test_cp_arg_interactive_update_overwrite_older() {
     // Option N
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b");
-    std::thread::sleep(Duration::from_secs(1));
+    sleep(Duration::from_millis(100));
     at.touch("a");
     ucmd.args(&["-i", "-u", "a", "b"])
         .pipe_in("N\n")
@@ -623,7 +623,7 @@ fn test_cp_arg_interactive_update_overwrite_older() {
     // Option Y
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b");
-    std::thread::sleep(Duration::from_secs(1));
+    sleep(Duration::from_millis(100));
     at.touch("a");
     ucmd.args(&["-i", "-u", "a", "b"])
         .pipe_in("Y\n")
@@ -2241,7 +2241,7 @@ fn test_cp_no_preserve_timestamps() {
         previous,
     )
     .unwrap();
-    sleep(Duration::from_secs(3));
+    sleep(Duration::from_millis(100));
 
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--no-preserve=timestamps")
@@ -5686,7 +5686,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
             if at.dir_exists(&format!("{DEST_DIR}/{SRC_DIR}")) {
                 break;
             }
-            std::thread::sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(100));
         }
         let mode = at.metadata(&format!("{DEST_DIR}/{SRC_DIR}")).mode();
         #[allow(clippy::unnecessary_cast, clippy::cast_lossless)]
