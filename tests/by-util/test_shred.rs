@@ -182,6 +182,47 @@ fn test_shred_empty() {
 }
 
 #[test]
+fn test_random_source() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "test_random_source";
+    let file_original_content = "test_shred file content";
+
+    at.write(file, file_original_content);
+
+    // File is missing
+    scene
+        .ucmd()
+        .arg("--random-source=test_random_file")
+        .arg(file)
+        .succeeds();
+
+    // Write to random file
+    let random_file = "test_random_file";
+    at.touch(random_file);
+
+    scene
+        .ucmd()
+        .arg("--random-source=test_random_file")
+        .arg(file)
+        .succeeds();
+
+    at.write(random_file, "random contents");
+
+    scene
+        .ucmd()
+        .arg("--random-source=test_random_file")
+        .arg(file)
+        .succeeds();
+
+    // File exists
+    assert!(at.file_exists(file));
+    // File is obfuscated
+    assert!(at.read_bytes(file) != file_original_content.as_bytes());
+}
+
+#[test]
 #[cfg(all(unix, feature = "chmod"))]
 fn test_shred_fail_no_perm() {
     use std::path::Path;
