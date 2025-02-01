@@ -5,7 +5,7 @@
 // spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
 
 use crate::common::util::{AtPath, TestScenario};
-use rand::{thread_rng, Rng, SeedableRng};
+use rand::{rng, Rng, SeedableRng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
@@ -18,8 +18,8 @@ use std::{
 };
 
 fn random_chars(n: usize) -> String {
-    thread_rng()
-        .sample_iter(&rand::distributions::Alphanumeric)
+    rng()
+        .sample_iter(&rand::distr::Alphanumeric)
         .map(char::from)
         .take(n)
         .collect::<String>()

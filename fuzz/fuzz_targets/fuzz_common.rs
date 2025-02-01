@@ -5,7 +5,7 @@
 
 use libc::STDIN_FILENO;
 use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
-use rand::prelude::SliceRandom;
+use rand::prelude::IndexedRandom;
 use rand::Rng;
 use similar::TextDiff;
 use std::env::temp_dir;
@@ -373,15 +373,15 @@ fn print_diff(rust_output: &str, gnu_output: &str) {
 }
 
 pub fn generate_random_string(max_length: usize) -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let valid_utf8: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
         .chars()
         .collect();
     let invalid_utf8 = [0xC3, 0x28]; // Invalid UTF-8 sequence
     let mut result = String::new();
 
-    for _ in 0..rng.gen_range(0..=max_length) {
-        if rng.gen_bool(0.9) {
+    for _ in 0..rng.random_range(0..=max_length) {
+        if rng.random_bool(0.9) {
             let ch = valid_utf8.choose(&mut rng).unwrap();
             result.push(*ch);
         } else {
@@ -396,18 +396,18 @@ pub fn generate_random_string(max_length: usize) -> String {
 }
 
 pub fn generate_random_file() -> Result<String, std::io::Error> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let file_name: String = (0..10)
-        .map(|_| rng.gen_range(b'a'..=b'z') as char)
+        .map(|_| rng.random_range(b'a'..=b'z') as char)
         .collect();
     let mut file_path = temp_dir();
     file_path.push(file_name);
 
     let mut file = File::create(&file_path)?;
 
-    let content_length = rng.gen_range(10..1000);
+    let content_length = rng.random_range(10..1000);
     let content: String = (0..content_length)
-        .map(|_| (rng.gen_range(b' '..=b'~') as char))
+        .map(|_| (rng.random_range(b' '..=b'~') as char))
         .collect();
 
     file.write_all(content.as_bytes())?;

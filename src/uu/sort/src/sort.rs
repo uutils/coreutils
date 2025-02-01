@@ -26,7 +26,7 @@ use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
 use nix::libc::{getrlimit, rlimit, RLIMIT_NOFILE};
 use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
@@ -1742,7 +1742,7 @@ fn general_numeric_compare(a: &GeneralF64ParseResult, b: &GeneralF64ParseResult)
 }
 
 fn get_rand_string() -> [u8; 16] {
-    thread_rng().sample(rand::distributions::Standard)
+    rng().sample(rand::distr::StandardUniform)
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {

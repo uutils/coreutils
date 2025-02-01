@@ -137,7 +137,7 @@ fn test_debug_2() {
     let result = ts
         .ucmd()
         .arg("-vv")
-        .arg(ts.bin_path)
+        .arg(&ts.bin_path)
         .args(&["echo", "hello2"])
         .succeeds();
     result.stderr_matches(
@@ -165,7 +165,7 @@ fn test_debug1_part_of_string_arg() {
     let result = ts
         .ucmd()
         .arg("-vS FOO=BAR")
-        .arg(ts.bin_path)
+        .arg(&ts.bin_path)
         .args(&["echo", "hello1"])
         .succeeds();
     result.stderr_matches(
@@ -186,7 +186,7 @@ fn test_debug2_part_of_string_arg() {
     let result = ts
         .ucmd()
         .arg("-vvS FOO=BAR")
-        .arg(ts.bin_path)
+        .arg(&ts.bin_path)
         .args(&["echo", "hello2"])
         .succeeds();
     result.stderr_matches(

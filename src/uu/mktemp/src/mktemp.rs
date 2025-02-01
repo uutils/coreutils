@@ -429,7 +429,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<P
 
     // Randomize.
     let bytes = &mut buf[prefix.len()..prefix.len() + rand];
-    rand::thread_rng().fill(bytes);
+    rand::rng().fill(bytes);
     for byte in bytes {
         *byte = match *byte % 62 {
             v @ 0..=9 => v + b'0',

@@ -176,7 +176,7 @@ impl BytesWriter {
     fn from_pass_type(pass: &PassType) -> Self {
         match pass {
             PassType::Random => Self::Random {
-                rng: StdRng::from_entropy(),
+                rng: StdRng::from_os_rng(),
                 buffer: [0; BLOCK_SIZE],
             },
             PassType::Pattern(pattern) => {
@@ -452,7 +452,7 @@ fn wipe_file(
             for pattern in PATTERNS.into_iter().take(remainder) {
                 pass_sequence.push(PassType::Pattern(pattern));
             }
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             pass_sequence.shuffle(&mut rng); // randomize the order of application
 
             let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after

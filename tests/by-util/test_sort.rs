@@ -1275,7 +1275,7 @@ fn test_tmp_files_deleted_on_sigint() {
         // approximately 20 MB
         for _ in 0..40 {
             let lines = SmallRng::seed_from_u64(123)
-                .sample_iter(rand::distributions::uniform::Uniform::new(0, 10000))
+                .sample_iter(rand::distr::uniform::Uniform::new(0, 10000).unwrap())
                 .take(100_000)
                 .map(|x| x.to_string() + "\n")
                 .collect::<String>();
