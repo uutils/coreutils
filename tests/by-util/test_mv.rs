@@ -1800,6 +1800,8 @@ fn test_mv_error_msg_with_multiple_sources_that_does_not_exist() {
 fn test_special_file_different_filesystem() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("f");
+    // TODO Use `TestScenario::mount_temp_fs()` for this purpose and
+    // un-ignore this test.
     std::fs::create_dir("/dev/shm/tmp").unwrap();
     ucmd.args(&["f", "/dev/shm/tmp"]).succeeds().no_output();
     assert!(!at.file_exists("f"));
