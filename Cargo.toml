@@ -302,6 +302,7 @@ iana-time-zone = "0.1.57"
 indicatif = "0.17.8"
 itertools = "0.14.0"
 libc = "0.2.153"
+libsystemd-sys = "0.9.3"
 lscolors = { version = "0.20.0", default-features = false, features = [
   "gnu_legacy",
 ] }
