@@ -2471,10 +2471,7 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<(
         fs::remove_file(dest)?;
     }
 
-    match make_fifo(dest) {
-        Ok(_) => Ok(()),
-        Err(_) => Err(format!("cannot create fifo {}: File exists", dest.quote()).into()),
-    }
+    make_fifo(dest).map_err(|_| format!("cannot create fifo {}: File exists", dest.quote()).into())
 }
 
 fn copy_link(
