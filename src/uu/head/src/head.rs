@@ -7,8 +7,12 @@
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::fs::File;
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, FromRawFd};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
@@ -239,7 +243,7 @@ impl HeadOptions {
     }
 }
 
-fn read_n_bytes(input: impl Read, n: u64) -> std::io::Result<()> {
+fn read_n_bytes(input: impl Read, n: u64) -> std::io::Result<u64> {
     // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
 
@@ -247,31 +251,31 @@ fn read_n_bytes(input: impl Read, n: u64) -> std::io::Result<()> {
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
 
-    io::copy(&mut reader, &mut stdout)?;
+    let bytes_written = io::copy(&mut reader, &mut stdout)?;
 
     // Make sure we finish writing everything to the target before
     // exiting. Otherwise, when Rust is implicitly flushing, any
     // error will be silently ignored.
     stdout.flush()?;
 
-    Ok(())
+    Ok(bytes_written)
 }
 
-fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std::io::Result<()> {
+fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std::io::Result<u64> {
     // Read the first `n` lines from the `input` reader.
     let mut reader = take_lines(input, n, separator);
 
     // Write those bytes to `stdout`.
     let mut stdout = std::io::stdout();
 
-    io::copy(&mut reader, &mut stdout)?;
+    let bytes_written = io::copy(&mut reader, &mut stdout)?;
 
     // Make sure we finish writing everything to the target before
     // exiting. Otherwise, when Rust is implicitly flushing, any
     // error will be silently ignored.
     stdout.flush()?;
 
-    Ok(())
+    Ok(bytes_written)
 }
 
 fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
@@ -284,7 +288,8 @@ fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> 
     }
 }
 
-fn read_but_last_n_bytes(input: impl std::io::BufRead, n: u64) -> std::io::Result<()> {
+fn read_but_last_n_bytes(input: impl std::io::BufRead, n: u64) -> std::io::Result<u64> {
+    let mut bytes_written = 0;
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
         let stdout = std::io::stdout();
         let stdout = stdout.lock();
@@ -294,32 +299,36 @@ fn read_but_last_n_bytes(input: impl std::io::BufRead, n: u64) -> std::io::Resul
         let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
         for byte in take_all_but(input.bytes(), n) {
             writer.write_all(&[byte?])?;
+            bytes_written += 1;
         }
         // Make sure we finish writing everything to the target before
         // exiting. Otherwise, when Rust is implicitly flushing, any
         // error will be silently ignored.
         writer.flush()?;
     }
-    Ok(())
+    Ok(bytes_written)
 }
 
 fn read_but_last_n_lines(
     input: impl std::io::BufRead,
     n: u64,
     separator: u8,
-) -> std::io::Result<()> {
+) -> std::io::Result<u64> {
+    let mut bytes_written: u64 = 0;
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
         for bytes in take_all_but(lines(input, separator), n) {
-            stdout.write_all(&bytes?)?;
+            let bytes = bytes?;
+            bytes_written += u64::try_from(bytes.len()).unwrap();
+            stdout.write_all(&bytes)?;
         }
         // Make sure we finish writing everything to the target before
         // exiting. Otherwise, when Rust is implicitly flushing, any
         // error will be silently ignored.
         stdout.flush()?;
     }
-    Ok(())
+    Ok(bytes_written)
 }
 
 /// Return the index in `input` just after the `n`th line from the end.
@@ -400,45 +409,43 @@ fn is_seekable(input: &mut std::fs::File) -> bool {
         && input.seek(SeekFrom::Start(current_pos.unwrap())).is_ok()
 }
 
-fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
+fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<u64> {
     let st = input.metadata()?;
     let seekable = is_seekable(input);
     let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
     if !seekable || st.len() <= blksize_limit {
-        return head_backwards_without_seek_file(input, options);
+        head_backwards_without_seek_file(input, options)
+    } else {
+        head_backwards_on_seekable_file(input, options)
     }
-
-    head_backwards_on_seekable_file(input, options)
 }
 
 fn head_backwards_without_seek_file(
     input: &mut std::fs::File,
     options: &HeadOptions,
-) -> std::io::Result<()> {
+) -> std::io::Result<u64> {
     let reader = std::io::BufReader::with_capacity(BUF_SIZE, &*input);
     match options.mode {
-        Mode::AllButLastBytes(n) => read_but_last_n_bytes(reader, n)?,
-        Mode::AllButLastLines(n) => read_but_last_n_lines(reader, n, options.line_ending.into())?,
+        Mode::AllButLastBytes(n) => read_but_last_n_bytes(reader, n),
+        Mode::AllButLastLines(n) => read_but_last_n_lines(reader, n, options.line_ending.into()),
         _ => unreachable!(),
     }
-
-    Ok(())
 }
 
 fn head_backwards_on_seekable_file(
     input: &mut std::fs::File,
     options: &HeadOptions,
-) -> std::io::Result<()> {
+) -> std::io::Result<u64> {
     match options.mode {
         Mode::AllButLastBytes(n) => {
             let size = input.metadata()?.len();
             if n >= size {
-                return Ok(());
+                Ok(0)
             } else {
                 read_n_bytes(
                     &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
                     size - n,
-                )?;
+                )
             }
         }
         Mode::AllButLastLines(n) => {
@@ -446,14 +453,13 @@ fn head_backwards_on_seekable_file(
             read_n_bytes(
                 &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
                 found,
-            )?;
+            )
         }
         _ => unreachable!(),
     }
-    Ok(())
 }
 
-fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
+fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<u64> {
     match options.mode {
         Mode::FirstBytes(n) => {
             read_n_bytes(&mut std::io::BufReader::with_capacity(BUF_SIZE, input), n)
@@ -480,16 +486,41 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     println!("==> standard input <==");
                 }
                 let stdin = std::io::stdin();
-                let mut stdin = stdin.lock();
 
-                match options.mode {
-                    Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
-                    Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
-                    Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.line_ending.into()),
-                    Mode::AllButLastLines(n) => {
-                        read_but_last_n_lines(&mut stdin, n, options.line_ending.into())
+                #[cfg(unix)]
+                {
+                    let stdin_raw_fd = stdin.as_raw_fd();
+                    let mut stdin_file = unsafe { File::from_raw_fd(stdin_raw_fd) };
+                    let current_pos = stdin_file.stream_position();
+                    if let Ok(current_pos) = current_pos {
+                        // We have a seekable file. Ensure we set the input stream to the
+                        // last byte read so that any tools that parse the remainder of
+                        // the stdin stream read from the correct place.
+
+                        let bytes_read = head_file(&mut stdin_file, options)?;
+                        stdin_file.seek(SeekFrom::Start(current_pos + bytes_read))?;
+                    } else {
+                        let _bytes_read = head_file(&mut stdin_file, options)?;
                     }
                 }
+
+                #[cfg(not(unix))]
+                {
+                    let mut stdin = stdin.lock();
+
+                    match options.mode {
+                        Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
+                        Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
+                        Mode::FirstLines(n) => {
+                            read_n_lines(&mut stdin, n, options.line_ending.into())
+                        }
+                        Mode::AllButLastLines(n) => {
+                            read_but_last_n_lines(&mut stdin, n, options.line_ending.into())
+                        }
+                    }?;
+                }
+
+                Ok(())
             }
             (name, false) => {
                 let mut file = match std::fs::File::open(name) {
@@ -508,7 +539,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     }
                     println!("==> {name} <==");
                 }
-                head_file(&mut file, options)
+                head_file(&mut file, options)?;
+                Ok(())
             }
         };
         if let Err(e) = res {
