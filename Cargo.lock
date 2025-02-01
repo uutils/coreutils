@@ -264,6 +264,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "build-env"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1522ac6ee801a11bf9ef3f80403f4ede6eb41291fac3dde3de09989679305f25"
+
+[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1325,6 +1331,17 @@ dependencies = [
  "bitflags 2.8.0",
  "libc",
  "redox_syscall",
+]
+
+[[package]]
+name = "libsystemd-sys"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed080163caa59cc29b34bce2209b737149a4bac148cd9a8b04e4c12822798119"
+dependencies = [
+ "build-env",
+ "libc",
+ "pkg-config",
 ]
 
 [[package]]
@@ -3465,9 +3482,11 @@ version = "0.0.29"
 dependencies = [
  "chrono",
  "clap",
+ "libsystemd-sys",
  "thiserror 2.0.11",
  "utmp-classic",
  "uucore",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
