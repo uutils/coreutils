@@ -37,13 +37,7 @@ pub mod options {
     pub static PATH: &str = "path";
 }
 
-#[cfg(unix)]
 use uucore::libc::getloadavg;
-
-#[cfg(windows)]
-extern "C" {
-    fn GetTickCount() -> uucore::libc::uint32_t;
-}
 
 #[derive(Debug, Error)]
 pub enum UptimeError {
@@ -113,7 +107,6 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[cfg(unix)]
 fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     // Uptime will print loadavg and time to stderr unless we encounter an extra operand.
     let mut non_fatal_error = false;
@@ -235,7 +228,6 @@ fn default_uptime(matches: &ArgMatches) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(unix)]
 fn print_loadavg() {
     use uucore::libc::c_double;
 
@@ -256,13 +248,6 @@ fn print_loadavg() {
     }
 }
 
-#[cfg(windows)]
-fn print_loadavg() {
-    // XXX: currently this is a noop as Windows does not seem to have anything comparable to
-    //      getloadavg()
-}
-
-#[cfg(unix)]
 #[cfg(target_os = "openbsd")]
 fn process_utmp_from_file(file: &str) -> usize {
     let mut nusers = 0;
@@ -284,7 +269,6 @@ fn process_utmp_from_file(file: &str) -> usize {
     nusers
 }
 
-#[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 fn process_utmpx() -> (Option<time_t>, usize) {
     let mut nusers = 0;
@@ -305,7 +289,6 @@ fn process_utmpx() -> (Option<time_t>, usize) {
     (boot_time, nusers)
 }
 
-#[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 fn process_utmpx_from_file(file: &OsString) -> (Option<time_t>, usize) {
     let mut nusers = 0;
@@ -324,11 +307,6 @@ fn process_utmpx_from_file(file: &OsString) -> (Option<time_t>, usize) {
         }
     }
     (boot_time, nusers)
-}
-
-#[cfg(windows)]
-fn process_utmpx() -> (Option<time_t>, usize) {
-    (None, 0) // TODO: change 0 to number of users
 }
 
 fn print_nusers(nusers: usize) {
@@ -355,7 +333,6 @@ fn get_uptime_from_boot_time(boot_time: time_t) -> i64 {
     now - boottime
 }
 
-#[cfg(unix)]
 #[cfg(target_os = "openbsd")]
 fn get_uptime() -> i64 {
     use uucore::libc::clock_gettime;
@@ -385,7 +362,6 @@ fn get_uptime() -> i64 {
     }
 }
 
-#[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 fn get_uptime(boot_time: Option<time_t>) -> i64 {
     use std::fs::File;
@@ -410,11 +386,6 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
         }
         None => -1,
     })
-}
-
-#[cfg(windows)]
-fn get_uptime(_boot_time: Option<time_t>) -> i64 {
-    unsafe { GetTickCount() as i64 }
 }
 
 fn print_uptime(upsecs: i64) {
