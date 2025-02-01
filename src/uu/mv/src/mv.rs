@@ -9,8 +9,6 @@ mod error;
 
 use std::collections::HashSet;
 use std::env;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
@@ -25,15 +23,13 @@ use std::path::{absolute, Path, PathBuf};
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-#[cfg(unix)]
-use libc::mkfifo;
 
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file, canonicalize,
-    path_ends_with_terminator, MissingHandling, ResolveMode,
+    make_fifo, path_ends_with_terminator, MissingHandling, ResolveMode,
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
@@ -689,17 +685,6 @@ fn rename_with_fallback(
             rename_file_fallback(from, to)
         }
     })
-}
-
-#[cfg(unix)]
-fn make_fifo(path: &Path) -> io::Result<()> {
-    let name = CString::new(path.to_str().unwrap()).unwrap();
-    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
-    if err == -1 {
-        Err(std::io::Error::from_raw_os_error(err))
-    } else {
-        Ok(())
-    }
 }
 
 /// Replace the destination with a new pipe with the same name as the source.

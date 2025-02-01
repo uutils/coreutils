@@ -7,13 +7,9 @@
 use quick_error::quick_error;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-#[cfg(not(windows))]
-use std::ffi::CString;
 use std::ffi::OsString;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
 use std::io;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
@@ -23,17 +19,15 @@ use uucore::fsxattr::copy_xattrs;
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
-#[cfg(unix)]
-use libc::mkfifo;
 use quick_error::ResultExt;
 
 use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop, normalize_path,
-    path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
-    ResolveMode,
+    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop, make_fifo,
+    normalize_path, path_ends_with_terminator, paths_refer_to_same_file, FileInformation,
+    MissingHandling, ResolveMode,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -2475,12 +2469,10 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<(
         fs::remove_file(dest)?;
     }
 
-    let name = CString::new(dest.as_os_str().as_bytes()).unwrap();
-    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
-    if err == -1 {
-        return Err(format!("cannot create fifo {}: File exists", dest.quote()).into());
+    match make_fifo(dest) {
+        Ok(_) => Ok(()),
+        Err(_) => Err(format!("cannot create fifo {}: File exists", dest.quote()).into()),
     }
-    Ok(())
 }
 
 fn copy_link(
