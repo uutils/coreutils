@@ -655,7 +655,7 @@ fn test_du_time() {
 #[cfg(feature = "touch")]
 fn birth_supported() -> bool {
     let ts = TestScenario::new(util_name!());
-    let m = match std::fs::metadata(ts.fixtures.subdir) {
+    let m = match std::fs::metadata(&ts.fixtures.subdir) {
         Ok(m) => m,
         Err(e) => panic!("{}", e),
     };

@@ -2288,7 +2288,7 @@ fn test_cp_one_file_system() {
     use crate::common::util::AtPath;
     use walkdir::WalkDir;
 
-    let scene = TestScenario::new(util_name!());
+    let mut scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     // Test must be run as root (or with `sudo -E`)
@@ -2304,14 +2304,8 @@ fn test_cp_one_file_system() {
     let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
 
     scene
-        .cmd("mount")
-        .arg("-t")
-        .arg("tmpfs")
-        .arg("-o")
-        .arg("size=640k") // ought to be enough
-        .arg("tmpfs")
-        .arg(mountpoint_path)
-        .succeeds();
+        .mount_temp_fs(mountpoint_path)
+        .expect("mounting tmpfs failed");
 
     at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
 
@@ -2324,7 +2318,7 @@ fn test_cp_one_file_system() {
         .succeeds();
 
     // Ditch the mount before the asserts
-    scene.cmd("umount").arg(mountpoint_path).succeeds();
+    scene.umount_temp_fs();
 
     assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));
     // Check if the other files were copied from the source folder hierarchy
