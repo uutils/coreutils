@@ -24,10 +24,12 @@ use quick_error::ResultExt;
 use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
+#[cfg(unix)]
+use uucore::fs::make_fifo;
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop, make_fifo,
-    normalize_path, path_ends_with_terminator, paths_refer_to_same_file, FileInformation,
-    MissingHandling, ResolveMode,
+    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop, normalize_path,
+    path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
+    ResolveMode,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
