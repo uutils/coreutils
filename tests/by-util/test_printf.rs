@@ -47,6 +47,15 @@ fn escaped_hex() {
 }
 
 #[test]
+fn test_missing_escaped_hex_value() {
+    new_ucmd!()
+        .arg(r"\x")
+        .fails()
+        .code_is(1)
+        .stderr_only("printf: missing hexadecimal number in escape\n");
+}
+
+#[test]
 fn escaped_octal() {
     new_ucmd!().args(&["\\101"]).succeeds().stdout_only("A");
 }
