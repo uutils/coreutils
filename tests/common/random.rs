@@ -4,17 +4,17 @@
 // file that was distributed with this source code.
 #![allow(clippy::naive_bytecount)]
 
-use rand::distributions::{Distribution, Uniform};
-use rand::{thread_rng, Rng};
+use rand::distr::{Distribution, Uniform};
+use rand::{rng, Rng};
 
 /// Samples alphanumeric characters `[A-Za-z0-9]` including newline `\n`
 ///
 /// # Examples
 ///
 /// ```rust,ignore
-/// use rand::{Rng, thread_rng};
+/// use rand::{Rng, rng};
 ///
-/// let vec = thread_rng()
+/// let vec = rng()
 ///     .sample_iter(AlphanumericNewline)
 ///     .take(10)
 ///     .collect::<Vec<u8>>();
@@ -39,7 +39,7 @@ impl AlphanumericNewline {
     where
         R: Rng + ?Sized,
     {
-        let idx = rng.gen_range(0..Self::CHARSET.len());
+        let idx = rng.random_range(0..Self::CHARSET.len());
         Self::CHARSET[idx]
     }
 }
@@ -81,7 +81,7 @@ impl RandomizedString {
     where
         D: Distribution<u8>,
     {
-        thread_rng()
+        rng()
             .sample_iter(dist)
             .take(length)
             .map(|b| b as char)
@@ -133,15 +133,15 @@ impl RandomizedString {
             return if num_delimiter > 0 {
                 String::from(delimiter as char)
             } else {
-                String::from(thread_rng().sample(&dist) as char)
+                String::from(rng().sample(&dist) as char)
             };
         }
 
         let samples = length - 1;
-        let mut result: Vec<u8> = thread_rng().sample_iter(&dist).take(samples).collect();
+        let mut result: Vec<u8> = rng().sample_iter(&dist).take(samples).collect();
 
         if num_delimiter == 0 {
-            result.push(thread_rng().sample(&dist));
+            result.push(rng().sample(&dist));
             return String::from_utf8(result).unwrap();
         }
 
@@ -151,9 +151,10 @@ impl RandomizedString {
             num_delimiter
         };
 
-        let between = Uniform::new(0, samples);
+        // it's safe to unwrap because samples is always > 0, thus low < high
+        let between = Uniform::new(0, samples).unwrap();
         for _ in 0..num_delimiter {
-            let mut pos = between.sample(&mut thread_rng());
+            let mut pos = between.sample(&mut rng());
             let turn = pos;
             while result[pos] == delimiter {
                 pos += 1;
@@ -170,7 +171,7 @@ impl RandomizedString {
         if end_with_delimiter {
             result.push(delimiter);
         } else {
-            result.push(thread_rng().sample(&dist));
+            result.push(rng().sample(&dist));
         }
 
         String::from_utf8(result).unwrap()
@@ -180,7 +181,7 @@ impl RandomizedString {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::distributions::Alphanumeric;
+    use rand::distr::Alphanumeric;
 
     #[test]
     fn test_random_string_generate() {

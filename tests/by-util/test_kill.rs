@@ -335,6 +335,39 @@ fn test_kill_with_signal_and_list() {
 }
 
 #[test]
+fn test_kill_with_list_lower_bits() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("128")
+        .succeeds()
+        .stdout_contains("EXIT");
+
+    new_ucmd!()
+        .arg("-l")
+        .arg("143")
+        .succeeds()
+        .stdout_contains("TERM");
+
+    new_ucmd!()
+        .arg("-l")
+        .arg("256")
+        .succeeds()
+        .stdout_contains("EXIT");
+
+    new_ucmd!()
+        .arg("-l")
+        .arg("2304")
+        .succeeds()
+        .stdout_contains("EXIT");
+}
+
+#[test]
+fn test_kill_with_list_lower_bits_unrecognized() {
+    new_ucmd!().arg("-l").arg("111").fails();
+    new_ucmd!().arg("-l").arg("384").fails();
+}
+
+#[test]
 fn test_kill_with_signal_and_table() {
     let target = Target::new();
     new_ucmd!()

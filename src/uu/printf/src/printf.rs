@@ -7,7 +7,7 @@ use std::io::stdout;
 use std::ops::ControlFlow;
 use uucore::error::{UResult, UUsageError};
 use uucore::format::{parse_spec_and_escape, FormatArgument, FormatItem};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
@@ -48,6 +48,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Without format specs in the string, the iter would not consume any args,
     // leading to an infinite loop. Thus, we exit early.
     if !format_seen {
+        if let Some(arg) = args.next() {
+            use FormatArgument::*;
+            let Unparsed(arg_str) = arg else {
+                unreachable!("All args are transformed to Unparsed")
+            };
+            show_warning!("ignoring excess arguments, starting with '{arg_str}'");
+        }
         return Ok(());
     }
 
@@ -59,6 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             };
         }
     }
+
     Ok(())
 }
 

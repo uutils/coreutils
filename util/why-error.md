@@ -9,9 +9,9 @@ This file documents why some tests are failing:
 * gnu/tests/dd/direct.sh
 * gnu/tests/dd/no-allocate.sh
 * gnu/tests/dd/nocache_eof.sh
-* gnu/tests/dd/skip-seek-past-file.sh
+* gnu/tests/dd/skip-seek-past-file.sh - https://github.com/uutils/coreutils/issues/7216
 * gnu/tests/dd/stderr.sh
-* gnu/tests/du/long-from-unreadable.sh
+* gnu/tests/du/long-from-unreadable.sh - https://github.com/uutils/coreutils/issues/7217
 * gnu/tests/du/move-dir-while-traversing.sh
 * gnu/tests/expr/expr-multibyte.pl
 * gnu/tests/expr/expr.pl
@@ -22,13 +22,13 @@ This file documents why some tests are failing:
 * gnu/tests/head/head-write-error.sh
 * gnu/tests/help/help-version-getopt.sh
 * gnu/tests/help/help-version.sh
+* gnu/tests/install/install-C.sh - https://github.com/uutils/coreutils/pull/7215
 * gnu/tests/ls/ls-misc.pl
 * gnu/tests/ls/stat-free-symlinks.sh
 * gnu/tests/misc/close-stdout.sh
 * gnu/tests/misc/comm.pl
-* gnu/tests/misc/kill.sh - https://github.com/uutils/coreutils/issues/7066 https://github.com/uutils/coreutils/issues/7067
 * gnu/tests/misc/nohup.sh
-* gnu/tests/misc/numfmt.pl
+* gnu/tests/misc/numfmt.pl - https://github.com/uutils/coreutils/issues/7219 / https://github.com/uutils/coreutils/issues/7221
 * gnu/tests/misc/stdbuf.sh - https://github.com/uutils/coreutils/issues/7072
 * gnu/tests/misc/tee.sh - https://github.com/uutils/coreutils/issues/7073
 * gnu/tests/misc/time-style.sh

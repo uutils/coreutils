@@ -7,7 +7,7 @@
 use std::fmt;
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Copy)]
+#[derive(Copy, PartialEq, Eq)]
 pub enum FormatWriter {
     IntWriter(fn(u64) -> String),
     FloatWriter(fn(f64) -> String),
@@ -20,21 +20,6 @@ impl Clone for FormatWriter {
         *self
     }
 }
-
-impl PartialEq for FormatWriter {
-    fn eq(&self, other: &Self) -> bool {
-        use crate::formatteriteminfo::FormatWriter::*;
-
-        match (self, other) {
-            (IntWriter(a), IntWriter(b)) => a == b,
-            (FloatWriter(a), FloatWriter(b)) => a == b,
-            (MultibyteWriter(a), MultibyteWriter(b)) => *a as usize == *b as usize,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for FormatWriter {}
 
 impl fmt::Debug for FormatWriter {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
