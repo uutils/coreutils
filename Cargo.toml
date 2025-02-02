@@ -141,6 +141,7 @@ feat_common_core = [
   "unexpand",
   "uniq",
   "unlink",
+  "uptime",
   "vdir",
   "wc",
   "yes",
@@ -229,7 +230,7 @@ feat_require_unix_core = [
 ]
 # "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
-feat_require_unix_utmpx = ["pinky", "uptime", "users", "who"]
+feat_require_unix_utmpx = ["pinky", "users", "who"]
 # "feat_require_unix_hostid" == set of utilities requiring gethostid in libc (only some unixes provide)
 feat_require_unix_hostid = ["hostid"]
 # "feat_require_selinux" == set of utilities depending on SELinux.
