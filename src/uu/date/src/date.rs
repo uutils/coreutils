@@ -5,17 +5,19 @@
 
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
-use chrono::format::{Item, StrftimeItems};
+mod formatter;
+
 use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
+use iana_time_zone::get_timezone;
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use uucore::custom_tz_fmt::custom_time_format;
+use std::str::FromStr;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
@@ -220,6 +222,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             now.with_timezone(now.offset())
         };
 
+        let tz = if settings.utc {
+            chrono_tz::Tz::UTC
+        } else {
+            match std::env::var("TZ") {
+                Ok(tz_env_var) => tz_env_var.parse().unwrap_or_default(),
+                Err(_) => chrono_tz::Tz::from_str(get_timezone().unwrap_or_default().as_str()).unwrap_or_default()
+            }
+        };
+
         // Iterate over all dates - whether it's a single date or a file.
         let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
             DateSource::Custom(ref input) => {
@@ -273,27 +284,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for date in dates {
             match date {
                 Ok(date) => {
-                    let format_string = custom_time_format(format_string);
-                    // Refuse to pass this string to chrono as it is crashing in this crate
-                    if format_string.contains("%#z") {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid format {}", format_string.replace("%f", "%N")),
-                        ));
-                    }
-                    // Hack to work around panic in chrono,
-                    // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
-                    let format_items = StrftimeItems::new(format_string.as_str());
-                    if format_items.clone().any(|i| i == Item::Error) {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid format {}", format_string.replace("%f", "%N")),
-                        ));
-                    }
-                    let formatted = date
-                        .format_with_items(format_items)
-                        .to_string()
-                        .replace("%f", "%N");
+                    let formatted = formatter::format(format_string, date, Some(tz));
                     println!("{formatted}");
                 }
                 Err((input, _err)) => show!(USimpleError::new(
@@ -394,13 +385,13 @@ fn make_format_string(settings: &Settings) -> &str {
             Iso8601Format::Hours => "%FT%H%:z",
             Iso8601Format::Minutes => "%FT%H:%M%:z",
             Iso8601Format::Seconds => "%FT%T%:z",
-            Iso8601Format::Ns => "%FT%T,%f%:z",
+            Iso8601Format::Ns => "%FT%T,%N%:z",
         },
         Format::Rfc5322 => "%a, %d %h %Y %T %z",
         Format::Rfc3339(ref fmt) => match *fmt {
             Rfc3339Format::Date => "%F",
             Rfc3339Format::Seconds => "%F %T%:z",
-            Rfc3339Format::Ns => "%F %T.%f%:z",
+            Rfc3339Format::Ns => "%F %T.%N%:z",
         },
         Format::Custom(ref fmt) => fmt,
         Format::Default => "%a %b %e %X %Z %Y",

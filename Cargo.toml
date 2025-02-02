@@ -279,6 +279,7 @@ chrono = { version = "0.4.38", default-features = false, features = [
   "clock",
 ] }
 chrono-tz = "0.10.0"
+icu = {features = ["icu_datetime_experimental"], version = "1.5.0"}
 clap = { version = "4.5", features = ["wrap_help", "cargo"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
