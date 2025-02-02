@@ -67,6 +67,8 @@ pub enum FormatError {
     InvalidPrecision(String),
     /// The format specifier ends with a %, as in `%f%`.
     EndsWithPercent(Vec<u8>),
+    /// The escape sequence `\x` appears without a literal hexadecimal value.
+    MissingHex,
 }
 
 impl Error for FormatError {}
@@ -105,6 +107,7 @@ impl Display for FormatError {
             Self::IoError(_) => write!(f, "io error"),
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
+            Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
         }
     }
 }
@@ -181,7 +184,10 @@ pub fn parse_spec_and_escape(
         }
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(Ok(FormatItem::Char(parse_escape_code(&mut current))))
+            Some(match parse_escape_code(&mut current) {
+                Ok(c) => Ok(FormatItem::Char(c)),
+                Err(_) => Err(FormatError::MissingHex),
+            })
         }
         [c, rest @ ..] => {
             current = rest;
@@ -224,7 +230,7 @@ pub fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
         [] => None,
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(parse_escape_code(&mut current))
+            Some(parse_escape_code(&mut current).unwrap_or(EscapedChar::Backslash(b'x')))
         }
         [c, rest @ ..] => {
             current = rest;
