@@ -227,7 +227,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             match std::env::var("TZ") {
                 Ok(tz_env_var) => tz_env_var.parse().unwrap_or_default(),
-                Err(_) => chrono_tz::Tz::from_str(get_timezone().unwrap_or_default().as_str()).unwrap_or_default()
+                Err(_) => chrono_tz::Tz::from_str(get_timezone().unwrap_or_default().as_str())
+                    .unwrap_or_default(),
             }
         };
 

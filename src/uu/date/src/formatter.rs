@@ -1,14 +1,16 @@
 use chrono::{Datelike, FixedOffset, NaiveDate, TimeZone, Timelike, Weekday};
-use icu::datetime::time_zone::{FallbackFormat, IsoFormat, IsoMinutes, IsoSeconds, TimeZoneFormatter};
-use icu::timezone::CustomTimeZone;
+use chrono_tz::{OffsetName, Tz};
 use core::fmt;
-use std::str::FromStr;
 use icu::calendar::DateTime;
 use icu::datetime::options::components;
+use icu::datetime::time_zone::{
+    FallbackFormat, IsoFormat, IsoMinutes, IsoSeconds, TimeZoneFormatter,
+};
 use icu::datetime::DateTimeFormatter;
 use icu::locid::locale;
+use icu::timezone::CustomTimeZone;
 use std::collections::HashSet;
-use chrono_tz::{OffsetName, Tz};
+use std::str::FromStr;
 
 enum Padding {
     None,
@@ -84,7 +86,11 @@ impl fmt::Display for FormattedOutput {
     }
 }
 
-pub(crate) fn format(format_string: &str, datetime: chrono::DateTime<FixedOffset>, timezone: Option<Tz>) -> String {
+pub(crate) fn format(
+    format_string: &str,
+    datetime: chrono::DateTime<FixedOffset>,
+    timezone: Option<Tz>,
+) -> String {
     let mut formatted_result: String = "".to_string();
 
     let section_list = partition_format_string_into_sections(format_string);
@@ -95,7 +101,11 @@ pub(crate) fn format(format_string: &str, datetime: chrono::DateTime<FixedOffset
     formatted_result
 }
 
-fn format_section(section_string: &str, datetime: chrono::DateTime<FixedOffset>, timezone: Option<Tz>) -> String {
+fn format_section(
+    section_string: &str,
+    datetime: chrono::DateTime<FixedOffset>,
+    timezone: Option<Tz>,
+) -> String {
     // println!("section: {}", section_string);
     let locale = locale!("en_US");
     let mut section_chars = section_string.chars().peekable();
@@ -147,15 +157,36 @@ fn format_section(section_string: &str, datetime: chrono::DateTime<FixedOffset>,
         timezone_offset_level += 1;
     }
 
-    if section_chars.next_if_eq(&'z').is_some() && 3 >= timezone_offset_level && timezone_offset_level >= 0 {
+    if section_chars.next_if_eq(&'z').is_some()
+        && 3 >= timezone_offset_level
+        && timezone_offset_level >= 0
+    {
         formatted_result += {
-            let tzf = TimeZoneFormatter::try_new(&locale.into(), icu::datetime::time_zone::TimeZoneFormatterOptions::from(FallbackFormat::Iso8601(
-                        if timezone_offset_level == 0 {IsoFormat::Basic} else {IsoFormat::Extended},
-                        if timezone_offset_level == 1 || timezone_offset_level == 2 { IsoMinutes::Required} else { IsoMinutes::Optional },
-                        if timezone_offset_level == 2 {IsoSeconds::Never} else {IsoSeconds::Optional},
-                    )),).unwrap();
+            let tzf = TimeZoneFormatter::try_new(
+                &locale.into(),
+                icu::datetime::time_zone::TimeZoneFormatterOptions::from(FallbackFormat::Iso8601(
+                    if timezone_offset_level == 0 {
+                        IsoFormat::Basic
+                    } else {
+                        IsoFormat::Extended
+                    },
+                    if timezone_offset_level == 1 || timezone_offset_level == 2 {
+                        IsoMinutes::Required
+                    } else {
+                        IsoMinutes::Optional
+                    },
+                    if timezone_offset_level == 2 {
+                        IsoSeconds::Never
+                    } else {
+                        IsoSeconds::Optional
+                    },
+                )),
+            )
+            .unwrap();
             let formatted_output = FormattedOutput::Text {
-                value: tzf.format_to_string(&CustomTimeZone::from_str(datetime.offset().to_string().as_str()).unwrap()),
+                value: tzf.format_to_string(
+                    &CustomTimeZone::from_str(datetime.offset().to_string().as_str()).unwrap(),
+                ),
                 width: width_string.parse().unwrap_or(0),
                 padding: padding.unwrap_or(Padding::None),
                 case,
@@ -573,13 +604,21 @@ fn format_section(section_string: &str, datetime: chrono::DateTime<FixedOffset>,
                 &output
             }
             'z' => {
-                let tzf = TimeZoneFormatter::try_new(&locale.into(), icu::datetime::time_zone::TimeZoneFormatterOptions::from(FallbackFormat::Iso8601(
+                let tzf = TimeZoneFormatter::try_new(
+                    &locale.into(),
+                    icu::datetime::time_zone::TimeZoneFormatterOptions::from(
+                        FallbackFormat::Iso8601(
                             icu::datetime::time_zone::IsoFormat::Basic,
                             icu::datetime::time_zone::IsoMinutes::Required,
                             icu::datetime::time_zone::IsoSeconds::Optional,
-                        )),).unwrap();
+                        ),
+                    ),
+                )
+                .unwrap();
                 formatted_output = FormattedOutput::Text {
-                    value: tzf.format_to_string(&CustomTimeZone::from_str(datetime.offset().to_string().as_str()).unwrap()),
+                    value: tzf.format_to_string(
+                        &CustomTimeZone::from_str(datetime.offset().to_string().as_str()).unwrap(),
+                    ),
                     width: width_string.parse().unwrap_or(0),
                     padding: padding.unwrap_or(Padding::None),
                     case,
@@ -599,7 +638,7 @@ fn format_section(section_string: &str, datetime: chrono::DateTime<FixedOffset>,
                     padding: padding.unwrap_or(Padding::None),
                     case,
                 };
-                
+
                 output = formatted_output.to_string();
                 &output
             }
