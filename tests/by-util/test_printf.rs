@@ -505,6 +505,32 @@ fn sub_any_asterisk_hex_arg() {
 }
 
 #[test]
+fn sub_any_asterisk_negative_first_param() {
+    new_ucmd!()
+        .args(&["a(%*s)b", "-5", "xyz"])
+        .succeeds()
+        .stdout_only("a(xyz  )b"); // Would be 'a(  xyz)b' if -5 was 5
+
+    // Negative octal
+    new_ucmd!()
+        .args(&["a(%*s)b", "-010", "xyz"])
+        .succeeds()
+        .stdout_only("a(xyz     )b");
+
+    // Negative hexadecimal
+    new_ucmd!()
+        .args(&["a(%*s)b", "-0x10", "xyz"])
+        .succeeds()
+        .stdout_only("a(xyz             )b");
+
+    // Should also work on %c
+    new_ucmd!()
+        .args(&["a(%*c)b", "-5", "x"])
+        .succeeds()
+        .stdout_only("a(x    )b"); // Would be 'a(    x)b' if -5 was 5
+}
+
+#[test]
 fn sub_any_specifiers_no_params() {
     new_ucmd!()
         .args(&["%ztlhLji", "3"]) //spell-checker:disable-line
