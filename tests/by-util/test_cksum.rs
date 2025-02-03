@@ -602,7 +602,6 @@ fn test_reset_binary() {
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e  ");
 }
 
-#[ignore = "issue #6375"]
 #[test]
 fn test_reset_binary_but_set() {
     let scene = TestScenario::new(util_name!());
@@ -619,7 +618,7 @@ fn test_reset_binary_but_set() {
         .arg("--algorithm=md5")
         .arg(at.subdir.join("f"))
         .succeeds()
-        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *"); // currently, asterisk=false. It should be true
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
 
 #[test]
