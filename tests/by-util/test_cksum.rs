@@ -1136,7 +1136,6 @@ fn test_cksum_garbage() {
         .stderr_contains("check-file: no properly formatted checksum lines found");
 }
 
-#[ignore = "Should fail on bits"]
 #[test]
 fn test_md5_bits() {
     let (at, mut ucmd) = at_and_ucmd!();
