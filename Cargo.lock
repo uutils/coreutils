@@ -595,6 +595,7 @@ dependencies = [
  "uu_yes",
  "uucore",
  "uuhelp_parser",
+ "uutests",
  "walkdir",
  "xattr",
  "zip",
@@ -3591,6 +3592,36 @@ name = "uuid"
 version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "744018581f9a3454a9e15beb8a33b017183f1e7c0cd170232a2d1453b23a51c4"
+
+[[package]]
+name = "uutests"
+version = "0.0.29"
+dependencies = [
+ "bincode",
+ "chrono",
+ "filetime",
+ "glob",
+ "hex-literal",
+ "lazy_static",
+ "libc",
+ "nix",
+ "num-prime",
+ "pretty_assertions",
+ "procfs",
+ "rand 0.9.0",
+ "regex",
+ "rlimit",
+ "rstest",
+ "serde",
+ "serde-big-array",
+ "sha1",
+ "tempfile",
+ "time",
+ "unindent",
+ "uucore",
+ "walkdir",
+ "xattr",
+]
 
 [[package]]
 name = "uutils_term_grid"

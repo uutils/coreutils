@@ -4,7 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) araba merci
 
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_default() {

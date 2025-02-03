@@ -13,12 +13,6 @@
     clippy::cast_possible_truncation
 )]
 
-use crate::common::random::{AlphanumericNewline, RandomizedString};
-#[cfg(unix)]
-use crate::common::util::expected_result;
-#[cfg(not(windows))]
-use crate::common::util::is_ci;
-use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
@@ -45,6 +39,18 @@ use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
     not(target_os = "openbsd")
 ))]
 use tail::text;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::random::{AlphanumericNewline, RandomizedString};
+#[cfg(unix)]
+use uutests::unwrap_or_return;
+#[cfg(unix)]
+use uutests::util::expected_result;
+#[cfg(unix)]
+#[cfg(not(windows))]
+use uutests::util::is_ci;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 const FOOBAR_TXT: &str = "foobar.txt";
 const FOOBAR_2_TXT: &str = "foobar2.txt";

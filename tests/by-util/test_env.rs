@@ -5,9 +5,6 @@
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD
 #![allow(clippy::missing_errors_doc)]
 
-use crate::common::util::TestScenario;
-#[cfg(unix)]
-use crate::common::util::UChild;
 #[cfg(unix)]
 use nix::sys::signal::Signal;
 #[cfg(feature = "echo")]
@@ -17,6 +14,11 @@ use std::path::Path;
 #[cfg(unix)]
 use std::process::Command;
 use tempfile::tempdir;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::UChild;
+use uutests::util_name;
 
 #[cfg(unix)]
 struct Target {
@@ -516,7 +518,7 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
 fn test_gnu_e20() {
     let scene = TestScenario::new(util_name!());
 
-    let env_bin = String::from(crate::common::util::TESTS_BINARY) + " " + util_name!();
+    let env_bin = String::from(uutests::util::get_tests_binary().as_str()) + " " + util_name!();
 
     let (input, output) = (
         [

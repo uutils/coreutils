@@ -6,7 +6,7 @@
 
 #![cfg(feature = "feat_selinux")]
 
-use crate::common::util::*;
+use uutests::util::*;
 
 // TODO: Check the implementation of `--compute` somehow.
 

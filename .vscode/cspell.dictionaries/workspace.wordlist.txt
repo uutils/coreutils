@@ -331,6 +331,7 @@ uucore
 uucore_procs
 uudoc
 uumain
+uutests
 uutil
 uutils
 

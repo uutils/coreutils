@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
 //spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs
 
@@ -22,8 +21,6 @@ use nix::sys;
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
 use rlimit::setrlimit;
-#[cfg(feature = "sleep")]
-use rstest::rstest;
 use std::borrow::Cow;
 use std::collections::VecDeque;
 #[cfg(not(windows))]
@@ -63,7 +60,21 @@ static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical
 static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
 static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 
-pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
+// we can't use
+// pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
+// as we are in a library, not a binary
+pub fn get_tests_binary() -> String {
+    std::env::var("CARGO_BIN_EXE_coreutils").unwrap_or_else(|_| {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let debug_or_release = if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        };
+        format!("{manifest_dir}/../../target/{debug_or_release}/coreutils")
+    })
+}
+
 pub const PATH: &str = env!("PATH");
 
 /// Default environment variables to run the commands with
@@ -1179,8 +1190,9 @@ impl TestScenario {
         T: AsRef<str>,
     {
         let tmpd = Rc::new(TempDir::new().unwrap());
+        println!("bin: {:?}", get_tests_binary());
         let ts = Self {
-            bin_path: PathBuf::from(TESTS_BINARY),
+            bin_path: PathBuf::from(get_tests_binary()),
             util_name: util_name.as_ref().into(),
             fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd,
@@ -1333,7 +1345,7 @@ impl UCommand {
     {
         let mut ucmd = Self::new();
         ucmd.util_name = Some(util_name.as_ref().into());
-        ucmd.bin_path(TESTS_BINARY).temp_dir(tmpd);
+        ucmd.bin_path(&*get_tests_binary()).temp_dir(tmpd);
         ucmd
     }
 
@@ -1594,7 +1606,7 @@ impl UCommand {
                 self.args.push_front(util_name.into());
             }
         } else if let Some(util_name) = &self.util_name {
-            self.bin_path = Some(PathBuf::from(TESTS_BINARY));
+            self.bin_path = Some(PathBuf::from(&*get_tests_binary()));
             self.args.push_front(util_name.into());
         // neither `bin_path` nor `util_name` was set so we apply the default to run the arguments
         // in a platform specific shell
@@ -2749,7 +2761,7 @@ const UUTILS_INFO: &str = "uutils-tests-info";
 /// Example:
 ///
 /// ```no_run
-/// use crate::common::util::*;
+/// use uutests::util::*;
 /// const VERSION_MIN_MULTIPLE_USERS: &str = "8.31";
 ///
 /// #[test]
@@ -2825,7 +2837,7 @@ fn parse_coreutil_version(version_string: &str) -> f32 {
 /// Example:
 ///
 /// ```no_run
-/// use crate::common::util::*;
+/// use uutests::util::*;
 /// #[test]
 /// fn test_xyz() {
 ///     let ts = TestScenario::new(util_name!());
@@ -2888,7 +2900,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
 /// Example:
 ///
 /// ```no_run
-/// use crate::common::util::*;
+/// use uutests::util::*;
 /// #[test]
 /// fn test_xyz() {
 ///    let ts = TestScenario::new("whoami");
