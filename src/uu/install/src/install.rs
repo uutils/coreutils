@@ -10,22 +10,22 @@ mod mode;
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
-use std::error::Error;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 use std::fs::File;
 use std::fs::{self, metadata};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
+use thiserror::Error;
 use uucore::backup_control::{self, BackupMode};
 use uucore::buf_copy::copy_stream;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 use uucore::process::{getegid, geteuid};
-use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
+use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -52,22 +52,51 @@ pub struct Behavior {
     target_dir: Option<String>,
 }
 
-#[derive(Debug)]
-enum InstallError {
+#[derive(Debug, Error)]
+pub enum InstallError {
+    #[error("Unimplemented feature: {0}")]
     Unimplemented(String),
-    DirNeedsArg(),
-    CreateDirFailed(PathBuf, std::io::Error),
+
+    #[error("{} with -d requires at least one argument.", uucore::util_name())]
+    DirNeedsArg,
+
+    #[error("failed to create {1}")]
+    CreateDirFailed(#[source] std::io::Error, PathBuf),
+
+    #[error("failed to chmod {0}")]
     ChmodFailed(PathBuf),
-    ChownFailed(PathBuf, String),
+
+    #[error("failed to chown {path}: {msg}")]
+    ChownFailed { path: PathBuf, msg: String },
+
+    #[error("invalid target {0}: No such file or directory")]
     InvalidTarget(PathBuf),
+
+    #[error("target '{0}' is not a directory")]
     TargetDirIsntDir(PathBuf),
-    BackupFailed(PathBuf, PathBuf, std::io::Error),
-    InstallFailed(PathBuf, PathBuf, std::io::Error),
+
+    #[error("cannot backup {1} to {2}")]
+    BackupFailed(#[source] std::io::Error, PathBuf, PathBuf),
+
+    #[error("cannot install {1} to {2}")]
+    InstallFailed(#[source] std::io::Error, PathBuf, PathBuf),
+
+    #[error("strip program failed: {0}")]
     StripProgramFailed(String),
-    MetadataFailed(std::io::Error),
+
+    #[error("{0}")]
+    MetadataFailed(#[source] std::io::Error),
+
+    #[error("invalid user: '{0}'")]
     InvalidUser(String),
+
+    #[error("invalid group: '{0}'")]
     InvalidGroup(String),
+
+    #[error("omitting directory '{0}'")]
     OmittingDirectory(PathBuf),
+
+    #[error("failed to access '{0}': Not a directory")]
     NotADirectory(PathBuf),
 }
 
@@ -81,52 +110,6 @@ impl UError for InstallError {
 
     fn usage(&self) -> bool {
         false
-    }
-}
-
-impl Error for InstallError {}
-
-impl Display for InstallError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Unimplemented(opt) => write!(f, "Unimplemented feature: {opt}"),
-            Self::DirNeedsArg() => {
-                write!(
-                    f,
-                    "{} with -d requires at least one argument.",
-                    uucore::util_name()
-                )
-            }
-            Self::CreateDirFailed(dir, e) => {
-                Display::fmt(&uio_error!(e, "failed to create {}", dir.quote()), f)
-            }
-            Self::ChmodFailed(file) => write!(f, "failed to chmod {}", file.quote()),
-            Self::ChownFailed(file, msg) => write!(f, "failed to chown {}: {}", file.quote(), msg),
-            Self::InvalidTarget(target) => write!(
-                f,
-                "invalid target {}: No such file or directory",
-                target.quote()
-            ),
-            Self::TargetDirIsntDir(target) => {
-                write!(f, "target {} is not a directory", target.quote())
-            }
-            Self::BackupFailed(from, to, e) => Display::fmt(
-                &uio_error!(e, "cannot backup {} to {}", from.quote(), to.quote()),
-                f,
-            ),
-            Self::InstallFailed(from, to, e) => Display::fmt(
-                &uio_error!(e, "cannot install {} to {}", from.quote(), to.quote()),
-                f,
-            ),
-            Self::StripProgramFailed(msg) => write!(f, "strip program failed: {msg}"),
-            Self::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
-            Self::InvalidUser(user) => write!(f, "invalid user: {}", user.quote()),
-            Self::InvalidGroup(group) => write!(f, "invalid group: {}", group.quote()),
-            Self::OmittingDirectory(dir) => write!(f, "omitting directory {}", dir.quote()),
-            Self::NotADirectory(dir) => {
-                write!(f, "failed to access {}: Not a directory", dir.quote())
-            }
-        }
     }
 }
 
@@ -456,7 +439,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 ///
 fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
     if paths.is_empty() {
-        Err(InstallError::DirNeedsArg().into())
+        Err(InstallError::DirNeedsArg.into())
     } else {
         for path in paths.iter().map(Path::new) {
             // if the path already exist, don't try to create it again
@@ -592,7 +575,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                 }
 
                 if let Err(e) = fs::create_dir_all(to_create) {
-                    return Err(InstallError::CreateDirFailed(to_create.to_path_buf(), e).into());
+                    return Err(InstallError::CreateDirFailed(e, to_create.to_path_buf()).into());
                 }
             }
         }
@@ -702,7 +685,13 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
     match wrap_chown(path, &meta, owner_id, group_id, false, verbosity) {
         Ok(msg) if b.verbose && !msg.is_empty() => println!("chown: {msg}"),
         Ok(_) => {}
-        Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
+        Err(msg) => {
+            return Err(InstallError::ChownFailed {
+                path: path.to_path_buf(),
+                msg,
+            }
+            .into())
+        }
     }
 
     Ok(())
@@ -729,7 +718,7 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
             // TODO!!
             if let Err(err) = fs::rename(to, backup_path) {
                 return Err(
-                    InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err).into(),
+                    InstallError::BackupFailed(err, to.to_path_buf(), backup_path.clone()).into(),
                 );
             }
         }
@@ -750,7 +739,7 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 /// Returns an empty Result or an error in case of failure.
 fn copy_normal_file(from: &Path, to: &Path) -> UResult<()> {
     if let Err(err) = fs::copy(from, to) {
-        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
+        return Err(InstallError::InstallFailed(err, from.to_path_buf(), to.to_path_buf()).into());
     }
     Ok(())
 }
@@ -784,7 +773,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         Ok(ft) => ft.file_type(),
         Err(err) => {
             return Err(
-                InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
+                InstallError::InstallFailed(err, from.to_path_buf(), to.to_path_buf()).into(),
             );
         }
     };
@@ -911,7 +900,11 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
 fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
-    if b.compare && !need_copy(from, to, b)? {
+    let to_is_symlink = fs::symlink_metadata(to)
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false);
+
+    if !to_is_symlink && b.compare && !need_copy(from, to, b)? {
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
