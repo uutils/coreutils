@@ -1187,7 +1187,6 @@ fn test_bsd_case() {
         .stderr_contains("f: no properly formatted checksum lines found");
 }
 
-#[ignore = "Different output"]
 #[test]
 fn test_blake2d_tested_with_sha1() {
     let (at, mut ucmd) = at_and_ucmd!();
