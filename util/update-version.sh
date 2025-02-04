@@ -20,7 +20,7 @@
 FROM="0.0.28"
 TO="0.0.29"
 
-PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml Cargo.toml)
+PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml tests/uutests/Cargo.toml Cargo.toml)
 
 # update the version of all programs
 #shellcheck disable=SC2086
