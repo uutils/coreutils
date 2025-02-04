@@ -575,7 +575,7 @@ semicolon_if_nothing_returned = "warn"
 single_char_pattern = "warn"
 explicit_iter_loop = "warn"
 if_not_else = "warn"
-manual_if_else = "warn"
+manual_let_else = "warn"
 
 all = { level = "deny", priority = -1 }
 cargo = { level = "warn", priority = -1 }
