@@ -135,12 +135,57 @@ fn filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
     Some(DateTime::from_timestamp(ft.unix_seconds(), ft.nanoseconds())?.into())
 }
 
+/// Whether all characters in the string are digits.
+fn all_digits(s: &str) -> bool {
+    s.as_bytes().iter().all(u8::is_ascii_digit)
+}
+
+/// Convert a two-digit year string to the corresponding number.
+fn get_year(s: &str) -> u8 {
+    // Pre-condition: s.len() >= 2
+    let bytes = s.as_bytes();
+    let y1 = bytes[0] - b'0';
+    let y2 = bytes[1] - b'0';
+    10 * y1 + y2
+}
+
+/// Whether the first filename should be interpreted as a timestamp.
+fn is_first_filename_timestamp(
+    reference: Option<&OsString>,
+    date: Option<&str>,
+    timestamp: Option<&String>,
+    files: &[&String],
+) -> bool {
+    match std::env::var("_POSIX2_VERSION") {
+        Ok(s) if s == "199209" => {
+            if timestamp.is_none() && reference.is_none() && date.is_none() {
+                if files.len() >= 2 {
+                    let s = files[0];
+                    if s.len() == 8 && all_digits(s) {
+                        true
+                    } else if s.len() == 10 && all_digits(s) {
+                        let year = get_year(s);
+                        (69..=99).contains(&year)
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let files: Vec<InputFile> = matches
-        .get_many::<OsString>(ARG_FILES)
+    let mut filenames: Vec<&String> = matches
+        .get_many::<String>(ARG_FILES)
         .ok_or_else(|| {
             USimpleError::new(
                 1,
@@ -150,19 +195,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             )
         })?
-        .map(|filename| {
-            if filename == "-" {
-                InputFile::Stdout
-            } else {
-                InputFile::Path(PathBuf::from(filename))
-            }
-        })
         .collect();
 
     let no_deref = matches.get_flag(options::NO_DEREF);
 
     let reference = matches.get_one::<OsString>(options::sources::REFERENCE);
-    let timestamp = matches.get_one::<String>(options::sources::TIMESTAMP);
+    let date = matches
+        .get_one::<String>(options::sources::DATE)
+        .map(|date| date.to_owned());
+
+    let mut timestamp = matches.get_one::<String>(options::sources::TIMESTAMP);
+
+    if is_first_filename_timestamp(reference, date.as_deref(), timestamp, &filenames) {
+        let head = filenames[0];
+        let tail = &filenames[1..];
+        timestamp = Some(head);
+        filenames = tail.to_vec();
+    }
 
     let source = if let Some(reference) = reference {
         Source::Reference(PathBuf::from(reference))
@@ -172,9 +221,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Source::Now
     };
 
-    let date = matches
-        .get_one::<String>(options::sources::DATE)
-        .map(|date| date.to_owned());
+    let files: Vec<InputFile> = filenames
+        .into_iter()
+        .map(|filename| {
+            if filename == "-" {
+                InputFile::Stdout
+            } else {
+                InputFile::Path(PathBuf::from(filename))
+            }
+        })
+        .collect();
 
     let opts = Options {
         no_create: matches.get_flag(options::NO_CREATE),
@@ -275,7 +331,6 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
-                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .group(
