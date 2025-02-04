@@ -1382,7 +1382,8 @@ impl UCommand {
 
     /// Set the working directory for this [`UCommand`]
     ///
-    /// Per default the working directory is set to the [`UCommands`] temporary directory.
+    /// Per default the working directory is set to the [`UCommand`] temporary directory.
+    ///
     pub fn current_dir<T>(&mut self, current_dir: T) -> &mut Self
     where
         T: Into<PathBuf>,
@@ -2637,7 +2638,7 @@ impl UChild {
     /// [`UChild::pipe_in`].
     ///
     /// # Errors
-    /// If [`ChildStdin::write_all`] or [`ChildStdin::flush`] returned an error
+    /// If [`std::process::ChildStdin::write_all`] or [`std::process::ChildStdin::flush`] returned an error
     pub fn try_write_in<T: Into<Vec<u8>>>(&mut self, data: T) -> io::Result<()> {
         let ignore_stdin_write_error = self.ignore_stdin_write_error;
         let mut writer = self.access_stdin_as_writer();
@@ -2659,7 +2660,7 @@ impl UChild {
 
     /// Close the child process stdout.
     ///
-    /// Note this will have no effect if the output was captured with [`CapturedOutput`] which is the
+    /// Note this will have no effect if the output was captured with CapturedOutput which is the
     /// default if [`UCommand::set_stdout`] wasn't called.
     pub fn close_stdout(&mut self) -> &mut Self {
         self.raw.stdout.take();
@@ -2668,7 +2669,7 @@ impl UChild {
 
     /// Close the child process stderr.
     ///
-    /// Note this will have no effect if the output was captured with [`CapturedOutput`] which is the
+    /// Note this will have no effect if the output was captured with CapturedOutput which is the
     /// default if [`UCommand::set_stderr`] wasn't called.
     pub fn close_stderr(&mut self) -> &mut Self {
         self.raw.stderr.take();
