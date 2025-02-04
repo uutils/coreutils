@@ -84,7 +84,11 @@ echo "path_GNU='${path_GNU}'"
 
 ###
 
+if [[ ! -z  "$CARGO_TARGET_DIR" ]]; then
+UU_BUILD_DIR="${CARGO_TARGET_DIR}/${UU_MAKE_PROFILE}"
+else
 UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
+fi
 echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
