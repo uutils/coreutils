@@ -41,7 +41,11 @@ PROG_PREFIX ?=
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
 BASEDIR       ?= $(shell pwd)
+ifdef CARGO_TARGET_DIR
+BUILDDIR 	  := $(CARGO_TARGET_DIR)/${PROFILE}
+else
 BUILDDIR      := $(BASEDIR)/target/${PROFILE}
+endif
 PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
 
