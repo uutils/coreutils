@@ -63,15 +63,38 @@ static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 // we can't use
 // pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 // as we are in a library, not a binary
+
 pub fn get_tests_binary() -> String {
     std::env::var("CARGO_BIN_EXE_coreutils").unwrap_or_else(|_| {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut target_dir = manifest_dir.to_path_buf();
+
+        // Check for target directory at different levels
+        for _ in 0..3 {
+            target_dir.push("target");
+            if target_dir.exists() {
+                let debug_or_release = if cfg!(debug_assertions) {
+                    "debug"
+                } else {
+                    "release"
+                };
+                return format!("{}/{}/coreutils", target_dir.display(), debug_or_release);
+            }
+            target_dir.pop();
+            target_dir.pop();
+        }
+
+        // If target directory not found, fallback to the manifest directory
         let debug_or_release = if cfg!(debug_assertions) {
             "debug"
         } else {
             "release"
         };
-        format!("{manifest_dir}/../../target/{debug_or_release}/coreutils")
+        format!(
+            "{}/target/{}/coreutils",
+            manifest_dir.display(),
+            debug_or_release
+        )
     })
 }
 
