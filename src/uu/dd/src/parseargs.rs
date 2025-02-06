@@ -222,11 +222,23 @@ impl Parser {
             .skip
             .force_bytes_if(self.iflag.skip_bytes)
             .to_bytes(ibs as u64);
+        // GNU coreutils has a limit of i64 (intmax_t)
+        if skip > i64::MAX as u64 {
+            return Err(ParseError::InvalidNumber(format!(
+                "'{skip}': Value too large for defined data type"
+            )));
+        }
 
         let seek = self
             .seek
             .force_bytes_if(self.oflag.seek_bytes)
             .to_bytes(obs as u64);
+        // GNU coreutils has a limit of i64 (intmax_t)
+        if seek > i64::MAX as u64 {
+            return Err(ParseError::InvalidNumber(format!(
+                "'{seek}': Value too large for defined data type"
+            )));
+        }
 
         let count = self.count.map(|c| c.force_bytes_if(self.iflag.count_bytes));
 
