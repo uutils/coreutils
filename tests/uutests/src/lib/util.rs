@@ -417,6 +417,13 @@ impl CmdResult {
         self.exit_status().code().unwrap()
     }
 
+    /// Verify the exit code of the program
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    /// ```
     #[track_caller]
     pub fn code_is(&self, expected_code: i32) -> &Self {
         let fails = self.code() != expected_code;
@@ -475,6 +482,12 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stdout will be or
     /// 2.  you know that stdout will also be empty
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    ///  scene.ucmd().fails().no_stderr();
+    /// ```
     #[track_caller]
     pub fn no_stderr(&self) -> &Self {
         assert!(
@@ -491,6 +504,13 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
+    ///     new_ucmd!()
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    ///  scene.ucmd().fails().no_stdout();
+    /// ```
     #[track_caller]
     pub fn no_stdout(&self) -> &Self {
         assert!(
@@ -711,6 +731,16 @@ impl CmdResult {
         ))
     }
 
+    /// Verify if stdout contains a specific string
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains("Options:");
+    /// ```
     #[track_caller]
     pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
@@ -722,6 +752,16 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stdout contains a specific line
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_line("Options:");
+    /// ```
     #[track_caller]
     pub fn stdout_contains_line<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
@@ -733,6 +773,17 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stderr contains a specific string
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    ///     new_ucmd!()
+    /// .arg("-l")
+    /// .arg("IaMnOtAsIgNaL")
+    /// .fails()
+    /// .stderr_contains("IaMnOtAsIgNaL");
+    /// ```
     #[track_caller]
     pub fn stderr_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
@@ -744,6 +795,17 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stdout does not contain a specific string
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    ///  new_ucmd!()
+    /// .arg("-l")
+    /// .arg("IaMnOtAsIgNaL")
+    /// .fails()
+    /// .stdout_does_not_contain("Valid-signal");
+    /// ```
     #[track_caller]
     pub fn stdout_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
@@ -755,6 +817,17 @@ impl CmdResult {
         self
     }
 
+    /// Verify if st stderr does not contain a specific string
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    ///  new_ucmd!()
+    /// .arg("-l")
+    /// .arg("IaMnOtAsIgNaL")
+    /// .fails()
+    /// .stderr_does_not_contain("Valid-signal");
+    /// ```
     #[track_caller]
     pub fn stderr_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(!self.stderr_str().contains(cmp.as_ref()));
