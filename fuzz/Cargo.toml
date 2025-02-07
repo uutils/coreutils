@@ -8,6 +8,7 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
+console = "0.15.0"
 libfuzzer-sys = "0.4.7"
 libc = "0.2.153"
 tempfile = "3.15.0"
