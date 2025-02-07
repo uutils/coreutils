@@ -935,9 +935,9 @@ fn test_obsolete_posix_format_with_year() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.env("_POSIX2_VERSION", "199209")
         .env("POSIXLY_CORRECT", "1")
-        .args(&["9001010000", "11111111"])
+        .args(&["0101000090", "11111111"])
         .succeeds()
         .no_output();
     assert!(at.file_exists("11111111"));
-    assert!(!at.file_exists("01010000"));
+    assert!(!at.file_exists("0101000090"));
 }

@@ -141,11 +141,14 @@ fn all_digits(s: &str) -> bool {
 }
 
 /// Convert a two-digit year string to the corresponding number.
+///
+/// `s` must be of length two or more. The last two bytes of `s` are
+/// assumed to be the two digits of the year.
 fn get_year(s: &str) -> u8 {
-    // Pre-condition: s.len() >= 2
     let bytes = s.as_bytes();
-    let y1 = bytes[0] - b'0';
-    let y2 = bytes[1] - b'0';
+    let n = bytes.len();
+    let y1 = bytes[n - 2] - b'0';
+    let y2 = bytes[n - 1] - b'0';
     10 * y1 + y2
 }
 
@@ -153,7 +156,7 @@ fn get_year(s: &str) -> u8 {
 fn is_first_filename_timestamp(
     reference: Option<&OsString>,
     date: Option<&str>,
-    timestamp: Option<&String>,
+    timestamp: &Option<String>,
     files: &[&String],
 ) -> bool {
     match std::env::var("_POSIX2_VERSION") {
@@ -180,6 +183,18 @@ fn is_first_filename_timestamp(
     }
 }
 
+/// Cycle the last two characters to the beginning of the string.
+///
+/// `s` must have length at least two.
+fn shr2(s: &str) -> String {
+    let n = s.len();
+    let (a, b) = s.split_at(n - 2);
+    let mut result = String::with_capacity(n);
+    result.push_str(b);
+    result.push_str(a);
+    result
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
@@ -204,19 +219,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>(options::sources::DATE)
         .map(|date| date.to_owned());
 
-    let mut timestamp = matches.get_one::<String>(options::sources::TIMESTAMP);
+    let mut timestamp = matches
+        .get_one::<String>(options::sources::TIMESTAMP)
+        .map(|t| t.to_owned());
 
-    if is_first_filename_timestamp(reference, date.as_deref(), timestamp, &filenames) {
-        let head = filenames[0];
-        let tail = &filenames[1..];
-        timestamp = Some(head);
-        filenames = tail.to_vec();
+    if is_first_filename_timestamp(reference, date.as_deref(), &timestamp, &filenames) {
+        timestamp = if filenames[0].len() == 10 {
+            Some(shr2(filenames[0]))
+        } else {
+            Some(filenames[0].to_string())
+        };
+        filenames = filenames[1..].to_vec();
     }
 
     let source = if let Some(reference) = reference {
         Source::Reference(PathBuf::from(reference))
     } else if let Some(ts) = timestamp {
-        Source::Timestamp(parse_timestamp(ts)?)
+        Source::Timestamp(parse_timestamp(&ts)?)
     } else {
         Source::Now
     };
