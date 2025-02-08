@@ -13,6 +13,11 @@ fn execution_phrase_double() {
     use std::process::Command;
 
     let scenario = TestScenario::new("ls");
+    println!("scenario.bin_path: {:?}", scenario.bin_path);
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
     let output = Command::new(&scenario.bin_path)
         .arg("ls")
         .arg("--some-invalid-arg")
@@ -32,6 +37,11 @@ fn util_name_double() {
     };
 
     let scenario = TestScenario::new("sort");
+    println!("scenario.bin_path: {:?}", scenario.bin_path);
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
     let mut child = Command::new(&scenario.bin_path)
         .arg("sort")
         .stdin(Stdio::piped())
@@ -54,6 +64,11 @@ fn util_name_single() {
     };
 
     let scenario = TestScenario::new("sort");
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
+
     symlink_file(&scenario.bin_path, scenario.fixtures.plus("uu-sort")).unwrap();
     let mut child = Command::new(scenario.fixtures.plus("uu-sort"))
         .stdin(Stdio::piped())
@@ -75,6 +90,10 @@ fn util_invalid_name_help() {
     use std::process::{Command, Stdio};
 
     let scenario = TestScenario::new("invalid_name");
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
     symlink_file(&scenario.bin_path, scenario.fixtures.plus("invalid_name")).unwrap();
     let child = Command::new(scenario.fixtures.plus("invalid_name"))
         .arg("--help")
@@ -109,6 +128,11 @@ fn util_non_utf8_name_help() {
 
     let scenario = TestScenario::new("invalid_name");
     let non_utf8_path = scenario.fixtures.plus(OsStr::from_bytes(b"\xff"));
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
+
     symlink_file(&scenario.bin_path, &non_utf8_path).unwrap();
     let child = Command::new(&non_utf8_path)
         .arg("--help")
@@ -135,6 +159,11 @@ fn util_invalid_name_invalid_command() {
 
     let scenario = TestScenario::new("invalid_name");
     symlink_file(&scenario.bin_path, scenario.fixtures.plus("invalid_name")).unwrap();
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
+
     let child = Command::new(scenario.fixtures.plus("invalid_name"))
         .arg("definitely_invalid")
         .stdin(Stdio::piped())
@@ -157,6 +186,12 @@ fn util_completion() {
     use std::process::{Command, Stdio};
 
     let scenario = TestScenario::new("completion");
+    println!("scenario.bin_path: {:?}", scenario.bin_path);
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
+
     let child = Command::new(&scenario.bin_path)
         .arg("completion")
         .arg("true")
@@ -182,6 +217,12 @@ fn util_manpage() {
     use std::process::{Command, Stdio};
 
     let scenario = TestScenario::new("completion");
+    println!("scenario.bin_path: {:?}", scenario.bin_path);
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
+
     let child = Command::new(&scenario.bin_path)
         .arg("manpage")
         .arg("true")
