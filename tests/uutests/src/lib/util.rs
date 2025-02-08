@@ -1896,6 +1896,22 @@ impl UCommand {
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
 
+    fn list_directory_contents(path: &Path, prefix: &str) {
+        if let Ok(entries) = fs::read_dir(path) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path_str = entry.path().to_string_lossy().to_string();
+                    log_info(&format!("{}File:", prefix), &path_str);
+
+                    // Recursively list contents if it's a directory
+                    if entry.path().is_dir() {
+                        Self::list_directory_contents(&entry.path(), &format!("{}  ", prefix));
+                    }
+                }
+            }
+        }
+    }
+
     pub fn run_no_wait(&mut self) -> UChild {
         assert!(!self.has_run, "{}", ALREADY_RUN);
         self.has_run = true;
@@ -1904,14 +1920,9 @@ impl UCommand {
         let target_path = Path::new("/project/target");
         if target_path.exists() && target_path.is_dir() {
             match fs::read_dir(target_path) {
-                Ok(entries) => {
+                Ok(_) => {
                     log_info("Files in /project/target/", "");
-                    for entry in entries {
-                        if let Ok(entry) = entry {
-                            let path_str = entry.path().to_string_lossy().to_string();
-                            log_info("  File:", &path_str);
-                        }
-                    }
+                    Self::list_directory_contents(target_path, "  ");
                 }
                 Err(e) => log_info("Error reading /project/target/", &e.to_string()),
             }
