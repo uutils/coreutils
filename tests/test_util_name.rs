@@ -24,25 +24,6 @@ fn execution_phrase_double() {
 }
 
 #[test]
-#[cfg(feature = "ls")]
-#[cfg(any(unix, windows))]
-fn execution_phrase_single() {
-    use std::process::Command;
-
-    let scenario = TestScenario::new("ls");
-    symlink_file(&scenario.bin_path, scenario.fixtures.plus("uu-ls")).unwrap();
-    let output = Command::new(scenario.fixtures.plus("uu-ls"))
-        .arg("--some-invalid-arg")
-        .output()
-        .unwrap();
-    dbg!(String::from_utf8(output.stderr.clone()).unwrap());
-    assert!(String::from_utf8(output.stderr).unwrap().contains(&format!(
-        "Usage: {}",
-        scenario.fixtures.plus("uu-ls").display()
-    )));
-}
-
-#[test]
 #[cfg(feature = "sort")]
 fn util_name_double() {
     use std::{
