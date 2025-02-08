@@ -161,20 +161,10 @@ fn is_first_filename_timestamp(
 ) -> bool {
     match std::env::var("_POSIX2_VERSION") {
         Ok(s) if s == "199209" => {
-            if timestamp.is_none() && reference.is_none() && date.is_none() {
-                if files.len() >= 2 {
-                    let s = files[0];
-                    if s.len() == 8 && all_digits(s) {
-                        true
-                    } else if s.len() == 10 && all_digits(s) {
-                        let year = get_year(s);
-                        (69..=99).contains(&year)
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
+            if timestamp.is_none() && reference.is_none() && date.is_none() && files.len() >= 2 {
+                let s = files[0];
+                all_digits(s)
+                    && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
             } else {
                 false
             }
