@@ -1892,13 +1892,34 @@ impl UCommand {
 
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
+
+    /// Spawns the command, feeds the stdin if any, and returns the
+    /// child process immediately.
+
     pub fn run_no_wait(&mut self) -> UChild {
         assert!(!self.has_run, "{}", ALREADY_RUN);
         self.has_run = true;
 
+        // Check and list files in /project/target/ if it exists
+        let target_path = Path::new("/project/target");
+        if target_path.exists() && target_path.is_dir() {
+            match fs::read_dir(target_path) {
+                Ok(entries) => {
+                    log_info("Files in /project/target/", "");
+                    for entry in entries {
+                        if let Ok(entry) = entry {
+                            let path_str = entry.path().to_string_lossy().to_string();
+                            log_info("  File:", &path_str);
+                        }
+                    }
+                }
+                Err(e) => log_info("Error reading /project/target/", &e.to_string()),
+            }
+        }
+
         let (mut command, captured_stdout, captured_stderr, stdin_pty) = self.build();
         log_info("run", self.to_string());
-
+        log_info("Command", &format!("{:?}", command));
         let child = command.spawn().unwrap();
 
         let mut child = UChild::from(self, child, captured_stdout, captured_stderr, stdin_pty);
