@@ -4887,3 +4887,39 @@ fn test_following_with_pid() {
 
     child.kill();
 }
+
+// This error was first detected when running tail so tail is used here but
+// should fail with any command that takes piped input.
+// See also https://github.com/uutils/coreutils/issues/3895
+#[test]
+#[cfg_attr(not(feature = "expensive_tests"), ignore)]
+fn test_when_piped_input_then_no_broken_pipe() {
+    let ts = TestScenario::new("tail");
+    for i in 0..10000 {
+        dbg!(i);
+        let test_string = "a\nb\n";
+        ts.ucmd()
+            .args(&["-n", "0"])
+            .pipe_in(test_string)
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+    }
+}
+
+#[test]
+fn test_child_when_run_with_stderr_to_stdout() {
+    let ts = TestScenario::new("tail");
+    let at = &ts.fixtures;
+
+    at.write("data", "file data\n");
+
+    let expected_stdout = "==> data <==\n\
+                                file data\n\
+                                tail: cannot open 'missing' for reading: No such file or directory\n";
+    ts.ucmd()
+        .args(&["data", "missing"])
+        .stderr_to_stdout()
+        .fails()
+        .stdout_only(expected_stdout);
+}

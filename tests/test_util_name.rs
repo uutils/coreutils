@@ -6,8 +6,6 @@ use uutests::util::TestScenario;
 
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
-#[cfg(windows)]
-use std::os::windows::fs::symlink_file;
 
 #[test]
 #[cfg(feature = "ls")]
@@ -67,7 +65,7 @@ fn util_name_double() {
 
 #[test]
 #[cfg(feature = "sort")]
-#[cfg(any(unix, windows))]
+#[cfg(unix)]
 fn util_name_single() {
     use std::{
         io::Write,
@@ -91,7 +89,7 @@ fn util_name_single() {
 }
 
 #[test]
-#[cfg(any(unix, windows))]
+#[cfg(unix)]
 fn util_invalid_name_help() {
     use std::process::{Command, Stdio};
 
@@ -150,7 +148,7 @@ fn util_non_utf8_name_help() {
 }
 
 #[test]
-#[cfg(any(unix, windows))]
+#[cfg(unix)]
 fn util_invalid_name_invalid_command() {
     use std::process::{Command, Stdio};
 

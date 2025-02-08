@@ -4,9 +4,8 @@
 // file that was distributed with this source code.
 #![allow(clippy::borrow_as_ptr)]
 
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::{at_and_ucmd, util_name};
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 use regex::Regex;
 #[cfg(target_os = "linux")]
@@ -170,6 +169,7 @@ mod linux_only {
     use std::process::{Output, Stdio};
     use std::time::Duration;
     use uutests::at_and_ucmd;
+    use uutests::new_ucmd;
     use uutests::util::TestScenario;
     use uutests::util_name;
 

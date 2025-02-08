@@ -6,10 +6,9 @@
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use std::fs::File;
 use std::fs::OpenOptions;
-#[cfg(not(windows))]
 use std::process::Stdio;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -670,4 +669,41 @@ fn test_appending_same_input_output() {
         .failure()
         .no_stdout()
         .stderr_contains("input file is output file");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_uchild_when_no_capture_reading_from_infinite_source() {
+    use regex::Regex;
+
+    let ts = TestScenario::new("cat");
+
+    let expected_stdout = b"\0".repeat(12345);
+    let mut child = ts
+        .ucmd()
+        .set_stdin(Stdio::from(File::open("/dev/zero").unwrap()))
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    child
+        .make_assertion()
+        .with_exact_output(12345, 0)
+        .stdout_only_bytes(expected_stdout);
+
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_matches(&Regex::new("[\0].*").unwrap())
+        .no_stderr();
+}
+
+#[test]
+fn test_child_when_pipe_in() {
+    let ts = TestScenario::new("cat");
+    let mut child = ts.ucmd().set_stdin(Stdio::piped()).run_no_wait();
+    child.pipe_in("content");
+    child.wait().unwrap().stdout_only("content").success();
+
+    ts.ucmd().pipe_in("content").run().stdout_is("content");
 }

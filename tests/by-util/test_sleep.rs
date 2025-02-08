@@ -11,6 +11,7 @@ use uutests::util_name;
 
 #[cfg(unix)]
 use nix::sys::signal::Signal::{SIGBUS, SIGSEGV};
+use std::io::ErrorKind;
 use std::time::{Duration, Instant};
 
 #[test]
@@ -254,8 +255,8 @@ fn test_sleep_when_input_has_only_whitespace_then_error(#[case] input: &str) {
 #[test]
 fn test_sleep_when_multiple_input_some_with_error_then_shows_all_errors() {
     let expected = "invalid time interval 'abc': Invalid input: abc\n\
-        sleep: invalid time interval '1years': Invalid time unit: 'years' at position 2\n\
-        sleep: invalid time interval ' ': Found only whitespace in input";
+                    sleep: invalid time interval '1years': Invalid time unit: 'years' at position 2\n\
+                    sleep: invalid time interval ' ': Found only whitespace in input";
 
     // Even if one of the arguments is valid, but the rest isn't, we should still fail and exit early.
     // So, the timeout of 10 seconds ensures we haven't executed `thread::sleep` with the only valid
@@ -273,4 +274,142 @@ fn test_negative_interval() {
         .args(&["--", "-1"])
         .fails()
         .usage_error("invalid time interval '-1': Number was negative");
+}
+
+#[cfg(unix)]
+#[test]
+#[should_panic = "Program must be run first or has not finished"]
+fn test_cmd_result_signal_when_still_running_then_panic() {
+    let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+
+    child
+        .make_assertion()
+        .is_alive()
+        .with_current_output()
+        .signal();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cmd_result_signal_when_kill_then_signal() {
+    let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+
+    child.kill();
+    child
+        .make_assertion()
+        .is_not_alive()
+        .with_current_output()
+        .signal_is(9)
+        .signal_name_is("SIGKILL")
+        .signal_name_is("KILL")
+        .signal_name_is("9")
+        .signal()
+        .expect("Signal was none");
+
+    let result = child.wait().unwrap();
+    result
+        .signal_is(9)
+        .signal_name_is("SIGKILL")
+        .signal_name_is("KILL")
+        .signal_name_is("9")
+        .signal()
+        .expect("Signal was none");
+}
+
+#[cfg(unix)]
+#[rstest]
+#[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
+#[case::signal_just_sig("SIG")]
+#[case::signal_value_too_high("100")]
+#[case::signal_value_negative("-1")]
+#[should_panic = "Invalid signal name or value"]
+fn test_cmd_result_signal_when_invalid_signal_name_then_panic(#[case] signal_name: &str) {
+    let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+    child.kill();
+    let result = child.wait().unwrap();
+    result.signal_name_is(signal_name);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cmd_result_signal_name_is_accepts_lowercase() {
+    let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+    child.kill();
+    let result = child.wait().unwrap();
+    result.signal_name_is("sigkill");
+    result.signal_name_is("kill");
+}
+
+#[test]
+fn test_uchild_when_wait_and_timeout_is_reached_then_timeout_error() {
+    let ts = TestScenario::new("sleep");
+    let child = ts
+        .ucmd()
+        .timeout(Duration::from_secs(1))
+        .arg("10.0")
+        .run_no_wait();
+
+    match child.wait() {
+        Err(error) if error.kind() == ErrorKind::Other => {
+            std::assert_eq!(error.to_string(), "wait: Timeout of '1s' reached");
+        }
+        Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
+        Ok(_) => panic!("Assertion failed: Expected timeout of `wait`."),
+    }
+}
+
+#[rstest]
+#[timeout(Duration::from_secs(5))]
+fn test_uchild_when_kill_and_timeout_higher_than_kill_time_then_no_panic() {
+    let ts = TestScenario::new("sleep");
+    let mut child = ts
+        .ucmd()
+        .timeout(Duration::from_secs(60))
+        .arg("20.0")
+        .run_no_wait();
+
+    child.kill().make_assertion().is_not_alive();
+}
+
+#[test]
+fn test_uchild_when_try_kill_and_timeout_is_reached_then_error() {
+    let ts = TestScenario::new("sleep");
+    let mut child = ts.ucmd().timeout(Duration::ZERO).arg("10.0").run_no_wait();
+
+    match child.try_kill() {
+        Err(error) if error.kind() == ErrorKind::Other => {
+            std::assert_eq!(error.to_string(), "kill: Timeout of '0s' reached");
+        }
+        Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
+        Ok(()) => panic!("Assertion failed: Expected timeout of `try_kill`."),
+    }
+}
+
+#[test]
+#[should_panic = "kill: Timeout of '0s' reached"]
+fn test_uchild_when_kill_with_timeout_and_timeout_is_reached_then_panic() {
+    let ts = TestScenario::new("sleep");
+    let mut child = ts.ucmd().timeout(Duration::ZERO).arg("10.0").run_no_wait();
+
+    child.kill();
+    panic!("Assertion failed: Expected timeout of `kill`.");
+}
+
+#[test]
+#[should_panic(expected = "wait: Timeout of '1.1s' reached")]
+fn test_ucommand_when_run_with_timeout_and_timeout_is_reached_then_panic() {
+    let ts = TestScenario::new("sleep");
+    ts.ucmd()
+        .timeout(Duration::from_millis(1100))
+        .arg("10.0")
+        .run();
+
+    panic!("Assertion failed: Expected timeout of `run`.")
+}
+
+#[rstest]
+#[timeout(Duration::from_secs(10))]
+fn test_ucommand_when_run_with_timeout_higher_then_execution_time_then_no_panic() {
+    let ts = TestScenario::new("sleep");
+    ts.ucmd().timeout(Duration::from_secs(60)).arg("1.0").run();
 }

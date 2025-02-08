@@ -324,6 +324,7 @@ libc
 libstdbuf
 musl
 tmpd
+uchild
 ucmd
 ucommand
 utmpx
