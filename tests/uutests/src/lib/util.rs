@@ -67,7 +67,6 @@ pub fn get_tests_binary() -> String {
     std::env::var("CARGO_BIN_EXE_coreutils").unwrap_or_else(|_| {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut target_dir = manifest_dir.to_path_buf();
-
         // Check for target directory at different levels
         for _ in 0..3 {
             target_dir.push("target");
@@ -77,21 +76,22 @@ pub fn get_tests_binary() -> String {
                 } else {
                     "release"
                 };
-
                 // First try the triple-specific path
-                let triple = std::env::var("TARGET");
-                let triple_path = format!(
-                    "{}/{:?}/{}/coreutils",
-                    target_dir.display(),
-                    triple,
-                    debug_or_release
-                );
-                log_info("0= Checking for binary at: {}", &triple_path);
-                // Check if triple-specific path exists
-                if Path::new(&triple_path).exists() {
-                    return triple_path;
+                let triple =
+                    std::env::var("CARGO_BUILD_TARGET").unwrap_or_else(|_| String::from(""));
+                if !triple.is_empty() {
+                    let triple_path = format!(
+                        "{}/{}/{}/coreutils",
+                        target_dir.display(),
+                        triple,
+                        debug_or_release
+                    );
+                    log_info("0= Checking for binary at: {}", &triple_path);
+                    // Check if triple-specific path exists
+                    if Path::new(&triple_path).exists() {
+                        return triple_path;
+                    }
                 }
-
                 // Fallback to regular path
                 let tmp = format!("{}/{}/coreutils", target_dir.display(), debug_or_release);
                 log_info("1= tmp0", &tmp);
@@ -100,35 +100,33 @@ pub fn get_tests_binary() -> String {
             target_dir.pop();
             target_dir.pop();
         }
-
         // If target directory not found, fallback to the manifest directory
         let debug_or_release = if cfg!(debug_assertions) {
             "debug"
         } else {
             "release"
         };
-
         // Try triple-specific path first in fallback case
-        let triple = std::env::var("TARGET");
-        let triple_path = format!(
-            "{}/target/{:?}/{}/coreutils",
-            manifest_dir.display(),
-            triple,
-            debug_or_release
-        );
-
-        if Path::new(&triple_path).exists() {
-            log_info("2= triple_path", &triple_path);
-            triple_path
-        } else {
-            let tmp = format!(
-                "{}/target/{}/coreutils",
+        let triple = std::env::var("CARGO_BUILD_TARGET").unwrap_or_else(|_| String::from(""));
+        if !triple.is_empty() {
+            let triple_path = format!(
+                "{}/target/{}/{}/coreutils",
                 manifest_dir.display(),
+                triple,
                 debug_or_release
             );
-            log_info("3= tmp", &tmp);
-            tmp
+            if Path::new(&triple_path).exists() {
+                log_info("2= triple_path", &triple_path);
+                return triple_path;
+            }
         }
+        let tmp = format!(
+            "{}/target/{}/coreutils",
+            manifest_dir.display(),
+            debug_or_release
+        );
+        log_info("3= tmp", &tmp);
+        tmp
     })
 }
 
