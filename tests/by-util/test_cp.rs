@@ -6045,17 +6045,13 @@ fn test_cp_from_stdin() {
 #[test]
 fn test_cp_verbose_message_after_interactive_prompt() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let ts = time::OffsetDateTime::now_utc();
-    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
     let src_file = "a";
     let dst_file = "b";
 
     at.touch(src_file);
     at.touch(dst_file);
 
-    filetime::set_file_times(at.plus_as_string(dst_file), previous, previous).unwrap();
-
-    ucmd.args(&["-i", "--verbose", "--update=older", src_file, dst_file])
+    ucmd.args(&["-i", "--verbose", src_file, dst_file])
         .pipe_in("Y\n")
         .succeeds()
         .stderr_is("cp: overwrite 'b'? ")
