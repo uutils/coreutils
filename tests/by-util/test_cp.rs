@@ -6053,7 +6053,7 @@ fn test_cp_verbose_message_after_interactive_prompt() {
 
     ucmd.args(&["-i", "--verbose", src_file, dst_file])
         .pipe_in("Y\n")
+        .stderr_to_stdout()
         .succeeds()
-        .stderr_is("cp: overwrite 'b'? ")
-        .stdout_is("'a' -> 'b'\n");
+        .stdout_is("cp: overwrite 'b'? 'a' -> 'b'\n");
 }
