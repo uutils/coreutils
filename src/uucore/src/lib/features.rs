@@ -72,4 +72,6 @@ pub mod signals;
 pub mod utmpx;
 // ** windows-only
 #[cfg(all(windows, feature = "wide"))]
-pub mod wide;
+pub mod wide; 
+#[cfg(feature = "uptime")]
+pub mod uptime;
