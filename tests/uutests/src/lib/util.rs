@@ -86,14 +86,16 @@ pub fn get_tests_binary() -> String {
                     triple,
                     debug_or_release
                 );
-
+                log_info("0= Checking for binary at: {}", &triple_path);
                 // Check if triple-specific path exists
                 if Path::new(&triple_path).exists() {
                     return triple_path;
                 }
 
                 // Fallback to regular path
-                return format!("{}/{}/coreutils", target_dir.display(), debug_or_release);
+                let tmp = format!("{}/{}/coreutils", target_dir.display(), debug_or_release);
+                log_info("1= tmp0", &tmp);
+                return tmp;
             }
             target_dir.pop();
             target_dir.pop();
@@ -116,13 +118,16 @@ pub fn get_tests_binary() -> String {
         );
 
         if Path::new(&triple_path).exists() {
+            log_info("2= triple_path", &triple_path);
             triple_path
         } else {
-            format!(
+            let tmp = format!(
                 "{}/target/{}/coreutils",
                 manifest_dir.display(),
                 debug_or_release
-            )
+            );
+            log_info("3= tmp", &tmp);
+            tmp
         }
     })
 }
