@@ -63,7 +63,6 @@ static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 // we can't use
 // pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 // as we are in a library, not a binary
-
 pub fn get_tests_binary() -> String {
     std::env::var("CARGO_BIN_EXE_coreutils").unwrap_or_else(|_| {
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -78,6 +77,22 @@ pub fn get_tests_binary() -> String {
                 } else {
                     "release"
                 };
+
+                // First try the triple-specific path
+                let triple = std::env::var("TARGET");
+                let triple_path = format!(
+                    "{}/{:?}/{}/coreutils",
+                    target_dir.display(),
+                    triple,
+                    debug_or_release
+                );
+
+                // Check if triple-specific path exists
+                if Path::new(&triple_path).exists() {
+                    return triple_path;
+                }
+
+                // Fallback to regular path
                 return format!("{}/{}/coreutils", target_dir.display(), debug_or_release);
             }
             target_dir.pop();
@@ -90,11 +105,25 @@ pub fn get_tests_binary() -> String {
         } else {
             "release"
         };
-        format!(
-            "{}/target/{}/coreutils",
+
+        // Try triple-specific path first in fallback case
+        let triple = std::env::var("TARGET");
+        let triple_path = format!(
+            "{}/target/{:?}/{}/coreutils",
             manifest_dir.display(),
+            triple,
             debug_or_release
-        )
+        );
+
+        if Path::new(&triple_path).exists() {
+            triple_path
+        } else {
+            format!(
+                "{}/target/{}/coreutils",
+                manifest_dir.display(),
+                debug_or_release
+            )
+        }
     })
 }
 
