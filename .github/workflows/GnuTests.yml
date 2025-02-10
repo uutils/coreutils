@@ -273,7 +273,7 @@ jobs:
                   have_new_failures="true"
                 else
                   MSG="Skip an intermittent issue ${LINE} (fails in this run but passes in the 'main' branch)"
-                  echo "::warning ::$MSG"
+                  echo "::notice ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   echo ""
                 fi
@@ -291,7 +291,7 @@ jobs:
                   echo $MSG >> ${COMMENT_LOG}
                 else
                   MSG="Skipping an intermittent issue ${LINE} (passes in this run but fails in the 'main' branch)"
-                  echo "::warning ::$MSG"
+                  echo "::notice ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   echo ""
                 fi
@@ -340,7 +340,10 @@ jobs:
         # Compare root tests
         compare_tests '${{ steps.vars.outputs.path_GNU_tests }}/test-suite-root.log' "${ROOT_REF_LOG_FILE}" "root"
 
-        if test -n "${have_new_failures}" ; then exit -1 ; fi
+        if [ -n "${have_new_failures}" ]; then
+          echo "::error ::Found new test failures"
+          exit 1
+        fi
     - name: Upload comparison log (for GnuComment workflow)
       if: success() || failure() # run regardless of prior step success/failure
       uses: actions/upload-artifact@v4
