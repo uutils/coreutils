@@ -6043,17 +6043,35 @@ fn test_cp_from_stdin() {
 }
 
 #[test]
-fn test_cp_verbose_message_after_interactive_prompt() {
+fn test_cp_update_older_interactive_prompt_yes() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let src_file = "a";
-    let dst_file = "b";
+    let old_file = "old";
+    let new_file = "new";
 
-    at.touch(src_file);
-    at.touch(dst_file);
+    let f = at.make_file(old_file);
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.touch(new_file);
 
-    ucmd.args(&["-i", "--verbose", src_file, dst_file])
+    ucmd.args(&["-i", "-v", "--update=older", new_file, old_file])
         .pipe_in("Y\n")
         .stderr_to_stdout()
         .succeeds()
-        .stdout_is("cp: overwrite 'b'? 'a' -> 'b'\n");
+        .stdout_is("cp: overwrite 'old'? 'new' -> 'old'\n");
+}
+
+#[test]
+fn test_cp_update_older_interactive_prompt_no() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let old_file = "old";
+    let new_file = "new";
+
+    let f = at.make_file(old_file);
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.touch(new_file);
+
+    ucmd.args(&["-i", "-v", "--update=older", new_file, old_file])
+        .pipe_in("N\n")
+        .stderr_to_stdout()
+        .fails()
+        .stdout_is("cp: overwrite 'old'? ");
 }
