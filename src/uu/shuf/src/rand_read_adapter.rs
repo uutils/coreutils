@@ -16,7 +16,7 @@
 use std::fmt;
 use std::io::Read;
 
-use rand_core::{impls, Error, RngCore};
+use rand_core::{impls, RngCore};
 
 /// An RNG that reads random bytes straight from any type supporting
 /// [`std::io::Read`], for example files.
@@ -30,11 +30,10 @@ use rand_core::{impls, Error, RngCore};
 ///
 /// `ReadRng` uses [`std::io::Read::read_exact`], which retries on interrupts.
 /// All other errors from the underlying reader, including when it does not
-/// have enough data, will only be reported through [`try_fill_bytes`].
+/// have enough data, will only be reported through `try_fill_bytes`.
 /// The other [`RngCore`] methods will panic in case of an error.
 ///
 /// [`OsRng`]: rand::rngs::OsRng
-/// [`try_fill_bytes`]: RngCore::try_fill_bytes
 #[derive(Debug)]
 pub struct ReadRng<R> {
     reader: R,
@@ -44,6 +43,14 @@ impl<R: Read> ReadRng<R> {
     /// Create a new `ReadRng` from a `Read`.
     pub fn new(r: R) -> Self {
         Self { reader: r }
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), ReadError> {
+        if dest.is_empty() {
+            return Ok(());
+        }
+        // Use `std::io::read_exact`, which retries on `ErrorKind::Interrupted`.
+        self.reader.read_exact(dest).map_err(ReadError)
     }
 }
 
@@ -60,16 +67,6 @@ impl<R: Read> RngCore for ReadRng<R> {
         self.try_fill_bytes(dest).unwrap_or_else(|err| {
             panic!("reading random bytes from Read implementation failed; error: {err}");
         });
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
-        if dest.is_empty() {
-            return Ok(());
-        }
-        // Use `std::io::read_exact`, which retries on `ErrorKind::Interrupted`.
-        self.reader
-            .read_exact(dest)
-            .map_err(|e| Error::new(ReadError(e)))
     }
 }
 

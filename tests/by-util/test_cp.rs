@@ -611,7 +611,7 @@ fn test_cp_arg_interactive_update_overwrite_older() {
     // Option N
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b");
-    std::thread::sleep(Duration::from_secs(1));
+    sleep(Duration::from_millis(100));
     at.touch("a");
     ucmd.args(&["-i", "-u", "a", "b"])
         .pipe_in("N\n")
@@ -623,7 +623,7 @@ fn test_cp_arg_interactive_update_overwrite_older() {
     // Option Y
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b");
-    std::thread::sleep(Duration::from_secs(1));
+    sleep(Duration::from_millis(100));
     at.touch("a");
     ucmd.args(&["-i", "-u", "a", "b"])
         .pipe_in("Y\n")
@@ -2241,7 +2241,7 @@ fn test_cp_no_preserve_timestamps() {
         previous,
     )
     .unwrap();
-    sleep(Duration::from_secs(3));
+    sleep(Duration::from_millis(100));
 
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--no-preserve=timestamps")
@@ -2288,7 +2288,7 @@ fn test_cp_one_file_system() {
     use crate::common::util::AtPath;
     use walkdir::WalkDir;
 
-    let scene = TestScenario::new(util_name!());
+    let mut scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     // Test must be run as root (or with `sudo -E`)
@@ -2304,14 +2304,8 @@ fn test_cp_one_file_system() {
     let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
 
     scene
-        .cmd("mount")
-        .arg("-t")
-        .arg("tmpfs")
-        .arg("-o")
-        .arg("size=640k") // ought to be enough
-        .arg("tmpfs")
-        .arg(mountpoint_path)
-        .succeeds();
+        .mount_temp_fs(mountpoint_path)
+        .expect("mounting tmpfs failed");
 
     at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
 
@@ -2324,7 +2318,7 @@ fn test_cp_one_file_system() {
         .succeeds();
 
     // Ditch the mount before the asserts
-    scene.cmd("umount").arg(mountpoint_path).succeeds();
+    scene.umount_temp_fs();
 
     assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));
     // Check if the other files were copied from the source folder hierarchy
@@ -2907,7 +2901,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     //               target name    link name
     at.symlink_file("no-such-file", "dangle");
     // to check if access time and modification time didn't change
-    sleep(Duration::from_millis(5000));
+    sleep(Duration::from_millis(100));
     //          don't dereference the link
     //           |    copy permissions, too
     //           |      |    from the link
@@ -5686,7 +5680,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
             if at.dir_exists(&format!("{DEST_DIR}/{SRC_DIR}")) {
                 break;
             }
-            std::thread::sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(100));
         }
         let mode = at.metadata(&format!("{DEST_DIR}/{SRC_DIR}")).mode();
         #[allow(clippy::unnecessary_cast, clippy::cast_lossless)]

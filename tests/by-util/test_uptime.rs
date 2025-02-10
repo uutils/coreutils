@@ -273,8 +273,3 @@ fn test_uptime_since() {
 
     new_ucmd!().arg("--since").succeeds().stdout_matches(&re);
 }
-
-#[test]
-fn test_failed() {
-    new_ucmd!().arg("will-fail").fails();
-}

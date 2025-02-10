@@ -392,6 +392,46 @@ fn test_presume_input_pipe_5_chars() {
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
+#[test]
+fn test_read_backwards_lines_large_file() {
+    // Create our fixtures on the fly. We need the input file to be at least double
+    // the size of BUF_SIZE as specified in head.rs. Go for something a bit bigger
+    // than that.
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+    let seq_30000_file_name = "seq_30000";
+    let seq_1000_file_name = "seq_1000";
+    scene
+        .cmd("seq")
+        .arg("30000")
+        .set_stdout(fixtures.make_file(seq_30000_file_name))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .arg("1000")
+        .set_stdout(fixtures.make_file(seq_1000_file_name))
+        .succeeds();
+
+    // Now run our tests.
+    scene
+        .ucmd()
+        .args(&["-n", "-29000", "seq_30000"])
+        .succeeds()
+        .stdout_is_fixture("seq_1000");
+
+    scene
+        .ucmd()
+        .args(&["-n", "-30000", "seq_30000"])
+        .run()
+        .stdout_is_fixture("emptyfile.txt");
+
+    scene
+        .ucmd()
+        .args(&["-n", "-30001", "seq_30000"])
+        .run()
+        .stdout_is_fixture("emptyfile.txt");
+}
+
 #[cfg(all(
     not(target_os = "windows"),
     not(target_os = "macos"),

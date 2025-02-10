@@ -602,7 +602,6 @@ fn test_reset_binary() {
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e  ");
 }
 
-#[ignore = "issue #6375"]
 #[test]
 fn test_reset_binary_but_set() {
     let scene = TestScenario::new(util_name!());
@@ -619,7 +618,7 @@ fn test_reset_binary_but_set() {
         .arg("--algorithm=md5")
         .arg(at.subdir.join("f"))
         .succeeds()
-        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *"); // currently, asterisk=false. It should be true
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
 
 #[test]
@@ -1137,7 +1136,6 @@ fn test_cksum_garbage() {
         .stderr_contains("check-file: no properly formatted checksum lines found");
 }
 
-#[ignore = "Should fail on bits"]
 #[test]
 fn test_md5_bits() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1188,7 +1186,6 @@ fn test_bsd_case() {
         .stderr_contains("f: no properly formatted checksum lines found");
 }
 
-#[ignore = "Different output"]
 #[test]
 fn test_blake2d_tested_with_sha1() {
     let (at, mut ucmd) = at_and_ucmd!();

@@ -692,7 +692,7 @@ fn identify_algo_name_and_length(
     line_info: &LineInfo,
     algo_name_input: Option<&str>,
     last_algo: &mut Option<String>,
-) -> Option<(String, Option<usize>)> {
+) -> Result<(String, Option<usize>), LineCheckError> {
     let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
     let algorithm = algo_from_line.to_lowercase();
     *last_algo = Some(algo_from_line);
@@ -701,18 +701,25 @@ fn identify_algo_name_and_length(
     // (for example SHA1 (f) = d...)
     // Also handle the case cksum -s sm3 but the file contains other formats
     if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
-        return None;
+        return Err(LineCheckError::ImproperlyFormatted);
     }
 
     if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
         // Not supported algo, leave early
-        return None;
+        return Err(LineCheckError::ImproperlyFormatted);
     }
 
     let bytes = if let Some(bitlen) = line_info.algo_bit_len {
-        if bitlen % 8 != 0 {
-            // The given length is wrong
-            return None;
+        if algorithm != ALGORITHM_OPTIONS_BLAKE2B || bitlen % 8 != 0 {
+            // Either
+            //  the algo based line is provided with a bit length
+            //  with an algorithm that does not support it (only Blake2B does).
+            //
+            //  eg: MD5-128 (foo.txt) = fffffffff
+            //          ^ This is illegal
+            // OR
+            //  the given length is wrong because it's not a multiple of 8.
+            return Err(LineCheckError::ImproperlyFormatted);
         }
         Some(bitlen / 8)
     } else if algorithm == ALGORITHM_OPTIONS_BLAKE2B {
@@ -722,7 +729,7 @@ fn identify_algo_name_and_length(
         None
     };
 
-    Some((algorithm, bytes))
+    Ok((algorithm, bytes))
 }
 
 /// Given a filename and an algorithm, compute the digest and compare it with
@@ -773,8 +780,7 @@ fn process_algo_based_line(
     let filename_to_check = line_info.filename.as_slice();
 
     let (algo_name, algo_byte_len) =
-        identify_algo_name_and_length(line_info, cli_algo_name, last_algo)
-            .ok_or(LineCheckError::ImproperlyFormatted)?;
+        identify_algo_name_and_length(line_info, cli_algo_name, last_algo)?;
 
     // If the digest bitlen is known, we can check the format of the expected
     // checksum with it.

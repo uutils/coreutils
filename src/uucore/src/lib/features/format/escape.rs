@@ -100,43 +100,50 @@ fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
     char::from_u32(ret)
 }
 
-pub fn parse_escape_code(rest: &mut &[u8]) -> EscapedChar {
+/// Represents an invalid escape sequence.
+#[derive(Debug)]
+pub struct EscapeError {}
+
+/// Parse an escape sequence, like `\n` or `\xff`, etc.
+pub fn parse_escape_code(rest: &mut &[u8]) -> Result<EscapedChar, EscapeError> {
     if let [c, new_rest @ ..] = rest {
         // This is for the \NNN syntax for octal sequences.
         // Note that '0' is intentionally omitted because that
         // would be the \0NNN syntax.
         if let b'1'..=b'7' = c {
             if let Some(parsed) = parse_code(rest, Base::Oct, true) {
-                return EscapedChar::Byte(parsed);
+                return Ok(EscapedChar::Byte(parsed));
             }
         }
 
         *rest = new_rest;
         match c {
-            b'\\' => EscapedChar::Byte(b'\\'),
-            b'"' => EscapedChar::Byte(b'"'),
-            b'a' => EscapedChar::Byte(b'\x07'),
-            b'b' => EscapedChar::Byte(b'\x08'),
-            b'c' => EscapedChar::End,
-            b'e' => EscapedChar::Byte(b'\x1b'),
-            b'f' => EscapedChar::Byte(b'\x0c'),
-            b'n' => EscapedChar::Byte(b'\n'),
-            b'r' => EscapedChar::Byte(b'\r'),
-            b't' => EscapedChar::Byte(b'\t'),
-            b'v' => EscapedChar::Byte(b'\x0b'),
+            b'\\' => Ok(EscapedChar::Byte(b'\\')),
+            b'"' => Ok(EscapedChar::Byte(b'"')),
+            b'a' => Ok(EscapedChar::Byte(b'\x07')),
+            b'b' => Ok(EscapedChar::Byte(b'\x08')),
+            b'c' => Ok(EscapedChar::End),
+            b'e' => Ok(EscapedChar::Byte(b'\x1b')),
+            b'f' => Ok(EscapedChar::Byte(b'\x0c')),
+            b'n' => Ok(EscapedChar::Byte(b'\n')),
+            b'r' => Ok(EscapedChar::Byte(b'\r')),
+            b't' => Ok(EscapedChar::Byte(b'\t')),
+            b'v' => Ok(EscapedChar::Byte(b'\x0b')),
             b'x' => {
                 if let Some(c) = parse_code(rest, Base::Hex, false) {
-                    EscapedChar::Byte(c)
+                    Ok(EscapedChar::Byte(c))
                 } else {
-                    EscapedChar::Backslash(b'x')
+                    Err(EscapeError {})
                 }
             }
-            b'0' => EscapedChar::Byte(parse_code(rest, Base::Oct, false).unwrap_or(b'\0')),
-            b'u' => EscapedChar::Char(parse_unicode(rest, 4).unwrap_or('\0')),
-            b'U' => EscapedChar::Char(parse_unicode(rest, 8).unwrap_or('\0')),
-            c => EscapedChar::Backslash(*c),
+            b'0' => Ok(EscapedChar::Byte(
+                parse_code(rest, Base::Oct, false).unwrap_or(b'\0'),
+            )),
+            b'u' => Ok(EscapedChar::Char(parse_unicode(rest, 4).unwrap_or('\0'))),
+            b'U' => Ok(EscapedChar::Char(parse_unicode(rest, 8).unwrap_or('\0'))),
+            c => Ok(EscapedChar::Backslash(*c)),
         }
     } else {
-        EscapedChar::Byte(b'\\')
+        Ok(EscapedChar::Byte(b'\\'))
     }
 }
