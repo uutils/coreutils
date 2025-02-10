@@ -71,6 +71,9 @@ clap = { workspace = true }
 once_cell = { workspace = true }
 tempfile = { workspace = true }
 
+[build-dependencies]
+pkg-config = { workspace = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi-util = { workspace = true, optional = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
@@ -80,9 +83,6 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
   "Win32_System_RemoteDesktop",
   "Win32_System_WindowsProgramming",
 ] }
-
-[target.'cfg(target_os="linux")'.dependencies]
-libsystemd-sys = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true, optional = true }
@@ -130,4 +130,4 @@ version-cmp = []
 wide = []
 custom-tz-fmt = []
 tty = []
-uptime = ["libc", "windows-sys", "utmpx", "libsystemd-sys", "utmp-classic"]
+uptime = ["libc", "windows-sys", "utmpx", "utmp-classic"]

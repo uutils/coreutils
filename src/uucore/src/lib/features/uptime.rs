@@ -1,6 +1,18 @@
+// spell-checker:ignore gettime BOOTTIME clockid boottime formated nusers loadavg getloadavg
+
 use crate::error::{UResult, USimpleError};
 use chrono::Local;
 use libc::time_t;
+
+#[cfg(target_os = "linux")]
+extern "C" {
+    pub fn sd_booted() -> libc::c_int;
+    pub fn sd_get_sessions(sessions: *mut *mut *mut libc::c_char) -> libc::c_int;
+    pub fn sd_session_get_class(
+        session: *const libc::c_char,
+        class: *mut *mut libc::c_char,
+    ) -> libc::c_int;
+}
 
 pub fn get_formatted_time() -> String {
     Local::now().time().format("%H:%M:%S").to_string()
@@ -108,15 +120,13 @@ pub fn get_formated_uptime(boot_time: Option<time_t>) -> UResult<String> {
     }
 }
 
-/// Returns the number of logged users from systemd, and return `-1` if unavailable.
 #[cfg(target_os = "linux")]
 pub fn get_nusers_systemd() -> UResult<usize> {
+    use crate::libc::*;
+    use std::ffi::CStr;
+    use std::ptr;
+
     unsafe {
-        use crate::libc::free;
-        use libsystemd_sys::daemon::sd_booted;
-        use libsystemd_sys::login::{sd_get_sessions, sd_session_get_class};
-        use std::ffi::{c_char, c_void, CStr};
-        use std::ptr;
         // systemd
         if sd_booted() > 0 {
             let mut sessions_list: *mut *mut c_char = ptr::null_mut();

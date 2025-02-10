@@ -58,6 +58,10 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
+    - if: ${{ contains(matrix.job.os, 'ubuntu') }}
+      run: |
+        sudo apt-get update -y
+        sudo apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev
     - uses: dtolnay/rust-toolchain@nightly
     ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
     ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
@@ -112,6 +116,10 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
+    - if: ${{ contains(matrix.job.os, 'ubuntu') }}
+      run: |
+        sudo apt-get update -y
+        sudo apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
@@ -171,6 +179,10 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
+    - if: ${{ contains(matrix.job.os, 'ubuntu') }}
+      run: |
+        sudo apt-get update -y
+        sudo apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
@@ -264,7 +276,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
-    - if: ${{ contains(matrix.os, 'ubuntu') }}
+    - if: ${{ contains(matrix.job.os, 'ubuntu') }}
       run: |
         sudo apt-get update -y
         sudo apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev
@@ -324,7 +336,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
-    - if: ${{ contains(matrix.os, 'ubuntu') }}
+    - if: ${{ contains(matrix.job.os, 'ubuntu') }}
       run: |
         sudo apt-get update -y
         sudo apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev
@@ -357,7 +369,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
-    - if: ${{ contains(matrix.os, 'ubuntu') }}
+    - if: ${{ contains(matrix.job.os, 'ubuntu') }}
       run: |
         sudo apt-get update -y
         sudo apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev
@@ -519,7 +531,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
-    - if: ${{ contains(matrix.os, 'ubuntu') }}
+    - if: ${{ contains(matrix.job.os, 'ubuntu') }}
       run: |
         sudo apt-get update -y
         sudo apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev
@@ -625,6 +637,9 @@ jobs:
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
         if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
           printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\", \"CARGO_TERM_COLOR\"]\n" > Cross.toml
+          if [[ "${{ matrix.job.target }}" == *"linux"* ]]; then
+            printf "[target.${{ matrix.job.target }}]\npre-build = [\"apt-get update\", \"apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev\"]\n" >> Cross.toml
+          fi
         fi
         # * executable for `strip`?
         STRIP="strip"
@@ -820,6 +835,10 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
+    - if: ${{ contains(matrix.job.os, 'ubuntu') }}
+      run: |
+        sudo apt-get update -y
+        sudo apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.7
@@ -902,6 +921,10 @@ jobs:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
+    - if: ${{ contains(matrix.job.os, 'ubuntu') }}
+      run: |
+        sudo apt-get update -y
+        sudo apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
