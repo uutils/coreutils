@@ -49,10 +49,10 @@ fn replace_output_file_in_input_files(
                     if let Some(copy) = &copy {
                         *file = copy.clone().into_os_string();
                     } else {
-                        let (_file, copy_path) = tmp_dir.next_file()?;
-                        std::fs::copy(file_path, &copy_path)
-                            .map_err(|error| SortError::OpenTmpFileFailed { error })?;
-                        *file = copy_path.clone().into_os_string();
+                        let (mut temp_file, copy_path) = tmp_dir.next_file()?;
+                        let mut source_file = File::open(&file_path)?;
+                        std::io::copy(&mut source_file, &mut temp_file)?;
+                        *file = OsString::from(&copy_path);
                         copy = Some(copy_path);
                     }
                 }
@@ -73,75 +73,162 @@ pub fn merge(
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
     replace_output_file_in_input_files(files, output.as_output_name(), tmp_dir)?;
-    let files = files
-        .iter()
-        .map(|file| open(file).map(|file| PlainMergeInput { inner: file }));
     if settings.compress_prog.is_none() {
-        merge_with_file_limit::<_, _, WriteablePlainTmpFile>(files, settings, output, tmp_dir)
+        merge_with_retry::<WriteablePlainTmpFile>(files, settings, output, tmp_dir)
     } else {
-        merge_with_file_limit::<_, _, WriteableCompressedTmpFile>(files, settings, output, tmp_dir)
+        merge_with_retry::<WriteableCompressedTmpFile>(files, settings, output, tmp_dir)
     }
 }
 
-// Merge already sorted `MergeInput`s.
-pub fn merge_with_file_limit<
-    M: MergeInput + 'static,
-    F: ExactSizeIterator<Item = UResult<M>>,
-    Tmp: WriteableTmpFile + 'static,
->(
-    files: F,
+/// Merge logic to handle file-descriptor exhaustion.
+/// First, an optimal merge (i.e. no temp-file preallocation) is attempted. If this succeeds then
+/// we're all done. There exist GNU-compatibility tests that require that no temp-files
+/// be created if one is not required, so we have to make our first attempt without a pre-allocating
+/// a temp file.
+/// If we fail to merge (due to file-descriptor exhaustion) on our first attempt, then retry with a
+/// pre-allocated temp-file. This ensures that when we hit the file-descriptor exhaustion again we
+/// will have a output file to merge our already opened input files into, and we can continue
+/// to make progress.
+fn merge_with_retry<Tmp: WriteableTmpFile>(
+    files: &mut [OsString],
     settings: &GlobalSettings,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    if files.len() <= settings.merge_batch_size {
-        let merger = merge_without_limit(files, settings);
-        merger?.write_all(settings, output)
-    } else {
-        let mut temporary_files = vec![];
-        let mut batch = vec![];
-        for file in files {
-            batch.push(file);
-            if batch.len() >= settings.merge_batch_size {
-                assert_eq!(batch.len(), settings.merge_batch_size);
-                let merger = merge_without_limit(batch.into_iter(), settings)?;
-                batch = vec![];
+    match merge_with_file_limit::<Tmp>(
+        files.iter().map(|file| PlainInputFile { path: file }),
+        settings,
+        &output,
+        tmp_dir,
+        None,
+    ) {
+        Ok(()) => Ok(()),
+        Err(_err) => {
+            // Pre-allocate the temp file that we can use for partial merges.
+            let tmp_file_option = Some(Tmp::create(
+                tmp_dir.next_file()?,
+                settings.compress_prog.as_deref(),
+            )?);
+            merge_with_file_limit::<Tmp>(
+                files.iter().map(|file| PlainInputFile { path: file }),
+                settings,
+                &output,
+                tmp_dir,
+                tmp_file_option,
+            )
+        }
+    }
+}
 
-                let mut tmp_file =
-                    Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
+/// Open and merge the input files.
+/// If possible, merge to the final output file.
+/// Reasons not to merge to the final-output file...
+/// 1 - if the number of input files exceeds the batch-size.
+/// 2 - if we run out of file-descriptors..
+/// In either case that we don't manage to merge to the final output file, collect a vector
+/// of the intermediate partial-merges (i.e. the temp files) and tail-call this function again.
+/// Eventually the initial input set will be reduced to a set small enough that we can finally
+/// merge to the target output file.
+pub fn merge_with_file_limit<Tmp: WriteableTmpFile>(
+    input_files: impl ExactSizeIterator<Item = impl ClosedFile>,
+    settings: &GlobalSettings,
+    output: &Output,
+    tmp_dir: &mut TmpDirWrapper,
+    mut tmp_file_option: Option<Tmp>,
+) -> UResult<()> {
+    // Code assumes settings.merge_batch_size >= 2. Assert it!
+    assert!(settings.merge_batch_size >= 2);
+    // Merge down all the input files into as few temporary files as we can (ideally 0
+    // if possible - i.e. merge directly to output).
+    let mut output_temporary_files = vec![];
+    let mut opened_files = vec![];
+    for input_file in input_files {
+        if opened_files.len() >= settings.merge_batch_size {
+            // Check that we've not somehow accidentally violated our merge-size requirement.
+            assert_eq!(opened_files.len(), settings.merge_batch_size);
+            // We have a full batch. Merge them.
+            let merger = merge_without_limit(opened_files.into_iter(), settings)?;
+            // If we haven't already got a temp-file to merge into, make one now...
+            let mut tmp_file = match tmp_file_option {
+                Some(t) => t,
+                None => Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?,
+            };
+            merger.write_all_to(settings, tmp_file.as_write())?;
+            output_temporary_files.push(tmp_file.finished_writing()?);
+            tmp_file_option = Some(Tmp::create(
+                tmp_dir.next_file()?,
+                settings.compress_prog.as_deref(),
+            )?);
+            opened_files = vec![];
+        }
+
+        // Make a backup in case our first attempt to open fails (due to file-descriptor exhaustion).
+        let input_file_backup = input_file.clone();
+
+        match input_file.open() {
+            Ok(opened_file) => opened_files.push(opened_file),
+            Err(err) => {
+                // We've run out of descriptors. If we've only managed to open one file then give up,
+                // otherwise merge what we've got.
+                if opened_files.len() < 2 {
+                    return Err(err);
+                }
+                let merger = merge_without_limit(opened_files.into_iter(), settings)?;
+                // If we haven't already got a temp-file to merge into, make one now...
+                let mut tmp_file = match tmp_file_option {
+                    Some(t) => t,
+                    None => Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?,
+                };
                 merger.write_all_to(settings, tmp_file.as_write())?;
-                temporary_files.push(tmp_file.finished_writing()?);
+                output_temporary_files.push(tmp_file.finished_writing()?);
+                tmp_file_option = Some(Tmp::create(
+                    tmp_dir.next_file()?,
+                    settings.compress_prog.as_deref(),
+                )?);
+
+                // Now retry the open. If we fail this time, give up completely and return error.
+                opened_files = vec![input_file_backup.open()?];
             }
         }
-        // Merge any remaining files that didn't get merged in a full batch above.
-        if !batch.is_empty() {
-            assert!(batch.len() < settings.merge_batch_size);
-            let merger = merge_without_limit(batch.into_iter(), settings)?;
-
-            let mut tmp_file =
-                Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-            merger.write_all_to(settings, tmp_file.as_write())?;
-            temporary_files.push(tmp_file.finished_writing()?);
+    }
+    // If we've opened some files but not yet merged them...
+    if !opened_files.is_empty() {
+        let merger = merge_without_limit(opened_files.into_iter(), settings)?;
+        // If we have no output temp files at this point, we can just merge to the final output and be done.
+        if output_temporary_files.is_empty() {
+            return merger.write_all_to(settings, &mut output.writer());
         }
-        merge_with_file_limit::<_, _, Tmp>(
-            temporary_files
-                .into_iter()
-                .map(Box::new(|c: Tmp::Closed| c.reopen())
-                    as Box<
-                        dyn FnMut(Tmp::Closed) -> UResult<<Tmp::Closed as ClosedTmpFile>::Reopened>,
-                    >),
+        // If we get to here then we have at least one other open temp file, need to do another round of merges.
+        // If we haven't already got a temp-file to merge into, make one now...
+        let mut tmp_file = match tmp_file_option {
+            Some(t) => t,
+            None => Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?,
+        };
+        merger.write_all_to(settings, tmp_file.as_write())?;
+        output_temporary_files.push(tmp_file.finished_writing()?);
+        tmp_file_option = Some(Tmp::create(
+            tmp_dir.next_file()?,
+            settings.compress_prog.as_deref(),
+        )?);
+    }
+    if output_temporary_files.is_empty() {
+        // If there are no temporary files we must be done.
+        Ok(())
+    } else {
+        merge_with_file_limit::<Tmp>(
+            output_temporary_files.into_iter(),
             settings,
             output,
             tmp_dir,
+            tmp_file_option,
         )
     }
 }
 
-/// Merge files without limiting how many files are concurrently open.
-///
-/// It is the responsibility of the caller to ensure that `files` yields only
-/// as many files as we are allowed to open concurrently.
-fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
+/// Merge a batch of files. Files are already opened at this point, all considerations of
+/// batch sizes and dealing with potential file-descriptor exhaustion have already been taken
+/// of.
+fn merge_without_limit<F: Iterator<Item = impl MergeInput>>(
     files: F,
     settings: &GlobalSettings,
 ) -> UResult<FileMerger> {
@@ -152,7 +239,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
         let (sender, receiver) = sync_channel(2);
         loaded_receivers.push(receiver);
         reader_files.push(Some(ReaderFile {
-            file: file?,
+            file,
             sender,
             carry_over: vec![],
         }));
@@ -204,6 +291,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
         reader_join_handle,
     })
 }
+
 /// The struct on the reader thread representing an input file
 struct ReaderFile<M: MergeInput> {
     file: M,
@@ -271,12 +359,6 @@ struct FileMerger<'a> {
 }
 
 impl FileMerger<'_> {
-    /// Write the merged contents to the output file.
-    fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
-        let mut out = output.into_write();
-        self.write_all_to(settings, &mut out)
-    }
-
     fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
         while self.write_next(settings, out) {}
         drop(self.request_sender);
@@ -380,21 +462,23 @@ fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
 
 /// A temporary file that can be written to.
 pub trait WriteableTmpFile: Sized {
-    type Closed: ClosedTmpFile;
+    type Closed: ClosedFile;
     type InnerWrite: Write;
     fn create(file: (File, PathBuf), compress_prog: Option<&str>) -> UResult<Self>;
     /// Closes the temporary file.
     fn finished_writing(self) -> UResult<Self::Closed>;
     fn as_write(&mut self) -> &mut Self::InnerWrite;
 }
-/// A temporary file that is (temporarily) closed, but can be reopened.
-pub trait ClosedTmpFile {
-    type Reopened: MergeInput;
-    /// Reopens the temporary file.
-    fn reopen(self) -> UResult<Self::Reopened>;
+
+/// A file that is (temporarily) closed, but can be reopened.
+pub trait ClosedFile: Clone {
+    type Opened: MergeInput;
+    /// Opens temporary file.
+    fn open(self) -> UResult<Self::Opened>;
 }
+
 /// A pre-sorted input for merging.
-pub trait MergeInput: Send {
+pub trait MergeInput: Send + 'static {
     type InnerRead: Read;
     /// Cleans this `MergeInput` up.
     /// Implementations may delete the backing file.
@@ -406,6 +490,7 @@ pub struct WriteablePlainTmpFile {
     path: PathBuf,
     file: BufWriter<File>,
 }
+#[derive(Clone)]
 pub struct ClosedPlainTmpFile {
     path: PathBuf,
 }
@@ -432,9 +517,9 @@ impl WriteableTmpFile for WriteablePlainTmpFile {
         &mut self.file
     }
 }
-impl ClosedTmpFile for ClosedPlainTmpFile {
-    type Reopened = PlainTmpMergeInput;
-    fn reopen(self) -> UResult<Self::Reopened> {
+impl ClosedFile for ClosedPlainTmpFile {
+    type Opened = PlainTmpMergeInput;
+    fn open(self) -> UResult<Self::Opened> {
         Ok(PlainTmpMergeInput {
             file: File::open(&self.path).map_err(|error| SortError::OpenTmpFileFailed { error })?,
             path: self.path,
@@ -463,6 +548,7 @@ pub struct WriteableCompressedTmpFile {
     child: Child,
     child_stdin: BufWriter<ChildStdin>,
 }
+#[derive(Clone)]
 pub struct ClosedCompressedTmpFile {
     path: PathBuf,
     compress_prog: String,
@@ -508,10 +594,10 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
         &mut self.child_stdin
     }
 }
-impl ClosedTmpFile for ClosedCompressedTmpFile {
-    type Reopened = CompressedTmpMergeInput;
+impl ClosedFile for ClosedCompressedTmpFile {
+    type Opened = CompressedTmpMergeInput;
 
-    fn reopen(self) -> UResult<Self::Reopened> {
+    fn open(self) -> UResult<Self::Opened> {
         let mut command = Command::new(&self.compress_prog);
         let file = File::open(&self.path).unwrap();
         command.stdin(file).stdout(Stdio::piped()).arg("-d");
@@ -544,11 +630,26 @@ impl MergeInput for CompressedTmpMergeInput {
     }
 }
 
-pub struct PlainMergeInput<R: Read + Send> {
-    inner: R,
+#[derive(Clone)]
+pub struct PlainInputFile<'a> {
+    path: &'a OsString,
 }
-impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
-    type InnerRead = R;
+
+impl ClosedFile for PlainInputFile<'_> {
+    type Opened = PlainMergeInput;
+    fn open(self) -> UResult<Self::Opened> {
+        Ok(PlainMergeInput {
+            inner: open(self.path)?,
+        })
+    }
+}
+
+pub struct PlainMergeInput {
+    inner: Box<dyn Read + Send>,
+}
+
+impl MergeInput for PlainMergeInput {
+    type InnerRead = Box<dyn Read + Send>;
     fn finished_reading(self) -> UResult<()> {
         Ok(())
     }
