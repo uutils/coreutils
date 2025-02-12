@@ -4,10 +4,12 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore mydir
-use crate::common::util::TestScenario;
 use filetime::FileTime;
 use rstest::rstest;
 use std::io::Write;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::{at_and_ucmd, util_name};
 
 #[test]
 fn test_mv_invalid_arg() {
@@ -1634,7 +1636,7 @@ fn test_mv_dir_into_path_slash() {
 fn test_acl() {
     use std::process::Command;
 
-    use crate::common::util::compare_xattrs;
+    use uutests::util::compare_xattrs;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1685,10 +1687,11 @@ fn test_acl() {
 
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
-    use crate::common::util::TestScenario;
     use std::fs::{read_to_string, set_permissions, write};
     use std::os::unix::fs::{symlink, PermissionsExt};
     use tempfile::TempDir;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
 
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[test]
@@ -1742,6 +1745,7 @@ mod inter_partition_copying {
     // that it would output the proper error message.
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
+        use uutests::util::TestScenario;
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
 

@@ -3,7 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore regfile
-use crate::common::util::{get_root_path, TestScenario};
+use uutests::new_ucmd;
+use uutests::path_concat;
+use uutests::util::{get_root_path, TestScenario};
+use uutests::{at_and_ucmd, util_name};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 

@@ -3,9 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use crate::common::util::{AtPath, TestScenario, UCommand};
 use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use uutests::at_and_ucmd;
+use uutests::util::{AtPath, TestScenario, UCommand};
+
+use uutests::new_ucmd;
+use uutests::util_name;
 
 static TEST_FILE: &str = "file";
 static REFERENCE_FILE: &str = "reference";

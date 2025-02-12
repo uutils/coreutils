@@ -4,7 +4,12 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG getfattr
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::path_concat;
+use uutests::util::TestScenario;
+use uutests::util_name;
+
 #[cfg(not(windows))]
 use std::fs::set_permissions;
 
@@ -34,7 +39,7 @@ use std::time::Duration;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(feature = "truncate")]
-use crate::common::util::PATH;
+use uutests::util::PATH;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
@@ -60,7 +65,7 @@ static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
     unix,
     not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
 ))]
-use crate::common::util::compare_xattrs;
+use uutests::util::compare_xattrs;
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
 #[cfg(all(not(windows), not(target_os = "freebsd")))]
@@ -2285,7 +2290,7 @@ fn test_cp_target_file_dev_null() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 fn test_cp_one_file_system() {
-    use crate::common::util::AtPath;
+    use uutests::util::AtPath;
     use walkdir::WalkDir;
 
     let mut scene = TestScenario::new(util_name!());
@@ -4579,7 +4584,8 @@ fn test_cp_no_dereference_attributes_only_with_symlink() {
 /// contains the test for cp when the source and destination points to the same file
 mod same_file {
 
-    use crate::common::util::TestScenario;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
 
     const FILE_NAME: &str = "foo";
     const SYMLINK_NAME: &str = "symlink";
@@ -5504,8 +5510,9 @@ mod same_file {
 #[cfg(all(unix, not(target_os = "android")))]
 mod link_deref {
 
-    use crate::common::util::{AtPath, TestScenario};
     use std::os::unix::fs::MetadataExt;
+    use uutests::util::{AtPath, TestScenario};
+    use uutests::util_name;
 
     const FILE: &str = "file";
     const FILE_LINK: &str = "file_link";
@@ -5949,8 +5956,8 @@ fn test_cp_no_file() {
     not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
 ))]
 fn test_cp_preserve_xattr_readonly_source() {
-    use crate::common::util::compare_xattrs;
     use std::process::Command;
+    use uutests::util::compare_xattrs;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

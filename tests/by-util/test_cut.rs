@@ -5,7 +5,10 @@
 
 // spell-checker:ignore defg
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 static INPUT: &str = "lists.txt";
 
