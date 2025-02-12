@@ -3,11 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use console::Style;
 use libc::STDIN_FILENO;
 use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
+use pretty_print::{
+    print_diff, print_end_with_status, print_or_empty, print_section, print_with_style,
+};
 use rand::prelude::IndexedRandom;
 use rand::Rng;
-use similar::TextDiff;
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::File;
@@ -17,6 +20,8 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicBool, Once};
 use std::{io, thread};
+
+pub mod pretty_print;
 
 /// Represents the result of running a command, including its standard output,
 /// standard error, and exit code.
@@ -315,8 +320,8 @@ pub fn compare_result(
     gnu_result: &CommandResult,
     fail_on_stderr_diff: bool,
 ) {
-    println!("Test Type: {}", test_type);
-    println!("Input: {}", input);
+    print_section(format!("Compare result for: {} {}", test_type, input));
+
     if let Some(pipe) = pipe_input {
         println!("Pipe: {}", pipe);
     }
@@ -326,48 +331,57 @@ pub fn compare_result(
 
     if rust_result.stdout.trim() != gnu_result.stdout.trim() {
         discrepancies.push("stdout differs");
-        println!("Rust stdout: {}", rust_result.stdout);
-        println!("GNU stdout: {}", gnu_result.stdout);
+        println!("Rust stdout:",);
+        print_or_empty(rust_result.stdout.as_str());
+        println!("GNU stdout:",);
+        print_or_empty(gnu_result.stdout.as_ref());
         print_diff(&rust_result.stdout, &gnu_result.stdout);
         should_panic = true;
     }
+
     if rust_result.stderr.trim() != gnu_result.stderr.trim() {
         discrepancies.push("stderr differs");
-        println!("Rust stderr: {}", rust_result.stderr);
-        println!("GNU stderr: {}", gnu_result.stderr);
+        println!("Rust stderr:",);
+        print_or_empty(rust_result.stderr.as_str());
+        println!("GNU stderr:",);
+        print_or_empty(gnu_result.stderr.as_str());
         print_diff(&rust_result.stderr, &gnu_result.stderr);
         if fail_on_stderr_diff {
             should_panic = true;
         }
     }
+
     if rust_result.exit_code != gnu_result.exit_code {
         discrepancies.push("exit code differs");
-        println!("Rust exit code: {}", rust_result.exit_code);
-        println!("GNU exit code: {}", gnu_result.exit_code);
+        println!(
+            "Different exit code: (Rust: {}, GNU: {})",
+            rust_result.exit_code, gnu_result.exit_code
+        );
         should_panic = true;
     }
 
     if discrepancies.is_empty() {
-        println!("All outputs and exit codes matched.");
+        print_end_with_status("Same behavior", true);
     } else {
-        println!("Discrepancy detected: {}", discrepancies.join(", "));
+        print_with_style(
+            format!("Discrepancies detected: {}", discrepancies.join(", ")),
+            Style::new().red(),
+        );
         if should_panic {
-            panic!("Test failed for {}: {}", test_type, input);
+            print_end_with_status(
+                format!("Test failed and will panic for: {} {}", test_type, input),
+                false,
+            );
+            panic!("Test failed for: {} {}", test_type, input);
         } else {
-            println!(
-                "Test completed with discrepancies for {}: {}",
-                test_type, input
+            print_end_with_status(
+                format!(
+                    "Test completed with discrepancies for: {} {}",
+                    test_type, input
+                ),
+                false,
             );
         }
-    }
-}
-
-/// When we have different outputs, print the diff
-fn print_diff(rust_output: &str, gnu_output: &str) {
-    println!("Diff=");
-    let diff = TextDiff::from_lines(rust_output, gnu_output);
-    for change in diff.iter_all_changes() {
-        print!("{}{}", change.tag(), change);
     }
     println!();
 }
@@ -413,4 +427,11 @@ pub fn generate_random_file() -> Result<String, std::io::Error> {
     file.write_all(content.as_bytes())?;
 
     Ok(file_path.to_str().unwrap().to_string())
+}
+
+pub fn replace_fuzz_binary_name(cmd: &str, result: &mut CommandResult) {
+    let fuzz_bin_name = format!("fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_{cmd}");
+
+    result.stdout = result.stdout.replace(&fuzz_bin_name, cmd);
+    result.stderr = result.stderr.replace(&fuzz_bin_name, cmd);
 }
