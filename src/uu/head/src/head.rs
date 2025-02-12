@@ -11,7 +11,7 @@ use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{strip_errno, FromIo, UError, UResult};
 use uucore::line_ending::LineEnding;
 use uucore::lines::lines;
 use uucore::{format_usage, help_about, help_usage, show};
@@ -56,6 +56,9 @@ enum HeadError {
 
     #[error("{0}")]
     MatchOption(String),
+
+    #[error("error writing 'standard output': {}", strip_errno(.err))]
+    WriteError { err: io::Error },
 }
 
 impl UError for HeadError {
@@ -543,11 +546,18 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             } else {
                 file
             };
-            return Err(HeadError::Io {
-                name: name.to_string(),
-                err: e,
+            match e.kind() {
+                std::io::ErrorKind::StorageFull => {
+                    return Err(HeadError::WriteError { err: e }.into())
+                }
+                _ => {
+                    return Err(HeadError::Io {
+                        name: name.to_string(),
+                        err: e,
+                    }
+                    .into())
+                }
             }
-            .into());
         }
         first = false;
     }
