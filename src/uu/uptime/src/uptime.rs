@@ -8,8 +8,10 @@
 use chrono::{Local, TimeZone, Utc};
 use clap::ArgMatches;
 use std::ffi::OsString;
+#[cfg(not(windows))]
 use std::fs;
 use std::io;
+#[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::error::set_exit_code;
@@ -27,7 +29,7 @@ use uucore::{format_usage, help_about, help_usage};
 
 #[cfg(target_os = "openbsd")]
 use utmp_classic::{parse_from_path, UtmpEntry};
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(windows, target_os = "openbsd")))]
 use uucore::utmpx::*;
 
 const ABOUT: &str = help_about!("uptime.md");
@@ -42,7 +44,7 @@ use uucore::libc::getloadavg;
 
 #[cfg(windows)]
 extern "C" {
-    fn GetTickCount() -> uucore::libc::uint32_t;
+    fn GetTickCount() -> u32;
 }
 
 #[derive(Debug, Error)]
@@ -203,6 +205,13 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     Ok(())
 }
 
+// TODO implement function
+#[cfg(not(unix))]
+fn uptime_with_file(_file_path: &OsString) -> UResult<()> {
+    show_error!("not implemented yet");
+    Ok(())
+}
+
 /// Default uptime behaviour i.e. when no file argument is given.
 fn default_uptime(matches: &ArgMatches) -> UResult<()> {
     #[cfg(target_os = "openbsd")]
@@ -345,7 +354,7 @@ fn print_time() {
     print!(" {}  ", local_time.format("%H:%M:%S"));
 }
 
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(windows, target_os = "openbsd")))]
 fn get_uptime_from_boot_time(boot_time: time_t) -> i64 {
     let now = Local::now().timestamp();
     #[cfg(target_pointer_width = "64")]
