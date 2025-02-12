@@ -66,6 +66,8 @@ pub use crate::features::ringbuffer;
 pub use crate::features::sum;
 #[cfg(feature = "update-control")]
 pub use crate::features::update_control;
+#[cfg(feature = "uptime")]
+pub use crate::features::uptime;
 #[cfg(feature = "version-cmp")]
 pub use crate::features::version_cmp;
 

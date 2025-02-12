@@ -61,6 +61,10 @@ jobs:
         TEST_SUMMARY_FILE='gnu-result.json'
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
         outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
+    - name: Install deps
+      run: |
+        sudo apt-get update -y
+        sudo apt-get -yq --no-install-suggests --no-install-recommends install libsystemd-dev
     - name: Checkout code (uutil)
       uses: actions/checkout@v4
       with:
