@@ -7,7 +7,7 @@
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 use thiserror::Error;
 use uucore::display::Quotable;
@@ -239,10 +239,7 @@ impl HeadOptions {
     }
 }
 
-fn read_n_bytes<R>(input: R, n: u64) -> std::io::Result<()>
-where
-    R: Read,
-{
+fn read_n_bytes(input: impl Read, n: u64) -> std::io::Result<()> {
     // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
 
@@ -287,48 +284,22 @@ fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> 
     }
 }
 
-/// Print to stdout all but the last `n` bytes from the given reader.
-fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::Result<()> {
-    if n == 0 {
-        //prints everything
-        return read_n_bytes(input, u64::MAX);
-    }
-
+fn read_but_last_n_bytes(input: impl std::io::BufRead, n: u64) -> std::io::Result<()> {
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
         let stdout = std::io::stdout();
-        let mut stdout = stdout.lock();
-
-        let mut ring_buffer = Vec::new();
-
-        let mut buffer = [0u8; BUF_SIZE];
-        let mut total_read = 0;
-
-        loop {
-            let read = match input.read(&mut buffer) {
-                Ok(0) => break,
-                Ok(read) => read,
-                Err(e) => match e.kind() {
-                    ErrorKind::Interrupted => continue,
-                    _ => return Err(e),
-                },
-            };
-
-            total_read += read;
-
-            if total_read <= n {
-                // Fill the ring buffer without exceeding n bytes
-                let overflow = n - total_read;
-                ring_buffer.extend_from_slice(&buffer[..read - overflow]);
-            } else {
-                // Write the ring buffer and the part of the buffer that exceeds n
-                stdout.write_all(&ring_buffer)?;
-                stdout.write_all(&buffer[..read - n + ring_buffer.len()])?;
-                ring_buffer.clear();
-                ring_buffer.extend_from_slice(&buffer[read - n + ring_buffer.len()..read]);
-            }
+        let stdout = stdout.lock();
+        // Even though stdout is buffered, it will flush on each newline in the
+        // input stream. This can be costly, so add an extra layer of buffering
+        // over the top. This gives a significant speedup (approx 4x).
+        let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
+        for byte in take_all_but(input.bytes(), n) {
+            writer.write_all(&[byte?])?;
         }
+        // Make sure we finish writing everything to the target before
+        // exiting. Otherwise, when Rust is implicitly flushing, any
+        // error will be silently ignored.
+        writer.flush()?;
     }
-
     Ok(())
 }
 
@@ -343,6 +314,10 @@ fn read_but_last_n_lines(
         for bytes in take_all_but(lines(input, separator), n) {
             stdout.write_all(&bytes?)?;
         }
+        // Make sure we finish writing everything to the target before
+        // exiting. Otherwise, when Rust is implicitly flushing, any
+        // error will be silently ignored.
+        stdout.flush()?;
     }
     Ok(())
 }
@@ -440,8 +415,7 @@ fn head_backwards_without_seek_file(
     input: &mut std::fs::File,
     options: &HeadOptions,
 ) -> std::io::Result<()> {
-    let reader = &mut std::io::BufReader::with_capacity(BUF_SIZE, &*input);
-
+    let reader = std::io::BufReader::with_capacity(BUF_SIZE, &*input);
     match options.mode {
         Mode::AllButLastBytes(n) => read_but_last_n_bytes(reader, n)?,
         Mode::AllButLastLines(n) => read_but_last_n_lines(reader, n, options.line_ending.into())?,
