@@ -1,3 +1,4 @@
+# spell-checker:ignore bintools gnum gperf ldflags libclang nixpkgs numtide pkgs texinfo
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
