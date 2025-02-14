@@ -13,6 +13,7 @@ pub use crate::features::entries;
 use crate::show_error;
 use clap::{Arg, ArgMatches, Command};
 use libc::{gid_t, uid_t};
+use options::traverse;
 use walkdir::WalkDir;
 
 use std::io::Error as IOError;
@@ -33,6 +34,7 @@ pub enum VerbosityLevel {
     Verbose,
     Normal,
 }
+
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Verbosity {
     pub groups_only: bool,
@@ -248,6 +250,14 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     false
 }
 
+pub fn get_metadata(file: &Path, follow: bool) -> Result<Metadata, std::io::Error> {
+    if follow {
+        file.metadata()
+    } else {
+        file.symlink_metadata()
+    }
+}
+
 impl ChownExecutor {
     pub fn exec(&self) -> UResult<()> {
         let mut ret = 0;
@@ -263,18 +273,15 @@ impl ChownExecutor {
     #[allow(clippy::cognitive_complexity)]
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let path = root.as_ref();
-        let meta = match self.obtain_meta(path, self.dereference) {
-            Some(m) => m,
-            _ => {
-                if self.verbosity.level == VerbosityLevel::Verbose {
-                    println!(
-                        "failed to change ownership of {} to {}",
-                        path.quote(),
-                        self.raw_owner
-                    );
-                }
-                return 1;
+        let Some(meta) = self.obtain_meta(path, self.dereference) else {
+            if self.verbosity.level == VerbosityLevel::Verbose {
+                println!(
+                    "failed to change ownership of {} to {}",
+                    path.quote(),
+                    self.raw_owner
+                );
             }
+            return 1;
         };
 
         if self.recursive
@@ -360,17 +367,15 @@ impl ChownExecutor {
                 Ok(entry) => entry,
             };
             let path = entry.path();
-            let meta = match self.obtain_meta(path, self.dereference) {
-                Some(m) => m,
-                _ => {
-                    ret = 1;
-                    if entry.file_type().is_dir() {
-                        // Instruct walkdir to skip this directory to avoid getting another error
-                        // when walkdir tries to query the children of this directory.
-                        iterator.skip_current_dir();
-                    }
-                    continue;
+
+            let Some(meta) = self.obtain_meta(path, self.dereference) else {
+                ret = 1;
+                if entry.file_type().is_dir() {
+                    // Instruct walkdir to skip this directory to avoid getting another error
+                    // when walkdir tries to query the children of this directory.
+                    iterator.skip_current_dir();
                 }
+                continue;
             };
 
             if self.preserve_root && is_root(path, self.traverse_symlinks == TraverseSymlinks::All)
@@ -415,26 +420,18 @@ impl ChownExecutor {
 
     fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
         let path = path.as_ref();
-        let meta = if follow {
-            path.metadata()
-        } else {
-            path.symlink_metadata()
-        };
-        match meta {
-            Err(e) => {
-                match self.verbosity.level {
-                    VerbosityLevel::Silent => (),
-                    _ => show_error!(
+        get_metadata(path, follow)
+            .inspect_err(|e| {
+                if self.verbosity.level != VerbosityLevel::Silent {
+                    show_error!(
                         "cannot {} {}: {}",
                         if follow { "dereference" } else { "access" },
                         path.quote(),
-                        strip_errno(&e)
-                    ),
+                        strip_errno(e)
+                    );
                 }
-                None
-            }
-            Ok(meta) => Some(meta),
-        }
+            })
+            .ok()
     }
 
     #[inline]
@@ -449,29 +446,21 @@ impl ChownExecutor {
 
     fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) {
         if self.verbosity.level == VerbosityLevel::Verbose {
-            match (self.dest_uid, self.dest_gid, gid) {
-                (Some(_), Some(_), Some(gid)) => {
-                    println!(
-                        "ownership of {} retained as {}:{}",
-                        path.quote(),
-                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                    );
-                }
+            let ownership = match (self.dest_uid, self.dest_gid, gid) {
+                (Some(_), Some(_), Some(gid)) => format!(
+                    "{}:{}",
+                    entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                    entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
+                ),
                 (None, Some(_), Some(gid)) => {
-                    println!(
-                        "ownership of {} retained as {}",
-                        path.quote(),
-                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                    );
+                    entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
                 }
-                (_, _, _) => {
-                    println!(
-                        "ownership of {} retained as {}",
-                        path.quote(),
-                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                    );
-                }
+                _ => entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+            };
+            if self.verbosity.groups_only {
+                println!("group of {} retained as {}", path.quote(), ownership);
+            } else {
+                println!("ownership of {} retained as {}", path.quote(), ownership);
             }
         }
     }
@@ -513,6 +502,45 @@ pub struct GidUidOwnerFilter {
     pub filter: IfFrom,
 }
 type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
+
+/// Determines symbolic link traversal and recursion settings based on flags.
+/// Returns the updated `dereference` and `traverse_symlinks` values.
+pub fn configure_symlink_and_recursion(
+    matches: &ArgMatches,
+) -> Result<(bool, bool, TraverseSymlinks), Box<dyn crate::error::UError>> {
+    let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
+        Some(true) // Follow symlinks
+    } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
+        Some(false) // Do not follow symlinks
+    } else {
+        None // Default behavior
+    };
+
+    let mut traverse_symlinks = if matches.get_flag("L") {
+        TraverseSymlinks::All
+    } else if matches.get_flag("H") {
+        TraverseSymlinks::First
+    } else {
+        TraverseSymlinks::None
+    };
+
+    let recursive = matches.get_flag(options::RECURSIVE);
+    if recursive {
+        if traverse_symlinks == TraverseSymlinks::None {
+            if dereference == Some(true) {
+                return Err(USimpleError::new(
+                    1,
+                    "-R --dereference requires -H or -L".to_string(),
+                ));
+            }
+            dereference = Some(false);
+        }
+    } else {
+        traverse_symlinks = TraverseSymlinks::None;
+    }
+
+    Ok((recursive, dereference.unwrap_or(true), traverse_symlinks))
+}
 
 /// Base implementation for `chgrp` and `chown`.
 ///
@@ -569,34 +597,7 @@ pub fn chown_base(
         .unwrap_or_default();
 
     let preserve_root = matches.get_flag(options::preserve_root::PRESERVE);
-
-    let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
-        Some(true)
-    } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
-        Some(false)
-    } else {
-        None
-    };
-
-    let mut traverse_symlinks = if matches.get_flag(options::traverse::TRAVERSE) {
-        TraverseSymlinks::First
-    } else if matches.get_flag(options::traverse::EVERY) {
-        TraverseSymlinks::All
-    } else {
-        TraverseSymlinks::None
-    };
-
-    let recursive = matches.get_flag(options::RECURSIVE);
-    if recursive {
-        if traverse_symlinks == TraverseSymlinks::None {
-            if dereference == Some(true) {
-                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
-            }
-            dereference = Some(false);
-        }
-    } else {
-        traverse_symlinks = TraverseSymlinks::None;
-    }
+    let (recursive, dereference, traverse_symlinks) = configure_symlink_and_recursion(&matches)?;
 
     let verbosity_level = if matches.get_flag(options::verbosity::CHANGES) {
         VerbosityLevel::Changes
@@ -626,12 +627,47 @@ pub fn chown_base(
             level: verbosity_level,
         },
         recursive,
-        dereference: dereference.unwrap_or(true),
+        dereference,
         preserve_root,
         files,
         filter,
     };
     executor.exec()
+}
+
+pub fn common_args() -> Vec<Arg> {
+    vec![
+        Arg::new(traverse::TRAVERSE)
+            .short(traverse::TRAVERSE.chars().next().unwrap())
+            .help("if a command line argument is a symbolic link to a directory, traverse it")
+            .overrides_with_all([traverse::EVERY, traverse::NO_TRAVERSE])
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(traverse::EVERY)
+            .short(traverse::EVERY.chars().next().unwrap())
+            .help("traverse every symbolic link to a directory encountered")
+            .overrides_with_all([traverse::TRAVERSE, traverse::NO_TRAVERSE])
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(traverse::NO_TRAVERSE)
+            .short(traverse::NO_TRAVERSE.chars().next().unwrap())
+            .help("do not traverse any symbolic links (default)")
+            .overrides_with_all([traverse::TRAVERSE, traverse::EVERY])
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(options::dereference::DEREFERENCE)
+            .long(options::dereference::DEREFERENCE)
+            .help(
+                "affect the referent of each symbolic link (this is the default), \
+    rather than the symbolic link itself",
+            )
+            .action(clap::ArgAction::SetTrue),
+        Arg::new(options::dereference::NO_DEREFERENCE)
+            .short('h')
+            .long(options::dereference::NO_DEREFERENCE)
+            .help(
+                "affect symbolic links instead of any referenced file \
+        (useful only on systems that can change the ownership of a symlink)",
+            )
+            .action(clap::ArgAction::SetTrue),
+    ]
 }
 
 #[cfg(test)]

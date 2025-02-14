@@ -15,4 +15,4 @@ Run the tests:
 cargo test --features "dircolors" --no-default-features
 ```
 
-Edit `/PATH_TO_COREUTILS/src/uu/dircolors/src/colors.rs` until the tests pass.
+Edit `/PATH_TO_COREUTILS/src/uu/dircolors/src/dircolors.rs` until the tests pass.

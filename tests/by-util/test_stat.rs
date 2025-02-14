@@ -184,7 +184,72 @@ fn test_char() {
     ];
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    eprintln!("{expected_stdout}");
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_printf_mtime_precision() {
+    // TODO Higher precision numbers (`%.3Y`, `%.4Y`, etc.) are
+    // formatted correctly, but we are not precise enough when we do
+    // some `mtime` computations, so we get `.7640` instead of
+    // `.7639`. This can be fixed by being more careful when
+    // transforming the number from `Metadata::mtime_nsec()` to the form
+    // used in rendering.
+    let args = ["-c", "%.0Y %.1Y %.2Y", "/dev/pts/ptmx"];
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    eprintln!("{expected_stdout}");
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_timestamp_format() {
+    let ts = TestScenario::new(util_name!());
+
+    // Create a file with a specific timestamp for testing
+    ts.ccmd("touch")
+        .args(&["-d", "1970-01-01 18:43:33.023456789", "k"])
+        .succeeds()
+        .no_stderr();
+
+    let test_cases = vec![
+        // Basic timestamp formats
+        ("%Y", "67413"),
+        ("%.Y", "67413.023456789"),
+        ("%.1Y", "67413.0"),
+        ("%.3Y", "67413.023"),
+        ("%.6Y", "67413.023456"),
+        ("%.9Y", "67413.023456789"),
+        // Width and padding tests
+        ("%13.6Y", " 67413.023456"),
+        ("%013.6Y", "067413.023456"),
+        ("%-13.6Y", "67413.023456 "),
+        // Longer width/precision combinations
+        ("%18.10Y", "  67413.0234567890"),
+        ("%I18.10Y", "  67413.0234567890"),
+        ("%018.10Y", "0067413.0234567890"),
+        ("%-18.10Y", "67413.0234567890  "),
+    ];
+
+    for (format_str, expected) in test_cases {
+        let result = ts
+            .ucmd()
+            .args(&["-c", format_str, "k"])
+            .succeeds()
+            .stdout_move_str();
+
+        assert_eq!(
+            result,
+            format!("{expected}\n"),
+            "Format '{}' failed.\nExpected: '{}'\nGot: '{}'",
+            format_str,
+            expected,
+            result,
+        );
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
@@ -242,7 +307,7 @@ fn test_multi_files() {
 #[test]
 fn test_printf() {
     let args = [
-        "--printf=123%-# 15q\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.23m\\x12\\167\\132\\112\\n",
+        "--printf=123%-# 15q\\r\\\"\\\\\\a\\b\\x1B\\f\\x0B%+020.23m\\x12\\167\\132\\112\\n",
         "/",
     ];
     let ts = TestScenario::new(util_name!());
@@ -256,11 +321,10 @@ fn test_pipe_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("FIFO");
     ucmd.arg("FIFO")
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_contains("fifo")
-        .stdout_contains("File: FIFO")
-        .succeeded();
+        .stdout_contains("File: FIFO");
 }
 
 #[test]
@@ -275,19 +339,17 @@ fn test_stdin_pipe_fifo1() {
     new_ucmd!()
         .arg("-")
         .set_stdin(std::process::Stdio::piped())
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_contains("fifo")
-        .stdout_contains("File: -")
-        .succeeded();
+        .stdout_contains("File: -");
     new_ucmd!()
         .args(&["-L", "-"])
         .set_stdin(std::process::Stdio::piped())
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_contains("fifo")
-        .stdout_contains("File: -")
-        .succeeded();
+        .stdout_contains("File: -");
 }
 
 #[test]
@@ -299,11 +361,10 @@ fn test_stdin_pipe_fifo2() {
     new_ucmd!()
         .arg("-")
         .set_stdin(std::process::Stdio::null())
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_contains("character special file")
-        .stdout_contains("File: -")
-        .succeeded();
+        .stdout_contains("File: -");
 }
 
 #[test]
@@ -339,11 +400,10 @@ fn test_stdin_redirect() {
     ts.ucmd()
         .arg("-")
         .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_contains("regular empty file")
-        .stdout_contains("File: -")
-        .succeeded();
+        .stdout_contains("File: -");
 }
 
 #[test]
@@ -351,4 +411,77 @@ fn test_without_argument() {
     new_ucmd!()
         .fails()
         .stderr_contains("missing operand\nTry 'stat --help' for more information.");
+}
+
+#[test]
+fn test_quoting_style_locale() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("'");
+    ts.ucmd()
+        .env("QUOTING_STYLE", "locale")
+        .args(&["-c", "%N", "'"])
+        .succeeds()
+        .stdout_only("'\\''\n");
+
+    ts.ucmd()
+        .args(&["-c", "%N", "'"])
+        .succeeds()
+        .stdout_only("\"'\"\n");
+}
+
+#[test]
+fn test_printf_octal_1() {
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = vec![0x0A, 0xFF]; // Newline + byte 255
+    ts.ucmd()
+        .args(&["--printf=\\012\\377", "."])
+        .succeeds()
+        .stdout_is_bytes(expected_stdout);
+}
+
+#[test]
+fn test_printf_octal_2() {
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = vec![b'.', 0x0A, b'a', 0xFF, b'b'];
+    ts.ucmd()
+        .args(&["--printf=.\\012a\\377b", "."])
+        .succeeds()
+        .stdout_is_bytes(expected_stdout);
+}
+
+#[test]
+fn test_printf_incomplete_hex() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["--printf=\\x", "."])
+        .succeeds()
+        .stderr_contains("warning: incomplete hex escape");
+}
+
+#[test]
+fn test_printf_bel_etc() {
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = vec![0x07, 0x08, 0x0C, 0x0A, 0x0D, 0x09]; // BEL, BS, FF, LF, CR, TAB
+    ts.ucmd()
+        .args(&["--printf=\\a\\b\\f\\n\\r\\t", "."])
+        .succeeds()
+        .stdout_is_bytes(expected_stdout);
+}
+
+#[test]
+fn test_printf_invalid_directive() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["--printf=%9", "."])
+        .fails()
+        .code_is(1)
+        .stderr_contains("'%9': invalid directive");
+
+    ts.ucmd()
+        .args(&["--printf=%9%", "."])
+        .fails()
+        .code_is(1)
+        .stderr_contains("'%9%': invalid directive");
 }

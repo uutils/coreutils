@@ -18,16 +18,16 @@ use crate::fuzz_common::{
 static CMD_PATH: &str = "wc";
 
 fn generate_wc_args() -> String {
-    let mut rng = rand::thread_rng();
-    let arg_count = rng.gen_range(1..=6);
+    let mut rng = rand::rng();
+    let arg_count = rng.random_range(1..=6);
     let mut args = Vec::new();
 
     for _ in 0..arg_count {
         // Introduce a chance to add invalid arguments
-        if rng.gen_bool(0.1) {
-            args.push(generate_random_string(rng.gen_range(1..=20)));
+        if rng.random_bool(0.1) {
+            args.push(generate_random_string(rng.random_range(1..=20)));
         } else {
-            match rng.gen_range(0..=5) {
+            match rng.random_range(0..=5) {
                 0 => args.push(String::from("-c")),
                 1 => args.push(String::from("-m")),
                 2 => args.push(String::from("-l")),
@@ -36,7 +36,7 @@ fn generate_wc_args() -> String {
                 // TODO
                 5 => {
                     args.push(String::from("--files0-from"));
-                    if rng.gen_bool(0.5) {
+                    if rng.random_bool(0.5) {
                         args.push(generate_random_string(50)); // Longer invalid file name
                     } else {
                         args.push(generate_random_string(5));
@@ -52,14 +52,14 @@ fn generate_wc_args() -> String {
 
 // Function to generate a random string of lines, including invalid ones
 fn generate_random_lines(count: usize) -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut lines = Vec::new();
 
     for _ in 0..count {
-        if rng.gen_bool(0.1) {
-            lines.push(generate_random_string(rng.gen_range(1000..=5000))); // Very long invalid line
+        if rng.random_bool(0.1) {
+            lines.push(generate_random_string(rng.random_range(1000..=5000))); // Very long invalid line
         } else {
-            lines.push(generate_random_string(rng.gen_range(1..=20)));
+            lines.push(generate_random_string(rng.random_range(1..=20)));
         }
     }
 

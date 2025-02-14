@@ -1,7 +1,7 @@
-diff --git a/tests/misc/invalid-opt.pl b/tests/misc/invalid-opt.pl
-index 4b9c4c184..4ccd89482 100755
---- a/tests/misc/invalid-opt.pl
-+++ b/tests/misc/invalid-opt.pl
+Index: gnu/tests/misc/invalid-opt.pl
+===================================================================
+--- gnu.orig/tests/misc/invalid-opt.pl
++++ gnu/tests/misc/invalid-opt.pl
 @@ -74,23 +74,13 @@ foreach my $prog (@built_programs)
      defined $out
        or $out = '';

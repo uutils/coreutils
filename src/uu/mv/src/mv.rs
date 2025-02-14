@@ -19,13 +19,13 @@ use std::io;
 use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
-use std::path::{Path, PathBuf};
+use std::path::{absolute, Path, PathBuf};
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{
-    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
-    path_ends_with_terminator,
+    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file, canonicalize,
+    path_ends_with_terminator, MissingHandling, ResolveMode,
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
@@ -322,20 +322,6 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         });
     }
 
-    if (source.eq(target)
-        || are_hardlinks_to_same_file(source, target)
-        || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
-        && opts.backup == BackupMode::NoBackup
-    {
-        if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
-            return Err(
-                MvError::SameFile(source.quote().to_string(), target.quote().to_string()).into(),
-            );
-        } else {
-            return Err(MvError::SelfSubdirectory(source.display().to_string()).into());
-        }
-    }
-
     let target_is_dir = target.is_dir();
     let source_is_dir = source.is_dir();
 
@@ -347,6 +333,8 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         return Err(MvError::FailedToAccessNotADirectory(target.quote().to_string()).into());
     }
 
+    assert_not_same_file(source, target, target_is_dir, opts)?;
+
     if target_is_dir {
         if opts.no_target_dir {
             if source.is_dir() {
@@ -356,14 +344,6 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             } else {
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
             }
-        // Check that source & target do not contain same subdir/dir when both exist
-        // mkdir dir1/dir2; mv dir1 dir1/dir2
-        } else if target.starts_with(source) {
-            Err(MvError::SelfTargetSubdirectory(
-                source.display().to_string(),
-                target.display().to_string(),
-            )
-            .into())
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
@@ -385,6 +365,88 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     } else {
         rename(source, target, opts, None).map_err(|e| USimpleError::new(1, format!("{e}")))
     }
+}
+
+fn assert_not_same_file(
+    source: &Path,
+    target: &Path,
+    target_is_dir: bool,
+    opts: &Options,
+) -> UResult<()> {
+    // we'll compare canonicalized_source and canonicalized_target for same file detection
+    let canonicalized_source = match canonicalize(
+        absolute(source)?,
+        MissingHandling::Normal,
+        ResolveMode::Logical,
+    ) {
+        Ok(source) if source.exists() => source,
+        _ => absolute(source)?, // file or symlink target doesn't exist but its absolute path is still used for comparison
+    };
+
+    // special case if the target exists, is a directory, and the `-T` flag wasn't used
+    let target_is_dir = target_is_dir && !opts.no_target_dir;
+    let canonicalized_target = if target_is_dir {
+        // `mv source_file target_dir` => target_dir/source_file
+        // canonicalize the path that exists (target directory) and join the source file name
+        canonicalize(
+            absolute(target)?,
+            MissingHandling::Normal,
+            ResolveMode::Logical,
+        )?
+        .join(source.file_name().unwrap_or_default())
+    } else {
+        // `mv source target_dir/target` => target_dir/target
+        // we canonicalize target_dir and join /target
+        match absolute(target)?.parent() {
+            Some(parent) if parent.to_str() != Some("") => {
+                canonicalize(parent, MissingHandling::Normal, ResolveMode::Logical)?
+                    .join(target.file_name().unwrap_or_default())
+            }
+            // path.parent() returns Some("") or None if there's no parent
+            _ => absolute(target)?, // absolute paths should always have a parent, but we'll fall back just in case
+        }
+    };
+
+    let same_file = (canonicalized_source.eq(&canonicalized_target)
+        || are_hardlinks_to_same_file(source, target)
+        || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
+        && opts.backup == BackupMode::NoBackup;
+
+    // get the expected target path to show in errors
+    // this is based on the argument and not canonicalized
+    let target_display = match source.file_name() {
+        Some(file_name) if target_is_dir => {
+            // join target_dir/source_file in a platform-independent manner
+            let mut path = target
+                .display()
+                .to_string()
+                .trim_end_matches("/")
+                .to_owned();
+
+            path.push('/');
+            path.push_str(&file_name.to_string_lossy());
+
+            path.quote().to_string()
+        }
+        _ => target.quote().to_string(),
+    };
+
+    if same_file
+        && (canonicalized_source.eq(&canonicalized_target)
+            || source.eq(Path::new("."))
+            || source.ends_with("/.")
+            || source.is_file())
+    {
+        return Err(MvError::SameFile(source.quote().to_string(), target_display).into());
+    } else if (same_file || canonicalized_target.starts_with(canonicalized_source))
+        // don't error if we're moving a symlink of a directory into itself
+        && !source.is_symlink()
+    {
+        return Err(
+            MvError::SelfTargetSubdirectory(source.quote().to_string(), target_display).into(),
+        );
+    }
+    Ok(())
 }
 
 fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
@@ -424,10 +486,6 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
     if !target_dir.is_dir() {
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
-
-    let canonicalized_target_dir = target_dir
-        .canonicalize()
-        .unwrap_or_else(|_| target_dir.to_path_buf());
 
     let multi_progress = options.progress_bar.then(MultiProgress::new);
 
@@ -479,24 +537,9 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
 
         // Check if we have mv dir1 dir2 dir2
         // And generate an error if this is the case
-        if let Ok(canonicalized_source) = sourcepath.canonicalize() {
-            if canonicalized_source == canonicalized_target_dir {
-                // User tried to move directory to itself, warning is shown
-                // and process of moving files is continued.
-                show!(USimpleError::new(
-                    1,
-                    format!(
-                        "cannot move '{}' to a subdirectory of itself, '{}/{}'",
-                        sourcepath.display(),
-                        uucore::fs::normalize_path(target_dir).display(),
-                        canonicalized_target_dir.components().last().map_or_else(
-                            || target_dir.display().to_string(),
-                            |dir| { PathBuf::from(dir.as_os_str()).display().to_string() }
-                        )
-                    )
-                ));
-                continue;
-            }
+        if let Err(e) = assert_not_same_file(sourcepath, target_dir, true, options) {
+            show!(e);
+            continue;
         }
 
         match rename(sourcepath, &targetpath, options, multi_progress.as_ref()) {
@@ -533,13 +576,6 @@ fn rename(
     let mut backup_path = None;
 
     if to.exists() {
-        if opts.update == UpdateMode::ReplaceIfOlder && opts.overwrite == OverwriteMode::Interactive
-        {
-            // `mv -i --update old new` when `new` exists doesn't move anything
-            // and exit with 0
-            return Ok(());
-        }
-
         if opts.update == UpdateMode::ReplaceNone {
             if opts.debug {
                 println!("skipped {}", to.quote());
@@ -679,7 +715,7 @@ fn rename_with_fallback(
             };
 
             #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-            fsxattr::apply_xattrs(to, xattrs).unwrap();
+            fsxattr::apply_xattrs(to, xattrs)?;
 
             if let Err(err) = result {
                 return match err.kind {

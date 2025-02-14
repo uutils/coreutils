@@ -147,7 +147,6 @@ UNIX_PROGS := \
 	nohup \
 	pathchk \
 	pinky \
-	sleep \
 	stat \
 	stdbuf \
 	timeout \

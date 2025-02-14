@@ -22,7 +22,7 @@
 //!  3. Parse both `printf` specifiers and escape sequences (for e.g. `printf`)
 //!
 //! This module aims to combine all three use cases. An iterator parsing each
-//! of these cases is provided by [`parse_escape_only`], [`parse_spec_only`]
+//! of these cases is provided by [`parse_spec_only`], [`parse_escape_only`]
 //! and [`parse_spec_and_escape`], respectively.
 //!
 //! There is a special [`Format`] type, which can be used to parse a format
@@ -38,13 +38,15 @@ pub mod num_parser;
 mod spec;
 
 pub use argument::*;
-use spec::Spec;
+pub use spec::Spec;
 use std::{
     error::Error,
     fmt::Display,
     io::{stdout, Write},
     ops::ControlFlow,
 };
+
+use os_display::Quotable;
 
 use crate::error::UError;
 
@@ -63,6 +65,10 @@ pub enum FormatError {
     NeedAtLeastOneSpec(Vec<u8>),
     WrongSpecType,
     InvalidPrecision(String),
+    /// The format specifier ends with a %, as in `%f%`.
+    EndsWithPercent(Vec<u8>),
+    /// The escape sequence `\x` appears without a literal hexadecimal value.
+    MissingHex,
 }
 
 impl Error for FormatError {}
@@ -92,12 +98,16 @@ impl Display for FormatError {
                 "format '{}' has no % directive",
                 String::from_utf8_lossy(s)
             ),
+            Self::EndsWithPercent(s) => {
+                write!(f, "format {} ends in %", String::from_utf8_lossy(s).quote())
+            }
             Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{precision}'"),
             // TODO: Error message below needs some work
             Self::WrongSpecType => write!(f, "wrong % directive type was given"),
             Self::IoError(_) => write!(f, "io error"),
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
+            Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
         }
     }
 }
@@ -174,7 +184,10 @@ pub fn parse_spec_and_escape(
         }
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(Ok(FormatItem::Char(parse_escape_code(&mut current))))
+            Some(match parse_escape_code(&mut current) {
+                Ok(c) => Ok(FormatItem::Char(c)),
+                Err(_) => Err(FormatError::MissingHex),
+            })
         }
         [c, rest @ ..] => {
             current = rest;
@@ -190,6 +203,7 @@ pub fn parse_spec_only(
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
+        [b'%'] => Some(Err(FormatError::EndsWithPercent(fmt.to_vec()))),
         [b'%', b'%', rest @ ..] => {
             current = rest;
             Some(Ok(FormatItem::Char(b'%')))
@@ -216,7 +230,7 @@ pub fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
         [] => None,
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(parse_escape_code(&mut current))
+            Some(parse_escape_code(&mut current).unwrap_or(EscapedChar::Backslash(b'x')))
         }
         [c, rest @ ..] => {
             current = rest;
@@ -323,11 +337,14 @@ impl<F: Formatter> Format<F> {
 
         let mut suffix = Vec::new();
         for item in &mut iter {
-            match item? {
-                FormatItem::Spec(_) => {
+            match item {
+                // If the `format_string` is of the form `%f%f` or
+                // `%f%`, then return an error.
+                Ok(FormatItem::Spec(_)) | Err(FormatError::EndsWithPercent(_)) => {
                     return Err(FormatError::TooManySpecs(format_string.as_ref().to_vec()));
                 }
-                FormatItem::Char(c) => suffix.push(c),
+                Ok(FormatItem::Char(c)) => suffix.push(c),
+                Err(e) => return Err(e),
             }
         }
 

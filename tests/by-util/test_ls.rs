@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
+// spell-checker:ignore (words) fakeroot setcap
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -1095,13 +1096,16 @@ fn test_ls_long() {
     let at = &scene.fixtures;
     at.touch(at.plus_as_string("test-long"));
 
+    #[cfg(not(windows))]
+    let regex = r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*";
+    #[cfg(windows)]
+    let regex = r"[-dl](r[w-]x){3}.*";
+
+    let re = &Regex::new(regex).unwrap();
+
     for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).arg("test-long").succeeds();
-        #[cfg(not(windows))]
-        result.stdout_matches(&Regex::new(r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*").unwrap());
-
-        #[cfg(windows)]
-        result.stdout_matches(&Regex::new(r"[-dl](r[w-]x){3}.*").unwrap());
+        result.stdout_matches(re);
     }
 }
 
@@ -1114,23 +1118,30 @@ fn test_ls_long_format() {
     at.touch(at.plus_as_string("test-long-dir/test-long-file"));
     at.mkdir(at.plus_as_string("test-long-dir/test-long-dir"));
 
-    for arg in LONG_ARGS {
-        // Assuming sane username do not have spaces within them.
-        // A line of the output should be:
-        // One of the characters -bcCdDlMnpPsStTx?
-        // rwx, with - for missing permissions, thrice.
-        // Zero or one "." for indicating a file with security context
-        // A number, preceded by column whitespace, and followed by a single space.
-        // A username, currently [^ ], followed by column whitespace, twice (or thrice for Hurd).
-        // A number, followed by a single space.
-        // A month, followed by a single space.
-        // A day, preceded by column whitespace, and followed by a single space.
-        // Either a year or a time, currently [0-9:]+, preceded by column whitespace,
-        // and followed by a single space.
-        // Whatever comes after is irrelevant to this specific test.
-        scene.ucmd().arg(arg).arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
+    // Assuming sane username do not have spaces within them.
+    // A line of the output should be:
+    // One of the characters -bcCdDlMnpPsStTx?
+    // rwx, with - for missing permissions, thrice.
+    // Zero or one "." for indicating a file with security context
+    // A number, preceded by column whitespace, and followed by a single space.
+    // A username, currently [^ ], followed by column whitespace, twice (or thrice for Hurd).
+    // A number, followed by a single space.
+    // A month, followed by a single space.
+    // A day, preceded by column whitespace, and followed by a single space.
+    // Either a year or a time, currently [0-9:]+, preceded by column whitespace,
+    // and followed by a single space.
+    // Whatever comes after is irrelevant to this specific test.
+    let re = &Regex::new(
             r"\n[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}\.? +\d+ [^ ]+ +[^ ]+( +[^ ]+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ "
-        ).unwrap());
+        ).unwrap();
+
+    for arg in LONG_ARGS {
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg("test-long-dir")
+            .succeeds()
+            .stdout_matches(re);
     }
 
     // This checks for the line with the .. entry. The uname and group should be digits.
@@ -2096,6 +2107,30 @@ fn test_ls_order_time() {
         let result = scene.ucmd().arg("-tc").succeeds();
         result.stdout_only("test-2\ntest-4\ntest-3\ntest-1\n");
     }
+}
+
+#[test]
+fn test_ls_order_mtime() {
+    use std::time::SystemTime;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let f3 = at.make_file("test-3");
+    f3.set_modified(SystemTime::now()).unwrap();
+    let f4 = at.make_file("test-4");
+    f4.set_modified(SystemTime::now()).unwrap();
+    let f1 = at.make_file("test-1");
+    f1.set_modified(SystemTime::now()).unwrap();
+    let f2 = at.make_file("test-2");
+    f2.set_modified(SystemTime::now()).unwrap();
+
+    let result = scene.ucmd().arg("-t").arg("--time=mtime").succeeds();
+    result.stdout_only("test-2\ntest-1\ntest-4\ntest-3\n");
+    f3.set_modified(SystemTime::now()).unwrap();
+
+    f4.set_modified(SystemTime::now()).unwrap();
+    let result = scene.ucmd().arg("-t").arg("--time=mtime").succeeds();
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
 }
 
 #[test]
@@ -5515,4 +5550,92 @@ fn test_suffix_case_sensitivity() {
                 img3.JpG",
         /* cSpell:enable */
     );
+}
+
+#[cfg(all(unix, target_os = "linux"))]
+#[test]
+fn test_ls_capabilities() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Test must be run as root (or with `sudo -E`)
+    // fakeroot setcap cap_net_bind_service=ep /tmp/file_name
+    // doesn't trigger an error and fails silently
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        return;
+    }
+    at.mkdir("test");
+    at.mkdir("test/dir");
+    at.touch("test/cap_pos");
+    at.touch("test/dir/cap_neg");
+    at.touch("test/dir/cap_pos");
+
+    let files = ["test/cap_pos", "test/dir/cap_pos"];
+    for file in &files {
+        scene
+            .cmd("sudo")
+            .args(&[
+                "-E",
+                "--non-interactive",
+                "setcap",
+                "cap_net_bind_service=ep",
+                at.plus(file).to_str().unwrap(),
+            ])
+            .succeeds();
+    }
+
+    let ls_colors = "di=:ca=30;41";
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", ls_colors)
+        .arg("--color=always")
+        .arg("test/cap_pos")
+        .arg("test/dir")
+        .succeeds()
+        .stdout_contains("\x1b[30;41mtest/cap_pos") // spell-checker:disable-line
+        .stdout_contains("\x1b[30;41mcap_pos") // spell-checker:disable-line
+        .stdout_does_not_contain("0;41mtest/dir/cap_neg"); // spell-checker:disable-line
+}
+
+#[cfg(feature = "test_risky_names")]
+#[test]
+fn test_non_unicode_names() {
+    // more extensive unit tests for correct escaping etc. are in the quoting_style module
+    let scene = TestScenario::new(util_name!());
+    let target_file = uucore::os_str_from_bytes(b"some-dir1/\xC0.file")
+        .expect("Only unix platforms can test non-unicode names");
+    let target_dir = uucore::os_str_from_bytes(b"some-dir1/\xC0.dir")
+        .expect("Only unix platforms can test non-unicode names");
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.touch(target_file);
+    at.mkdir(target_dir);
+
+    scene
+        .ucmd()
+        .arg("--quoting-style=shell-escape")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains("''$'\\300''.dir'")
+        .stdout_contains("''$'\\300''.file'");
+
+    scene
+        .ucmd()
+        .arg("--quoting-style=literal")
+        .arg("--show-control-chars")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_is_bytes(b"\xC0.dir\n\xC0.file\n");
+}
+
+#[test]
+fn test_time_style_timezone_name() {
+    let re_custom_format = Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* UTC f\n").unwrap();
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.env("TZ", "UTC0")
+        .args(&["-l", "--time-style=+%Z"])
+        .succeeds()
+        .stdout_matches(&re_custom_format);
 }

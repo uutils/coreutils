@@ -4,29 +4,30 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
-use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::{metadata, File};
 use std::io::{self, IsTerminal, Read, Write};
-use thiserror::Error;
-use uucore::display::Quotable;
-use uucore::error::UResult;
-use uucore::fs::FileInformation;
-
-#[cfg(unix)]
-use std::os::fd::{AsFd, AsRawFd};
-
-/// Linux splice support
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
-
 /// Unix domain socket support
 #[cfg(unix)]
 use std::net::Shutdown;
 #[cfg(unix)]
+use std::os::fd::{AsFd, AsRawFd};
+#[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
+
+use clap::{crate_version, Arg, ArgAction, Command};
+#[cfg(unix)]
+use nix::fcntl::{fcntl, FcntlArg};
+use thiserror::Error;
+use uucore::display::Quotable;
+use uucore::error::UResult;
+use uucore::fs::FileInformation;
 use uucore::{format_usage, help_about, help_usage};
+
+/// Linux splice support
+#[cfg(any(target_os = "linux", target_os = "android"))]
+mod splice;
 
 const USAGE: &str = help_usage!("cat.md");
 const ABOUT: &str = help_about!("cat.md");
@@ -322,6 +323,24 @@ fn cat_handle<R: FdReadable>(
     }
 }
 
+/// Whether this process is appending to stdout.
+#[cfg(unix)]
+fn is_appending() -> bool {
+    let stdout = std::io::stdout();
+    let flags = match fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL) {
+        Ok(flags) => flags,
+        Err(_) => return false,
+    };
+    // TODO Replace `1 << 10` with `nix::fcntl::Oflag::O_APPEND`.
+    let o_append = 1 << 10;
+    (flags & o_append) > 0
+}
+
+#[cfg(not(unix))]
+fn is_appending() -> bool {
+    false
+}
+
 fn cat_path(
     path: &str,
     options: &OutputOptions,
@@ -331,10 +350,16 @@ fn cat_path(
     match get_input_type(path)? {
         InputType::StdIn => {
             let stdin = io::stdin();
+            let in_info = FileInformation::from_file(&stdin)?;
             let mut handle = InputHandle {
                 reader: stdin,
                 is_interactive: std::io::stdin().is_terminal(),
             };
+            if let Some(out_info) = out_info {
+                if in_info == *out_info && is_appending() {
+                    return Err(CatError::OutputIsInput);
+                }
+            }
             cat_handle(&mut handle, options, state)
         }
         InputType::Directory => Err(CatError::IsDirectory),

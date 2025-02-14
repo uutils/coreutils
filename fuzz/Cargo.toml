@@ -8,10 +8,11 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
+console = "0.15.0"
 libfuzzer-sys = "0.4.7"
 libc = "0.2.153"
-tempfile = "3.11.0"
-rand = { version = "0.8.5", features = ["small_rng"] }
+tempfile = "3.15.0"
+rand = { version = "0.9.0", features = ["small_rng"] }
 similar = "2.5.0"
 
 uucore = { path = "../src/uucore/" }
@@ -27,6 +28,7 @@ uu_cut = { path = "../src/uu/cut/" }
 uu_split = { path = "../src/uu/split/" }
 uu_tr = { path = "../src/uu/tr/" }
 uu_env = { path = "../src/uu/env/" }
+uu_cksum = { path = "../src/uu/cksum/" }
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -125,5 +127,11 @@ doc = false
 [[bin]]
 name = "fuzz_env"
 path = "fuzz_targets/fuzz_env.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_cksum"
+path = "fuzz_targets/fuzz_cksum.rs"
 test = false
 doc = false

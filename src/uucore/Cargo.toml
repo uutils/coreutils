@@ -2,7 +2,7 @@
 
 [package]
 name = "uucore"
-version = "0.0.28"
+version = "0.0.29"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uutils ~ 'core' uutils code library (cross-platform)"
@@ -14,10 +14,15 @@ keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [lib]
 path = "src/lib/lib.rs"
 
 [dependencies]
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
 clap = { workspace = true }
 uucore_procs = { workspace = true }
 number_prefix = { workspace = true }
@@ -25,6 +30,8 @@ dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
 wild = "2.2.1"
 glob = { workspace = true }
+iana-time-zone = { workspace = true }
+lazy_static = "1.4.0"
 # * optional
 itertools = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
@@ -51,6 +58,7 @@ sha3 = { workspace = true, optional = true }
 blake2b_simd = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
+crc32fast = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
@@ -85,7 +93,8 @@ fsxattr = ["xattr"]
 lines = []
 format = ["itertools", "quoting-style"]
 mode = ["libc"]
-perms = ["libc", "walkdir"]
+perms = ["entries", "libc", "walkdir"]
+buf-copy = []
 pipes = []
 process = ["libc"]
 proc-info = ["tty", "walkdir"]
@@ -104,10 +113,12 @@ sum = [
   "blake2b_simd",
   "blake3",
   "sm3",
+  "crc32fast",
 ]
 update-control = []
 utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []
 wide = []
+custom-tz-fmt = []
 tty = []

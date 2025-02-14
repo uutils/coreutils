@@ -20,7 +20,7 @@ use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
-use uucore::{crash_if_err, format_usage, help_about, help_usage};
+use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("join.md");
 const USAGE: &str = help_usage!("join.md");
@@ -587,15 +587,19 @@ impl<'a> State<'a> {
         !self.seq.is_empty()
     }
 
-    fn initialize<Sep: Separator>(&mut self, read_sep: &Sep, autoformat: bool) -> usize {
-        if let Some(line) = crash_if_err!(1, self.read_line(read_sep)) {
+    fn initialize<Sep: Separator>(
+        &mut self,
+        read_sep: &Sep,
+        autoformat: bool,
+    ) -> std::io::Result<usize> {
+        if let Some(line) = self.read_line(read_sep)? {
             self.seq.push(line);
 
             if autoformat {
-                return self.seq[0].field_ranges.len();
+                return Ok(self.seq[0].field_ranges.len());
             }
         }
-        0
+        Ok(0)
     }
 
     fn finalize<Sep: Separator>(
@@ -1008,20 +1012,21 @@ fn exec<Sep: Separator>(file1: &str, file2: &str, settings: Settings, sep: Sep) 
 
     let format = if settings.autoformat {
         let mut format = vec![Spec::Key];
-        let mut initialize = |state: &mut State| {
-            let max_fields = state.initialize(&sep, settings.autoformat);
+        let mut initialize = |state: &mut State| -> UResult<()> {
+            let max_fields = state.initialize(&sep, settings.autoformat)?;
             for i in 0..max_fields {
                 if i != state.key {
                     format.push(Spec::Field(state.file_num, i));
                 }
             }
+            Ok(())
         };
-        initialize(&mut state1);
-        initialize(&mut state2);
+        initialize(&mut state1)?;
+        initialize(&mut state2)?;
         format
     } else {
-        state1.initialize(&sep, settings.autoformat);
-        state2.initialize(&sep, settings.autoformat);
+        state1.initialize(&sep, settings.autoformat)?;
+        state2.initialize(&sep, settings.autoformat)?;
         settings.format
     };
 

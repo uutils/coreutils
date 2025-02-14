@@ -183,8 +183,7 @@ pub fn update_positions(dired: &mut DiredOutput, start: usize, end: usize) {
 /// we don't use clap here because we need to know if the argument is present
 /// as it can be overridden by --hyperlink
 pub fn is_dired_arg_present() -> bool {
-    let args: Vec<String> = std::env::args().collect();
-    args.iter().any(|x| x == "--dired" || x == "-D")
+    std::env::args_os().any(|x| x == "--dired" || x == "-D")
 }
 
 #[cfg(test)]

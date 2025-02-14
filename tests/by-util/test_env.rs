@@ -81,6 +81,15 @@ fn test_env_version() {
 }
 
 #[test]
+fn test_env_permissions() {
+    new_ucmd!()
+        .arg(".")
+        .fails()
+        .code_is(126)
+        .stderr_is("env: '.': Permission denied\n");
+}
+
+#[test]
 fn test_echo() {
     #[cfg(target_os = "windows")]
     let args = ["cmd", "/d/c", "echo"];
@@ -128,7 +137,7 @@ fn test_debug_2() {
     let result = ts
         .ucmd()
         .arg("-vv")
-        .arg(ts.bin_path)
+        .arg(&ts.bin_path)
         .args(&["echo", "hello2"])
         .succeeds();
     result.stderr_matches(
@@ -156,7 +165,7 @@ fn test_debug1_part_of_string_arg() {
     let result = ts
         .ucmd()
         .arg("-vS FOO=BAR")
-        .arg(ts.bin_path)
+        .arg(&ts.bin_path)
         .args(&["echo", "hello1"])
         .succeeds();
     result.stderr_matches(
@@ -177,7 +186,7 @@ fn test_debug2_part_of_string_arg() {
     let result = ts
         .ucmd()
         .arg("-vvS FOO=BAR")
-        .arg(ts.bin_path)
+        .arg(&ts.bin_path)
         .args(&["echo", "hello2"])
         .succeeds();
     result.stderr_matches(
@@ -882,6 +891,29 @@ fn test_env_arg_ignore_signal_empty() {
         .no_stderr()
         .stdout_contains("hello");
 }
+
+#[test]
+fn disallow_equals_sign_on_short_unset_option() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .arg("-u=")
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: cannot unset '=': Invalid argument");
+    ts.ucmd()
+        .arg("-u=A1B2C3")
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: cannot unset '=A1B2C3': Invalid argument");
+    ts.ucmd().arg("--split-string=A1B=2C3=").succeeds();
+    ts.ucmd()
+        .arg("--unset=")
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: cannot unset '': Invalid argument");
+}
+
 #[cfg(test)]
 mod tests_split_iterator {
 
@@ -918,7 +950,7 @@ mod tests_split_iterator {
                 | '*' | '?' | '[' | '#' | '˜' | '=' | '%' => {
                     special = true;
                 }
-                _ => continue,
+                _ => (),
             }
         }
 

@@ -679,6 +679,68 @@ fn test_remove_inaccessible_dir() {
 
 #[test]
 #[cfg(not(windows))]
+fn test_rm_current_or_parent_dir_rm4() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+
+    let answers = [
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/.'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/..'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/../'",
+    ];
+    let std_err_str = ts
+        .ucmd()
+        .arg("-rf")
+        .arg("d/.")
+        .arg("d/./")
+        .arg("d/.////")
+        .arg("d/..")
+        .arg("d/../")
+        .fails()
+        .stderr_move_str();
+
+    for (idx, line) in std_err_str.lines().enumerate() {
+        assert_eq!(line, answers[idx]);
+    }
+}
+
+#[test]
+#[cfg(windows)]
+fn test_rm_current_or_parent_dir_rm4_windows() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+
+    let answers = [
+        "rm: refusing to remove '.' or '..' directory: skipping 'd\\.'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd\\.\\'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd\\.\\'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd\\..'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd\\..\\'",
+    ];
+    let std_err_str = ts
+        .ucmd()
+        .arg("-rf")
+        .arg("d\\.")
+        .arg("d\\.\\")
+        .arg("d\\.\\\\\\\\")
+        .arg("d\\..")
+        .arg("d\\..\\")
+        .fails()
+        .stderr_move_str();
+
+    for (idx, line) in std_err_str.lines().enumerate() {
+        assert_eq!(line, answers[idx]);
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
 fn test_fifo_removal() {
     use std::time::Duration;
 

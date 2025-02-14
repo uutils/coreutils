@@ -125,16 +125,13 @@ fn basename(fullname: &str, suffix: &str) -> String {
 
     // Convert to path buffer and get last path component
     let pb = PathBuf::from(path);
-    match pb.components().last() {
-        Some(c) => {
-            let name = c.as_os_str().to_str().unwrap();
-            if name == suffix {
-                name.to_string()
-            } else {
-                name.strip_suffix(suffix).unwrap_or(name).to_string()
-            }
-        }
 
-        None => String::new(),
-    }
+    pb.components().next_back().map_or_else(String::new, |c| {
+        let name = c.as_os_str().to_str().unwrap();
+        if name == suffix {
+            name.to_string()
+        } else {
+            name.strip_suffix(suffix).unwrap_or(name).to_string()
+        }
+    })
 }

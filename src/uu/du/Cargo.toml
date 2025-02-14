@@ -1,6 +1,6 @@
 [package]
 name = "uu_du"
-version = "0.0.28"
+version = "0.0.29"
 authors = ["uutils developers"]
 license = "MIT"
 description = "du ~ (uutils) display disk usage"
@@ -22,6 +22,7 @@ chrono = { workspace = true }
 glob = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true, features = ["format"] }
+thiserror = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [

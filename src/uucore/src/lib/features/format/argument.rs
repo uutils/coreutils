@@ -112,7 +112,8 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
                     Default::default()
                 }
                 ParseError::PartialMatch(v, rest) => {
-                    if input.starts_with('\'') {
+                    let bytes = input.as_encoded_bytes();
+                    if !bytes.is_empty() && bytes[0] == b'\'' {
                         show_warning!(
                             "{}: character(s) following character constant have been ignored",
                             &rest,

@@ -20,7 +20,7 @@ use crate::common::util::expected_result;
 use crate::common::util::is_ci;
 use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
-use rand::distributions::Alphanumeric;
+use rand::distr::Alphanumeric;
 use rstest::rstest;
 use std::char::from_digit;
 use std::fs::File;

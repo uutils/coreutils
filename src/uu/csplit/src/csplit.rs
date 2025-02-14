@@ -16,7 +16,7 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{crash_if_err, format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 mod csplit_error;
 mod patterns;
@@ -51,26 +51,23 @@ pub struct CsplitOptions {
 }
 
 impl CsplitOptions {
-    fn new(matches: &ArgMatches) -> Self {
+    fn new(matches: &ArgMatches) -> Result<Self, CsplitError> {
         let keep_files = matches.get_flag(options::KEEP_FILES);
         let quiet = matches.get_flag(options::QUIET);
         let elide_empty_files = matches.get_flag(options::ELIDE_EMPTY_FILES);
         let suppress_matched = matches.get_flag(options::SUPPRESS_MATCHED);
 
-        Self {
-            split_name: crash_if_err!(
-                1,
-                SplitName::new(
-                    matches.get_one::<String>(options::PREFIX).cloned(),
-                    matches.get_one::<String>(options::SUFFIX_FORMAT).cloned(),
-                    matches.get_one::<String>(options::DIGITS).cloned()
-                )
-            ),
+        Ok(Self {
+            split_name: SplitName::new(
+                matches.get_one::<String>(options::PREFIX).cloned(),
+                matches.get_one::<String>(options::SUFFIX_FORMAT).cloned(),
+                matches.get_one::<String>(options::DIGITS).cloned(),
+            )?,
             keep_files,
             quiet,
             elide_empty_files,
             suppress_matched,
-        }
+        })
     }
 }
 
@@ -90,7 +87,11 @@ pub fn csplit<T>(options: &CsplitOptions, patterns: &[String], input: T) -> Resu
 where
     T: BufRead,
 {
-    let mut input_iter = InputSplitter::new(input.lines().enumerate());
+    let enumerated_input_lines = input
+        .lines()
+        .map(|line| line.map_err_context(|| "read error".to_string()))
+        .enumerate();
+    let mut input_iter = InputSplitter::new(enumerated_input_lines);
     let mut split_writer = SplitWriter::new(options);
     let patterns: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
     let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
@@ -120,7 +121,7 @@ fn do_csplit<I>(
     input_iter: &mut InputSplitter<I>,
 ) -> Result<(), CsplitError>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, UResult<String>)>,
 {
     // split the file based on patterns
     for pattern in patterns {
@@ -201,7 +202,12 @@ impl Drop for SplitWriter<'_> {
     fn drop(&mut self) {
         if self.options.elide_empty_files && self.size == 0 {
             let file_name = self.options.split_name.get(self.counter);
-            remove_file(file_name).expect("Failed to elide split");
+            // In the case of `echo a | csplit -z - %a%1`, the file
+            // `xx00` does not exist because the positive offset
+            // advanced past the end of the input. Since there is no
+            // file to remove in that case, `remove_file` would return
+            // an error, so we just ignore it.
+            let _ = remove_file(file_name);
         }
     }
 }
@@ -308,7 +314,7 @@ impl SplitWriter<'_> {
         input_iter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
     where
-        I: Iterator<Item = (usize, io::Result<String>)>,
+        I: Iterator<Item = (usize, UResult<String>)>,
     {
         input_iter.rewind_buffer();
         input_iter.set_size_of_buffer(1);
@@ -361,7 +367,7 @@ impl SplitWriter<'_> {
         input_iter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
     where
-        I: Iterator<Item = (usize, io::Result<String>)>,
+        I: Iterator<Item = (usize, UResult<String>)>,
     {
         if offset >= 0 {
             // The offset is zero or positive, no need for a buffer on the lines read.
@@ -375,6 +381,7 @@ impl SplitWriter<'_> {
             while let Some((ln, line)) = input_iter.next() {
                 let l = line?;
                 if regex.is_match(&l) {
+                    let mut next_line_suppress_matched = false;
                     match (self.options.suppress_matched, offset) {
                         // no offset, add the line to the next split
                         (false, 0) => {
@@ -385,6 +392,11 @@ impl SplitWriter<'_> {
                         }
                         // a positive offset, some more lines need to be added to the current split
                         (false, _) => self.writeln(&l)?,
+                        // suppress matched option true, but there is a positive offset, so the line is printed
+                        (true, 1..) => {
+                            next_line_suppress_matched = true;
+                            self.writeln(&l)?;
+                        }
                         _ => (),
                     };
                     offset -= 1;
@@ -405,6 +417,11 @@ impl SplitWriter<'_> {
                         offset -= 1;
                     }
                     self.finish_split();
+
+                    // if we have to suppress one line after we take the next and do nothing
+                    if next_line_suppress_matched {
+                        input_iter.next();
+                    }
                     return Ok(());
                 }
                 self.writeln(&l)?;
@@ -423,7 +440,12 @@ impl SplitWriter<'_> {
                     for line in input_iter.shrink_buffer_to_size() {
                         self.writeln(&line)?;
                     }
-                    if !self.options.suppress_matched {
+                    if self.options.suppress_matched {
+                        // since offset_usize is for sure greater than 0
+                        // the first element of the buffer should be removed and this
+                        // line inserted to be coherent with GNU implementation
+                        input_iter.add_line_to_buffer(ln, l);
+                    } else {
                         // add 1 to the buffer size to make place for the matched line
                         input_iter.set_size_of_buffer(offset_usize + 1);
                         assert!(
@@ -431,6 +453,7 @@ impl SplitWriter<'_> {
                             "should be big enough to hold every lines"
                         );
                     }
+
                     self.finish_split();
                     if input_iter.buffer_len() < offset_usize {
                         return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
@@ -456,7 +479,7 @@ impl SplitWriter<'_> {
 /// This is used to pass matching lines to the next split and to support patterns with a negative offset.
 struct InputSplitter<I>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, UResult<String>)>,
 {
     iter: I,
     buffer: Vec<<I as Iterator>::Item>,
@@ -469,7 +492,7 @@ where
 
 impl<I> InputSplitter<I>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, UResult<String>)>,
 {
     fn new(iter: I) -> Self {
         Self {
@@ -533,7 +556,7 @@ where
 
 impl<I> Iterator for InputSplitter<I>
 where
-    I: Iterator<Item = (usize, io::Result<String>)>,
+    I: Iterator<Item = (usize, UResult<String>)>,
 {
     type Item = <I as Iterator>::Item;
 
@@ -561,19 +584,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap()
         .map(|s| s.to_string())
         .collect();
-    let options = CsplitOptions::new(&matches);
+    let options = CsplitOptions::new(&matches)?;
     if file_name == "-" {
         let stdin = io::stdin();
         Ok(csplit(&options, &patterns, stdin.lock())?)
     } else {
         let file = File::open(file_name)
-            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
-        let file_metadata = file
-            .metadata()
-            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
-        if !file_metadata.is_file() {
-            return Err(CsplitError::NotRegularFile(file_name.to_string()).into());
-        }
+            .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
         Ok(csplit(&options, &patterns, BufReader::new(file))?)
     }
 }
@@ -621,8 +638,9 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::QUIET)
-                .short('s')
+                .short('q')
                 .long(options::QUIET)
+                .visible_short_alias('s')
                 .visible_alias("silent")
                 .help("do not print counts of output file sizes")
                 .action(ArgAction::SetTrue),

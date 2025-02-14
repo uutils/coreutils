@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints
+// spell-checker:ignore (words) ints (linux) NOFILE
 #![allow(clippy::cast_possible_wrap)]
 
 use std::time::Duration;
@@ -29,6 +29,10 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 
 #[test]
 fn test_buffer_sizes() {
+    #[cfg(target_os = "linux")]
+    let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "0%", "10%"];
+    // TODO Percentage sizes are not yet supported beyond Linux.
+    #[cfg(not(target_os = "linux"))]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
         TestScenario::new(util_name!())
@@ -72,6 +76,15 @@ fn test_invalid_buffer_size() {
         .fails()
         .code_is(2)
         .stderr_only("sort: invalid suffix in --buffer-size argument '100f'\n");
+
+    // TODO Percentage sizes are not yet supported beyond Linux.
+    #[cfg(target_os = "linux")]
+    new_ucmd!()
+        .arg("-S")
+        .arg("0x123%")
+        .fails()
+        .code_is(2)
+        .stderr_only("sort: invalid --buffer-size argument '0x123%'\n");
 
     new_ucmd!()
         .arg("-n")
@@ -1085,6 +1098,31 @@ fn test_merge_batch_size() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_merge_batch_size_with_limit() {
+    use rlimit::Resource;
+    // Currently need...
+    // 3 descriptors for stdin, stdout, stderr
+    // 2 descriptors for CTRL+C handling logic (to be reworked at some point)
+    // 2 descriptors for the input files (i.e. batch-size of 2).
+    let limit_fd = 3 + 2 + 2;
+    TestScenario::new(util_name!())
+        .ucmd()
+        .limit(Resource::NOFILE, limit_fd, limit_fd)
+        .arg("--batch-size=2")
+        .arg("-m")
+        .arg("--unique")
+        .arg("merge_ints_interleaved_1.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_1.txt")
+        .succeeds()
+        .stdout_only_fixture("merge_ints_interleaved.expected");
+}
+
+#[test]
 fn test_sigpipe_panic() {
     let mut cmd = new_ucmd!();
     let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
@@ -1225,6 +1263,7 @@ fn test_tmp_files_deleted_on_sigint() {
     use std::{fs::read_dir, time::Duration};
 
     use nix::{sys::signal, unistd::Pid};
+    use rand::rngs::SmallRng;
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
@@ -1235,8 +1274,8 @@ fn test_tmp_files_deleted_on_sigint() {
         let mut file = at.make_file(file_name);
         // approximately 20 MB
         for _ in 0..40 {
-            let lines = rand_pcg::Pcg32::seed_from_u64(123)
-                .sample_iter(rand::distributions::uniform::Uniform::new(0, 10000))
+            let lines = SmallRng::seed_from_u64(123)
+                .sample_iter(rand::distr::uniform::Uniform::new(0, 10000).unwrap())
                 .take(100_000)
                 .map(|x| x.to_string() + "\n")
                 .collect::<String>();
@@ -1276,4 +1315,31 @@ fn test_same_sort_mode_twice() {
 #[test]
 fn test_args_override() {
     new_ucmd!().args(&["-f", "-f"]).pipe_in("foo").succeeds();
+}
+
+#[test]
+fn test_k_overflow() {
+    let input = "2\n1\n";
+    let output = "1\n2\n";
+    new_ucmd!()
+        .args(&["-k", "18446744073709551616"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_human_blocks_r_and_q() {
+    let input = "1Q\n1R\n";
+    let output = "1R\n1Q\n";
+    new_ucmd!()
+        .args(&["-h"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_args_check_conflict() {
+    new_ucmd!().arg("-c").arg("-C").fails();
 }

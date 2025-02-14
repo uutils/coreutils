@@ -23,6 +23,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+env:
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
 jobs:
   gnu:
     permissions:
@@ -45,9 +48,9 @@ jobs:
         path_reference="reference"
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
-        repo_default_branch="${{ github.event.repository.default_branch }}"
-        repo_GNU_ref="v9.5"
-        repo_reference_branch="${{ github.event.repository.default_branch }}"
+        repo_default_branch="$DEFAULT_BRANCH"
+        repo_GNU_ref="v9.6"
+        repo_reference_branch="$DEFAULT_BRANCH"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
         SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
@@ -62,6 +65,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         path: '${{ steps.vars.outputs.path_UUTILS }}'
+        persist-credentials: false
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
@@ -76,6 +80,7 @@ jobs:
         path: '${{ steps.vars.outputs.path_GNU }}'
         ref: ${{ steps.vars.outputs.repo_GNU_ref }}
         submodules: false
+        persist-credentials: false
 
     - name: Override submodule URL and initialize submodules
       # Use github instead of upstream git server
@@ -86,7 +91,7 @@ jobs:
       working-directory: ${{ steps.vars.outputs.path_GNU }}
 
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v7
+      uses: dawidd6/action-download-artifact@v8
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
@@ -100,7 +105,7 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev libselinux1-dev attr
+        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev libselinux1-dev attr quilt
     - name: Add various locales
       shell: bash
       run: |
@@ -244,11 +249,16 @@ jobs:
             CURRENT_RUN_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
             REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
             CURRENT_RUN_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
-            echo "Detailled information:"
+            REF_SKIP=$(sed -n "s/^SKIP: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
+            CURRENT_RUN_SKIP=$(sed -n "s/^SKIP: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
+
+            echo "Detailed information:"
             echo "REF_ERROR = ${REF_ERROR}"
             echo "CURRENT_RUN_ERROR = ${CURRENT_RUN_ERROR}"
             echo "REF_FAILING = ${REF_FAILING}"
             echo "CURRENT_RUN_FAILING = ${CURRENT_RUN_FAILING}"
+            echo "REF_SKIP_PASS = ${REF_SKIP}"
+            echo "CURRENT_RUN_SKIP = ${CURRENT_RUN_SKIP}"
 
             # Compare failing and error tests
             for LINE in ${CURRENT_RUN_FAILING}
@@ -263,7 +273,7 @@ jobs:
                   have_new_failures="true"
                 else
                   MSG="Skip an intermittent issue ${LINE} (fails in this run but passes in the 'main' branch)"
-                  echo "::warning ::$MSG"
+                  echo "::notice ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   echo ""
                 fi
@@ -281,7 +291,7 @@ jobs:
                   echo $MSG >> ${COMMENT_LOG}
                 else
                   MSG="Skipping an intermittent issue ${LINE} (passes in this run but fails in the 'main' branch)"
-                  echo "::warning ::$MSG"
+                  echo "::notice ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   echo ""
                 fi
@@ -303,11 +313,22 @@ jobs:
             do
               if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_ERROR}"
               then
-                MSG="Congrats! The gnu test ${LINE} is no longer ERROR!"
+                MSG="Congrats! The gnu test ${LINE} is no longer ERROR! (might be PASS or FAIL)"
                 echo "::warning ::$MSG"
                 echo $MSG >> ${COMMENT_LOG}
               fi
             done
+
+            for LINE in ${REF_SKIP}
+            do
+              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_SKIP}"
+              then
+                MSG="Congrats! The gnu test ${LINE} is no longer SKIP! (might be PASS, ERROR or FAIL)"
+                echo "::warning ::$MSG"
+                echo $MSG >> ${COMMENT_LOG}
+              fi
+            done
+
           else
             echo "::warning ::Skipping ${test_type} test failure comparison; no prior reference test logs are available."
           fi
@@ -319,7 +340,10 @@ jobs:
         # Compare root tests
         compare_tests '${{ steps.vars.outputs.path_GNU_tests }}/test-suite-root.log' "${ROOT_REF_LOG_FILE}" "root"
 
-        if test -n "${have_new_failures}" ; then exit -1 ; fi
+        if [ -n "${have_new_failures}" ]; then
+          echo "::error ::Found new test failures"
+          exit 1
+        fi
     - name: Upload comparison log (for GnuComment workflow)
       if: success() || failure() # run regardless of prior step success/failure
       uses: actions/upload-artifact@v4

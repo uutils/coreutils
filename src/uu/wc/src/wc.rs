@@ -13,7 +13,7 @@ mod word_count;
 use std::{
     borrow::{Borrow, Cow},
     cmp::max,
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     fs::{self, File},
     io::{self, Write},
     iter,
@@ -28,7 +28,7 @@ use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::{
     error::{FromIo, UError, UResult},
     format_usage, help_about, help_usage,
-    quoting_style::{escape_name, QuotingStyle},
+    quoting_style::{self, QuotingStyle},
     shortcut_value_parser::ShortcutValueParser,
     show,
 };
@@ -255,13 +255,17 @@ impl<'a> Input<'a> {
     }
 
     /// Converts input to title that appears in stats.
-    fn to_title(&self) -> Option<Cow<str>> {
+    fn to_title(&self) -> Option<Cow<OsStr>> {
         match self {
-            Self::Path(path) => Some(match path.to_str() {
-                Some(s) if !s.contains('\n') => Cow::Borrowed(s),
-                _ => Cow::Owned(escape_name(path.as_os_str(), QS_ESCAPE)),
-            }),
-            Self::Stdin(StdinKind::Explicit) => Some(Cow::Borrowed(STDIN_REPR)),
+            Self::Path(path) => {
+                let path = path.as_os_str();
+                if path.to_string_lossy().contains('\n') {
+                    Some(Cow::Owned(quoting_style::escape_name(path, QS_ESCAPE)))
+                } else {
+                    Some(Cow::Borrowed(path))
+                }
+            }
+            Self::Stdin(StdinKind::Explicit) => Some(Cow::Borrowed(OsStr::new(STDIN_REPR))),
             Self::Stdin(StdinKind::Implicit) => None,
         }
     }
@@ -269,7 +273,7 @@ impl<'a> Input<'a> {
     /// Converts input into the form that appears in errors.
     fn path_display(&self) -> String {
         match self {
-            Self::Path(path) => escape_name(path.as_os_str(), QS_ESCAPE),
+            Self::Path(path) => escape_name_wrapper(path.as_os_str()),
             Self::Stdin(_) => String::from("standard input"),
         }
     }
@@ -361,7 +365,7 @@ impl WcError {
             Some((input, idx)) => {
                 let path = match input {
                     Input::Stdin(_) => STDIN_REPR.into(),
-                    Input::Path(path) => escape_name(path.as_os_str(), QS_ESCAPE).into(),
+                    Input::Path(path) => escape_name_wrapper(path.as_os_str()).into(),
                 };
                 Self::ZeroLengthFileNameCtx { path, idx }
             }
@@ -761,7 +765,9 @@ fn files0_iter_file<'a>(path: &Path) -> UResult<impl Iterator<Item = InputIterIt
         Err(e) => Err(e.map_err_context(|| {
             format!(
                 "cannot open {} for reading",
-                escape_name(path.as_os_str(), QS_QUOTE_ESCAPE)
+                quoting_style::escape_name(path.as_os_str(), QS_QUOTE_ESCAPE)
+                    .into_string()
+                    .expect("All escaped names with the escaping option return valid strings.")
             )
         })),
     }
@@ -793,9 +799,9 @@ fn files0_iter<'a>(
                         Ok(Input::Path(PathBuf::from(s).into()))
                     }
                 }
-                Err(e) => Err(e.map_err_context(|| {
-                    format!("{}: read error", escape_name(&err_path, QS_ESCAPE))
-                }) as Box<dyn UError>),
+                Err(e) => Err(e
+                    .map_err_context(|| format!("{}: read error", escape_name_wrapper(&err_path)))
+                    as Box<dyn UError>),
             }),
     );
     // Loop until there is an error; yield that error and then nothing else.
@@ -806,6 +812,12 @@ fn files0_iter<'a>(
         }
         next
     })
+}
+
+fn escape_name_wrapper(name: &OsStr) -> String {
+    quoting_style::escape_name(name, QS_ESCAPE)
+        .into_string()
+        .expect("All escaped names with the escaping option return valid strings.")
 }
 
 fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
@@ -844,14 +856,17 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
             let maybe_title = input.to_title();
             let maybe_title_str = maybe_title.as_deref();
             if let Err(err) = print_stats(settings, &word_count, maybe_title_str, number_width) {
-                let title = maybe_title_str.unwrap_or("<stdin>");
-                show!(err.map_err_context(|| format!("failed to print result for {title}")));
+                let title = maybe_title_str.unwrap_or(OsStr::new("<stdin>"));
+                show!(err.map_err_context(|| format!(
+                    "failed to print result for {}",
+                    title.to_string_lossy()
+                )));
             }
         }
     }
 
     if settings.total_when.is_total_row_visible(num_inputs) {
-        let title = are_stats_visible.then_some("total");
+        let title = are_stats_visible.then_some(OsStr::new("total"));
         if let Err(err) = print_stats(settings, &total_word_count, title, number_width) {
             show!(err.map_err_context(|| "failed to print total".into()));
         }
@@ -865,7 +880,7 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
 fn print_stats(
     settings: &Settings,
     result: &WordCount,
-    title: Option<&str>,
+    title: Option<&OsStr>,
     number_width: usize,
 ) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
@@ -885,8 +900,8 @@ fn print_stats(
     }
 
     if let Some(title) = title {
-        writeln!(stdout, "{space}{title}")
-    } else {
-        writeln!(stdout)
+        write!(stdout, "{space}")?;
+        stdout.write_all(&uucore::os_str_as_bytes_lossy(title))?;
     }
+    writeln!(stdout)
 }

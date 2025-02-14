@@ -7,6 +7,7 @@
 # restrict following config to systems with matching environment variables.
 COLORTERM ?*
 TERM Eterm
+TERM alacritty*
 TERM ansi
 TERM *color*
 TERM con[0-9]*x[0-9]*
@@ -15,6 +16,7 @@ TERM console
 TERM cygwin
 TERM *direct*
 TERM dtterm
+TERM foot
 TERM gnome
 TERM hurd
 TERM jfbterm

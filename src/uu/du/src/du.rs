@@ -8,8 +8,6 @@ use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, ArgMatches, Co
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
-use std::error::Error;
-use std::fmt::Display;
 #[cfg(not(windows))]
 use std::fs::Metadata;
 use std::fs::{self, DirEntry, File};
@@ -25,6 +23,7 @@ use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
+use thiserror::Error;
 use uucore::display::{print_verbatim, Quotable};
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
@@ -422,47 +421,25 @@ fn du(
     Ok(my_stat)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum DuError {
+    #[error("invalid maximum depth {depth}", depth = .0.quote())]
     InvalidMaxDepthArg(String),
+
+    #[error("summarizing conflicts with --max-depth={depth}", depth = .0.maybe_quote())]
     SummarizeDepthConflict(String),
+
+    #[error("invalid argument {style} for 'time style'\nValid arguments are:\n- 'full-iso'\n- 'long-iso'\n- 'iso'\nTry '{help}' for more information.",
+           style = .0.quote(),
+           help = uucore::execution_phrase())]
     InvalidTimeStyleArg(String),
+
+    #[error("'birth' and 'creation' arguments for --time are not supported on this platform.")]
     InvalidTimeArg,
+
+    #[error("Invalid exclude syntax: {0}")]
     InvalidGlob(String),
 }
-
-impl Display for DuError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidMaxDepthArg(s) => write!(f, "invalid maximum depth {}", s.quote()),
-            Self::SummarizeDepthConflict(s) => {
-                write!(
-                    f,
-                    "summarizing conflicts with --max-depth={}",
-                    s.maybe_quote()
-                )
-            }
-            Self::InvalidTimeStyleArg(s) => write!(
-                f,
-                "invalid argument {} for 'time style'
-Valid arguments are:
-- 'full-iso'
-- 'long-iso'
-- 'iso'
-Try '{} --help' for more information.",
-                s.quote(),
-                uucore::execution_phrase()
-            ),
-            Self::InvalidTimeArg => write!(
-                f,
-                "'birth' and 'creation' arguments for --time are not supported on this platform.",
-            ),
-            Self::InvalidGlob(s) => write!(f, "Invalid exclude syntax: {s}"),
-        }
-    }
-}
-
-impl Error for DuError {}
 
 impl UError for DuError {
     fn code(&self) -> i32 {
@@ -542,7 +519,7 @@ impl StatPrinter {
 
                         if !self
                             .threshold
-                            .map_or(false, |threshold| threshold.should_exclude(size))
+                            .is_some_and(|threshold| threshold.should_exclude(size))
                             && self
                                 .max_depth
                                 .map_or(true, |max_depth| stat_info.depth <= max_depth)
@@ -1129,7 +1106,9 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
         ParseSizeError::InvalidSuffix(_) => {
             format!("invalid suffix in --{} argument {}", option, s.quote())
         }
-        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
+        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
+            format!("invalid --{} argument {}", option, s.quote())
+        }
         ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }
 }

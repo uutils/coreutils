@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore defg
+
 use crate::common::util::TestScenario;
 
 static INPUT: &str = "lists.txt";
@@ -42,6 +45,13 @@ static COMPLEX_SEQUENCE: &TestedSequence = &TestedSequence {
     name: "",
     sequence: "9-,6-7,-2,4",
 };
+
+#[test]
+fn test_no_args() {
+    new_ucmd!().fails().stderr_is(
+        "cut: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n",
+    );
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -246,25 +256,29 @@ fn test_no_such_file() {
 }
 
 #[test]
-fn test_equal_as_delimiter1() {
-    new_ucmd!()
-        .args(&["-f", "2", "-d="])
-        .pipe_in("--dir=./out/lib")
-        .succeeds()
-        .stdout_only("./out/lib\n");
+fn test_equal_as_delimiter() {
+    for arg in ["-d=", "--delimiter=="] {
+        new_ucmd!()
+            .args(&["-f2", arg])
+            .pipe_in("--dir=./out/lib")
+            .succeeds()
+            .stdout_only("./out/lib\n");
+    }
 }
 
 #[test]
-fn test_equal_as_delimiter2() {
-    new_ucmd!()
-        .args(&["-f2", "--delimiter="])
-        .pipe_in("a=b\n")
-        .succeeds()
-        .stdout_only("a=b\n");
+fn test_empty_string_as_delimiter() {
+    for arg in ["-d''", "--delimiter=", "--delimiter=''"] {
+        new_ucmd!()
+            .args(&["-f2", arg])
+            .pipe_in("a\0b\n")
+            .succeeds()
+            .stdout_only("b\n");
+    }
 }
 
 #[test]
-fn test_equal_as_delimiter3() {
+fn test_empty_string_as_delimiter_with_output_delimiter() {
     new_ucmd!()
         .args(&["-f", "1,2", "-d", "''", "--output-delimiter=Z"])
         .pipe_in("ab\0cd\n")
@@ -273,13 +287,38 @@ fn test_equal_as_delimiter3() {
 }
 
 #[test]
-fn test_multiple() {
-    let result = new_ucmd!()
+fn test_newline_as_delimiter() {
+    for (field, expected_output) in [("1", "a:1\n"), ("2", "b:\n")] {
+        new_ucmd!()
+            .args(&["-f", field, "-d", "\n"])
+            .pipe_in("a:1\nb:")
+            .succeeds()
+            .stdout_only_bytes(expected_output);
+    }
+}
+
+#[test]
+fn test_newline_as_delimiter_with_output_delimiter() {
+    new_ucmd!()
+        .args(&["-f1-", "-d", "\n", "--output-delimiter=:"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_only_bytes("a:b\n");
+}
+
+#[test]
+fn test_multiple_delimiters() {
+    new_ucmd!()
         .args(&["-f2", "-d:", "-d="])
-        .pipe_in("a=b\n")
-        .succeeds();
-    assert_eq!(result.stdout_str(), "b\n");
-    assert_eq!(result.stderr_str(), "");
+        .pipe_in("a:=b\n")
+        .succeeds()
+        .stdout_only("b\n");
+
+    new_ucmd!()
+        .args(&["-f2", "-d=", "-d:"])
+        .pipe_in("a:=b\n")
+        .succeeds()
+        .stdout_only("=b\n");
 }
 
 #[test]
@@ -301,13 +340,6 @@ fn test_multiple_mode_args() {
 }
 
 #[test]
-fn test_no_argument() {
-    new_ucmd!().fails().stderr_is(
-        "cut: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n",
-    );
-}
-
-#[test]
 #[cfg(unix)]
 fn test_8bit_non_utf8_delimiter() {
     use std::ffi::OsStr;
@@ -319,4 +351,30 @@ fn test_8bit_non_utf8_delimiter() {
         .args(&["--out=_", "-f2,3", "8bit-delim.txt"])
         .succeeds()
         .stdout_check(|out| out == "b_c\n".as_bytes());
+}
+
+#[test]
+fn test_newline_preservation_with_f1_option() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("1", "a\nb");
+    let expected = "a\nb\n";
+    ucmd.args(&["-f1-", "1"]).succeeds().stdout_is(expected);
+}
+
+#[test]
+fn test_output_delimiter_with_character_ranges() {
+    new_ucmd!()
+        .args(&["-c2-3,4-", "--output-delim=:"])
+        .pipe_in("abcdefg\n")
+        .succeeds()
+        .stdout_only("bc:defg\n");
+}
+
+#[test]
+fn test_output_delimiter_with_adjacent_ranges() {
+    new_ucmd!()
+        .args(&["-b1-2,3-4", "--output-d=:"])
+        .pipe_in("abcd\n")
+        .succeeds()
+        .stdout_only("ab:cd\n");
 }
