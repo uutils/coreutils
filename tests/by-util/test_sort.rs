@@ -1099,27 +1099,58 @@ fn test_merge_batch_size() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn test_merge_batch_size_with_limit() {
+fn test_merge_with_limit() {
     use rlimit::Resource;
     // Currently need...
     // 3 descriptors for stdin, stdout, stderr
     // 2 descriptors for CTRL+C handling logic (to be reworked at some point)
-    // 2 descriptors for the input files (i.e. batch-size of 2).
-    let limit_fd = 3 + 2 + 2;
-    TestScenario::new(util_name!())
-        .ucmd()
-        .limit(Resource::NOFILE, limit_fd, limit_fd)
-        .arg("--batch-size=2")
-        .arg("-m")
-        .arg("--unique")
-        .arg("merge_ints_interleaved_1.txt")
-        .arg("merge_ints_interleaved_2.txt")
-        .arg("merge_ints_interleaved_3.txt")
-        .arg("merge_ints_interleaved_3.txt")
-        .arg("merge_ints_interleaved_2.txt")
-        .arg("merge_ints_interleaved_1.txt")
-        .succeeds()
-        .stdout_only_fixture("merge_ints_interleaved.expected");
+    // Minimum 2 descriptors for the input files.
+    // 1 descriptor for a working temp file.
+    // Test outputs to stdout, so no need for an additional output descriptor.
+    let minimum_required_fd = 3 + 2 + 2 + 1;
+
+    // Need to test that if we have fewer than minimum_required_fd descriptors available
+    // we don't hang.
+    // Then for all cases >= minimum_required_fd the test should pass.
+    // Run up to a maximum of 10 extra descriptors (which is clearly more than we should
+    // ever need since we're only opening maximum 6 inputs simultaneously).
+    let easily_sufficient_fd = minimum_required_fd + 10;
+
+    // Test for explicit fail (i.e. validate we don't hang/loop-forever) when we don't
+    // have enough descriptors.
+    for limit_fd in 0..minimum_required_fd {
+        TestScenario::new(util_name!())
+            .ucmd()
+            .limit(Resource::NOFILE, limit_fd, limit_fd)
+            .arg("-m")
+            .arg("--batch-size=2")
+            .arg("--unique")
+            .arg("merge_ints_interleaved_1.txt")
+            .arg("merge_ints_interleaved_2.txt")
+            .arg("merge_ints_interleaved_3.txt")
+            .arg("merge_ints_interleaved_3.txt")
+            .arg("merge_ints_interleaved_2.txt")
+            .arg("merge_ints_interleaved_1.txt")
+            .fails();
+    }
+
+    // Test for pass when we have enough descriptors.
+    for limit_fd in minimum_required_fd..easily_sufficient_fd {
+        TestScenario::new(util_name!())
+            .ucmd()
+            .limit(Resource::NOFILE, limit_fd, limit_fd)
+            .arg("-m")
+            .arg("--batch-size=2")
+            .arg("--unique")
+            .arg("merge_ints_interleaved_1.txt")
+            .arg("merge_ints_interleaved_2.txt")
+            .arg("merge_ints_interleaved_3.txt")
+            .arg("merge_ints_interleaved_3.txt")
+            .arg("merge_ints_interleaved_2.txt")
+            .arg("merge_ints_interleaved_1.txt")
+            .succeeds()
+            .stdout_only_fixture("merge_ints_interleaved.expected");
+    }
 }
 
 #[test]
