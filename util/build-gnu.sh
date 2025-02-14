@@ -2,7 +2,7 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo
 
 set -e
 
@@ -346,7 +346,7 @@ sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/quote-align.sh
 # Slightly different error message
 sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
 # Most tests check that `/usr/bin/tr` is working correctly before running.
-# However in NixOS/Nix-based distros, the tr coreutil is located somewhere in
+# However in NixOS/Nix-based distros, the tr util is located somewhere in
 # /nix/store/xxxxxxxxxxxx...xxxx/bin/tr
 # We just replace the references to `/usr/bin/tr` with the result of `$(which tr)`
 sed -i  's/\/usr\/bin\/tr/$(which tr)/' tests/init.sh
