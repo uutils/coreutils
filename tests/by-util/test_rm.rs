@@ -775,3 +775,15 @@ fn test_non_utf8() {
     ucmd.arg(file).succeeds();
     assert!(!at.file_exists(file));
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_inaccessible_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("a/unreadable");
+    at.set_mode("a/unreadable", 0o0333);
+    ucmd.args(&["-r", "-f", "a"]).succeeds().no_output();
+    assert!(!at.dir_exists("a/unreadable"));
+    assert!(!at.dir_exists("a"));
+}

@@ -19,7 +19,7 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{
     format_usage, help_about, help_section, help_usage, os_str_as_bytes, prompt_yes, show_error,
 };
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
@@ -343,71 +343,80 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
-        if options.interactive != InteractiveMode::Always && !options.verbose {
-            if let Err(e) = fs::remove_dir_all(path) {
-                // GNU compatibility (rm/empty-inacc.sh)
-                // remove_dir_all failed. maybe it is because of the permissions
-                // but if the directory is empty, remove_dir might work.
-                // So, let's try that before failing for real
-                if fs::remove_dir(path).is_err() {
-                    had_err = true;
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        // GNU compatibility (rm/fail-eacces.sh)
-                        // here, GNU doesn't use some kind of remove_dir_all
-                        // It will show directory+file
-                        show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
-                    } else {
-                        show_error!("cannot remove {}: {}", path.quote(), e);
-                    }
-                }
-            }
-        } else {
-            let mut dirs: VecDeque<DirEntry> = VecDeque::new();
-            // The Paths to not descend into. We need to this because WalkDir doesn't have a way, afaik, to not descend into a directory
-            // So we have to just ignore paths as they come up if they start with a path we aren't descending into
-            let mut not_descended: Vec<PathBuf> = Vec::new();
+        // if options.interactive != InteractiveMode::Always && !options.verbose {
+        //     if let Err(e) = fs::remove_dir_all(path) {
+        //         // GNU compatibility (rm/empty-inacc.sh)
+        //         // remove_dir_all failed. maybe it is because of the permissions
+        //         // but if the directory is empty, remove_dir might work.
+        //         // So, let's try that before failing for real
+        //         if fs::remove_dir(path).is_err() {
+        //             had_err = true;
+        //             if e.kind() == std::io::ErrorKind::PermissionDenied {
+        //                 // GNU compatibility (rm/fail-eacces.sh)
+        //                 // here, GNU doesn't use some kind of remove_dir_all
+        //                 // It will show directory+file
+        //                 show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
+        //             } else {
+        //                 show_error!("cannot remove {}: {}", path.quote(), e);
+        //             }
+        //         }
+        //     }
+        // } else {
+        let mut dirs: VecDeque<PathBuf> = VecDeque::new();
+        // The Paths to not descend into. We need to this because WalkDir doesn't have a way, afaik, to not descend into a directory
+        // So we have to just ignore paths as they come up if they start with a path we aren't descending into
+        let mut not_descended: Vec<PathBuf> = Vec::new();
 
-            'outer: for entry in WalkDir::new(path) {
-                match entry {
-                    Ok(entry) => {
-                        if options.interactive == InteractiveMode::Always {
-                            for not_descend in &not_descended {
-                                if entry.path().starts_with(not_descend) {
-                                    // We don't need to continue the rest of code in this loop if we are in a directory we don't want to descend into
-                                    continue 'outer;
-                                }
+        'outer: for entry in WalkDir::new(path) {
+            match entry {
+                Ok(entry) => {
+                    if options.interactive == InteractiveMode::Always {
+                        for not_descend in &not_descended {
+                            if entry.path().starts_with(not_descend) {
+                                // We don't need to continue the rest of code in this loop if we are in a directory we don't want to descend into
+                                continue 'outer;
                             }
                         }
-                        let file_type = entry.file_type();
-                        if file_type.is_dir() {
-                            // If we are in Interactive Mode Always and the directory isn't empty we ask if we should descend else we push this directory onto dirs vector
-                            if options.interactive == InteractiveMode::Always
-                                && fs::read_dir(entry.path()).unwrap().count() != 0
-                            {
-                                // If we don't descend we push this directory onto our not_descended vector else we push this directory onto dirs vector
-                                if prompt_descend(entry.path()) {
-                                    dirs.push_back(entry);
-                                } else {
-                                    not_descended.push(entry.path().to_path_buf());
-                                }
+                    }
+                    let file_type = entry.file_type();
+                    if file_type.is_dir() {
+                        // If we are in Interactive Mode Always and the directory isn't empty we ask if we should descend else we push this directory onto dirs vector
+                        if options.interactive == InteractiveMode::Always
+                            && fs::read_dir(entry.path()).unwrap().count() != 0
+                        {
+                            // If we don't descend we push this directory onto our not_descended vector else we push this directory onto dirs vector
+                            if prompt_descend(entry.path()) {
+                                dirs.push_back(entry.path().to_path_buf());
                             } else {
-                                dirs.push_back(entry);
+                                not_descended.push(entry.path().to_path_buf());
                             }
                         } else {
-                            had_err = remove_file(entry.path(), options).bitor(had_err);
+                            dirs.push_back(entry.path().to_path_buf());
                         }
+                    } else {
+                        had_err = remove_file(entry.path(), options).bitor(had_err);
                     }
-                    Err(e) => {
+                }
+                Err(e) => {
+                    if let Some(io_error) = e.io_error() {
+                        if io_error.kind() == std::io::ErrorKind::PermissionDenied {
+                            // We might still be able to remove the directory, if it is empty.
+                        } else {
+                            had_err = true;
+                            show_error!("recursing in {}: {}", path.quote(), e);
+                        }
+                    } else {
                         had_err = true;
                         show_error!("recursing in {}: {}", path.quote(), e);
                     }
                 }
             }
-
-            for dir in dirs.iter().rev() {
-                had_err = remove_dir(dir.path(), options).bitor(had_err);
-            }
         }
+
+        for dir in dirs.iter().rev() {
+            had_err = remove_dir(dir, options).bitor(had_err);
+        }
+        // }
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
     } else if options.recursive {
@@ -428,49 +437,57 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     had_err
 }
 
-fn remove_dir(path: &Path, options: &Options) -> bool {
-    if prompt_dir(path, options) {
-        if let Ok(mut read_dir) = fs::read_dir(path) {
-            if options.dir || options.recursive {
-                if read_dir.next().is_none() {
-                    match fs::remove_dir(path) {
-                        Ok(_) => {
-                            if options.verbose {
-                                println!("removed directory {}", normalize(path).quote());
-                            }
-                        }
-                        Err(e) => {
-                            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                // GNU compatibility (rm/fail-eacces.sh)
-                                show_error!(
-                                    "cannot remove {}: {}",
-                                    path.quote(),
-                                    "Permission denied"
-                                );
-                            } else {
-                                show_error!("cannot remove {}: {}", path.quote(), e);
-                            }
-                            return true;
-                        }
-                    }
-                } else {
-                    // directory can be read but is not empty
-                    show_error!("cannot remove {}: Directory not empty", path.quote());
-                    return true;
-                }
-            } else {
-                // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
-                show_error!("cannot remove {}: Is a directory", path.quote());
-                return true;
+fn remove_empty_dir(path: &Path, verbose: bool) -> bool {
+    match fs::remove_dir(path) {
+        Ok(_) => {
+            if verbose {
+                println!("removed directory {}", normalize(path).quote());
             }
-        } else {
-            // GNU's rm shows this message if directory is empty but not readable
-            show_error!("cannot remove {}: Directory not empty", path.quote());
-            return true;
+            false
+        }
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                // GNU compatibility (rm/fail-eacces.sh)
+                show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
+            } else {
+                show_error!("cannot remove {}: {}", path.quote(), e);
+            }
+            true
         }
     }
+}
 
-    false
+fn remove_read_dir(path: &Path, read_dir: &mut fs::ReadDir, options: &Options) -> bool {
+    if !(options.dir || options.recursive) {
+        // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
+        show_error!("cannot remove {}: Is a directory", path.quote());
+        return true;
+    }
+    match read_dir.next() {
+        Some(_) => {
+            // directory can be read but is not empty
+            show_error!("cannot remove {}: Directory not empty", path.quote());
+            true
+        }
+        None => remove_empty_dir(path, options.verbose),
+    }
+}
+
+fn remove_dir(path: &Path, options: &Options) -> bool {
+    if !prompt_dir(path, options) {
+        return false;
+    }
+    match fs::read_dir(path) {
+        Ok(mut read_dir) => remove_read_dir(path, &mut read_dir, options),
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                remove_empty_dir(path, options.verbose)
+            } else {
+                show_error!("cannot remove {}: Directory not empty", path.quote());
+                true
+            }
+        }
+    }
 }
 
 fn remove_file(path: &Path, options: &Options) -> bool {
