@@ -74,10 +74,15 @@ tempfile = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi-util = { workspace = true, optional = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
+  "Wdk_System_SystemInformation",
   "Win32_Storage_FileSystem",
   "Win32_Foundation",
+  "Win32_System_RemoteDesktop",
   "Win32_System_WindowsProgramming",
 ] }
+
+[target.'cfg(target_os = "openbsd")'.dependencies]
+utmp-classic = { workspace = true, optional = true }
 
 [features]
 default = []
@@ -122,3 +127,4 @@ version-cmp = []
 wide = []
 custom-tz-fmt = []
 tty = []
+uptime = ["libc", "windows-sys", "utmpx", "utmp-classic", "thiserror"]
