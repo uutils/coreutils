@@ -167,10 +167,11 @@ fn test_rm_non_empty_directory() {
     at.mkdir(dir);
     at.touch(file_a);
 
-    ucmd.arg("-d")
-        .arg(dir)
-        .fails()
-        .stderr_contains(format!("cannot remove '{dir}': Directory not empty"));
+    #[cfg(windows)]
+    let expected = "rm: cannot remove 'test_rm_non_empty_dir': The directory is not empty.\n";
+    #[cfg(not(windows))]
+    let expected = "rm: cannot remove 'test_rm_non_empty_dir': Directory not empty\n";
+    ucmd.arg("-d").arg(dir).fails().stderr_only(expected);
     assert!(at.file_exists(file_a));
     assert!(at.dir_exists(dir));
 }
