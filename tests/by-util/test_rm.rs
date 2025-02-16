@@ -775,3 +775,40 @@ fn test_non_utf8() {
     ucmd.arg(file).succeeds();
     assert!(!at.file_exists(file));
 }
+
+#[test]
+fn test_recursive_interactive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("a/b");
+    #[cfg(windows)]
+    let expected =
+        "rm: descend into directory 'a'? rm: remove directory 'a\\b'? rm: remove directory 'a'? ";
+    #[cfg(not(windows))]
+    let expected =
+        "rm: descend into directory 'a'? rm: remove directory 'a/b'? rm: remove directory 'a'? ";
+    ucmd.args(&["-i", "-r", "a"])
+        .pipe_in("y\ny\ny\n")
+        .succeeds()
+        .stderr_only(expected);
+    assert!(!at.dir_exists("a/b"));
+    assert!(!at.dir_exists("a"));
+}
+
+// Avoid an infinite recursion due to a symbolic link to the current directory.
+#[test]
+fn test_recursive_symlink_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    at.relative_symlink_file(".", "d/link");
+    #[cfg(windows)]
+    let expected = "rm: descend into directory 'd'? rm: remove symbolic link 'd\\link'? rm: remove directory 'd'? ";
+    #[cfg(not(windows))]
+    let expected = "rm: descend into directory 'd'? rm: remove symbolic link 'd/link'? rm: remove directory 'd'? ";
+    ucmd.args(&["-i", "-r", "d"])
+        .pipe_in("y\ny\ny\n")
+        .succeeds()
+        .stderr_only(expected);
+    assert!(!at.symlink_exists("d/link"));
+    assert!(!at.dir_exists("d"));
+}
