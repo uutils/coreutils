@@ -330,6 +330,17 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     had_err
 }
 
+/// Whether the given directory is empty.
+///
+/// `path` must be a directory. If there is an error reading the
+/// contents of the directory, this returns `false`.
+fn is_dir_empty(path: &Path) -> bool {
+    match std::fs::read_dir(path) {
+        Err(_) => false,
+        Ok(iter) => iter.count() == 0,
+    }
+}
+
 /// Whether the given file or directory is writable.
 #[cfg(unix)]
 fn is_writable(path: &Path) -> bool {
@@ -403,7 +414,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
                         if file_type.is_dir() {
                             // If we are in Interactive Mode Always and the directory isn't empty we ask if we should descend else we push this directory onto dirs vector
                             if options.interactive == InteractiveMode::Always
-                                && fs::read_dir(entry.path()).unwrap().count() != 0
+                                && !is_dir_empty(entry.path())
                             {
                                 // If we don't descend we push this directory onto our not_descended vector else we push this directory onto dirs vector
                                 if prompt_descend(entry.path()) {
