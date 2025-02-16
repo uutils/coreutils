@@ -135,12 +135,62 @@ fn filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
     Some(DateTime::from_timestamp(ft.unix_seconds(), ft.nanoseconds())?.into())
 }
 
+/// Whether all characters in the string are digits.
+fn all_digits(s: &str) -> bool {
+    s.as_bytes().iter().all(u8::is_ascii_digit)
+}
+
+/// Convert a two-digit year string to the corresponding number.
+///
+/// `s` must be of length two or more. The last two bytes of `s` are
+/// assumed to be the two digits of the year.
+fn get_year(s: &str) -> u8 {
+    let bytes = s.as_bytes();
+    let n = bytes.len();
+    let y1 = bytes[n - 2] - b'0';
+    let y2 = bytes[n - 1] - b'0';
+    10 * y1 + y2
+}
+
+/// Whether the first filename should be interpreted as a timestamp.
+fn is_first_filename_timestamp(
+    reference: Option<&OsString>,
+    date: Option<&str>,
+    timestamp: &Option<String>,
+    files: &[&String],
+) -> bool {
+    match std::env::var("_POSIX2_VERSION") {
+        Ok(s) if s == "199209" => {
+            if timestamp.is_none() && reference.is_none() && date.is_none() && files.len() >= 2 {
+                let s = files[0];
+                all_digits(s)
+                    && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
+/// Cycle the last two characters to the beginning of the string.
+///
+/// `s` must have length at least two.
+fn shr2(s: &str) -> String {
+    let n = s.len();
+    let (a, b) = s.split_at(n - 2);
+    let mut result = String::with_capacity(n);
+    result.push_str(b);
+    result.push_str(a);
+    result
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let files: Vec<InputFile> = matches
-        .get_many::<OsString>(ARG_FILES)
+    let mut filenames: Vec<&String> = matches
+        .get_many::<String>(ARG_FILES)
         .ok_or_else(|| {
             USimpleError::new(
                 1,
@@ -150,6 +200,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             )
         })?
+        .collect();
+
+    let no_deref = matches.get_flag(options::NO_DEREF);
+
+    let reference = matches.get_one::<OsString>(options::sources::REFERENCE);
+    let date = matches
+        .get_one::<String>(options::sources::DATE)
+        .map(|date| date.to_owned());
+
+    let mut timestamp = matches
+        .get_one::<String>(options::sources::TIMESTAMP)
+        .map(|t| t.to_owned());
+
+    if is_first_filename_timestamp(reference, date.as_deref(), &timestamp, &filenames) {
+        timestamp = if filenames[0].len() == 10 {
+            Some(shr2(filenames[0]))
+        } else {
+            Some(filenames[0].to_string())
+        };
+        filenames = filenames[1..].to_vec();
+    }
+
+    let source = if let Some(reference) = reference {
+        Source::Reference(PathBuf::from(reference))
+    } else if let Some(ts) = timestamp {
+        Source::Timestamp(parse_timestamp(&ts)?)
+    } else {
+        Source::Now
+    };
+
+    let files: Vec<InputFile> = filenames
+        .into_iter()
         .map(|filename| {
             if filename == "-" {
                 InputFile::Stdout
@@ -158,23 +240,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         })
         .collect();
-
-    let no_deref = matches.get_flag(options::NO_DEREF);
-
-    let reference = matches.get_one::<OsString>(options::sources::REFERENCE);
-    let timestamp = matches.get_one::<String>(options::sources::TIMESTAMP);
-
-    let source = if let Some(reference) = reference {
-        Source::Reference(PathBuf::from(reference))
-    } else if let Some(ts) = timestamp {
-        Source::Timestamp(parse_timestamp(ts)?)
-    } else {
-        Source::Now
-    };
-
-    let date = matches
-        .get_one::<String>(options::sources::DATE)
-        .map(|date| date.to_owned());
 
     let opts = Options {
         no_create: matches.get_flag(options::NO_CREATE),
@@ -275,7 +340,6 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
-                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .group(
@@ -599,14 +663,11 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 
     let local = NaiveDateTime::parse_from_str(&ts, format)
         .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
-    let mut local = match chrono::Local.from_local_datetime(&local) {
-        LocalResult::Single(dt) => dt,
-        _ => {
-            return Err(USimpleError::new(
-                1,
-                format!("invalid date ts format {}", ts.quote()),
-            ))
-        }
+    let LocalResult::Single(mut local) = chrono::Local.from_local_datetime(&local) else {
+        return Err(USimpleError::new(
+            1,
+            format!("invalid date ts format {}", ts.quote()),
+        ));
     };
 
     // Chrono caps seconds at 59, but 60 is valid. It might be a leap second

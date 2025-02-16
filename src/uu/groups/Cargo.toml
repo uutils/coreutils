@@ -1,6 +1,6 @@
 [package]
 name = "uu_groups"
-version = "0.0.28"
+version = "0.0.29"
 authors = ["uutils developers"]
 license = "MIT"
 description = "groups ~ (uutils) display group memberships for USERNAME"
@@ -18,6 +18,7 @@ path = "src/groups.rs"
 
 [dependencies]
 clap = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
 
 [[bin]]

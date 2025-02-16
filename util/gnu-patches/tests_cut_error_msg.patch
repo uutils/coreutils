@@ -1,0 +1,72 @@
+Index: gnu/tests/cut/cut.pl
+===================================================================
+--- gnu.orig/tests/cut/cut.pl
++++ gnu/tests/cut/cut.pl
+@@ -29,13 +29,15 @@ my $mb_locale = $ENV{LOCALE_FR_UTF8};
+ 
+ my $prog = 'cut';
+ my $try = "Try '$prog --help' for more information.\n";
+-my $from_field1 = "$prog: fields are numbered from 1\n$try";
+-my $from_pos1 =   "$prog: byte/character positions are numbered from 1\n$try";
+-my $inval_fld = "$prog: invalid field range\n$try";
+-my $inval_pos = "$prog: invalid byte or character range\n$try";
+-my $no_endpoint = "$prog: invalid range with no endpoint: -\n$try";
+-my $nofield = "$prog: an input delimiter may be specified only when " .
+-              "operating on fields\n$try";
++my $from_field1 = "$prog: range '' was invalid: failed to parse range\n";
++my $from_field_0 = "$prog: range '0' was invalid: fields and positions are numbered from 1\n";
++my $from_field_0_dash = "$prog: range '0-' was invalid: fields and positions are numbered from 1\n";
++my $from_field_0_2 = "$prog: range '0-2' was invalid: fields and positions are numbered from 1\n";
++my $from_pos1 =   "$prog: range '' was invalid: failed to parse range\n";
++my $inval_fld = "$prog: range '--' was invalid: failed to parse range\n";
++my $inval_pos = "$prog: range '--' was invalid: failed to parse range\n";
++my $no_endpoint = "$prog: range '-' was invalid: invalid range with no endpoint\n";
++my $nofield = "$prog: invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields\n";
+ 
+ my @Tests =
+  (
+@@ -44,16 +46,16 @@ my @Tests =
+ 
+   # This failed (as it should) even before coreutils-6.9.90,
+   # but cut from 6.9.90 produces a more useful diagnostic.
+-  ['zero-1', '-b0',   {ERR=>$from_pos1}, {EXIT => 1} ],
++  ['zero-1', '-b0',   {ERR=>$from_field_0}, {EXIT => 1} ],
+ 
+   # Up to coreutils-6.9, specifying a range of 0-2 was not an error.
+   # It was treated just like "-2".
+-  ['zero-2', '-f0-2', {ERR=>$from_field1}, {EXIT => 1} ],
++  ['zero-2', '-f0-2', {ERR=>$from_field_0_2}, {EXIT => 1} ],
+ 
+   # Up to coreutils-8.20, specifying a range of 0- was not an error.
+-  ['zero-3b', '-b0-', {ERR=>$from_pos1}, {EXIT => 1} ],
+-  ['zero-3c', '-c0-', {ERR=>$from_pos1}, {EXIT => 1} ],
+-  ['zero-3f', '-f0-', {ERR=>$from_field1}, {EXIT => 1} ],
++  ['zero-3b', '-b0-', {ERR=>$from_field_0_dash}, {EXIT => 1} ],
++  ['zero-3c', '-c0-', {ERR=>$from_field_0_dash}, {EXIT => 1} ],
++  ['zero-3f', '-f0-', {ERR=>$from_field_0_dash}, {EXIT => 1} ],
+ 
+   ['1', '-d:', '-f1,3-', {IN=>"a:b:c\n"}, {OUT=>"a:c\n"}],
+   ['2', '-d:', '-f1,3-', {IN=>"a:b:c\n"}, {OUT=>"a:c\n"}],
+@@ -96,11 +98,10 @@ my @Tests =
+   # Errors
+   # -s may be used only with -f
+   ['y', qw(-s -b4), {IN=>":\n"}, {OUT=>""}, {EXIT=>1},
+-   {ERR=>"$prog: suppressing non-delimited lines makes sense\n"
+-    . "\tonly when operating on fields\n$try"}],
++   {ERR=>"$prog: invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields\n"}],
+   # You must specify bytes or fields (or chars)
+   ['z', '', {IN=>":\n"}, {OUT=>""}, {EXIT=>1},
+-   {ERR=>"$prog: you must specify a list of bytes, characters, or fields\n$try"}
++   {ERR=>"$prog: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n"}
+   ],
+   # Empty field list
+   ['empty-fl', qw(-f ''), {IN=>":\n"}, {OUT=>""}, {EXIT=>1},
+@@ -199,7 +200,7 @@ my @Tests =
+ 
+   # None of the following invalid ranges provoked an error up to coreutils-6.9.
+   ['inval1', qw(-f 2-0), {IN=>''}, {OUT=>''}, {EXIT=>1},
+-   {ERR=>"$prog: invalid decreasing range\n$try"}],
++   {ERR=>"$prog: range '2-0' was invalid: fields and positions are numbered from 1\n"}],
+   ['inval2', qw(-f -), {IN=>''}, {OUT=>''}, {EXIT=>1}, {ERR=>$no_endpoint}],
+   ['inval3', '-f', '4,-', {IN=>''}, {OUT=>''}, {EXIT=>1}, {ERR=>$no_endpoint}],
+   ['inval4', '-f', '1-2,-', {IN=>''}, {OUT=>''}, {EXIT=>1},

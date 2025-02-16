@@ -10,6 +10,26 @@ fn invalid_input() {
     new_ucmd!().arg("-/").fails().code_is(125);
 }
 
+#[test]
+fn test_permission() {
+    new_ucmd!()
+        .arg("-o1")
+        .arg(".")
+        .fails()
+        .code_is(126)
+        .stderr_contains("Permission denied");
+}
+
+#[test]
+fn test_no_such() {
+    new_ucmd!()
+        .arg("-o1")
+        .arg("no_such")
+        .fails()
+        .code_is(127)
+        .stderr_contains("No such file or directory");
+}
+
 #[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
 #[test]
 fn test_stdbuf_unbuffered_stdout() {

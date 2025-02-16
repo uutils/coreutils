@@ -26,6 +26,10 @@ fn test_count() {
 #[cfg(unix)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    all(target_arch = "aarch64", target_os = "linux"),
+    ignore = "Issue #7174 - Test not supported on ARM64 Linux"
+)]
 fn test_boot() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-b", "--boot", "--b"] {

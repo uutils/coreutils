@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore extendedbigdecimal bigdecimal numberparse
+// spell-checker:ignore extendedbigdecimal bigdecimal numberparse hexadecimalfloat
 //! Parsing numbers for use in `seq`.
 //!
 //! This module provides an implementation of [`FromStr`] for the
@@ -16,6 +16,7 @@ use num_traits::Num;
 use num_traits::Zero;
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
+use crate::hexadecimalfloat;
 use crate::number::PreciseNumber;
 
 /// An error returned when parsing a number fails.
@@ -102,7 +103,19 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     // displayed in decimal notation. For example, "1e-2" will be
     // displayed as "0.01", but "1e2" will be displayed as "100",
     // without a decimal point.
-    let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
+
+    // In ['BigDecimal'], a positive scale represents a negative power of 10.
+    // This means the exponent value from the number must be inverted. However,
+    // since the |i64::MIN| > |i64::MAX| (i.e. |−2^63| > |2^63−1|) inverting a
+    // valid negative value could result in an overflow. To prevent this, we
+    // limit the minimal value with i64::MIN + 1.
+    let exponent = exponent.max(i64::MIN + 1);
+    let base: BigInt = s[..j].parse().map_err(|_| ParseNumberError::Float)?;
+    let x = if base.is_zero() {
+        BigDecimal::zero()
+    } else {
+        BigDecimal::from_bigint(base, -exponent)
+    };
 
     let num_integral_digits = if is_minus_zero_float(s, &x) {
         if exponent > 0 {
@@ -204,7 +217,16 @@ fn parse_decimal_and_exponent(
     // Because of the match guard, this subtraction will not underflow.
     let num_digits_between_decimal_point_and_e = (j - (i + 1)) as i64;
     let exponent: i64 = s[j + 1..].parse().map_err(|_| ParseNumberError::Float)?;
-    let val: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
+    let val: BigDecimal = {
+        let parsed_decimal = s
+            .parse::<BigDecimal>()
+            .map_err(|_| ParseNumberError::Float)?;
+        if parsed_decimal == BigDecimal::zero() {
+            BigDecimal::zero()
+        } else {
+            parsed_decimal
+        }
+    };
 
     let num_integral_digits = {
         let minimum: usize = {
@@ -278,6 +300,14 @@ fn parse_decimal_and_exponent(
 /// assert_eq!(actual, expected);
 /// ```
 fn parse_hexadecimal(s: &str) -> Result<PreciseNumber, ParseNumberError> {
+    if s.find(['.', 'p', 'P']).is_some() {
+        hexadecimalfloat::parse_number(s)
+    } else {
+        parse_hexadecimal_integer(s)
+    }
+}
+
+fn parse_hexadecimal_integer(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     let (is_neg, s) = if s.starts_with('-') {
         (true, &s[3..])
     } else {
@@ -323,7 +353,7 @@ impl FromStr for PreciseNumber {
         // Check if the string seems to be in hexadecimal format.
         //
         // May be 0x123 or -0x123, so the index `i` may be either 0 or 1.
-        if let Some(i) = s.to_lowercase().find("0x") {
+        if let Some(i) = s.find("0x").or_else(|| s.find("0X")) {
             if i <= 1 {
                 return parse_hexadecimal(s);
             }
@@ -333,7 +363,7 @@ impl FromStr for PreciseNumber {
         // number differently depending on its form. This is important
         // because the form of the input dictates how the output will be
         // presented.
-        match (s.find('.'), s.find('e')) {
+        match (s.find('.'), s.find(['e', 'E'])) {
             // For example, "123456" or "inf".
             (None, None) => parse_no_decimal_no_exponent(s),
             // For example, "123e456" or "1e-2".
@@ -392,6 +422,7 @@ mod tests {
     fn test_parse_big_int() {
         assert_eq!(parse("0"), ExtendedBigDecimal::zero());
         assert_eq!(parse("0.1e1"), ExtendedBigDecimal::one());
+        assert_eq!(parse("0.1E1"), ExtendedBigDecimal::one());
         assert_eq!(
             parse("1.0e1"),
             ExtendedBigDecimal::BigDecimal("10".parse::<BigDecimal>().unwrap())
@@ -570,5 +601,19 @@ mod tests {
         assert_eq!(num_fractional_digits("-0.0"), 1);
         assert_eq!(num_fractional_digits("-0e-1"), 1);
         assert_eq!(num_fractional_digits("-0.0e-1"), 2);
+    }
+
+    #[test]
+    fn test_parse_min_exponents() {
+        // Make sure exponents <= i64::MIN do not cause errors
+        assert!("1e-9223372036854775807".parse::<PreciseNumber>().is_ok());
+        assert!("1e-9223372036854775808".parse::<PreciseNumber>().is_ok());
+    }
+
+    #[test]
+    fn test_parse_max_exponents() {
+        // Make sure exponents >= i64::MAX cause errors
+        assert!("1e9223372036854775807".parse::<PreciseNumber>().is_err());
+        assert!("1e9223372036854775808".parse::<PreciseNumber>().is_err());
     }
 }

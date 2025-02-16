@@ -35,11 +35,13 @@ jobs:
       RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.6
+      uses: mozilla-actions/sccache-action@v0.0.7
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.1.5
+      uses: vmactions/freebsd-vm@v1.1.8
       with:
         usesh: true
         sync: rsync
@@ -127,11 +129,13 @@ jobs:
       RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.6
+      uses: mozilla-actions/sccache-action@v0.0.7
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.1.5
+      uses: vmactions/freebsd-vm@v1.1.8
       with:
         usesh: true
         sync: rsync

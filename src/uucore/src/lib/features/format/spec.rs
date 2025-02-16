@@ -314,15 +314,17 @@ impl Spec {
     ) -> Result<(), FormatError> {
         match self {
             Self::Char { width, align_left } => {
-                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
-                write_padded(writer, &[args.get_char()], width, *align_left)
+                let (width, neg_width) =
+                    resolve_asterisk_maybe_negative(*width, &mut args).unwrap_or_default();
+                write_padded(writer, &[args.get_char()], width, *align_left || neg_width)
             }
             Self::String {
                 width,
                 align_left,
                 precision,
             } => {
-                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
+                let (width, neg_width) =
+                    resolve_asterisk_maybe_negative(*width, &mut args).unwrap_or_default();
 
                 // GNU does do this truncation on a byte level, see for instance:
                 //     printf "%.1s" 🙃
@@ -330,13 +332,18 @@ impl Spec {
                 // For now, we let printf panic when we truncate within a code point.
                 // TODO: We need to not use Rust's formatting for aligning the output,
                 // so that we can just write bytes to stdout without panicking.
-                let precision = resolve_asterisk(*precision, &mut args)?;
+                let precision = resolve_asterisk(*precision, &mut args);
                 let s = args.get_str();
                 let truncated = match precision {
                     Some(p) if p < s.len() => &s[..p],
                     _ => s,
                 };
-                write_padded(writer, truncated.as_bytes(), width, *align_left)
+                write_padded(
+                    writer,
+                    truncated.as_bytes(),
+                    width,
+                    *align_left || neg_width,
+                )
             }
             Self::EscapedString => {
                 let s = args.get_str();
@@ -353,20 +360,20 @@ impl Spec {
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
             Self::QuotedString => {
-                let s = args.get_str();
-                writer
-                    .write_all(
-                        escape_name(
-                            s.as_ref(),
-                            &QuotingStyle::Shell {
-                                escape: true,
-                                always_quote: false,
-                                show_control: false,
-                            },
-                        )
-                        .as_bytes(),
-                    )
-                    .map_err(FormatError::IoError)
+                let s = escape_name(
+                    args.get_str().as_ref(),
+                    &QuotingStyle::Shell {
+                        escape: true,
+                        always_quote: false,
+                        show_control: false,
+                    },
+                );
+                #[cfg(unix)]
+                let bytes = std::os::unix::ffi::OsStringExt::into_vec(s);
+                #[cfg(not(unix))]
+                let bytes = s.to_string_lossy().as_bytes().to_owned();
+
+                writer.write_all(&bytes).map_err(FormatError::IoError)
             }
             Self::SignedInt {
                 width,
@@ -374,8 +381,8 @@ impl Spec {
                 positive_sign,
                 alignment,
             } => {
-                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
-                let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(0);
+                let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
+                let precision = resolve_asterisk(*precision, &mut args).unwrap_or(0);
                 let i = args.get_i64();
 
                 if precision as u64 > i32::MAX as u64 {
@@ -397,8 +404,8 @@ impl Spec {
                 precision,
                 alignment,
             } => {
-                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
-                let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(0);
+                let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
+                let precision = resolve_asterisk(*precision, &mut args).unwrap_or(0);
                 let i = args.get_u64();
 
                 if precision as u64 > i32::MAX as u64 {
@@ -423,8 +430,8 @@ impl Spec {
                 alignment,
                 precision,
             } => {
-                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
-                let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(6);
+                let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
+                let precision = resolve_asterisk(*precision, &mut args).unwrap_or(6);
                 let f = args.get_f64();
 
                 if precision as u64 > i32::MAX as u64 {
@@ -450,12 +457,30 @@ impl Spec {
 fn resolve_asterisk<'a>(
     option: Option<CanAsterisk<usize>>,
     mut args: impl ArgumentIter<'a>,
-) -> Result<Option<usize>, FormatError> {
-    Ok(match option {
+) -> Option<usize> {
+    match option {
         None => None,
         Some(CanAsterisk::Asterisk) => Some(usize::try_from(args.get_u64()).ok().unwrap_or(0)),
         Some(CanAsterisk::Fixed(w)) => Some(w),
-    })
+    }
+}
+
+fn resolve_asterisk_maybe_negative<'a>(
+    option: Option<CanAsterisk<usize>>,
+    mut args: impl ArgumentIter<'a>,
+) -> Option<(usize, bool)> {
+    match option {
+        None => None,
+        Some(CanAsterisk::Asterisk) => {
+            let nb = args.get_i64();
+            if nb < 0 {
+                Some((usize::try_from(-(nb as isize)).ok().unwrap_or(0), true))
+            } else {
+                Some((usize::try_from(nb).ok().unwrap_or(0), false))
+            }
+        }
+        Some(CanAsterisk::Fixed(w)) => Some((w, false)),
+    }
 }
 
 fn write_padded(

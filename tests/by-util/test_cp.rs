@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG getfattr
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -611,7 +611,7 @@ fn test_cp_arg_interactive_update_overwrite_older() {
     // Option N
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b");
-    std::thread::sleep(Duration::from_secs(1));
+    sleep(Duration::from_millis(100));
     at.touch("a");
     ucmd.args(&["-i", "-u", "a", "b"])
         .pipe_in("N\n")
@@ -623,7 +623,7 @@ fn test_cp_arg_interactive_update_overwrite_older() {
     // Option Y
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b");
-    std::thread::sleep(Duration::from_secs(1));
+    sleep(Duration::from_millis(100));
     at.touch("a");
     ucmd.args(&["-i", "-u", "a", "b"])
         .pipe_in("Y\n")
@@ -2241,7 +2241,7 @@ fn test_cp_no_preserve_timestamps() {
         previous,
     )
     .unwrap();
-    sleep(Duration::from_secs(3));
+    sleep(Duration::from_millis(100));
 
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--no-preserve=timestamps")
@@ -2288,7 +2288,7 @@ fn test_cp_one_file_system() {
     use crate::common::util::AtPath;
     use walkdir::WalkDir;
 
-    let scene = TestScenario::new(util_name!());
+    let mut scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     // Test must be run as root (or with `sudo -E`)
@@ -2304,14 +2304,8 @@ fn test_cp_one_file_system() {
     let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
 
     scene
-        .cmd("mount")
-        .arg("-t")
-        .arg("tmpfs")
-        .arg("-o")
-        .arg("size=640k") // ought to be enough
-        .arg("tmpfs")
-        .arg(mountpoint_path)
-        .succeeds();
+        .mount_temp_fs(mountpoint_path)
+        .expect("mounting tmpfs failed");
 
     at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
 
@@ -2324,7 +2318,7 @@ fn test_cp_one_file_system() {
         .succeeds();
 
     // Ditch the mount before the asserts
-    scene.cmd("umount").arg(mountpoint_path).succeeds();
+    scene.umount_temp_fs();
 
     assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));
     // Check if the other files were copied from the source folder hierarchy
@@ -2423,6 +2417,17 @@ fn test_cp_reflink_bad() {
 }
 
 #[test]
+fn test_cp_conflicting_update() {
+    new_ucmd!()
+        .arg("-b")
+        .arg("--update=none")
+        .arg("a")
+        .arg("b")
+        .fails()
+        .stderr_contains("--backup is mutually exclusive with -n or --update=none-fail");
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_reflink_insufficient_permission() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2513,7 +2518,7 @@ fn test_cp_sparse_always_non_empty() {
     const BUFFER_SIZE: usize = 4096 * 16 + 3;
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+    let mut buf = vec![0; BUFFER_SIZE].into_boxed_slice();
     let blocks_to_touch = [buf.len() / 3, 2 * (buf.len() / 3)];
 
     for i in blocks_to_touch {
@@ -2529,7 +2534,7 @@ fn test_cp_sparse_always_non_empty() {
     let touched_block_count =
         blocks_to_touch.len() as u64 * at.metadata("dst_file_sparse").blksize() / 512;
 
-    assert_eq!(at.read_bytes("dst_file_sparse"), buf);
+    assert_eq!(at.read_bytes("dst_file_sparse").into_boxed_slice(), buf);
     assert_eq!(at.metadata("dst_file_sparse").blocks(), touched_block_count);
 }
 
@@ -2896,7 +2901,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     //               target name    link name
     at.symlink_file("no-such-file", "dangle");
     // to check if access time and modification time didn't change
-    sleep(Duration::from_millis(5000));
+    sleep(Duration::from_millis(100));
     //          don't dereference the link
     //           |    copy permissions, too
     //           |      |    from the link
@@ -3365,6 +3370,29 @@ fn test_copy_dir_preserve_permissions() {
     assert_metadata_eq!(metadata1, metadata2);
 }
 
+/// cp should preserve attributes of subdirectories when copying recursively.
+#[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[test]
+fn test_copy_dir_preserve_subdir_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a1");
+    at.mkdir("a1/a2");
+    // Use different permissions for a better test
+    at.set_mode("a1/a2", 0o0555);
+    at.set_mode("a1", 0o0777);
+
+    ucmd.args(&["-p", "-r", "a1", "b1"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    // Make sure everything is preserved
+    assert!(at.dir_exists("b1"));
+    assert!(at.dir_exists("b1/a2"));
+    assert_metadata_eq!(at.metadata("a1"), at.metadata("b1"));
+    assert_metadata_eq!(at.metadata("a1/a2"), at.metadata("b1/a2"));
+}
+
 /// Test for preserving permissions when copying a directory, even in
 /// the face of an inaccessible file in that directory.
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
@@ -3437,15 +3465,9 @@ fn test_same_file_force_backup() {
 }
 
 /// Test for copying the contents of a FIFO as opposed to the FIFO object itself.
-#[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
+#[cfg(unix)]
 #[test]
 fn test_copy_contents_fifo() {
-    // TODO this test should work on FreeBSD, but the command was
-    // causing an error:
-    //
-    // cp: 'fifo' -> 'outfile': the source path is neither a regular file nor a symlink to a regular file
-    //
-    // the underlying `std::fs:copy` doesn't support copying fifo on freeBSD
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
 
@@ -5616,7 +5638,7 @@ mod link_deref {
 // which could be problematic if we aim to preserve ownership or mode. For example, when
 // copying a directory, the destination directory could temporarily be setgid on some filesystems.
 // This temporary setgid status could grant access to other users who share the same group
-// ownership as the newly created directory.To mitigate this issue, when creating a directory we
+// ownership as the newly created directory. To mitigate this issue, when creating a directory we
 // disable these excessive permissions.
 #[test]
 #[cfg(unix)]
@@ -5658,7 +5680,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
             if at.dir_exists(&format!("{DEST_DIR}/{SRC_DIR}")) {
                 break;
             }
-            std::thread::sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(100));
         }
         let mode = at.metadata(&format!("{DEST_DIR}/{SRC_DIR}")).mode();
         #[allow(clippy::unnecessary_cast, clippy::cast_lossless)]
@@ -5947,4 +5969,137 @@ fn test_cp_no_file() {
     ucmd.fails()
         .code_is(1)
         .stderr_contains("error: the following required arguments were not provided:");
+}
+
+#[test]
+#[cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
+))]
+fn test_cp_preserve_xattr_readonly_source() {
+    use crate::common::util::compare_xattrs;
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source_file = "a";
+    let dest_file = "e";
+
+    at.touch(source_file);
+
+    let xattr_key = "user.test";
+    match Command::new("setfattr")
+        .args([
+            "-n",
+            xattr_key,
+            "-v",
+            "value",
+            &at.plus_as_string(source_file),
+        ])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfattr failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfattr failed with {e}");
+            return;
+        }
+    }
+
+    let getfattr_output = Command::new("getfattr")
+        .args([&at.plus_as_string(source_file)])
+        .output()
+        .expect("Failed to run `getfattr` on the destination file");
+
+    assert!(
+        getfattr_output.status.success(),
+        "getfattr did not run successfully: {}",
+        String::from_utf8_lossy(&getfattr_output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
+    assert!(
+        stdout.contains(xattr_key),
+        "Expected '{}' not found in getfattr output:\n{}",
+        xattr_key,
+        stdout
+    );
+
+    at.set_readonly(source_file);
+    assert!(scene
+        .fixtures
+        .metadata(source_file)
+        .permissions()
+        .readonly());
+
+    scene
+        .ucmd()
+        .args(&[
+            "--preserve=xattr",
+            &at.plus_as_string(source_file),
+            &at.plus_as_string(dest_file),
+        ])
+        .succeeds()
+        .no_output();
+
+    assert!(scene.fixtures.metadata(dest_file).permissions().readonly());
+    assert!(
+        compare_xattrs(&at.plus(source_file), &at.plus(dest_file)),
+        "Extended attributes were not preserved"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_from_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let target = "target";
+    let test_string = "Hello, World!\n";
+
+    ucmd.arg("/dev/fd/0")
+        .arg(target)
+        .pipe_in(test_string)
+        .succeeds();
+
+    assert!(at.file_exists(target));
+    assert_eq!(at.read(target), test_string);
+}
+
+#[test]
+fn test_cp_update_older_interactive_prompt_yes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let old_file = "old";
+    let new_file = "new";
+
+    let f = at.make_file(old_file);
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.touch(new_file);
+
+    ucmd.args(&["-i", "-v", "--update=older", new_file, old_file])
+        .pipe_in("Y\n")
+        .stderr_to_stdout()
+        .succeeds()
+        .stdout_is("cp: overwrite 'old'? 'new' -> 'old'\n");
+}
+
+#[test]
+fn test_cp_update_older_interactive_prompt_no() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let old_file = "old";
+    let new_file = "new";
+
+    let f = at.make_file(old_file);
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.touch(new_file);
+
+    ucmd.args(&["-i", "-v", "--update=older", new_file, old_file])
+        .pipe_in("N\n")
+        .stderr_to_stdout()
+        .fails()
+        .stdout_is("cp: overwrite 'old'? ");
 }

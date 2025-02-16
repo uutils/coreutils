@@ -3,18 +3,22 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (path) eacces inacc
+// spell-checker:ignore (path) eacces inacc rm-r4
 
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, File, Metadata};
-use std::io::ErrorKind;
+use std::fs::{self, Metadata};
 use std::ops::BitOr;
+#[cfg(not(windows))]
+use std::os::unix::ffi::OsStrExt;
+use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::{
+    format_usage, help_about, help_section, help_usage, os_str_as_bytes, prompt_yes, show_error,
+};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -290,6 +294,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 
     for filename in files {
         let file = Path::new(filename);
+
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
                 if metadata.is_dir() {
@@ -300,6 +305,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
                     remove_file(file, options)
                 }
             }
+
             Err(_e) => {
                 // TODO: actually print out the specific error
                 // TODO: When the error is not about missing files
@@ -325,6 +331,15 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 #[allow(clippy::cognitive_complexity)]
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
+
+    let path = clean_trailing_slashes(path);
+    if path_is_current_or_parent_directory(path) {
+        show_error!(
+            "refusing to remove '.' or '..' directory: skipping '{}'",
+            path.display()
+        );
+        return true;
+    }
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
@@ -396,7 +411,11 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
     } else if options.recursive {
-        show_error!("could not remove directory {}", path.quote());
+        show_error!(
+            "it is dangerous to operate recursively on '{}'",
+            MAIN_SEPARATOR
+        );
+        show_error!("use --no-preserve-root to override this failsafe");
         had_err = true;
     } else {
         show_error!(
@@ -409,49 +428,35 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     had_err
 }
 
+/// Remove the given directory, asking the user for permission if necessary.
+///
+/// Returns true if it has encountered an error.
 fn remove_dir(path: &Path, options: &Options) -> bool {
-    if prompt_dir(path, options) {
-        if let Ok(mut read_dir) = fs::read_dir(path) {
-            if options.dir || options.recursive {
-                if read_dir.next().is_none() {
-                    match fs::remove_dir(path) {
-                        Ok(_) => {
-                            if options.verbose {
-                                println!("removed directory {}", normalize(path).quote());
-                            }
-                        }
-                        Err(e) => {
-                            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                // GNU compatibility (rm/fail-eacces.sh)
-                                show_error!(
-                                    "cannot remove {}: {}",
-                                    path.quote(),
-                                    "Permission denied"
-                                );
-                            } else {
-                                show_error!("cannot remove {}: {}", path.quote(), e);
-                            }
-                            return true;
-                        }
-                    }
-                } else {
-                    // directory can be read but is not empty
-                    show_error!("cannot remove {}: Directory not empty", path.quote());
-                    return true;
-                }
-            } else {
-                // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
-                show_error!("cannot remove {}: Is a directory", path.quote());
-                return true;
-            }
-        } else {
-            // GNU's rm shows this message if directory is empty but not readable
-            show_error!("cannot remove {}: Directory not empty", path.quote());
-            return true;
-        }
+    // Ask the user for permission.
+    if !prompt_dir(path, options) {
+        return false;
     }
 
-    false
+    // Called to remove a symlink_dir (windows) without "-r"/"-R" or "-d".
+    if !options.dir && !options.recursive {
+        show_error!("cannot remove {}: Is a directory", path.quote());
+        return true;
+    }
+
+    // Try to remove the directory.
+    match fs::remove_dir(path) {
+        Ok(_) => {
+            if options.verbose {
+                println!("removed directory {}", normalize(path).quote());
+            }
+            false
+        }
+        Err(e) => {
+            let e = e.map_err_context(|| format!("cannot remove {}", path.quote()));
+            show_error!("{e}");
+            true
+        }
+    }
 }
 
 fn remove_file(path: &Path, options: &Options) -> bool {
@@ -505,27 +510,17 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
             }
         }
     }
-    // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
-    match File::options().read(true).write(true).open(path) {
-        Ok(file) => {
-            let Ok(metadata) = file.metadata() else {
-                return true;
-            };
 
-            if options.interactive == InteractiveMode::Always && !metadata.permissions().readonly()
-            {
-                return if metadata.len() == 0 {
-                    prompt_yes!("remove regular empty file {}?", path.quote())
-                } else {
-                    prompt_yes!("remove file {}?", path.quote())
-                };
-            }
-        }
-        Err(err) => {
-            if err.kind() != ErrorKind::PermissionDenied {
-                return true;
-            }
-        }
+    let Ok(metadata) = fs::metadata(path) else {
+        return true;
+    };
+
+    if options.interactive == InteractiveMode::Always && !metadata.permissions().readonly() {
+        return if metadata.len() == 0 {
+            prompt_yes!("remove regular empty file {}?", path.quote())
+        } else {
+            prompt_yes!("remove file {}?", path.quote())
+        };
     }
     prompt_file_permission_readonly(path)
 }
@@ -559,6 +554,20 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
         true
     }
 }
+/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g  '/../..' , '../..'
+fn path_is_current_or_parent_directory(path: &Path) -> bool {
+    let path_str = os_str_as_bytes(path.as_os_str());
+    let dir_separator = MAIN_SEPARATOR as u8;
+    if let Ok(path_bytes) = path_str {
+        return path_bytes == ([b'.'])
+            || path_bytes == ([b'.', b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
+            || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
+            || path_bytes.ends_with(&[dir_separator, b'.', b'.', dir_separator]);
+    }
+    false
+}
 
 // For windows we can use windows metadata trait and file attributes to see if a directory is readonly
 #[cfg(windows)]
@@ -586,6 +595,40 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
+/// Removes trailing slashes, for example 'd/../////' yield 'd/../' required to fix rm-r4 GNU test
+fn clean_trailing_slashes(path: &Path) -> &Path {
+    let path_str = os_str_as_bytes(path.as_os_str());
+    let dir_separator = MAIN_SEPARATOR as u8;
+
+    if let Ok(path_bytes) = path_str {
+        let mut idx = if path_bytes.len() > 1 {
+            path_bytes.len() - 1
+        } else {
+            return path;
+        };
+        // Checks if element at the end is a '/'
+        if path_bytes[idx] == dir_separator {
+            for i in (1..path_bytes.len()).rev() {
+                // Will break at the start of the continuous sequence of '/', eg: "abc//////" , will break at
+                // "abc/", this will clean ////// to the root '/', so we have to be careful to not
+                // delete the root.
+                if path_bytes[i - 1] != dir_separator {
+                    idx = i;
+                    break;
+                }
+            }
+            #[cfg(unix)]
+            return Path::new(OsStr::from_bytes(&path_bytes[0..=idx]));
+
+            #[cfg(not(unix))]
+            // Unwrapping is fine here as os_str_as_bytes() would return an error on non unix
+            // systems with non utf-8 characters and thus bypass the if let Ok branch
+            return Path::new(std::str::from_utf8(&path_bytes[0..=idx]).unwrap());
+        }
+    }
+    path
+}
+
 fn prompt_descend(path: &Path) -> bool {
     prompt_yes!("descend into directory {}?", path.quote())
 }
@@ -610,4 +653,18 @@ fn is_symlink_dir(metadata: &Metadata) -> bool {
 
     metadata.file_type().is_symlink()
         && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+}
+
+mod tests {
+
+    #[test]
+    // Testing whether path the `/////` collapses to `/`
+    fn test_collapsible_slash_path() {
+        use std::path::Path;
+
+        use crate::clean_trailing_slashes;
+        let path = Path::new("/////");
+
+        assert_eq!(Path::new("/"), clean_trailing_slashes(path));
+    }
 }

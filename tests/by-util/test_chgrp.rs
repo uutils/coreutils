@@ -56,7 +56,7 @@ fn test_invalid_group() {
 }
 
 #[test]
-fn test_1() {
+fn test_error_1() {
     if getegid() != 0 {
         new_ucmd!().arg("bin").arg(DIR).fails().stderr_contains(
             // linux fails with "Operation not permitted (os error 1)"
@@ -416,4 +416,180 @@ fn test_traverse_symlinks() {
             }
         );
     }
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_from_option() {
+    use std::os::unix::fs::MetadataExt;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let groups = nix::unistd::getgroups().unwrap();
+    // Skip test if we don't have at least two different groups to work with
+    if groups.len() < 2 {
+        return;
+    }
+    let (first_group, second_group) = (groups[0], groups[1]);
+
+    at.touch("test_file");
+    scene
+        .ucmd()
+        .arg(first_group.to_string())
+        .arg("test_file")
+        .succeeds();
+
+    // Test successful group change with --from
+    scene
+        .ucmd()
+        .arg("--from")
+        .arg(first_group.to_string())
+        .arg(second_group.to_string())
+        .arg("test_file")
+        .succeeds()
+        .no_stderr();
+
+    // Verify the group was changed
+    let new_gid = at.plus("test_file").metadata().unwrap().gid();
+    assert_eq!(new_gid, second_group.as_raw());
+
+    scene
+        .ucmd()
+        .arg("--from")
+        .arg(first_group.to_string())
+        .arg(first_group.to_string())
+        .arg("test_file")
+        .succeeds()
+        .no_stderr();
+
+    let unchanged_gid = at.plus("test_file").metadata().unwrap().gid();
+    assert_eq!(unchanged_gid, second_group.as_raw());
+}
+
+#[test]
+#[cfg(not(any(target_os = "android", target_os = "macos")))]
+fn test_from_with_invalid_group() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("test_file");
+    #[cfg(not(target_os = "android"))]
+    let err_msg = "chgrp: invalid user: 'nonexistent_group'\n";
+    #[cfg(target_os = "android")]
+    let err_msg = "chgrp: invalid user: 'staff'\n";
+
+    ucmd.arg("--from")
+        .arg("nonexistent_group")
+        .arg("staff")
+        .arg("test_file")
+        .fails()
+        .stderr_is(err_msg);
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_verbosity_messages() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let groups = nix::unistd::getgroups().unwrap();
+    // Skip test if we don't have at least one group to work with
+    if groups.is_empty() {
+        return;
+    }
+
+    at.touch("ref_file");
+    at.touch("target_file");
+
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--reference=ref_file")
+        .arg("target_file")
+        .succeeds()
+        .stderr_contains("group of 'target_file' retained as ");
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_from_with_reference() {
+    use std::os::unix::fs::MetadataExt;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let groups = nix::unistd::getgroups().unwrap();
+    if groups.len() < 2 {
+        return;
+    }
+    let (first_group, second_group) = (groups[0], groups[1]);
+
+    at.touch("ref_file");
+    at.touch("test_file");
+
+    scene
+        .ucmd()
+        .arg(first_group.to_string())
+        .arg("test_file")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg(second_group.to_string())
+        .arg("ref_file")
+        .succeeds();
+
+    // Test --from with --reference
+    scene
+        .ucmd()
+        .arg("--from")
+        .arg(first_group.to_string())
+        .arg("--reference=ref_file")
+        .arg("test_file")
+        .succeeds()
+        .no_stderr();
+
+    let new_gid = at.plus("test_file").metadata().unwrap().gid();
+    let ref_gid = at.plus("ref_file").metadata().unwrap().gid();
+    assert_eq!(new_gid, ref_gid);
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_numeric_group_formats() {
+    use std::os::unix::fs::MetadataExt;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let groups = nix::unistd::getgroups().unwrap();
+    if groups.len() < 2 {
+        return;
+    }
+    let (first_group, second_group) = (groups[0], groups[1]);
+
+    at.touch("test_file");
+
+    scene
+        .ucmd()
+        .arg(first_group.to_string())
+        .arg("test_file")
+        .succeeds();
+
+    // Test :gid format in --from
+    scene
+        .ucmd()
+        .arg(format!("--from=:{}", first_group.as_raw()))
+        .arg(second_group.to_string())
+        .arg("test_file")
+        .succeeds()
+        .no_stderr();
+
+    let new_gid = at.plus("test_file").metadata().unwrap().gid();
+    assert_eq!(new_gid, second_group.as_raw());
+
+    // Test :gid format in target group
+    scene
+        .ucmd()
+        .arg(format!("--from={}", second_group.as_raw()))
+        .arg(format!(":{}", first_group.as_raw()))
+        .arg("test_file")
+        .succeeds()
+        .no_stderr();
+
+    let final_gid = at.plus("test_file").metadata().unwrap().gid();
+    assert_eq!(final_gid, first_group.as_raw());
 }

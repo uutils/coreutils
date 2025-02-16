@@ -47,6 +47,15 @@ fn escaped_hex() {
 }
 
 #[test]
+fn test_missing_escaped_hex_value() {
+    new_ucmd!()
+        .arg(r"\x")
+        .fails()
+        .code_is(1)
+        .stderr_only("printf: missing hexadecimal number in escape\n");
+}
+
+#[test]
 fn escaped_octal() {
     new_ucmd!().args(&["\\101"]).succeeds().stdout_only("A");
 }
@@ -496,6 +505,32 @@ fn sub_any_asterisk_hex_arg() {
 }
 
 #[test]
+fn sub_any_asterisk_negative_first_param() {
+    new_ucmd!()
+        .args(&["a(%*s)b", "-5", "xyz"])
+        .succeeds()
+        .stdout_only("a(xyz  )b"); // Would be 'a(  xyz)b' if -5 was 5
+
+    // Negative octal
+    new_ucmd!()
+        .args(&["a(%*s)b", "-010", "xyz"])
+        .succeeds()
+        .stdout_only("a(xyz     )b");
+
+    // Negative hexadecimal
+    new_ucmd!()
+        .args(&["a(%*s)b", "-0x10", "xyz"])
+        .succeeds()
+        .stdout_only("a(xyz             )b");
+
+    // Should also work on %c
+    new_ucmd!()
+        .args(&["a(%*c)b", "-5", "x"])
+        .succeeds()
+        .stdout_only("a(x    )b"); // Would be 'a(    x)b' if -5 was 5
+}
+
+#[test]
 fn sub_any_specifiers_no_params() {
     new_ucmd!()
         .args(&["%ztlhLji", "3"]) //spell-checker:disable-line
@@ -679,7 +714,11 @@ fn char_as_byte() {
 
 #[test]
 fn no_infinite_loop() {
-    new_ucmd!().args(&["a", "b"]).succeeds().stdout_only("a");
+    new_ucmd!()
+        .args(&["a", "b"])
+        .succeeds()
+        .stdout_is("a")
+        .stderr_contains("warning: ignoring excess arguments, starting with 'b'");
 }
 
 #[test]
@@ -915,4 +954,51 @@ fn float_flag_position_space_padding() {
         .args(&["% +5.1f", "1"])
         .succeeds()
         .stdout_only(" +1.0");
+}
+
+#[test]
+fn float_abs_value_less_than_one() {
+    new_ucmd!()
+        .args(&["%g", "0.1171875"])
+        .succeeds()
+        .stdout_only("0.117188");
+
+    // The original value from #7031 issue
+    new_ucmd!()
+        .args(&["%g", "-0.1171875"])
+        .succeeds()
+        .stdout_only("-0.117188");
+
+    new_ucmd!()
+        .args(&["%g", "0.01171875"])
+        .succeeds()
+        .stdout_only("0.0117188");
+
+    new_ucmd!()
+        .args(&["%g", "-0.01171875"])
+        .succeeds()
+        .stdout_only("-0.0117188");
+
+    new_ucmd!()
+        .args(&["%g", "0.001171875001"])
+        .succeeds()
+        .stdout_only("0.00117188");
+
+    new_ucmd!()
+        .args(&["%g", "-0.001171875001"])
+        .succeeds()
+        .stdout_only("-0.00117188");
+}
+
+#[test]
+fn float_switch_switch_decimal_scientific() {
+    new_ucmd!()
+        .args(&["%g", "0.0001"])
+        .succeeds()
+        .stdout_only("0.0001");
+
+    new_ucmd!()
+        .args(&["%g", "0.00001"])
+        .succeeds()
+        .stdout_only("1e-05");
 }

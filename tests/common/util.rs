@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs
 
 #![allow(dead_code)]
 #![allow(
@@ -1169,6 +1169,8 @@ pub struct TestScenario {
     pub util_name: String,
     pub fixtures: AtPath,
     tmpd: Rc<TempDir>,
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    tmp_fs_mountpoint: Option<String>,
 }
 
 impl TestScenario {
@@ -1182,6 +1184,8 @@ impl TestScenario {
             util_name: util_name.as_ref().into(),
             fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd,
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+            tmp_fs_mountpoint: None,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
         fixture_path_builder.push(TESTS_DIR);
@@ -1214,6 +1218,44 @@ impl TestScenario {
     /// relative to the environment's unique temporary test directory.
     pub fn ccmd<S: AsRef<str>>(&self, util_name: S) -> UCommand {
         UCommand::with_util(util_name, self.tmpd.clone())
+    }
+
+    /// Mounts a temporary filesystem at the specified mount point.
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    pub fn mount_temp_fs(&mut self, mount_point: &str) -> core::result::Result<(), String> {
+        if self.tmp_fs_mountpoint.is_some() {
+            return Err("already mounted".to_string());
+        }
+        let cmd_result = self
+            .cmd("mount")
+            .arg("-t")
+            .arg("tmpfs")
+            .arg("-o")
+            .arg("size=640k") // ought to be enough
+            .arg("tmpfs")
+            .arg(mount_point)
+            .run();
+        if !cmd_result.succeeded() {
+            return Err(format!("mount failed: {}", cmd_result.stderr_str()));
+        }
+        self.tmp_fs_mountpoint = Some(mount_point.to_string());
+        Ok(())
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    /// Unmounts the temporary filesystem if it is currently mounted.
+    pub fn umount_temp_fs(&mut self) {
+        if let Some(mount_point) = self.tmp_fs_mountpoint.as_ref() {
+            self.cmd("umount").arg(mount_point).succeeds();
+            self.tmp_fs_mountpoint = None;
+        }
+    }
+}
+
+impl Drop for TestScenario {
+    fn drop(&mut self) {
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        self.umount_temp_fs();
     }
 }
 
@@ -4006,5 +4048,25 @@ mod tests {
             .succeeds()
             .stdout_is(expected);
         std::assert_eq!(p_umask, get_umask()); // make sure parent umask didn't change
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    #[test]
+    fn test_mount_temp_fs() {
+        let mut scene = TestScenario::new("util");
+        let at = &scene.fixtures;
+        // Test must be run as root (or with `sudo -E`)
+        if scene.cmd("whoami").run().stdout_str() != "root\n" {
+            return;
+        }
+        at.mkdir("mountpoint");
+        let mountpoint = at.plus("mountpoint");
+        scene.mount_temp_fs(mountpoint.to_str().unwrap()).unwrap();
+        scene
+            .cmd("df")
+            .arg("-h")
+            .arg(mountpoint)
+            .succeeds()
+            .stdout_contains("tmpfs");
     }
 }

@@ -3,21 +3,20 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) BUFWRITER seekable
+// spell-checker:ignore (vars) seekable
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::num::TryFromIntError;
+use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::line_ending::LineEnding;
 use uucore::lines::lines;
 use uucore::{format_usage, help_about, help_usage, show};
 
 const BUF_SIZE: usize = 65536;
-
-/// The capacity in bytes for buffered writers.
-const BUFWRITER_CAPACITY: usize = 16_384; // 16 kilobytes
 
 const ABOUT: &str = help_about!("head.md");
 const USAGE: &str = help_usage!("head.md");
@@ -36,6 +35,36 @@ mod parse;
 mod take;
 use take::take_all_but;
 use take::take_lines;
+
+#[derive(Error, Debug)]
+enum HeadError {
+    /// Wrapper around `io::Error`
+    #[error("error reading {name}: {err}")]
+    Io { name: String, err: io::Error },
+
+    #[error("parse error: {0}")]
+    ParseError(String),
+
+    #[error("bad argument encoding")]
+    BadEncoding,
+
+    #[error("{0}: number of -bytes or -lines is too large")]
+    NumTooLarge(#[from] TryFromIntError),
+
+    #[error("clap error: {0}")]
+    Clap(#[from] clap::Error),
+
+    #[error("{0}")]
+    MatchOption(String),
+}
+
+impl UError for HeadError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
+
+type HeadResult<T> = Result<T, HeadError>;
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
@@ -152,7 +181,7 @@ impl Mode {
 
 fn arg_iterate<'a>(
     mut args: impl uucore::Args + 'a,
-) -> UResult<Box<dyn Iterator<Item = OsString> + 'a>> {
+) -> HeadResult<Box<dyn Iterator<Item = OsString> + 'a>> {
     // argv[0] is always present
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
@@ -160,22 +189,19 @@ fn arg_iterate<'a>(
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
                 Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(USimpleError::new(
-                        1,
-                        format!("bad argument format: {}", s.quote()),
-                    )),
-                    parse::ParseError::Overflow => Err(USimpleError::new(
-                        1,
-                        format!(
-                            "invalid argument: {} Value too large for defined datatype",
-                            s.quote()
-                        ),
-                    )),
+                    parse::ParseError::Syntax => Err(HeadError::ParseError(format!(
+                        "bad argument format: {}",
+                        s.quote()
+                    ))),
+                    parse::ParseError::Overflow => Err(HeadError::ParseError(format!(
+                        "invalid argument: {} Value too large for defined datatype",
+                        s.quote()
+                    ))),
                 },
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
-            Err(USimpleError::new(1, "bad argument encoding".to_owned()))
+            Err(HeadError::BadEncoding)
         }
     } else {
         Ok(Box::new(vec![first].into_iter()))
@@ -226,6 +252,11 @@ where
 
     io::copy(&mut reader, &mut stdout)?;
 
+    // Make sure we finish writing everything to the target before
+    // exiting. Otherwise, when Rust is implicitly flushing, any
+    // error will be silently ignored.
+    stdout.flush()?;
+
     Ok(())
 }
 
@@ -234,11 +265,14 @@ fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std
     let mut reader = take_lines(input, n, separator);
 
     // Write those bytes to `stdout`.
-    let stdout = std::io::stdout();
-    let stdout = stdout.lock();
-    let mut writer = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout);
+    let mut stdout = std::io::stdout();
 
-    io::copy(&mut reader, &mut writer)?;
+    io::copy(&mut reader, &mut stdout)?;
+
+    // Make sure we finish writing everything to the target before
+    // exiting. Otherwise, when Rust is implicitly flushing, any
+    // error will be silently ignored.
+    stdout.flush()?;
 
     Ok(())
 }
@@ -247,15 +281,13 @@ fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> 
     match usize::try_from(n) {
         Ok(value) => Some(value),
         Err(e) => {
-            show!(USimpleError::new(
-                1,
-                format!("{e}: number of -bytes or -lines is too large")
-            ));
+            show!(HeadError::NumTooLarge(e));
             None
         }
     }
 }
 
+/// Print to stdout all but the last `n` bytes from the given reader.
 fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::Result<()> {
     if n == 0 {
         //prints everything
@@ -285,7 +317,7 @@ fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::
 
             if total_read <= n {
                 // Fill the ring buffer without exceeding n bytes
-                let overflow = total_read - n;
+                let overflow = n - total_read;
                 ring_buffer.extend_from_slice(&buffer[..read - overflow]);
             } else {
                 // Write the ring buffer and the part of the buffer that exceeds n
@@ -318,15 +350,9 @@ fn read_but_last_n_lines(
 /// Return the index in `input` just after the `n`th line from the end.
 ///
 /// If `n` exceeds the number of lines in this file, then return 0.
-///
-/// The cursor must be at the start of the seekable input before
-/// calling this function. This function rewinds the cursor to the
+/// This function rewinds the cursor to the
 /// beginning of the input just before returning unless there is an
 /// I/O error.
-///
-/// If `zeroed` is `false`, interpret the newline character `b'\n'` as
-/// a line ending. If `zeroed` is `true`, interpret the null character
-/// `b'\0'` as a line ending instead.
 ///
 /// # Errors
 ///
@@ -358,20 +384,21 @@ fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> std::io::R
 where
     R: Read + Seek,
 {
-    let size = input.seek(SeekFrom::End(0))?;
+    let file_size = input.seek(SeekFrom::End(0))?;
 
     let mut buffer = [0u8; BUF_SIZE];
-    let buf_size: usize = (BUF_SIZE as u64).min(size).try_into().unwrap();
-    let buffer = &mut buffer[..buf_size];
 
     let mut i = 0u64;
     let mut lines = 0u64;
 
     loop {
         // the casts here are ok, `buffer.len()` should never be above a few k
-        input.seek(SeekFrom::Current(
-            -((buffer.len() as i64).min((size - i) as i64)),
-        ))?;
+        let bytes_remaining_to_search = file_size - i;
+        let bytes_to_read_this_loop = bytes_remaining_to_search.min(BUF_SIZE.try_into().unwrap());
+        let read_start_offset = bytes_remaining_to_search - bytes_to_read_this_loop;
+        let buffer = &mut buffer[..bytes_to_read_this_loop.try_into().unwrap()];
+
+        input.seek(SeekFrom::Start(read_start_offset))?;
         input.read_exact(buffer)?;
         for byte in buffer.iter().rev() {
             if byte == &separator {
@@ -380,11 +407,11 @@ where
             // if it were just `n`,
             if lines == n + 1 {
                 input.rewind()?;
-                return Ok(size - i);
+                return Ok(file_size - i);
             }
             i += 1;
         }
-        if size - i == 0 {
+        if file_size - i == 0 {
             input.rewind()?;
             return Ok(0);
         }
@@ -510,16 +537,17 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 head_file(&mut file, options)
             }
         };
-        if res.is_err() {
+        if let Err(e) = res {
             let name = if file.as_str() == "-" {
                 "standard input"
             } else {
                 file
             };
-            show!(USimpleError::new(
-                1,
-                format!("error reading {name}: Input/output error")
-            ));
+            return Err(HeadError::Io {
+                name: name.to_string(),
+                err: e,
+            }
+            .into());
         }
         first = false;
     }
@@ -536,7 +564,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match HeadOptions::get_from(&matches) {
         Ok(o) => o,
         Err(s) => {
-            return Err(USimpleError::new(1, s));
+            return Err(HeadError::MatchOption(s).into());
         }
     };
     uu_head(&args)
@@ -667,12 +695,59 @@ mod tests {
 
     #[test]
     fn test_find_nth_line_from_end() {
-        let mut input = Cursor::new("x\ny\nz\n");
-        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 6);
-        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 4);
-        assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 2);
-        assert_eq!(find_nth_line_from_end(&mut input, 3, b'\n').unwrap(), 0);
-        assert_eq!(find_nth_line_from_end(&mut input, 4, b'\n').unwrap(), 0);
-        assert_eq!(find_nth_line_from_end(&mut input, 1000, b'\n').unwrap(), 0);
+        // Make sure our input buffer is several multiples of BUF_SIZE in size
+        // such that we can be reasonably confident we've exercised all logic paths.
+        // Make the contents of the buffer look like...
+        // aaaa\n
+        // aaaa\n
+        // aaaa\n
+        // aaaa\n
+        // aaaa\n
+        // ...
+        // This will make it easier to validate the results since each line will have
+        // 5 bytes in it.
+
+        let minimum_buffer_size = BUF_SIZE * 4;
+        let mut input_buffer = vec![];
+        let mut loop_iteration: u64 = 0;
+        while input_buffer.len() < minimum_buffer_size {
+            for _n in 0..4 {
+                input_buffer.push(b'a');
+            }
+            loop_iteration += 1;
+            input_buffer.push(b'\n');
+        }
+
+        let lines_in_input_file = loop_iteration;
+        let input_length = lines_in_input_file * 5;
+        assert_eq!(input_length, input_buffer.len().try_into().unwrap());
+        let mut input = Cursor::new(input_buffer);
+        // We now have loop_iteration lines in the buffer Now walk backwards through the buffer
+        // to confirm everything parses correctly.
+        // Use a large step size to prevent the test from taking too long, but don't use a power
+        // of 2 in case we miss some corner case.
+        let step_size = 511;
+        for n in (0..lines_in_input_file).filter(|v| v % step_size == 0) {
+            // The 5*n comes from 5-bytes per row.
+            assert_eq!(
+                find_nth_line_from_end(&mut input, n, b'\n').unwrap(),
+                input_length - 5 * n
+            );
+        }
+
+        // Now confirm that if we query with a value >= lines_in_input_file we get an offset
+        // of 0
+        assert_eq!(
+            find_nth_line_from_end(&mut input, lines_in_input_file, b'\n').unwrap(),
+            0
+        );
+        assert_eq!(
+            find_nth_line_from_end(&mut input, lines_in_input_file + 1, b'\n').unwrap(),
+            0
+        );
+        assert_eq!(
+            find_nth_line_from_end(&mut input, lines_in_input_file + 1000, b'\n').unwrap(),
+            0
+        );
     }
 }

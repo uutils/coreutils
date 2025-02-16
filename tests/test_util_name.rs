@@ -35,7 +35,7 @@ fn execution_phrase_single() {
     use std::process::Command;
 
     let scenario = TestScenario::new("ls");
-    symlink_file(scenario.bin_path, scenario.fixtures.plus("uu-ls")).unwrap();
+    symlink_file(&scenario.bin_path, scenario.fixtures.plus("uu-ls")).unwrap();
     let output = Command::new(scenario.fixtures.plus("uu-ls"))
         .arg("--some-invalid-arg")
         .output()
@@ -56,7 +56,7 @@ fn util_name_double() {
     };
 
     let scenario = TestScenario::new("sort");
-    let mut child = Command::new(scenario.bin_path)
+    let mut child = Command::new(&scenario.bin_path)
         .arg("sort")
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
@@ -78,7 +78,7 @@ fn util_name_single() {
     };
 
     let scenario = TestScenario::new("sort");
-    symlink_file(scenario.bin_path, scenario.fixtures.plus("uu-sort")).unwrap();
+    symlink_file(&scenario.bin_path, scenario.fixtures.plus("uu-sort")).unwrap();
     let mut child = Command::new(scenario.fixtures.plus("uu-sort"))
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
@@ -102,7 +102,7 @@ fn util_invalid_name_help() {
     };
 
     let scenario = TestScenario::new("invalid_name");
-    symlink_file(scenario.bin_path, scenario.fixtures.plus("invalid_name")).unwrap();
+    symlink_file(&scenario.bin_path, scenario.fixtures.plus("invalid_name")).unwrap();
     let child = Command::new(scenario.fixtures.plus("invalid_name"))
         .arg("--help")
         .stdin(Stdio::piped())
@@ -138,7 +138,7 @@ fn util_non_utf8_name_help() {
 
     let scenario = TestScenario::new("invalid_name");
     let non_utf8_path = scenario.fixtures.plus(OsStr::from_bytes(b"\xff"));
-    symlink_file(scenario.bin_path, &non_utf8_path).unwrap();
+    symlink_file(&scenario.bin_path, &non_utf8_path).unwrap();
     let child = Command::new(&non_utf8_path)
         .arg("--help")
         .stdin(Stdio::piped())
@@ -166,7 +166,7 @@ fn util_invalid_name_invalid_command() {
     };
 
     let scenario = TestScenario::new("invalid_name");
-    symlink_file(scenario.bin_path, scenario.fixtures.plus("invalid_name")).unwrap();
+    symlink_file(&scenario.bin_path, scenario.fixtures.plus("invalid_name")).unwrap();
     let child = Command::new(scenario.fixtures.plus("invalid_name"))
         .arg("definitely_invalid")
         .stdin(Stdio::piped())
@@ -192,7 +192,7 @@ fn util_completion() {
     };
 
     let scenario = TestScenario::new("completion");
-    let child = Command::new(scenario.bin_path)
+    let child = Command::new(&scenario.bin_path)
         .arg("completion")
         .arg("true")
         .arg("powershell")
@@ -220,7 +220,7 @@ fn util_manpage() {
     };
 
     let scenario = TestScenario::new("completion");
-    let child = Command::new(scenario.bin_path)
+    let child = Command::new(&scenario.bin_path)
         .arg("manpage")
         .arg("true")
         .stdin(Stdio::piped())

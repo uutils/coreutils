@@ -8,7 +8,7 @@
 use libfuzzer_sys::fuzz_target;
 use uu_printf::uumain;
 
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use rand::Rng;
 use std::env;
 use std::ffi::OsString;
@@ -44,34 +44,34 @@ fn generate_escape_sequence(rng: &mut impl Rng) -> String {
 }
 
 fn generate_printf() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let format_specifiers = ["%s", "%d", "%f", "%x", "%o", "%c", "%b", "%q"];
     let mut printf_str = String::new();
     // Add a 20% chance of generating an invalid format specifier
-    if rng.gen_bool(0.2) {
+    if rng.random_bool(0.2) {
         printf_str.push_str("%z"); // Invalid format specifier
     } else {
         let specifier = *format_specifiers.choose(&mut rng).unwrap();
         printf_str.push_str(specifier);
 
         // Add a 20% chance of introducing complex format strings
-        if rng.gen_bool(0.2) {
-            printf_str.push_str(&format!(" %{}", rng.gen_range(1..=1000)));
+        if rng.random_bool(0.2) {
+            printf_str.push_str(&format!(" %{}", rng.random_range(1..=1000)));
         } else {
             // Add a random string or number after the specifier
             if specifier == "%s" {
                 printf_str.push_str(&format!(
                     " {}",
-                    generate_random_string(rng.gen_range(1..=10))
+                    generate_random_string(rng.random_range(1..=10))
                 ));
             } else {
-                printf_str.push_str(&format!(" {}", rng.gen_range(1..=1000)));
+                printf_str.push_str(&format!(" {}", rng.random_range(1..=1000)));
             }
         }
     }
 
     // Add a 10% chance of including an escape sequence
-    if rng.gen_bool(0.1) {
+    if rng.random_bool(0.1) {
         printf_str.push_str(&generate_escape_sequence(&mut rng));
     }
     printf_str

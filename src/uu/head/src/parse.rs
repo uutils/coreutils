@@ -91,9 +91,8 @@ fn process_num_block(
             }
             if let Some(n) = multiplier {
                 options.push(OsString::from("-c"));
-                let num = match num.checked_mul(n) {
-                    Some(n) => n,
-                    None => return Some(Err(ParseError::Overflow)),
+                let Some(num) = num.checked_mul(n) else {
+                    return Some(Err(ParseError::Overflow));
                 };
                 options.push(OsString::from(format!("{num}")));
             } else {

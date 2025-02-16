@@ -154,43 +154,41 @@ impl Uniq {
 
     fn cmp_key<F>(&self, line: &[u8], mut closure: F) -> bool
     where
-        F: FnMut(&mut dyn Iterator<Item = u8>) -> bool,
+        F: FnMut(&mut dyn Iterator<Item = char>) -> bool,
     {
         let fields_to_check = self.skip_fields(line);
-        let len = fields_to_check.len();
-        let slice_start = self.slice_start.unwrap_or(0);
-        let slice_stop = self.slice_stop.unwrap_or(len);
-        if len > 0 {
-            // fast path: avoid doing any work if there is no need to skip or map to lower-case
-            if !self.ignore_case && slice_start == 0 && slice_stop == len {
-                return closure(&mut fields_to_check.iter().copied());
-            }
 
-            // fast path: avoid skipping
-            if self.ignore_case && slice_start == 0 && slice_stop == len {
-                return closure(&mut fields_to_check.iter().map(|u| u.to_ascii_lowercase()));
-            }
-
-            // fast path: we can avoid mapping chars to lower-case, if we don't want to ignore the case
-            if !self.ignore_case {
-                return closure(
-                    &mut fields_to_check
-                        .iter()
-                        .skip(slice_start)
-                        .take(slice_stop)
-                        .copied(),
-                );
-            }
-
-            closure(
-                &mut fields_to_check
-                    .iter()
-                    .skip(slice_start)
-                    .take(slice_stop)
-                    .map(|u| u.to_ascii_lowercase()),
-            )
+        // Skip self.slice_start bytes (if -s was used).
+        // self.slice_start is how many characters to skip, but historically
+        // uniq’s `-s N` means “skip N *bytes*,” so do that literally:
+        let skip_bytes = self.slice_start.unwrap_or(0);
+        let fields_to_check = if skip_bytes < fields_to_check.len() {
+            &fields_to_check[skip_bytes..]
         } else {
-            closure(&mut fields_to_check.iter().copied())
+            // If skipping beyond end-of-line, leftover is empty => effectively ""
+            &[]
+        };
+
+        // Convert the leftover bytes to UTF-8 for character-based -w
+        // If invalid UTF-8, just compare them as individual bytes (fallback).
+        let Ok(string_after_skip) = std::str::from_utf8(fields_to_check) else {
+            // Fallback: if invalid UTF-8, treat them as single-byte “chars”
+            return closure(&mut fields_to_check.iter().map(|&b| b as char));
+        };
+
+        let total_chars = string_after_skip.chars().count();
+
+        // `-w N` => Compare no more than N characters
+        let slice_stop = self.slice_stop.unwrap_or(total_chars);
+        let slice_start = slice_stop.min(total_chars);
+
+        let mut iter = string_after_skip.chars().take(slice_start);
+
+        if self.ignore_case {
+            // We can do ASCII-lowercase or full Unicode-lowercase. For minimal changes, do ASCII:
+            closure(&mut iter.map(|c| c.to_ascii_lowercase()))
+        } else {
+            closure(&mut iter)
         }
     }
 
@@ -383,7 +381,7 @@ fn should_extract_obs_skip_chars(
         && posix_version().is_some_and(|v| v <= OBSOLETE)
         && !preceding_long_opt_req_value
         && !preceding_short_opt_req_value
-        && slice.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
+        && slice.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
 }
 
 /// Helper function to [`filter_args`]

@@ -1,6 +1,6 @@
 [package]
 name = "uu_chmod"
-version = "0.0.28"
+version = "0.0.29"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chmod ~ (uutils) change mode of FILE"
@@ -19,7 +19,7 @@ path = "src/chmod.rs"
 [dependencies]
 clap = { workspace = true }
 libc = { workspace = true }
-uucore = { workspace = true, features = ["fs", "mode"] }
+uucore = { workspace = true, features = ["entries", "fs", "mode", "perms"] }
 
 [[bin]]
 name = "chmod"

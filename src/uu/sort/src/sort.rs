@@ -26,23 +26,24 @@ use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
 use nix::libc::{getrlimit, rlimit, RLIMIT_NOFILE};
 use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
-use std::error::Error;
 use std::ffi::{OsStr, OsString};
-use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::num::IntErrorKind;
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
+use thiserror::Error;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
+use uucore::error::strip_errno;
+use uucore::error::{set_exit_code, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_size::{ParseSizeError, Parser};
 use uucore::shortcut_value_parser::ShortcutValueParser;
@@ -119,44 +120,43 @@ const POSITIVE: char = '+';
 // available memory into consideration, instead of relying on this constant only.
 const DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
 
-#[derive(Debug)]
-enum SortError {
+#[derive(Debug, Error)]
+pub enum SortError {
+    #[error("{}", format_disorder(.file, .line_number, .line, .silent))]
     Disorder {
         file: OsString,
         line_number: usize,
         line: String,
         silent: bool,
     },
-    OpenFailed {
-        path: String,
-        error: std::io::Error,
-    },
+
+    #[error("open failed: {}: {}", .path.maybe_quote(), strip_errno(.error))]
+    OpenFailed { path: String, error: std::io::Error },
+
+    #[error("failed to parse key {}: {}", .key.quote(), .msg)]
+    ParseKeyError { key: String, msg: String },
+
+    #[error("cannot read: {}: {}", .path.maybe_quote(), strip_errno(.error))]
     ReadFailed {
         path: PathBuf,
         error: std::io::Error,
     },
-    ParseKeyError {
-        key: String,
-        msg: String,
-    },
-    OpenTmpFileFailed {
-        error: std::io::Error,
-    },
-    CompressProgExecutionFailed {
-        code: i32,
-    },
-    CompressProgTerminatedAbnormally {
-        prog: String,
-    },
-    TmpFileCreationFailed {
-        path: PathBuf,
-    },
-    Uft8Error {
-        error: Utf8Error,
-    },
-}
 
-impl Error for SortError {}
+    #[error("failed to open temporary file: {}", strip_errno(.error))]
+    OpenTmpFileFailed { error: std::io::Error },
+
+    #[error("couldn't execute compress program: errno {code}")]
+    CompressProgExecutionFailed { code: i32 },
+
+    #[error("{} terminated abnormally", .prog.quote())]
+    CompressProgTerminatedAbnormally { prog: String },
+
+    #[error("cannot create temporary file in '{}':", .path.display())]
+    TmpFileCreationFailed { path: PathBuf },
+
+    #[error("{error}")]
+    Uft8Error { error: Utf8Error },
+}
 
 impl UError for SortError {
     fn code(&self) -> i32 {
@@ -167,60 +167,11 @@ impl UError for SortError {
     }
 }
 
-impl Display for SortError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Disorder {
-                file,
-                line_number,
-                line,
-                silent,
-            } => {
-                if *silent {
-                    Ok(())
-                } else {
-                    write!(
-                        f,
-                        "{}:{}: disorder: {}",
-                        file.maybe_quote(),
-                        line_number,
-                        line
-                    )
-                }
-            }
-            Self::OpenFailed { path, error } => {
-                write!(
-                    f,
-                    "open failed: {}: {}",
-                    path.maybe_quote(),
-                    strip_errno(error)
-                )
-            }
-            Self::ParseKeyError { key, msg } => {
-                write!(f, "failed to parse key {}: {}", key.quote(), msg)
-            }
-            Self::ReadFailed { path, error } => {
-                write!(
-                    f,
-                    "cannot read: {}: {}",
-                    path.maybe_quote(),
-                    strip_errno(error)
-                )
-            }
-            Self::OpenTmpFileFailed { error } => {
-                write!(f, "failed to open temporary file: {}", strip_errno(error))
-            }
-            Self::CompressProgExecutionFailed { code } => {
-                write!(f, "couldn't execute compress program: errno {code}")
-            }
-            Self::CompressProgTerminatedAbnormally { prog } => {
-                write!(f, "{} terminated abnormally", prog.quote())
-            }
-            Self::TmpFileCreationFailed { path } => {
-                write!(f, "cannot create temporary file in '{}':", path.display())
-            }
-            Self::Uft8Error { error } => write!(f, "{error}"),
-        }
+fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: &bool) -> String {
+    if *silent {
+        String::new()
+    } else {
+        format!("{}:{}: disorder: {}", file.maybe_quote(), line_number, line)
     }
 }
 
@@ -338,7 +289,7 @@ impl GlobalSettings {
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
         let size = Parser::default()
             .with_allow_list(&[
-                "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y",
+                "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y", "R", "Q", "%",
             ])
             .with_default_unit("K")
             .with_b_byte_count(true)
@@ -584,8 +535,9 @@ impl<'a> Line<'a> {
                     } else {
                         // include a trailing si unit
                         if selector.settings.mode == SortMode::HumanNumeric
-                            && self.line[selection.end..initial_selection.end]
-                                .starts_with(&['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][..])
+                            && self.line[selection.end..initial_selection.end].starts_with(
+                                &['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', 'Q'][..],
+                            )
                         {
                             selection.end += 1;
                         }
@@ -746,9 +698,17 @@ impl KeyPosition {
             .ok_or_else(|| format!("invalid key {}", key.quote()))?;
         let char = field_and_char.next();
 
-        let field = field
-            .parse()
-            .map_err(|e| format!("failed to parse field index {}: {}", field.quote(), e))?;
+        let field = match field.parse::<usize>() {
+            Ok(f) => f,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
+            Err(e) => {
+                return Err(format!(
+                    "failed to parse field index {} {}",
+                    field.quote(),
+                    e
+                ))
+            }
+        };
         if field == 0 {
             return Err("field index can not be 0".to_string());
         }
@@ -1411,14 +1371,14 @@ pub fn uu_app() -> Command {
                     options::check::QUIET,
                     options::check::DIAGNOSE_FIRST,
                 ]))
-                .conflicts_with(options::OUTPUT)
+                .conflicts_with_all([options::OUTPUT, options::check::CHECK_SILENT])
                 .help("check for sorted input; do not sort"),
         )
         .arg(
             Arg::new(options::check::CHECK_SILENT)
                 .short('C')
                 .long(options::check::CHECK_SILENT)
-                .conflicts_with(options::OUTPUT)
+                .conflicts_with_all([options::OUTPUT, options::check::CHECK])
                 .help(
                     "exit successfully if the given file is already sorted, \
                 and exit with status 1 otherwise.",
@@ -1567,8 +1527,7 @@ fn exec(
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
     if settings.merge {
-        let file_merger = merge::merge(files, settings, output.as_output_name(), tmp_dir)?;
-        file_merger.write_all(settings, output)
+        merge::merge(files, settings, output, tmp_dir)
     } else if settings.check {
         if files.len() > 1 {
             Err(UUsageError::new(2, "only one file allowed with -c"))
@@ -1783,7 +1742,7 @@ fn general_numeric_compare(a: &GeneralF64ParseResult, b: &GeneralF64ParseResult)
 }
 
 fn get_rand_string() -> [u8; 16] {
-    thread_rng().sample(rand::distributions::Standard)
+    rng().sample(rand::distr::StandardUniform)
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
@@ -1896,7 +1855,9 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
         ParseSizeError::InvalidSuffix(_) => {
             format!("invalid suffix in --{} argument {}", option, s.quote())
         }
-        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
+        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
+            format!("invalid --{} argument {}", option, s.quote())
+        }
         ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }
 }

@@ -98,10 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         println!("{panic_info}");
     }));
 
-    let matches = match uu_app().try_get_matches_from(args) {
-        Ok(m) => m,
-        Err(e) => return Err(e.into()),
-    };
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let mut options = Options::from(&matches);
 
@@ -308,12 +305,12 @@ fn more(
         rows = number;
     }
 
-    let lines = break_buff(buff, usize::from(cols));
+    let lines = break_buff(buff, cols as usize);
 
     let mut pager = Pager::new(rows, lines, next_file, options);
 
-    if options.pattern.is_some() {
-        match search_pattern_in_file(&pager.lines, &options.pattern) {
+    if let Some(pat) = options.pattern.as_ref() {
+        match search_pattern_in_file(&pager.lines, pat) {
             Some(number) => pager.upper_mark = number,
             None => {
                 execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
@@ -446,8 +443,8 @@ struct Pager<'a> {
     // The current line at the top of the screen
     upper_mark: usize,
     // The number of rows that fit on the screen
-    content_rows: u16,
-    lines: Vec<String>,
+    content_rows: usize,
+    lines: Vec<&'a str>,
     next_file: Option<&'a str>,
     line_count: usize,
     silent: bool,
@@ -456,11 +453,11 @@ struct Pager<'a> {
 }
 
 impl<'a> Pager<'a> {
-    fn new(rows: u16, lines: Vec<String>, next_file: Option<&'a str>, options: &Options) -> Self {
+    fn new(rows: u16, lines: Vec<&'a str>, next_file: Option<&'a str>, options: &Options) -> Self {
         let line_count = lines.len();
         Self {
             upper_mark: options.from_line,
-            content_rows: rows.saturating_sub(1),
+            content_rows: rows.saturating_sub(1) as usize,
             lines,
             next_file,
             line_count,
@@ -472,30 +469,25 @@ impl<'a> Pager<'a> {
 
     fn should_close(&mut self) -> bool {
         self.upper_mark
-            .saturating_add(self.content_rows.into())
+            .saturating_add(self.content_rows)
             .ge(&self.line_count)
     }
 
     fn page_down(&mut self) {
         // If the next page down position __after redraw__ is greater than the total line count,
         // the upper mark must not grow past top of the screen at the end of the open file.
-        if self
-            .upper_mark
-            .saturating_add(self.content_rows as usize * 2)
-            .ge(&self.line_count)
-        {
-            self.upper_mark = self.line_count - self.content_rows as usize;
+        if self.upper_mark.saturating_add(self.content_rows * 2) >= self.line_count {
+            self.upper_mark = self.line_count - self.content_rows;
             return;
         }
 
-        self.upper_mark = self.upper_mark.saturating_add(self.content_rows.into());
+        self.upper_mark = self.upper_mark.saturating_add(self.content_rows);
     }
 
     fn page_up(&mut self) {
-        let content_row_usize: usize = self.content_rows.into();
         self.upper_mark = self
             .upper_mark
-            .saturating_sub(content_row_usize.saturating_add(self.line_squeezed));
+            .saturating_sub(self.content_rows.saturating_add(self.line_squeezed));
 
         if self.squeeze {
             let iter = self.lines.iter().take(self.upper_mark).rev();
@@ -520,7 +512,7 @@ impl<'a> Pager<'a> {
     // TODO: Deal with column size changes.
     fn page_resize(&mut self, _: u16, row: u16, option_line: Option<u16>) {
         if option_line.is_none() {
-            self.content_rows = row.saturating_sub(1);
+            self.content_rows = row.saturating_sub(1) as usize;
         };
     }
 
@@ -528,7 +520,7 @@ impl<'a> Pager<'a> {
         self.draw_lines(stdout);
         let lower_mark = self
             .line_count
-            .min(self.upper_mark.saturating_add(self.content_rows.into()));
+            .min(self.upper_mark.saturating_add(self.content_rows));
         self.draw_prompt(stdout, lower_mark, wrong_key);
         stdout.flush().unwrap();
     }
@@ -541,7 +533,7 @@ impl<'a> Pager<'a> {
         let mut displayed_lines = Vec::new();
         let mut iter = self.lines.iter().skip(self.upper_mark);
 
-        while displayed_lines.len() < self.content_rows as usize {
+        while displayed_lines.len() < self.content_rows {
             match iter.next() {
                 Some(line) => {
                     if self.squeeze {
@@ -608,13 +600,12 @@ impl<'a> Pager<'a> {
     }
 }
 
-fn search_pattern_in_file(lines: &[String], pattern: &Option<String>) -> Option<usize> {
-    let pattern = pattern.clone().unwrap_or_default();
+fn search_pattern_in_file(lines: &[&str], pattern: &str) -> Option<usize> {
     if lines.is_empty() || pattern.is_empty() {
         return None;
     }
     for (line_number, line) in lines.iter().enumerate() {
-        if line.contains(pattern.as_str()) {
+        if line.contains(pattern) {
             return Some(line_number);
         }
     }
@@ -630,8 +621,10 @@ fn paging_add_back_message(options: &Options, stdout: &mut std::io::Stdout) -> U
 }
 
 // Break the lines on the cols of the terminal
-fn break_buff(buff: &str, cols: usize) -> Vec<String> {
-    let mut lines = Vec::with_capacity(buff.lines().count());
+fn break_buff(buff: &str, cols: usize) -> Vec<&str> {
+    // We _could_ do a precise with_capacity here, but that would require scanning the
+    // whole buffer. Just guess a value instead.
+    let mut lines = Vec::with_capacity(2048);
 
     for l in buff.lines() {
         lines.append(&mut break_line(l, cols));
@@ -639,11 +632,11 @@ fn break_buff(buff: &str, cols: usize) -> Vec<String> {
     lines
 }
 
-fn break_line(line: &str, cols: usize) -> Vec<String> {
+fn break_line(line: &str, cols: usize) -> Vec<&str> {
     let width = UnicodeWidthStr::width(line);
     let mut lines = Vec::new();
     if width < cols {
-        lines.push(line.to_string());
+        lines.push(line);
         return lines;
     }
 
@@ -655,14 +648,14 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
         total_width += width;
 
         if total_width > cols {
-            lines.push(line[last_index..index].to_string());
+            lines.push(&line[last_index..index]);
             last_index = index;
             total_width = width;
         }
     }
 
     if last_index != line.len() {
-        lines.push(line[last_index..].to_string());
+        lines.push(&line[last_index..]);
     }
     lines
 }
@@ -707,63 +700,46 @@ mod tests {
             test_string.push_str("👩🏻‍🔬");
         }
 
-        let lines = break_line(&test_string, 80);
+        let lines = break_line(&test_string, 31);
 
         let widths: Vec<usize> = lines
             .iter()
             .map(|s| UnicodeWidthStr::width(&s[..]))
             .collect();
 
-        // Each 👩🏻‍🔬 is 6 character width it break line to the closest number to 80 => 6 * 13 = 78
-        assert_eq!((78, 42), (widths[0], widths[1]));
+        // Each 👩🏻‍🔬 is 2 character width, break line to the closest even number to 31
+        assert_eq!((30, 10), (widths[0], widths[1]));
     }
 
     #[test]
     fn test_search_pattern_empty_lines() {
         let lines = vec![];
-        let pattern = Some(String::from("pattern"));
-        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+        let pattern = "pattern";
+        assert_eq!(None, search_pattern_in_file(&lines, pattern));
     }
 
     #[test]
     fn test_search_pattern_empty_pattern() {
-        let lines = vec![String::from("line1"), String::from("line2")];
-        let pattern = None;
-        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+        let lines = vec!["line1", "line2"];
+        let pattern = "";
+        assert_eq!(None, search_pattern_in_file(&lines, pattern));
     }
 
     #[test]
     fn test_search_pattern_found_pattern() {
-        let lines = vec![
-            String::from("line1"),
-            String::from("line2"),
-            String::from("pattern"),
-        ];
-        let lines2 = vec![
-            String::from("line1"),
-            String::from("line2"),
-            String::from("pattern"),
-            String::from("pattern2"),
-        ];
-        let lines3 = vec![
-            String::from("line1"),
-            String::from("line2"),
-            String::from("other_pattern"),
-        ];
-        let pattern = Some(String::from("pattern"));
-        assert_eq!(2, search_pattern_in_file(&lines, &pattern).unwrap());
-        assert_eq!(2, search_pattern_in_file(&lines2, &pattern).unwrap());
-        assert_eq!(2, search_pattern_in_file(&lines3, &pattern).unwrap());
+        let lines = vec!["line1", "line2", "pattern"];
+        let lines2 = vec!["line1", "line2", "pattern", "pattern2"];
+        let lines3 = vec!["line1", "line2", "other_pattern"];
+        let pattern = "pattern";
+        assert_eq!(2, search_pattern_in_file(&lines, pattern).unwrap());
+        assert_eq!(2, search_pattern_in_file(&lines2, pattern).unwrap());
+        assert_eq!(2, search_pattern_in_file(&lines3, pattern).unwrap());
     }
 
     #[test]
     fn test_search_pattern_not_found_pattern() {
-        let lines = vec![
-            String::from("line1"),
-            String::from("line2"),
-            String::from("something"),
-        ];
-        let pattern = Some(String::from("pattern"));
-        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+        let lines = vec!["line1", "line2", "something"];
+        let pattern = "pattern";
+        assert_eq!(None, search_pattern_in_file(&lines, pattern));
     }
 }

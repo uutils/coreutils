@@ -1,6 +1,6 @@
 [package]
 name = "uu_comm"
-version = "0.0.28"
+version = "0.0.29"
 authors = ["uutils developers"]
 license = "MIT"
 description = "comm ~ (uutils) compare sorted inputs"
@@ -18,7 +18,7 @@ path = "src/comm.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "comm"

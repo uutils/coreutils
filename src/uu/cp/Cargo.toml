@@ -1,6 +1,6 @@
 [package]
 name = "uu_cp"
-version = "0.0.28"
+version = "0.0.29"
 authors = [
   "Jordy Dickinson <jordy.dickinson@gmail.com>",
   "Joshua S. Miller <jsmiller@uchicago.edu>",
@@ -28,8 +28,10 @@ quick-error = { workspace = true }
 selinux = { workspace = true, optional = true }
 uucore = { workspace = true, features = [
   "backup-control",
+  "buf-copy",
   "entries",
   "fs",
+  "fsxattr",
   "perms",
   "mode",
   "update-control",

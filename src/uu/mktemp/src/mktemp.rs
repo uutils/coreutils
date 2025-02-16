@@ -11,9 +11,7 @@ use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
 
 use std::env;
-use std::error::Error;
 use std::ffi::OsStr;
-use std::fmt::Display;
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
@@ -25,6 +23,7 @@ use std::os::unix::prelude::PermissionsExt;
 
 use rand::Rng;
 use tempfile::Builder;
+use thiserror::Error;
 
 const ABOUT: &str = help_about!("mktemp.md");
 const USAGE: &str = help_usage!("mktemp.md");
@@ -46,68 +45,41 @@ const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum MkTempError {
+    #[error("could not persist file {path}", path = .0.quote())]
     PersistError(PathBuf),
+
+    #[error("with --suffix, template {template} must end in X", template = .0.quote())]
     MustEndInX(String),
+
+    #[error("too few X's in template {template}", template = .0.quote())]
     TooFewXs(String),
 
     /// The template prefix contains a path separator (e.g. `"a/bXXX"`).
+    #[error("invalid template, {template}, contains directory separator", template = .0.quote())]
     PrefixContainsDirSeparator(String),
 
     /// The template suffix contains a path separator (e.g. `"XXXa/b"`).
+    #[error("invalid suffix {suffix}, contains directory separator", suffix = .0.quote())]
     SuffixContainsDirSeparator(String),
+
+    #[error("invalid template, {template}; with --tmpdir, it may not be absolute", template = .0.quote())]
     InvalidTemplate(String),
+
+    #[error("too many templates")]
     TooManyTemplates,
 
     /// When a specified temporary directory could not be found.
+    #[error("failed to create {template_type} via template {template}: No such file or directory",
+            template_type = .0,
+            template = .1.quote())]
     NotFound(String, String),
 }
 
 impl UError for MkTempError {
     fn usage(&self) -> bool {
         matches!(self, Self::TooManyTemplates)
-    }
-}
-
-impl Error for MkTempError {}
-
-impl Display for MkTempError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use MkTempError::*;
-        match self {
-            PersistError(p) => write!(f, "could not persist file {}", p.quote()),
-            MustEndInX(s) => write!(f, "with --suffix, template {} must end in X", s.quote()),
-            TooFewXs(s) => write!(f, "too few X's in template {}", s.quote()),
-            PrefixContainsDirSeparator(s) => {
-                write!(
-                    f,
-                    "invalid template, {}, contains directory separator",
-                    s.quote()
-                )
-            }
-            SuffixContainsDirSeparator(s) => {
-                write!(
-                    f,
-                    "invalid suffix {}, contains directory separator",
-                    s.quote()
-                )
-            }
-            InvalidTemplate(s) => write!(
-                f,
-                "invalid template, {}; with --tmpdir, it may not be absolute",
-                s.quote()
-            ),
-            TooManyTemplates => {
-                write!(f, "too many templates")
-            }
-            NotFound(template_type, s) => write!(
-                f,
-                "failed to create {} via template {}: No such file or directory",
-                template_type,
-                s.quote()
-            ),
-        }
     }
 }
 
@@ -457,7 +429,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<P
 
     // Randomize.
     let bytes = &mut buf[prefix.len()..prefix.len() + rand];
-    rand::thread_rng().fill(bytes);
+    rand::rng().fill(bytes);
     for byte in bytes {
         *byte = match *byte % 62 {
             v @ 0..=9 => v + b'0',

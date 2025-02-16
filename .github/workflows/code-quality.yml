@@ -32,6 +32,8 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
@@ -44,7 +46,7 @@ jobs:
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+        unset FAIL_ON_FAULT ; case "$STYLE_FAIL_ON_FAULT" in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
           *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
         esac;
@@ -75,13 +77,15 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
         components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.6
+      uses: mozilla-actions/sccache-action@v0.0.7
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -89,7 +93,7 @@ jobs:
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+        unset FAIL_ON_FAULT ; case "$STYLE_FAIL_ON_FAULT" in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
           *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
         esac;
@@ -108,7 +112,7 @@ jobs:
           fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
           fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
           # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-          S=$(cargo clippy --all-targets --features ${{ matrix.job.features }} -pcoreutils -- ${CLIPPY_FLAGS} -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
+          S=$(cargo clippy --all-targets --features ${{ matrix.job.features }} --tests -pcoreutils -- ${CLIPPY_FLAGS} -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
           if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   style_spellcheck:
@@ -120,6 +124,8 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -127,7 +133,7 @@ jobs:
         ## VARs setup
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+        unset FAIL_ON_FAULT ; case "$STYLE_FAIL_ON_FAULT" in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
           *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
         esac;
@@ -156,6 +162,8 @@ jobs:
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Check
         run: npx --yes @taplo/cli fmt --check

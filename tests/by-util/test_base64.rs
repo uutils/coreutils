@@ -41,6 +41,28 @@ fn test_encode_repeat_flags_later_wrap_15() {
 }
 
 #[test]
+fn test_decode_short() {
+    let input = "aQ";
+    new_ucmd!()
+        .args(&["--decode"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("i");
+}
+
+#[test]
+fn test_multi_lines() {
+    let input = ["aQ\n\n\n", "a\nQ==\n\n\n"];
+    for i in input {
+        new_ucmd!()
+            .args(&["--decode"])
+            .pipe_in(i)
+            .succeeds()
+            .stdout_only("i");
+    }
+}
+
+#[test]
 fn test_base64_encode_file() {
     new_ucmd!()
         .arg("input-simple.txt")
@@ -105,6 +127,17 @@ fn test_wrap() {
             // spell-checker:disable-next-line
             .stdout_only("VGhlIHF1aWNrIGJyb3du\nIGZveCBqdW1wcyBvdmVy\nIHRoZSBsYXp5IGRvZy4=\n");
     }
+    let input = "hello, world";
+    new_ucmd!()
+        .args(&["--wrap", "0"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("aGVsbG8sIHdvcmxk"); // spell-checker:disable-line
+    new_ucmd!()
+        .args(&["--wrap", "30"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("aGVsbG8sIHdvcmxk\n"); // spell-checker:disable-line
 }
 
 #[test]
@@ -199,7 +232,7 @@ fn test_manpage() {
 
     let test_scenario = TestScenario::new("");
 
-    let child = Command::new(test_scenario.bin_path)
+    let child = Command::new(&test_scenario.bin_path)
         .arg("manpage")
         .arg("base64")
         .stdin(Stdio::piped())

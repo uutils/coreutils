@@ -14,7 +14,7 @@ use crate::common::util::TestScenario;
 
 use std::time::{Duration, SystemTime};
 
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 
 const NUM_PRIMES: usize = 10000;
@@ -171,7 +171,7 @@ fn test_random() {
         while product < min {
             // log distribution---higher probability for lower numbers
             let factor = loop {
-                let next = rng.gen_range(0_f64..log_num_primes).exp2().floor() as usize;
+                let next = rng.random_range(0_f64..log_num_primes).exp2().floor() as usize;
                 if next < NUM_PRIMES {
                     break primes[next];
                 }
@@ -216,7 +216,7 @@ fn test_random_big() {
     println!("rng_seed={rng_seed:?}");
     let mut rng = SmallRng::seed_from_u64(rng_seed);
 
-    let bit_range_1 = Uniform::new(14_usize, 51);
+    let bit_range_1 = Uniform::new(14, 51).unwrap();
     let mut rand_64 = move || {
         // first, choose a random number of bits for the first factor
         let f_bit_1 = bit_range_1.sample(&mut rng);
@@ -226,11 +226,11 @@ fn test_random_big() {
         // we will have a number of additional factors equal to n_facts + 1
         // where n_facts is in [0, floor(rem/14) )  NOTE half-open interval
         // Each prime factor is at least 14 bits, hence floor(rem/14)
-        let n_factors = Uniform::new(0_usize, rem / 14).sample(&mut rng);
+        let n_factors = Uniform::new(0, rem / 14).unwrap().sample(&mut rng);
         // we have to distribute extra_bits among the (n_facts + 1) values
         let extra_bits = rem - (n_factors + 1) * 14;
         // (remember, a Range is a half-open interval)
-        let extra_range = Uniform::new(0_usize, extra_bits + 1);
+        let extra_range = Uniform::new(0, extra_bits + 1).unwrap();
 
         // to generate an even split of this range, generate n-1 random elements
         // in the range, add the desired total value to the end, sort this list,
@@ -262,7 +262,9 @@ fn test_random_big() {
         for bit in f_bits {
             assert!(bit < 37);
             n_bits += 14 + bit;
-            let elm = Uniform::new(0, PRIMES_BY_BITS[bit].len()).sample(&mut rng);
+            let elm = Uniform::new(0, PRIMES_BY_BITS[bit].len())
+                .unwrap()
+                .sample(&mut rng);
             let factor = PRIMES_BY_BITS[bit][elm];
             factors.push(factor);
             product *= factor;

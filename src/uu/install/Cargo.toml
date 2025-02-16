@@ -1,6 +1,6 @@
 [package]
 name = "uu_install"
-version = "0.0.28"
+version = "0.0.29"
 authors = ["Ben Eills <ben@beneills.com>", "uutils developers"]
 license = "MIT"
 description = "install ~ (uutils) copy files from SOURCE to DESTINATION (with specified attributes)"
@@ -23,6 +23,7 @@ file_diff = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
+  "buf-copy",
   "fs",
   "mode",
   "perms",

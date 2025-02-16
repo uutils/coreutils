@@ -5,23 +5,13 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
 
-use clap::{
-    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
-    crate_version, Arg, ArgAction, Command,
-};
-use glob::{MatchOptions, Pattern};
-use lscolors::LsColors;
-
-use ansi_width::ansi_width;
-use std::{cell::OnceCell, num::IntErrorKind};
-use std::{collections::HashSet, io::IsTerminal};
-
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use std::{cell::OnceCell, num::IntErrorKind};
 use std::{
     cmp::Reverse,
     error::Error,
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     fmt::{Display, Write as FmtWrite},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{stdout, BufWriter, ErrorKind, Stdout, Write},
@@ -34,7 +24,18 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
+use std::{collections::HashSet, io::IsTerminal};
+
+use ansi_width::ansi_width;
+use chrono::{DateTime, Local, TimeDelta};
+use clap::{
+    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
+    crate_version, Arg, ArgAction, Command,
+};
+use glob::{MatchOptions, Pattern};
+use lscolors::LsColors;
 use term_grid::{Direction, Filling, Grid, GridOptions};
+
 use uucore::error::USimpleError;
 use uucore::format::human::{human_readable, SizeFormat};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
@@ -55,21 +56,25 @@ use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
-use uucore::quoting_style::{escape_dir_name, escape_name, QuotingStyle};
+use uucore::quoting_style::{self, escape_name, QuotingStyle};
 use uucore::{
+    custom_tz_fmt,
     display::Quotable,
     error::{set_exit_code, UError, UResult},
     format_usage,
     fs::display_permissions,
+    os_str_as_bytes_lossy,
     parse_size::parse_size_u64,
     shortcut_value_parser::ShortcutValueParser,
     version_cmp::version_cmp,
 };
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
+
 mod dired;
 use dired::{is_dired_arg_present, DiredOutput};
 mod colors;
 use colors::{color_name, StyleManager};
+
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
@@ -333,6 +338,35 @@ enum TimeStyle {
     Format(String),
 }
 
+/// Whether the given date is considered recent (i.e., in the last 6 months).
+fn is_recent(time: DateTime<Local>) -> bool {
+    // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
+    time + TimeDelta::try_seconds(31_556_952 / 2).unwrap() > Local::now()
+}
+
+impl TimeStyle {
+    /// Format the given time according to this time format style.
+    fn format(&self, time: DateTime<Local>) -> String {
+        let recent = is_recent(time);
+        match (self, recent) {
+            (Self::FullIso, _) => time.format("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
+            (Self::LongIso, _) => time.format("%Y-%m-%d %H:%M").to_string(),
+            (Self::Iso, true) => time.format("%m-%d %H:%M").to_string(),
+            (Self::Iso, false) => time.format("%Y-%m-%d ").to_string(),
+            // spell-checker:ignore (word) datetime
+            //In this version of chrono translating can be done
+            //The function is chrono::datetime::DateTime::format_localized
+            //However it's currently still hard to get the current pure-rust-locale
+            //So it's not yet implemented
+            (Self::Locale, true) => time.format("%b %e %H:%M").to_string(),
+            (Self::Locale, false) => time.format("%b %e  %Y").to_string(),
+            (Self::Format(fmt), _) => time
+                .format(custom_tz_fmt::custom_time_format(fmt).as_str())
+                .to_string(),
+        }
+    }
+}
+
 fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
     let possible_time_styles = vec![
         "full-iso".to_string(),
@@ -345,8 +379,8 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
         if options.get_flag(options::FULL_TIME)
-            && options.indices_of(options::FULL_TIME).unwrap().last()
-                > options.indices_of(options::TIME_STYLE).unwrap().last()
+            && options.indices_of(options::FULL_TIME).unwrap().next_back()
+                > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
             Ok(TimeStyle::FullIso)
         } else {
@@ -536,6 +570,7 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
         match field.as_str() {
             "ctime" | "status" => Time::Change,
             "access" | "atime" | "use" => Time::Access,
+            "mtime" | "modification" => Time::Modification,
             "birth" | "creation" => Time::Birth,
             // below should never happen as clap already restricts the values.
             _ => unreachable!("Invalid field for --time"),
@@ -1442,12 +1477,14 @@ pub fn uu_app() -> Command {
                     "Show time in <field>:\n\
                         \taccess time (-u): atime, access, use;\n\
                         \tchange time (-t): ctime, status.\n\
+                        \tmodification time: mtime, modification.\n\
                         \tbirth time: birth, creation;",
                 )
                 .value_name("field")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("atime").alias("access").alias("use"),
                     PossibleValue::new("ctime").alias("status"),
+                    PossibleValue::new("mtime").alias("modification"),
                     PossibleValue::new("birth").alias("creation"),
                 ]))
                 .hide_possible_values(true)
@@ -2047,8 +2084,13 @@ impl PathData {
 /// dir1:               <- This as well
 /// file11
 /// ```
-fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
-    let escaped_name = escape_dir_name(path_data.p_buf.as_os_str(), &config.quoting_style);
+fn show_dir_name(
+    path_data: &PathData,
+    out: &mut BufWriter<Stdout>,
+    config: &Config,
+) -> std::io::Result<()> {
+    let escaped_name =
+        quoting_style::escape_dir_name(path_data.p_buf.as_os_str(), &config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -2056,7 +2098,8 @@ fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Con
         escaped_name
     };
 
-    write!(out, "{name}:").unwrap();
+    write_os_str(out, &name)?;
+    write!(out, ":")
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2133,7 +2176,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 if config.dired {
                     dired::indent(&mut out)?;
                 }
-                show_dir_name(path_data, &mut out, config);
+                show_dir_name(path_data, &mut out, config)?;
                 writeln!(out)?;
                 if config.dired {
                     // First directory displayed
@@ -2145,7 +2188,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 }
             } else {
                 writeln!(out)?;
-                show_dir_name(path_data, &mut out, config);
+                show_dir_name(path_data, &mut out, config)?;
                 writeln!(out)?;
             }
         }
@@ -2262,7 +2305,11 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         case_sensitive: true,
     };
     let file_name = entry.file_name();
-    // If the decoding fails, still show an incorrect rendering
+    // If the decoding fails, still match best we can
+    // FIXME: use OsStrings or Paths once we have a glob crate that supports it:
+    // https://github.com/rust-lang/glob/issues/23
+    // https://github.com/rust-lang/glob/issues/78
+    // https://github.com/BurntSushi/ripgrep/issues/1250
     let file_name = match file_name.to_str() {
         Some(s) => s.to_string(),
         None => file_name.to_string_lossy().into_owned(),
@@ -2374,7 +2421,7 @@ fn enter_directory(
                             dired::add_dir_name(dired, dir_name_size);
                         }
 
-                        show_dir_name(e, out, config);
+                        show_dir_name(e, out, config)?;
                         writeln!(out)?;
                         enter_directory(
                             e,
@@ -2514,7 +2561,7 @@ fn display_items(
 
     let quoted = items.iter().any(|item| {
         let name = escape_name(&item.display_name, &config.quoting_style);
-        name.starts_with('\'')
+        os_str_starts_with(&name, b"'")
     });
 
     if config.format == Format::Long {
@@ -2588,19 +2635,20 @@ fn display_items(
             Format::Commas => {
                 let mut current_col = 0;
                 if let Some(name) = names.next() {
-                    write!(out, "{name}")?;
-                    current_col = ansi_width(&name) as u16 + 2;
+                    write_os_str(out, &name)?;
+                    current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
                 }
                 for name in names {
-                    let name_width = ansi_width(&name) as u16;
+                    let name_width = ansi_width(&name.to_string_lossy()) as u16;
                     // If the width is 0 we print one single line
                     if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
-                        write!(out, ",\n{name}")?;
+                        writeln!(out, ",")?;
                     } else {
                         current_col += name_width + 2;
-                        write!(out, ", {name}")?;
+                        write!(out, ", ")?;
                     }
+                    write_os_str(out, &name)?;
                 }
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
@@ -2610,7 +2658,8 @@ fn display_items(
             }
             _ => {
                 for name in names {
-                    write!(out, "{}{}", name, config.line_ending)?;
+                    write_os_str(out, &name)?;
+                    write!(out, "{}", config.line_ending)?;
                 }
             }
         };
@@ -2644,7 +2693,7 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
 }
 
 fn display_grid(
-    names: impl Iterator<Item = String>,
+    names: impl Iterator<Item = OsString>,
     width: u16,
     direction: Direction,
     out: &mut BufWriter<Stdout>,
@@ -2658,13 +2707,13 @@ fn display_grid(
                 write!(out, "  ")?;
             }
             printed_something = true;
-            write!(out, "{name}")?;
+            write_os_str(out, &name)?;
         }
         if printed_something {
             writeln!(out)?;
         }
     } else {
-        let names: Vec<String> = if quoted {
+        let names: Vec<_> = if quoted {
             // In case some names are quoted, GNU adds a space before each
             // entry that does not start with a quote to make it prettier
             // on multiline.
@@ -2679,16 +2728,24 @@ fn display_grid(
             // ```
             names
                 .map(|n| {
-                    if n.starts_with('\'') || n.starts_with('"') {
+                    if os_str_starts_with(&n, b"'") || os_str_starts_with(&n, b"\"") {
                         n
                     } else {
-                        format!(" {n}")
+                        let mut ret: OsString = " ".into();
+                        ret.push(n);
+                        ret
                     }
                 })
                 .collect()
         } else {
             names.collect()
         };
+
+        // FIXME: the Grid crate only supports &str, so can't display raw bytes
+        let names: Vec<_> = names
+            .into_iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
 
         // Determine whether to use tabs for separation based on whether any entry ends with '/'.
         // If any entry ends with '/', it indicates that the -F flag is likely used to classify directories.
@@ -2751,14 +2808,14 @@ fn display_item_long(
     style_manager: &mut Option<StyleManager>,
     quoted: bool,
 ) -> UResult<()> {
-    let mut output_display: String = String::new();
+    let mut output_display: Vec<u8> = vec![];
 
     // apply normal color to non filename outputs
     if let Some(style_manager) = style_manager {
         write!(output_display, "{}", style_manager.apply_normal()).unwrap();
     }
     if config.dired {
-        output_display += "  ";
+        output_display.extend(b"  ");
     }
     if let Some(md) = item.get_metadata(out) {
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
@@ -2865,11 +2922,13 @@ fn display_item_long(
             String::new(),
             out,
             style_manager,
-            ansi_width(&output_display),
+            ansi_width(&String::from_utf8_lossy(&output_display)),
         );
 
-        let displayed_item = if quoted && !item_name.starts_with('\'') {
-            format!(" {item_name}")
+        let displayed_item = if quoted && !os_str_starts_with(&item_name, b"'") {
+            let mut ret: OsString = " ".into();
+            ret.push(item_name);
+            ret
         } else {
             item_name
         };
@@ -2882,7 +2941,8 @@ fn display_item_long(
             );
             dired::update_positions(dired, start, end);
         }
-        write!(output_display, "{}{}", displayed_item, config.line_ending).unwrap();
+        write_os_str(&mut output_display, &displayed_item)?;
+        write!(output_display, "{}", config.line_ending)?;
     } else {
         #[cfg(unix)]
         let leading_char = {
@@ -2962,7 +3022,7 @@ fn display_item_long(
             String::new(),
             out,
             style_manager,
-            ansi_width(&output_display),
+            ansi_width(&String::from_utf8_lossy(&output_display)),
         );
         let date_len = 12;
 
@@ -2978,12 +3038,13 @@ fn display_item_long(
             dired::calculate_and_update_positions(
                 dired,
                 output_display.len(),
-                displayed_item.trim().len(),
+                displayed_item.to_string_lossy().trim().len(),
             );
         }
-        write!(output_display, "{}{}", displayed_item, config.line_ending).unwrap();
+        write_os_str(&mut output_display, &displayed_item)?;
+        write!(output_display, "{}", config.line_ending)?;
     }
-    write!(out, "{output_display}")?;
+    out.write_all(&output_display)?;
 
     Ok(())
 }
@@ -3002,7 +3063,6 @@ use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
 use uucore::fs::FileInformation;
-use uucore::quoting_style;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {
@@ -3088,31 +3148,7 @@ fn get_time(md: &Metadata, config: &Config) -> Option<chrono::DateTime<chrono::L
 
 fn display_date(metadata: &Metadata, config: &Config) -> String {
     match get_time(metadata, config) {
-        Some(time) => {
-            //Date is recent if from past 6 months
-            //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            let recent = time + chrono::TimeDelta::try_seconds(31_556_952 / 2).unwrap()
-                > chrono::Local::now();
-
-            match &config.time_style {
-                TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
-                TimeStyle::LongIso => time.format("%Y-%m-%d %H:%M"),
-                TimeStyle::Iso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
-                TimeStyle::Locale => {
-                    let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
-
-                    // spell-checker:ignore (word) datetime
-                    //In this version of chrono translating can be done
-                    //The function is chrono::datetime::DateTime::format_localized
-                    //However it's currently still hard to get the current pure-rust-locale
-                    //So it's not yet implemented
-
-                    time.format(fmt)
-                }
-                TimeStyle::Format(e) => time.format(e),
-            }
-            .to_string()
-        }
+        Some(time) => config.time_style.format(time),
         None => "???".into(),
     }
 }
@@ -3225,7 +3261,7 @@ fn display_item_name(
     out: &mut BufWriter<Stdout>,
     style_manager: &mut Option<StyleManager>,
     current_column: usize,
-) -> String {
+) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
 
@@ -3237,11 +3273,14 @@ fn display_item_name(
     }
 
     if let Some(style_manager) = style_manager {
-        name = color_name(&name, path, style_manager, out, None, is_wrap(name.len()));
+        let len = name.len();
+        name = color_name(name, path, style_manager, out, None, is_wrap(len));
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
-        name = more_info + &name;
+        let old_name = name;
+        name = more_info.into();
+        name.push(&old_name);
     }
 
     if config.indicator_style != IndicatorStyle::None {
@@ -3267,7 +3306,7 @@ fn display_item_name(
         };
 
         if let Some(c) = char_opt {
-            name.push(c);
+            name.push(OsStr::new(&c.to_string()));
         }
     }
 
@@ -3278,7 +3317,7 @@ fn display_item_name(
     {
         match path.p_buf.read_link() {
             Ok(target) => {
-                name.push_str(" -> ");
+                name.push(" -> ");
 
                 // We might as well color the symlink output after the arrow.
                 // This makes extra system calls, but provides important information that
@@ -3306,10 +3345,10 @@ fn display_item_name(
                         )
                         .is_err()
                     {
-                        name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
+                        name.push(path.p_buf.read_link().unwrap());
                     } else {
-                        name.push_str(&color_name(
-                            &escape_name(target.as_os_str(), &config.quoting_style),
+                        name.push(color_name(
+                            escape_name(target.as_os_str(), &config.quoting_style),
                             path,
                             style_manager,
                             out,
@@ -3320,7 +3359,7 @@ fn display_item_name(
                 } else {
                     // If no coloring is required, we just use target as is.
                     // Apply the right quoting
-                    name.push_str(&escape_name(target.as_os_str(), &config.quoting_style));
+                    name.push(escape_name(target.as_os_str(), &config.quoting_style));
                 }
             }
             Err(err) => {
@@ -3338,14 +3377,16 @@ fn display_item_name(
             } else {
                 pad_left(&path.security_context, pad_count)
             };
-            name = format!("{security_context} {name}");
+            let old_name = name;
+            name = format!("{security_context} ").into();
+            name.push(old_name);
         }
     }
 
     name
 }
 
-fn create_hyperlink(name: &str, path: &PathData) -> String {
+fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     let hostname = hostname::get().unwrap_or_else(|_| OsString::from(""));
     let hostname = hostname.to_string_lossy();
 
@@ -3370,7 +3411,10 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
         .collect();
 
     // \x1b = ESC, \x07 = BEL
-    format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07")
+    let mut ret: OsString = format!("\x1b]8;;file://{hostname}{absolute_path}\x07").into();
+    ret.push(name);
+    ret.push("\x1b]8;;\x07");
+    ret
 }
 
 #[cfg(not(unix))]
@@ -3541,4 +3585,12 @@ fn calculate_padding_collection(
     }
 
     padding_collections
+}
+
+fn os_str_starts_with(haystack: &OsStr, needle: &[u8]) -> bool {
+    os_str_as_bytes_lossy(haystack).starts_with(needle)
+}
+
+fn write_os_str<W: Write>(writer: &mut W, string: &OsStr) -> std::io::Result<()> {
+    writer.write_all(&os_str_as_bytes_lossy(string))
 }

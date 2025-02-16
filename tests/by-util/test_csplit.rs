@@ -130,17 +130,21 @@ fn test_up_to_match_sequence() {
 
 #[test]
 fn test_up_to_match_offset() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["numbers50.txt", "/9$/+3"])
-        .succeeds()
-        .stdout_only("24\n117\n");
+    for offset in ["3", "+3"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["numbers50.txt", &format!("/9$/{offset}")])
+            .succeeds()
+            .stdout_only("24\n117\n");
 
-    let count = glob(&at.plus_as_string("xx*"))
-        .expect("there should be splits created")
-        .count();
-    assert_eq!(count, 2);
-    assert_eq!(at.read("xx00"), generate(1, 12));
-    assert_eq!(at.read("xx01"), generate(12, 51));
+        let count = glob(&at.plus_as_string("xx*"))
+            .expect("there should be splits created")
+            .count();
+        assert_eq!(count, 2);
+        assert_eq!(at.read("xx00"), generate(1, 12));
+        assert_eq!(at.read("xx01"), generate(12, 51));
+        at.remove("xx00");
+        at.remove("xx01");
+    }
 }
 
 #[test]
@@ -316,16 +320,29 @@ fn test_skip_to_match_sequence4() {
 
 #[test]
 fn test_skip_to_match_offset() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["numbers50.txt", "%23%+3"])
-        .succeeds()
-        .stdout_only("75\n");
+    for offset in ["3", "+3"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["numbers50.txt", &format!("%23%{offset}")])
+            .succeeds()
+            .stdout_only("75\n");
 
-    let count = glob(&at.plus_as_string("xx*"))
-        .expect("there should be splits created")
-        .count();
-    assert_eq!(count, 1);
-    assert_eq!(at.read("xx00"), generate(26, 51));
+        let count = glob(&at.plus_as_string("xx*"))
+            .expect("there should be splits created")
+            .count();
+        assert_eq!(count, 1);
+        assert_eq!(at.read("xx00"), generate(26, 51));
+        at.remove("xx00");
+    }
+}
+
+#[test]
+fn test_skip_to_match_offset_suppress_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-z", "-", "%a%1"])
+        .pipe_in("a\n")
+        .succeeds()
+        .no_output();
+    assert!(!at.file_exists("xx00"));
 }
 
 #[test]
@@ -387,18 +404,23 @@ fn test_option_keep() {
 
 #[test]
 fn test_option_quiet() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["--quiet", "numbers50.txt", "13", "%25%", "/0$/"])
-        .succeeds()
-        .no_stdout();
+    for arg in ["-q", "--quiet", "-s", "--silent"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&[arg, "numbers50.txt", "13", "%25%", "/0$/"])
+            .succeeds()
+            .no_stdout();
 
-    let count = glob(&at.plus_as_string("xx*"))
-        .expect("there should be splits created")
-        .count();
-    assert_eq!(count, 3);
-    assert_eq!(at.read("xx00"), generate(1, 13));
-    assert_eq!(at.read("xx01"), generate(25, 30));
-    assert_eq!(at.read("xx02"), generate(30, 51));
+        let count = glob(&at.plus_as_string("xx*"))
+            .expect("there should be splits created")
+            .count();
+        assert_eq!(count, 3);
+        assert_eq!(at.read("xx00"), generate(1, 13));
+        assert_eq!(at.read("xx01"), generate(25, 30));
+        assert_eq!(at.read("xx02"), generate(30, 51));
+        at.remove("xx00");
+        at.remove("xx01");
+        at.remove("xx02");
+    }
 }
 
 #[test]
@@ -457,14 +479,14 @@ fn test_up_to_match_offset_option_suppress_matched() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "--suppress-matched", "/10/+4"])
         .succeeds()
-        .stdout_only("27\n111\n");
+        .stdout_only("30\n108\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
         .count();
     assert_eq!(count, 2);
-    assert_eq!(at.read("xx00"), generate(1, 10) + &generate(11, 14));
-    assert_eq!(at.read("xx01"), generate(14, 51));
+    assert_eq!(at.read("xx00"), generate(1, 14));
+    assert_eq!(at.read("xx01"), generate(15, 51));
 }
 
 #[test]
@@ -472,14 +494,14 @@ fn test_up_to_match_negative_offset_option_suppress_matched() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "--suppress-matched", "/10/-4"])
         .succeeds()
-        .stdout_only("10\n128\n");
+        .stdout_only("10\n129\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
         .count();
     assert_eq!(count, 2);
     assert_eq!(at.read("xx00"), generate(1, 6));
-    assert_eq!(at.read("xx01"), generate(6, 10) + &generate(11, 51));
+    assert_eq!(at.read("xx01"), generate(7, 51));
 }
 
 #[test]
@@ -1364,10 +1386,10 @@ fn zero_error() {
 
 #[test]
 fn no_such_file() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["in", "0"])
+    new_ucmd!()
+        .args(&["in", "0"])
         .fails()
-        .stderr_contains("cannot access 'in': No such file or directory");
+        .stderr_contains("cannot open 'in' for reading: No such file or directory");
 }
 
 #[test]
@@ -1404,4 +1426,53 @@ fn repeat_everything() {
     assert_eq!(at.read("xxz_003"), generate(28, 35 + 1));
     assert_eq!(at.read("xxz_004"), generate(37, 44 + 1));
     assert_eq!(at.read("xxz_005"), generate(46, 50 + 1));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_named_pipe_input_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let mut fifo_writer =
+        create_named_pipe_with_writer(&at.plus_as_string("fifo"), &generate(1, 51));
+
+    let result = ucmd.args(&["fifo", "10"]).succeeds();
+    fifo_writer.kill().unwrap();
+    fifo_writer.wait().unwrap();
+    result.stdout_only("18\n123\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 2);
+    assert_eq!(at.read("xx00"), generate(1, 10));
+    assert_eq!(at.read("xx01"), generate(10, 51));
+}
+
+#[cfg(unix)]
+fn create_named_pipe_with_writer(path: &str, data: &str) -> std::process::Child {
+    // cSpell:ignore IRWXU
+    nix::unistd::mkfifo(path, nix::sys::stat::Mode::S_IRWXU).unwrap();
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("printf '{}' > {path}", data))
+        .spawn()
+        .unwrap()
+}
+
+#[test]
+fn test_directory_input_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("test_directory");
+
+    #[cfg(unix)]
+    ucmd.args(&["test_directory", "1"])
+        .fails()
+        .code_is(1)
+        .stderr_only("csplit: read error: Is a directory\n");
+    #[cfg(windows)]
+    ucmd.args(&["test_directory", "1"])
+        .fails()
+        .code_is(1)
+        .stderr_only("csplit: cannot open 'test_directory' for reading: Permission denied\n");
 }
