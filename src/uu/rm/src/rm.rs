@@ -6,7 +6,6 @@
 // spell-checker:ignore (path) eacces inacc rm-r4
 
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
-use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
 use std::ops::BitOr;
@@ -21,7 +20,6 @@ use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::{
     format_usage, help_about, help_section, help_usage, os_str_as_bytes, prompt_yes, show_error,
 };
-use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
@@ -341,6 +339,24 @@ fn is_dir_empty(path: &Path) -> bool {
     }
 }
 
+/// Whether the given file or directory is readable.
+#[cfg(unix)]
+fn is_readable(path: &Path) -> bool {
+    match std::fs::metadata(path) {
+        Err(_) => false,
+        Ok(metadata) => {
+            let mode = metadata.permissions().mode();
+            (mode & 0o400) > 0
+        }
+    }
+}
+
+/// Whether the given file or directory is readable.
+#[cfg(not(unix))]
+fn is_readable(_path: &Path) -> bool {
+    true
+}
+
 /// Whether the given file or directory is writable.
 #[cfg(unix)]
 fn is_writable(path: &Path) -> bool {
@@ -360,7 +376,106 @@ fn is_writable(_path: &Path) -> bool {
     true
 }
 
-#[allow(clippy::cognitive_complexity)]
+/// Recursively remove the directory tree rooted at the given path.
+///
+/// If `path` is a file or a symbolic link, just remove it. If it is a
+/// directory, remove all of its entries recursively and then remove the
+/// directory itself. In case of an error, print the error message to
+/// `stderr` and return `true`. If there were no errors, return `false`.
+fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
+    // Special case: if we cannot access the metadata because the
+    // filename is too long, fall back to try
+    // `std::fs::remove_dir_all()`.
+    //
+    // TODO This is a temporary bandage; we shouldn't need to do this
+    // at all. Instead of using the full path like "x/y/z", which
+    // causes a `InvalidFilename` error when trying to access the file
+    // metadata, we should be able to use just the last part of the
+    // path, "z", and know that it is relative to the parent, "x/y".
+    if let Some(s) = path.to_str() {
+        if s.len() > 1000 {
+            match std::fs::remove_dir_all(path) {
+                Ok(_) => return false,
+                Err(e) => {
+                    let e = e.map_err_context(|| format!("cannot remove {}", path.quote()));
+                    show_error!("{e}");
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Base case 1: this is a file or a symbolic link.
+    //
+    // The symbolic link case is important because it could be a link to
+    // a directory and we don't want to recurse. In particular, this
+    // avoids an infinite recursion in the case of a link to the current
+    // directory, like `ln -s . link`.
+    if !path.is_dir() || path.is_symlink() {
+        return remove_file(path, options);
+    }
+
+    // Base case 2: this is a non-empty directory, but the user
+    // doesn't want to descend into it.
+    if options.interactive == InteractiveMode::Always
+        && !is_dir_empty(path)
+        && !prompt_descend(path)
+    {
+        return false;
+    }
+
+    // Recursive case: this is a directory.
+    let mut error = false;
+    match std::fs::read_dir(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            // This is not considered an error.
+        }
+        Err(_) => error = true,
+        Ok(iter) => {
+            for entry in iter {
+                match entry {
+                    Err(_) => error = true,
+                    Ok(entry) => {
+                        let child_error = remove_dir_recursive(&entry.path(), options);
+                        error = error || child_error;
+                    }
+                }
+            }
+        }
+    }
+
+    // Ask the user whether to remove the current directory.
+    if options.interactive == InteractiveMode::Always && !prompt_dir(path, options) {
+        return false;
+    }
+
+    // Try removing the directory itself.
+    match std::fs::remove_dir(path) {
+        Err(_) if !error && !is_readable(path) => {
+            // For compatibility with GNU test case
+            // `tests/rm/unread2.sh`, show "Permission denied" in this
+            // case instead of "Directory not empty".
+            show_error!("cannot remove {}: Permission denied", path.quote());
+            error = true;
+        }
+        Err(e) if !error => {
+            let e = e.map_err_context(|| format!("cannot remove {}", path.quote()));
+            show_error!("{e}");
+            error = true;
+        }
+        Err(_) => {
+            // If there has already been at least one error when
+            // trying to remove the children, then there is no need to
+            // show another error message as we return from each level
+            // of the recursion.
+        }
+        Ok(_) if options.verbose => println!("removed directory {}", normalize(path).quote()),
+        Ok(_) => {}
+    }
+
+    error
+}
+
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
 
@@ -375,71 +490,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
-        if options.interactive != InteractiveMode::Always && !options.verbose {
-            if let Err(e) = fs::remove_dir_all(path) {
-                // GNU compatibility (rm/empty-inacc.sh)
-                // remove_dir_all failed. maybe it is because of the permissions
-                // but if the directory is empty, remove_dir might work.
-                // So, let's try that before failing for real
-                if fs::remove_dir(path).is_err() {
-                    had_err = true;
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        // GNU compatibility (rm/fail-eacces.sh)
-                        // here, GNU doesn't use some kind of remove_dir_all
-                        // It will show directory+file
-                        show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
-                    } else {
-                        show_error!("cannot remove {}: {}", path.quote(), e);
-                    }
-                }
-            }
-        } else {
-            let mut dirs: VecDeque<DirEntry> = VecDeque::new();
-            // The Paths to not descend into. We need to this because WalkDir doesn't have a way, afaik, to not descend into a directory
-            // So we have to just ignore paths as they come up if they start with a path we aren't descending into
-            let mut not_descended: Vec<PathBuf> = Vec::new();
-
-            'outer: for entry in WalkDir::new(path) {
-                match entry {
-                    Ok(entry) => {
-                        if options.interactive == InteractiveMode::Always {
-                            for not_descend in &not_descended {
-                                if entry.path().starts_with(not_descend) {
-                                    // We don't need to continue the rest of code in this loop if we are in a directory we don't want to descend into
-                                    continue 'outer;
-                                }
-                            }
-                        }
-                        let file_type = entry.file_type();
-                        if file_type.is_dir() {
-                            // If we are in Interactive Mode Always and the directory isn't empty we ask if we should descend else we push this directory onto dirs vector
-                            if options.interactive == InteractiveMode::Always
-                                && !is_dir_empty(entry.path())
-                            {
-                                // If we don't descend we push this directory onto our not_descended vector else we push this directory onto dirs vector
-                                if prompt_descend(entry.path()) {
-                                    dirs.push_back(entry);
-                                } else {
-                                    not_descended.push(entry.path().to_path_buf());
-                                }
-                            } else {
-                                dirs.push_back(entry);
-                            }
-                        } else {
-                            had_err = remove_file(entry.path(), options).bitor(had_err);
-                        }
-                    }
-                    Err(e) => {
-                        had_err = true;
-                        show_error!("recursing in {}: {}", path.quote(), e);
-                    }
-                }
-            }
-
-            for dir in dirs.iter().rev() {
-                had_err = remove_dir(dir.path(), options).bitor(had_err);
-            }
-        }
+        had_err = remove_dir_recursive(path, options)
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
     } else if options.recursive {

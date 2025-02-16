@@ -3164,7 +3164,6 @@ dependencies = [
  "clap",
  "libc",
  "uucore",
- "walkdir",
  "windows-sys 0.59.0",
 ]
 
