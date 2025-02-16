@@ -15,7 +15,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::{
     format_usage, help_about, help_section, help_usage, os_str_as_bytes, prompt_yes, show_error,
 };
@@ -428,49 +428,35 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     had_err
 }
 
+/// Remove the given directory, asking the user for permission if necessary.
+///
+/// Returns true if it has encountered an error.
 fn remove_dir(path: &Path, options: &Options) -> bool {
-    if prompt_dir(path, options) {
-        if let Ok(mut read_dir) = fs::read_dir(path) {
-            if options.dir || options.recursive {
-                if read_dir.next().is_none() {
-                    match fs::remove_dir(path) {
-                        Ok(_) => {
-                            if options.verbose {
-                                println!("removed directory {}", normalize(path).quote());
-                            }
-                        }
-                        Err(e) => {
-                            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                // GNU compatibility (rm/fail-eacces.sh)
-                                show_error!(
-                                    "cannot remove {}: {}",
-                                    path.quote(),
-                                    "Permission denied"
-                                );
-                            } else {
-                                show_error!("cannot remove {}: {}", path.quote(), e);
-                            }
-                            return true;
-                        }
-                    }
-                } else {
-                    // directory can be read but is not empty
-                    show_error!("cannot remove {}: Directory not empty", path.quote());
-                    return true;
-                }
-            } else {
-                // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
-                show_error!("cannot remove {}: Is a directory", path.quote());
-                return true;
-            }
-        } else {
-            // GNU's rm shows this message if directory is empty but not readable
-            show_error!("cannot remove {}: Directory not empty", path.quote());
-            return true;
-        }
+    // Ask the user for permission.
+    if !prompt_dir(path, options) {
+        return false;
     }
 
-    false
+    // Called to remove a symlink_dir (windows) without "-r"/"-R" or "-d".
+    if !options.dir && !options.recursive {
+        show_error!("cannot remove {}: Is a directory", path.quote());
+        return true;
+    }
+
+    // Try to remove the directory.
+    match fs::remove_dir(path) {
+        Ok(_) => {
+            if options.verbose {
+                println!("removed directory {}", normalize(path).quote());
+            }
+            false
+        }
+        Err(e) => {
+            let e = e.map_err_context(|| format!("cannot remove {}", path.quote()));
+            show_error!("{e}");
+            true
+        }
+    }
 }
 
 fn remove_file(path: &Path, options: &Options) -> bool {
