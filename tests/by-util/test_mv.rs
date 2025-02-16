@@ -6,6 +6,7 @@
 // spell-checker:ignore mydir
 use crate::common::util::TestScenario;
 use filetime::FileTime;
+use rstest::rstest;
 use std::io::Write;
 
 #[test]
@@ -467,7 +468,31 @@ fn test_mv_same_symlink() {
         .arg(file_c)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_c}' and '{file_a}' are the same file\n",));
+        .stderr_is(format!("mv: '{file_c}' and '{file_a}' are the same file\n"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_same_broken_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.symlink_file("missing-target", "broken");
+
+    ucmd.arg("broken")
+        .arg("broken")
+        .fails()
+        .stderr_is("mv: 'broken' and 'broken' are the same file\n");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_symlink_into_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.symlink_file("dir", "dir-link");
+
+    ucmd.arg("dir-link").arg("dir").succeeds();
 }
 
 #[test]
@@ -569,6 +594,30 @@ fn test_mv_simple_backup() {
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(format!("{file_b}~")));
+}
+
+#[test]
+fn test_mv_simple_backup_for_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "test_mv_simple_backup_dir_a";
+    let dir_b = "test_mv_simple_backup_dir_b";
+
+    at.mkdir(dir_a);
+    at.mkdir(dir_b);
+    at.touch(format!("{dir_a}/file_a"));
+    at.touch(format!("{dir_b}/file_b"));
+    ucmd.arg("-T")
+        .arg("-b")
+        .arg(dir_a)
+        .arg(dir_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+    assert!(at.dir_exists(&format!("{dir_b}~")));
+    assert!(at.file_exists(format!("{dir_b}/file_a")));
+    assert!(at.file_exists(format!("{dir_b}~/file_b")));
 }
 
 #[test]
@@ -1071,6 +1120,30 @@ fn test_mv_arg_update_older_dest_older() {
 }
 
 #[test]
+fn test_mv_arg_update_older_dest_older_interactive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "old";
+    let new = "new";
+    let old_content = "file1 content\n";
+    let new_content = "file2 content\n";
+
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+
+    at.write(new, new_content);
+
+    ucmd.arg(new)
+        .arg(old)
+        .arg("--interactive")
+        .arg("--update=older")
+        .fails()
+        .stderr_contains("overwrite 'old'?")
+        .no_stdout();
+}
+
+#[test]
 fn test_mv_arg_update_short_overwrite() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1366,24 +1439,6 @@ fn test_mv_interactive_error() {
 }
 
 #[test]
-fn test_mv_into_self() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let dir1 = "dir1";
-    let dir2 = "dir2";
-    at.mkdir(dir1);
-    at.mkdir(dir2);
-
-    scene
-        .ucmd()
-        .arg(dir1)
-        .arg(dir2)
-        .arg(dir2)
-        .fails()
-        .stderr_contains("mv: cannot move 'dir2' to a subdirectory of itself, 'dir2/dir2'");
-}
-
-#[test]
 fn test_mv_arg_interactive_skipped() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
@@ -1432,27 +1487,32 @@ fn test_mv_into_self_data() {
     assert!(!at.file_exists(file1));
 }
 
-#[test]
-fn test_mv_directory_into_subdirectory_of_itself_fails() {
+#[rstest]
+#[case(vec!["mydir"], vec!["mydir", "mydir"], "mv: cannot move 'mydir' to a subdirectory of itself, 'mydir/mydir'")]
+#[case(vec!["mydir"], vec!["mydir/", "mydir/"], "mv: cannot move 'mydir/' to a subdirectory of itself, 'mydir/mydir'")]
+#[case(vec!["mydir"], vec!["./mydir", "mydir", "mydir/"], "mv: cannot move './mydir' to a subdirectory of itself, 'mydir/mydir'")]
+#[case(vec!["mydir"], vec!["mydir/", "mydir/mydir_2/"], "mv: cannot move 'mydir/' to a subdirectory of itself, 'mydir/mydir_2/'")]
+#[case(vec!["mydir/mydir_2"], vec!["mydir", "mydir/mydir_2"], "mv: cannot move 'mydir' to a subdirectory of itself, 'mydir/mydir_2/mydir'\n")]
+#[case(vec!["mydir/mydir_2"], vec!["mydir/", "mydir/mydir_2/"], "mv: cannot move 'mydir/' to a subdirectory of itself, 'mydir/mydir_2/mydir'\n")]
+#[case(vec!["mydir", "mydir_2"], vec!["mydir/", "mydir_2/", "mydir_2/"], "mv: cannot move 'mydir_2/' to a subdirectory of itself, 'mydir_2/mydir_2'")]
+#[case(vec!["mydir"], vec!["mydir/", "mydir"], "mv: cannot move 'mydir/' to a subdirectory of itself, 'mydir/mydir'")]
+#[case(vec!["mydir"], vec!["-T", "mydir", "mydir"], "mv: 'mydir' and 'mydir' are the same file")]
+#[case(vec!["mydir"], vec!["mydir/", "mydir/../"], "mv: 'mydir/' and 'mydir/../mydir' are the same file")]
+fn test_mv_directory_self(
+    #[case] dirs: Vec<&str>,
+    #[case] args: Vec<&str>,
+    #[case] expected_error: &str,
+) {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let dir1 = "mydir";
-    let dir2 = "mydir/mydir_2";
-    at.mkdir(dir1);
-    at.mkdir(dir2);
-    scene.ucmd().arg(dir1).arg(dir2).fails().stderr_contains(
-        "mv: cannot move 'mydir' to a subdirectory of itself, 'mydir/mydir_2/mydir'",
-    );
-
-    // check that it also errors out with /
+    for dir in dirs {
+        at.mkdir_all(dir);
+    }
     scene
         .ucmd()
-        .arg(format!("{dir1}/"))
-        .arg(dir2)
+        .args(&args)
         .fails()
-        .stderr_contains(
-            "mv: cannot move 'mydir/' to a subdirectory of itself, 'mydir/mydir_2/mydir/'",
-        );
+        .stderr_contains(expected_error);
 }
 
 #[test]
@@ -1730,24 +1790,4 @@ fn test_mv_error_msg_with_multiple_sources_that_does_not_exist() {
         .fails()
         .stderr_contains("mv: cannot stat 'a': No such file or directory")
         .stderr_contains("mv: cannot stat 'b/': No such file or directory");
-}
-
-#[test]
-fn test_mv_error_cant_move_itself() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    at.mkdir("b");
-    scene
-        .ucmd()
-        .arg("b")
-        .arg("b/")
-        .fails()
-        .stderr_contains("mv: cannot move 'b' to a subdirectory of itself, 'b/b'");
-    scene
-        .ucmd()
-        .arg("./b")
-        .arg("b")
-        .arg("b/")
-        .fails()
-        .stderr_contains("mv: cannot move 'b' to a subdirectory of itself, 'b/b'");
 }

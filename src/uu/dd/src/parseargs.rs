@@ -517,9 +517,7 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
         (None, None, None) => match parser.parse_u64(s) {
             Ok(n) => (n, 1),
             Err(ParseSizeError::SizeTooBig(_)) => (u64::MAX, 1),
-            Err(ParseSizeError::InvalidSuffix(_) | ParseSizeError::ParseFailure(_)) => {
-                return Err(ParseError::InvalidNumber(full.to_string()))
-            }
+            Err(_) => return Err(ParseError::InvalidNumber(full.to_string())),
         },
         (Some(i), None, None) => (parse_bytes_only(s, i)?, 1),
         (None, Some(i), None) => (parse_bytes_only(s, i)?, 2),

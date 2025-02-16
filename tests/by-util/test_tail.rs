@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
+// spell-checker:ignore (cmd) taskkill
 #![allow(
     clippy::unicode_not_nfc,
     clippy::cast_lossless,
@@ -19,7 +20,7 @@ use crate::common::util::expected_result;
 use crate::common::util::is_ci;
 use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
-use rand::distributions::Alphanumeric;
+use rand::distr::Alphanumeric;
 use rstest::rstest;
 use std::char::from_digit;
 use std::fs::File;
@@ -4821,4 +4822,62 @@ fn test_obsolete_encoding_windows() {
         .no_stdout()
         .stderr_is("tail: bad argument encoding: '-�b'\n")
         .code_is(1);
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
+fn test_following_with_pid() {
+    use std::process::Command;
+
+    let ts = TestScenario::new(util_name!());
+
+    #[cfg(not(windows))]
+    let mut sleep_command = Command::new("sleep")
+        .arg("999d")
+        .spawn()
+        .expect("failed to start sleep command");
+    #[cfg(windows)]
+    let mut sleep_command = Command::new("powershell")
+        .arg("-Command")
+        .arg("Start-Sleep -Seconds 999")
+        .spawn()
+        .expect("failed to start sleep command");
+
+    let sleep_pid = sleep_command.id();
+
+    let at = &ts.fixtures;
+    at.touch("f");
+    // when -f is specified, tail should die after
+    // the pid from --pid also dies
+    let mut child = ts
+        .ucmd()
+        .args(&[
+            "--pid",
+            &sleep_pid.to_string(),
+            "-f",
+            at.plus("f").to_str().unwrap(),
+        ])
+        .stderr_to_stdout()
+        .run_no_wait();
+    child.make_assertion_with_delay(2000).is_alive();
+
+    #[cfg(not(windows))]
+    Command::new("kill")
+        .arg("-9")
+        .arg(sleep_pid.to_string())
+        .output()
+        .expect("failed to kill sleep command");
+    #[cfg(windows)]
+    Command::new("taskkill")
+        .arg("/PID")
+        .arg(sleep_pid.to_string())
+        .arg("/F")
+        .output()
+        .expect("failed to kill sleep command");
+
+    let _ = sleep_command.wait();
+
+    child.make_assertion_with_delay(2000).is_not_alive();
+
+    child.kill();
 }

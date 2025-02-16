@@ -210,13 +210,8 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Don't manage the error. GNU doesn't show error when doing
     // test foo -nt bar
-    let f_a = match fs::metadata(a) {
-        Ok(f) => f,
-        Err(_) => return Ok(false),
-    };
-    let f_b = match fs::metadata(b) {
-        Ok(f) => f,
-        Err(_) => return Ok(false),
+    let (Ok(f_a), Ok(f_b)) = (fs::metadata(a), fs::metadata(b)) else {
+        return Ok(false);
     };
 
     Ok(match op.to_str() {
@@ -290,11 +285,8 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         fs::metadata(path)
     };
 
-    let metadata = match metadata {
-        Ok(metadata) => metadata,
-        Err(_) => {
-            return false;
-        }
+    let Ok(metadata) = metadata else {
+        return false;
     };
 
     let file_type = metadata.file_type();

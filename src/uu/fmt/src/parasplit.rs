@@ -255,9 +255,8 @@ impl ParagraphStream<'_> {
             if l_slice.starts_with("From ") {
                 true
             } else {
-                let colon_posn = match l_slice.find(':') {
-                    Some(n) => n,
-                    None => return false,
+                let Some(colon_posn) = l_slice.find(':') else {
+                    return false;
                 };
 
                 // header field must be nonzero length
@@ -560,12 +559,11 @@ impl<'a> Iterator for WordSplit<'a> {
 
         // find the start of the next word, and record if we find a tab character
         let (before_tab, after_tab, word_start) =
-            match self.analyze_tabs(&self.string[old_position..]) {
-                (b, a, Some(s)) => (b, a, s + old_position),
-                (_, _, None) => {
-                    self.position = self.length;
-                    return None;
-                }
+            if let (b, a, Some(s)) = self.analyze_tabs(&self.string[old_position..]) {
+                (b, a, s + old_position)
+            } else {
+                self.position = self.length;
+                return None;
             };
 
         // find the beginning of the next whitespace

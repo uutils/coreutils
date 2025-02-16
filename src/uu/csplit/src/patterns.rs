@@ -106,7 +106,7 @@ pub fn get_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
 fn extract_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
     let mut patterns = Vec::with_capacity(args.len());
     let to_match_reg =
-        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[\+-]\d+)?$").unwrap();
+        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[\+-]?\d+)?$").unwrap();
     let execute_ntimes_reg = Regex::new(r"^\{(?P<TIMES>\d+)|\*\}$").unwrap();
     let mut iter = args.iter().peekable();
 
@@ -219,14 +219,15 @@ mod tests {
             "{*}",
             "/test3.*end$/",
             "{4}",
-            "/test4.*end$/+3",
-            "/test5.*end$/-3",
+            "/test4.*end$/3",
+            "/test5.*end$/+3",
+            "/test6.*end$/-3",
         ]
         .into_iter()
         .map(|v| v.to_string())
         .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
-        assert_eq!(patterns.len(), 5);
+        assert_eq!(patterns.len(), 6);
         match patterns.first() {
             Some(Pattern::UpToMatch(reg, 0, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
@@ -256,9 +257,16 @@ mod tests {
             _ => panic!("expected UpToMatch pattern"),
         };
         match patterns.get(4) {
-            Some(Pattern::UpToMatch(reg, -3, ExecutePattern::Times(1))) => {
+            Some(Pattern::UpToMatch(reg, 3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test5.*end$");
+            }
+            _ => panic!("expected UpToMatch pattern"),
+        };
+        match patterns.get(5) {
+            Some(Pattern::UpToMatch(reg, -3, ExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test6.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
         };
@@ -273,14 +281,15 @@ mod tests {
             "{*}",
             "%test3.*end$%",
             "{4}",
-            "%test4.*end$%+3",
-            "%test5.*end$%-3",
+            "%test4.*end$%3",
+            "%test5.*end$%+3",
+            "%test6.*end$%-3",
         ]
         .into_iter()
         .map(|v| v.to_string())
         .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
-        assert_eq!(patterns.len(), 5);
+        assert_eq!(patterns.len(), 6);
         match patterns.first() {
             Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
@@ -310,9 +319,16 @@ mod tests {
             _ => panic!("expected SkipToMatch pattern"),
         };
         match patterns.get(4) {
-            Some(Pattern::SkipToMatch(reg, -3, ExecutePattern::Times(1))) => {
+            Some(Pattern::SkipToMatch(reg, 3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test5.*end$");
+            }
+            _ => panic!("expected SkipToMatch pattern"),
+        };
+        match patterns.get(5) {
+            Some(Pattern::SkipToMatch(reg, -3, ExecutePattern::Times(1))) => {
+                let parsed_reg = format!("{reg}");
+                assert_eq!(parsed_reg, "test6.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
         };

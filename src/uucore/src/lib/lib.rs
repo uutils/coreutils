@@ -40,10 +40,14 @@ pub use crate::parser::shortcut_value_parser;
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
 pub use crate::features::backup_control;
+#[cfg(feature = "buf-copy")]
+pub use crate::features::buf_copy;
 #[cfg(feature = "checksum")]
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
 pub use crate::features::colors;
+#[cfg(feature = "custom-tz-fmt")]
+pub use crate::features::custom_tz_fmt;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
 #[cfg(feature = "format")]
@@ -74,7 +78,7 @@ pub use crate::features::mode;
 pub use crate::features::entries;
 #[cfg(all(unix, feature = "perms"))]
 pub use crate::features::perms;
-#[cfg(all(unix, feature = "pipes"))]
+#[cfg(all(unix, any(feature = "pipes", feature = "buf-copy")))]
 pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
@@ -97,7 +101,7 @@ pub use crate::features::wide;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
 
-#[cfg(all(unix, not(target_os = "macos"), feature = "fsxattr"))]
+#[cfg(all(unix, feature = "fsxattr"))]
 pub use crate::features::fsxattr;
 
 //## core functions
@@ -253,9 +257,10 @@ pub fn read_yes() -> bool {
     }
 }
 
-/// Helper function for processing delimiter values (which could be non UTF-8)
-/// It converts OsString to &[u8] for unix targets only
-/// On non-unix (i.e. Windows) it will just return an error if delimiter value is not UTF-8
+/// Converts an `OsStr` to a UTF-8 `&[u8]`.
+///
+/// This always succeeds on unix platforms,
+/// and fails on other platforms if the string can't be coerced to UTF-8.
 pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
     #[cfg(unix)]
     let bytes = os_string.as_bytes();
@@ -271,13 +276,28 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> mods::error::UResult<&[u8]> {
     Ok(bytes)
 }
 
-/// Helper function for converting a slice of bytes into an &OsStr
-/// or OsString in non-unix targets.
+/// Performs a potentially lossy conversion from `OsStr` to UTF-8 bytes.
 ///
-/// It converts `&[u8]` to `Cow<OsStr>` for unix targets only.
-/// On non-unix (i.e. Windows), the conversion goes through the String type
-/// and thus undergo UTF-8 validation, making it fail if the stream contains
-/// non-UTF-8 characters.
+/// This is always lossless on unix platforms,
+/// and wraps [`OsStr::to_string_lossy`] on non-unix platforms.
+pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<[u8]> {
+    #[cfg(unix)]
+    let bytes = Cow::from(os_string.as_bytes());
+
+    #[cfg(not(unix))]
+    let bytes = match os_string.to_string_lossy() {
+        Cow::Borrowed(slice) => Cow::from(slice.as_bytes()),
+        Cow::Owned(owned) => Cow::from(owned.into_bytes()),
+    };
+
+    bytes
+}
+
+/// Converts a `&[u8]` to an `&OsStr`,
+/// or parses it as UTF-8 into an [`OsString`] on non-unix platforms.
+///
+/// This always succeeds on unix platforms,
+/// and fails on other platforms if the bytes can't be parsed as UTF-8.
 pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
     #[cfg(unix)]
     let os_str = Cow::Borrowed(OsStr::from_bytes(bytes));
@@ -289,9 +309,10 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> mods::error::UResult<Cow<'_, OsStr>> {
     Ok(os_str)
 }
 
-/// Helper function for making an `OsString` from a byte field
-/// It converts `Vec<u8>` to `OsString` for unix targets only.
-/// On non-unix (i.e. Windows) it may fail if the bytes are not valid UTF-8
+/// Converts a `Vec<u8>` into an `OsString`, parsing as UTF-8 on non-unix platforms.
+///
+/// This always succeeds on unix platforms,
+/// and fails on other platforms if the bytes can't be parsed as UTF-8.
 pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
     #[cfg(unix)]
     let s = OsString::from_vec(vec);
@@ -361,7 +382,10 @@ macro_rules! prompt_yes(
         eprint!("{}: ", uucore::util_name());
         eprint!($($args)+);
         eprint!(" ");
-        uucore::crash_if_err!(1, std::io::stderr().flush());
+        let res = std::io::stderr().flush().map_err(|err| {
+            $crate::error::USimpleError::new(1, err.to_string())
+        });
+        uucore::show_if_err!(res);
         uucore::read_yes()
     })
 );

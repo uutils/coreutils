@@ -34,9 +34,8 @@ pub enum ParseError {
 /// Parses obsolete syntax
 /// tail -\[NUM\]\[bcl\]\[f\] and tail +\[NUM\]\[bcl\]\[f\]
 pub fn parse_obsolete(src: &OsString) -> Option<Result<ObsoleteArgs, ParseError>> {
-    let mut rest = match src.to_str() {
-        Some(src) => src,
-        None => return Some(Err(ParseError::InvalidEncoding)),
+    let Some(mut rest) = src.to_str() else {
+        return Some(Err(ParseError::InvalidEncoding));
     };
     let sign = if let Some(r) = rest.strip_prefix('-') {
         rest = r;
@@ -86,9 +85,8 @@ pub fn parse_obsolete(src: &OsString) -> Option<Result<ObsoleteArgs, ParseError>
     }
 
     let multiplier = if mode == 'b' { 512 } else { 1 };
-    let num = match num.checked_mul(multiplier) {
-        Some(n) => n,
-        None => return Some(Err(ParseError::Overflow)),
+    let Some(num) = num.checked_mul(multiplier) else {
+        return Some(Err(ParseError::Overflow));
     };
 
     Some(Ok(ObsoleteArgs {

@@ -421,25 +421,29 @@ pub fn get_backup_path(
 }
 
 fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let mut p = path.to_string_lossy().into_owned();
-    p.push_str(suffix);
-    PathBuf::from(p)
+    let mut file_name = path.file_name().unwrap_or_default().to_os_string();
+    file_name.push(suffix);
+    path.with_file_name(file_name)
 }
 
 fn numbered_backup_path(path: &Path) -> PathBuf {
+    let file_name = path.file_name().unwrap_or_default();
     for i in 1_u64.. {
-        let path_str = &format!("{}.~{}~", path.to_string_lossy(), i);
-        let path = Path::new(path_str);
+        let mut numbered_file_name = file_name.to_os_string();
+        numbered_file_name.push(format!(".~{}~", i));
+        let path = path.with_file_name(numbered_file_name);
         if !path.exists() {
-            return path.to_path_buf();
+            return path;
         }
     }
     panic!("cannot create backup")
 }
 
 fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let test_path_str = &format!("{}.~1~", path.to_string_lossy());
-    let test_path = Path::new(test_path_str);
+    let file_name = path.file_name().unwrap_or_default();
+    let mut numbered_file_name = file_name.to_os_string();
+    numbered_file_name.push(".~1~");
+    let test_path = path.with_file_name(numbered_file_name);
     if test_path.exists() {
         numbered_backup_path(path)
     } else {
@@ -660,6 +664,41 @@ mod tests {
         let result = determine_backup_suffix(&matches);
         assert_eq!(result, "-v");
     }
+
+    #[test]
+    fn test_numbered_backup_path() {
+        assert_eq!(numbered_backup_path(Path::new("")), PathBuf::from(".~1~"));
+        assert_eq!(numbered_backup_path(Path::new("/")), PathBuf::from("/.~1~"));
+        assert_eq!(
+            numbered_backup_path(Path::new("/hello/world")),
+            PathBuf::from("/hello/world.~1~")
+        );
+        assert_eq!(
+            numbered_backup_path(Path::new("/hello/world/")),
+            PathBuf::from("/hello/world.~1~")
+        );
+    }
+
+    #[test]
+    fn test_simple_backup_path() {
+        assert_eq!(
+            simple_backup_path(Path::new(""), ".bak"),
+            PathBuf::from(".bak")
+        );
+        assert_eq!(
+            simple_backup_path(Path::new("/"), ".bak"),
+            PathBuf::from("/.bak")
+        );
+        assert_eq!(
+            simple_backup_path(Path::new("/hello/world"), ".bak"),
+            PathBuf::from("/hello/world.bak")
+        );
+        assert_eq!(
+            simple_backup_path(Path::new("/hello/world/"), ".bak"),
+            PathBuf::from("/hello/world.bak")
+        );
+    }
+
     #[test]
     fn test_source_is_target_backup() {
         let source = Path::new("data.txt.bak");

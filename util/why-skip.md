@@ -63,10 +63,6 @@ tests/misc/csplit-heap.sh
 = multicall binary is disabled =
 tests/misc/coreutils.sh
 
-= your ls doesn't call capget =
-tests/ls/no-cap.sh
-
-
 = not running on GNU/Hurd =
 tests/id/gnu-zero-uids.sh
 

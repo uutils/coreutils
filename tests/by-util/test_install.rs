@@ -577,7 +577,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 
     let mut file2_meta = at.metadata(file2);
     let before = FileTime::from_last_modification_time(&file2_meta);
-    sleep(std::time::Duration::from_millis(1000));
+    sleep(std::time::Duration::from_millis(100));
 
     scene
         .ucmd()
@@ -594,7 +594,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 
     assert!(before != after_install_sticky);
 
-    sleep(std::time::Duration::from_millis(1000));
+    sleep(std::time::Duration::from_millis(100));
 
     // dest file still 1644, so need_copy ought to return `true`
     scene
@@ -1716,4 +1716,54 @@ fn test_install_root_combined() {
     run_and_check(&["-Cv", "-o2", "c", "d"], "d", 2, 0);
     run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
     run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_from_fifo() {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::thread;
+
+    let pipe_name = "pipe";
+    let target_name = "target";
+    let test_string = "Hello, world!\n";
+
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkfifo(pipe_name);
+    assert!(s.fixtures.is_fifo(pipe_name));
+
+    let proc = s.ucmd().arg(pipe_name).arg(target_name).run_no_wait();
+
+    let pipe_path = s.fixtures.plus(pipe_name);
+    let thread = thread::spawn(move || {
+        let mut pipe = OpenOptions::new()
+            .write(true)
+            .create(false)
+            .open(pipe_path)
+            .unwrap();
+        pipe.write_all(test_string.as_bytes()).unwrap();
+    });
+
+    proc.wait().unwrap();
+    thread.join().unwrap();
+
+    assert!(s.fixtures.file_exists(target_name));
+    assert_eq!(s.fixtures.read(target_name), test_string);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_from_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let target = "target";
+    let test_string = "Hello, World!\n";
+
+    ucmd.arg("/dev/fd/0")
+        .arg(target)
+        .pipe_in(test_string)
+        .succeeds();
+
+    assert!(at.file_exists(target));
+    assert_eq!(at.read(target), test_string);
 }

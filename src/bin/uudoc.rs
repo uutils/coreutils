@@ -46,7 +46,9 @@ fn main() -> io::Result<()> {
         * [Installation](installation.md)\n\
         * [Build from source](build.md)\n\
         * [Platform support](platforms.md)\n\
-        * [Contributing](contributing.md)\n\
+        * [Contributing](CONTRIBUTING.md)\n\
+        \t* [Development](DEVELOPMENT.md)\n\
+        \t* [Code of Conduct](CODE_OF_CONDUCT.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
         * [Extensions](extensions.md)\n\
         \n\

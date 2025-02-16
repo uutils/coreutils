@@ -24,6 +24,7 @@ use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
 use uucore::checksum::ChecksumError;
 use uucore::checksum::ChecksumOptions;
+use uucore::checksum::ChecksumVerbose;
 use uucore::checksum::HashAlgorithm;
 use uucore::error::{FromIo, UResult};
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
@@ -240,13 +241,14 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
             |files| files.map(OsStr::new).collect::<Vec<_>>(),
         );
+
+        let verbose = ChecksumVerbose::new(status, quiet, warn);
+
         let opts = ChecksumOptions {
             binary,
             ignore_missing,
-            quiet,
-            status,
             strict,
-            warn,
+            verbose,
         };
 
         // Execute the checksum validation
@@ -356,14 +358,16 @@ pub fn uu_app_common() -> Command {
                 .short('q')
                 .long(options::QUIET)
                 .help("don't print OK for each successfully verified file")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with_all([options::STATUS, options::WARN]),
         )
         .arg(
             Arg::new(options::STATUS)
                 .short('s')
                 .long("status")
                 .help("don't output anything, status code shows success")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with_all([options::QUIET, options::WARN]),
         )
         .arg(
             Arg::new(options::STRICT)
@@ -382,7 +386,8 @@ pub fn uu_app_common() -> Command {
                 .short('w')
                 .long("warn")
                 .help("warn about improperly formatted checksum lines")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with_all([options::QUIET, options::STATUS]),
         )
         .arg(
             Arg::new("zero")

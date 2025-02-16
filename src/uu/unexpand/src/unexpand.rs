@@ -16,7 +16,7 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::{crash_if_err, format_usage, help_about, help_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
 const USAGE: &str = help_usage!("unexpand.md");
 const ABOUT: &str = help_about!("unexpand.md");
@@ -244,7 +244,7 @@ fn write_tabs(
     prevtab: bool,
     init: bool,
     amode: bool,
-) {
+) -> UResult<()> {
     // This conditional establishes the following:
     // We never turn a single space before a non-blank into
     // a tab, unless it's at the start of the line.
@@ -255,15 +255,16 @@ fn write_tabs(
                 break;
             }
 
-            crash_if_err!(1, output.write_all(b"\t"));
+            output.write_all(b"\t")?;
             scol += nts;
         }
     }
 
     while col > scol {
-        crash_if_err!(1, output.write_all(b" "));
+        output.write_all(b" ")?;
         scol += 1;
     }
+    Ok(())
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -325,7 +326,7 @@ fn unexpand_line(
     options: &Options,
     lastcol: usize,
     ts: &[usize],
-) -> std::io::Result<()> {
+) -> UResult<()> {
     let mut byte = 0; // offset into the buffer
     let mut col = 0; // the current column
     let mut scol = 0; // the start col for the current span, i.e., the already-printed width
@@ -335,7 +336,7 @@ fn unexpand_line(
     while byte < buf.len() {
         // when we have a finite number of columns, never convert past the last column
         if lastcol > 0 && col >= lastcol {
-            write_tabs(output, ts, scol, col, pctype == CharType::Tab, init, true);
+            write_tabs(output, ts, scol, col, pctype == CharType::Tab, init, true)?;
             output.write_all(&buf[byte..])?;
             scol = col;
             break;
@@ -370,7 +371,7 @@ fn unexpand_line(
                     pctype == CharType::Tab,
                     init,
                     options.aflag,
-                );
+                )?;
                 init = false; // no longer at the start of a line
                 col = if ctype == CharType::Other {
                     // use computed width
@@ -391,7 +392,7 @@ fn unexpand_line(
     }
 
     // write out anything remaining
-    write_tabs(output, ts, scol, col, pctype == CharType::Tab, init, true);
+    write_tabs(output, ts, scol, col, pctype == CharType::Tab, init, true)?;
     output.flush()?;
     buf.truncate(0); // clear out the buffer
 

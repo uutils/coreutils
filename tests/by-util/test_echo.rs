@@ -219,8 +219,7 @@ fn test_hyphen_values_at_start() {
         .arg("-test")
         .arg("araba")
         .arg("-merci")
-        .run()
-        .success()
+        .succeeds()
         .stdout_does_not_contain("-E")
         .stdout_is("-test araba -merci\n");
 }
@@ -231,8 +230,7 @@ fn test_hyphen_values_between() {
         .arg("test")
         .arg("-E")
         .arg("araba")
-        .run()
-        .success()
+        .succeeds()
         .stdout_is("test -E araba\n");
 
     new_ucmd!()
@@ -240,9 +238,18 @@ fn test_hyphen_values_between() {
         .arg("dum dum dum")
         .arg("-e")
         .arg("dum")
-        .run()
-        .success()
+        .succeeds()
         .stdout_is("dumdum  dum dum dum -e dum\n");
+}
+
+#[test]
+fn test_double_hyphens() {
+    new_ucmd!().arg("--").succeeds().stdout_only("--\n");
+    new_ucmd!()
+        .arg("--")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-- --\n");
 }
 
 #[test]
@@ -382,4 +389,56 @@ fn slash_eight_off_by_one() {
         .args(&["-e", "-n", r"\8"])
         .succeeds()
         .stdout_only(r"\8");
+}
+
+mod posixly_correct {
+    use super::*;
+
+    #[test]
+    fn ignore_options() {
+        for arg in ["--help", "--version", "-E -n 'foo'", "-nE 'foo'"] {
+            new_ucmd!()
+                .env("POSIXLY_CORRECT", "1")
+                .arg(arg)
+                .succeeds()
+                .stdout_only(format!("{arg}\n"));
+        }
+    }
+
+    #[test]
+    fn process_n_option() {
+        new_ucmd!()
+            .env("POSIXLY_CORRECT", "1")
+            .args(&["-n", "foo"])
+            .succeeds()
+            .stdout_only("foo");
+
+        // ignore -E & process escapes
+        new_ucmd!()
+            .env("POSIXLY_CORRECT", "1")
+            .args(&["-n", "-E", "foo\\cbar"])
+            .succeeds()
+            .stdout_only("foo");
+    }
+
+    #[test]
+    fn process_escapes() {
+        new_ucmd!()
+            .env("POSIXLY_CORRECT", "1")
+            .arg("foo\\n")
+            .succeeds()
+            .stdout_only("foo\n\n");
+
+        new_ucmd!()
+            .env("POSIXLY_CORRECT", "1")
+            .arg("foo\\tbar")
+            .succeeds()
+            .stdout_only("foo\tbar\n");
+
+        new_ucmd!()
+            .env("POSIXLY_CORRECT", "1")
+            .arg("foo\\ctbar")
+            .succeeds()
+            .stdout_only("foo");
+    }
 }

@@ -381,7 +381,7 @@ fn test_newer_file() {
     let scenario = TestScenario::new(util_name!());
 
     scenario.fixtures.touch("regular_file");
-    sleep(std::time::Duration::from_millis(1000));
+    sleep(std::time::Duration::from_millis(100));
     scenario.fixtures.touch("newer_file");
 
     scenario
@@ -949,7 +949,7 @@ fn test_file_N() {
     scene.ucmd().args(&["-N", "regular_file"]).fails();
     // The file will have different create/modified data
     // so, test -N will return 0
-    sleep(std::time::Duration::from_millis(1000));
+    sleep(std::time::Duration::from_millis(100));
     at.touch("regular_file");
     scene.ucmd().args(&["-N", "regular_file"]).succeeds();
 }

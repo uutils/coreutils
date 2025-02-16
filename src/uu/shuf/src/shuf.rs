@@ -7,7 +7,7 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::memchr_iter;
-use rand::prelude::SliceRandom;
+use rand::prelude::{IndexedRandom, SliceRandom};
 use rand::{Rng, RngCore};
 use std::collections::HashSet;
 use std::fs::File;
@@ -299,7 +299,7 @@ impl Shufable for RangeInclusive<usize> {
         self.is_empty()
     }
     fn choose(&self, rng: &mut WrappedRng) -> usize {
-        rng.gen_range(self.clone())
+        rng.random_range(self.clone())
     }
     type PartialShuffleIterator<'b>
         = NonrepeatingIterator<'b>
@@ -348,7 +348,7 @@ impl<'a> NonrepeatingIterator<'a> {
         match &mut self.buf {
             NumberSet::AlreadyListed(already_listed) => {
                 let chosen = loop {
-                    let guess = self.rng.gen_range(self.range.clone());
+                    let guess = self.rng.random_range(self.range.clone());
                     let newly_inserted = already_listed.insert(guess);
                     if newly_inserted {
                         break guess;
@@ -435,7 +435,7 @@ fn shuf_exec(input: &mut impl Shufable, opts: Options) -> UResult<()> {
                 .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
             WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
         }
-        None => WrappedRng::RngDefault(rand::thread_rng()),
+        None => WrappedRng::RngDefault(rand::rng()),
     };
 
     if opts.repeat {
@@ -518,13 +518,6 @@ impl RngCore for WrappedRng {
         match self {
             Self::RngFile(r) => r.fill_bytes(dest),
             Self::RngDefault(r) => r.fill_bytes(dest),
-        }
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-        match self {
-            Self::RngFile(r) => r.try_fill_bytes(dest),
-            Self::RngDefault(r) => r.try_fill_bytes(dest),
         }
     }
 }

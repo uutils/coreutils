@@ -82,7 +82,10 @@ impl NumInfo {
             if Self::is_invalid_char(char, &mut had_decimal_pt, parse_settings) {
                 return if let Some(start) = start {
                     let has_si_unit = parse_settings.accept_si_units
-                        && matches!(char, 'K' | 'k' | 'M' | 'G' | 'T' | 'P' | 'E' | 'Z' | 'Y');
+                        && matches!(
+                            char,
+                            'K' | 'k' | 'M' | 'G' | 'T' | 'P' | 'E' | 'Z' | 'Y' | 'R' | 'Q'
+                        );
                     (
                         Self { exponent, sign },
                         start..if has_si_unit { idx + 1 } else { idx },
@@ -176,6 +179,8 @@ fn get_unit(unit: Option<char>) -> u8 {
             'E' => 6,
             'Z' => 7,
             'Y' => 8,
+            'R' => 9,
+            'Q' => 10,
             _ => 0,
         }
     } else {

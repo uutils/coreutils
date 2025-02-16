@@ -27,6 +27,7 @@ use std::path::Path;
 use crate::blocks::{read_block_size, BlockSize};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
+use crate::filesystem::FsError;
 use crate::table::Table;
 
 const ABOUT: &str = help_about!("df.md");
@@ -188,6 +189,7 @@ impl Options {
                         .to_string(),
                 ),
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
+                ParseSizeError::PhysicalMem(s) => OptionsError::InvalidBlockSize(s),
             })?,
             header_mode: {
                 if matches.get_flag(OPT_HUMAN_READABLE_BINARY)
@@ -350,11 +352,25 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
 
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
-    Ok(mounts
-        .into_iter()
-        .filter_map(|m| Filesystem::new(m, None))
-        .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
-        .collect())
+    #[cfg(not(windows))]
+    {
+        let maybe_mount = |m| Filesystem::from_mount(&mounts, &m, None).ok();
+        Ok(mounts
+            .clone()
+            .into_iter()
+            .filter_map(maybe_mount)
+            .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
+            .collect())
+    }
+    #[cfg(windows)]
+    {
+        let maybe_mount = |m| Filesystem::from_mount(&m, None).ok();
+        Ok(mounts
+            .into_iter()
+            .filter_map(maybe_mount)
+            .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
+            .collect())
+    }
 }
 
 /// For each path, get the filesystem that contains that path.
@@ -385,17 +401,25 @@ where
     // both the mount information and usage information.
     for path in paths {
         match Filesystem::from_path(&mounts, path) {
-            Some(fs) => result.push(fs),
-            None => {
-                // this happens if specified file system type != file system type of the file
-                if path.as_ref().exists() {
-                    show!(USimpleError::new(1, "no file systems processed"));
-                } else {
-                    show!(USimpleError::new(
-                        1,
-                        format!("{}: No such file or directory", path.as_ref().display())
-                    ));
-                }
+            Ok(fs) => result.push(fs),
+            Err(FsError::InvalidPath) => {
+                show!(USimpleError::new(
+                    1,
+                    format!("{}: No such file or directory", path.as_ref().display())
+                ));
+            }
+            Err(FsError::MountMissing) => {
+                show!(USimpleError::new(1, "no file systems processed"));
+            }
+            #[cfg(not(windows))]
+            Err(FsError::OverMounted) => {
+                show!(USimpleError::new(
+                    1,
+                    format!(
+                        "cannot access {}: over-mounted by another device",
+                        path.as_ref().quote()
+                    )
+                ));
             }
         }
     }

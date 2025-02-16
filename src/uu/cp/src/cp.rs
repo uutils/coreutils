@@ -10,13 +10,15 @@ use std::collections::{HashMap, HashSet};
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::ffi::OsString;
-use std::fs::{self, File, Metadata, OpenOptions, Permissions};
+use std::fs::{self, Metadata, OpenOptions, Permissions};
 use std::io;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
+#[cfg(all(unix, not(target_os = "android")))]
+use uucore::fsxattr::copy_xattrs;
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use filetime::FileTime;
@@ -172,7 +174,7 @@ pub enum CopyMode {
 /// For full compatibility with GNU, these options should also combine. We
 /// currently only do a best effort imitation of that behavior, because it is
 /// difficult to achieve in clap, especially with `--no-preserve`.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Attributes {
     #[cfg(unix)]
     pub ownership: Preserve,
@@ -930,6 +932,16 @@ impl Options {
         };
         let update_mode = update_control::determine_update_mode(matches);
 
+        if backup_mode != BackupMode::NoBackup
+            && matches
+                .get_one::<String>(update_control::arguments::OPT_UPDATE)
+                .is_some_and(|v| v == "none" || v == "none-fail")
+        {
+            return Err(Error::InvalidArgument(
+                "--backup is mutually exclusive with -n or --update=none-fail".to_string(),
+            ));
+        }
+
         let backup_suffix = backup_control::determine_backup_suffix(matches);
 
         let overwrite = OverwriteMode::from_matches(matches);
@@ -1516,6 +1528,42 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<
     Ok(())
 }
 
+/// Copies extended attributes (xattrs) from `source` to `dest`, ensuring that `dest` is temporarily
+/// user-writable if needed and restoring its original permissions afterward. This avoids “Operation
+/// not permitted” errors on read-only files. Returns an error if permission or metadata operations fail,
+/// or if xattr copying fails.
+#[cfg(all(unix, not(target_os = "android")))]
+fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
+    let metadata = fs::symlink_metadata(dest)?;
+
+    // Check if the destination file is currently read-only for the user.
+    let mut perms = metadata.permissions();
+    let was_readonly = perms.readonly();
+
+    // Temporarily grant user write if it was read-only.
+    if was_readonly {
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        fs::set_permissions(dest, perms)?;
+    }
+
+    // Perform the xattr copy and capture any potential error,
+    // so we can restore permissions before returning.
+    let copy_xattrs_result = copy_xattrs(source, dest);
+
+    // Restore read-only if we changed it.
+    if was_readonly {
+        let mut revert_perms = fs::symlink_metadata(dest)?.permissions();
+        revert_perms.set_readonly(true);
+        fs::set_permissions(dest, revert_perms)?;
+    }
+
+    // If copying xattrs failed, propagate that error now.
+    copy_xattrs_result?;
+
+    Ok(())
+}
+
 /// Copy the specified attributes from one path to another.
 pub(crate) fn copy_attributes(
     source: &Path,
@@ -1605,12 +1653,7 @@ pub(crate) fn copy_attributes(
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
         #[cfg(all(unix, not(target_os = "android")))]
         {
-            let xattrs = xattr::list(source)?;
-            for attr in xattrs {
-                if let Some(attr_value) = xattr::get(source, attr.clone())? {
-                    xattr::set(dest, attr, &attr_value[..])?;
-                }
-            }
+            copy_extended_attrs(source, dest)?;
         }
         #[cfg(not(all(unix, not(target_os = "android"))))]
         {
@@ -1920,6 +1963,7 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
 ///
 /// * `Ok(())` - The file was copied successfully.
 /// * `Err(CopyError)` - An error occurred while copying the file.
+#[allow(clippy::too_many_arguments)]
 fn handle_copy_mode(
     source: &Path,
     dest: &Path,
@@ -1928,15 +1972,10 @@ fn handle_copy_mode(
     source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
+    source_is_fifo: bool,
+    #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<()> {
-    let source_file_type = source_metadata.file_type();
-
-    let source_is_symlink = source_file_type.is_symlink();
-
-    #[cfg(unix)]
-    let source_is_fifo = source_file_type.is_fifo();
-    #[cfg(not(unix))]
-    let source_is_fifo = false;
+    let source_is_symlink = source_metadata.is_symlink();
 
     match options.copy_mode {
         CopyMode::Link => {
@@ -1973,6 +2012,8 @@ fn handle_copy_mode(
                 source_is_symlink,
                 source_is_fifo,
                 symlinked_files,
+                #[cfg(unix)]
+                source_is_stream,
             )?;
         }
         CopyMode::SymLink => {
@@ -1993,6 +2034,8 @@ fn handle_copy_mode(
                             source_is_symlink,
                             source_is_fifo,
                             symlinked_files,
+                            #[cfg(unix)]
+                            source_is_stream,
                         )?;
                     }
                     update_control::UpdateMode::ReplaceNone => {
@@ -2023,6 +2066,8 @@ fn handle_copy_mode(
                                 source_is_symlink,
                                 source_is_fifo,
                                 symlinked_files,
+                                #[cfg(unix)]
+                                source_is_stream,
                             )?;
                         }
                     }
@@ -2036,6 +2081,8 @@ fn handle_copy_mode(
                     source_is_symlink,
                     source_is_fifo,
                     symlinked_files,
+                    #[cfg(unix)]
+                    source_is_stream,
                 )?;
             }
         }
@@ -2224,10 +2271,6 @@ fn copy_file(
         .into());
     }
 
-    if options.verbose {
-        print_verbose_output(options.parents, progress_bar, source, dest);
-    }
-
     if options.preserve_hard_links() {
         // if we encounter a matching device/inode pair in the source tree
         // we can arrange to create a hard link between the corresponding names
@@ -2237,6 +2280,11 @@ fn copy_file(
                 .context(format!("cannot stat {}", source.quote()))?,
         ) {
             std::fs::hard_link(new_source, dest)?;
+
+            if options.verbose {
+                print_verbose_output(options.parents, progress_bar, source, dest);
+            }
+
             return Ok(());
         };
     }
@@ -2262,6 +2310,18 @@ fn copy_file(
 
     let dest_permissions = calculate_dest_permissions(dest, &source_metadata, options, context)?;
 
+    #[cfg(unix)]
+    let source_is_fifo = source_metadata.file_type().is_fifo();
+    #[cfg(not(unix))]
+    let source_is_fifo = false;
+
+    #[cfg(unix)]
+    let source_is_stream = source_is_fifo
+        || source_metadata.file_type().is_char_device()
+        || source_metadata.file_type().is_block_device();
+    #[cfg(not(unix))]
+    let source_is_stream = false;
+
     handle_copy_mode(
         source,
         dest,
@@ -2270,7 +2330,14 @@ fn copy_file(
         &source_metadata,
         symlinked_files,
         source_in_command_line,
+        source_is_fifo,
+        #[cfg(unix)]
+        source_is_stream,
     )?;
+
+    if options.verbose {
+        print_verbose_output(options.parents, progress_bar, source, dest);
+    }
 
     // TODO: implement something similar to gnu's lchown
     if !dest_is_symlink {
@@ -2285,8 +2352,16 @@ fn copy_file(
 
     if options.dereference(source_in_command_line) {
         if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
-            copy_attributes(&src, dest, &options.attributes)?;
+            if src.exists() {
+                copy_attributes(&src, dest, &options.attributes)?;
+            }
         }
+    } else if source_is_stream && source.exists() {
+        // Some stream files may not exist after we have copied it,
+        // like anonymous pipes. Thus, we can't really copy its
+        // attributes. However, this is already handled in the stream
+        // copy function (see `copy_stream` under platform/linux.rs).
+        copy_attributes(source, dest, &options.attributes)?;
     } else {
         copy_attributes(source, dest, &options.attributes)?;
     }
@@ -2350,6 +2425,7 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
+#[allow(clippy::too_many_arguments)]
 fn copy_helper(
     source: &Path,
     dest: &Path,
@@ -2358,6 +2434,7 @@ fn copy_helper(
     source_is_symlink: bool,
     source_is_fifo: bool,
     symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
@@ -2368,12 +2445,7 @@ fn copy_helper(
         return Err(Error::NotADirectory(dest.to_path_buf()));
     }
 
-    if source.as_os_str() == "/dev/null" {
-        /* workaround a limitation of fs::copy
-         * https://github.com/rust-lang/rust/issues/79390
-         */
-        File::create(dest).context(dest.display().to_string())?;
-    } else if source_is_fifo && options.recursive && !options.copy_contents {
+    if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
         copy_fifo(dest, options.overwrite, options.debug)?;
     } else if source_is_symlink {
@@ -2385,8 +2457,10 @@ fn copy_helper(
             options.reflink_mode,
             options.sparse_mode,
             context,
-            #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+            #[cfg(unix)]
             source_is_fifo,
+            #[cfg(unix)]
+            source_is_stream,
         )?;
 
         if !options.attributes_only && options.debug {

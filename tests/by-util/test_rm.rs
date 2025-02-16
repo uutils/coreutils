@@ -167,10 +167,11 @@ fn test_rm_non_empty_directory() {
     at.mkdir(dir);
     at.touch(file_a);
 
-    ucmd.arg("-d")
-        .arg(dir)
-        .fails()
-        .stderr_contains(format!("cannot remove '{dir}': Directory not empty"));
+    #[cfg(windows)]
+    let expected = "rm: cannot remove 'test_rm_non_empty_dir': The directory is not empty.\n";
+    #[cfg(not(windows))]
+    let expected = "rm: cannot remove 'test_rm_non_empty_dir': Directory not empty\n";
+    ucmd.arg("-d").arg(dir).fails().stderr_only(expected);
     assert!(at.file_exists(file_a));
     assert!(at.dir_exists(dir));
 }
@@ -675,6 +676,68 @@ fn test_remove_inaccessible_dir() {
 
     scene.ucmd().arg("-rf").arg(dir_1).succeeds();
     assert!(!at.dir_exists(dir_1));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_rm_current_or_parent_dir_rm4() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+
+    let answers = [
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/.'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/./'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/..'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd/../'",
+    ];
+    let std_err_str = ts
+        .ucmd()
+        .arg("-rf")
+        .arg("d/.")
+        .arg("d/./")
+        .arg("d/.////")
+        .arg("d/..")
+        .arg("d/../")
+        .fails()
+        .stderr_move_str();
+
+    for (idx, line) in std_err_str.lines().enumerate() {
+        assert_eq!(line, answers[idx]);
+    }
+}
+
+#[test]
+#[cfg(windows)]
+fn test_rm_current_or_parent_dir_rm4_windows() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+
+    let answers = [
+        "rm: refusing to remove '.' or '..' directory: skipping 'd\\.'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd\\.\\'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd\\.\\'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd\\..'",
+        "rm: refusing to remove '.' or '..' directory: skipping 'd\\..\\'",
+    ];
+    let std_err_str = ts
+        .ucmd()
+        .arg("-rf")
+        .arg("d\\.")
+        .arg("d\\.\\")
+        .arg("d\\.\\\\\\\\")
+        .arg("d\\..")
+        .arg("d\\..\\")
+        .fails()
+        .stderr_move_str();
+
+    for (idx, line) in std_err_str.lines().enumerate() {
+        assert_eq!(line, answers[idx]);
+    }
 }
 
 #[test]

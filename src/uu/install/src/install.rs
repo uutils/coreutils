@@ -12,14 +12,12 @@ use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use std::error::Error;
 use std::fmt::{Debug, Display};
-use std::fs;
 use std::fs::File;
-use std::os::unix::fs::MetadataExt;
-#[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
+use std::fs::{self, metadata};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
 use uucore::backup_control::{self, BackupMode};
+use uucore::buf_copy::copy_stream;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
@@ -28,6 +26,11 @@ use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 use uucore::process::{getegid, geteuid};
 use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
+
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
+#[cfg(unix)]
+use std::os::unix::prelude::OsStrExt;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -649,7 +652,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         }
 
         let mut targetpath = target_dir.to_path_buf();
-        let filename = sourcepath.components().last().unwrap();
+        let filename = sourcepath.components().next_back().unwrap();
         targetpath.push(filename);
 
         show_if_err!(copy(sourcepath, &targetpath, b));
@@ -736,7 +739,24 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     }
 }
 
-/// Copy a file from one path to another.
+/// Copy a non-special file using std::fs::copy.
+///
+/// # Parameters
+/// * `from` - The source file path.
+/// * `to` - The destination file path.
+///
+/// # Returns
+///
+/// Returns an empty Result or an error in case of failure.
+fn copy_normal_file(from: &Path, to: &Path) -> UResult<()> {
+    if let Err(err) = fs::copy(from, to) {
+        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
+    }
+    Ok(())
+}
+
+/// Copy a file from one path to another. Handles the certain cases of special
+/// files (e.g character specials).
 ///
 /// # Parameters
 ///
@@ -760,18 +780,26 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         }
     }
 
-    if from.as_os_str() == "/dev/null" {
-        /* workaround a limitation of fs::copy
-         * https://github.com/rust-lang/rust/issues/79390
-         */
-        if let Err(err) = File::create(to) {
+    let ft = match metadata(from) {
+        Ok(ft) => ft.file_type(),
+        Err(err) => {
             return Err(
                 InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
             );
         }
-    } else if let Err(err) = fs::copy(from, to) {
-        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
+    };
+
+    // Stream-based copying to get around the limitations of std::fs::copy
+    #[cfg(unix)]
+    if ft.is_char_device() || ft.is_block_device() || ft.is_fifo() {
+        let mut handle = File::open(from)?;
+        let mut dest = File::create(to)?;
+        copy_stream(&mut handle, &mut dest)?;
+        return Ok(());
     }
+
+    copy_normal_file(from, to)?;
+
     Ok(())
 }
 

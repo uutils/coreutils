@@ -37,6 +37,33 @@ pub(crate) struct Filesystem {
     pub usage: FsUsage,
 }
 
+#[derive(Debug, PartialEq)]
+pub(crate) enum FsError {
+    #[cfg(not(windows))]
+    OverMounted,
+    InvalidPath,
+    MountMissing,
+}
+
+/// Check whether `mount` has been over-mounted.
+///
+/// `mount` is considered over-mounted if it there is an element in
+/// `mounts` after mount that has the same mount_dir.
+#[cfg(not(windows))]
+fn is_over_mounted(mounts: &[MountInfo], mount: &MountInfo) -> bool {
+    let last_mount_for_dir = mounts
+        .iter()
+        .filter(|m| m.mount_dir == mount.mount_dir)
+        .next_back();
+
+    if let Some(lmi) = last_mount_for_dir {
+        lmi.dev_name != mount.dev_name
+    } else {
+        // Should be unreachable if `mount` is in `mounts`
+        false
+    }
+}
+
 /// Find the mount info that best matches a given filesystem path.
 ///
 /// This function returns the element of `mounts` on which `path` is
@@ -56,14 +83,16 @@ fn mount_info_from_path<P>(
     path: P,
     // This is really only used for testing purposes.
     canonicalize: bool,
-) -> Option<&MountInfo>
+) -> Result<&MountInfo, FsError>
 where
     P: AsRef<Path>,
 {
     // TODO Refactor this function with `Stater::find_mount_point()`
     // in the `stat` crate.
     let path = if canonicalize {
-        path.as_ref().canonicalize().ok()?
+        path.as_ref()
+            .canonicalize()
+            .map_err(|_| FsError::InvalidPath)?
     } else {
         path.as_ref().to_path_buf()
     };
@@ -82,12 +111,14 @@ where
         .find(|m| m.1.eq(&path))
         .map(|m| m.0);
 
-    maybe_mount_point.or_else(|| {
-        mounts
-            .iter()
-            .filter(|mi| path.starts_with(&mi.mount_dir))
-            .max_by_key(|mi| mi.mount_dir.len())
-    })
+    maybe_mount_point
+        .or_else(|| {
+            mounts
+                .iter()
+                .filter(|mi| path.starts_with(&mi.mount_dir))
+                .max_by_key(|mi| mi.mount_dir.len())
+        })
+        .ok_or(FsError::MountMissing)
 }
 
 impl Filesystem {
@@ -117,6 +148,27 @@ impl Filesystem {
         })
     }
 
+    /// Find and create the filesystem from the given mount
+    /// after checking that the it hasn't been over-mounted
+    #[cfg(not(windows))]
+    pub(crate) fn from_mount(
+        mounts: &[MountInfo],
+        mount: &MountInfo,
+        file: Option<String>,
+    ) -> Result<Self, FsError> {
+        if is_over_mounted(mounts, mount) {
+            Err(FsError::OverMounted)
+        } else {
+            Self::new(mount.clone(), file).ok_or(FsError::MountMissing)
+        }
+    }
+
+    /// Find and create the filesystem from the given mount.
+    #[cfg(windows)]
+    pub(crate) fn from_mount(mount: &MountInfo, file: Option<String>) -> Result<Self, FsError> {
+        Self::new(mount.clone(), file).ok_or(FsError::MountMissing)
+    }
+
     /// Find and create the filesystem that best matches a given path.
     ///
     /// This function returns a new `Filesystem` derived from the
@@ -133,16 +185,18 @@ impl Filesystem {
     /// * [`Path::canonicalize`]
     /// * [`MountInfo::mount_dir`]
     ///
-    pub(crate) fn from_path<P>(mounts: &[MountInfo], path: P) -> Option<Self>
+    pub(crate) fn from_path<P>(mounts: &[MountInfo], path: P) -> Result<Self, FsError>
     where
         P: AsRef<Path>,
     {
         let file = path.as_ref().display().to_string();
         let canonicalize = true;
-        let mount_info = mount_info_from_path(mounts, path, canonicalize)?;
-        // TODO Make it so that we do not need to clone the `mount_info`.
-        let mount_info = (*mount_info).clone();
-        Self::new(mount_info, Some(file))
+
+        let result = mount_info_from_path(mounts, path, canonicalize);
+        #[cfg(windows)]
+        return result.and_then(|mount_info| Self::from_mount(mount_info, Some(file)));
+        #[cfg(not(windows))]
+        return result.and_then(|mount_info| Self::from_mount(mounts, mount_info, Some(file)));
     }
 }
 
@@ -153,7 +207,7 @@ mod tests {
 
         use uucore::fsext::MountInfo;
 
-        use crate::filesystem::mount_info_from_path;
+        use crate::filesystem::{mount_info_from_path, FsError};
 
         // Create a fake `MountInfo` with the given directory name.
         fn mount_info(mount_dir: &str) -> MountInfo {
@@ -183,7 +237,19 @@ mod tests {
 
         #[test]
         fn test_empty_mounts() {
-            assert!(mount_info_from_path(&[], "/", false).is_none());
+            assert_eq!(
+                mount_info_from_path(&[], "/", false).unwrap_err(),
+                FsError::MountMissing
+            );
+        }
+
+        #[test]
+        fn test_bad_path() {
+            assert_eq!(
+                // This path better not exist....
+                mount_info_from_path(&[], "/non-existent-path", true).unwrap_err(),
+                FsError::InvalidPath
+            );
         }
 
         #[test]
@@ -210,13 +276,19 @@ mod tests {
         #[test]
         fn test_no_match() {
             let mounts = [mount_info("/foo")];
-            assert!(mount_info_from_path(&mounts, "/bar", false).is_none());
+            assert_eq!(
+                mount_info_from_path(&mounts, "/bar", false).unwrap_err(),
+                FsError::MountMissing
+            );
         }
 
         #[test]
         fn test_partial_match() {
             let mounts = [mount_info("/foo/bar")];
-            assert!(mount_info_from_path(&mounts, "/foo/baz", false).is_none());
+            assert_eq!(
+                mount_info_from_path(&mounts, "/foo/baz", false).unwrap_err(),
+                FsError::MountMissing
+            );
         }
 
         #[test]
@@ -235,6 +307,54 @@ mod tests {
             let mounts = [mount_info];
             let actual = mount_info_from_path(&mounts, dev_name, false).unwrap();
             assert!(mount_info_eq(actual, &mounts[0]));
+        }
+    }
+
+    #[cfg(not(windows))]
+    mod over_mount {
+        use crate::filesystem::{is_over_mounted, Filesystem, FsError};
+        use uucore::fsext::MountInfo;
+
+        fn mount_info_with_dev_name(mount_dir: &str, dev_name: Option<&str>) -> MountInfo {
+            MountInfo {
+                dev_id: Default::default(),
+                dev_name: dev_name.map(String::from).unwrap_or_default(),
+                fs_type: Default::default(),
+                mount_dir: String::from(mount_dir),
+                mount_option: Default::default(),
+                mount_root: Default::default(),
+                remote: Default::default(),
+                dummy: Default::default(),
+            }
+        }
+
+        #[test]
+        fn test_over_mount() {
+            let mount_info1 = mount_info_with_dev_name("/foo", Some("dev_name_1"));
+            let mount_info2 = mount_info_with_dev_name("/foo", Some("dev_name_2"));
+            let mounts = [mount_info1, mount_info2];
+            assert!(is_over_mounted(&mounts, &mounts[0]));
+        }
+
+        #[test]
+        fn test_over_mount_not_over_mounted() {
+            let mount_info1 = mount_info_with_dev_name("/foo", Some("dev_name_1"));
+            let mount_info2 = mount_info_with_dev_name("/foo", Some("dev_name_2"));
+            let mounts = [mount_info1, mount_info2];
+            assert!(!is_over_mounted(&mounts, &mounts[1]));
+        }
+
+        #[test]
+        fn test_from_mount_over_mounted() {
+            let mount_info1 = mount_info_with_dev_name("/foo", Some("dev_name_1"));
+            let mount_info2 = mount_info_with_dev_name("/foo", Some("dev_name_2"));
+
+            let mounts = [mount_info1, mount_info2];
+
+            assert_eq!(
+                Filesystem::from_mount(&mounts, &mounts[0], None).unwrap_err(),
+                FsError::OverMounted
+            );
         }
     }
 }

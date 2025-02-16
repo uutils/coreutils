@@ -98,12 +98,12 @@ fn reader_writer<
     )?;
     match read_result {
         ReadResult::WroteChunksToFile { tmp_files } => {
-            let merger = merge::merge_with_file_limit::<_, _, Tmp>(
+            merge::merge_with_file_limit::<_, _, Tmp>(
                 tmp_files.into_iter().map(|c| c.reopen()),
                 settings,
+                output,
                 tmp_dir,
             )?;
-            merger.write_all(settings, output)?;
         }
         ReadResult::SortedSingleChunk(chunk) => {
             if settings.unique {
@@ -224,11 +224,8 @@ fn read_write_loop<I: WriteableTmpFile>(
     let mut sender_option = Some(sender);
     let mut tmp_files = vec![];
     loop {
-        let chunk = match receiver.recv() {
-            Ok(it) => it,
-            _ => {
-                return Ok(ReadResult::WroteChunksToFile { tmp_files });
-            }
+        let Ok(chunk) = receiver.recv() else {
+            return Ok(ReadResult::WroteChunksToFile { tmp_files });
         };
 
         let tmp_file = write::<I>(

@@ -626,7 +626,9 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
         ParseSizeError::InvalidSuffix(_) => {
             format!("invalid suffix in --{} argument {}", option, s.quote())
         }
-        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
+        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
+            format!("invalid --{} argument {}", option, s.quote())
+        }
         ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }
 }
