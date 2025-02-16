@@ -12,6 +12,8 @@ use std::fs::{self, Metadata};
 use std::ops::BitOr;
 #[cfg(not(windows))]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
@@ -328,6 +330,25 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     had_err
 }
 
+/// Whether the given file or directory is writable.
+#[cfg(unix)]
+fn is_writable(path: &Path) -> bool {
+    match std::fs::metadata(path) {
+        Err(_) => false,
+        Ok(metadata) => {
+            let mode = metadata.permissions().mode();
+            (mode & 0o200) > 0
+        }
+    }
+}
+
+/// Whether the given file or directory is writable.
+#[cfg(not(unix))]
+fn is_writable(_path: &Path) -> bool {
+    // TODO Not yet implemented.
+    true
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
@@ -515,7 +536,7 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
         return true;
     };
 
-    if options.interactive == InteractiveMode::Always && !metadata.permissions().readonly() {
+    if options.interactive == InteractiveMode::Always && is_writable(path) {
         return if metadata.len() == 0 {
             prompt_yes!("remove regular empty file {}?", path.quote())
         } else {
@@ -527,7 +548,7 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
 
 fn prompt_file_permission_readonly(path: &Path) -> bool {
     match fs::metadata(path) {
-        Ok(metadata) if !metadata.permissions().readonly() => true,
+        Ok(_) if is_writable(path) => true,
         Ok(metadata) if metadata.len() == 0 => prompt_yes!(
             "remove write-protected regular empty file {}?",
             path.quote()
