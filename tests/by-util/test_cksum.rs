@@ -4,7 +4,10 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 const ALGOS: [&str; 11] = [
     "sysv", "bsd", "crc", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "sm3",
@@ -1676,7 +1679,7 @@ fn test_check_incorrectly_formatted_checksum_keeps_processing_hex() {
 /// This module reimplements the cksum-base64.pl GNU test.
 mod gnu_cksum_base64 {
     use super::*;
-    use crate::common::util::log_info;
+    use uutests::util::log_info;
 
     const PAIRS: [(&str, &str); 12] = [
         ("sysv", "0 0 f"),

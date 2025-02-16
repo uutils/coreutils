@@ -10,7 +10,10 @@ use std::ffi::CString;
 use std::path::Path;
 use std::{io, iter, str};
 
-use crate::common::util::*;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn version() {

@@ -263,6 +263,10 @@ feat_os_windows_legacy = [
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
 test = ["uu_test"]
 
+[workspace]
+members = ["tests/uutests"]
+default-members = ["."]
+
 [workspace.package]
 readme = "README.package.md"
 
@@ -363,6 +367,7 @@ uucore = { version = "0.0.29", package = "uucore", path = "src/uucore" }
 uucore_procs = { version = "0.0.29", package = "uucore_procs", path = "src/uucore_procs" }
 uu_ls = { version = "0.0.29", path = "src/uu/ls" }
 uu_base32 = { version = "0.0.29", path = "src/uu/base32" }
+uutests = { version = "0.0.29", package = "uutests", path = "tests/uutests/" }
 
 [dependencies]
 clap = { workspace = true }
@@ -491,6 +496,7 @@ yes = { optional = true, version = "0.0.29", package = "uu_yes", path = "src/uu/
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
 
 [dev-dependencies]
+uutests = { workspace = true }
 chrono = { workspace = true }
 filetime = { workspace = true }
 glob = { workspace = true }
@@ -503,6 +509,7 @@ sha1 = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
 time = { workspace = true, features = ["local-offset"] }
 unindent = "0.2.3"
+#uutests = { workspace = true }
 uucore = { workspace = true, features = [
   "mode",
   "entries",
@@ -514,17 +521,17 @@ walkdir = { workspace = true }
 hex-literal = "0.4.1"
 rstest = { workspace = true }
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 procfs = { version = "0.17", default-features = false }
 
-[target.'cfg(unix)'.dev-dependencies]
+[target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["process", "signal", "user", "term"] }
 rlimit = "0.10.1"
 xattr = { workspace = true }
 
 # Specifically used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
 # to deserialize a utmpx struct into a binary file
-[target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
+[target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dependencies]
 serde = { version = "1.0.202", features = ["derive"] }
 bincode = { version = "1.3.3" }
 serde-big-array = "0.5.1"
