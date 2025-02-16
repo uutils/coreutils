@@ -18,19 +18,19 @@ use crate::fuzz_common::{
 static CMD_PATH: &str = "cut";
 
 fn generate_cut_args() -> String {
-    let mut rng = rand::thread_rng();
-    let arg_count = rng.gen_range(1..=6);
+    let mut rng = rand::rng();
+    let arg_count = rng.random_range(1..=6);
     let mut args = Vec::new();
 
     for _ in 0..arg_count {
-        if rng.gen_bool(0.1) {
-            args.push(generate_random_string(rng.gen_range(1..=20)));
+        if rng.random_bool(0.1) {
+            args.push(generate_random_string(rng.random_range(1..=20)));
         } else {
-            match rng.gen_range(0..=4) {
-                0 => args.push(String::from("-b") + &rng.gen_range(1..=10).to_string()),
-                1 => args.push(String::from("-c") + &rng.gen_range(1..=10).to_string()),
+            match rng.random_range(0..=4) {
+                0 => args.push(String::from("-b") + &rng.random_range(1..=10).to_string()),
+                1 => args.push(String::from("-c") + &rng.random_range(1..=10).to_string()),
                 2 => args.push(String::from("-d,") + &generate_random_string(1)), // Using a comma as a default delimiter
-                3 => args.push(String::from("-f") + &rng.gen_range(1..=5).to_string()),
+                3 => args.push(String::from("-f") + &rng.random_range(1..=5).to_string()),
                 _ => (),
             }
         }
@@ -40,12 +40,12 @@ fn generate_cut_args() -> String {
 }
 
 fn generate_delimited_data(count: usize) -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut lines = Vec::new();
 
     for _ in 0..count {
-        let fields = (0..rng.gen_range(1..=5))
-            .map(|_| generate_random_string(rng.gen_range(1..=10)))
+        let fields = (0..rng.random_range(1..=5))
+            .map(|_| generate_random_string(rng.random_range(1..=10)))
             .collect::<Vec<_>>()
             .join(",");
         lines.push(fields);

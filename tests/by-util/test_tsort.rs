@@ -83,3 +83,31 @@ fn test_split_on_any_whitespace() {
         .succeeds()
         .stdout_only("a\nb\n");
 }
+
+#[test]
+fn test_cycle() {
+    // The graph looks like:  a --> b <==> c --> d
+    new_ucmd!()
+        .pipe_in("a b b c c d c b")
+        .fails()
+        .code_is(1)
+        .stdout_is("a\nc\nd\nb\n")
+        .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\n");
+}
+
+#[test]
+fn test_two_cycles() {
+    // The graph looks like:
+    //
+    //        a
+    //        |
+    //        V
+    // c <==> b <==> d
+    //
+    new_ucmd!()
+        .pipe_in("a b b c c b b d d b")
+        .fails()
+        .code_is(1)
+        .stdout_is("a\nc\nd\nb\n")
+        .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\ntsort: -: input contains a loop:\ntsort: b\ntsort: d\n");
+}

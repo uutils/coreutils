@@ -232,7 +232,7 @@ fn test_manpage() {
 
     let test_scenario = TestScenario::new("");
 
-    let child = Command::new(test_scenario.bin_path)
+    let child = Command::new(&test_scenario.bin_path)
         .arg("manpage")
         .arg("base64")
         .stdin(Stdio::piped())

@@ -171,12 +171,9 @@ impl Uniq {
 
         // Convert the leftover bytes to UTF-8 for character-based -w
         // If invalid UTF-8, just compare them as individual bytes (fallback).
-        let string_after_skip = match std::str::from_utf8(fields_to_check) {
-            Ok(s) => s,
-            Err(_) => {
-                // Fallback: if invalid UTF-8, treat them as single-byte “chars”
-                return closure(&mut fields_to_check.iter().map(|&b| b as char));
-            }
+        let Ok(string_after_skip) = std::str::from_utf8(fields_to_check) else {
+            // Fallback: if invalid UTF-8, treat them as single-byte “chars”
+            return closure(&mut fields_to_check.iter().map(|&b| b as char));
         };
 
         let total_chars = string_after_skip.chars().count();

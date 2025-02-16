@@ -2,11 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//spell-checker:ignore TAOCP
+//spell-checker:ignore TAOCP indegree
 use clap::{crate_version, Arg, Command};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fmt::Display;
 use std::path::Path;
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 use uucore::{format_usage, help_about, help_usage, show};
@@ -18,42 +18,29 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum TsortError {
     /// The input file is actually a directory.
+    #[error("{0}: read error: Is a directory")]
     IsDir(String),
 
     /// The number of tokens in the input data is odd.
     ///
     /// The list of edges must be even because each edge has two
     /// components: a source node and a target node.
+    #[error("{input}: input contains an odd number of tokens", input = .0.maybe_quote())]
     NumTokensOdd(String),
 
     /// The graph contains a cycle.
+    #[error("{0}: input contains a loop:")]
     Loop(String),
 
     /// A particular node in a cycle. (This is mainly used for printing.)
+    #[error("{0}")]
     LoopNode(String),
 }
 
-impl std::error::Error for TsortError {}
-
 impl UError for TsortError {}
-
-impl Display for TsortError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::IsDir(d) => write!(f, "{d}: read error: Is a directory"),
-            Self::NumTokensOdd(i) => write!(
-                f,
-                "{}: input contains an odd number of tokens",
-                i.maybe_quote()
-            ),
-            Self::Loop(i) => write!(f, "{i}: input contains a loop:"),
-            Self::LoopNode(v) => write!(f, "{v}"),
-        }
-    }
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -75,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     // Create the directed graph from pairs of tokens in the input data.
-    let mut g = Graph::default();
+    let mut g = Graph::new(input.clone());
     for ab in data.split_whitespace().collect::<Vec<&str>>().chunks(2) {
         match ab {
             [a, b] => g.add_edge(a, b),
@@ -83,20 +70,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    match g.run_tsort() {
-        Err(cycle) => {
-            show!(TsortError::Loop(input.to_string()));
-            for node in &cycle {
-                show!(TsortError::LoopNode(node.to_string()));
-            }
-            println!("{}", cycle.join("\n"));
-            Ok(())
-        }
-        Ok(ordering) => {
-            println!("{}", ordering.join("\n"));
-            Ok(())
-        }
-    }
+    g.run_tsort();
+    Ok(())
 }
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
@@ -112,34 +87,45 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Find the element `x` in `vec` and remove it, returning its index.
+fn remove<T>(vec: &mut Vec<T>, x: T) -> Option<usize>
+where
+    T: PartialEq,
+{
+    vec.iter().position(|item| *item == x).inspect(|i| {
+        vec.remove(*i);
+    })
+}
+
 // We use String as a representation of node here
 // but using integer may improve performance.
-
+#[derive(Default)]
 struct Node<'input> {
     successor_names: Vec<&'input str>,
     predecessor_count: usize,
 }
 
 impl<'input> Node<'input> {
-    fn new() -> Self {
-        Node {
-            successor_names: Vec::new(),
-            predecessor_count: 0,
-        }
-    }
-
     fn add_successor(&mut self, successor_name: &'input str) {
         self.successor_names.push(successor_name);
     }
 }
-#[derive(Default)]
+
 struct Graph<'input> {
+    name: String,
     nodes: HashMap<&'input str, Node<'input>>,
 }
 
 impl<'input> Graph<'input> {
+    fn new(name: String) -> Graph<'input> {
+        Self {
+            name,
+            nodes: HashMap::default(),
+        }
+    }
+
     fn add_node(&mut self, name: &'input str) {
-        self.nodes.entry(name).or_insert_with(Node::new);
+        self.nodes.entry(name).or_default();
     }
 
     fn add_edge(&mut self, from: &'input str, to: &'input str) {
@@ -154,9 +140,14 @@ impl<'input> Graph<'input> {
             to_node.predecessor_count += 1;
         }
     }
+
+    fn remove_edge(&mut self, u: &'input str, v: &'input str) {
+        remove(&mut self.nodes.get_mut(u).unwrap().successor_names, v);
+        self.nodes.get_mut(v).unwrap().predecessor_count -= 1;
+    }
+
     /// Implementation of algorithm T from TAOCP (Don. Knuth), vol. 1.
-    fn run_tsort(&mut self) -> Result<Vec<&'input str>, Vec<&'input str>> {
-        let mut result = Vec::with_capacity(self.nodes.len());
+    fn run_tsort(&mut self) {
         // First, we find a node that have no prerequisites (independent nodes)
         // If no such node exists, then there is a cycle.
         let mut independent_nodes_queue: VecDeque<&'input str> = self
@@ -173,10 +164,18 @@ impl<'input> Graph<'input> {
         independent_nodes_queue.make_contiguous().sort_unstable(); // to make sure the resulting ordering is deterministic we need to order independent nodes
                                                                    // FIXME: this doesn't comply entirely with the GNU coreutils implementation.
 
-        // we remove each independent node, from the graph, updating each successor predecessor_count variable as we do.
-        while let Some(name_of_next_node_to_process) = independent_nodes_queue.pop_front() {
-            result.push(name_of_next_node_to_process);
-            if let Some(node_to_process) = self.nodes.remove(name_of_next_node_to_process) {
+        // To make sure the resulting ordering is deterministic we
+        // need to order independent nodes.
+        //
+        // FIXME: this doesn't comply entirely with the GNU coreutils
+        // implementation.
+        independent_nodes_queue.make_contiguous().sort_unstable();
+
+        while !self.nodes.is_empty() {
+            // Get the next node (breaking any cycles necessary to do so).
+            let v = self.find_next_node(&mut independent_nodes_queue);
+            println!("{v}");
+            if let Some(node_to_process) = self.nodes.remove(v) {
                 for successor_name in node_to_process.successor_names {
                     let successor_node = self.nodes.get_mut(successor_name).unwrap();
                     successor_node.predecessor_count -= 1;
@@ -187,20 +186,61 @@ impl<'input> Graph<'input> {
                 }
             }
         }
+    }
 
-        // if the graph has no cycle (it's a dependency tree), the graph should be empty now, as all nodes have been deleted.
-        if self.nodes.is_empty() {
-            Ok(result)
-        } else {
-            // otherwise, we detect and show a cycle to the user (as the GNU coreutils implementation does)
-            Err(self.detect_cycle())
+    /// Get the in-degree of the node with the given name.
+    fn indegree(&self, name: &str) -> Option<usize> {
+        self.nodes.get(name).map(|data| data.predecessor_count)
+    }
+
+    // Pre-condition: self.nodes is non-empty.
+    fn find_next_node(&mut self, frontier: &mut VecDeque<&'input str>) -> &'input str {
+        // If there are no nodes of in-degree zero but there are still
+        // un-visited nodes in the graph, then there must be a cycle.
+        // We need to find the cycle, display it, and then break the
+        // cycle.
+        //
+        // A cycle is guaranteed to be of length at least two. We break
+        // the cycle by deleting an arbitrary edge (the first). That is
+        // not necessarily the optimal thing, but it should be enough to
+        // continue making progress in the graph traversal.
+        //
+        // It is possible that deleting the edge does not actually
+        // result in the target node having in-degree zero, so we repeat
+        // the process until such a node appears.
+        loop {
+            match frontier.pop_front() {
+                None => self.find_and_break_cycle(frontier),
+                Some(v) => return v,
+            }
+        }
+    }
+
+    fn find_and_break_cycle(&mut self, frontier: &mut VecDeque<&'input str>) {
+        let cycle = self.detect_cycle();
+        show!(TsortError::Loop(self.name.clone()));
+        for node in &cycle {
+            show!(TsortError::LoopNode(node.to_string()));
+        }
+        let u = cycle[0];
+        let v = cycle[1];
+        self.remove_edge(u, v);
+        if self.indegree(v).unwrap() == 0 {
+            frontier.push_back(v);
         }
     }
 
     fn detect_cycle(&self) -> Vec<&'input str> {
+        // Sort the nodes just to make this function deterministic.
+        let mut nodes = Vec::new();
+        for node in self.nodes.keys() {
+            nodes.push(node);
+        }
+        nodes.sort_unstable();
+
         let mut visited = HashSet::new();
         let mut stack = Vec::with_capacity(self.nodes.len());
-        for &node in self.nodes.keys() {
+        for node in nodes {
             if !visited.contains(node) && self.dfs(node, &mut visited, &mut stack) {
                 return stack;
             }

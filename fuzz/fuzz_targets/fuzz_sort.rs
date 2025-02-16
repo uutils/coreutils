@@ -20,18 +20,18 @@ use crate::fuzz_common::{
 static CMD_PATH: &str = "sort";
 
 fn generate_sort_args() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
-    let arg_count = rng.gen_range(1..=5);
+    let arg_count = rng.random_range(1..=5);
     let mut args = Vec::new();
 
     for _ in 0..arg_count {
-        match rng.gen_range(0..=4) {
+        match rng.random_range(0..=4) {
             0 => args.push(String::from("-r")), // Reverse the result of comparisons
             1 => args.push(String::from("-n")), // Compare according to string numerical value
             2 => args.push(String::from("-f")), // Fold lower case to upper case characters
-            3 => args.push(generate_random_string(rng.gen_range(1..=10))), // Random string (to simulate file names)
-            _ => args.push(String::from("-k") + &rng.gen_range(1..=5).to_string()), // Sort via a specified field
+            3 => args.push(generate_random_string(rng.random_range(1..=10))), // Random string (to simulate file names)
+            _ => args.push(String::from("-k") + &rng.random_range(1..=5).to_string()), // Sort via a specified field
         }
     }
 
@@ -39,11 +39,11 @@ fn generate_sort_args() -> String {
 }
 
 fn generate_random_lines(count: usize) -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut lines = Vec::new();
 
     for _ in 0..count {
-        lines.push(generate_random_string(rng.gen_range(1..=20)));
+        lines.push(generate_random_string(rng.random_range(1..=20)));
     }
 
     lines.join("\n")

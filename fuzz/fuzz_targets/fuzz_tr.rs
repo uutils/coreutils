@@ -17,23 +17,23 @@ use crate::fuzz_common::{
 static CMD_PATH: &str = "tr";
 
 fn generate_tr_args() -> Vec<String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut args = Vec::new();
 
     // Translate, squeeze, and/or delete characters
     let opts = ["-c", "-d", "-s", "-t"];
     for opt in &opts {
-        if rng.gen_bool(0.25) {
+        if rng.random_bool(0.25) {
             args.push(opt.to_string());
         }
     }
 
     // Generating STRING1 and optionally STRING2
-    let string1 = generate_random_string(rng.gen_range(1..=20));
+    let string1 = generate_random_string(rng.random_range(1..=20));
     args.push(string1);
-    if rng.gen_bool(0.7) {
+    if rng.random_bool(0.7) {
         // Higher chance to add STRING2 for translation
-        let string2 = generate_random_string(rng.gen_range(1..=20));
+        let string2 = generate_random_string(rng.random_range(1..=20));
         args.push(string2);
     }
 

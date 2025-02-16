@@ -652,14 +652,10 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
-    let source_metadata = match fs::symlink_metadata(source) {
-        Ok(metadata) => metadata,
-        Err(_) => return false,
-    };
-
-    let target_metadata = match fs::symlink_metadata(target) {
-        Ok(metadata) => metadata,
-        Err(_) => return false,
+    let (Ok(source_metadata), Ok(target_metadata)) =
+        (fs::symlink_metadata(source), fs::symlink_metadata(target))
+    else {
+        return false;
     };
 
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
@@ -682,14 +678,10 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &P
 /// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
-    let source_metadata = match fs::metadata(source) {
-        Ok(metadata) => metadata,
-        Err(_) => return false,
-    };
-
-    let target_metadata = match fs::symlink_metadata(target) {
-        Ok(metadata) => metadata,
-        Err(_) => return false,
+    let (Ok(source_metadata), Ok(target_metadata)) =
+        (fs::metadata(source), fs::symlink_metadata(target))
+    else {
+        return false;
     };
 
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()

@@ -2,7 +2,7 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo
 
 set -e
 
@@ -60,7 +60,7 @@ fi
 
 ###
 
-release_tag_GNU="v9.5"
+release_tag_GNU="v9.6"
 
 if test ! -d "${path_GNU}"; then
     echo "Could not find GNU coreutils (expected at '${path_GNU}')"
@@ -94,6 +94,19 @@ if [ "$(uname)" == "Linux" ]; then
     export SELINUX_ENABLED=1
 fi
 
+# Set up quilt for patch management
+export QUILT_PATCHES="${ME_dir}/gnu-patches/"
+cd "$path_GNU"
+
+# Check if all patches are already applied
+if [ "$(quilt applied | wc -l)" -eq "$(quilt series | wc -l)" ]; then
+    echo "All patches are already applied"
+else
+    # Push all patches
+    quilt push -a || { echo "Failed to apply patches"; exit 1; }
+fi
+cd -
+
 "${MAKE}" PROFILE="${UU_MAKE_PROFILE}"
 
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
@@ -122,6 +135,8 @@ if test -f gnu-built; then
     echo "'rm -f $(pwd)/gnu-built' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
+    # Disable useless checks
+    sed -i 's|check-texinfo: $(syntax_checks)|check-texinfo:|' doc/local.mk
     ./bootstrap --skip-po
     ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references
     #Add timeout to to protect against hangs
@@ -132,66 +147,36 @@ else
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
     "${MAKE}" -j "$("${NPROC}")"
+
+    # Handle generated factor tests
+    t_first=00
+    t_max=37
+    seq=$(
+        i=${t_first}
+        while test "${i}" -le "${t_max}"; do
+            printf '%02d ' ${i}
+            i=$((i + 1))
+        done
+       )
+    for i in ${seq}; do
+        echo "strip t${i}.sh from Makefile"
+        sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
+    done
+
+    # Remove tests checking for --version & --help
+    # Not really interesting for us and logs are too big
+    sed -i -e '/tests\/help\/help-version.sh/ D' \
+        -e '/tests\/help\/help-version-getopt.sh/ D' \
+        Makefile
     touch gnu-built
 fi
 
-# Handle generated factor tests
-t_first=00
-t_max=36
-# t_max_release=20
-# if test "${UU_MAKE_PROFILE}" != "debug"; then
-#     # Generate the factor tests, so they can be fixed
-#     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
-#     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
-#     seq=$(
-#         i=${t_first}
-#         while test "${i}" -le "${t_max_release}"; do
-#             printf '%02d ' $i
-#             i=$((i + 1))
-#         done
-#     )
-#     for i in ${seq}; do
-#         "${MAKE}" "tests/factor/t${i}.sh"
-#     done
-#     cat
-#     sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*.sh
-#     t_first=$((t_max_release + 1))
-# fi
-# strip all (debug) or just the longer (release) factor tests from Makefile
-seq=$(
-    i=${t_first}
-    while test "${i}" -le "${t_max}"; do
-        printf '%02d ' ${i}
-        i=$((i + 1))
-    done
-)
-for i in ${seq}; do
-    echo "strip t${i}.sh from Makefile"
-    sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
-done
-
 grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 
-# Remove tests checking for --version & --help
-# Not really interesting for us and logs are too big
-sed -i -e '/tests\/help\/help-version.sh/ D' \
-    -e '/tests\/help\/help-version-getopt.sh/ D' \
-    Makefile
-
-# printf doesn't limit the values used in its arg, so this produced ~2GB of output
-sed -i '/INT_OFLOW/ D' tests/printf/printf.sh
-
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
-sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/sort/sort-compress-proc.sh
-sed -i 's|ls -|/usr/bin/ls -|' tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
-sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail/tail-n0f.sh tests/cp/fail-perm.sh tests/mv/i-2.sh tests/shuf/shuf.sh
-sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/test/test-N.sh
-sed -i 's|split |/usr/bin/split |' tests/factor/factor-parallel.sh
-sed -i 's|id -|/usr/bin/id -|' tests/runcon/runcon-no-reorder.sh
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
 # tests/ls/abmon-align.sh - https://github.com/uutils/coreutils/issues/3505
-sed -i 's|touch |/usr/bin/touch |' tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh tests/ls/ls-time.sh tests/stat/stat-nanoseconds.sh tests/misc/time-style.sh tests/test/test-N.sh tests/ls/abmon-align.sh
-sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
+sed -i 's|touch |/usr/bin/touch |' tests/test/test-N.sh tests/ls/abmon-align.sh
 
 # our messages are better
 sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
@@ -203,12 +188,7 @@ sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is n
 # Our message is better
 sed -i "s|warning: unrecognized escape|warning: incomplete hex escape|" tests/stat/stat-printf.pl
 
-sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
-sed -i 's|paste |/usr/bin/paste |' tests/od/od-endian.sh
 sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh
-
-# Add specific timeout to tests that currently hang to limit time spent waiting
-sed -i 's|\(^\s*\)seq \$|\1'"${SYSTEM_TIMEOUT}"' 0.1 seq \$|' tests/seq/seq-precision.sh tests/seq/seq-long-double.sh
 
 # Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs -r sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
@@ -218,8 +198,6 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r sed -Ei
 # in some cases, what we are doing in rust/coreutils is good (or better)
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
-
-eval cat "$path_UUTILS/util/gnu-patches/*.patch" | patch -N -r - -d "$path_GNU" -p 1 -i - || true
 
 sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-eacces.sh
 
@@ -367,3 +345,8 @@ sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/quote-align.sh
 
 # Slightly different error message
 sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
+# Most tests check that `/usr/bin/tr` is working correctly before running.
+# However in NixOS/Nix-based distros, the tr util is located somewhere in
+# /nix/store/xxxxxxxxxxxx...xxxx/bin/tr
+# We just replace the references to `/usr/bin/tr` with the result of `$(which tr)`
+sed -i  's/\/usr\/bin\/tr/$(which tr)/' tests/init.sh

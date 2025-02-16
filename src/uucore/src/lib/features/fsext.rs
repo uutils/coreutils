@@ -137,6 +137,19 @@ pub struct MountInfo {
     pub dummy: bool,
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn replace_special_chars(s: String) -> String {
+    // Replace
+    //
+    // * ASCII space with a regular space character,
+    // * \011 ASCII horizontal tab with a tab character,
+    // * ASCII backslash with an actual backslash character.
+    //
+    s.replace(r#"\040"#, " ")
+        .replace(r#"\011"#, "	")
+        .replace(r#"\134"#, r#"\"#)
+}
+
 impl MountInfo {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     fn new(file_name: &str, raw: &[&str]) -> Option<Self> {
@@ -158,14 +171,14 @@ impl MountInfo {
                 dev_name = raw[after_fields + 1].to_string();
                 fs_type = raw[after_fields].to_string();
                 mount_root = raw[3].to_string();
-                mount_dir = raw[4].to_string();
+                mount_dir = replace_special_chars(raw[4].to_string());
                 mount_option = raw[5].to_string();
             }
             LINUX_MTAB => {
                 dev_name = raw[0].to_string();
                 fs_type = raw[2].to_string();
                 mount_root = String::new();
-                mount_dir = raw[1].to_string();
+                mount_dir = replace_special_chars(raw[1].to_string());
                 mount_option = raw[3].to_string();
             }
             _ => return None,
@@ -1080,5 +1093,29 @@ mod tests {
 
         assert_eq!(info.fs_type, "xfs");
         assert_eq!(info.dev_name, "/dev/fs0");
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_mountinfo_dir_special_chars() {
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &r#"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw"#
+                .split_ascii_whitespace()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
+
+        let info = MountInfo::new(
+            LINUX_MTAB,
+            &r#"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,relatime 0 0"#
+                .split_ascii_whitespace()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
     }
 }

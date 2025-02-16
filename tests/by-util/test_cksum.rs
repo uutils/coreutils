@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont
 
 use crate::common::util::TestScenario;
 
@@ -301,7 +301,7 @@ fn test_check_algo() {
         .arg("lorem_ipsum.txt")
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
         .code_is(1);
     new_ucmd!()
         .arg("-a=sysv")
@@ -309,7 +309,7 @@ fn test_check_algo() {
         .arg("lorem_ipsum.txt")
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
         .code_is(1);
     new_ucmd!()
         .arg("-a=crc")
@@ -317,7 +317,15 @@ fn test_check_algo() {
         .arg("lorem_ipsum.txt")
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
+        .code_is(1);
+    new_ucmd!()
+        .arg("-a=crc32b")
+        .arg("--check")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
         .code_is(1);
 }
 
@@ -594,7 +602,6 @@ fn test_reset_binary() {
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e  ");
 }
 
-#[ignore = "issue #6375"]
 #[test]
 fn test_reset_binary_but_set() {
     let scene = TestScenario::new(util_name!());
@@ -611,7 +618,7 @@ fn test_reset_binary_but_set() {
         .arg("--algorithm=md5")
         .arg(at.subdir.join("f"))
         .succeeds()
-        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *"); // currently, asterisk=false. It should be true
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
 
 #[test]
@@ -1129,7 +1136,6 @@ fn test_cksum_garbage() {
         .stderr_contains("check-file: no properly formatted checksum lines found");
 }
 
-#[ignore = "Should fail on bits"]
 #[test]
 fn test_md5_bits() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1180,7 +1186,6 @@ fn test_bsd_case() {
         .stderr_contains("f: no properly formatted checksum lines found");
 }
 
-#[ignore = "Different output"]
 #[test]
 fn test_blake2d_tested_with_sha1() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1274,6 +1279,18 @@ fn test_several_files_error_mgmt() {
         .fails()
         .stderr_contains("empty: no properly ")
         .stderr_contains("incorrect: no properly ");
+}
+
+#[test]
+fn test_check_unknown_checksum_file() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("missing")
+        .fails()
+        .stderr_only("cksum: missing: No such file or directory\n");
 }
 
 #[test]
@@ -1661,10 +1678,11 @@ mod gnu_cksum_base64 {
     use super::*;
     use crate::common::util::log_info;
 
-    const PAIRS: [(&str, &str); 11] = [
+    const PAIRS: [(&str, &str); 12] = [
         ("sysv", "0 0 f"),
         ("bsd", "00000     0 f"),
         ("crc", "4294967295 0 f"),
+        ("crc32b", "0 0 f"),
         ("md5", "1B2M2Y8AsgTpgAmY7PhCfg=="),
         ("sha1", "2jmj7l5rSw0yVb/vlWAYkK/YBwk="),
         ("sha224", "0UoCjCo6K8lHYQK7KII0xBWisB+CjqYqxbPkLw=="),
@@ -1693,7 +1711,7 @@ mod gnu_cksum_base64 {
     }
 
     fn output_format(algo: &str, digest: &str) -> String {
-        if ["sysv", "bsd", "crc"].contains(&algo) {
+        if ["sysv", "bsd", "crc", "crc32b"].contains(&algo) {
             digest.to_string()
         } else {
             format!("{} (f) = {}", algo.to_uppercase(), digest).replace("BLAKE2B", "BLAKE2b")
@@ -1706,6 +1724,7 @@ mod gnu_cksum_base64 {
         let scene = make_scene();
 
         for (algo, digest) in PAIRS {
+            log_info("ALGORITHM", algo);
             scene
                 .ucmd()
                 .arg("--base64")
@@ -1724,8 +1743,17 @@ mod gnu_cksum_base64 {
         let scene = make_scene();
 
         for (algo, digest) in PAIRS {
-            if ["sysv", "bsd", "crc"].contains(&algo) {
+            if ["sysv", "bsd", "crc", "crc32b"].contains(&algo) {
                 // These algorithms do not accept `--check`
+                scene
+                    .ucmd()
+                    .arg("--check")
+                    .arg("-a")
+                    .arg(algo)
+                    .fails()
+                    .stderr_only(
+                        "cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}\n",
+                    );
                 continue;
             }
 
@@ -1789,6 +1817,373 @@ mod gnu_cksum_base64 {
                 .no_stdout()
                 .stderr_contains("no properly formatted checksum lines found");
         }
+    }
+}
+
+/// This module reimplements the cksum-c.sh GNU test.
+mod gnu_cksum_c {
+    use super::*;
+
+    const INVALID_SUM: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaafdb57c725157cb40b5aee8d937b8351477e";
+
+    fn make_scene() -> TestScenario {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.write("input", "9\n7\n1\n4\n2\n6\n3\n5\n8\n10\n");
+
+        let algos: &[&[&str]] = &[
+            &["-a", "sha384"],
+            &["-a", "blake2b"],
+            &["-a", "blake2b", "-l", "384"],
+            &["-a", "sm3"],
+        ];
+
+        for args in algos {
+            let result = scene.ucmd().args(args).succeeds();
+            let stdout = result.stdout();
+            at.append_bytes("CHECKSUMS", stdout);
+        }
+
+        scene
+    }
+
+    #[test]
+    #[ignore]
+    fn test_signed_checksums() {
+        todo!()
+    }
+
+    #[test]
+    fn test_check_individual_digests_in_mixed_file() {
+        let scene = make_scene();
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("-a")
+            .arg("sm3")
+            .arg("CHECKSUMS")
+            .succeeds();
+    }
+
+    #[test]
+    fn test_check_against_older_non_hex_formats() {
+        let scene = make_scene();
+
+        scene
+            .ucmd()
+            .arg("-c")
+            .arg("-a")
+            .arg("crc")
+            .arg("CHECKSUMS")
+            .fails();
+
+        let crc_cmd = scene.ucmd().arg("-a").arg("crc").arg("input").succeeds();
+        let crc_cmd_out = crc_cmd.stdout();
+        scene.fixtures.write_bytes("CHECKSUMS.crc", crc_cmd_out);
+
+        scene.ucmd().arg("-c").arg("CHECKSUMS.crc").fails();
+    }
+
+    #[test]
+    fn test_status() {
+        let scene = make_scene();
+
+        scene
+            .ucmd()
+            .arg("--status")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .succeeds()
+            .no_output();
+    }
+
+    fn make_scene_with_comment() -> TestScenario {
+        let scene = make_scene();
+
+        scene
+            .fixtures
+            .append("CHECKSUMS", "# Very important comment\n");
+
+        scene
+    }
+
+    #[test]
+    fn test_status_with_comment() {
+        let scene = make_scene_with_comment();
+
+        scene
+            .ucmd()
+            .arg("--status")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .succeeds()
+            .no_output();
+    }
+
+    fn make_scene_with_invalid_line() -> TestScenario {
+        let scene = make_scene_with_comment();
+
+        scene.fixtures.append("CHECKSUMS", "invalid_line\n");
+
+        scene
+    }
+
+    #[test]
+    fn test_check_strict() {
+        let scene = make_scene_with_invalid_line();
+
+        // without strict, succeeds
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .succeeds()
+            .stderr_contains("1 line is improperly formatted");
+
+        // with strict, fails
+        scene
+            .ucmd()
+            .arg("--strict")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .fails()
+            .stderr_contains("1 line is improperly formatted");
+    }
+
+    fn make_scene_with_two_invalid_lines() -> TestScenario {
+        let scene = make_scene_with_comment();
+
+        scene
+            .fixtures
+            .append("CHECKSUMS", "invalid_line\ninvalid_line\n");
+
+        scene
+    }
+
+    #[test]
+    fn test_check_strict_plural_checks() {
+        let scene = make_scene_with_two_invalid_lines();
+
+        scene
+            .ucmd()
+            .arg("--strict")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .fails()
+            .stderr_contains("2 lines are improperly formatted");
+    }
+
+    fn make_scene_with_incorrect_checksum() -> TestScenario {
+        let scene = make_scene_with_two_invalid_lines();
+
+        scene
+            .fixtures
+            .append("CHECKSUMS", &format!("SM3 (input) = {INVALID_SUM}\n"));
+
+        scene
+    }
+
+    #[test]
+    fn test_check_with_incorrect_checksum() {
+        let scene = make_scene_with_incorrect_checksum();
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .fails()
+            .stdout_contains("input: FAILED")
+            .stderr_contains("1 computed checksum did NOT match");
+
+        // also fails with strict
+        scene
+            .ucmd()
+            .arg("--strict")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .fails()
+            .stdout_contains("input: FAILED")
+            .stderr_contains("1 computed checksum did NOT match");
+    }
+
+    #[test]
+    fn test_status_with_errors() {
+        let scene = make_scene_with_incorrect_checksum();
+
+        scene
+            .ucmd()
+            .arg("--status")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .fails()
+            .no_output();
+    }
+
+    #[test]
+    fn test_check_with_non_existing_file() {
+        let scene = make_scene();
+        scene
+            .fixtures
+            .write("CHECKSUMS2", &format!("SM3 (input2) = {INVALID_SUM}\n"));
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("CHECKSUMS2")
+            .fails()
+            .stdout_contains("input2: FAILED open or read")
+            .stderr_contains("1 listed file could not be read");
+
+        // also fails with strict
+        scene
+            .ucmd()
+            .arg("--strict")
+            .arg("--check")
+            .arg("CHECKSUMS2")
+            .fails()
+            .stdout_contains("input2: FAILED open or read")
+            .stderr_contains("1 listed file could not be read");
+    }
+
+    fn make_scene_with_another_improperly_formatted() -> TestScenario {
+        let scene = make_scene_with_incorrect_checksum();
+
+        scene.fixtures.append(
+            "CHECKSUMS",
+            &format!("BLAKE2b (missing-file) = {INVALID_SUM}\n"),
+        );
+
+        scene
+    }
+
+    #[test]
+    fn test_warn() {
+        let scene = make_scene_with_another_improperly_formatted();
+
+        scene
+            .ucmd()
+            .arg("--warn")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .run()
+            .stderr_contains("CHECKSUMS: 6: improperly formatted SM3 checksum line")
+            .stderr_contains("CHECKSUMS: 9: improperly formatted BLAKE2b checksum line");
+    }
+
+    fn make_scene_with_checksum_missing() -> TestScenario {
+        let scene = make_scene_with_another_improperly_formatted();
+
+        scene.fixtures.write(
+            "CHECKSUMS-missing",
+            &format!("SM3 (nonexistent) = {INVALID_SUM}\n"),
+        );
+
+        scene
+    }
+
+    #[test]
+    fn test_ignore_missing() {
+        let scene = make_scene_with_checksum_missing();
+
+        scene
+            .ucmd()
+            .arg("--ignore-missing")
+            .arg("--check")
+            .arg("CHECKSUMS-missing")
+            .fails()
+            .stdout_does_not_contain("nonexistent: No such file or directory")
+            .stdout_does_not_contain("nonexistent: FAILED open or read")
+            .stderr_contains("CHECKSUMS-missing: no file was verified");
+    }
+
+    #[test]
+    fn test_status_and_warn() {
+        let scene = make_scene_with_checksum_missing();
+
+        // --status before --warn
+        scene
+            .ucmd()
+            .arg("--status")
+            .arg("--warn")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .fails()
+            .stderr_contains("CHECKSUMS: 9: improperly formatted BLAKE2b checksum line")
+            .stderr_contains("WARNING: 3 lines are improperly formatted")
+            .stderr_contains("WARNING: 1 computed checksum did NOT match");
+
+        // --warn before --status (status hides the results)
+        scene
+            .ucmd()
+            .arg("--warn")
+            .arg("--status")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .fails()
+            .stderr_does_not_contain("CHECKSUMS: 9: improperly formatted BLAKE2b checksum line")
+            .stderr_does_not_contain("WARNING: 3 lines are improperly formatted")
+            .stderr_does_not_contain("WARNING: 1 computed checksum did NOT match");
+    }
+
+    #[test]
+    fn test_status_and_ignore_missing() {
+        let scene = make_scene_with_checksum_missing();
+
+        scene
+            .ucmd()
+            .arg("--status")
+            .arg("--ignore-missing")
+            .arg("--check")
+            .arg("CHECKSUMS")
+            .fails()
+            .no_output();
+    }
+
+    #[test]
+    fn test_status_warn_and_ignore_missing() {
+        let scene = make_scene_with_checksum_missing();
+
+        scene
+            .ucmd()
+            .arg("--status")
+            .arg("--warn")
+            .arg("--ignore-missing")
+            .arg("--check")
+            .arg("CHECKSUMS-missing")
+            .fails()
+            .stderr_contains("CHECKSUMS-missing: no file was verified")
+            .stdout_does_not_contain("nonexistent: No such file or directory");
+    }
+
+    #[test]
+    fn test_check_several_files_dont_exist() {
+        let scene = make_scene();
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("non-existing-1")
+            .arg("non-existing-2")
+            .fails()
+            .stderr_contains("non-existing-1: No such file or directory")
+            .stderr_contains("non-existing-2: No such file or directory");
+    }
+
+    #[test]
+    fn test_check_several_files_empty() {
+        let scene = make_scene();
+        scene.fixtures.touch("empty-1");
+        scene.fixtures.touch("empty-2");
+
+        scene
+            .ucmd()
+            .arg("--check")
+            .arg("empty-1")
+            .arg("empty-2")
+            .fails()
+            .stderr_contains("empty-1: no properly formatted checksum lines found")
+            .stderr_contains("empty-2: no properly formatted checksum lines found");
     }
 }
 

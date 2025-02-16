@@ -119,6 +119,10 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.7
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -192,13 +196,6 @@ jobs:
         ## Confirm MinSRV compatible 'Cargo.lock'
         # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
         cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible (or out-of-date) 'Cargo.lock' file; update using \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
-    - name: Confirm MinSRV equivalence for '.clippy.toml'
-      shell: bash
-      run: |
-        ## Confirm MinSRV equivalence for '.clippy.toml'
-        # * ensure '.clippy.toml' MSRV configuration setting is equal to ${{ env.RUST_MIN_SRV }}
-        CLIPPY_MSRV=$(grep -P "(?i)^\s*msrv\s*=\s*" .clippy.toml | grep -oP "\d+([.]\d+)+")
-        if [ "${CLIPPY_MSRV}" != "${{ env.RUST_MIN_SRV }}" ]; then { echo "::error file=.clippy.toml::Incorrect MSRV configuration for clippy (found '${CLIPPY_MSRV}'; should be '${{ env.RUST_MIN_SRV }}'); update '.clippy.toml' with 'msrv = \"${{ env.RUST_MIN_SRV }}\"'" ; exit 1 ; } ; fi
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -420,14 +417,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v7
+      uses: dawidd6/action-download-artifact@v8
       with:
         workflow: CICD.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v7
+      uses: dawidd6/action-download-artifact@v8
       with:
         workflow: CICD.yml
         name: size-result
@@ -492,7 +489,7 @@ jobs:
         job:
           # - { os , target , cargo-options , features , use-cross , toolchain, skip-tests }
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
-          - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
+          - { os: ubuntu-24.04-arm  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-musl  , features: feat_os_unix_musl      , use-cross: use-cross , skip-tests: true }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }

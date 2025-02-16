@@ -5659,3 +5659,14 @@ fn test_non_unicode_names() {
         .succeeds()
         .stdout_is_bytes(b"\xC0.dir\n\xC0.file\n");
 }
+
+#[test]
+fn test_time_style_timezone_name() {
+    let re_custom_format = Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* UTC f\n").unwrap();
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.env("TZ", "UTC0")
+        .args(&["-l", "--time-style=+%Z"])
+        .succeeds()
+        .stdout_matches(&re_custom_format);
+}

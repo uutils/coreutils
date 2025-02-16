@@ -241,6 +241,8 @@ DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
 
 Note that GNU test suite relies on individual utilities (not the multicall binary).
 
+You also need to install [quilt](https://savannah.nongnu.org/projects/quilt), a tool used to manage a stack of patches for modifying GNU tests.
+
 On FreeBSD, you need to install packages for GNU coreutils and sed (used in shell scripts instead of system commands):
 
 ```shell

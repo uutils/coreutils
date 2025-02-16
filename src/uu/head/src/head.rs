@@ -350,15 +350,9 @@ fn read_but_last_n_lines(
 /// Return the index in `input` just after the `n`th line from the end.
 ///
 /// If `n` exceeds the number of lines in this file, then return 0.
-///
-/// The cursor must be at the start of the seekable input before
-/// calling this function. This function rewinds the cursor to the
+/// This function rewinds the cursor to the
 /// beginning of the input just before returning unless there is an
 /// I/O error.
-///
-/// If `zeroed` is `false`, interpret the newline character `b'\n'` as
-/// a line ending. If `zeroed` is `true`, interpret the null character
-/// `b'\0'` as a line ending instead.
 ///
 /// # Errors
 ///
@@ -390,20 +384,21 @@ fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> std::io::R
 where
     R: Read + Seek,
 {
-    let size = input.seek(SeekFrom::End(0))?;
+    let file_size = input.seek(SeekFrom::End(0))?;
 
     let mut buffer = [0u8; BUF_SIZE];
-    let buf_size: usize = (BUF_SIZE as u64).min(size).try_into().unwrap();
-    let buffer = &mut buffer[..buf_size];
 
     let mut i = 0u64;
     let mut lines = 0u64;
 
     loop {
         // the casts here are ok, `buffer.len()` should never be above a few k
-        input.seek(SeekFrom::Current(
-            -((buffer.len() as i64).min((size - i) as i64)),
-        ))?;
+        let bytes_remaining_to_search = file_size - i;
+        let bytes_to_read_this_loop = bytes_remaining_to_search.min(BUF_SIZE.try_into().unwrap());
+        let read_start_offset = bytes_remaining_to_search - bytes_to_read_this_loop;
+        let buffer = &mut buffer[..bytes_to_read_this_loop.try_into().unwrap()];
+
+        input.seek(SeekFrom::Start(read_start_offset))?;
         input.read_exact(buffer)?;
         for byte in buffer.iter().rev() {
             if byte == &separator {
@@ -412,11 +407,11 @@ where
             // if it were just `n`,
             if lines == n + 1 {
                 input.rewind()?;
-                return Ok(size - i);
+                return Ok(file_size - i);
             }
             i += 1;
         }
-        if size - i == 0 {
+        if file_size - i == 0 {
             input.rewind()?;
             return Ok(0);
         }
@@ -700,12 +695,59 @@ mod tests {
 
     #[test]
     fn test_find_nth_line_from_end() {
-        let mut input = Cursor::new("x\ny\nz\n");
-        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 6);
-        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 4);
-        assert_eq!(find_nth_line_from_end(&mut input, 2, b'\n').unwrap(), 2);
-        assert_eq!(find_nth_line_from_end(&mut input, 3, b'\n').unwrap(), 0);
-        assert_eq!(find_nth_line_from_end(&mut input, 4, b'\n').unwrap(), 0);
-        assert_eq!(find_nth_line_from_end(&mut input, 1000, b'\n').unwrap(), 0);
+        // Make sure our input buffer is several multiples of BUF_SIZE in size
+        // such that we can be reasonably confident we've exercised all logic paths.
+        // Make the contents of the buffer look like...
+        // aaaa\n
+        // aaaa\n
+        // aaaa\n
+        // aaaa\n
+        // aaaa\n
+        // ...
+        // This will make it easier to validate the results since each line will have
+        // 5 bytes in it.
+
+        let minimum_buffer_size = BUF_SIZE * 4;
+        let mut input_buffer = vec![];
+        let mut loop_iteration: u64 = 0;
+        while input_buffer.len() < minimum_buffer_size {
+            for _n in 0..4 {
+                input_buffer.push(b'a');
+            }
+            loop_iteration += 1;
+            input_buffer.push(b'\n');
+        }
+
+        let lines_in_input_file = loop_iteration;
+        let input_length = lines_in_input_file * 5;
+        assert_eq!(input_length, input_buffer.len().try_into().unwrap());
+        let mut input = Cursor::new(input_buffer);
+        // We now have loop_iteration lines in the buffer Now walk backwards through the buffer
+        // to confirm everything parses correctly.
+        // Use a large step size to prevent the test from taking too long, but don't use a power
+        // of 2 in case we miss some corner case.
+        let step_size = 511;
+        for n in (0..lines_in_input_file).filter(|v| v % step_size == 0) {
+            // The 5*n comes from 5-bytes per row.
+            assert_eq!(
+                find_nth_line_from_end(&mut input, n, b'\n').unwrap(),
+                input_length - 5 * n
+            );
+        }
+
+        // Now confirm that if we query with a value >= lines_in_input_file we get an offset
+        // of 0
+        assert_eq!(
+            find_nth_line_from_end(&mut input, lines_in_input_file, b'\n').unwrap(),
+            0
+        );
+        assert_eq!(
+            find_nth_line_from_end(&mut input, lines_in_input_file + 1, b'\n').unwrap(),
+            0
+        );
+        assert_eq!(
+            find_nth_line_from_end(&mut input, lines_in_input_file + 1000, b'\n').unwrap(),
+            0
+        );
     }
 }

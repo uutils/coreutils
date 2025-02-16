@@ -15,6 +15,7 @@ use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use uucore::custom_tz_fmt::custom_time_format;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
@@ -272,8 +273,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for date in dates {
             match date {
                 Ok(date) => {
-                    // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
-                    let format_string = &format_string.replace("%N", "%f");
+                    let format_string = custom_time_format(format_string);
                     // Refuse to pass this string to chrono as it is crashing in this crate
                     if format_string.contains("%#z") {
                         return Err(USimpleError::new(
@@ -283,7 +283,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                     // Hack to work around panic in chrono,
                     // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
-                    let format_items = StrftimeItems::new(format_string);
+                    let format_items = StrftimeItems::new(format_string.as_str());
                     if format_items.clone().any(|i| i == Item::Error) {
                         return Err(USimpleError::new(
                             1,
@@ -403,7 +403,7 @@ fn make_format_string(settings: &Settings) -> &str {
             Rfc3339Format::Ns => "%F %T.%f%:z",
         },
         Format::Custom(ref fmt) => fmt,
-        Format::Default => "%c",
+        Format::Default => "%a %b %e %X %Z %Y",
     }
 }
 

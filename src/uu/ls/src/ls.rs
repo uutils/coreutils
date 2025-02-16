@@ -5,19 +5,9 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
 
-use clap::{
-    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
-    crate_version, Arg, ArgAction, Command,
-};
-use glob::{MatchOptions, Pattern};
-use lscolors::LsColors;
-
-use ansi_width::ansi_width;
-use std::{cell::OnceCell, num::IntErrorKind};
-use std::{collections::HashSet, io::IsTerminal};
-
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use std::{cell::OnceCell, num::IntErrorKind};
 use std::{
     cmp::Reverse,
     error::Error,
@@ -34,7 +24,18 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
+use std::{collections::HashSet, io::IsTerminal};
+
+use ansi_width::ansi_width;
+use chrono::{DateTime, Local, TimeDelta};
+use clap::{
+    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
+    crate_version, Arg, ArgAction, Command,
+};
+use glob::{MatchOptions, Pattern};
+use lscolors::LsColors;
 use term_grid::{Direction, Filling, Grid, GridOptions};
+
 use uucore::error::USimpleError;
 use uucore::format::human::{human_readable, SizeFormat};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
@@ -57,6 +58,7 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{self, escape_name, QuotingStyle};
 use uucore::{
+    custom_tz_fmt,
     display::Quotable,
     error::{set_exit_code, UError, UResult},
     format_usage,
@@ -67,10 +69,12 @@ use uucore::{
     version_cmp::version_cmp,
 };
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
+
 mod dired;
 use dired::{is_dired_arg_present, DiredOutput};
 mod colors;
 use colors::{color_name, StyleManager};
+
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
@@ -334,6 +338,35 @@ enum TimeStyle {
     Format(String),
 }
 
+/// Whether the given date is considered recent (i.e., in the last 6 months).
+fn is_recent(time: DateTime<Local>) -> bool {
+    // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
+    time + TimeDelta::try_seconds(31_556_952 / 2).unwrap() > Local::now()
+}
+
+impl TimeStyle {
+    /// Format the given time according to this time format style.
+    fn format(&self, time: DateTime<Local>) -> String {
+        let recent = is_recent(time);
+        match (self, recent) {
+            (Self::FullIso, _) => time.format("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
+            (Self::LongIso, _) => time.format("%Y-%m-%d %H:%M").to_string(),
+            (Self::Iso, true) => time.format("%m-%d %H:%M").to_string(),
+            (Self::Iso, false) => time.format("%Y-%m-%d ").to_string(),
+            // spell-checker:ignore (word) datetime
+            //In this version of chrono translating can be done
+            //The function is chrono::datetime::DateTime::format_localized
+            //However it's currently still hard to get the current pure-rust-locale
+            //So it's not yet implemented
+            (Self::Locale, true) => time.format("%b %e %H:%M").to_string(),
+            (Self::Locale, false) => time.format("%b %e  %Y").to_string(),
+            (Self::Format(fmt), _) => time
+                .format(custom_tz_fmt::custom_time_format(fmt).as_str())
+                .to_string(),
+        }
+    }
+}
+
 fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
     let possible_time_styles = vec![
         "full-iso".to_string(),
@@ -346,8 +379,8 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
         //If both FULL_TIME and TIME_STYLE are present
         //The one added last is dominant
         if options.get_flag(options::FULL_TIME)
-            && options.indices_of(options::FULL_TIME).unwrap().last()
-                > options.indices_of(options::TIME_STYLE).unwrap().last()
+            && options.indices_of(options::FULL_TIME).unwrap().next_back()
+                > options.indices_of(options::TIME_STYLE).unwrap().next_back()
         {
             Ok(TimeStyle::FullIso)
         } else {
@@ -3117,31 +3150,7 @@ fn get_time(md: &Metadata, config: &Config) -> Option<chrono::DateTime<chrono::L
 
 fn display_date(metadata: &Metadata, config: &Config) -> String {
     match get_time(metadata, config) {
-        Some(time) => {
-            //Date is recent if from past 6 months
-            //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            let recent = time + chrono::TimeDelta::try_seconds(31_556_952 / 2).unwrap()
-                > chrono::Local::now();
-
-            match &config.time_style {
-                TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
-                TimeStyle::LongIso => time.format("%Y-%m-%d %H:%M"),
-                TimeStyle::Iso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
-                TimeStyle::Locale => {
-                    let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
-
-                    // spell-checker:ignore (word) datetime
-                    //In this version of chrono translating can be done
-                    //The function is chrono::datetime::DateTime::format_localized
-                    //However it's currently still hard to get the current pure-rust-locale
-                    //So it's not yet implemented
-
-                    time.format(fmt)
-                }
-                TimeStyle::Format(e) => time.format(e),
-            }
-            .to_string()
-        }
+        Some(time) => config.time_style.format(time),
         None => "???".into(),
     }
 }

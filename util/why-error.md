@@ -1,6 +1,5 @@
 This file documents why some tests are failing:
 
-* gnu/tests/chgrp/from.sh - https://github.com/uutils/coreutils/issues/7039
 * gnu/tests/cp/preserve-gid.sh
 * gnu/tests/csplit/csplit-suppress-matched.pl
 * gnu/tests/date/date-debug.sh
@@ -10,10 +9,9 @@ This file documents why some tests are failing:
 * gnu/tests/dd/direct.sh
 * gnu/tests/dd/no-allocate.sh
 * gnu/tests/dd/nocache_eof.sh
-* gnu/tests/dd/skip-seek-past-file.sh
+* gnu/tests/dd/skip-seek-past-file.sh - https://github.com/uutils/coreutils/issues/7216
 * gnu/tests/dd/stderr.sh
-* gnu/tests/df/over-mount-device.sh
-* gnu/tests/du/long-from-unreadable.sh
+* gnu/tests/du/long-from-unreadable.sh - https://github.com/uutils/coreutils/issues/7217
 * gnu/tests/du/move-dir-while-traversing.sh
 * gnu/tests/expr/expr-multibyte.pl
 * gnu/tests/expr/expr.pl
@@ -24,14 +22,13 @@ This file documents why some tests are failing:
 * gnu/tests/head/head-write-error.sh
 * gnu/tests/help/help-version-getopt.sh
 * gnu/tests/help/help-version.sh
+* gnu/tests/install/install-C.sh - https://github.com/uutils/coreutils/pull/7215
 * gnu/tests/ls/ls-misc.pl
 * gnu/tests/ls/stat-free-symlinks.sh
 * gnu/tests/misc/close-stdout.sh
 * gnu/tests/misc/comm.pl
-* gnu/tests/misc/dircolors.pl
-* gnu/tests/misc/kill.sh - https://github.com/uutils/coreutils/issues/7066 https://github.com/uutils/coreutils/issues/7067
 * gnu/tests/misc/nohup.sh
-* gnu/tests/misc/numfmt.pl
+* gnu/tests/misc/numfmt.pl - https://github.com/uutils/coreutils/issues/7219 / https://github.com/uutils/coreutils/issues/7221
 * gnu/tests/misc/stdbuf.sh - https://github.com/uutils/coreutils/issues/7072
 * gnu/tests/misc/tee.sh - https://github.com/uutils/coreutils/issues/7073
 * gnu/tests/misc/time-style.sh
@@ -55,7 +52,6 @@ This file documents why some tests are failing:
 * gnu/tests/rm/one-file-system.sh - https://github.com/uutils/coreutils/issues/7011
 * gnu/tests/rm/rm1.sh
 * gnu/tests/rm/rm2.sh
-* gnu/tests/seq/seq-precision.sh
 * gnu/tests/shred/shred-passes.sh
 * gnu/tests/sort/sort-continue.sh
 * gnu/tests/sort/sort-debug-keys.sh
@@ -66,7 +62,6 @@ This file documents why some tests are failing:
 * gnu/tests/sort/sort-merge-fdlimit.sh
 * gnu/tests/sort/sort-month.sh
 * gnu/tests/sort/sort.pl
-* gnu/tests/split/line-bytes.sh
 * gnu/tests/stat/stat-nanoseconds.sh
 * gnu/tests/tac/tac-2-nonseekable.sh
 * gnu/tests/tail/end-of-device.sh

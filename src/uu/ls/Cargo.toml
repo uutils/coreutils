@@ -18,15 +18,18 @@ path = "src/ls.rs"
 
 [dependencies]
 ansi-width = { workspace = true }
-clap = { workspace = true, features = ["env"] }
 chrono = { workspace = true }
-number_prefix = { workspace = true }
-uutils_term_grid = { workspace = true }
-terminal_size = { workspace = true }
+clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
+hostname = { workspace = true }
 lscolors = { workspace = true }
+number_prefix = { workspace = true }
+once_cell = { workspace = true }
+selinux = { workspace = true, optional = true }
+terminal_size = { workspace = true }
 uucore = { workspace = true, features = [
   "colors",
+  "custom-tz-fmt",
   "entries",
   "format",
   "fs",
@@ -34,9 +37,7 @@ uucore = { workspace = true, features = [
   "quoting-style",
   "version-cmp",
 ] }
-once_cell = { workspace = true }
-selinux = { workspace = true, optional = true }
-hostname = { workspace = true }
+uutils_term_grid = { workspace = true }
 
 [[bin]]
 name = "ls"

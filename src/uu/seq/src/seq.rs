@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) extendedbigdecimal numberparse
+// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat
 use std::ffi::OsString;
 use std::io::{stdout, ErrorKind, Write};
 
@@ -10,11 +10,13 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use num_traits::{ToPrimitive, Zero};
 
 use uucore::error::{FromIo, UResult};
-use uucore::format::{num_format, Format};
+use uucore::format::{num_format, sprintf, Format, FormatArgument};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
 mod extendedbigdecimal;
+mod hexadecimalfloat;
+
 // public to allow fuzzing
 #[cfg(fuzzing)]
 pub mod number;
@@ -72,6 +74,18 @@ fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
     v.into_iter()
 }
 
+fn select_precision(
+    first: Option<usize>,
+    increment: Option<usize>,
+    last: Option<usize>,
+) -> Option<usize> {
+    match (first, increment, last) {
+        (Some(0), Some(0), Some(0)) => Some(0),
+        (Some(f), Some(i), Some(_)) => Some(f.max(i)),
+        _ => None,
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(split_short_args_with_value(args))?;
@@ -87,8 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = SeqOptions {
         separator: matches
             .get_one::<String>(OPT_SEPARATOR)
-            .map(|s| s.as_str())
-            .unwrap_or("\n")
+            .map_or("\n", |s| s.as_str())
             .to_string(),
         terminator: matches
             .get_one::<String>(OPT_TERMINATOR)
@@ -99,32 +112,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
 
-    let first = if numbers.len() > 1 {
+    let (first, first_precision) = if numbers.len() > 1 {
         match numbers[0].parse() {
-            Ok(num) => num,
+            Ok(num) => (num, hexadecimalfloat::parse_precision(numbers[0])),
             Err(e) => return Err(SeqError::ParseError(numbers[0].to_string(), e).into()),
         }
     } else {
-        PreciseNumber::one()
+        (PreciseNumber::one(), Some(0))
     };
-    let increment = if numbers.len() > 2 {
+    let (increment, increment_precision) = if numbers.len() > 2 {
         match numbers[1].parse() {
-            Ok(num) => num,
+            Ok(num) => (num, hexadecimalfloat::parse_precision(numbers[1])),
             Err(e) => return Err(SeqError::ParseError(numbers[1].to_string(), e).into()),
         }
     } else {
-        PreciseNumber::one()
+        (PreciseNumber::one(), Some(0))
     };
     if increment.is_zero() {
         return Err(SeqError::ZeroIncrement(numbers[1].to_string()).into());
     }
-    let last: PreciseNumber = {
+    let (last, last_precision): (PreciseNumber, Option<usize>) = {
         // We are guaranteed that `numbers.len()` is greater than zero
         // and at most three because of the argument specification in
         // `uu_app()`.
         let n: usize = numbers.len();
         match numbers[n - 1].parse() {
-            Ok(num) => num,
+            Ok(num) => (num, hexadecimalfloat::parse_precision(numbers[n - 1])),
             Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_string(), e).into()),
         }
     };
@@ -133,30 +146,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .num_integral_digits
         .max(increment.num_integral_digits)
         .max(last.num_integral_digits);
-    let largest_dec = first
-        .num_fractional_digits
-        .max(increment.num_fractional_digits);
 
-    let format = match options.format {
-        Some(f) => {
-            let f = Format::<num_format::Float>::parse(f)?;
-            Some(f)
-        }
-        None => None,
-    };
+    let precision = select_precision(first_precision, increment_precision, last_precision);
+
+    let format = options
+        .format
+        .map(Format::<num_format::Float>::parse)
+        .transpose()?;
+
     let result = print_seq(
         (first.number, increment.number, last.number),
-        largest_dec,
+        precision,
         &options.separator,
         &options.terminator,
         options.equal_width,
         padding,
-        &format,
+        format.as_ref(),
     );
     match result {
-        Ok(_) => Ok(()),
+        Ok(()) => Ok(()),
         Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
-        Err(e) => Err(e.map_err_context(|| "write error".into())),
+        Err(err) => Err(err.map_err_context(|| "write error".into())),
     }
 }
 
@@ -210,38 +220,60 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
     }
 }
 
+fn format_bigdecimal(value: &bigdecimal::BigDecimal) -> Option<String> {
+    let format_arguments = &[FormatArgument::Float(value.to_f64()?)];
+    let value_as_bytes = sprintf("%g", format_arguments).ok()?;
+    String::from_utf8(value_as_bytes).ok()
+}
+
 /// Write a big decimal formatted according to the given parameters.
 fn write_value_float(
     writer: &mut impl Write,
     value: &ExtendedBigDecimal,
     width: usize,
-    precision: usize,
+    precision: Option<usize>,
 ) -> std::io::Result<()> {
-    let value_as_str =
-        if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
-            format!("{value:>width$.precision$}")
-        } else {
-            format!("{value:>0width$.precision$}")
-        };
+    let value_as_str = match precision {
+        // format with precision: decimal floats and integers
+        Some(precision) => match value {
+            ExtendedBigDecimal::Infinity | ExtendedBigDecimal::MinusInfinity => {
+                format!("{value:>width$.precision$}")
+            }
+            _ => format!("{value:>0width$.precision$}"),
+        },
+        // format without precision: hexadecimal floats
+        None => match value {
+            ExtendedBigDecimal::BigDecimal(bd) => {
+                format_bigdecimal(bd).unwrap_or_else(|| "{value}".to_owned())
+            }
+            _ => format!("{value:>0width$}"),
+        },
+    };
     write!(writer, "{value_as_str}")
 }
 
 /// Floating point based code path
 fn print_seq(
     range: RangeFloat,
-    largest_dec: usize,
+    precision: Option<usize>,
     separator: &str,
     terminator: &str,
     pad: bool,
     padding: usize,
-    format: &Option<Format<num_format::Float>>,
+    format: Option<&Format<num_format::Float>>,
 ) -> std::io::Result<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
     let (first, increment, last) = range;
     let mut value = first;
     let padding = if pad {
-        padding + if largest_dec > 0 { largest_dec + 1 } else { 0 }
+        let precision_value = precision.unwrap_or(0);
+        padding
+            + if precision_value > 0 {
+                precision_value + 1
+            } else {
+                0
+            }
     } else {
         0
     };
@@ -273,7 +305,7 @@ fn print_seq(
                 };
                 f.fmt(&mut stdout, float)?;
             }
-            None => write_value_float(&mut stdout, &value, padding, largest_dec)?,
+            None => write_value_float(&mut stdout, &value, padding, precision)?,
         }
         // TODO Implement augmenting addition.
         value = value + increment.clone();

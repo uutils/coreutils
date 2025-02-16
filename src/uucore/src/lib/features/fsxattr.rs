@@ -79,13 +79,10 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
 pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    match xattr::list(file) {
-        Ok(acl) => {
-            // if we have extra attributes, we have an acl
-            acl.count() > 0
-        }
-        Err(_) => false,
-    }
+    xattr::list(file).is_ok_and(|acl| {
+        // if we have extra attributes, we have an acl
+        acl.count() > 0
+    })
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
@@ -132,7 +129,7 @@ pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
 
             for entry in acl_entries.chunks_exact(4) {
                 // Third byte and fourth byte will be the perm bits
-                perm = (perm << 3) | entry[2] as u32 | entry[3] as u32;
+                perm = (perm << 3) | u32::from(entry[2]) | u32::from(entry[3]);
             }
             return perm;
         }

@@ -5,7 +5,7 @@
 // spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
 
 use crate::common::util::{AtPath, TestScenario};
-use rand::{thread_rng, Rng, SeedableRng};
+use rand::{rng, Rng, SeedableRng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
@@ -18,8 +18,8 @@ use std::{
 };
 
 fn random_chars(n: usize) -> String {
-    thread_rng()
-        .sample_iter(&rand::distributions::Alphanumeric)
+    rng()
+        .sample_iter(&rand::distr::Alphanumeric)
         .map(char::from)
         .take(n)
         .collect::<String>()
@@ -1972,4 +1972,21 @@ fn test_split_separator_same_multiple() {
         .ucmd()
         .args(&["-t:", "-t:", "-t,", "fivelines.txt"])
         .fails();
+}
+
+#[test]
+fn test_long_lines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let line1 = [" ".repeat(131_070), String::from("\n")].concat();
+    let line2 = [" ", "\n"].concat();
+    let line3 = [" ".repeat(131_071), String::from("\n")].concat();
+    let infile = [line1, line2, line3].concat();
+    ucmd.args(&["-C", "131072"])
+        .pipe_in(infile)
+        .succeeds()
+        .no_output();
+    assert_eq!(at.read("xaa").len(), 131_071);
+    assert_eq!(at.read("xab").len(), 2);
+    assert_eq!(at.read("xac").len(), 131_072);
+    assert!(!at.plus("xad").exists());
 }

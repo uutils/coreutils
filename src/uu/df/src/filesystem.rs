@@ -54,7 +54,7 @@ fn is_over_mounted(mounts: &[MountInfo], mount: &MountInfo) -> bool {
     let last_mount_for_dir = mounts
         .iter()
         .filter(|m| m.mount_dir == mount.mount_dir)
-        .last();
+        .next_back();
 
     if let Some(lmi) = last_mount_for_dir {
         lmi.dev_name != mount.dev_name

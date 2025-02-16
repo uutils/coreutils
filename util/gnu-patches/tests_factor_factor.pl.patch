@@ -1,7 +1,7 @@
-diff --git a/tests/factor/factor.pl b/tests/factor/factor.pl
-index b1406c266..3d97cd6a5 100755
---- a/tests/factor/factor.pl
-+++ b/tests/factor/factor.pl
+Index: gnu/tests/factor/factor.pl
+===================================================================
+--- gnu.orig/tests/factor/factor.pl
++++ gnu/tests/factor/factor.pl
 @@ -61,12 +61,14 @@ my @Tests =
        # Map newer glibc diagnostic to expected.
        # Also map OpenBSD 5.1's "unknown option" to expected "invalid option".

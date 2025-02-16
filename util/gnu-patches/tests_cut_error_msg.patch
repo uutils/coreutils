@@ -1,7 +1,7 @@
-diff --git a/tests/cut/cut.pl b/tests/cut/cut.pl
-index 1670db02e..ed633792a 100755
---- a/tests/cut/cut.pl
-+++ b/tests/cut/cut.pl
+Index: gnu/tests/cut/cut.pl
+===================================================================
+--- gnu.orig/tests/cut/cut.pl
++++ gnu/tests/cut/cut.pl
 @@ -29,13 +29,15 @@ my $mb_locale = $ENV{LOCALE_FR_UTF8};
  
  my $prog = 'cut';

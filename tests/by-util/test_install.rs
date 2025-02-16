@@ -577,7 +577,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 
     let mut file2_meta = at.metadata(file2);
     let before = FileTime::from_last_modification_time(&file2_meta);
-    sleep(std::time::Duration::from_millis(1000));
+    sleep(std::time::Duration::from_millis(100));
 
     scene
         .ucmd()
@@ -594,7 +594,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 
     assert!(before != after_install_sticky);
 
-    sleep(std::time::Duration::from_millis(1000));
+    sleep(std::time::Duration::from_millis(100));
 
     // dest file still 1644, so need_copy ought to return `true`
     scene

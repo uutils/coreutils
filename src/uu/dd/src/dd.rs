@@ -54,7 +54,7 @@ use nix::{
 };
 use uucore::display::Quotable;
 #[cfg(unix)]
-use uucore::error::set_exit_code;
+use uucore::error::{set_exit_code, USimpleError};
 use uucore::error::{FromIo, UResult};
 #[cfg(target_os = "linux")]
 use uucore::show_if_err;
@@ -338,11 +338,11 @@ impl<'a> Input<'a> {
         let mut src = Source::stdin_as_file();
         #[cfg(unix)]
         if let Source::StdinFile(f) = &src {
-            // GNU compatibility:
-            // this will check whether stdin points to a folder or not
-            if f.metadata()?.is_file() && settings.iflags.directory {
-                show_error!("standard input: not a directory");
-                return Err(1.into());
+            if settings.iflags.directory && !f.metadata()?.is_dir() {
+                return Err(USimpleError::new(
+                    1,
+                    "setting flags for 'standard input': Not a directory",
+                ));
             }
         };
         if settings.skip > 0 {

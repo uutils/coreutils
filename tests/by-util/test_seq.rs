@@ -698,7 +698,7 @@ fn test_parse_error_hex() {
     new_ucmd!()
         .arg("0xlmnop")
         .fails()
-        .usage_error("invalid hexadecimal argument: '0xlmnop'");
+        .usage_error("invalid floating point argument: '0xlmnop'");
 }
 
 #[test]
@@ -825,4 +825,93 @@ fn test_parse_scientific_zero() {
         .args(&["-w", "0", "1"])
         .succeeds()
         .stdout_only("0\n1\n");
+}
+
+#[test]
+fn test_parse_valid_hexadecimal_float_two_args() {
+    let test_cases = [
+        (["0x1p-1", "2"], "0.5\n1.5\n"),
+        (["0x.8p16", "32768"], "32768\n"),
+        (["0xffff.4p-4", "4096"], "4095.95\n"),
+        (["0xA.A9p-1", "6"], "5.33008\n"),
+        (["0xa.a9p-1", "6"], "5.33008\n"),
+        (["0xffffffffffp-30", "1024"], "1024\n"), // spell-checker:disable-line
+    ];
+
+    for (input_arguments, expected_output) in &test_cases {
+        new_ucmd!()
+            .args(input_arguments)
+            .succeeds()
+            .stdout_only(expected_output);
+    }
+}
+
+#[test]
+fn test_parse_valid_hexadecimal_float_three_args() {
+    let test_cases = [
+        (["0x3.4p-1", "0x4p-1", "4"], "1.625\n3.625\n"),
+        (
+            ["-0x.ep-3", "-0x.1p-3", "-0x.fp-3"],
+            "-0.109375\n-0.117188\n",
+        ),
+    ];
+
+    for (input_arguments, expected_output) in &test_cases {
+        new_ucmd!()
+            .args(input_arguments)
+            .succeeds()
+            .stdout_only(expected_output);
+    }
+}
+
+#[test]
+fn test_parse_float_gnu_coreutils() {
+    // some values from GNU coreutils tests
+    new_ucmd!()
+        .args(&[".89999", "1e-7", ".8999901"])
+        .succeeds()
+        .stdout_only("0.8999900\n0.8999901\n");
+
+    new_ucmd!()
+        .args(&["0", "0.000001", "0.000003"])
+        .succeeds()
+        .stdout_only("0.000000\n0.000001\n0.000002\n0.000003\n");
+}
+
+#[test]
+fn test_parse_out_of_bounds_exponents() {
+    // The value 1e-9223372036854775808 is used in GNU Coreutils and BigDecimal tests to verify
+    // overflows and undefined behavior. Let's test the value too.
+    new_ucmd!()
+        .args(&["1e-9223372036854775808"])
+        .succeeds()
+        .stdout_only("");
+}
+
+#[ignore]
+#[test]
+fn test_parse_valid_hexadecimal_float_format_issues() {
+    // These tests detect differences in the representation of floating-point values with GNU seq.
+    // There are two key areas to investigate:
+    //
+    // 1. GNU seq uses long double (80-bit) types for values, while the current implementation
+    // relies on f64 (64-bit). This can lead to differences due to varying precision. However, it's
+    // likely not the primary cause, as even double (64-bit) values can differ when compared to
+    // f64.
+    //
+    // 2. GNU seq uses the %Lg format specifier for printing (see the "get_default_format" function
+    // ). It appears that Rust lacks a direct equivalent for this format. Additionally, %Lg
+    // can use %f (floating) or %e (scientific) depending on the precision. There also seem to be
+    // some differences in the behavior of C and Rust when displaying floating-point or scientific
+    // notation, at least without additional configuration.
+    //
+    // It makes sense to begin by experimenting with formats and attempting to replicate
+    // the printf("%Lg",...) behavior. Another area worth investigating is glibc, as reviewing its
+    // code may help uncover additional corner cases or test data that could reveal more issues.
+
+    //Test output: 0.00000000992804416455328464508056640625
+    new_ucmd!()
+        .args(&["0xa.a9p-30", "1"])
+        .succeeds()
+        .stdout_only("9.92804e-09\n1\n");
 }

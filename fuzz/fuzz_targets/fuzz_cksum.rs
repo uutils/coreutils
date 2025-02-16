@@ -11,7 +11,8 @@ use uu_cksum::uumain;
 mod fuzz_common;
 use crate::fuzz_common::{
     compare_result, generate_and_run_uumain, generate_random_file, generate_random_string,
-    run_gnu_cmd, CommandResult,
+    pretty_print::{print_or_empty, print_test_begin},
+    replace_fuzz_binary_name, run_gnu_cmd, CommandResult,
 };
 use rand::Rng;
 use std::env::temp_dir;
@@ -22,7 +23,7 @@ use std::process::Command;
 static CMD_PATH: &str = "cksum";
 
 fn generate_cksum_args() -> Vec<String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut args = Vec::new();
 
     let digests = [
@@ -38,29 +39,29 @@ fn generate_cksum_args() -> Vec<String> {
         "--binary",
     ];
 
-    if rng.gen_bool(0.3) {
+    if rng.random_bool(0.3) {
         args.push("-a".to_string());
-        args.push(digests[rng.gen_range(0..digests.len())].to_string());
+        args.push(digests[rng.random_range(0..digests.len())].to_string());
     }
 
-    if rng.gen_bool(0.2) {
-        args.push(digest_opts[rng.gen_range(0..digest_opts.len())].to_string());
+    if rng.random_bool(0.2) {
+        args.push(digest_opts[rng.random_range(0..digest_opts.len())].to_string());
     }
 
-    if rng.gen_bool(0.15) {
+    if rng.random_bool(0.15) {
         args.push("-l".to_string());
-        args.push(rng.gen_range(8..513).to_string());
+        args.push(rng.random_range(8..513).to_string());
     }
 
-    if rng.gen_bool(0.05) {
-        for _ in 0..rng.gen_range(0..3) {
+    if rng.random_bool(0.05) {
+        for _ in 0..rng.random_range(0..3) {
             args.push(format!("file_{}", generate_random_string(5)));
         }
     } else {
         args.push("-c".to_string());
     }
 
-    if rng.gen_bool(0.25) {
+    if rng.random_bool(0.25) {
         if let Ok(file_path) = generate_random_file() {
             args.push(file_path);
         }
@@ -68,7 +69,7 @@ fn generate_cksum_args() -> Vec<String> {
 
     if args.is_empty() || !args.iter().any(|arg| arg.starts_with("file_")) {
         args.push("-a".to_string());
-        args.push(digests[rng.gen_range(0..digests.len())].to_string());
+        args.push(digests[rng.random_range(0..digests.len())].to_string());
 
         if let Ok(file_path) = generate_random_file() {
             args.push(file_path);
@@ -106,7 +107,7 @@ fn select_random_digest_opts<'a>(
 ) -> Vec<&'a str> {
     digest_opts
         .iter()
-        .filter(|_| rng.gen_bool(0.5))
+        .filter(|_| rng.random_bool(0.5))
         .copied()
         .collect()
 }
@@ -123,19 +124,21 @@ fuzz_target!(|_data: &[u8]| {
             .map_or("md5", |index| &cksum_args[index + 1]);
 
         let all_digest_opts = ["--base64", "--raw", "--tag", "--untagged"];
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let selected_digest_opts = select_random_digest_opts(&mut rng, &all_digest_opts);
 
         if let Ok(checksum_file_path) =
             generate_checksum_file(algo, &file_path, &selected_digest_opts)
         {
+            print_test_begin(format!("cksum {:?}", args));
+
             if let Ok(content) = fs::read_to_string(&checksum_file_path) {
-                println!("File content: {checksum_file_path}={content}");
+                println!("File content ({})", checksum_file_path);
+                print_or_empty(&content);
             } else {
                 eprintln!("Error reading the checksum file.");
             }
-            println!("args: {:?}", args);
-            let rust_result = generate_and_run_uumain(&args, uumain, None);
+            let mut rust_result = generate_and_run_uumain(&args, uumain, None);
 
             let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false, None) {
                 Ok(result) => result,
@@ -150,6 +153,9 @@ fuzz_target!(|_data: &[u8]| {
                     }
                 }
             };
+
+            // Lower the number of false positives caused by binary names
+            replace_fuzz_binary_name("cksum", &mut rust_result);
 
             compare_result(
                 "cksum",

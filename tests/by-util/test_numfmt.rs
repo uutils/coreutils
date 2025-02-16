@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (paths) gnutest
+// spell-checker:ignore (paths) gnutest ronna quetta
 
 use crate::common::util::TestScenario;
 
@@ -32,7 +32,7 @@ fn test_from_si() {
     new_ucmd!()
         .args(&["--from=si"])
         .pipe_in("1000\n1.1M\n0.1G")
-        .run()
+        .succeeds()
         .stdout_is("1000\n1100000\n100000000\n");
 }
 
@@ -41,7 +41,7 @@ fn test_from_iec() {
     new_ucmd!()
         .args(&["--from=iec"])
         .pipe_in("1024\n1.1M\n0.1G")
-        .run()
+        .succeeds()
         .stdout_is("1024\n1153434\n107374183\n");
 }
 
@@ -50,7 +50,7 @@ fn test_from_iec_i() {
     new_ucmd!()
         .args(&["--from=iec-i"])
         .pipe_in("1.1Mi\n0.1Gi")
-        .run()
+        .succeeds()
         .stdout_is("1153434\n107374183\n");
 }
 
@@ -74,7 +74,7 @@ fn test_from_auto() {
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("1K\n1Ki")
-        .run()
+        .succeeds()
         .stdout_is("1000\n1024\n");
 }
 
@@ -83,7 +83,7 @@ fn test_to_si() {
     new_ucmd!()
         .args(&["--to=si"])
         .pipe_in("1000\n1100000\n100000000")
-        .run()
+        .succeeds()
         .stdout_is("1.0K\n1.1M\n100M\n");
 }
 
@@ -92,7 +92,7 @@ fn test_to_iec() {
     new_ucmd!()
         .args(&["--to=iec"])
         .pipe_in("1024\n1153434\n107374182")
-        .run()
+        .succeeds()
         .stdout_is("1.0K\n1.2M\n103M\n");
 }
 
@@ -101,7 +101,7 @@ fn test_to_iec_i() {
     new_ucmd!()
         .args(&["--to=iec-i"])
         .pipe_in("1024\n1153434\n107374182")
-        .run()
+        .succeeds()
         .stdout_is("1.0Ki\n1.2Mi\n103Mi\n");
 }
 
@@ -109,7 +109,7 @@ fn test_to_iec_i() {
 fn test_input_from_free_arguments() {
     new_ucmd!()
         .args(&["--from=si", "1K", "1.1M", "0.1G"])
-        .run()
+        .succeeds()
         .stdout_is("1000\n1100000\n100000000\n");
 }
 
@@ -118,7 +118,7 @@ fn test_padding() {
     new_ucmd!()
         .args(&["--from=si", "--padding=8"])
         .pipe_in("1K\n1.1M\n0.1G")
-        .run()
+        .succeeds()
         .stdout_is("    1000\n 1100000\n100000000\n");
 }
 
@@ -127,7 +127,7 @@ fn test_negative_padding() {
     new_ucmd!()
         .args(&["--from=si", "--padding=-8"])
         .pipe_in("1K\n1.1M\n0.1G")
-        .run()
+        .succeeds()
         .stdout_is("1000    \n1100000 \n100000000\n");
 }
 
@@ -136,7 +136,7 @@ fn test_header() {
     new_ucmd!()
         .args(&["--from=si", "--header=2"])
         .pipe_in("header\nheader2\n1K\n1.1M\n0.1G")
-        .run()
+        .succeeds()
         .stdout_is("header\nheader2\n1000\n1100000\n100000000\n");
 }
 
@@ -145,7 +145,7 @@ fn test_header_default() {
     new_ucmd!()
         .args(&["--from=si", "--header"])
         .pipe_in("header\n1K\n1.1M\n0.1G")
-        .run()
+        .succeeds()
         .stdout_is("header\n1000\n1100000\n100000000\n");
 }
 
@@ -153,7 +153,7 @@ fn test_header_default() {
 fn test_header_error_if_non_numeric() {
     new_ucmd!()
         .args(&["--header=two"])
-        .run()
+        .fails()
         .stderr_is("numfmt: invalid header value 'two'\n");
 }
 
@@ -161,7 +161,7 @@ fn test_header_error_if_non_numeric() {
 fn test_header_error_if_0() {
     new_ucmd!()
         .args(&["--header=0"])
-        .run()
+        .fails()
         .stderr_is("numfmt: invalid header value '0'\n");
 }
 
@@ -169,7 +169,7 @@ fn test_header_error_if_0() {
 fn test_header_error_if_negative() {
     new_ucmd!()
         .args(&["--header=-3"])
-        .run()
+        .fails()
         .stderr_is("numfmt: invalid header value '-3'\n");
 }
 
@@ -178,25 +178,28 @@ fn test_negative() {
     new_ucmd!()
         .args(&["--from=si"])
         .pipe_in("-1000\n-1.1M\n-0.1G")
-        .run()
+        .succeeds()
         .stdout_is("-1000\n-1100000\n-100000000\n");
     new_ucmd!()
         .args(&["--to=iec-i"])
         .pipe_in("-1024\n-1153434\n-107374182")
-        .run()
+        .succeeds()
         .stdout_is("-1.0Ki\n-1.2Mi\n-103Mi\n");
 }
 
 #[test]
 fn test_negative_zero() {
-    new_ucmd!().pipe_in("-0\n-0.0").run().stdout_is("0\n0.0\n");
+    new_ucmd!()
+        .pipe_in("-0\n-0.0")
+        .succeeds()
+        .stdout_is("0\n0.0\n");
 }
 
 #[test]
 fn test_no_op() {
     new_ucmd!()
         .pipe_in("1024\n1234567")
-        .run()
+        .succeeds()
         .stdout_is("1024\n1234567\n");
 }
 
@@ -205,7 +208,7 @@ fn test_normalize() {
     new_ucmd!()
         .args(&["--from=si", "--to=si"])
         .pipe_in("10000000K\n0.001K")
-        .run()
+        .succeeds()
         .stdout_is("10G\n1\n");
 }
 
@@ -213,7 +216,7 @@ fn test_normalize() {
 fn test_si_to_iec() {
     new_ucmd!()
         .args(&["--from=si", "--to=iec", "15334263563K"])
-        .run()
+        .succeeds()
         .stdout_is("14T\n");
 }
 
@@ -222,7 +225,7 @@ fn test_should_report_invalid_empty_number_on_empty_stdin() {
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("\n")
-        .run()
+        .fails()
         .stderr_is("numfmt: invalid number: ''\n");
 }
 
@@ -231,28 +234,41 @@ fn test_should_report_invalid_empty_number_on_blank_stdin() {
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("  \t  \n")
-        .run()
+        .fails()
         .stderr_is("numfmt: invalid number: ''\n");
 }
 
 #[test]
-fn test_should_report_invalid_suffix_on_stdin() {
-    for c in b'a'..=b'z' {
-        new_ucmd!()
-            .args(&["--from=auto"])
-            .pipe_in(format!("1{}", c as char))
-            .run()
-            .stderr_is(format!(
-                "numfmt: invalid suffix in input: '1{}'\n",
-                c as char
-            ));
-    }
+fn test_suffixes() {
+    // TODO add support for ronna (R) and quetta (Q)
+    let valid_suffixes = ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y' /*'R' , 'Q'*/];
 
+    // TODO implement special handling of 'K'
+    for c in ('A'..='Z').chain('a'..='z') {
+        let args = ["--from=si", "--to=si", &format!("1{c}")];
+
+        if valid_suffixes.contains(&c) {
+            new_ucmd!()
+                .args(&args)
+                .succeeds()
+                .stdout_only(format!("1.0{c}\n"));
+        } else {
+            new_ucmd!()
+                .args(&args)
+                .fails()
+                .code_is(2)
+                .stderr_only(format!("numfmt: invalid suffix in input: '1{c}'\n"));
+        }
+    }
+}
+
+#[test]
+fn test_should_report_invalid_suffix_on_nan() {
     // GNU numfmt reports this one as “invalid number”
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("NaN")
-        .run()
+        .fails()
         .stderr_is("numfmt: invalid suffix in input: 'NaN'\n");
 }
 
@@ -262,7 +278,7 @@ fn test_should_report_invalid_number_with_interior_junk() {
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("1x0K")
-        .run()
+        .fails()
         .stderr_is("numfmt: invalid number: '1x0K'\n");
 }
 
@@ -271,14 +287,14 @@ fn test_should_skip_leading_space_from_stdin() {
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in(" 2Ki")
-        .run()
+        .succeeds()
         .stdout_is("2048\n");
 
     // multi-line
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("\t1Ki\n  2K")
-        .run()
+        .succeeds()
         .stdout_is("1024\n2000\n");
 }
 
@@ -287,7 +303,7 @@ fn test_should_convert_only_first_number_in_line() {
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("1Ki 2M 3G")
-        .run()
+        .succeeds()
         .stdout_is("1024 2M 3G\n");
 }
 
@@ -296,13 +312,13 @@ fn test_leading_whitespace_should_imply_padding() {
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("   1K")
-        .run()
+        .succeeds()
         .stdout_is(" 1000\n");
 
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("    202Ki")
-        .run()
+        .succeeds()
         .stdout_is("   206848\n");
 }
 
@@ -311,7 +327,7 @@ fn test_should_calculate_implicit_padding_per_line() {
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("   1Ki\n        2K")
-        .run()
+        .succeeds()
         .stdout_is("  1024\n      2000\n");
 }
 
@@ -319,7 +335,7 @@ fn test_should_calculate_implicit_padding_per_line() {
 fn test_leading_whitespace_in_free_argument_should_imply_padding() {
     new_ucmd!()
         .args(&["--from=auto", "   1Ki"])
-        .run()
+        .succeeds()
         .stdout_is("  1024\n");
 }
 
@@ -327,7 +343,7 @@ fn test_leading_whitespace_in_free_argument_should_imply_padding() {
 fn test_should_calculate_implicit_padding_per_free_argument() {
     new_ucmd!()
         .args(&["--from=auto", "   1Ki", "        2K"])
-        .run()
+        .succeeds()
         .stdout_is("  1024\n      2000\n");
 }
 

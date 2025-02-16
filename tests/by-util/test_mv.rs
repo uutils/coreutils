@@ -1120,6 +1120,30 @@ fn test_mv_arg_update_older_dest_older() {
 }
 
 #[test]
+fn test_mv_arg_update_older_dest_older_interactive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "old";
+    let new = "new";
+    let old_content = "file1 content\n";
+    let new_content = "file2 content\n";
+
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+
+    at.write(new, new_content);
+
+    ucmd.arg(new)
+        .arg(old)
+        .arg("--interactive")
+        .arg("--update=older")
+        .fails()
+        .stderr_contains("overwrite 'old'?")
+        .no_stdout();
+}
+
+#[test]
 fn test_mv_arg_update_short_overwrite() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();

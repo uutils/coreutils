@@ -10,11 +10,11 @@ use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
 use std::env;
 use std::ffi::CString;
-use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::{Error, IsTerminal};
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
@@ -33,41 +33,30 @@ mod options {
     pub const CMD: &str = "cmd";
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum NohupError {
+    #[error("Cannot detach from console")]
     CannotDetach,
-    CannotReplace(&'static str, std::io::Error),
-    OpenFailed(i32, std::io::Error),
-    OpenFailed2(i32, std::io::Error, String, std::io::Error),
-}
 
-impl std::error::Error for NohupError {}
+    #[error("Cannot replace {name}: {err}", name = .0, err = .1)]
+    CannotReplace(&'static str, #[source] Error),
+
+    #[error("failed to open {path}: {err}", path = NOHUP_OUT.quote(), err = .1)]
+    OpenFailed(i32, #[source] Error),
+
+    #[error("failed to open {first_path}: {first_err}\nfailed to open {second_path}: {second_err}",
+            first_path = NOHUP_OUT.quote(),
+            first_err = .1,
+            second_path = .2.quote(),
+            second_err = .3)]
+    OpenFailed2(i32, #[source] Error, String, Error),
+}
 
 impl UError for NohupError {
     fn code(&self) -> i32 {
         match self {
             Self::OpenFailed(code, _) | Self::OpenFailed2(code, _, _, _) => *code,
             _ => 2,
-        }
-    }
-}
-
-impl Display for NohupError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::CannotDetach => write!(f, "Cannot detach from console"),
-            Self::CannotReplace(s, e) => write!(f, "Cannot replace {s}: {e}"),
-            Self::OpenFailed(_, e) => {
-                write!(f, "failed to open {}: {}", NOHUP_OUT.quote(), e)
-            }
-            Self::OpenFailed2(_, e1, s, e2) => write!(
-                f,
-                "failed to open {}: {}\nfailed to open {}: {}",
-                NOHUP_OUT.quote(),
-                e1,
-                s.quote(),
-                e2
-            ),
         }
     }
 }

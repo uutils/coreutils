@@ -19,11 +19,11 @@ use std::{
 };
 
 use crate::{
-    error::{set_exit_code, FromIo, UError, UResult, USimpleError},
+    error::{FromIo, UError, UResult, USimpleError},
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
     sum::{
         Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224,
-        Sha3_256, Sha3_384, Sha3_512, Sha512, Shake128, Shake256, Sm3, BSD, CRC, SYSV,
+        Sha3_256, Sha3_384, Sha3_512, Sha512, Shake128, Shake256, Sm3, BSD, CRC, CRC32B, SYSV,
     },
     util_name,
 };
@@ -32,6 +32,7 @@ use thiserror::Error;
 pub const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
 pub const ALGORITHM_OPTIONS_BSD: &str = "bsd";
 pub const ALGORITHM_OPTIONS_CRC: &str = "crc";
+pub const ALGORITHM_OPTIONS_CRC32B: &str = "crc32b";
 pub const ALGORITHM_OPTIONS_MD5: &str = "md5";
 pub const ALGORITHM_OPTIONS_SHA1: &str = "sha1";
 pub const ALGORITHM_OPTIONS_SHA3: &str = "sha3";
@@ -46,10 +47,11 @@ pub const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 pub const ALGORITHM_OPTIONS_SHAKE128: &str = "shake128";
 pub const ALGORITHM_OPTIONS_SHAKE256: &str = "shake256";
 
-pub const SUPPORTED_ALGORITHMS: [&str; 15] = [
+pub const SUPPORTED_ALGORITHMS: [&str; 16] = [
     ALGORITHM_OPTIONS_SYSV,
     ALGORITHM_OPTIONS_BSD,
     ALGORITHM_OPTIONS_CRC,
+    ALGORITHM_OPTIONS_CRC32B,
     ALGORITHM_OPTIONS_MD5,
     ALGORITHM_OPTIONS_SHA1,
     ALGORITHM_OPTIONS_SHA3,
@@ -128,10 +130,12 @@ impl From<ChecksumError> for LineCheckError {
 enum FileCheckError {
     /// a generic UError was encountered in sub-functions
     UError(Box<dyn UError>),
-    /// the checksum file is improperly formatted.
-    ImproperlyFormatted,
     /// reading of the checksum file failed
     CantOpenChecksumFile,
+    /// processing of the file is considered as a failure regarding the
+    /// provided flags. This however does not stop the processing of
+    /// further files.
+    Failed,
 }
 
 impl From<Box<dyn UError>> for FileCheckError {
@@ -146,15 +150,57 @@ impl From<ChecksumError> for FileCheckError {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy)]
+pub enum ChecksumVerbose {
+    Status,
+    Quiet,
+    Normal,
+    Warning,
+}
+
+impl ChecksumVerbose {
+    pub fn new(status: bool, quiet: bool, warn: bool) -> Self {
+        use ChecksumVerbose::*;
+
+        // Assume only one of the three booleans will be enabled at once.
+        // This is ensured by clap's overriding arguments.
+        match (status, quiet, warn) {
+            (true, _, _) => Status,
+            (_, true, _) => Quiet,
+            (_, _, true) => Warning,
+            _ => Normal,
+        }
+    }
+
+    #[inline]
+    pub fn over_status(self) -> bool {
+        self > Self::Status
+    }
+
+    #[inline]
+    pub fn over_quiet(self) -> bool {
+        self > Self::Quiet
+    }
+
+    #[inline]
+    pub fn at_least_warning(self) -> bool {
+        self >= Self::Warning
+    }
+}
+
+impl Default for ChecksumVerbose {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
 /// This struct regroups CLI flags.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ChecksumOptions {
     pub binary: bool,
     pub ignore_missing: bool,
-    pub quiet: bool,
-    pub status: bool,
     pub strict: bool,
-    pub warn: bool,
+    pub verbose: ChecksumVerbose,
 }
 
 #[derive(Debug, Error)]
@@ -183,7 +229,7 @@ pub enum ChecksumError {
     LengthOnlyForBlake2b,
     #[error("the --binary and --text options are meaningless when verifying checksums")]
     BinaryTextConflict,
-    #[error("--check is not supported with --algorithm={{bsd,sysv,crc}}")]
+    #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
     AlgorithmNotSupportedWithCheck,
     #[error("You cannot combine multiple hash algorithms!")]
     CombineMultipleAlgorithms,
@@ -233,20 +279,19 @@ pub fn create_sha3(bits: Option<usize>) -> UResult<HashAlgorithm> {
 }
 
 #[allow(clippy::comparison_chain)]
-fn cksum_output(res: &ChecksumResult, status: bool) {
+fn print_cksum_report(res: &ChecksumResult) {
     if res.bad_format == 1 {
         show_warning_caps!("{} line is improperly formatted", res.bad_format);
     } else if res.bad_format > 1 {
         show_warning_caps!("{} lines are improperly formatted", res.bad_format);
     }
 
-    if !status {
-        if res.failed_cksum == 1 {
-            show_warning_caps!("{} computed checksum did NOT match", res.failed_cksum);
-        } else if res.failed_cksum > 1 {
-            show_warning_caps!("{} computed checksums did NOT match", res.failed_cksum);
-        }
+    if res.failed_cksum == 1 {
+        show_warning_caps!("{} computed checksum did NOT match", res.failed_cksum);
+    } else if res.failed_cksum > 1 {
+        show_warning_caps!("{} computed checksums did NOT match", res.failed_cksum);
     }
+
     if res.failed_open_file == 1 {
         show_warning_caps!("{} listed file could not be read", res.failed_open_file);
     } else if res.failed_open_file > 1 {
@@ -282,10 +327,10 @@ impl FileChecksumResult {
 
     /// The cli options might prevent to display on the outcome of the
     /// comparison on STDOUT.
-    fn can_display(&self, opts: ChecksumOptions) -> bool {
+    fn can_display(&self, verbose: ChecksumVerbose) -> bool {
         match self {
-            FileChecksumResult::Ok => !opts.status && !opts.quiet,
-            FileChecksumResult::Failed => !opts.status,
+            FileChecksumResult::Ok => verbose.over_quiet(),
+            FileChecksumResult::Failed => verbose.over_status(),
             FileChecksumResult::CantOpen => true,
         }
     }
@@ -308,9 +353,9 @@ fn print_file_report<W: Write>(
     filename: &[u8],
     result: FileChecksumResult,
     prefix: &str,
-    opts: ChecksumOptions,
+    verbose: ChecksumVerbose,
 ) {
-    if result.can_display(opts) {
+    if result.can_display(verbose) {
         let _ = write!(w, "{prefix}");
         let _ = w.write_all(filename);
         let _ = writeln!(w, ": {result}");
@@ -333,6 +378,11 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             name: ALGORITHM_OPTIONS_CRC,
             create_fn: Box::new(|| Box::new(CRC::new())),
             bits: 256,
+        }),
+        ALGORITHM_OPTIONS_CRC32B => Ok(HashAlgorithm {
+            name: ALGORITHM_OPTIONS_CRC32B,
+            create_fn: Box::new(|| Box::new(CRC32B::new())),
+            bits: 32,
         }),
         ALGORITHM_OPTIONS_MD5 | "md5sum" => Ok(HashAlgorithm {
             name: ALGORITHM_OPTIONS_MD5,
@@ -582,7 +632,7 @@ fn get_file_to_check(
                 filename_bytes,
                 FileChecksumResult::CantOpen,
                 "",
-                opts,
+                opts.verbose,
             );
         };
         match File::open(filename) {
@@ -641,29 +691,35 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
 fn identify_algo_name_and_length(
     line_info: &LineInfo,
     algo_name_input: Option<&str>,
-) -> Option<(String, Option<usize>)> {
-    let algorithm = line_info
-        .algo_name
-        .clone()
-        .unwrap_or_default()
-        .to_lowercase();
+    last_algo: &mut Option<String>,
+) -> Result<(String, Option<usize>), LineCheckError> {
+    let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
+    let algorithm = algo_from_line.to_lowercase();
+    *last_algo = Some(algo_from_line);
 
     // check if we are called with XXXsum (example: md5sum) but we detected a different algo parsing the file
     // (for example SHA1 (f) = d...)
     // Also handle the case cksum -s sm3 but the file contains other formats
     if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
-        return None;
+        return Err(LineCheckError::ImproperlyFormatted);
     }
 
     if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
         // Not supported algo, leave early
-        return None;
+        return Err(LineCheckError::ImproperlyFormatted);
     }
 
     let bytes = if let Some(bitlen) = line_info.algo_bit_len {
-        if bitlen % 8 != 0 {
-            // The given length is wrong
-            return None;
+        if algorithm != ALGORITHM_OPTIONS_BLAKE2B || bitlen % 8 != 0 {
+            // Either
+            //  the algo based line is provided with a bit length
+            //  with an algorithm that does not support it (only Blake2B does).
+            //
+            //  eg: MD5-128 (foo.txt) = fffffffff
+            //          ^ This is illegal
+            // OR
+            //  the given length is wrong because it's not a multiple of 8.
+            return Err(LineCheckError::ImproperlyFormatted);
         }
         Some(bitlen / 8)
     } else if algorithm == ALGORITHM_OPTIONS_BLAKE2B {
@@ -673,7 +729,7 @@ fn identify_algo_name_and_length(
         None
     };
 
-    Some((algorithm, bytes))
+    Ok((algorithm, bytes))
 }
 
 /// Given a filename and an algorithm, compute the digest and compare it with
@@ -704,7 +760,7 @@ fn compute_and_check_digest_from_file(
         filename,
         FileChecksumResult::from_bool(checksum_correct),
         prefix,
-        opts,
+        opts.verbose,
     );
 
     if checksum_correct {
@@ -719,11 +775,12 @@ fn process_algo_based_line(
     line_info: &LineInfo,
     cli_algo_name: Option<&str>,
     opts: ChecksumOptions,
+    last_algo: &mut Option<String>,
 ) -> Result<(), LineCheckError> {
     let filename_to_check = line_info.filename.as_slice();
 
-    let (algo_name, algo_byte_len) = identify_algo_name_and_length(line_info, cli_algo_name)
-        .ok_or(LineCheckError::ImproperlyFormatted)?;
+    let (algo_name, algo_byte_len) =
+        identify_algo_name_and_length(line_info, cli_algo_name, last_algo)?;
 
     // If the digest bitlen is known, we can check the format of the expected
     // checksum with it.
@@ -782,13 +839,13 @@ fn process_non_algo_based_line(
 /// matched the expected.
 /// If the comparison didn't happen, return a `LineChecksumError`.
 fn process_checksum_line(
-    filename_input: &OsStr,
     line: &OsStr,
     i: usize,
     cli_algo_name: Option<&str>,
     cli_algo_length: Option<usize>,
     opts: ChecksumOptions,
     cached_regex: &mut Option<LineFormat>,
+    last_algo: &mut Option<String>,
 ) -> Result<(), LineCheckError> {
     let line_bytes = os_str_as_bytes(line)?;
 
@@ -799,34 +856,19 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    if let Some(line_info) = LineInfo::parse(line, cached_regex) {
-        if line_info.format == LineFormat::AlgoBased {
-            process_algo_based_line(&line_info, cli_algo_name, opts)
-        } else if let Some(cli_algo) = cli_algo_name {
-            // If we match a non-algo based regex, we expect a cli argument
-            // to give us the algorithm to use
-            process_non_algo_based_line(i, &line_info, cli_algo, cli_algo_length, opts)
-        } else {
-            // We have no clue of what algorithm to use
-            return Err(LineCheckError::ImproperlyFormatted);
-        }
-    } else {
-        if opts.warn {
-            let algo = if let Some(algo_name_input) = cli_algo_name {
-                algo_name_input.to_uppercase()
-            } else {
-                "Unknown algorithm".to_string()
-            };
-            eprintln!(
-                "{}: {}: {}: improperly formatted {} checksum line",
-                util_name(),
-                &filename_input.maybe_quote(),
-                i + 1,
-                algo
-            );
-        }
+    let Some(line_info) = LineInfo::parse(line, cached_regex) else {
+        return Err(LineCheckError::ImproperlyFormatted);
+    };
 
-        Err(LineCheckError::ImproperlyFormatted)
+    if line_info.format == LineFormat::AlgoBased {
+        process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
+    } else if let Some(cli_algo) = cli_algo_name {
+        // If we match a non-algo based regex, we expect a cli argument
+        // to give us the algorithm to use
+        process_non_algo_based_line(i, &line_info, cli_algo, cli_algo_length, opts)
+    } else {
+        // We have no clue of what algorithm to use
+        return Err(LineCheckError::ImproperlyFormatted);
     }
 }
 
@@ -849,7 +891,6 @@ fn process_checksum_file(
             Err(e) => {
                 // Could not read the file, show the error and continue to the next file
                 show_error!("{e}");
-                set_exit_code(1);
                 return Err(FileCheckError::CantOpenChecksumFile);
             }
         }
@@ -861,16 +902,20 @@ fn process_checksum_file(
     // cached_regex is used to ensure that several non algo-based checksum line
     // will use the same regex.
     let mut cached_regex = None;
+    // last_algo caches the algorithm used in the last line to print a warning
+    // message for the current line if improperly formatted.
+    // Behavior tested in gnu_cksum_c::test_warn
+    let mut last_algo = None;
 
     for (i, line) in lines.iter().enumerate() {
         let line_result = process_checksum_line(
-            filename_input,
             line,
             i,
             cli_algo_name,
             cli_algo_length,
             opts,
             &mut cached_regex,
+            &mut last_algo,
         );
 
         // Match a first time to elude critical UErrors, and increment the total
@@ -886,7 +931,26 @@ fn process_checksum_file(
         match line_result {
             Ok(()) => res.correct += 1,
             Err(DigestMismatch) => res.failed_cksum += 1,
-            Err(ImproperlyFormatted) => res.bad_format += 1,
+            Err(ImproperlyFormatted) => {
+                res.bad_format += 1;
+
+                if opts.verbose.at_least_warning() {
+                    let algo = if let Some(algo_name_input) = cli_algo_name {
+                        Cow::Owned(algo_name_input.to_uppercase())
+                    } else if let Some(algo) = &last_algo {
+                        Cow::Borrowed(algo.as_str())
+                    } else {
+                        Cow::Borrowed("Unknown algorithm")
+                    };
+                    eprintln!(
+                        "{}: {}: {}: improperly formatted {} checksum line",
+                        util_name(),
+                        &filename_input.maybe_quote(),
+                        i + 1,
+                        algo
+                    );
+                }
+            }
             Err(CantOpenFile | FileIsDirectory) => res.failed_open_file += 1,
             Err(FileNotFound) if !opts.ignore_missing => res.failed_open_file += 1,
             _ => continue,
@@ -896,36 +960,43 @@ fn process_checksum_file(
     // not a single line correctly formatted found
     // return an error
     if res.total_properly_formatted() == 0 {
-        if !opts.status {
+        if opts.verbose.over_status() {
             log_no_properly_formatted(get_filename_for_output(filename_input, input_is_stdin));
         }
-        set_exit_code(1);
-        return Err(FileCheckError::ImproperlyFormatted);
+        return Err(FileCheckError::Failed);
     }
 
     // if any incorrectly formatted line, show it
-    cksum_output(&res, opts.status);
+    if opts.verbose.over_status() {
+        print_cksum_report(&res);
+    }
 
     if opts.ignore_missing && res.correct == 0 {
         // we have only bad format
         // and we had ignore-missing
-        eprintln!(
-            "{}: {}: no file was verified",
-            util_name(),
-            filename_input.maybe_quote(),
-        );
-        set_exit_code(1);
+        if opts.verbose.over_status() {
+            eprintln!(
+                "{}: {}: no file was verified",
+                util_name(),
+                filename_input.maybe_quote(),
+            );
+        }
+        return Err(FileCheckError::Failed);
     }
 
     // strict means that we should have an exit code.
     if opts.strict && res.bad_format > 0 {
-        set_exit_code(1);
+        return Err(FileCheckError::Failed);
     }
 
-    // if we have any failed checksum verification, we set an exit code
-    // except if we have ignore_missing
-    if (res.failed_cksum > 0 || res.failed_open_file > 0) && !opts.ignore_missing {
-        set_exit_code(1);
+    // If a file was missing, return an error unless we explicitly ignore it.
+    if res.failed_open_file > 0 && !opts.ignore_missing {
+        return Err(FileCheckError::Failed);
+    }
+
+    // Obviously, if a checksum failed at some point, report the error.
+    if res.failed_cksum > 0 {
+        return Err(FileCheckError::Failed);
     }
 
     Ok(())
@@ -943,16 +1014,23 @@ pub fn perform_checksum_validation<'a, I>(
 where
     I: Iterator<Item = &'a OsStr>,
 {
+    let mut failed = false;
+
     // if cksum has several input files, it will print the result for each file
     for filename_input in files {
         use FileCheckError::*;
         match process_checksum_file(filename_input, algo_name_input, length_input, opts) {
             Err(UError(e)) => return Err(e),
-            Err(CantOpenChecksumFile | ImproperlyFormatted) | Ok(_) => continue,
+            Err(Failed | CantOpenChecksumFile) => failed = true,
+            Ok(_) => continue,
         }
     }
 
-    Ok(())
+    if failed {
+        Err(USimpleError::new(1, ""))
+    } else {
+        Ok(())
+    }
 }
 
 pub fn digest_reader<T: Read>(
@@ -1409,7 +1487,7 @@ mod tests {
 
         for (filename, result, prefix, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
-            print_file_report(&mut buffer, filename, *result, prefix, opts);
+            print_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
             assert_eq!(&buffer, expected)
         }
     }

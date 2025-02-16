@@ -49,7 +49,7 @@ jobs:
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="$DEFAULT_BRANCH"
-        repo_GNU_ref="v9.5"
+        repo_GNU_ref="v9.6"
         repo_reference_branch="$DEFAULT_BRANCH"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
@@ -91,7 +91,7 @@ jobs:
       working-directory: ${{ steps.vars.outputs.path_GNU }}
 
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v7
+      uses: dawidd6/action-download-artifact@v8
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
@@ -105,7 +105,7 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev libselinux1-dev attr
+        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev libselinux1-dev attr quilt
     - name: Add various locales
       shell: bash
       run: |
@@ -273,7 +273,7 @@ jobs:
                   have_new_failures="true"
                 else
                   MSG="Skip an intermittent issue ${LINE} (fails in this run but passes in the 'main' branch)"
-                  echo "::warning ::$MSG"
+                  echo "::notice ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   echo ""
                 fi
@@ -291,7 +291,7 @@ jobs:
                   echo $MSG >> ${COMMENT_LOG}
                 else
                   MSG="Skipping an intermittent issue ${LINE} (passes in this run but fails in the 'main' branch)"
-                  echo "::warning ::$MSG"
+                  echo "::notice ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   echo ""
                 fi
@@ -340,7 +340,10 @@ jobs:
         # Compare root tests
         compare_tests '${{ steps.vars.outputs.path_GNU_tests }}/test-suite-root.log' "${ROOT_REF_LOG_FILE}" "root"
 
-        if test -n "${have_new_failures}" ; then exit -1 ; fi
+        if [ -n "${have_new_failures}" ]; then
+          echo "::error ::Found new test failures"
+          exit 1
+        fi
     - name: Upload comparison log (for GnuComment workflow)
       if: success() || failure() # run regardless of prior step success/failure
       uses: actions/upload-artifact@v4
