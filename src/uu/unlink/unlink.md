@@ -1,7 +1,7 @@
 # unlink
 
 ```
-unlink [FILE]
+unlink FILE
 unlink OPTION
 ```
 
