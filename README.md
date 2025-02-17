@@ -223,6 +223,12 @@ Installing with `make` installs shell completions for all installed utilities
 for `bash`, `fish` and `zsh`. Completions for `elvish` and `powershell` can also
 be generated; See `Manually install shell completions`.
 
+To skip installation of completions and manpages:
+
+```shell
+make COMPLETIONS=n MANPAGES=n install
+```
+
 ### Manually install shell completions
 
 The `coreutils` binary can generate completions for the `bash`, `elvish`,
