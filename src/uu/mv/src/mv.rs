@@ -657,7 +657,22 @@ fn rename_with_fallback(
     to: &Path,
     multi_progress: Option<&MultiProgress>,
 ) -> io::Result<()> {
-    if fs::rename(from, to).is_err() {
+    if let Err(err) = fs::rename(from, to) {
+        #[cfg(windows)]
+        const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
+        #[cfg(unix)]
+        const EXDEV: i32 = libc::EXDEV as _;
+
+        // We will only copy if:
+        // 1. Files are on different devices (EXDEV error)
+        // 2. On Windows, if the target file exists and source file is opened by another process
+        //    (MoveFileExW fails with "Access Denied" even if the source file has FILE_SHARE_DELETE permission)
+        let should_fallback = matches!(err.raw_os_error(), Some(EXDEV))
+            || (from.is_file() && can_delete_file(from).unwrap_or(false));
+        if !should_fallback {
+            return Err(err);
+        }
+
         // Get metadata without following symlinks
         let metadata = from.symlink_metadata()?;
         let file_type = metadata.file_type();
@@ -791,4 +806,56 @@ fn is_empty_dir(path: &Path) -> bool {
         Ok(contents) => contents.peekable().peek().is_none(),
         Err(_e) => false,
     }
+}
+
+/// Checks if a file can be deleted by attempting to open it with delete permissions.
+#[cfg(windows)]
+fn can_delete_file(path: &Path) -> Result<bool, io::Error> {
+    use std::{
+        os::windows::ffi::OsStrExt as _,
+        ptr::{null, null_mut},
+    };
+
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, INVALID_HANDLE_VALUE},
+        Storage::FileSystem::{
+            CreateFileW, DELETE, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_DELETE, FILE_SHARE_READ,
+            FILE_SHARE_WRITE, OPEN_EXISTING,
+        },
+    };
+
+    let wide_path = path
+        .as_os_str()
+        .encode_wide()
+        .chain([0])
+        .collect::<Vec<u16>>();
+
+    let handle = unsafe {
+        CreateFileW(
+            wide_path.as_ptr(),
+            DELETE,
+            FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+            null(),
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            null_mut(),
+        )
+    };
+
+    if handle == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+
+    unsafe { CloseHandle(handle) };
+
+    Ok(true)
+}
+
+#[cfg(not(windows))]
+fn can_delete_file(_: &Path) -> Result<bool, io::Error> {
+    // On non-Windows platforms, always return false to indicate that we don't need
+    // to try the copy+delete fallback. This is because on Unix-like systems,
+    // rename() failing with errors other than EXDEV means the operation cannot
+    // succeed even with a copy+delete approach (e.g. permission errors).
+    Ok(false)
 }

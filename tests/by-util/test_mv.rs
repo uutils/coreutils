@@ -50,6 +50,22 @@ fn test_mv_rename_file() {
 }
 
 #[test]
+fn test_mv_with_source_file_opened_and_target_file_exists() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let src = "source_file_opened";
+    let dst = "target_file_exists";
+
+    let f = at.make_file(src);
+
+    at.touch(dst);
+
+    ucmd.arg(src).arg(dst).succeeds().no_stderr().no_stdout();
+
+    drop(f);
+}
+
+#[test]
 fn test_mv_move_file_into_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_mv_move_file_into_dir_dir";
@@ -1668,6 +1684,51 @@ fn test_acl() {
     scene.ucmd().arg(&path).arg(path2).succeeds();
 
     assert!(compare_xattrs(&file, &file_target));
+}
+
+#[test]
+#[cfg(windows)]
+fn test_move_should_not_fallback_to_copy() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let locked_file = "a_file_is_locked";
+    let locked_file_path = at.plus(locked_file);
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .share_mode(
+            uucore::windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ
+                | uucore::windows_sys::Win32::Storage::FileSystem::FILE_SHARE_WRITE,
+        )
+        .open(locked_file_path);
+
+    let target_file = "target_file";
+    ucmd.arg(locked_file).arg(target_file).fails();
+
+    assert!(at.file_exists(locked_file));
+    assert!(!at.file_exists(target_file));
+
+    drop(file);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_move_should_not_fallback_to_copy() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let readonly_dir = "readonly_dir";
+    let locked_file = "readonly_dir/a_file_is_locked";
+    at.mkdir(readonly_dir);
+    at.touch(locked_file);
+    at.set_mode(readonly_dir, 0o555);
+
+    let target_file = "target_file";
+    ucmd.arg(locked_file).arg(target_file).fails();
+
+    assert!(at.file_exists(locked_file));
+    assert!(!at.file_exists(target_file));
 }
 
 // Todo:
