@@ -991,3 +991,13 @@ fn test_missing_argument_after() {
         "test: missing argument after 'foo'"
     );
 }
+
+#[test]
+fn test_gt_lt_operator() {
+    new_ucmd!().args(&["a", "<", "b"]).succeeds().no_output();
+    new_ucmd!()
+        .args(&["a", ">", "b"])
+        .fails()
+        .code_is(1)
+        .no_output();
+}
