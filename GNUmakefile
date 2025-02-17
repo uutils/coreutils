@@ -8,6 +8,12 @@ ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
 endif
 
+# Needed for the foreach loops to split each loop into a seperate command
+define newline
+
+
+endef
+
 PROFILE_CMD :=
 ifeq ($(PROFILE),release)
 	PROFILE_CMD = --release
@@ -340,41 +346,43 @@ distclean: clean
 manpages: build-coreutils
 	mkdir -p $(BUILDDIR)/man/
 	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1; \
+		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 
 completions: build-coreutils
 	mkdir -p $(BUILDDIR)/completions/zsh $(BUILDDIR)/completions/bash $(BUILDDIR)/completions/fish
 	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR)/coreutils completion $(prog) zsh > $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog); \
-		$(BUILDDIR)/coreutils completion $(prog) bash > $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog); \
-		$(BUILDDIR)/coreutils completion $(prog) fish > $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish; \
+		$(BUILDDIR)/coreutils completion $(prog) zsh > $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/coreutils completion $(prog) bash > $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/coreutils completion $(prog) fish > $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(newline) \
 	)
 
 install: build manpages completions
 	mkdir -p $(INSTALLDIR_BIN)
 ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
-	cd $(INSTALLDIR_BIN) && $(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
-		ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) &&) :
+	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+	)
 	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 else
 	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
+		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
+	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
 	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/; \
+		$(INSTALL) $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
 	)
 
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/; \
-		$(INSTALL) $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/; \
-		$(INSTALL) $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/; \
+		$(INSTALL) $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/ $(newline) \
+		$(INSTALL) $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/ $(newline) \
+		$(INSTALL) $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/ $(newline) \
 	)
 
 uninstall:
