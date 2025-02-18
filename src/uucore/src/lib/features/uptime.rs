@@ -1,4 +1,16 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
 // spell-checker:ignore gettime BOOTTIME clockid boottime formated nusers loadavg getloadavg
+
+//! Provides functions to get system uptime, number of users and load average.
+
+// The code was originally written in uu_uptime
+// (https://github.com/uutils/coreutils/blob/main/src/uu/uptime/src/uptime.rs)
+// but was eventually moved here.
+// See https://github.com/uutils/coreutils/pull/7289 for discussion.
 
 use crate::error::{UError, UResult};
 use chrono::Local;
@@ -11,6 +23,8 @@ pub enum UptimeError {
     SystemUptime,
     #[error("could not retrieve system load average")]
     SystemLoadavg,
+    #[error("Windows does not have an equivalent to the load average on Unix-like systems")]
+    WindowsLoadavg,
     #[error("boot time larger than current time")]
     BootTime,
 }
@@ -21,10 +35,20 @@ impl UError for UptimeError {
     }
 }
 
+/// Returns the formatted time string, e.g. "12:34:56"
 pub fn get_formatted_time() -> String {
     Local::now().time().format("%H:%M:%S").to_string()
 }
 
+/// Get the system uptime
+///
+/// # Arguments
+///
+/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+///
+/// # Returns
+///
+/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(target_os = "openbsd")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     use libc::clock_gettime;
@@ -54,6 +78,15 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     }
 }
 
+/// Get the system uptime
+///
+/// # Arguments
+///
+/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+///
+/// # Returns
+///
+/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
@@ -105,6 +138,11 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     Err(UptimeError::SystemUptime)?
 }
 
+/// Get the system uptime
+///
+/// # Returns
+///
+/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(windows)]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     use windows_sys::Win32::System::SystemInformation::GetTickCount;
@@ -115,7 +153,15 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     Ok(uptime as i64)
 }
 
-/// Returns the formatted uptime string, e.g. "1 day, 3:45"
+/// Get the system uptime in a human-readable format
+///
+/// # Arguments
+///
+/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+///
+/// # Returns
+///
+/// Returns a UResult with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an UptimeError.
 #[inline]
 pub fn get_formated_uptime(boot_time: Option<time_t>) -> UResult<String> {
     let up_secs = get_uptime(boot_time)?;
@@ -133,6 +179,11 @@ pub fn get_formated_uptime(boot_time: Option<time_t>) -> UResult<String> {
     }
 }
 
+/// Get the number of users currently logged in
+///
+/// # Returns
+///
+/// Returns the number of users currently logged in if successful, otherwise 0.
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 // see: https://gitlab.com/procps-ng/procps/-/blob/4740a0efa79cade867cfc7b32955fe0f75bf5173/library/uptime.c#L63-L115
@@ -149,6 +200,11 @@ pub fn get_nusers() -> usize {
     num_user
 }
 
+/// Get the number of users currently logged in
+///
+/// # Returns
+///
+/// Returns the number of users currently logged in if successful, otherwise 0
 #[cfg(target_os = "openbsd")]
 pub fn get_nusers(file: &str) -> usize {
     use utmp_classic::{parse_from_path, UtmpEntry};
@@ -176,6 +232,11 @@ pub fn get_nusers(file: &str) -> usize {
     nusers
 }
 
+/// Get the number of users currently logged in
+///
+/// # Returns
+///
+/// Returns the number of users currently logged in if successful, otherwise 0
 #[cfg(target_os = "windows")]
 pub fn get_nusers() -> usize {
     use std::ptr;
@@ -234,6 +295,11 @@ pub fn get_nusers() -> usize {
     num_user
 }
 
+/// Format the number of users to a human-readable string
+///
+/// # Returns
+///
+/// e.g. "0 user", "1 user", "2 users"
 #[inline]
 pub fn format_nusers(nusers: usize) -> String {
     match nusers {
@@ -243,6 +309,11 @@ pub fn format_nusers(nusers: usize) -> String {
     }
 }
 
+/// Get the number of users currently logged in in a human-readable format
+///
+/// # Returns
+///
+/// e.g. "0 user", "1 user", "2 users"
 #[inline]
 pub fn get_formatted_nusers() -> String {
     #[cfg(not(target_os = "openbsd"))]
@@ -252,6 +323,12 @@ pub fn get_formatted_nusers() -> String {
     format_nusers(get_nusers("/var/run/utmp"))
 }
 
+/// Get the system load average
+///
+/// # Returns
+///
+/// Returns a UResult with the load average if successful, otherwise an UptimeError.
+/// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
 #[cfg(unix)]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     use crate::libc::c_double;
@@ -267,12 +344,23 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     }
 }
 
-/// Windows does not seem to have anything similar.
+/// Get the system load average
+/// Windows does not have an equivalent to the load average on Unix-like systems.
+///
+/// # Returns
+///
+/// Returns a UResult with an UptimeError.
 #[cfg(windows)]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
-    Err(UptimeError::SystemLoadavg)?
+    Err(UptimeError::WindowsLoadavg)?
 }
 
+/// Get the system load average in a human-readable format
+///
+/// # Returns
+///
+/// Returns a UResult with the load average in a human-readable format if successful, otherwise an UptimeError.
+/// e.g. "load average: 0.00, 0.00, 0.00"
 #[inline]
 pub fn get_formatted_loadavg() -> UResult<String> {
     let loadavg = get_loadavg()?;
