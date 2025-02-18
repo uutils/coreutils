@@ -56,17 +56,19 @@ fn test_from_iec_i() {
 
 #[test]
 fn test_from_iec_i_requires_suffix() {
-    let numbers = vec!["1024", "10M"];
+    new_ucmd!()
+        .args(&["--from=iec-i", "10M"])
+        .fails()
+        .code_is(2)
+        .stderr_is("numfmt: missing 'i' suffix in input: '10M' (e.g Ki/Mi/Gi)\n");
+}
 
-    for number in numbers {
-        new_ucmd!()
-            .args(&["--from=iec-i", number])
-            .fails()
-            .code_is(2)
-            .stderr_is(format!(
-                "numfmt: missing 'i' suffix in input: '{number}' (e.g Ki/Mi/Gi)\n"
-            ));
-    }
+#[test]
+fn test_from_iec_i_without_suffix_are_bytes() {
+    new_ucmd!()
+        .args(&["--from=iec-i", "1024"])
+        .succeeds()
+        .stdout_is("1024\n");
 }
 
 #[test]
