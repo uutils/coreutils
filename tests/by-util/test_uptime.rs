@@ -8,16 +8,16 @@
 
 use crate::common::util::TestScenario;
 
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "openbsd")))]
 use bincode::serialize;
 use regex::Regex;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "openbsd")))]
 use serde::Serialize;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "openbsd")))]
 use serde_big_array::BigArray;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "openbsd")))]
 use std::fs::File;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "openbsd")))]
 use std::{io::Write, path::PathBuf};
 
 #[test]
@@ -26,6 +26,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn test_uptime() {
     TestScenario::new(util_name!())
         .ucmd()
@@ -38,7 +39,7 @@ fn test_uptime() {
 
 /// Checks for files without utmpx records for which boot time cannot be calculated
 #[test]
-#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
+#[cfg(not(any(windows, target_os = "openbsd", target_os = "freebsd")))]
 // Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
 // file that is accessed using getutxent()
 fn test_uptime_for_file_without_utmpx_records() {
@@ -82,7 +83,7 @@ fn test_uptime_with_fifo() {
 }
 
 #[test]
-#[cfg(not(target_os = "freebsd"))]
+#[cfg(not(any(windows, target_os = "freebsd")))]
 fn test_uptime_with_non_existent_file() {
     // Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
     // file that is accessed using getutxent()
@@ -98,7 +99,7 @@ fn test_uptime_with_non_existent_file() {
 // TODO create a similar test for macos
 // This will pass
 #[test]
-#[cfg(not(any(target_os = "openbsd", target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "openbsd", target_os = "macos")))]
 #[cfg_attr(
     all(target_arch = "aarch64", target_os = "linux"),
     ignore = "Issue #7159 - Test not supported on ARM64 Linux"
@@ -244,8 +245,10 @@ fn test_uptime_with_extra_argument() {
         .fails()
         .stderr_contains("extra operand 'b'");
 }
+
 /// Checks whether uptime displays the correct stderr msg when its called with a directory
 #[test]
+#[cfg(unix)]
 fn test_uptime_with_dir() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
