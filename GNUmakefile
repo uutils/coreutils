@@ -8,7 +8,7 @@ ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
 endif
 
-# Needed for the foreach loops to split each loop into a seperate command
+# Needed for the foreach loops to split each loop into a separate command
 define newline
 
 
