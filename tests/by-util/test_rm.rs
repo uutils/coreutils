@@ -813,3 +813,75 @@ fn test_recursive_symlink_loop() {
     assert!(!at.symlink_exists("d/link"));
     assert!(!at.dir_exists("d"));
 }
+
+#[cfg(not(windows))]
+#[test]
+fn test_only_first_error_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.touch("a/b/file");
+    // Make the inner directory not writable.
+    at.set_mode("a/b", 0o0555);
+
+    // To match the behavior of GNU `rm`, print an error message for
+    // the file in the non-writable directory, but don't print the
+    // error messages that would have appeared when trying to remove
+    // the directories containing the file.
+    ucmd.args(&["-r", "-f", "a"])
+        .fails()
+        .stderr_only("rm: cannot remove 'a/b/file': Permission denied\n");
+    assert!(at.file_exists("a/b/file"));
+    assert!(at.dir_exists("a/b"));
+    assert!(at.dir_exists("a"));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_unreadable_and_nonempty_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("a/b");
+    at.set_mode("a", 0o0333);
+
+    ucmd.args(&["-r", "-f", "a"])
+        .fails()
+        .stderr_only("rm: cannot remove 'a': Permission denied\n");
+    assert!(at.dir_exists("a/b"));
+    assert!(at.dir_exists("a"));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_inaccessible_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.set_mode("dir", 0o0333);
+    ucmd.args(&["-d", "dir"]).succeeds().no_output();
+    assert!(!at.dir_exists("dir"));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_inaccessible_dir_nonempty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/f");
+    at.set_mode("dir", 0o0333);
+    ucmd.args(&["-d", "dir"])
+        .fails()
+        .stderr_only("rm: cannot remove 'dir': Directory not empty\n");
+    assert!(at.file_exists("dir/f"));
+    assert!(at.dir_exists("dir"));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_inaccessible_dir_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("a/unreadable");
+    at.set_mode("a/unreadable", 0o0333);
+    ucmd.args(&["-r", "-f", "a"]).succeeds().no_output();
+    assert!(!at.dir_exists("a/unreadable"));
+    assert!(!at.dir_exists("a"));
+}
