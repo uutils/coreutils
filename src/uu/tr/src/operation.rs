@@ -8,11 +8,11 @@
 use crate::unicode_table;
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take, take_till},
+    bytes::complete::{tag, take, take_till, take_until},
     character::complete::one_of,
     combinator::{map, map_opt, peek, recognize, value},
     multi::{many0, many_m_n},
-    sequence::{delimited, preceded, separated_pair},
+    sequence::{delimited, preceded, separated_pair, terminated},
     IResult, Parser,
 };
 use std::{
@@ -39,6 +39,7 @@ pub enum BadSequence {
     Set1LongerSet2EndsInClass,
     ComplementMoreThanOneUniqueInSet2,
     BackwardsRange { end: u32, start: u32 },
+    MultipleCharInEquivalence(String),
 }
 
 impl Display for BadSequence {
@@ -89,6 +90,10 @@ impl Display for BadSequence {
                     end_or_start_to_string(end)
                 )
             }
+            Self::MultipleCharInEquivalence(s) => write!(
+                f,
+                "{s}: equivalence class operand must be a single character"
+            ),
         }
     }
 }
@@ -492,18 +497,37 @@ impl Sequence {
     }
 
     fn parse_char_equal(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
-        delimited(
+        preceded(
             tag("[="),
-            alt((
-                value(
-                    Err(BadSequence::MissingEquivalentClassChar),
-                    peek(tag("=]")),
-                ),
-                map(Self::parse_backslash_or_char, |c| Ok(Self::Char(c))),
-            )),
-            tag("=]"),
+            (
+                alt((
+                    value(Err(()), peek(tag("=]"))),
+                    map(Self::parse_backslash_or_char, Ok),
+                )),
+                map(terminated(take_until("=]"), tag("=]")), |v: &[u8]| {
+                    if v.is_empty() {
+                        Ok(())
+                    } else {
+                        Err(v)
+                    }
+                }),
+            ),
         )
         .parse(input)
+        .map(|(l, (a, b))| {
+            (
+                l,
+                match (a, b) {
+                    (Err(()), _) => Err(BadSequence::MissingEquivalentClassChar),
+                    (Ok(c), Ok(())) => Ok(Self::Char(c)),
+                    (Ok(c), Err(v)) => Err(BadSequence::MultipleCharInEquivalence(format!(
+                        "{}{}",
+                        String::from_utf8_lossy(&[c]).into_owned(),
+                        String::from_utf8_lossy(v).into_owned()
+                    ))),
+                },
+            )
+        })
     }
 }
 
