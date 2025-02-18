@@ -876,6 +876,19 @@ fn test_inaccessible_dir_nonempty() {
 
 #[cfg(not(windows))]
 #[test]
+fn test_inaccessible_dir_interactive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.set_mode("dir", 0);
+    ucmd.args(&["-i", "-d", "dir"])
+        .pipe_in("y\n")
+        .succeeds()
+        .stderr_only("rm: attempt removal of inaccessible directory 'dir'? ");
+    assert!(!at.dir_exists("dir"));
+}
+
+#[cfg(not(windows))]
+#[test]
 fn test_inaccessible_dir_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
