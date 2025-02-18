@@ -993,10 +993,37 @@ fn test_missing_argument_after() {
 }
 
 #[test]
-fn test_gt_lt_operator() {
-    new_ucmd!().args(&["a", "<", "b"]).succeeds().no_output();
+fn test_string_inequality_operator() {
+    let items = [
+        ("a", "b"),
+        ("a", "aa"),
+        ("a", "a "),
+        ("a", "a b"),
+        ("", "b"),
+        ("a", "ä"),
+    ];
+    for (left, right) in items {
+        new_ucmd!().args(&[left, "<", right]).succeeds().no_output();
+        new_ucmd!()
+            .args(&[right, "<", left])
+            .fails()
+            .code_is(1)
+            .no_output();
+
+        new_ucmd!().args(&[right, ">", left]).succeeds().no_output();
+        new_ucmd!()
+            .args(&[left, ">", right])
+            .fails()
+            .code_is(1)
+            .no_output();
+    }
     new_ucmd!()
-        .args(&["a", ">", "b"])
+        .args(&["", "<", ""])
+        .fails()
+        .code_is(1)
+        .no_output();
+    new_ucmd!()
+        .args(&["", ">", ""])
         .fails()
         .code_is(1)
         .no_output();
