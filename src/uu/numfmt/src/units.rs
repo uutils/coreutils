@@ -45,20 +45,21 @@ pub enum RawSuffix {
 
 pub type Suffix = (RawSuffix, WithI);
 
-pub struct DisplayableSuffix(pub Suffix);
+pub struct DisplayableSuffix(pub Suffix, pub Unit);
 
 impl fmt::Display for DisplayableSuffix {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Self((ref raw_suffix, ref with_i)) = *self;
-        match raw_suffix {
-            RawSuffix::K => write!(f, "K"),
-            RawSuffix::M => write!(f, "M"),
-            RawSuffix::G => write!(f, "G"),
-            RawSuffix::T => write!(f, "T"),
-            RawSuffix::P => write!(f, "P"),
-            RawSuffix::E => write!(f, "E"),
-            RawSuffix::Z => write!(f, "Z"),
-            RawSuffix::Y => write!(f, "Y"),
+        let Self((ref raw_suffix, ref with_i), unit) = *self;
+        match (raw_suffix, unit) {
+            (RawSuffix::K, Unit::Si) => write!(f, "k"),
+            (RawSuffix::K, _) => write!(f, "K"),
+            (RawSuffix::M, _) => write!(f, "M"),
+            (RawSuffix::G, _) => write!(f, "G"),
+            (RawSuffix::T, _) => write!(f, "T"),
+            (RawSuffix::P, _) => write!(f, "P"),
+            (RawSuffix::E, _) => write!(f, "E"),
+            (RawSuffix::Z, _) => write!(f, "Z"),
+            (RawSuffix::Y, _) => write!(f, "Y"),
         }
         .and_then(|()| match with_i {
             true => write!(f, "i"),
