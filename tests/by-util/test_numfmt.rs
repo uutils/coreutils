@@ -84,7 +84,7 @@ fn test_to_si() {
         .args(&["--to=si"])
         .pipe_in("1000\n1100000\n100000000")
         .succeeds()
-        .stdout_is("1.0K\n1.1M\n100M\n");
+        .stdout_is("1.0k\n1.1M\n100M\n");
 }
 
 #[test]
@@ -243,15 +243,15 @@ fn test_suffixes() {
     // TODO add support for ronna (R) and quetta (Q)
     let valid_suffixes = ['K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y' /*'R' , 'Q'*/];
 
-    // TODO implement special handling of 'K'
     for c in ('A'..='Z').chain('a'..='z') {
         let args = ["--from=si", "--to=si", &format!("1{c}")];
 
         if valid_suffixes.contains(&c) {
+            let s = if c == 'K' { 'k' } else { c };
             new_ucmd!()
                 .args(&args)
                 .succeeds()
-                .stdout_only(format!("1.0{c}\n"));
+                .stdout_only(format!("1.0{s}\n"));
         } else {
             new_ucmd!()
                 .args(&args)
@@ -504,7 +504,7 @@ fn test_delimiter_to_si() {
         .args(&["-d=,", "--to=si"])
         .pipe_in("1234,56")
         .succeeds()
-        .stdout_only("1.3K,56\n");
+        .stdout_only("1.3k,56\n");
 }
 
 #[test]
@@ -513,7 +513,7 @@ fn test_delimiter_skips_leading_whitespace() {
         .args(&["-d=,", "--to=si"])
         .pipe_in("     \t               1234,56")
         .succeeds()
-        .stdout_only("1.3K,56\n");
+        .stdout_only("1.3k,56\n");
 }
 
 #[test]
@@ -522,7 +522,7 @@ fn test_delimiter_preserves_leading_whitespace_in_unselected_fields() {
         .args(&["-d=|", "--to=si"])
         .pipe_in("             1000|   2000")
         .succeeds()
-        .stdout_only("1.0K|   2000\n");
+        .stdout_only("1.0k|   2000\n");
 }
 
 #[test]
@@ -550,7 +550,7 @@ fn test_delimiter_with_padding() {
         .args(&["-d=|", "--to=si", "--padding=5"])
         .pipe_in("1000|2000")
         .succeeds()
-        .stdout_only(" 1.0K|2000\n");
+        .stdout_only(" 1.0k|2000\n");
 }
 
 #[test]
@@ -559,21 +559,21 @@ fn test_delimiter_with_padding_and_fields() {
         .args(&["-d=|", "--to=si", "--padding=5", "--field=-"])
         .pipe_in("1000|2000")
         .succeeds()
-        .stdout_only(" 1.0K| 2.0K\n");
+        .stdout_only(" 1.0k| 2.0k\n");
 }
 
 #[test]
 fn test_round() {
     for (method, exp) in [
-        ("from-zero", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
-        ("from-zer", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
-        ("f", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
-        ("towards-zero", ["9.0K", "-9.0K", "9.0K", "-9.0K"]),
-        ("up", ["9.1K", "-9.0K", "9.1K", "-9.0K"]),
-        ("down", ["9.0K", "-9.1K", "9.0K", "-9.1K"]),
-        ("nearest", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
-        ("near", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
-        ("n", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
+        ("from-zero", ["9.1k", "-9.1k", "9.1k", "-9.1k"]),
+        ("from-zer", ["9.1k", "-9.1k", "9.1k", "-9.1k"]),
+        ("f", ["9.1k", "-9.1k", "9.1k", "-9.1k"]),
+        ("towards-zero", ["9.0k", "-9.0k", "9.0k", "-9.0k"]),
+        ("up", ["9.1k", "-9.0k", "9.1k", "-9.0k"]),
+        ("down", ["9.0k", "-9.1k", "9.0k", "-9.1k"]),
+        ("nearest", ["9.0k", "-9.0k", "9.1k", "-9.1k"]),
+        ("near", ["9.0k", "-9.0k", "9.1k", "-9.1k"]),
+        ("n", ["9.0k", "-9.0k", "9.1k", "-9.1k"]),
     ] {
         new_ucmd!()
             .args(&[
@@ -649,7 +649,7 @@ fn test_transform_with_suffix_on_input() {
         .args(&["--suffix=b", "--to=si"])
         .pipe_in("2000b")
         .succeeds()
-        .stdout_only("2.0Kb\n");
+        .stdout_only("2.0kb\n");
 }
 
 #[test]
@@ -658,7 +658,7 @@ fn test_transform_without_suffix_on_input() {
         .args(&["--suffix=b", "--to=si"])
         .pipe_in("2000")
         .succeeds()
-        .stdout_only("2.0Kb\n");
+        .stdout_only("2.0kb\n");
 }
 
 #[test]
@@ -667,7 +667,7 @@ fn test_transform_with_suffix_and_delimiter() {
         .args(&["--suffix=b", "--to=si", "-d=|"])
         .pipe_in("1000b|2000|3000")
         .succeeds()
-        .stdout_only("1.0Kb|2000|3000\n");
+        .stdout_only("1.0kb|2000|3000\n");
 }
 
 #[test]
