@@ -339,15 +339,18 @@ fn is_dir_empty(path: &Path) -> bool {
     }
 }
 
+#[cfg(unix)]
+fn is_readable_metadata(metadata: &Metadata) -> bool {
+    let mode = metadata.permissions().mode();
+    (mode & 0o400) > 0
+}
+
 /// Whether the given file or directory is readable.
 #[cfg(unix)]
 fn is_readable(path: &Path) -> bool {
     match std::fs::metadata(path) {
         Err(_) => false,
-        Ok(metadata) => {
-            let mode = metadata.permissions().mode();
-            (mode & 0o400) > 0
-        }
+        Ok(metadata) => is_readable_metadata(&metadata),
     }
 }
 
@@ -357,15 +360,18 @@ fn is_readable(_path: &Path) -> bool {
     true
 }
 
+#[cfg(unix)]
+fn is_writable_metadata(metadata: &Metadata) -> bool {
+    let mode = metadata.permissions().mode();
+    (mode & 0o200) > 0
+}
+
 /// Whether the given file or directory is writable.
 #[cfg(unix)]
 fn is_writable(path: &Path) -> bool {
     match std::fs::metadata(path) {
         Err(_) => false,
-        Ok(metadata) => {
-            let mode = metadata.permissions().mode();
-            (mode & 0o200) > 0
-        }
+        Ok(metadata) => is_writable_metadata(&metadata),
     }
 }
 
@@ -623,20 +629,25 @@ fn prompt_file_permission_readonly(path: &Path) -> bool {
 // Most cases are covered by keep eye out for edge cases
 #[cfg(unix)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    let mode = metadata.permissions().mode();
-    // Check if directory has user write permissions
-    // Why is S_IWUSR showing up as a u16 on macos?
-    #[allow(clippy::unnecessary_cast)]
-    let user_writable = (mode & (libc::S_IWUSR as u32)) != 0;
-    if !user_writable {
-        prompt_yes!("remove write-protected directory {}?", path.quote())
-    } else if options.interactive == InteractiveMode::Always {
-        prompt_yes!("remove directory {}?", path.quote())
-    } else {
-        true
+    match (
+        is_readable_metadata(metadata),
+        is_writable_metadata(metadata),
+        options.interactive,
+    ) {
+        (false, false, _) => prompt_yes!(
+            "attempt removal of inaccessible directory {}?",
+            path.quote()
+        ),
+        (false, true, InteractiveMode::Always) => prompt_yes!(
+            "attempt removal of inaccessible directory {}?",
+            path.quote()
+        ),
+        (true, false, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
+        (_, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
+        (_, _, _) => true,
     }
 }
+
 /// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g  '/../..' , '../..'
 fn path_is_current_or_parent_directory(path: &Path) -> bool {
     let path_str = os_str_as_bytes(path.as_os_str());
