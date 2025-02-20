@@ -34,6 +34,8 @@ pub mod ringbuffer;
 pub mod sum;
 #[cfg(feature = "update-control")]
 pub mod update_control;
+#[cfg(feature = "uptime")]
+pub mod uptime;
 #[cfg(feature = "version-cmp")]
 pub mod version_cmp;
 
