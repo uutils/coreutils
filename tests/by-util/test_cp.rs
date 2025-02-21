@@ -6041,3 +6041,37 @@ fn test_cp_from_stdin() {
     assert!(at.file_exists(target));
     assert_eq!(at.read(target), test_string);
 }
+
+#[test]
+fn test_cp_update_older_interactive_prompt_yes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let old_file = "old";
+    let new_file = "new";
+
+    let f = at.make_file(old_file);
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.touch(new_file);
+
+    ucmd.args(&["-i", "-v", "--update=older", new_file, old_file])
+        .pipe_in("Y\n")
+        .stderr_to_stdout()
+        .succeeds()
+        .stdout_is("cp: overwrite 'old'? 'new' -> 'old'\n");
+}
+
+#[test]
+fn test_cp_update_older_interactive_prompt_no() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let old_file = "old";
+    let new_file = "new";
+
+    let f = at.make_file(old_file);
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+    at.touch(new_file);
+
+    ucmd.args(&["-i", "-v", "--update=older", new_file, old_file])
+        .pipe_in("N\n")
+        .stderr_to_stdout()
+        .fails()
+        .stdout_is("cp: overwrite 'old'? ");
+}

@@ -336,6 +336,16 @@ fn test_skip_to_match_offset() {
 }
 
 #[test]
+fn test_skip_to_match_offset_suppress_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-z", "-", "%a%1"])
+        .pipe_in("a\n")
+        .succeeds()
+        .no_output();
+    assert!(!at.file_exists("xx00"));
+}
+
+#[test]
 fn test_skip_to_match_negative_offset() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%23%-3"])

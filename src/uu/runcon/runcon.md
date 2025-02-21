@@ -1,7 +1,7 @@
 # runcon
 
 ```
-runcon [CONTEXT COMMAND [ARG...]]
+runcon CONTEXT COMMAND [ARG...]
 runcon [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] COMMAND [ARG...]
 ```
 

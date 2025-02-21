@@ -1167,6 +1167,15 @@ fn check_against_gnu_tr_tests_empty_eq() {
 }
 
 #[test]
+fn check_too_many_chars_in_eq() {
+    new_ucmd!()
+        .args(&["-d", "[=aa=]"])
+        .pipe_in("")
+        .fails()
+        .stderr_contains("aa: equivalence class operand must be a single character\n");
+}
+
+#[test]
 fn check_against_gnu_tr_tests_empty_cc() {
     // ['empty-cc', qw('[::]' x), {IN=>''}, {OUT=>''}, {EXIT=>1},
     //  {ERR=>"$prog: missing character class name '[::]'\n"}],

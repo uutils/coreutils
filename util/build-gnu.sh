@@ -2,7 +2,7 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo
 
 set -e
 
@@ -203,14 +203,6 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r sed -Ei
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
 
-sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-eacces.sh
-
-sed -i -e "s|rm: cannot remove 'a/b/file'|rm: cannot remove 'a'|g" tests/rm/cycle.sh
-
-sed -i -e "s|rm: cannot remove directory 'b/a/p'|rm: cannot remove 'b'|g" tests/rm/rm1.sh
-
-sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
-
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
@@ -349,3 +341,8 @@ sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/quote-align.sh
 
 # Slightly different error message
 sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
+# Most tests check that `/usr/bin/tr` is working correctly before running.
+# However in NixOS/Nix-based distros, the tr util is located somewhere in
+# /nix/store/xxxxxxxxxxxx...xxxx/bin/tr
+# We just replace the references to `/usr/bin/tr` with the result of `$(which tr)`
+sed -i  's/\/usr\/bin\/tr/$(which tr)/' tests/init.sh

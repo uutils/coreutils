@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// cSpell:ignore POLLERR POLLRDBAND pfds revents
+
 use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, Command};
 use std::fs::OpenOptions;
 use std::io::{copy, stdin, stdout, Error, ErrorKind, Read, Result, Write};
@@ -33,15 +35,20 @@ mod options {
 struct Options {
     append: bool,
     ignore_interrupts: bool,
+    ignore_pipe_errors: bool,
     files: Vec<String>,
     output_error: Option<OutputErrorMode>,
 }
 
 #[derive(Clone, Debug)]
 enum OutputErrorMode {
+    /// Diagnose write error on any output
     Warn,
+    /// Diagnose write error on any output that is not a pipe
     WarnNoPipe,
+    /// Exit upon write error on any output
     Exit,
+    /// Exit upon write error on any output that is not a pipe
     ExitNoPipe,
 }
 
@@ -49,32 +56,39 @@ enum OutputErrorMode {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
+    let append = matches.get_flag(options::APPEND);
+    let ignore_interrupts = matches.get_flag(options::IGNORE_INTERRUPTS);
+    let ignore_pipe_errors = matches.get_flag(options::IGNORE_PIPE_ERRORS);
+    let output_error = if matches.contains_id(options::OUTPUT_ERROR) {
+        match matches
+            .get_one::<String>(options::OUTPUT_ERROR)
+            .map(String::as_str)
+        {
+            Some("warn") => Some(OutputErrorMode::Warn),
+            // If no argument is specified for --output-error,
+            // defaults to warn-nopipe
+            None | Some("warn-nopipe") => Some(OutputErrorMode::WarnNoPipe),
+            Some("exit") => Some(OutputErrorMode::Exit),
+            Some("exit-nopipe") => Some(OutputErrorMode::ExitNoPipe),
+            _ => unreachable!(),
+        }
+    } else if ignore_pipe_errors {
+        Some(OutputErrorMode::WarnNoPipe)
+    } else {
+        None
+    };
+
+    let files = matches
+        .get_many::<String>(options::FILE)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
     let options = Options {
-        append: matches.get_flag(options::APPEND),
-        ignore_interrupts: matches.get_flag(options::IGNORE_INTERRUPTS),
-        files: matches
-            .get_many::<String>(options::FILE)
-            .map(|v| v.map(ToString::to_string).collect())
-            .unwrap_or_default(),
-        output_error: {
-            if matches.get_flag(options::IGNORE_PIPE_ERRORS) {
-                Some(OutputErrorMode::WarnNoPipe)
-            } else if matches.contains_id(options::OUTPUT_ERROR) {
-                if let Some(v) = matches.get_one::<String>(options::OUTPUT_ERROR) {
-                    match v.as_str() {
-                        "warn" => Some(OutputErrorMode::Warn),
-                        "warn-nopipe" => Some(OutputErrorMode::WarnNoPipe),
-                        "exit" => Some(OutputErrorMode::Exit),
-                        "exit-nopipe" => Some(OutputErrorMode::ExitNoPipe),
-                        _ => unreachable!(),
-                    }
-                } else {
-                    Some(OutputErrorMode::WarnNoPipe)
-                }
-            } else {
-                None
-            }
-        },
+        append,
+        ignore_interrupts,
+        ignore_pipe_errors,
+        files,
+        output_error,
     };
 
     match tee(&options) {
@@ -140,7 +154,6 @@ pub fn uu_app() -> Command {
                         .help("exit on write errors to any output that are not pipe errors (equivalent to exit on non-unix platforms)"),
                 ]))
                 .help("set write error behavior")
-                .conflicts_with(options::IGNORE_PIPE_ERRORS),
         )
 }
 
@@ -176,6 +189,11 @@ fn tee(options: &Options) -> Result<()> {
     let input = &mut NamedReader {
         inner: Box::new(stdin()) as Box<dyn Read>,
     };
+
+    #[cfg(target_os = "linux")]
+    if options.ignore_pipe_errors && !ensure_stdout_not_broken()? && output.writers.len() == 1 {
+        return Ok(());
+    }
 
     let res = match copy(input, &mut output) {
         // ErrorKind::Other is raised by MultiWriter when all writers
@@ -366,4 +384,45 @@ impl Read for NamedReader {
             okay => okay,
         }
     }
+}
+
+/// Check that if stdout is a pipe, it is not broken.
+#[cfg(target_os = "linux")]
+pub fn ensure_stdout_not_broken() -> Result<bool> {
+    use nix::{
+        poll::{PollFd, PollFlags, PollTimeout},
+        sys::stat::{fstat, SFlag},
+    };
+    use std::os::fd::{AsFd, AsRawFd};
+
+    let out = stdout();
+
+    // First, check that stdout is a fifo and return true if it's not the case
+    let stat = fstat(out.as_raw_fd())?;
+    if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
+        return Ok(true);
+    }
+
+    // POLLRDBAND is the flag used by GNU tee.
+    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
+
+    // Then, ensure that the pipe is not broken
+    let res = nix::poll::poll(&mut pfds, PollTimeout::NONE)?;
+
+    if res > 0 {
+        // poll succeeded;
+        let error = pfds.iter().any(|pfd| {
+            if let Some(revents) = pfd.revents() {
+                revents.contains(PollFlags::POLLERR)
+            } else {
+                true
+            }
+        });
+        return Ok(!error);
+    }
+
+    // if res == 0, it means that timeout was reached, which is impossible
+    // because we set infinite timeout.
+    // And if res < 0, the nix wrapper should have sent back an error.
+    unreachable!();
 }

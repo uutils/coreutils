@@ -6,7 +6,6 @@
 // spell-checker:ignore (words) egid euid pseudofloat
 
 use crate::common::util::TestScenario;
-use std::thread::sleep;
 
 #[test]
 fn test_empty_test_equivalent_to_false() {
@@ -380,28 +379,28 @@ fn test_same_device_inode() {
 fn test_newer_file() {
     let scenario = TestScenario::new(util_name!());
 
-    scenario.fixtures.touch("regular_file");
-    sleep(std::time::Duration::from_millis(100));
+    let older_file = scenario.fixtures.make_file("older_file");
+    older_file.set_modified(std::time::UNIX_EPOCH).unwrap();
     scenario.fixtures.touch("newer_file");
 
     scenario
         .ucmd()
-        .args(&["newer_file", "-nt", "regular_file"])
+        .args(&["newer_file", "-nt", "older_file"])
         .succeeds();
 
     scenario
         .ucmd()
-        .args(&["regular_file", "-nt", "newer_file"])
+        .args(&["older_file", "-nt", "newer_file"])
         .fails();
 
     scenario
         .ucmd()
-        .args(&["regular_file", "-ot", "newer_file"])
+        .args(&["older_file", "-ot", "newer_file"])
         .succeeds();
 
     scenario
         .ucmd()
-        .args(&["newer_file", "-ot", "regular_file"])
+        .args(&["newer_file", "-ot", "older_file"])
         .fails();
 }
 
@@ -946,12 +945,15 @@ fn test_bracket_syntax_version() {
 fn test_file_N() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    scene.ucmd().args(&["-N", "regular_file"]).fails();
+
+    let f = at.make_file("file");
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+
+    scene.ucmd().args(&["-N", "file"]).fails();
     // The file will have different create/modified data
     // so, test -N will return 0
-    sleep(std::time::Duration::from_millis(100));
-    at.touch("regular_file");
-    scene.ucmd().args(&["-N", "regular_file"]).succeeds();
+    at.touch("file");
+    scene.ucmd().args(&["-N", "file"]).succeeds();
 }
 
 #[test]

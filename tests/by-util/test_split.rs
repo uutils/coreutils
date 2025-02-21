@@ -1977,9 +1977,9 @@ fn test_split_separator_same_multiple() {
 #[test]
 fn test_long_lines() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let line1 = format!("{:131070}\n", "");
-    let line2 = format!("{:1}\n", "");
-    let line3 = format!("{:131071}\n", "");
+    let line1 = [" ".repeat(131_070), String::from("\n")].concat();
+    let line2 = [" ", "\n"].concat();
+    let line3 = [" ".repeat(131_071), String::from("\n")].concat();
     let infile = [line1, line2, line3].concat();
     ucmd.args(&["-C", "131072"])
         .pipe_in(infile)

@@ -2271,10 +2271,6 @@ fn copy_file(
         .into());
     }
 
-    if options.verbose {
-        print_verbose_output(options.parents, progress_bar, source, dest);
-    }
-
     if options.preserve_hard_links() {
         // if we encounter a matching device/inode pair in the source tree
         // we can arrange to create a hard link between the corresponding names
@@ -2284,6 +2280,11 @@ fn copy_file(
                 .context(format!("cannot stat {}", source.quote()))?,
         ) {
             std::fs::hard_link(new_source, dest)?;
+
+            if options.verbose {
+                print_verbose_output(options.parents, progress_bar, source, dest);
+            }
+
             return Ok(());
         };
     }
@@ -2333,6 +2334,10 @@ fn copy_file(
         #[cfg(unix)]
         source_is_stream,
     )?;
+
+    if options.verbose {
+        print_verbose_output(options.parents, progress_bar, source, dest);
+    }
 
     // TODO: implement something similar to gnu's lchown
     if !dest_is_symlink {

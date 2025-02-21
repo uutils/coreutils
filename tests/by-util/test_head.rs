@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
+// spell-checker:ignore (words) seekable
 
 use crate::common::util::TestScenario;
 
@@ -390,6 +391,45 @@ fn test_presume_input_pipe_5_chars() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
+}
+
+#[test]
+fn test_all_but_last_bytes_large_file_piped() {
+    // Validate print-all-but-last-n-bytes with a large piped-in (i.e. non-seekable) file.
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    // First, create all our fixtures.
+    let seq_30000_file_name = "seq_30000";
+    let seq_29000_file_name = "seq_29000";
+    let seq_29001_30000_file_name = "seq_29001_30000";
+    scene
+        .cmd("seq")
+        .arg("30000")
+        .set_stdout(fixtures.make_file(seq_30000_file_name))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .arg("29000")
+        .set_stdout(fixtures.make_file(seq_29000_file_name))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .args(&["29001", "30000"])
+        .set_stdout(fixtures.make_file(seq_29001_30000_file_name))
+        .succeeds();
+
+    let seq_29001_30000_file_length = fixtures
+        .open(seq_29001_30000_file_name)
+        .metadata()
+        .unwrap()
+        .len();
+    scene
+        .ucmd()
+        .args(&["-c", &format!("-{}", seq_29001_30000_file_length)])
+        .pipe_in_fixture(seq_30000_file_name)
+        .succeeds()
+        .stdout_only_fixture(seq_29000_file_name);
 }
 
 #[test]

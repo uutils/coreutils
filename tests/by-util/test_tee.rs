@@ -165,6 +165,7 @@ mod linux_only {
     use std::fmt::Write;
     use std::fs::File;
     use std::process::{Output, Stdio};
+    use std::time::Duration;
 
     fn make_broken_pipe() -> File {
         use libc::c_int;
@@ -181,6 +182,22 @@ mod linux_only {
 
         // Make the write end of the pipe into a Rust File
         unsafe { File::from_raw_fd(fds[1]) }
+    }
+
+    fn make_hanging_read() -> File {
+        use libc::c_int;
+        use std::os::unix::io::FromRawFd;
+
+        let mut fds: [c_int; 2] = [0, 0];
+        assert!(
+            (unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) } == 0),
+            "Failed to create pipe"
+        );
+
+        // PURPOSELY leak the write end of the pipe, so the read end hangs.
+
+        // Return the read end of the pipe
+        unsafe { File::from_raw_fd(fds[0]) }
     }
 
     fn run_tee(proc: &mut UCommand) -> (String, Output) {
@@ -534,5 +551,32 @@ mod linux_only {
 
         expect_failure(&output, "No space left");
         expect_short(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_mode_broken_pipe_only() {
+        new_ucmd!()
+            .timeout(Duration::from_secs(1))
+            .arg("-p")
+            .set_stdin(make_hanging_read())
+            .set_stdout(make_broken_pipe())
+            .succeeds();
+    }
+
+    #[test]
+    fn test_pipe_mode_broken_pipe_file() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("-p")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
     }
 }

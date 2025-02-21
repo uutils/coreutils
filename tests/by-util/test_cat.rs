@@ -9,6 +9,8 @@ use crate::common::util::vec_of_size;
 use crate::common::util::TestScenario;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
+#[cfg(target_os = "linux")]
+use std::fs::File;
 use std::fs::OpenOptions;
 #[cfg(not(windows))]
 use std::process::Stdio;
@@ -645,4 +647,24 @@ fn test_u_ignored() {
             .succeeds()
             .stdout_only("hello");
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_appending_same_input_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("foo", "content");
+    let foo_file = at.plus_as_string("foo");
+
+    let file_read = File::open(&foo_file).unwrap();
+    let file_write = OpenOptions::new().append(true).open(&foo_file).unwrap();
+
+    ucmd.set_stdin(file_read);
+    ucmd.set_stdout(file_write);
+
+    ucmd.run()
+        .failure()
+        .no_stdout()
+        .stderr_contains("input file is output file");
 }

@@ -135,9 +135,6 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
             RawSuffix::Z => Ok(i * IEC_BASES[7]),
             RawSuffix::Y => Ok(i * IEC_BASES[8]),
         },
-        (None, &Unit::Iec(true)) => {
-            Err(format!("missing 'i' suffix in input: '{i}' (e.g Ki/Mi/Gi)"))
-        }
         (Some((raw_suffix, false)), &Unit::Iec(true)) => Err(format!(
             "missing 'i' suffix in input: '{i}{raw_suffix:?}' (e.g Ki/Mi/Gi)"
         )),

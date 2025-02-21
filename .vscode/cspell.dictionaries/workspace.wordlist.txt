@@ -136,6 +136,7 @@ vmsplice
 
 # * vars/libc
 COMFOLLOW
+EXDEV
 FILENO
 FTSENT
 HOSTSIZE
