@@ -3,6 +3,8 @@
 # Config options
 PROFILE         ?= debug
 MULTICALL       ?= n
+COMPLETIONS     ?= y
+MANPAGES        ?= y
 INSTALL         ?= install
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
@@ -343,12 +345,23 @@ clean:
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
+ifeq ($(MANPAGES),y)
 manpages: build-coreutils
 	mkdir -p $(BUILDDIR)/man/
 	$(foreach prog, $(INSTALLEES), \
 		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 
+install-manpages: manpages
+	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
+	$(foreach prog, $(INSTALLEES), \
+		$(INSTALL) $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
+	)
+else
+install-manpages:
+endif
+
+ifeq ($(COMPLETIONS),y)
 completions: build-coreutils
 	mkdir -p $(BUILDDIR)/completions/zsh $(BUILDDIR)/completions/bash $(BUILDDIR)/completions/fish
 	$(foreach prog, $(INSTALLEES), \
@@ -357,7 +370,20 @@ completions: build-coreutils
 		$(BUILDDIR)/coreutils completion $(prog) fish > $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(newline) \
 	)
 
-install: build manpages completions
+install-completions: completions
+	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
+	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
+	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
+	$(foreach prog, $(INSTALLEES), \
+		$(INSTALL) $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/ $(newline) \
+		$(INSTALL) $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/ $(newline) \
+		$(INSTALL) $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/ $(newline) \
+	)
+else
+install-completions:
+endif
+
+install: build install-manpages install-completions
 	mkdir -p $(INSTALLDIR_BIN)
 ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
@@ -371,19 +397,6 @@ else
 	)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
-	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
-	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
-	)
-
-	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
-	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
-	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
-	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/ $(newline) \
-		$(INSTALL) $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/ $(newline) \
-		$(INSTALL) $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/ $(newline) \
-	)
 
 uninstall:
 ifeq (${MULTICALL}, y)
