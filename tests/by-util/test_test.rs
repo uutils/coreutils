@@ -993,7 +993,7 @@ fn test_missing_argument_after() {
 }
 
 #[test]
-fn test_string_inequality_operator() {
+fn test_string_lt_gt_operator() {
     let items = [
         ("a", "b"),
         ("a", "aa"),
