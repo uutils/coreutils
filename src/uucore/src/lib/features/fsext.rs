@@ -814,7 +814,7 @@ impl FsMeta for StatFs {
     fn fsid(&self) -> u64 {
         let f_fsid: &[u32; 2] =
             unsafe { &*(&self.f_fsid as *const nix::sys::statfs::fsid_t as *const [u32; 2]) };
-        (u64::from(f_fsid[0])) << 32 | u64::from(f_fsid[1])
+        ((u64::from(f_fsid[0])) << 32) | u64::from(f_fsid[1])
     }
     #[cfg(not(any(
         target_vendor = "apple",
