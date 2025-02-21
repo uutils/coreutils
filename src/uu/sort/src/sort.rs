@@ -605,6 +605,8 @@ impl<'a> Line<'a> {
                 )?;
             }
         }
+        // TODO fix requires an MSRV of 1.82
+        #[allow(clippy::unnecessary_map_or)]
         if settings.mode != SortMode::Random
             && !settings.stable
             && !settings.unique
