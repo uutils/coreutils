@@ -66,6 +66,14 @@ fn generate_test_args() -> Vec<TestArg> {
             arg_type: ArgType::STRINGSTRING,
         },
         TestArg {
+            arg: ">".to_string(),
+            arg_type: ArgType::STRINGSTRING,
+        },
+        TestArg {
+            arg: "<".to_string(),
+            arg_type: ArgType::STRINGSTRING,
+        },
+        TestArg {
             arg: "-eq".to_string(),
             arg_type: ArgType::INTEGERINTEGER,
         },
