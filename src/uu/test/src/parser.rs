@@ -50,7 +50,7 @@ impl Symbol {
                     "(" => Self::LParen,
                     "!" => Self::Bang,
                     "-a" | "-o" => Self::BoolOp(s),
-                    "=" | "==" | "!=" => Self::Op(Operator::String(s)),
+                    "=" | "==" | "!=" | "<" | ">" => Self::Op(Operator::String(s)),
                     "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Self::Op(Operator::Int(s)),
                     "-ef" | "-nt" | "-ot" => Self::Op(Operator::File(s)),
                     "-n" | "-z" => Self::UnaryOp(UnaryOperator::StrlenOp(s)),
