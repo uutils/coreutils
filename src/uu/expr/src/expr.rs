@@ -4,15 +4,13 @@
 // file that was distributed with this source code.
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use syntax_tree::AstNode;
+use syntax_tree::{is_truthy, AstNode};
 use thiserror::Error;
 use uucore::{
     display::Quotable,
     error::{UError, UResult},
     format_usage, help_about, help_section, help_usage,
 };
-
-use crate::syntax_tree::is_truthy;
 
 mod syntax_tree;
 

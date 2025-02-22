@@ -292,7 +292,7 @@ const PRECEDENCE: &[&[(&str, BinOp)]] = &[
     &[(":", BinOp::String(StringOp::Match))],
 ];
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NumOrStr {
     Num(BigInt),
     Str(String),
@@ -343,6 +343,9 @@ impl NumOrStr {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AstNode {
+    Evaluated {
+        value: NumOrStr,
+    },
     Leaf {
         value: String,
     },
@@ -366,8 +369,15 @@ impl AstNode {
         Parser::new(input).parse()
     }
 
+    pub fn evaluated(self) -> ExprResult<Self> {
+        Ok(Self::Evaluated {
+            value: self.eval()?,
+        })
+    }
+
     pub fn eval(&self) -> ExprResult<NumOrStr> {
         match self {
+            Self::Evaluated { value } => Ok(value.clone()),
             Self::Leaf { value } => Ok(value.to_string().into()),
             Self::BinOp {
                 op_type,
@@ -536,7 +546,10 @@ impl<'a> Parser<'a> {
                 value: self.next()?.into(),
             },
             "(" => {
-                let s = self.parse_expression()?;
+                // Evaluate the node just after parsing to we detect arithmetic
+                // errors before checking for the closing parenthesis.
+                let s = self.parse_expression()?.evaluated()?;
+
                 match self.next() {
                     Ok(")") => {}
                     // Since we have parsed at least a '(', there will be a token
@@ -680,7 +693,9 @@ mod test {
             AstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Mul),
-                op(BinOp::Numeric(NumericOp::Add), "1", "2"),
+                op(BinOp::Numeric(NumericOp::Add), "1", "2")
+                    .evaluated()
+                    .unwrap(),
                 "3"
             ))
         );
