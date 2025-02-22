@@ -132,6 +132,8 @@ impl Sequence {
             Self::Char(c) => Box::new(std::iter::once(*c)),
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
+            // In Rust v1.82.0, use `repeat_n`:
+            // <https://doc.rust-lang.org/std/iter/fn.repeat_n.html>
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
             Self::Class(class) => match class {
                 Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),

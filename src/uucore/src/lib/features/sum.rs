@@ -27,7 +27,7 @@ pub trait Digest {
     fn reset(&mut self);
     fn output_bits(&self) -> usize;
     fn output_bytes(&self) -> usize {
-        (self.output_bits() + 7) / 8
+        self.output_bits().div_ceil(8)
     }
     fn result_str(&mut self) -> String {
         let mut buf: Vec<u8> = vec![0; self.output_bytes()];

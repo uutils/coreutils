@@ -227,12 +227,12 @@ fn parse_lines<'a>(
 ///
 /// * `file`: The file to start reading from.
 /// * `next_files`: When `file` reaches EOF, it is updated to `next_files.next()` if that is `Some`,
-///    and this function continues reading.
+///   and this function continues reading.
 /// * `buffer`: The buffer that is filled with bytes. Its contents will mostly be overwritten (see `start_offset`
 ///   as well). It will be grown up to `max_buffer_size` if necessary, but it will always grow to read at least two lines.
 /// * `max_buffer_size`: Grow the buffer to at most this length. If None, the buffer will not grow, unless needed to read at least two lines.
 /// * `start_offset`: The amount of bytes at the start of `buffer` that were carried over
-///    from the previous read and should not be overwritten.
+///   from the previous read and should not be overwritten.
 /// * `separator`: The byte that separates lines.
 ///
 /// # Returns

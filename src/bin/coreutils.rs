@@ -107,7 +107,7 @@ fn main() {
             }
             // Not a special command: fallthrough to calling a util
             _ => {}
-        };
+        }
 
         match utils.get(util) {
             Some(&(uumain, _)) => {
