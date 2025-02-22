@@ -2781,6 +2781,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "onig",
+ "thiserror 2.0.11",
  "uucore",
 ]
 

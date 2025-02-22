@@ -3,10 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::fmt::Display;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use syntax_tree::AstNode;
+use thiserror::Error;
 use uucore::{
     display::Quotable,
     error::{UError, UResult},
@@ -25,62 +24,35 @@ mod options {
 
 pub type ExprResult<T> = Result<T, ExprError>;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Error, Clone, Debug, PartialEq, Eq)]
 pub enum ExprError {
+    #[error("syntax error: unexpected argument {}", .0.quote())]
     UnexpectedArgument(String),
+    #[error("syntax error: missing argument after {}", .0.quote())]
     MissingArgument(String),
+    #[error("non-integer argument")]
     NonIntegerArgument,
+    #[error("missing operand")]
     MissingOperand,
+    #[error("division by zero")]
     DivisionByZero,
+    #[error("Invalid regex expression")]
     InvalidRegexExpression,
+    #[error("syntax error: expecting ')' after {}", .0.quote())]
     ExpectedClosingBraceAfter(String),
+    #[error("syntax error: expecting ')' instead of {}", .0.quote())]
     ExpectedClosingBraceInsteadOf(String),
+    #[error("Unmatched ( or \\(")]
     UnmatchedOpeningParenthesis,
+    #[error("Unmatched ) or \\)")]
     UnmatchedClosingParenthesis,
+    #[error("Unmatched \\{{")]
     UnmatchedOpeningBrace,
+    #[error("Unmatched ) or \\}}")]
     UnmatchedClosingBrace,
+    #[error("Invalid content of {0}")]
     InvalidContent(String),
 }
-
-impl Display for ExprError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnexpectedArgument(s) => {
-                write!(f, "syntax error: unexpected argument {}", s.quote())
-            }
-            Self::MissingArgument(s) => {
-                write!(f, "syntax error: missing argument after {}", s.quote())
-            }
-            Self::NonIntegerArgument => write!(f, "non-integer argument"),
-            Self::MissingOperand => write!(f, "missing operand"),
-            Self::DivisionByZero => write!(f, "division by zero"),
-            Self::InvalidRegexExpression => write!(f, "Invalid regex expression"),
-            Self::ExpectedClosingBraceAfter(s) => {
-                write!(f, "syntax error: expecting ')' after {}", s.quote())
-            }
-            Self::ExpectedClosingBraceInsteadOf(s) => {
-                write!(f, "syntax error: expecting ')' instead of {}", s.quote())
-            }
-            Self::UnmatchedOpeningParenthesis => {
-                write!(f, "Unmatched ( or \\(")
-            }
-            Self::UnmatchedClosingParenthesis => {
-                write!(f, "Unmatched ) or \\)")
-            }
-            Self::UnmatchedOpeningBrace => {
-                write!(f, "Unmatched \\{{")
-            }
-            Self::UnmatchedClosingBrace => {
-                write!(f, "Unmatched ) or \\}}")
-            }
-            Self::InvalidContent(s) => {
-                write!(f, "Invalid content of {}", s)
-            }
-        }
-    }
-}
-
-impl std::error::Error for ExprError {}
 
 impl UError for ExprError {
     fn code(&self) -> i32 {
