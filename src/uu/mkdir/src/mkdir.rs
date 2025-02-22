@@ -152,7 +152,7 @@ fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) ->
 /// ## Options
 ///
 /// * `recursive` --- create parent directories for the `path`, if they do not
-///     exist.
+///   exist.
 /// * `mode` --- file mode for the directories (not implemented on windows).
 /// * `verbose` --- print a message for each printed directory.
 ///
