@@ -2609,15 +2609,6 @@ impl UChild {
         self.wait().unwrap()
     }
 
-    /// Convenience method for [`UChild::pipe_in`] and then [`UChild::wait_with_output`]
-    #[deprecated = "Please use pipe_in_and_wait() -> CmdResult instead."]
-    pub fn pipe_in_and_wait_with_output<T: Into<Vec<u8>>>(mut self, content: T) -> Output {
-        self.pipe_in(content);
-
-        #[allow(deprecated)]
-        self.wait_with_output().unwrap()
-    }
-
     /// Write some bytes to the child process stdin.
     ///
     /// This function is meant for small data and faking user input like typing a `yes` or `no`.

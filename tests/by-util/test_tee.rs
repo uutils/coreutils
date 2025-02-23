@@ -160,11 +160,11 @@ fn test_tee_no_more_writeable_2() {
 
 #[cfg(target_os = "linux")]
 mod linux_only {
-    use crate::common::util::{AtPath, TestScenario, UCommand};
+    use crate::common::util::{AtPath, CmdResult, TestScenario, UCommand};
 
     use std::fmt::Write;
     use std::fs::File;
-    use std::process::{Output, Stdio};
+    use std::process::Stdio;
     use std::time::Duration;
 
     fn make_broken_pipe() -> File {
@@ -200,64 +200,61 @@ mod linux_only {
         unsafe { File::from_raw_fd(fds[0]) }
     }
 
-    fn run_tee(proc: &mut UCommand) -> (String, Output) {
+    fn run_tee(proc: &mut UCommand) -> (String, CmdResult) {
         let content = (1..=100_000).fold(String::new(), |mut output, x| {
             let _ = writeln!(output, "{x}");
             output
         });
 
-        #[allow(deprecated)]
-        let output = proc
+        let result = proc
             .ignore_stdin_write_error()
             .set_stdin(Stdio::piped())
             .run_no_wait()
-            .pipe_in_and_wait_with_output(content.as_bytes());
+            .pipe_in_and_wait(content.as_bytes());
 
-        (content, output)
+        (content, result)
     }
 
-    fn expect_success(output: &Output) {
+    fn expect_success(result: &CmdResult) {
         assert!(
-            output.status.success(),
+            result.succeeded(),
             "Command was expected to succeed.\nstdout = {}\n stderr = {}",
-            std::str::from_utf8(&output.stdout).unwrap(),
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stdout()).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
         assert!(
-            output.stderr.is_empty(),
+            result.stderr_str().is_empty(),
             "Unexpected data on stderr.\n stderr = {}",
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
     }
 
-    fn expect_failure(output: &Output, message: &str) {
+    fn expect_failure(result: &CmdResult, message: &str) {
         assert!(
-            !output.status.success(),
+            !result.succeeded(),
             "Command was expected to fail.\nstdout = {}\n stderr = {}",
-            std::str::from_utf8(&output.stdout).unwrap(),
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stdout()).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
         assert!(
-            std::str::from_utf8(&output.stderr)
-                .unwrap()
-                .contains(message),
+            result.stderr_str().contains(message),
             "Expected to see error message fragment {} in stderr, but did not.\n stderr = {}",
             message,
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
     }
 
-    fn expect_silent_failure(output: &Output) {
+    fn expect_silent_failure(result: &CmdResult) {
         assert!(
-            !output.status.success(),
+            !result.succeeded(),
             "Command was expected to fail.\nstdout = {}\n stderr = {}",
-            std::str::from_utf8(&output.stdout).unwrap(),
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stdout()).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
         assert!(
-            output.stderr.is_empty(),
+            result.stderr_str().is_empty(),
             "Unexpected data on stderr.\n stderr = {}",
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
     }
 
