@@ -278,10 +278,26 @@ jobs:
       run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
+    - name: "`make install COMPLETIONS=n MANPAGES=n`"
+      shell: bash
+      run: |
+        DESTDIR=/tmp/ make PROFILE=release COMPLETIONS=n MANPAGES=n install
+        # Check that the utils are present
+        test -f /tmp/usr/local/bin/tty
+        # Check that the manpage is not present
+        ! test -f /tmp/usr/local/share/man/man1/whoami.1
+        # Check that the completion is not present
+        ! test -f /tmp/usr/local/share/zsh/site-functions/_install
+        ! test -f /tmp/usr/local/share/bash-completion/completions/head
+        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
+      env:
+        RUST_BACKTRACE: "1"
     - name: "`make install`"
       shell: bash
       run: |
         DESTDIR=/tmp/ make PROFILE=release install
+        # Check that the utils are present
+        test -f /tmp/usr/local/bin/tty
         # Check that the manpage is present
         test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is present
@@ -294,6 +310,8 @@ jobs:
       shell: bash
       run: |
         DESTDIR=/tmp/ make uninstall
+        # Check that the utils are not present
+        ! test -f /tmp/usr/local/bin/tty
         # Check that the manpage is not present
         ! test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is not present
