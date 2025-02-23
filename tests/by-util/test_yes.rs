@@ -29,8 +29,7 @@ fn run(args: &[impl AsRef<OsStr>], expected: &[u8]) {
     let buf = child.stdout_exact_bytes(expected.len());
     child.close_stdout();
 
-    #[allow(deprecated)]
-    check_termination(child.wait_with_output().unwrap().status);
+    check_termination(child.wait().unwrap().exit_status());
     assert_eq!(buf.as_slice(), expected);
 }
 
