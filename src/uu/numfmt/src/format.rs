@@ -278,12 +278,12 @@ fn transform_to(
             format!(
                 "{:.precision$}{}",
                 i2,
-                DisplayableSuffix(s),
+                DisplayableSuffix(s, opts.to),
                 precision = precision
             )
         }
-        Some(s) if i2.abs() < 10.0 => format!("{:.1}{}", i2, DisplayableSuffix(s)),
-        Some(s) => format!("{:.0}{}", i2, DisplayableSuffix(s)),
+        Some(s) if i2.abs() < 10.0 => format!("{:.1}{}", i2, DisplayableSuffix(s, opts.to)),
+        Some(s) => format!("{:.0}{}", i2, DisplayableSuffix(s, opts.to)),
     })
 }
 
