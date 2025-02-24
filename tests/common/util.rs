@@ -2284,7 +2284,6 @@ impl UChild {
             self.tmpd.clone(),
         );
 
-        #[allow(deprecated)]
         let output = self.wait_with_output()?;
 
         Ok(CmdResult {
@@ -2307,8 +2306,7 @@ impl UChild {
     ///
     /// If `self.timeout` is reached while waiting or [`Child::wait_with_output`] returned an
     /// error.
-    #[deprecated = "Please use wait() -> io::Result<CmdResult> instead."]
-    pub fn wait_with_output(mut self) -> io::Result<Output> {
+    fn wait_with_output(mut self) -> io::Result<Output> {
         // some apps do not stop execution until their stdin gets closed.
         // to prevent a endless waiting here, we close the stdin.
         self.join(); // ensure that all pending async input is piped in
