@@ -370,3 +370,11 @@ fn test_num_str_comparison() {
         .succeeds()
         .stdout_is("1\n");
 }
+
+#[test]
+fn test_eager_evaluation() {
+    new_ucmd!()
+        .args(&["(", "1", "/", "0"])
+        .fails()
+        .stderr_contains("division by zero");
+}
