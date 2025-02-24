@@ -133,6 +133,12 @@ pub struct ProcessInformation {
     cached_thread_ids: Option<Rc<Vec<usize>>>,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum UidGid {
+    Uid,
+    Gid,
+}
+
 impl ProcessInformation {
     /// Try new with pid path such as `/proc/self`
     ///
@@ -237,6 +243,43 @@ impl ProcessInformation {
         self.cached_start_time = Some(time);
 
         Ok(time)
+    }
+
+    pub fn ppid(&mut self) -> Result<u64, io::Error> {
+        // the PPID is the fourth field in /proc/<PID>/stat
+        // (https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10)
+        self.stat()
+            .get(3)
+            .ok_or(io::ErrorKind::InvalidData)?
+            .parse::<u64>()
+            .map_err(|_| io::ErrorKind::InvalidData.into())
+    }
+
+    fn get_uid_or_gid_field(&mut self, field: UidGid, index: usize) -> Result<u32, io::Error> {
+        self.status()
+            .get(&format!("{:?}", field))
+            .ok_or(io::ErrorKind::InvalidData)?
+            .split_whitespace()
+            .nth(index)
+            .ok_or(io::ErrorKind::InvalidData)?
+            .parse::<u32>()
+            .map_err(|_| io::ErrorKind::InvalidData.into())
+    }
+
+    pub fn uid(&mut self) -> Result<u32, io::Error> {
+        self.get_uid_or_gid_field(UidGid::Uid, 0)
+    }
+
+    pub fn euid(&mut self) -> Result<u32, io::Error> {
+        self.get_uid_or_gid_field(UidGid::Uid, 1)
+    }
+
+    pub fn gid(&mut self) -> Result<u32, io::Error> {
+        self.get_uid_or_gid_field(UidGid::Gid, 0)
+    }
+
+    pub fn egid(&mut self) -> Result<u32, io::Error> {
+        self.get_uid_or_gid_field(UidGid::Gid, 1)
     }
 
     /// Fetch run state from [ProcessInformation::cached_stat]
@@ -455,5 +498,17 @@ mod tests {
 
         let case = "47246 (kworker /10:1-events) I 2 0 0 0 -1 69238880 0 0 0 0 17 29 0 0 20 0 1 0 1396260 0 0 18446744073709551615 0 0 0 0 0 0 0 2147483647 0 0 0 0 17 10 0 0 0 0 0 0 0 0 0 0 0 0 0";
         assert!(stat_split(case)[1] == "kworker /10:1-events");
+    }
+
+    #[test]
+    fn test_uid_gid() {
+        let mut pid_entry = ProcessInformation::try_new(
+            PathBuf::from_str(&format!("/proc/{}", current_pid())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(pid_entry.uid().unwrap(), uucore::process::getuid());
+        assert_eq!(pid_entry.euid().unwrap(), uucore::process::geteuid());
+        assert_eq!(pid_entry.gid().unwrap(), uucore::process::getgid());
+        assert_eq!(pid_entry.egid().unwrap(), uucore::process::getegid());
     }
 }
