@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore exitstatus cmdline kworker pgrep pwait snice procps
+// spell-checker:ignore egid euid gettid ppid
 
 //! Set of functions to manage IDs
 //!
