@@ -94,16 +94,29 @@ pub fn uu_app() -> Command {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // For expr utility we do not want getopts.
     // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`
-    let matches = uu_app().try_get_matches_from(args)?;
-    let token_strings: Vec<&str> = matches
-        .get_many::<String>(options::EXPRESSION)
-        .map(|v| v.into_iter().map(|s| s.as_ref()).collect::<Vec<_>>())
-        .unwrap_or_default();
+    let args: Vec<String> = args
+        .skip(1) // Skip binary name
+        .map(|a| a.to_string_lossy().to_string())
+        .collect();
 
-    let res: String = AstNode::parse(&token_strings)?.eval()?.eval_as_string();
-    println!("{res}");
-    if !is_truthy(&res.into()) {
-        return Err(1.into());
+    if args.len() == 1 && args[0] == "--help" {
+        let _ = uu_app().print_help();
+    } else if args.len() == 1 && args[0] == "--version" {
+        println!("{} {}", uucore::util_name(), crate_version!())
+    } else {
+        // The first argument may be "--" and should be be ignored.
+        let args = if !args.is_empty() && args[0] == "--" {
+            &args[1..]
+        } else {
+            &args
+        };
+
+        let res: String = AstNode::parse(args)?.eval()?.eval_as_string();
+        println!("{res}");
+        if !is_truthy(&res.into()) {
+            return Err(1.into());
+        }
     }
+
     Ok(())
 }
