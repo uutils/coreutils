@@ -365,7 +365,7 @@ pub enum AstNode {
 }
 
 impl AstNode {
-    pub fn parse(input: &[&str]) -> ExprResult<Self> {
+    pub fn parse(input: &[impl AsRef<str>]) -> ExprResult<Self> {
         Parser::new(input).parse()
     }
 
@@ -427,13 +427,13 @@ impl AstNode {
     }
 }
 
-struct Parser<'a> {
-    input: &'a [&'a str],
+struct Parser<'a, S: AsRef<str>> {
+    input: &'a [S],
     index: usize,
 }
 
-impl<'a> Parser<'a> {
-    fn new(input: &'a [&'a str]) -> Self {
+impl<'a, S: AsRef<str>> Parser<'a, S> {
+    fn new(input: &'a [S]) -> Self {
         Self { input, index: 0 }
     }
 
@@ -441,19 +441,19 @@ impl<'a> Parser<'a> {
         let next = self.input.get(self.index);
         if let Some(next) = next {
             self.index += 1;
-            Ok(next)
+            Ok(next.as_ref())
         } else {
             // The indexing won't panic, because we know that the input size
             // is greater than zero.
             Err(ExprError::MissingArgument(
-                self.input[self.index - 1].into(),
+                self.input[self.index - 1].as_ref().into(),
             ))
         }
     }
 
     fn accept<T>(&mut self, f: impl Fn(&str) -> Option<T>) -> Option<T> {
         let next = self.input.get(self.index)?;
-        let tok = f(next);
+        let tok = f(next.as_ref());
         if let Some(tok) = tok {
             self.index += 1;
             Some(tok)
@@ -468,7 +468,7 @@ impl<'a> Parser<'a> {
         }
         let res = self.parse_expression()?;
         if let Some(arg) = self.input.get(self.index) {
-            return Err(ExprError::UnexpectedArgument(arg.to_string()));
+            return Err(ExprError::UnexpectedArgument(arg.as_ref().into()));
         }
         Ok(res)
     }
@@ -556,12 +556,12 @@ impl<'a> Parser<'a> {
                     // at `self.index - 1`. So this indexing won't panic.
                     Ok(_) => {
                         return Err(ExprError::ExpectedClosingBraceInsteadOf(
-                            self.input[self.index - 1].into(),
+                            self.input[self.index - 1].as_ref().into(),
                         ));
                     }
                     Err(ExprError::MissingArgument(_)) => {
                         return Err(ExprError::ExpectedClosingBraceAfter(
-                            self.input[self.index - 1].into(),
+                            self.input[self.index - 1].as_ref().into(),
                         ));
                     }
                     Err(e) => return Err(e),
