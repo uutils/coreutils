@@ -3,9 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use uutests::new_ucmd;
 #[cfg(unix)]
-use crate::common::util::expected_result;
-use crate::common::util::{is_ci, whoami, TestScenario};
+use uutests::unwrap_or_return;
+#[cfg(unix)]
+use uutests::util::expected_result;
+use uutests::util::{is_ci, whoami, TestScenario};
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {

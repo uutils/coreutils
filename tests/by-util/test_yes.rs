@@ -8,7 +8,9 @@ use std::process::{ExitStatus, Stdio};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[cfg(unix)]
 fn check_termination(result: ExitStatus) {

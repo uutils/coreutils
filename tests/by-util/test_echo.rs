@@ -2,9 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) araba merci
+// spell-checker:ignore (words) araba merci mright
 
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util::UCommand;
+use uutests::util_name;
 
 #[test]
 fn test_default() {
@@ -391,6 +394,64 @@ fn slash_eight_off_by_one() {
         .stdout_only(r"\8");
 }
 
+#[test]
+fn test_normalized_newlines_stdout_is() {
+    let res = new_ucmd!().args(&["-ne", "A\r\nB\nC"]).run();
+
+    res.normalized_newlines_stdout_is("A\r\nB\nC");
+    res.normalized_newlines_stdout_is("A\nB\nC");
+    res.normalized_newlines_stdout_is("A\nB\r\nC");
+}
+
+#[test]
+fn test_normalized_newlines_stdout_is_fail() {
+    new_ucmd!()
+        .args(&["-ne", "A\r\nB\nC"])
+        .run()
+        .stdout_is("A\r\nB\nC");
+}
+
+#[test]
+fn test_cmd_result_stdout_check_and_stdout_str_check() {
+    let result = new_ucmd!().arg("Hello world").run();
+
+    result.stdout_str_check(|stdout| stdout.ends_with("world\n"));
+    result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
+    result.no_stderr();
+}
+
+#[test]
+fn test_cmd_result_stderr_check_and_stderr_str_check() {
+    let ts = TestScenario::new("echo");
+
+    let result = UCommand::new()
+        .arg(format!(
+            "{} {} Hello world >&2",
+            ts.bin_path.display(),
+            ts.util_name
+        ))
+        .run();
+
+    result.stderr_str_check(|stderr| stderr.ends_with("world\n"));
+    result.stderr_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
+    result.no_stdout();
+}
+
+#[test]
+fn test_cmd_result_stdout_str_check_when_false_then_panics() {
+    new_ucmd!()
+        .args(&["-e", "\\f"])
+        .succeeds()
+        .stdout_only("\x0C\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cmd_result_signal_when_normal_exit_then_no_signal() {
+    let result = TestScenario::new("echo").ucmd().run();
+    assert!(result.signal().is_none());
+}
+
 mod posixly_correct {
     use super::*;
 
@@ -441,4 +502,57 @@ mod posixly_correct {
             .succeeds()
             .stdout_only("foo");
     }
+}
+
+#[test]
+fn test_child_when_run_with_a_non_blocking_util() {
+    new_ucmd!()
+        .arg("hello world")
+        .run()
+        .success()
+        .stdout_only("hello world\n");
+}
+
+// Test basically that most of the methods of UChild are working
+#[test]
+fn test_uchild_when_run_no_wait_with_a_non_blocking_util() {
+    let mut child = new_ucmd!().arg("hello world").run_no_wait();
+
+    // check `child.is_alive()` and `child.delay()` is working
+    let mut trials = 10;
+    while child.is_alive() {
+        assert!(
+            trials > 0,
+            "Assertion failed: child process is still alive."
+        );
+
+        child.delay(500);
+        trials -= 1;
+    }
+
+    assert!(!child.is_alive());
+
+    // check `child.is_not_alive()` is working
+    assert!(child.is_not_alive());
+
+    // check the current output is correct
+    std::assert_eq!(child.stdout(), "hello world\n");
+    assert!(child.stderr().is_empty());
+
+    // check the current output of echo is empty. We already called `child.stdout()` and `echo`
+    // exited so there's no additional output after the first call of `child.stdout()`
+    assert!(child.stdout().is_empty());
+    assert!(child.stderr().is_empty());
+
+    // check that we're still able to access all output of the child process, even after exit
+    // and call to `child.stdout()`
+    std::assert_eq!(child.stdout_all(), "hello world\n");
+    assert!(child.stderr_all().is_empty());
+
+    // we should be able to call kill without panics, even if the process already exited
+    child.make_assertion().is_not_alive();
+    child.kill();
+
+    // we should be able to call wait without panics and apply some assertions
+    child.wait().unwrap().code_is(0).no_stdout().no_stderr();
 }

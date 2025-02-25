@@ -4,9 +4,11 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) Sdivide
 
-use crate::common::util::{TestScenario, UCommand};
 use chrono::{DateTime, Duration, Utc};
 use std::fs::metadata;
+use uutests::new_ucmd;
+use uutests::util::{TestScenario, UCommand};
+use uutests::util_name;
 
 const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
 

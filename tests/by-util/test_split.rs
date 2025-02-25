@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
 
-use crate::common::util::{AtPath, TestScenario};
 use rand::{rng, Rng, SeedableRng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -16,6 +15,11 @@ use std::{
     fs::{read_dir, File},
     io::{BufWriter, Read, Write},
 };
+use uutests::util::{AtPath, TestScenario};
+
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util_name;
 
 fn random_chars(n: usize) -> String {
     rng()
