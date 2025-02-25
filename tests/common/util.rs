@@ -1834,6 +1834,14 @@ impl UCommand {
         cmd_result
     }
 
+    #[track_caller]
+    pub fn fails_with_code(&mut self, expected_code: i32) -> CmdResult {
+        let cmd_result = self.run();
+        cmd_result.failure();
+        cmd_result.code_is(expected_code);
+        cmd_result
+    }
+
     pub fn get_full_fixture_path(&self, file_rel_path: &str) -> String {
         let tmpdir_path = self.tmpd.as_ref().unwrap().path();
         format!("{}/{file_rel_path}", tmpdir_path.to_str().unwrap())
