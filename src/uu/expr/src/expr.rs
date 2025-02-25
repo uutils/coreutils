@@ -48,8 +48,8 @@ pub enum ExprError {
     UnmatchedOpeningBrace,
     #[error("Unmatched ) or \\}}")]
     UnmatchedClosingBrace,
-    #[error("Invalid content of {0}")]
-    InvalidContent(String),
+    #[error("Invalid content of \\{{\\}}")]
+    InvalidBracketContent,
 }
 
 impl UError for ExprError {
