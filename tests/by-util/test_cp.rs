@@ -440,6 +440,29 @@ fn test_cp_arg_update_older_dest_not_older_than_src() {
 }
 
 #[test]
+fn test_cp_arg_update_older_dest_not_older_than_src_no_verbose_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_dest_not_older_file1";
+    let new = "test_cp_arg_update_dest_not_older_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
+
+    at.write(old, old_content);
+    at.write(new, new_content);
+
+    ucmd.arg(old)
+        .arg(new)
+        .arg("--verbose")
+        .arg("--update=older")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), "new content\n");
+}
+
+#[test]
 fn test_cp_arg_update_older_dest_older_than_src() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -460,6 +483,32 @@ fn test_cp_arg_update_older_dest_older_than_src() {
         .succeeds()
         .no_stderr()
         .no_stdout();
+
+    assert_eq!(at.read(old), "new content\n");
+}
+
+#[test]
+fn test_cp_arg_update_older_dest_older_than_src_with_verbose_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_dest_older_file1";
+    let new = "test_cp_arg_update_dest_older_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
+
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+
+    at.write(new, new_content);
+
+    ucmd.arg(new)
+        .arg(old)
+        .arg("--verbose")
+        .arg("--update=older")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("'{new}' -> '{old}'\n"));
 
     assert_eq!(at.read(old), "new content\n");
 }
