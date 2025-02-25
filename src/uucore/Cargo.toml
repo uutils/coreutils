@@ -27,11 +27,11 @@ clap = { workspace = true }
 uucore_procs = { workspace = true }
 number_prefix = { workspace = true }
 dns-lookup = { workspace = true, optional = true }
-dunce = { version = "1.0.4", optional = true }
-wild = "2.2.1"
+dunce = { workspace = true, optional = true }
+wild = { workspace = true }
 glob = { workspace = true }
 iana-time-zone = { workspace = true }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 # * optional
 itertools = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
@@ -41,12 +41,12 @@ time = { workspace = true, optional = true, features = [
   "macros",
 ] }
 # * "problem" dependencies (pinned)
-data-encoding = { version = "2.6", optional = true }
-data-encoding-macro = { version = "0.1.15", optional = true }
-z85 = { version = "3.0.5", optional = true }
+data-encoding = { workspace = true, optional = true }
+data-encoding-macro = { workspace = true, optional = true }
+z85 = { workspace = true, optional = true }
 libc = { workspace = true, optional = true }
 once_cell = { workspace = true }
-os_display = "0.1.3"
+os_display = { workspace = true }
 
 digest = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }

@@ -363,6 +363,122 @@ uucore = { version = "0.0.29", package = "uucore", path = "src/uucore" }
 uucore_procs = { version = "0.0.29", package = "uucore_procs", path = "src/uucore_procs" }
 uu_ls = { version = "0.0.29", path = "src/uu/ls" }
 uu_base32 = { version = "0.0.29", path = "src/uu/base32" }
+arch = { version = "0.0.29", path = "src/uu/arch" }
+base32 = { version = "0.0.29", path = "src/uu/base32" }
+base64 = { version = "0.0.29", path = "src/uu/base64" }
+basename = { version = "0.0.29", path = "src/uu/basename" }
+basenc = { version = "0.0.29", path = "src/uu/basenc" }
+cat = { version = "0.0.29", path = "src/uu/cat" }
+chcon = { version = "0.0.29", path = "src/uu/chcon" }
+chgrp = { version = "0.0.29", path = "src/uu/chgrp" }
+chmod = { version = "0.0.29", path = "src/uu/chmod" }
+chown = { version = "0.0.29", path = "src/uu/chown" }
+chroot = { version = "0.0.29", path = "src/uu/chroot" }
+cksum = { version = "0.0.29", path = "src/uu/cksum" }
+comm = { version = "0.0.29", path = "src/uu/comm" }
+cp = { version = "0.0.29", path = "src/uu/cp" }
+cpp = "0.5.10"
+cpp_build = "0.5.10"
+csplit = { version = "0.0.29", path = "src/uu/csplit" }
+cut = { version = "0.0.29", path = "src/uu/cut" }
+data-encoding = "2.6"
+data-encoding-macro = "0.1.15"
+date = { version = "0.0.29", path = "src/uu/date" }
+dd = { version = "0.0.29", path = "src/uu/dd" }
+df = { version = "0.0.29", path = "src/uu/df" }
+dir = { version = "0.0.29", path = "src/uu/dir" }
+dircolors = { version = "0.0.29", path = "src/uu/dircolors" }
+dirname = { version = "0.0.29", path = "src/uu/dirname" }
+du = { version = "0.0.29", path = "src/uu/du" }
+dunce = "1.0.4"
+echo = { version = "0.0.29", path = "src/uu/echo" }
+env = { version = "0.0.29", path = "src/uu/env" }
+expand = { version = "0.0.29", path = "src/uu/expand" }
+expr = { version = "0.0.29", path = "src/uu/expr" }
+factor = { version = "0.0.29", path = "src/uu/factor" }
+false = { version = "0.0.29", path = "src/uu/false" }
+fmt = { version = "0.0.29", path = "src/uu/fmt" }
+fold = { version = "0.0.29", path = "src/uu/fold" }
+groups = { version = "0.0.29", path = "src/uu/groups" }
+hashsum = { version = "0.0.29", path = "src/uu/hashsum" }
+head = { version = "0.0.29", path = "src/uu/head" }
+hex-literal = "0.4.1"
+hostid = { version = "0.0.29", path = "src/uu/hostid" }
+id = { version = "0.0.29", path = "src/uu/id" }
+install = { version = "0.0.29", path = "src/uu/install" }
+join = { version = "0.0.29", path = "src/uu/join" }
+kill = { version = "0.0.29", path = "src/uu/kill" }
+lazy_static = "1.4.0"
+libstdbuf = { version = "0.0.29", path = "src/uu/stdbuf/src/libstdbuf" }
+link = { version = "0.0.29", path = "src/uu/link" }
+ln = { version = "0.0.29", path = "src/uu/ln" }
+logname = { version = "0.0.29", path = "src/uu/logname" }
+ls = { version = "0.0.29", path = "src/uu/ls" }
+mkdir = { version = "0.0.29", path = "src/uu/mkdir" }
+mkfifo = { version = "0.0.29", path = "src/uu/mkfifo" }
+mknod = { version = "0.0.29", path = "src/uu/mknod" }
+mktemp = { version = "0.0.29", path = "src/uu/mktemp" }
+more = { version = "0.0.29", path = "src/uu/more" }
+mv = { version = "0.0.29", path = "src/uu/mv" }
+nice = { version = "0.0.29", path = "src/uu/nice" }
+nl = { version = "0.0.29", path = "src/uu/nl" }
+nohup = { version = "0.0.29", path = "src/uu/nohup" }
+nproc = { version = "0.0.29", path = "src/uu/nproc" }
+numfmt = { version = "0.0.29", path = "src/uu/numfmt" }
+od = { version = "0.0.29", path = "src/uu/od" }
+os_display = "0.1.3"
+paste = { version = "0.0.29", path = "src/uu/paste" }
+pathchk = { version = "0.0.29", path = "src/uu/pathchk" }
+pinky = { version = "0.0.29", path = "src/uu/pinky" }
+pr = { version = "0.0.29", path = "src/uu/pr" }
+pretty_assertions = "1.4.0"
+printenv = { version = "0.0.29", path = "src/uu/printenv" }
+printf = { version = "0.0.29", path = "src/uu/printf" }
+proc-macro2 = "1.0.81"
+ptx = { version = "0.0.29", path = "src/uu/ptx" }
+pwd = { version = "0.0.29", path = "src/uu/pwd" }
+quote = "1.0.36"
+readlink = { version = "0.0.29", path = "src/uu/readlink" }
+realpath = { version = "0.0.29", path = "src/uu/realpath" }
+rm = { version = "0.0.29", path = "src/uu/rm" }
+rmdir = { version = "0.0.29", path = "src/uu/rmdir" }
+runcon = { version = "0.0.29", path = "src/uu/runcon" }
+seq = { version = "0.0.29", path = "src/uu/seq" }
+shred = { version = "0.0.29", path = "src/uu/shred" }
+shuf = { version = "0.0.29", path = "src/uu/shuf" }
+sleep = { version = "0.0.29", path = "src/uu/sleep" }
+sort = { version = "0.0.29", path = "src/uu/sort" }
+split = { version = "0.0.29", path = "src/uu/split" }
+stat = { version = "0.0.29", path = "src/uu/stat" }
+stdbuf = { version = "0.0.29", path = "src/uu/stdbuf" }
+stty = { version = "0.0.29", path = "src/uu/stty" }
+sum = { version = "0.0.29", path = "src/uu/sum" }
+sync = { version = "0.0.29", path = "src/uu/sync" }
+tac = { version = "0.0.29", path = "src/uu/tac" }
+tail = { version = "0.0.29", path = "src/uu/tail" }
+tee = { version = "0.0.29", path = "src/uu/tee" }
+timeout = { version = "0.0.29", path = "src/uu/timeout" }
+touch = { version = "0.0.29", path = "src/uu/touch" }
+tr = { version = "0.0.29", path = "src/uu/tr" }
+true = { version = "0.0.29", path = "src/uu/true" }
+truncate = { version = "0.0.29", path = "src/uu/truncate" }
+tsort = { version = "0.0.29", path = "src/uu/tsort" }
+tty = { version = "0.0.29", path = "src/uu/tty" }
+uname = { version = "0.0.29", path = "src/uu/uname" }
+unexpand = { version = "0.0.29", path = "src/uu/unexpand" }
+unindent = "0.2.3"
+uniq = { version = "0.0.29", path = "src/uu/uniq" }
+unlink = { version = "0.0.29", path = "src/uu/unlink" }
+uptime = { version = "0.0.29", path = "src/uu/uptime" }
+users = { version = "0.0.29", path = "src/uu/users" }
+uu_test = { version = "0.0.29", path = "src/uu/test" }
+vdir = { version = "0.0.29", path = "src/uu/vdir" }
+wc = { version = "0.0.29", path = "src/uu/wc" }
+who = { version = "0.0.29", path = "src/uu/who" }
+whoami = { version = "0.0.29", path = "src/uu/whoami" }
+wild = "2.2.1"
+yes = { version = "0.0.29", path = "src/uu/yes" }
+z85 = "3.0.5"
 
 [dependencies]
 clap = { workspace = true }
@@ -378,10 +494,10 @@ zip = { workspace = true, optional = true }
 uuhelp_parser = { optional = true, version = ">=0.0.19", path = "src/uuhelp_parser" }
 
 # * uutils
-uu_test = { optional = true, version = "0.0.29", package = "uu_test", path = "src/uu/test" }
+uu_test = { workspace = true, optional = true }
 #
 arch = { optional = true, version = "0.0.29", package = "uu_arch", path = "src/uu/arch" }
-base32 = { optional = true, version = "0.0.29", package = "uu_base32", path = "src/uu/base32" }
+base32 = { workspace = true, optional = true }
 base64 = { optional = true, version = "0.0.29", package = "uu_base64", path = "src/uu/base64" }
 basename = { optional = true, version = "0.0.29", package = "uu_basename", path = "src/uu/basename" }
 basenc = { optional = true, version = "0.0.29", package = "uu_basenc", path = "src/uu/basenc" }
@@ -422,7 +538,7 @@ join = { optional = true, version = "0.0.29", package = "uu_join", path = "src/u
 kill = { optional = true, version = "0.0.29", package = "uu_kill", path = "src/uu/kill" }
 link = { optional = true, version = "0.0.29", package = "uu_link", path = "src/uu/link" }
 ln = { optional = true, version = "0.0.29", package = "uu_ln", path = "src/uu/ln" }
-ls = { optional = true, version = "0.0.29", package = "uu_ls", path = "src/uu/ls" }
+ls = { workspace = true, optional = true }
 logname = { optional = true, version = "0.0.29", package = "uu_logname", path = "src/uu/logname" }
 mkdir = { optional = true, version = "0.0.29", package = "uu_mkdir", path = "src/uu/mkdir" }
 mkfifo = { optional = true, version = "0.0.29", package = "uu_mkfifo", path = "src/uu/mkfifo" }
@@ -496,13 +612,13 @@ filetime = { workspace = true }
 glob = { workspace = true }
 libc = { workspace = true }
 num-prime = { workspace = true }
-pretty_assertions = "1.4.0"
+pretty_assertions = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 sha1 = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
 time = { workspace = true, features = ["local-offset"] }
-unindent = "0.2.3"
+unindent = { workspace = true }
 uucore = { workspace = true, features = [
   "mode",
   "entries",
@@ -511,7 +627,7 @@ uucore = { workspace = true, features = [
   "utmpx",
 ] }
 walkdir = { workspace = true }
-hex-literal = "0.4.1"
+hex-literal = { workspace = true }
 rstest = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
