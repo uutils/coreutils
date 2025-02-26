@@ -465,20 +465,21 @@ fn format_float_hexadecimal(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    let (first_digit, mantissa, exponent) = if f == 0.0 {
-        (0, 0, 0)
+    let (sign, first_digit, mantissa, exponent) = if f == 0.0 {
+        ("", 0, 0, 0)
     } else {
         let bits = f.to_bits();
-        let exponent_bits = ((bits >> 52) & 0x7fff) as i64;
+        let sign = if (bits >> 63) == 1 { "-" } else { "" };
+        let exponent_bits = ((bits >> 52) & 0x7ff) as i64;
         let exponent = exponent_bits - 1023;
         let mantissa = bits & 0xf_ffff_ffff_ffff;
-        (1, mantissa, exponent)
+        (sign, 1, mantissa, exponent)
     };
 
     let mut s = match (precision, force_decimal) {
-        (0, ForceDecimal::No) => format!("0x{first_digit}p{exponent:+}"),
-        (0, ForceDecimal::Yes) => format!("0x{first_digit}.p{exponent:+}"),
-        _ => format!("0x{first_digit}.{mantissa:0>13x}p{exponent:+}"),
+        (0, ForceDecimal::No) => format!("{sign}0x{first_digit}p{exponent:+}"),
+        (0, ForceDecimal::Yes) => format!("{sign}0x{first_digit}.p{exponent:+}"),
+        _ => format!("{sign}0x{first_digit}.{mantissa:0>13x}p{exponent:+}"),
     };
 
     if case == Case::Uppercase {
@@ -663,14 +664,22 @@ mod test {
         assert_eq!(f(0.125), "0x1.0000000000000p-3");
         assert_eq!(f(256.0), "0x1.0000000000000p+8");
         assert_eq!(f(65536.0), "0x1.0000000000000p+16");
+        assert_eq!(f(-0.00001), "-0x1.4f8b588e368f1p-17");
+        assert_eq!(f(-0.125), "-0x1.0000000000000p-3");
+        assert_eq!(f(-256.0), "-0x1.0000000000000p+8");
+        assert_eq!(f(-65536.0), "-0x1.0000000000000p+16");
 
         let f = |x| format_float_hexadecimal(x, 0, Case::Lowercase, ForceDecimal::No);
         assert_eq!(f(0.125), "0x1p-3");
         assert_eq!(f(256.0), "0x1p+8");
+        assert_eq!(f(-0.125), "-0x1p-3");
+        assert_eq!(f(-256.0), "-0x1p+8");
 
         let f = |x| format_float_hexadecimal(x, 0, Case::Lowercase, ForceDecimal::Yes);
         assert_eq!(f(0.125), "0x1.p-3");
         assert_eq!(f(256.0), "0x1.p+8");
+        assert_eq!(f(-0.125), "-0x1.p-3");
+        assert_eq!(f(-256.0), "-0x1.p+8");
     }
 
     #[test]
