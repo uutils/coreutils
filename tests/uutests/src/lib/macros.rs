@@ -47,8 +47,8 @@ macro_rules! util_name {
 /// This macro is intended for quick, single-call tests. For more complex tests
 /// that require multiple invocations of the tested binary, see [`TestScenario`]
 ///
-/// [`UCommand`]: crate::tests::common::util::UCommand
-/// [`TestScenario]: crate::tests::common::util::TestScenario
+/// [`UCommand`]: crate::util::UCommand
+/// [`TestScenario`]: crate::util::TestScenario
 #[macro_export]
 macro_rules! new_ucmd {
     () => {
@@ -65,9 +65,9 @@ macro_rules! new_ucmd {
 /// This macro is intended for quick, single-call tests. For more complex tests
 /// that require multiple invocations of the tested binary, see [`TestScenario`]
 ///
-/// [`UCommand`]: crate::tests::common::util::UCommand
-/// [`AtPath`]: crate::tests::common::util::AtPath
-/// [`TestScenario]: crate::tests::common::util::TestScenario
+/// [`UCommand`]: crate::util::UCommand
+/// [`AtPath`]: crate::util::AtPath
+/// [`TestScenario`]: crate::util::TestScenario
 #[macro_export]
 macro_rules! at_and_ucmd {
     () => {{

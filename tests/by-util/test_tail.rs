@@ -13,12 +13,6 @@
     clippy::cast_possible_truncation
 )]
 
-use crate::common::random::{AlphanumericNewline, RandomizedString};
-#[cfg(unix)]
-use crate::common::util::expected_result;
-#[cfg(not(windows))]
-use crate::common::util::is_ci;
-use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
@@ -45,6 +39,18 @@ use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
     not(target_os = "openbsd")
 ))]
 use tail::text;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::random::{AlphanumericNewline, RandomizedString};
+#[cfg(unix)]
+use uutests::unwrap_or_return;
+#[cfg(unix)]
+use uutests::util::expected_result;
+#[cfg(unix)]
+#[cfg(not(windows))]
+use uutests::util::is_ci;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 const FOOBAR_TXT: &str = "foobar.txt";
 const FOOBAR_2_TXT: &str = "foobar2.txt";
@@ -4880,4 +4886,40 @@ fn test_following_with_pid() {
     child.make_assertion_with_delay(2000).is_not_alive();
 
     child.kill();
+}
+
+// This error was first detected when running tail so tail is used here but
+// should fail with any command that takes piped input.
+// See also https://github.com/uutils/coreutils/issues/3895
+#[test]
+#[cfg_attr(not(feature = "expensive_tests"), ignore)]
+fn test_when_piped_input_then_no_broken_pipe() {
+    let ts = TestScenario::new("tail");
+    for i in 0..10000 {
+        dbg!(i);
+        let test_string = "a\nb\n";
+        ts.ucmd()
+            .args(&["-n", "0"])
+            .pipe_in(test_string)
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+    }
+}
+
+#[test]
+fn test_child_when_run_with_stderr_to_stdout() {
+    let ts = TestScenario::new("tail");
+    let at = &ts.fixtures;
+
+    at.write("data", "file data\n");
+
+    let expected_stdout = "==> data <==\n\
+                                file data\n\
+                                tail: cannot open 'missing' for reading: No such file or directory\n";
+    ts.ucmd()
+        .args(&["data", "missing"])
+        .stderr_to_stdout()
+        .fails()
+        .stdout_only(expected_stdout);
 }

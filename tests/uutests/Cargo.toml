@@ -1,0 +1,64 @@
+# spell-checker:ignore (features) zerocopy serde
+
+[package]
+name = "uutests"
+version = "0.0.29"
+authors = ["uutils developers"]
+license = "MIT"
+description = "uutils ~ 'core' uutils test library (cross-platform)"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/main/src/tests/common"
+# readme = "README.md"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lib]
+path = "src/lib/lib.rs"
+
+[dependencies]
+chrono = { workspace = true }
+filetime = { workspace = true }
+glob = { workspace = true }
+libc = { workspace = true }
+num-prime = { workspace = true }
+pretty_assertions = "1.4.0"
+rand = { workspace = true }
+regex = { workspace = true }
+sha1 = { workspace = true, features = ["std"] }
+tempfile = { workspace = true }
+time = { workspace = true, features = ["local-offset"] }
+unindent = "0.2.3"
+lazy_static = "1.4.0"
+uucore = { workspace = true, features = [
+  "mode",
+  "entries",
+  "process",
+  "signals",
+  "utmpx",
+] }
+walkdir = { workspace = true }
+hex-literal = "0.4.1"
+rstest = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+procfs = { version = "0.17", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["process", "signal", "user", "term"] }
+rlimit = "0.10.1"
+xattr = { workspace = true }
+
+# Specifically used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
+# to deserialize a utmpx struct into a binary file
+[target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dependencies]
+serde = { version = "1.0.202", features = ["derive"] }
+bincode = { version = "1.3.3" }
+serde-big-array = "0.5.1"
+
+[build-dependencies]
+cargo_metadata = "0.19.1"

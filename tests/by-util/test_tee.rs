@@ -4,7 +4,9 @@
 // file that was distributed with this source code.
 #![allow(clippy::borrow_as_ptr)]
 
-use crate::common::util::TestScenario;
+use uutests::util::TestScenario;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
+
 use regex::Regex;
 #[cfg(target_os = "linux")]
 use std::fmt::Write;
@@ -160,12 +162,15 @@ fn test_tee_no_more_writeable_2() {
 
 #[cfg(target_os = "linux")]
 mod linux_only {
-    use crate::common::util::{AtPath, CmdResult, TestScenario, UCommand};
+    use uutests::util::{AtPath, CmdResult, TestScenario, UCommand};
 
     use std::fmt::Write;
     use std::fs::File;
     use std::process::Stdio;
     use std::time::Duration;
+    use uutests::at_and_ucmd;
+    use uutests::new_ucmd;
+    use uutests::util_name;
 
     fn make_broken_pipe() -> File {
         use libc::c_int;
