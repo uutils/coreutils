@@ -478,7 +478,7 @@ fn format_float_hexadecimal(
     let mut s = match (precision, force_decimal) {
         (0, ForceDecimal::No) => format!("0x{first_digit}p{exponent:+x}"),
         (0, ForceDecimal::Yes) => format!("0x{first_digit}.p{exponent:+x}"),
-        _ => format!("0x{first_digit}.{mantissa:0>13x}p{exponent:+x}"),
+        _ => format!("0x{first_digit}.{mantissa:0>13x}p{exponent:+}"),
     };
 
     if case == Case::Uppercase {
@@ -652,6 +652,17 @@ mod test {
         assert_eq!(f(12.345_678_9), "1.e+01");
         assert_eq!(f(1_000_000.0), "1.e+06");
         assert_eq!(f(99_999_999.0), "1.e+08");
+    }
+
+    #[test]
+    fn hexadecimal_float() {
+        use super::format_float_hexadecimal;
+        let f = |x| format_float_hexadecimal(x, 6, Case::Lowercase, ForceDecimal::No);
+        // TODO: These values do not match coreutils output, but are possible correct representations.
+        assert_eq!(f(0.00001), "0x1.4f8b588e368f1p-17");
+        assert_eq!(f(0.125), "0x1.0000000000000p-3");
+        assert_eq!(f(256.0), "0x1.0000000000000p+8");
+        assert_eq!(f(65536.0), "0x1.0000000000000p+16");
     }
 
     #[test]
