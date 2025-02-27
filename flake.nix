@@ -2,26 +2,29 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs";
-    flake-utils.url = "github:numtide/flake-utils";
+
+    # <https://github.com/nix-systems/nix-systems>
+    systems.url = "github:nix-systems/default";
   };
 
-  outputs = {
-    self,
-    nixpkgs,
-    flake-utils,
-  }:
-    flake-utils.lib.eachDefaultSystem (system: let
-      pkgs = nixpkgs.legacyPackages.${system};
-      libselinuxPath = with pkgs;
-        lib.makeLibraryPath [
-          libselinux
-        ];
-      libaclPath = with pkgs;
-        lib.makeLibraryPath [
-          acl
-        ];
+  outputs = inputs: let
+    inherit (inputs.nixpkgs) lib legacyPackages;
+    eachSystem = lib.genAttrs (import inputs.systems);
+    pkgsFor = legacyPackages;
+  in {
+    devShells = eachSystem (
+      system: let
+        libselinuxPath = with pkgsFor.${system};
+          lib.makeLibraryPath [
+            libselinux
+          ];
 
-      build_deps = with pkgs; [
+        libaclPath = with pkgsFor.${system};
+          lib.makeLibraryPath [
+            acl
+          ];
+
+        build_deps = with pkgsFor.${system}; [
           clang
           llvmPackages.bintools
           rustup
@@ -31,7 +34,8 @@
           # debugging
           gdb
         ];
-      gnu_testing_deps = with pkgs; [
+
+        gnu_testing_deps = with pkgsFor.${system}; [
           autoconf
           automake
           bison
@@ -40,32 +44,31 @@
           gettext
           texinfo
         ];
-    in {
-      devShell = pkgs.mkShell {
-        buildInputs = build_deps ++ gnu_testing_deps;
+      in {
+        default = pkgsFor.${system}.pkgs.mkShell {
+          packages = build_deps ++ gnu_testing_deps;
 
-        RUSTC_VERSION = "1.75";
-        LIBCLANG_PATH = pkgs.lib.makeLibraryPath [pkgs.llvmPackages_latest.libclang.lib];
-        shellHook = ''
-          export PATH=$PATH:''${CARGO_HOME:-~/.cargo}/bin
-          export PATH=$PATH:''${RUSTUP_HOME:-~/.rustup}/toolchains/$RUSTC_VERSION-x86_64-unknown-linux-gnu/bin/
-        '';
+          RUSTC_VERSION = "1.75";
+          LIBCLANG_PATH = pkgsFor.${system}.lib.makeLibraryPath [pkgsFor.${system}.llvmPackages_latest.libclang.lib];
+          shellHook = ''
+            export PATH=$PATH:''${CARGO_HOME:-~/.cargo}/bin
+            export PATH=$PATH:''${RUSTUP_HOME:-~/.rustup}/toolchains/$RUSTC_VERSION-x86_64-unknown-linux-gnu/bin/
+          '';
 
-        SELINUX_INCLUDE_DIR = ''${pkgs.libselinux.dev}/include'';
-        SELINUX_LIB_DIR = libselinuxPath;
-        SELINUX_STATIC = "0";
+          SELINUX_INCLUDE_DIR = ''${pkgsFor.${system}.libselinux.dev}/include'';
+          SELINUX_LIB_DIR = libselinuxPath;
+          SELINUX_STATIC = "0";
 
-        # Necessary to build GNU.
-        LDFLAGS = ''-L ${libselinuxPath} -L ${libaclPath}'';
+          # Necessary to build GNU.
+          LDFLAGS = ''-L ${libselinuxPath} -L ${libaclPath}'';
 
-        # Add precompiled library to rustc search path
-        RUSTFLAGS =
-          (builtins.map (a: ''-L ${a}/lib'') [
-            ])
-          ++ [
+          # Add precompiled library to rustc search path
+          RUSTFLAGS = [
             ''-L ${libselinuxPath}''
             ''-L ${libaclPath}''
           ];
-      };
-    });
+        };
+      }
+    );
+  };
 }
