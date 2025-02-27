@@ -3,11 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use clap::{crate_version, Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::io::stdout;
 use std::ops::ControlFlow;
 use uucore::error::{UResult, UUsageError};
-use uucore::format::{parse_spec_and_escape, FormatArgument, FormatItem};
-use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
+use uucore::format::{parse_spec_and_escape, FormatArgument, FormatError, FormatItem};
+use uucore::{
+    format_usage, help_about, help_section, help_usage, os_str_as_bytes_verbose, show_warning,
+};
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
@@ -25,17 +28,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let format = matches
-        .get_one::<String>(options::FORMAT)
+        .get_one::<OsString>(options::FORMAT)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
+    let format = os_str_as_bytes_verbose(format).map_err(FormatError::from)?;
 
-    let values: Vec<_> = match matches.get_many::<String>(options::ARGUMENT) {
-        Some(s) => s.map(|s| FormatArgument::Unparsed(s.to_string())).collect(),
+    let values: Vec<_> = match matches.get_many::<OsString>(options::ARGUMENT) {
+        Some(s) => s
+            .map(|os_string| FormatArgument::Unparsed(os_string.to_owned()))
+            .collect(),
         None => vec![],
     };
 
     let mut format_seen = false;
     let mut args = values.iter().peekable();
-    for item in parse_spec_and_escape(format.as_ref()) {
+
+    // Parse and process the format string
+    for item in parse_spec_and_escape(format) {
         if let Ok(FormatItem::Spec(_)) = item {
             format_seen = true;
         }
@@ -53,13 +61,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let Unparsed(arg_str) = arg else {
                 unreachable!("All args are transformed to Unparsed")
             };
-            show_warning!("ignoring excess arguments, starting with '{arg_str}'");
+            show_warning!(
+                "ignoring excess arguments, starting with '{}'",
+                arg_str.to_string_lossy()
+            );
         }
         return Ok(());
     }
 
     while args.peek().is_some() {
-        for item in parse_spec_and_escape(format.as_ref()) {
+        for item in parse_spec_and_escape(format) {
             match item?.write(stdout(), &mut args)? {
                 ControlFlow::Continue(()) => {}
                 ControlFlow::Break(()) => return Ok(()),
@@ -91,6 +102,10 @@ pub fn uu_app() -> Command {
                 .help("Print version information")
                 .action(ArgAction::Version),
         )
-        .arg(Arg::new(options::FORMAT))
-        .arg(Arg::new(options::ARGUMENT).action(ArgAction::Append))
+        .arg(Arg::new(options::FORMAT).value_parser(clap::value_parser!(OsString)))
+        .arg(
+            Arg::new(options::ARGUMENT)
+                .action(ArgAction::Append)
+                .value_parser(clap::value_parser!(OsString)),
+        )
 }

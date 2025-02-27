@@ -13,51 +13,12 @@ fn basic_literal() {
 }
 
 #[test]
-fn escaped_tab() {
-    new_ucmd!()
-        .args(&["hello\\t world"])
-        .succeeds()
-        .stdout_only("hello\t world");
-}
-
-#[test]
-fn escaped_newline() {
-    new_ucmd!()
-        .args(&["hello\\n world"])
-        .succeeds()
-        .stdout_only("hello\n world");
-}
-
-#[test]
-fn escaped_slash() {
-    new_ucmd!()
-        .args(&["hello\\\\ world"])
-        .succeeds()
-        .stdout_only("hello\\ world");
-}
-
-#[test]
-fn unescaped_double_quote() {
-    new_ucmd!().args(&["\\\""]).succeeds().stdout_only("\"");
-}
-
-#[test]
-fn escaped_hex() {
-    new_ucmd!().args(&["\\x41"]).succeeds().stdout_only("A");
-}
-
-#[test]
 fn test_missing_escaped_hex_value() {
     new_ucmd!()
         .arg(r"\x")
         .fails()
         .code_is(1)
         .stderr_only("printf: missing hexadecimal number in escape\n");
-}
-
-#[test]
-fn escaped_octal() {
-    new_ucmd!().args(&["\\101"]).succeeds().stdout_only("A");
 }
 
 #[test]
@@ -84,38 +45,6 @@ fn escaped_percent_sign() {
 #[test]
 fn escaped_unrecognized() {
     new_ucmd!().args(&["c\\d"]).succeeds().stdout_only("c\\d");
-}
-
-#[test]
-fn sub_string() {
-    new_ucmd!()
-        .args(&["hello %s", "world"])
-        .succeeds()
-        .stdout_only("hello world");
-}
-
-#[test]
-fn sub_multi_field() {
-    new_ucmd!()
-        .args(&["%s %s", "hello", "world"])
-        .succeeds()
-        .stdout_only("hello world");
-}
-
-#[test]
-fn sub_repeat_format_str() {
-    new_ucmd!()
-        .args(&["%s.", "hello", "world"])
-        .succeeds()
-        .stdout_only("hello.world.");
-}
-
-#[test]
-fn sub_string_ignore_escapes() {
-    new_ucmd!()
-        .args(&["hello %s", "\\tworld"])
-        .succeeds()
-        .stdout_only("hello \\tworld");
 }
 
 #[test]
@@ -531,27 +460,11 @@ fn sub_any_asterisk_negative_first_param() {
 }
 
 #[test]
-fn sub_any_specifiers_no_params() {
-    new_ucmd!()
-        .args(&["%ztlhLji", "3"]) //spell-checker:disable-line
-        .succeeds()
-        .stdout_only("3");
-}
-
-#[test]
-fn sub_any_specifiers_after_first_param() {
-    new_ucmd!()
-        .args(&["%0ztlhLji", "3"]) //spell-checker:disable-line
-        .succeeds()
-        .stdout_only("3");
-}
-
-#[test]
-fn sub_any_specifiers_after_period() {
-    new_ucmd!()
-        .args(&["%0.ztlhLji", "3"]) //spell-checker:disable-line
-        .succeeds()
-        .stdout_only("3");
+fn sub_any_specifiers() {
+    // spell-checker:disable-next-line
+    for format in ["%ztlhLji", "%0ztlhLji", "%0.ztlhLji"] {
+        new_ucmd!().args(&[format, "3"]).succeeds().stdout_only("3");
+    }
 }
 
 #[test]
@@ -803,33 +716,23 @@ fn pad_string() {
 }
 
 #[test]
-fn format_spec_zero_char_fails() {
-    // It is invalid to have the format spec '%0c'
-    new_ucmd!().args(&["%0c", "3"]).fails().code_is(1);
+fn format_spec_zero_fails() {
+    // It is invalid to have the format spec
+    for format in ["%0c", "%0s"] {
+        new_ucmd!().args(&[format, "3"]).fails().code_is(1);
+    }
 }
 
 #[test]
-fn format_spec_zero_string_fails() {
-    // It is invalid to have the format spec '%0s'
-    new_ucmd!().args(&["%0s", "3"]).fails().code_is(1);
-}
-
-#[test]
-fn invalid_precision_fails() {
+fn invalid_precision_tests() {
     // It is invalid to have length of output string greater than i32::MAX
-    new_ucmd!()
-        .args(&["%.*d", "2147483648", "0"])
-        .fails()
-        .stderr_is("printf: invalid precision: '2147483648'\n");
-}
-
-#[test]
-fn float_invalid_precision_fails() {
-    // It is invalid to have length of output string greater than i32::MAX
-    new_ucmd!()
-        .args(&["%.*f", "2147483648", "0"])
-        .fails()
-        .stderr_is("printf: invalid precision: '2147483648'\n");
+    for format in ["%.*d", "%.*f"] {
+        let expected_error = "printf: invalid precision: '2147483648'\n";
+        new_ucmd!()
+            .args(&[format, "2147483648", "0"])
+            .fails()
+            .stderr_is(expected_error);
+    }
 }
 
 // The following padding-tests test for the cases in which flags in ['0', ' '] are given.
@@ -1001,4 +904,105 @@ fn float_switch_switch_decimal_scientific() {
         .args(&["%g", "0.00001"])
         .succeeds()
         .stdout_only("1e-05");
+}
+
+#[test]
+fn mb_input() {
+    for format in ["\"á", "\'á", "'\u{e1}"] {
+        new_ucmd!()
+            .args(&["%04x\n", format])
+            .succeeds()
+            .stdout_only("00e1\n");
+    }
+
+    let cases = vec![
+        ("\"á=", "="),
+        ("\'á-", "-"),
+        ("\'á=-==", "=-=="),
+        ("'\u{e1}++", "++"),
+    ];
+
+    for (format, expected) in cases {
+        new_ucmd!()
+            .args(&["%04x\n", format])
+            .succeeds()
+            .stdout_is("00e1\n")
+            .stderr_is(format!("printf: warning: {expected}: character(s) following character constant have been ignored\n"));
+    }
+}
+
+#[test]
+fn escaped_characters() {
+    fn test_escaped_character(input: &str, expected: &str) {
+        new_ucmd!().args(&[input]).succeeds().stdout_only(expected);
+    }
+
+    let cases = vec![
+        ("hello\\t world", "hello\t world"),
+        ("hello\\n world", "hello\n world"),
+        ("hello\\\\ world", "hello\\ world"),
+        ("\\\"", "\""),
+        ("\\x41", "A"),
+        ("\\101", "A"),
+    ];
+
+    for (input, expected) in cases {
+        test_escaped_character(input, expected);
+    }
+}
+
+#[test]
+fn substitution_tests() {
+    fn test_substitution(format: &str, args: Vec<&str>, expected: &str) {
+        let mut cmd = new_ucmd!();
+        cmd.args(&[format]);
+        for arg in args {
+            cmd.args(&[arg]);
+        }
+        cmd.succeeds().stdout_only(expected);
+    }
+    let cases = vec![
+        ("%s %s", vec!["hello", "world"], "hello world"),
+        ("%s.", vec!["hello", "world"], "hello.world."),
+        ("hello %s", vec!["\\tworld"], "hello \\tworld"),
+    ];
+
+    for (format, args, expected) in cases {
+        test_substitution(format, args, expected);
+    }
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn non_utf_8_input() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // ISO-8859-1 encoded text
+    // spell-checker:disable
+    const INPUT_AND_OUTPUT: &[u8] =
+        b"Swer an rehte g\xFCete wendet s\xEEn gem\xFCete, dem volget s\xE6lde und \xEAre.";
+    // spell-checker:enable
+
+    let os_str = OsStr::from_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("%s")
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg(os_str)
+        .succeeds()
+        .stdout_only_bytes(INPUT_AND_OUTPUT);
+
+    new_ucmd!()
+        .arg("%d")
+        .arg(os_str)
+        .fails()
+        // spell-checker:disable
+        .stderr_only("printf: invalid (non-UTF-8) argument like 'Swer an rehte g�ete wendet s�n gem�ete, dem volget s�lde und �re.' encountered
+");
+    // spell-checker:enable
 }

@@ -3,14 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use super::FormatError;
 use crate::{
     error::set_exit_code,
     features::format::num_parser::{ParseError, ParsedNumber},
+    os_str_as_bytes_verbose, os_str_as_str_verbose,
     quoting_style::{escape_name, Quotes, QuotingStyle},
     show_error, show_warning,
 };
 use os_display::Quotable;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 
 /// An argument for formatting
 ///
@@ -22,71 +24,102 @@ use std::ffi::OsStr;
 #[derive(Clone, Debug)]
 pub enum FormatArgument {
     Char(char),
-    String(String),
+    String(OsString),
     UnsignedInt(u64),
     SignedInt(i64),
     Float(f64),
     /// Special argument that gets coerced into the other variants
-    Unparsed(String),
+    Unparsed(OsString),
 }
 
 pub trait ArgumentIter<'a>: Iterator<Item = &'a FormatArgument> {
-    fn get_char(&mut self) -> u8;
-    fn get_i64(&mut self) -> i64;
-    fn get_u64(&mut self) -> u64;
-    fn get_f64(&mut self) -> f64;
-    fn get_str(&mut self) -> &'a str;
+    fn get_char(&mut self) -> Result<u8, FormatError>;
+    fn get_i64(&mut self) -> Result<i64, FormatError>;
+    fn get_u64(&mut self) -> Result<u64, FormatError>;
+    fn get_f64(&mut self) -> Result<f64, FormatError>;
+    fn get_str(&mut self) -> &'a OsStr;
 }
 
 impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
-    fn get_char(&mut self) -> u8 {
+    fn get_char(&mut self) -> Result<u8, FormatError> {
         let Some(next) = self.next() else {
-            return b'\0';
+            return Ok(b'\0');
         };
         match next {
-            FormatArgument::Char(c) => *c as u8,
-            FormatArgument::Unparsed(s) => s.bytes().next().unwrap_or(b'\0'),
-            _ => b'\0',
+            FormatArgument::Char(c) => Ok(*c as u8),
+            FormatArgument::Unparsed(os) => match os_str_as_bytes_verbose(os)?.first() {
+                Some(&byte) => Ok(byte),
+                None => Ok(b'\0'),
+            },
+            _ => Ok(b'\0'),
         }
     }
 
-    fn get_u64(&mut self) -> u64 {
+    fn get_u64(&mut self) -> Result<u64, FormatError> {
         let Some(next) = self.next() else {
-            return 0;
+            return Ok(0);
         };
         match next {
-            FormatArgument::UnsignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_u64(s), s),
-            _ => 0,
+            FormatArgument::UnsignedInt(n) => Ok(*n),
+            FormatArgument::Unparsed(os) => {
+                let s = os_str_as_str_verbose(os)?;
+                // Check if the string is a character literal enclosed in quotes
+                if s.starts_with(['"', '\'']) {
+                    // Extract the content between the quotes safely using chars
+                    let mut chars = s.trim_matches(|c| c == '"' || c == '\'').chars();
+                    if let Some(first_char) = chars.next() {
+                        if chars.clone().count() > 0 {
+                            // Emit a warning if there are additional characters
+                            let remaining: String = chars.collect();
+                            show_warning!(
+                                "{}: character(s) following character constant have been ignored",
+                                remaining
+                            );
+                        }
+                        return Ok(first_char as u64); // Use only the first character
+                    }
+                    return Ok(0); // Empty quotes
+                }
+                Ok(extract_value(ParsedNumber::parse_u64(s), s))
+            }
+            _ => Ok(0),
         }
     }
 
-    fn get_i64(&mut self) -> i64 {
+    fn get_i64(&mut self) -> Result<i64, FormatError> {
         let Some(next) = self.next() else {
-            return 0;
+            return Ok(0);
         };
         match next {
-            FormatArgument::SignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_i64(s), s),
-            _ => 0,
+            FormatArgument::SignedInt(n) => Ok(*n),
+            FormatArgument::Unparsed(os) => {
+                let str = os_str_as_str_verbose(os)?;
+
+                Ok(extract_value(ParsedNumber::parse_i64(str), str))
+            }
+            _ => Ok(0),
         }
     }
 
-    fn get_f64(&mut self) -> f64 {
+    fn get_f64(&mut self) -> Result<f64, FormatError> {
         let Some(next) = self.next() else {
-            return 0.0;
+            return Ok(0.0);
         };
         match next {
-            FormatArgument::Float(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_f64(s), s),
-            _ => 0.0,
+            FormatArgument::Float(n) => Ok(*n),
+            FormatArgument::Unparsed(os) => {
+                let str = os_str_as_str_verbose(os)?;
+
+                Ok(extract_value(ParsedNumber::parse_f64(str), str))
+            }
+            _ => Ok(0.0),
         }
     }
 
-    fn get_str(&mut self) -> &'a str {
+    fn get_str(&mut self) -> &'a OsStr {
         match self.next() {
-            Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) => s,
-            _ => "",
+            Some(FormatArgument::Unparsed(os) | FormatArgument::String(os)) => os,
+            _ => "".as_ref(),
         }
     }
 }
@@ -121,6 +154,7 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
                     } else {
                         show_error!("{}: value not completely converted", input.quote());
                     }
+
                     v
                 }
             }
