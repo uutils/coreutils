@@ -3,23 +3,31 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime
+// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime ixon pathconf endregion
 
 mod flags;
+mod generated;
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
     cfgetospeed, cfsetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags,
-    OutputFlags, SpecialCharacterIndices, Termios,
+    OutputFlags, SetArg, SpecialCharacterIndices, Termios,
 };
+use nix::unistd::{pathconf, PathconfVar};
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
+use std::collections::HashMap;
+use std::env;
+use std::error::Error;
+use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{self, stdout, Stdout};
+use std::io::Write;
+use std::io::{self, Stdin, StdoutLock};
 use std::ops::ControlFlow;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::sync::OnceLock;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage};
 
@@ -99,14 +107,14 @@ struct Options<'a> {
 
 enum Device {
     File(File),
-    Stdout(Stdout),
+    Stdin(Stdin),
 }
 
 impl AsFd for Device {
     fn as_fd(&self) -> BorrowedFd<'_> {
         match self {
             Self::File(f) => f.as_fd(),
-            Self::Stdout(stdout) => stdout.as_fd(),
+            Self::Stdin(stdin) => stdin.as_fd(),
         }
     }
 }
@@ -115,7 +123,7 @@ impl AsRawFd for Device {
     fn as_raw_fd(&self) -> RawFd {
         match self {
             Self::File(f) => f.as_raw_fd(),
-            Self::Stdout(stdout) => stdout.as_raw_fd(),
+            Self::Stdin(stdin) => stdin.as_raw_fd(),
         }
     }
 }
@@ -141,7 +149,7 @@ impl<'a> Options<'a> {
                         .custom_flags(O_NONBLOCK)
                         .open(f)?,
                 ),
-                None => Device::Stdout(stdout()),
+                None => Device::Stdin(io::stdin()),
             },
             settings: matches
                 .get_many::<String>(options::SETTINGS)
@@ -176,22 +184,30 @@ ioctl_write_ptr_bad!(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    // Manually fix this edge case:
+    //
+    // stty -- -ixon
+    let end_of_options_os_str = OsStr::new("--");
 
-    let opts = Options::from(&matches)?;
+    // Ignore the end of options delimiter ("--") and everything after, as GNU Core Utilities does
+    let fixed_args = args.take_while(|os| os.as_os_str() != end_of_options_os_str);
 
-    stty(&opts)
+    let matches = uu_app().try_get_matches_from(fixed_args)?;
+
+    let options = Options::from(&matches)?;
+
+    stty(options)
 }
 
-fn stty(opts: &Options) -> UResult<()> {
-    if opts.save && opts.all {
+fn stty(options: Options) -> UResult<()> {
+    if options.save && options.all {
         return Err(USimpleError::new(
             1,
             "the options for verbose and stty-readable output styles are mutually exclusive",
         ));
     }
 
-    if opts.settings.is_some() && (opts.save || opts.all) {
+    if options.settings.is_some() && (options.save || options.all) {
         return Err(USimpleError::new(
             1,
             "when specifying an output style, modes may not be set",
@@ -199,31 +215,128 @@ fn stty(opts: &Options) -> UResult<()> {
     }
 
     // TODO: Figure out the right error message for when tcgetattr fails
-    let mut termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
+    let mut termios = match tcgetattr(options.file.as_fd()) {
+        Ok(te) => te,
+        Err(er) => {
+            return Err(USimpleError::new(
+                1,
+                format!("could not get terminal attributes: errno {er}"),
+            ));
+        }
+    };
 
-    if let Some(settings) = &opts.settings {
-        for setting in settings {
-            if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
-                return Err(USimpleError::new(
-                    1,
-                    format!("invalid argument '{setting}'"),
-                ));
+    if let Some(settings) = options.settings {
+        let settings_len = settings.len();
+
+        let mut special =
+            Vec::<(SpecialCharacterIndices, SpecialCharacterAssignment)>::with_capacity(
+                settings_len,
+            );
+        let mut rest = Vec::<&str>::with_capacity(settings_len);
+
+        let special_character_indices_hash_map = get_special_character_indices_hash_map();
+
+        let mut peekable = settings.into_iter().peekable();
+
+        while let Some(&st) = peekable.peek() {
+            peekable.next();
+
+            if let Some(&sp) = special_character_indices_hash_map.get(st) {
+                let Some(binding) = peekable.next() else {
+                    return Err(USimpleError::new(
+                        1_i32,
+                        format!("missing argument to '{st}'"),
+                    ));
+                };
+
+                let spe = match parse_special_character_assignment(binding) {
+                    Ok(spec) => spec,
+                    Err(st) => {
+                        return Err(USimpleError::new(1, st));
+                    }
+                };
+
+                special.push((sp, spe));
+            } else {
+                rest.push(st);
             }
         }
 
-        tcsetattr(
-            opts.file.as_fd(),
-            nix::sys::termios::SetArg::TCSANOW,
-            &termios,
-        )
-        .expect("Could not write terminal attributes");
+        for setting in rest {
+            match apply_setting(&mut termios, setting) {
+                ControlFlow::Break(re) => {
+                    if re? {
+                        // The setting was successfully applied
+                        continue;
+                    } else {
+                        // All attempts to apply the setting failed
+                        return Err(USimpleError::new(
+                            1,
+                            format!("invalid argument '{setting}'"),
+                        ));
+                    }
+                }
+                ControlFlow::Continue(()) => {
+                    // Should be unreachable
+                    debug_assert!(false);
+                }
+            }
+        }
+
+        for (sp, spe) in special {
+            let sp_usize = sp as usize;
+
+            let Some(control_char) = termios.control_chars.get_mut(sp_usize) else {
+                return Err(USimpleError::new(
+                    1,
+                    format!("failed to get special character to assign: '{sp_usize}'"),
+                ));
+            };
+
+            match spe {
+                SpecialCharacterAssignment::DisablingAssignment => {
+                    match get_disabling_assignment() {
+                        Ok(ue) => {
+                            *control_char = ue;
+                        }
+                        Err(bo) => {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("failed to disable a special character: {bo}"),
+                            ));
+                        }
+                    }
+                }
+                SpecialCharacterAssignment::AssignTo(ue) => {
+                    *control_char = ue;
+                }
+            }
+        }
+
+        if let Err(er) = tcsetattr(options.file.as_fd(), SetArg::TCSANOW, &termios) {
+            return Err(USimpleError::new(
+                1,
+                format!("Could not write terminal attributes: errno {er}"),
+            ));
+        }
     } else {
-        print_settings(&termios, opts).expect("TODO: make proper error here from nix error");
+        #[allow(clippy::collapsible_else_if)]
+        if let Err(bo) = print_settings(&termios, &options) {
+            return Err(USimpleError::new(
+                1,
+                format!("failed to print settings: {bo}"),
+            ));
+        }
     }
+
     Ok(())
 }
 
-fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
+fn print_terminal_size(
+    stdout_lock: &mut StdoutLock,
+    termios: &Termios,
+    options: &Options,
+) -> UResult<()> {
     let speed = cfgetospeed(termios);
 
     // BSDs use a u32 for the baud rate, so we can simply print it.
@@ -235,7 +348,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    print!("speed {speed} baud; ");
+    write!(stdout_lock, "speed {speed} baud; ")?;
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
@@ -249,15 +362,22 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
-            print!("speed {text} baud; ");
+            write!(stdout_lock, "speed {text} baud; ")?;
+
             break;
         }
     }
 
-    if opts.all {
+    if options.all {
         let mut size = TermSize::default();
-        unsafe { tiocgwinsz(opts.file.as_raw_fd(), &mut size as *mut _)? };
-        print!("rows {}; columns {}; ", size.rows, size.columns);
+
+        unsafe { tiocgwinsz(options.file.as_raw_fd(), &mut size as *mut _)? };
+
+        write!(
+            stdout_lock,
+            "rows {}; columns {}; ",
+            size.rows, size.columns
+        )?;
     }
 
     #[cfg(any(target_os = "linux", target_os = "redox"))]
@@ -266,10 +386,12 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         // so we get the underlying libc::termios struct to get that information.
         let libc_termios: nix::libc::termios = termios.clone().into();
         let line = libc_termios.c_line;
-        print!("line = {line};");
+
+        write!(stdout_lock, "line = {line};")?;
     }
 
-    println!();
+    writeln!(stdout_lock)?;
+
     Ok(())
 }
 
@@ -299,56 +421,78 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
     Ok(format!("{meta_prefix}{ctrl_prefix}{character}"))
 }
 
-fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
-    if !opts.all {
+fn print_control_chars(
+    stdout_lock: &mut StdoutLock,
+    termios: &Termios,
+    options: &Options,
+) -> UResult<()> {
+    if !options.all {
         // TODO: this branch should print values that differ from defaults
         return Ok(());
     }
 
     for (text, cc_index) in CONTROL_CHARS {
-        print!(
+        write!(
+            stdout_lock,
             "{text} = {}; ",
             control_char_to_string(termios.control_chars[*cc_index as usize])?
-        );
+        )?;
     }
-    println!(
+
+    writeln!(
+        stdout_lock,
         "min = {}; time = {};",
         termios.control_chars[SpecialCharacterIndices::VMIN as usize],
         termios.control_chars[SpecialCharacterIndices::VTIME as usize]
-    );
+    )?;
+
     Ok(())
 }
 
-fn print_in_save_format(termios: &Termios) {
-    print!(
+fn print_in_save_format(stdout_lock: &mut StdoutLock, termios: &Termios) -> UResult<()> {
+    write!(
+        stdout_lock,
         "{:x}:{:x}:{:x}:{:x}",
         termios.input_flags.bits(),
         termios.output_flags.bits(),
         termios.control_flags.bits(),
         termios.local_flags.bits()
-    );
-    for cc in termios.control_chars {
-        print!(":{cc:x}");
-    }
-    println!();
-}
+    )?;
 
-fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
-    if opts.save {
-        print_in_save_format(termios);
-    } else {
-        print_terminal_size(termios, opts)?;
-        print_control_chars(termios, opts)?;
-        print_flags(termios, opts, CONTROL_FLAGS);
-        print_flags(termios, opts, INPUT_FLAGS);
-        print_flags(termios, opts, OUTPUT_FLAGS);
-        print_flags(termios, opts, LOCAL_FLAGS);
+    for cc in termios.control_chars {
+        write!(stdout_lock, ":{cc:x}")?;
     }
+
+    writeln!(stdout_lock)?;
+
     Ok(())
 }
 
-fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<T>]) {
+fn print_settings(termios: &Termios, options: &Options) -> UResult<()> {
+    let mut stdout_lock = io::stdout().lock();
+
+    if options.save {
+        print_in_save_format(&mut stdout_lock, termios)?;
+    } else {
+        print_terminal_size(&mut stdout_lock, termios, options)?;
+        print_control_chars(&mut stdout_lock, termios, options)?;
+        print_flags(&mut stdout_lock, termios, options, CONTROL_FLAGS)?;
+        print_flags(&mut stdout_lock, termios, options, INPUT_FLAGS)?;
+        print_flags(&mut stdout_lock, termios, options, OUTPUT_FLAGS)?;
+        print_flags(&mut stdout_lock, termios, options, LOCAL_FLAGS)?;
+    }
+
+    Ok(())
+}
+
+fn print_flags<T: TermiosFlag>(
+    stdout_lock: &mut StdoutLock,
+    termios: &Termios,
+    options: &Options,
+    flags: &[Flag<T>],
+) -> UResult<()> {
     let mut printed = false;
+
     for &Flag {
         name,
         flag,
@@ -360,41 +504,51 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
         if !show {
             continue;
         }
+
         let val = flag.is_in(termios, group);
+
         if group.is_some() {
-            if val && (!sane || opts.all) {
-                print!("{name} ");
+            if val && (!sane || options.all) {
+                write!(stdout_lock, "{name} ")?;
+
                 printed = true;
             }
-        } else if opts.all || val != sane {
+        } else if options.all || val != sane {
             if !val {
-                print!("-");
+                write!(stdout_lock, "-")?;
             }
-            print!("{name} ");
+
+            write!(stdout_lock, "{name} ")?;
+
             printed = true;
         }
     }
+
     if printed {
-        println!();
+        writeln!(stdout_lock)?;
     }
+
+    Ok(())
 }
 
 /// Apply a single setting
 ///
 /// The value inside the `Break` variant of the `ControlFlow` indicates whether
 /// the setting has been applied.
-fn apply_setting(termios: &mut Termios, s: &str) -> ControlFlow<bool> {
-    apply_baud_rate_flag(termios, s)?;
+fn apply_setting(termios: &mut Termios, setting: &str) -> ControlFlow<UResult<bool>> {
+    apply_baud_rate_flag(termios, setting)?;
 
-    let (remove, name) = match s.strip_prefix('-') {
-        Some(s) => (true, s),
-        None => (false, s),
+    let (remove, name) = match setting.strip_prefix('-') {
+        Some(st) => (true, st),
+        None => (false, setting),
     };
+
     apply_flag(termios, CONTROL_FLAGS, name, remove)?;
     apply_flag(termios, INPUT_FLAGS, name, remove)?;
     apply_flag(termios, OUTPUT_FLAGS, name, remove)?;
     apply_flag(termios, LOCAL_FLAGS, name, remove)?;
-    ControlFlow::Break(false)
+
+    ControlFlow::Break(Ok(false))
 }
 
 /// Apply a flag to a slice of flags
@@ -406,7 +560,7 @@ fn apply_flag<T: TermiosFlag>(
     flags: &[Flag<T>],
     input: &str,
     remove: bool,
-) -> ControlFlow<bool> {
+) -> ControlFlow<UResult<bool>> {
     for Flag {
         name, flag, group, ..
     } in flags
@@ -415,20 +569,34 @@ fn apply_flag<T: TermiosFlag>(
             // Flags with groups cannot be removed
             // Since the name matches, we can short circuit and don't have to check the other flags.
             if remove && group.is_some() {
-                return ControlFlow::Break(false);
+                return ControlFlow::Break(Ok(false));
             }
+
             // If there is a group, the bits for that group should be cleared before applying the flag
             if let Some(group) = group {
                 group.apply(termios, false);
             }
+
             flag.apply(termios, !remove);
-            return ControlFlow::Break(true);
+
+            return ControlFlow::Break(Ok(true));
         }
     }
+
     ControlFlow::Continue(())
 }
 
-fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool> {
+fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<UResult<bool>> {
+    fn map_cfsetospeed_result(result: nix::Result<()>) -> UResult<bool> {
+        match result {
+            Ok(()) => Ok(true),
+            Err(er) => Err(USimpleError::new(
+                1,
+                format!("failed to set baud rate: errno {er}"),
+            )),
+        }
+    }
+
     // BSDs use a u32 for the baud rate, so any decimal number applies.
     #[cfg(any(
         target_os = "freebsd",
@@ -439,8 +607,9 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
         target_os = "openbsd"
     ))]
     if let Ok(n) = input.parse::<u32>() {
-        cfsetospeed(termios, n).expect("Failed to set baud rate");
-        return ControlFlow::Break(true);
+        let result = map_cfsetospeed_result(cfsetospeed(termios, n));
+
+        return ControlFlow::Break(result);
     }
 
     // Other platforms use an enum.
@@ -454,10 +623,12 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *text == input {
-            cfsetospeed(termios, *baud_rate).expect("Failed to set baud rate");
-            return ControlFlow::Break(true);
+            let result = map_cfsetospeed_result(cfsetospeed(termios, *baud_rate));
+
+            return ControlFlow::Break(result);
         }
     }
+
     ControlFlow::Continue(())
 }
 
@@ -492,6 +663,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SETTINGS)
                 .action(ArgAction::Append)
+                // Allows e.g. "stty -ixon" to work
+                .allow_hyphen_values(true)
                 .help("settings to change"),
         )
 }
@@ -545,5 +718,223 @@ impl TermiosFlag for LocalFlags {
 
     fn apply(&self, termios: &mut Termios, val: bool) {
         termios.local_flags.set(*self, val);
+    }
+}
+
+enum SpecialCharacterAssignment {
+    DisablingAssignment,
+    AssignTo(u8),
+}
+
+// See explanation above "Table: Circumflex Control Characters in stty" in
+// https://pubs.opengroup.org/onlinepubs/9799919799/utilities/stty.html
+//
+// Also:
+//
+// "They are set with the syntax ‘name value’, where the names are listed below and the value can be given either literally, in hat notation (‘^c’), or as an integer which may start with ‘0x’ to indicate hexadecimal, ‘0’ to indicate octal, or any other digit to indicate decimal."
+// https://www.gnu.org/software/coreutils/manual/html_node/Characters.html
+//
+// GNU Core Utilities allows all of these for disabling assignment:
+// "", "^-", "undef"
+fn parse_special_character_assignment(
+    assignment_str: &str,
+) -> Result<SpecialCharacterAssignment, String> {
+    use crate::generated::CIRCUMFLEX_CONTROL_CHARACTERS_TABLE_MAP;
+
+    let make_error = || Err(format!("invalid integer argument: '{assignment_str}'"));
+
+    fn ensure_one_byte(ch: char) -> Result<u8, String> {
+        let mut encoding_buffer = [0_u8; 4_usize];
+
+        let st = ch.encode_utf8(&mut encoding_buffer);
+
+        match st.as_bytes() {
+            &[ue] => {
+                Ok(ue)
+            }
+            _ => {
+                Err(format!("Character '{ch:?}' cannot be used for special control character assignment, because it has a multi-byte UTF-8 representation"))
+            }
+        }
+    }
+
+    let mut chars = assignment_str.chars();
+
+    // e.g. GNU Core utilities treats:
+    //
+    // stty intr ''
+    //
+    // as a disabling assignment
+    let Some(first_char) = chars.next() else {
+        return Ok(SpecialCharacterAssignment::DisablingAssignment);
+    };
+
+    let first_char_byte = ensure_one_byte(first_char)?;
+
+    let after_first_char_chars = chars.clone();
+
+    let Some(second_char) = chars.next() else {
+        // Single character is treated literally
+        return Ok(SpecialCharacterAssignment::AssignTo(first_char_byte));
+    };
+
+    let second_char_byte = ensure_one_byte(second_char)?;
+
+    match (first_char_byte, second_char_byte) {
+        (b'0', b'x') => {
+            // Hexadecimal
+            let result = u8::from_str_radix(chars.as_str(), 16_u32);
+
+            return if let Ok(ue) = result {
+                Ok(SpecialCharacterAssignment::AssignTo(ue))
+            } else {
+                make_error()
+            };
+        }
+        (b'0', _) => {
+            // Octal
+            let result = u8::from_str_radix(after_first_char_chars.as_str(), 8_u32);
+
+            return if let Ok(ue) = result {
+                Ok(SpecialCharacterAssignment::AssignTo(ue))
+            } else {
+                make_error()
+            };
+        }
+        _ => {
+            // Continue
+        }
+    };
+
+    if let Some(third_char) = chars.next() {
+        let third_char_byte = ensure_one_byte(third_char)?;
+
+        if let (b'u', b'n', b'd') = (first_char_byte, second_char_byte, third_char_byte) {
+            // Look for "undef"
+            if chars.as_str() == "ef" {
+                return Ok(SpecialCharacterAssignment::DisablingAssignment);
+            }
+        }
+    } else {
+        match (first_char_byte, second_char_byte) {
+            (b'^', b'-') => return Ok(SpecialCharacterAssignment::DisablingAssignment),
+            (b'^', ue) => {
+                // Circumflex
+                let map: &'static phf::Map<u8, u8> = &CIRCUMFLEX_CONTROL_CHARACTERS_TABLE_MAP;
+
+                if let Some(uei) = map.get(&ue) {
+                    return Ok(SpecialCharacterAssignment::AssignTo(*uei));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    make_error()
+}
+
+fn get_special_character_indices_hash_map() -> HashMap<&'static str, SpecialCharacterIndices> {
+    let mut hash_map = HashMap::<&'static str, SpecialCharacterIndices>::with_capacity(18_usize);
+
+    let mut insert = |key: &'static str, value: SpecialCharacterIndices| {
+        let op = hash_map.insert(key, value);
+
+        debug_assert!(op.is_none());
+    };
+
+    /* #region POSIX */
+    {
+        // "Table: Control Character Names in stty"
+        // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/stty.html
+
+        // spell-checker:disable
+        insert("eof", SpecialCharacterIndices::VEOF);
+        insert("eol", SpecialCharacterIndices::VEOL);
+        insert("erase", SpecialCharacterIndices::VERASE);
+        insert("intr", SpecialCharacterIndices::VINTR);
+        insert("kill", SpecialCharacterIndices::VKILL);
+        insert("quit", SpecialCharacterIndices::VQUIT);
+        insert("susp", SpecialCharacterIndices::VSUSP);
+        insert("start", SpecialCharacterIndices::VSTART);
+        insert("stop", SpecialCharacterIndices::VSTOP);
+        // spell-checker:enable
+    }
+    /* #endregion */
+
+    /* #region Non-POSIX */
+    {
+        // https://www.gnu.org/software/coreutils/manual/html_node/Characters.html
+
+        // spell-checker:disable
+        insert("eol2", SpecialCharacterIndices::VEOL2);
+
+        #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
+        {
+            insert("discard", SpecialCharacterIndices::VDISCARD);
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            insert("swtch", SpecialCharacterIndices::VSWTC);
+        }
+
+        // TODO
+        // Haiku and Solaris
+        // insert("swtch", SpecialCharacterIndices::VSWTCH);
+
+        // TODO
+        // BSD and Solaris
+        // insert("status", SpecialCharacterIndices::VSTATUS);
+
+        // TODO
+        // AIX, BSD, and Solaris
+        // insert("dsusp", SpecialCharacterIndices::VDSUSP);
+
+        #[cfg(not(target_os = "haiku"))]
+        {
+            insert("rprnt", SpecialCharacterIndices::VREPRINT);
+        }
+
+        #[cfg(not(any(target_os = "aix", target_os = "haiku")))]
+        {
+            insert("werase", SpecialCharacterIndices::VWERASE);
+        }
+
+        #[cfg(not(target_os = "haiku"))]
+        {
+            insert("lnext", SpecialCharacterIndices::VLNEXT);
+        }
+        // spell-checker:enable
+    }
+    /* #endregion */
+
+    hash_map
+}
+
+fn get_disabling_assignment() -> Result<u8, Box<dyn Error>> {
+    static ONCE_LOCK: OnceLock<Option<u8>> = OnceLock::<Option<u8>>::new();
+
+    let option = match ONCE_LOCK.get() {
+        Some(op) => op,
+        None => {
+            let path_buf = env::current_dir()?;
+
+            // spell-checker:disable-next-line
+            let op = pathconf(path_buf.as_path(), PathconfVar::_POSIX_VDISABLE)?;
+
+            let opt = match op {
+                Some(is) => Some(u8::try_from(is)?),
+                None => None,
+            };
+
+            ONCE_LOCK.get_or_init(|| opt)
+        }
+    };
+
+    match option {
+        Some(ue) => Ok(*ue),
+        None => Err(Box::from(
+            "Disabling special characters is not supported on this system",
+        )),
     }
 }
