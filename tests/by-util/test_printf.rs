@@ -52,8 +52,7 @@ fn escaped_hex() {
 fn test_missing_escaped_hex_value() {
     new_ucmd!()
         .arg(r"\x")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("printf: missing hexadecimal number in escape\n");
 }
 
@@ -291,8 +290,7 @@ fn sub_num_hex_upper() {
 fn sub_num_hex_non_numerical() {
     new_ucmd!()
         .args(&["parameters need to be numbers %X", "%194"])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -642,8 +640,7 @@ fn sub_general_round_float_leading_zeroes() {
 fn partial_float() {
     new_ucmd!()
         .args(&["%.2f is %s", "42.03x", "a lot"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("42.03 is a lot")
         .stderr_is("printf: '42.03x': value not completely converted\n");
 }
@@ -652,8 +649,7 @@ fn partial_float() {
 fn partial_integer() {
     new_ucmd!()
         .args(&["%d is %s", "42x23", "a lot"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("42 is a lot")
         .stderr_is("printf: '42x23': value not completely converted\n");
 }
@@ -662,8 +658,7 @@ fn partial_integer() {
 fn test_overflow() {
     new_ucmd!()
         .args(&["%d", "36893488147419103232"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
 }
 
@@ -671,8 +666,7 @@ fn test_overflow() {
 fn partial_char() {
     new_ucmd!()
         .args(&["%d", "'abc"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("97")
         .stderr_is(
             "printf: warning: bc: character(s) following character constant have been ignored\n",
@@ -807,13 +801,13 @@ fn pad_string() {
 #[test]
 fn format_spec_zero_char_fails() {
     // It is invalid to have the format spec '%0c'
-    new_ucmd!().args(&["%0c", "3"]).fails().code_is(1);
+    new_ucmd!().args(&["%0c", "3"]).fails_with_code(1);
 }
 
 #[test]
 fn format_spec_zero_string_fails() {
     // It is invalid to have the format spec '%0s'
-    new_ucmd!().args(&["%0s", "3"]).fails().code_is(1);
+    new_ucmd!().args(&["%0s", "3"]).fails_with_code(1);
 }
 
 #[test]

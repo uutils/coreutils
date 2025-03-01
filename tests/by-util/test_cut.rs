@@ -58,7 +58,7 @@ fn test_no_args() {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -110,24 +110,21 @@ fn test_whitespace_delimited() {
 fn test_whitespace_with_explicit_delimiter() {
     new_ucmd!()
         .args(&["-w", "-f", COMPLEX_SEQUENCE.sequence, "-d:"])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
 fn test_whitespace_with_byte() {
     new_ucmd!()
         .args(&["-w", "-b", COMPLEX_SEQUENCE.sequence])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
 fn test_whitespace_with_char() {
     new_ucmd!()
         .args(&["-c", COMPLEX_SEQUENCE.sequence, "-w"])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -135,9 +132,9 @@ fn test_delimiter_with_byte_and_char() {
     for conflicting_arg in ["-c", "-b"] {
         new_ucmd!()
             .args(&[conflicting_arg, COMPLEX_SEQUENCE.sequence, "-d="])
-            .fails()
+            .fails_with_code(1)
             .stderr_is("cut: invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields\n")
-            .code_is(1);
+;
     }
 }
 
@@ -145,8 +142,7 @@ fn test_delimiter_with_byte_and_char() {
 fn test_too_large() {
     new_ucmd!()
         .args(&["-b1-18446744073709551615", "/dev/null"])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -243,8 +239,7 @@ fn test_is_a_directory() {
 
     ucmd.arg("-b1")
         .arg("some")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_is("cut: some: Is a directory\n");
 }
 
@@ -253,8 +248,7 @@ fn test_no_such_file() {
     new_ucmd!()
         .arg("-b1")
         .arg("some")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_is("cut: some: No such file or directory\n");
 }
 

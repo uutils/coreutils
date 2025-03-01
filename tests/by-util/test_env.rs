@@ -63,7 +63,7 @@ impl Drop for Target {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(125);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
 
 #[test]
@@ -88,8 +88,7 @@ fn test_env_version() {
 fn test_env_permissions() {
     new_ucmd!()
         .arg(".")
-        .fails()
-        .code_is(126)
+        .fails_with_code(126)
         .stderr_is("env: '.': Permission denied\n");
 }
 
@@ -541,106 +540,91 @@ fn test_env_parsing_errors() {
 
     ts.ucmd()
         .arg("-S\\|echo hallo") // no quotes, invalid escape sequence |
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\|' in -S\n");
 
     ts.ucmd()
         .arg("-S\\a") // no quotes, invalid escape sequence a
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
     ts.ucmd()
         .arg("-S\"\\a\"") // double quotes, invalid escape sequence a
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
     ts.ucmd()
         .arg(r#"-S"\a""#) // same as before, just using r#""#
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
     ts.ucmd()
         .arg("-S'\\a'") // single quotes, invalid escape sequence a
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
     ts.ucmd()
         .arg(r"-S\|\&\;") // no quotes, invalid escape sequence |
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\|' in -S\n");
 
     ts.ucmd()
         .arg(r"-S\<\&\;") // no quotes, invalid escape sequence <
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\<' in -S\n");
 
     ts.ucmd()
         .arg(r"-S\>\&\;") // no quotes, invalid escape sequence >
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\>' in -S\n");
 
     ts.ucmd()
         .arg(r"-S\`\&\;") // no quotes, invalid escape sequence `
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
         .arg(r#"-S"\`\&\;""#) // double quotes, invalid escape sequence `
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
         .arg(r"-S'\`\&\;'") // single quotes, invalid escape sequence `
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
         .arg(r"-S\`") // ` escaped without quotes
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
         .arg(r#"-S"\`""#) // ` escaped in double quotes
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
         .arg(r"-S'\`'") // ` escaped in single quotes
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
         .args(&[r"-S\🦉"]) // ` escaped in single quotes
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\\u{FFFD}' in -S\n"); // gnu doesn't show the owl. Instead a invalid unicode ?
 }
@@ -651,8 +635,7 @@ fn test_env_with_empty_executable_single_quotes() {
 
     ts.ucmd()
         .args(&["-S''"]) // empty single quotes, considered as program name
-        .fails()
-        .code_is(127)
+        .fails_with_code(127)
         .no_stdout()
         .stderr_is("env: '': No such file or directory\n"); // gnu version again adds escaping here
 }
@@ -663,8 +646,7 @@ fn test_env_with_empty_executable_double_quotes() {
 
     ts.ucmd()
         .args(&["-S\"\""]) // empty double quotes, considered as program name
-        .fails()
-        .code_is(127)
+        .fails_with_code(127)
         .no_stdout()
         .stderr_is("env: '': No such file or directory\n");
 }
@@ -805,23 +787,19 @@ fn test_env_arg_ignore_signal_invalid_signals() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()
         .args(&["--ignore-signal=banana"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains("env: 'banana': invalid signal");
     ts.ucmd()
         .args(&["--ignore-signal=SIGbanana"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains("env: 'SIGbanana': invalid signal");
     ts.ucmd()
         .args(&["--ignore-signal=exit"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains("env: 'exit': invalid signal");
     ts.ucmd()
         .args(&["--ignore-signal=SIGexit"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains("env: 'SIGexit': invalid signal");
 }
 
@@ -833,32 +811,28 @@ fn test_env_arg_ignore_signal_special_signals() {
     let signal_kill = nix::sys::signal::SIGKILL;
     ts.ucmd()
         .args(&["--ignore-signal=stop", "echo", "hello"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains(format!(
             "env: failed to set signal action for signal {}: Invalid argument",
             signal_stop as i32
         ));
     ts.ucmd()
         .args(&["--ignore-signal=kill", "echo", "hello"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains(format!(
             "env: failed to set signal action for signal {}: Invalid argument",
             signal_kill as i32
         ));
     ts.ucmd()
         .args(&["--ignore-signal=SToP", "echo", "hello"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains(format!(
             "env: failed to set signal action for signal {}: Invalid argument",
             signal_stop as i32
         ));
     ts.ucmd()
         .args(&["--ignore-signal=SIGKILL", "echo", "hello"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains(format!(
             "env: failed to set signal action for signal {}: Invalid argument",
             signal_kill as i32
@@ -902,19 +876,16 @@ fn disallow_equals_sign_on_short_unset_option() {
 
     ts.ucmd()
         .arg("-u=")
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains("env: cannot unset '=': Invalid argument");
     ts.ucmd()
         .arg("-u=A1B2C3")
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains("env: cannot unset '=A1B2C3': Invalid argument");
     ts.ucmd().arg("--split-string=A1B=2C3=").succeeds();
     ts.ucmd()
         .arg("--unset=")
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .stderr_contains("env: cannot unset '': Invalid argument");
 }
 

@@ -9,7 +9,7 @@ use uutests::util_name;
 #[test]
 #[cfg(not(windows))]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[cfg(not(windows))]
@@ -82,15 +82,13 @@ fn test_mknod_character_device_requires_major_and_minor() {
     new_ucmd!()
         .arg("test_file")
         .arg("c")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("Special files require major and minor device numbers.");
     new_ucmd!()
         .arg("test_file")
         .arg("c")
         .arg("1")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("Special files require major and minor device numbers.");
     new_ucmd!()
         .arg("test_file")

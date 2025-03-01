@@ -234,8 +234,7 @@ fn test_invalid_b2sum_length_option_not_multiple_of_8() {
         .ccmd("b2sum")
         .arg("--length=9")
         .arg(at.subdir.join("testf"))
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -249,8 +248,7 @@ fn test_invalid_b2sum_length_option_too_large() {
         .ccmd("b2sum")
         .arg("--length=513")
         .arg(at.subdir.join("testf"))
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -479,13 +477,12 @@ fn test_check_md5sum_mixed_format() {
         .arg("--strict")
         .arg("-c")
         .arg("check.md5sum")
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -494,14 +491,12 @@ fn test_conflicting_arg() {
         .arg("--tag")
         .arg("--check")
         .arg("--md5")
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
     new_ucmd!()
         .arg("--tag")
         .arg("--text")
         .arg("--md5")
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]

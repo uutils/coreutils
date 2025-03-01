@@ -17,7 +17,7 @@ static NOT_A_DIRECTORY: &str = "The directory name is invalid.";
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -94,8 +94,7 @@ fn test_symlink_to_itself_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("a", "a");
     ucmd.args(&["-ev", "a"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("Too many levels of symbolic links");
 }
 
@@ -107,8 +106,7 @@ fn test_trailing_slash_regular_file() {
     scene
         .ucmd()
         .args(&["-ev", "./regfile/"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains(NOT_A_DIRECTORY)
         .no_stdout();
     scene
@@ -127,8 +125,7 @@ fn test_trailing_slash_symlink_to_regular_file() {
     scene
         .ucmd()
         .args(&["-ev", "./link/"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains(NOT_A_DIRECTORY)
         .no_stdout();
     scene
@@ -139,8 +136,7 @@ fn test_trailing_slash_symlink_to_regular_file() {
     scene
         .ucmd()
         .args(&["-e", "./link/more"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stdout();
 }
 
@@ -174,8 +170,7 @@ fn test_trailing_slash_symlink_to_directory() {
     scene
         .ucmd()
         .args(&["-ev", "./link/more"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("No such file or directory")
         .no_stdout();
 }
@@ -200,8 +195,7 @@ fn test_trailing_slash_symlink_to_missing() {
         scene
             .ucmd()
             .args(&["-ev", query])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_contains("No such file or directory")
             .no_stdout();
     }
@@ -222,22 +216,19 @@ fn test_canonicalize_trailing_slash_regfile() {
         scene
             .ucmd()
             .args(&["-fv", &format!("./{name}/")])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_contains(NOT_A_DIRECTORY)
             .no_stdout();
         scene
             .ucmd()
             .args(&["-fv", &format!("{name}/more")])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_contains(NOT_A_DIRECTORY)
             .no_stdout();
         scene
             .ucmd()
             .args(&["-fv", &format!("./{name}/more/")])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_contains(NOT_A_DIRECTORY)
             .no_stdout();
     }
@@ -273,14 +264,12 @@ fn test_canonicalize_trailing_slash_subdir() {
         scene
             .ucmd()
             .args(&["-f", &format!("{name}/more/more2")])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .no_stdout();
         scene
             .ucmd()
             .args(&["-f", &format!("./{name}/more/more2/")])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .no_stdout();
     }
 }
@@ -304,14 +293,12 @@ fn test_canonicalize_trailing_slash_missing() {
         scene
             .ucmd()
             .args(&["-f", &format!("{name}/more")])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .no_stdout();
         scene
             .ucmd()
             .args(&["-f", &format!("./{name}/more/")])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .no_stdout();
     }
 }
@@ -333,8 +320,7 @@ fn test_canonicalize_trailing_slash_subdir_missing() {
         scene
             .ucmd()
             .args(&["-f", query])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .no_stdout();
     }
 }
@@ -348,8 +334,7 @@ fn test_canonicalize_trailing_slash_symlink_loop() {
         scene
             .ucmd()
             .args(&["-f", query])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .no_stdout();
     }
 }

@@ -20,7 +20,7 @@ static ALPHA_OUT: &str = "
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 // Test that od can read one file and dump with default format
@@ -871,15 +871,13 @@ fn test_od_invalid_bytes() {
         new_ucmd!()
             .arg(format!("{option}={INVALID_SIZE}"))
             .arg("file")
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_only(format!("od: invalid {option} argument '{INVALID_SIZE}'\n"));
 
         new_ucmd!()
             .arg(format!("{option}={INVALID_SUFFIX}"))
             .arg("file")
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_only(format!(
                 "od: invalid suffix in {option} argument '{INVALID_SUFFIX}'\n"
             ));
@@ -887,8 +885,7 @@ fn test_od_invalid_bytes() {
         new_ucmd!()
             .arg(format!("{option}={BIG_SIZE}"))
             .arg("file")
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_only(format!("od: {option} argument '{BIG_SIZE}' too large\n"));
     }
 }

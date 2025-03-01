@@ -9,7 +9,7 @@ use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(125);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
 
 // FIXME: this depends on the system having true and false in PATH
@@ -26,8 +26,7 @@ fn test_subcommand_return_code() {
 fn test_invalid_time_interval() {
     new_ucmd!()
         .args(&["xyz", "sleep", "0"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .usage_error("invalid time interval 'xyz'");
 }
 
@@ -35,8 +34,7 @@ fn test_invalid_time_interval() {
 fn test_invalid_kill_after() {
     new_ucmd!()
         .args(&["-k", "xyz", "1", "sleep", "0"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .usage_error("invalid time interval 'xyz'");
 }
 
@@ -87,8 +85,7 @@ fn test_foreground() {
     for arg in ["-f", "--foreground"] {
         new_ucmd!()
             .args(&[arg, ".1", "sleep", "10"])
-            .fails()
-            .code_is(124)
+            .fails_with_code(124)
             .no_output();
     }
 }
@@ -175,8 +172,7 @@ fn test_kill_subprocess() {
             "-c",
             "trap 'echo inside_trap' TERM; sleep 30",
         ])
-        .fails()
-        .code_is(124)
+        .fails_with_code(124)
         .stdout_contains("inside_trap")
         .stderr_contains("Terminated");
 }

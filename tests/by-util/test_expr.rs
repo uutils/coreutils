@@ -11,29 +11,25 @@ use uutests::util_name;
 #[test]
 fn test_no_arguments() {
     new_ucmd!()
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .usage_error("missing operand");
 }
 
 #[test]
 fn test_simple_values() {
     // null or 0 => EXIT_VALUE == 1
-    new_ucmd!().args(&[""]).fails().code_is(1).stdout_only("\n");
+    new_ucmd!().args(&[""]).fails_with_code(1).stdout_only("\n");
     new_ucmd!()
         .args(&["0"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_only("0\n");
     new_ucmd!()
         .args(&["00"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_only("00\n");
     new_ucmd!()
         .args(&["-0"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_only("-0\n");
 
     // non-null and non-0 => EXIT_VALUE = 0
@@ -49,8 +45,7 @@ fn test_simple_arithmetic() {
 
     new_ucmd!()
         .args(&["1", "-", "1"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_only("0\n");
 
     new_ucmd!()
@@ -113,8 +108,7 @@ fn test_parenthesis() {
 
     new_ucmd!()
         .args(&["1", "(", ")"])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("expr: syntax error: unexpected argument '('\n");
 }
 
@@ -210,8 +204,7 @@ fn test_and() {
 fn test_index() {
     new_ucmd!()
         .args(&["index", "αbcdef", "x"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_only("0\n");
     new_ucmd!()
         .args(&["index", "αbcdef", "α"])
@@ -240,8 +233,7 @@ fn test_index() {
 
     new_ucmd!()
         .args(&["αbcdef", "index", "α"])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("expr: syntax error: unexpected argument 'index'\n");
 }
 
@@ -259,8 +251,7 @@ fn test_length() {
 
     new_ucmd!()
         .args(&["abcdef", "length"])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("expr: syntax error: unexpected argument 'length'\n");
 }
 
@@ -306,8 +297,7 @@ fn test_substr() {
 
     new_ucmd!()
         .args(&["abc", "substr", "1", "1"])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("expr: syntax error: unexpected argument 'substr'\n");
 }
 
@@ -315,20 +305,17 @@ fn test_substr() {
 fn test_invalid_substr() {
     new_ucmd!()
         .args(&["substr", "abc", "0", "1"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_only("\n");
 
     new_ucmd!()
         .args(&["substr", "abc", &(usize::MAX.to_string() + "0"), "1"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_only("\n");
 
     new_ucmd!()
         .args(&["substr", "abc", "0", &(usize::MAX.to_string() + "0")])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_only("\n");
 }
 
@@ -359,8 +346,7 @@ fn test_invalid_syntax() {
     for invalid_syntax in invalid_syntaxes {
         new_ucmd!()
             .args(&invalid_syntax)
-            .fails()
-            .code_is(2)
+            .fails_with_code(2)
             .stderr_contains("syntax error");
     }
 }

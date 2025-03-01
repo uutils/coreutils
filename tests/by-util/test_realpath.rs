@@ -280,8 +280,7 @@ fn test_relative_existing_require_directories() {
     at.mkdir("dir1");
     at.touch("dir1/f");
     ucmd.args(&["-e", "--relative-base=.", "--relative-to=dir1/f", "."])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("directory");
 }
 
@@ -387,7 +386,7 @@ fn test_realpath_trailing_slash() {
         .arg("link_file")
         .succeeds()
         .stdout_contains(format!("{}file\n", std::path::MAIN_SEPARATOR));
-    scene.ucmd().arg("link_file/").fails().code_is(1);
+    scene.ucmd().arg("link_file/").fails_with_code(1);
     scene
         .ucmd()
         .arg("link_dir")
@@ -413,7 +412,7 @@ fn test_realpath_trailing_slash() {
         .args(&["-e", "link_file"])
         .succeeds()
         .stdout_contains(format!("{}file\n", std::path::MAIN_SEPARATOR));
-    scene.ucmd().args(&["-e", "link_file/"]).fails().code_is(1);
+    scene.ucmd().args(&["-e", "link_file/"]).fails_with_code(1);
     scene
         .ucmd()
         .args(&["-e", "link_dir"])
@@ -424,12 +423,11 @@ fn test_realpath_trailing_slash() {
         .args(&["-e", "link_dir/"])
         .succeeds()
         .stdout_contains(format!("{}dir\n", std::path::MAIN_SEPARATOR));
-    scene.ucmd().args(&["-e", "link_no_dir"]).fails().code_is(1);
+    scene.ucmd().args(&["-e", "link_no_dir"]).fails_with_code(1);
     scene
         .ucmd()
         .args(&["-e", "link_no_dir/"])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
     scene
         .ucmd()
         .args(&["-m", "link_file"])
@@ -464,5 +462,5 @@ fn test_realpath_trailing_slash() {
 
 #[test]
 fn test_realpath_empty() {
-    new_ucmd!().fails().code_is(1);
+    new_ucmd!().fails_with_code(1);
 }

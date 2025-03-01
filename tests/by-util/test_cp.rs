@@ -190,8 +190,7 @@ fn test_cp_same_file() {
 
     ucmd.arg(file)
         .arg(file)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains(format!("'{file}' and '{file}' are the same file"));
 }
 
@@ -669,8 +668,7 @@ fn test_cp_arg_interactive_update_overwrite_older() {
     at.touch("a");
     ucmd.args(&["-i", "-u", "a", "b"])
         .pipe_in("N\n")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is("cp: overwrite 'b'? ");
 
@@ -1725,8 +1723,7 @@ fn test_cp_preserve_invalid_rejected() {
         .arg("--preserve=invalid-value")
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_HELLO_WORLD_DEST)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stdout();
 }
 
@@ -3470,8 +3467,7 @@ fn test_copy_dir_preserve_permissions_inaccessible_file() {
     //            |      |    |     |
     //            V      V    V     V
     ucmd.args(&["-p", "-R", "d1", "d2"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("cp: cannot open 'd1/f' for reading: permission denied\n");
     assert!(at.dir_exists("d2"));
     assert!(!at.file_exists("d2/f"));
@@ -5986,16 +5982,14 @@ fn test_cp_with_options_backup_and_rem_when_dest_is_symlink() {
 fn test_cp_single_file() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("missing destination file");
 }
 
 #[test]
 fn test_cp_no_file() {
     let (_at, mut ucmd) = at_and_ucmd!();
-    ucmd.fails()
-        .code_is(1)
+    ucmd.fails_with_code(1)
         .stderr_contains("error: the following required arguments were not provided:");
 }
 

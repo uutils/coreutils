@@ -8,12 +8,12 @@ use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_invalid_input() {
-    new_ucmd!().arg(".").fails().code_is(1);
+    new_ucmd!().arg(".").fails_with_code(1);
 }
 
 #[test]
@@ -52,8 +52,7 @@ fn test_fmt_width() {
 fn test_fmt_width_invalid() {
     new_ucmd!()
         .args(&["one-word-per-line.txt", "-w", "apple"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is("fmt: invalid width: 'apple'\n");
     // an invalid width can be successfully overwritten later:
@@ -88,8 +87,7 @@ fn test_fmt_width_too_big() {
     for param in ["-w", "--width"] {
         new_ucmd!()
             .args(&["one-word-per-line.txt", param, "2501"])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_is("fmt: invalid width: '2501': Numerical result out of range\n");
     }
     // However, as a temporary value it is okay:
@@ -104,8 +102,7 @@ fn test_fmt_invalid_width() {
     for param in ["-w", "--width"] {
         new_ucmd!()
             .args(&["one-word-per-line.txt", param, "invalid"])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_contains("invalid width: 'invalid'");
     }
 }
@@ -114,8 +111,7 @@ fn test_fmt_invalid_width() {
 fn test_fmt_positional_width_not_first() {
     new_ucmd!()
         .args(&["one-word-per-line.txt", "-10"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("fmt: invalid option -- 1; -WIDTH is recognized only when it is the first\noption; use -w N instead");
 }
 
@@ -123,8 +119,7 @@ fn test_fmt_positional_width_not_first() {
 fn test_fmt_width_not_valid_number() {
     new_ucmd!()
         .args(&["-25x", "one-word-per-line.txt"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("fmt: invalid width: '25x'");
 }
 
@@ -148,8 +143,7 @@ fn test_fmt_goal_too_big() {
     for param in ["-g", "--goal"] {
         new_ucmd!()
             .args(&["one-word-per-line.txt", "--width=75", param, "76"])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_is("fmt: GOAL cannot be greater than WIDTH.\n");
     }
 }
@@ -159,8 +153,7 @@ fn test_fmt_goal_bigger_than_default_width_of_75() {
     for param in ["-g", "--goal"] {
         new_ucmd!()
             .args(&["one-word-per-line.txt", param, "76"])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_is("fmt: GOAL cannot be greater than WIDTH.\n");
     }
 }
@@ -192,8 +185,7 @@ fn test_fmt_goal_too_small_to_check_negative_minlength() {
 fn test_fmt_non_existent_file() {
     new_ucmd!()
         .args(&["non-existing"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_is("fmt: cannot open 'non-existing' for reading: No such file or directory\n");
 }
 
@@ -202,8 +194,7 @@ fn test_fmt_invalid_goal() {
     for param in ["-g", "--goal"] {
         new_ucmd!()
             .args(&["one-word-per-line.txt", param, "invalid"])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             // GNU complains about "invalid width", which is confusing.
             // We intentionally deviate from GNU, and show a more helpful message:
             .stderr_contains("invalid goal: 'invalid'");
@@ -222,14 +213,12 @@ fn test_fmt_invalid_goal_override() {
 fn test_fmt_invalid_goal_width_priority() {
     new_ucmd!()
         .args(&["one-word-per-line.txt", "-g", "apple", "-w", "banana"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is("fmt: invalid width: 'banana'\n");
     new_ucmd!()
         .args(&["one-word-per-line.txt", "-w", "banana", "-g", "apple"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is("fmt: invalid width: 'banana'\n");
 }

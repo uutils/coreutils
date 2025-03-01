@@ -13,8 +13,7 @@ use uutests::util_name;
 fn test_dev_null() {
     new_ucmd!()
         .set_stdin(File::open("/dev/null").unwrap())
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("not a tty\n");
 }
 
@@ -24,8 +23,7 @@ fn test_dev_null_silent() {
     new_ucmd!()
         .args(&["-s"])
         .set_stdin(File::open("/dev/null").unwrap())
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("");
 }
 
@@ -59,7 +57,7 @@ fn test_close_stdin_silent_alias() {
 
 #[test]
 fn test_wrong_argument() {
-    new_ucmd!().args(&["a"]).fails().code_is(2);
+    new_ucmd!().args(&["a"]).fails_with_code(2);
 }
 
 #[test]

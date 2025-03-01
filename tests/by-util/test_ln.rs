@@ -12,7 +12,7 @@ use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -779,8 +779,7 @@ fn test_symlink_remove_existing_same_src_and_dest() {
     at.touch("a");
     at.write("a", "sample");
     ucmd.args(&["-sf", "a", "a"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("'a' and 'a' are the same file");
     assert!(at.file_exists("a") && !at.symlink_exists("a"));
     assert_eq!(at.read("a"), "sample");
