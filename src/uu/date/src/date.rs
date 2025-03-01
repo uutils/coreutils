@@ -9,10 +9,10 @@ use chrono::format::{Item, StrftimeItems};
 use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
-use std::fs::File;
+use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use uucore::custom_tz_fmt::custom_time_format;
@@ -24,6 +24,9 @@ use uucore::{format_usage, help_about, help_usage, show};
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
 use uucore::shortcut_value_parser::ShortcutValueParser;
+
+type MaybeParsedDatetime =
+    Result<DateTime<FixedOffset>, (String, parse_datetime::ParseDateTimeError)>;
 
 // Options
 const DATE: &str = "date";
@@ -75,7 +78,7 @@ struct Settings {
     utc: bool,
     format: Format,
     date_source: DateSource,
-    set_to: Option<DateTime<FixedOffset>>,
+    set_to: Option<String>,
 }
 
 /// Various ways of displaying the date
@@ -93,6 +96,7 @@ enum DateSource {
     Custom(String),
     File(PathBuf),
     Stdin,
+    Reference(PathBuf),
     Human(TimeDelta),
 }
 
@@ -136,119 +140,88 @@ impl From<&str> for Rfc3339Format {
     }
 }
 
-#[uucore::main]
-#[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
-
-    let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
-        if !form.starts_with('+') {
-            return Err(USimpleError::new(
-                1,
-                format!("invalid date {}", form.quote()),
-            ));
-        }
-        let form = form[1..].to_string();
-        Format::Custom(form)
-    } else if let Some(fmt) = matches
-        .get_many::<String>(OPT_ISO_8601)
-        .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
-    {
-        Format::Iso8601(fmt)
-    } else if matches.get_flag(OPT_RFC_EMAIL) {
-        Format::Rfc5322
-    } else if let Some(fmt) = matches
-        .get_one::<String>(OPT_RFC_3339)
-        .map(|s| s.as_str().into())
-    {
-        Format::Rfc3339(fmt)
-    } else {
-        Format::Default
-    };
-
-    let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        let ref_time = Local::now();
-        if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date.as_str()) {
-            let duration = new_time.signed_duration_since(ref_time);
-            DateSource::Human(duration)
+impl Format {
+    fn extract_from(matches: &ArgMatches) -> UResult<Self> {
+        if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
+            if let Some(stripped_form) = form.strip_prefix('+') {
+                Ok(Self::Custom(stripped_form.to_string()))
+            } else {
+                Err(USimpleError::new(
+                    1,
+                    format!("invalid date {}", form.quote()),
+                ))
+            }
+        } else if let Some(fmt) = matches
+            .get_many::<String>(OPT_ISO_8601)
+            .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
+        {
+            Ok(Self::Iso8601(fmt))
+        } else if matches.get_flag(OPT_RFC_EMAIL) {
+            Ok(Self::Rfc5322)
+        } else if let Some(fmt) = matches
+            .get_one::<String>(OPT_RFC_3339)
+            .map(|s| s.as_str().into())
+        {
+            Ok(Self::Rfc3339(fmt))
         } else {
-            DateSource::Custom(date.into())
+            Ok(Self::Default)
         }
-    } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
-        match file.as_ref() {
-            "-" => DateSource::Stdin,
-            _ => DateSource::File(file.into()),
-        }
-    } else {
-        DateSource::Now
-    };
+    }
+}
 
-    let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
-        None => None,
-        Some(Err((input, _err))) => {
-            return Err(USimpleError::new(
-                1,
-                format!("invalid date {}", input.quote()),
-            ));
-        }
-        Some(Ok(date)) => Some(date),
-    };
-
-    let settings = Settings {
-        utc: matches.get_flag(OPT_UNIVERSAL),
-        format,
-        date_source,
-        set_to,
-    };
-
-    if let Some(date) = settings.set_to {
-        // All set time functions expect UTC datetimes.
-        let date: DateTime<Utc> = if settings.utc {
-            date.with_timezone(&Utc)
+impl DateSource {
+    fn extract_from(matches: &ArgMatches) -> Self {
+        if let Some(date) = matches.get_one::<String>(OPT_DATE) {
+            let ref_time = Local::now();
+            if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date.as_str()) {
+                let duration = new_time.signed_duration_since(ref_time);
+                Self::Human(duration)
+            } else {
+                Self::Custom(date.into())
+            }
+        } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
+            match file.as_ref() {
+                "-" => Self::Stdin,
+                _ => Self::File(file.into()),
+            }
+        } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+            Self::Reference(file.into())
         } else {
-            date.into()
-        };
+            Self::Now
+        }
+    }
 
-        return set_system_datetime(date);
-    } else {
-        // Get the current time, either in the local time zone or UTC.
-        let now: DateTime<FixedOffset> = if settings.utc {
-            let now = Utc::now();
-            now.with_timezone(&now.offset().fix())
-        } else {
-            let now = Local::now();
-            now.with_timezone(now.offset())
-        };
-
-        // Iterate over all dates - whether it's a single date or a file.
-        let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
-            DateSource::Custom(ref input) => {
+    // The hideous error-type stems from `parse_date`.
+    fn try_into_iterator(
+        &self,
+        now: &DateTime<FixedOffset>,
+    ) -> UResult<Box<dyn Iterator<Item = MaybeParsedDatetime>>> {
+        match self {
+            Self::Custom(ref input) => {
                 let date = parse_date(input.clone());
                 let iter = std::iter::once(date);
-                Box::new(iter)
+                Ok(Box::new(iter))
             }
-            DateSource::Human(relative_time) => {
+            Self::Human(relative_time) => {
                 // Double check the result is overflow or not of the current_time + relative_time
                 // it may cause a panic of chrono::datetime::DateTime add
-                match now.checked_add_signed(relative_time) {
+                match now.checked_add_signed(*relative_time) {
                     Some(date) => {
                         let iter = std::iter::once(Ok(date));
-                        Box::new(iter)
+                        Ok(Box::new(iter))
                     }
-                    None => {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid date {relative_time}"),
-                        ));
-                    }
+                    None => Err(USimpleError::new(
+                        1,
+                        format!("invalid date {relative_time}"),
+                    )),
                 }
             }
-            DateSource::Stdin => {
+            Self::Stdin => {
                 let lines = BufReader::new(std::io::stdin()).lines();
                 let iter = lines.map_while(Result::ok).map(parse_date);
-                Box::new(iter)
+                Ok(Box::new(iter))
             }
-            DateSource::File(ref path) => {
+            Self::File(ref path) => {
                 if path.is_dir() {
                     return Err(USimpleError::new(
                         2,
@@ -259,48 +232,106 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
                 let lines = BufReader::new(file).lines();
                 let iter = lines.map_while(Result::ok).map(parse_date);
-                Box::new(iter)
+                Ok(Box::new(iter))
             }
-            DateSource::Now => {
-                let iter = std::iter::once(Ok(now));
-                Box::new(iter)
+            Self::Reference(ref path) => {
+                let metadata = metadata(path)?;
+                // TODO: "This field might not be available on all platforms" → which ones?
+                let date_utc: DateTime<Utc> = metadata.modified()?.into();
+                let date: DateTime<FixedOffset> = date_utc.into();
+                let iter = std::iter::once(Ok(date));
+                Ok(Box::new(iter))
             }
+            Self::Now => {
+                let iter = std::iter::once(Ok(*now));
+                Ok(Box::new(iter))
+            }
+        }
+    }
+}
+
+fn print_date(format_string: &str, date: DateTime<FixedOffset>) -> UResult<()> {
+    let format_string = custom_time_format(format_string);
+    // Refuse to pass this string to chrono as it is crashing in this crate
+    if format_string.contains("%#z") {
+        return Err(USimpleError::new(
+            1,
+            format!("invalid format {}", format_string.replace("%f", "%N")),
+        ));
+    }
+    // Hack to work around panic in chrono,
+    // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
+    let format_items = StrftimeItems::new(format_string.as_str());
+    if format_items.clone().any(|i| i == Item::Error) {
+        return Err(USimpleError::new(
+            1,
+            format!("invalid format {}", format_string.replace("%f", "%N")),
+        ));
+    }
+    let formatted = date
+        .format_with_items(format_items)
+        .to_string()
+        .replace("%f", "%N");
+    println!("{formatted}");
+    Ok(())
+}
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().try_get_matches_from(args)?;
+
+    let format = Format::extract_from(&matches)?;
+
+    let date_source = DateSource::extract_from(&matches);
+
+    let set_to = matches.get_one::<String>(OPT_SET);
+
+    let settings = Settings {
+        utc: matches.get_flag(OPT_UNIVERSAL),
+        format,
+        date_source,
+        set_to: set_to.cloned(),
+    };
+
+    // Get the current time, either in the local time zone or UTC.
+    let now: DateTime<FixedOffset> = if settings.utc {
+        let now = Utc::now();
+        now.with_timezone(&now.offset().fix())
+    } else {
+        let now = Local::now();
+        now.with_timezone(now.offset())
+    };
+
+    // Iterate over all dates - whether it's a single date or a file.
+    let dates: Box<dyn Iterator<Item = _>> = if let Some(date_string) = &settings.set_to {
+        // Ignore settings.date_source, as it should not be able to be set on the command-line.
+        let date = parse_datetime::parse_datetime_at_date(now.into(), date_string)
+            .map_err(|_| USimpleError::new(1, format!("invalid date {}", date_string.quote())))?;
+        // All set time functions expect UTC datetimes.
+        let date: DateTime<Utc> = if settings.utc {
+            date.with_timezone(&Utc)
+        } else {
+            date.into()
         };
+        set_system_datetime(date)?;
+        let date_fixed: DateTime<FixedOffset> = date.into();
+        Box::new(std::iter::once(Ok(date_fixed)))
+    } else {
+        settings.date_source.try_into_iterator(&now)?
+    };
 
-        let format_string = make_format_string(&settings);
+    let format_string = make_format_string(&settings);
 
-        // Format all the dates
-        for date in dates {
-            match date {
-                Ok(date) => {
-                    let format_string = custom_time_format(format_string);
-                    // Refuse to pass this string to chrono as it is crashing in this crate
-                    if format_string.contains("%#z") {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid format {}", format_string.replace("%f", "%N")),
-                        ));
-                    }
-                    // Hack to work around panic in chrono,
-                    // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
-                    let format_items = StrftimeItems::new(format_string.as_str());
-                    if format_items.clone().any(|i| i == Item::Error) {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid format {}", format_string.replace("%f", "%N")),
-                        ));
-                    }
-                    let formatted = date
-                        .format_with_items(format_items)
-                        .to_string()
-                        .replace("%f", "%N");
-                    println!("{formatted}");
-                }
-                Err((input, _err)) => show!(USimpleError::new(
-                    1,
-                    format!("invalid date {}", input.quote())
-                )),
+    // Format all the dates
+    for date in dates {
+        match date {
+            Ok(date) => {
+                print_date(format_string, date)?;
             }
+            Err((input, _err)) => show!(USimpleError::new(
+                1,
+                format!("invalid date {}", input.quote())
+            )),
         }
     }
 
@@ -313,11 +344,16 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        // Must not use .args_override_self(true)!
+        // Some flags like --rfc-email do NOT override themselves.
         .arg(
             Arg::new(OPT_DATE)
                 .short('d')
                 .long(OPT_DATE)
                 .value_name("STRING")
+                .overrides_with(OPT_DATE)
+                .conflicts_with(OPT_FILE)
+                .conflicts_with(OPT_REFERENCE)
                 .help("display time described by STRING, not 'now'"),
         )
         .arg(
@@ -326,6 +362,8 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .overrides_with(OPT_FILE)
+                .conflicts_with(OPT_REFERENCE)
                 .help("like --date; once for each line of DATEFILE"),
         )
         .arg(
@@ -338,6 +376,8 @@ pub fn uu_app() -> Command {
                 ]))
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
+                .conflicts_with(OPT_RFC_EMAIL)
+                .conflicts_with(OPT_RFC_3339)
                 .help(ISO_8601_HELP_STRING),
         )
         .arg(
@@ -345,6 +385,7 @@ pub fn uu_app() -> Command {
                 .short('R')
                 .long(OPT_RFC_EMAIL)
                 .help(RFC_5322_HELP_STRING)
+                .conflicts_with(OPT_RFC_3339)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -358,6 +399,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
                 .help("annotate the parsed date, and warn about questionable usage to stderr")
+                .overrides_with(OPT_DEBUG)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -366,6 +408,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
+                .overrides_with(OPT_REFERENCE)
                 .help("display the last modification time of FILE"),
         )
         .arg(
@@ -373,6 +416,10 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_SET)
                 .value_name("STRING")
+                .overrides_with(OPT_SET)
+                .conflicts_with(OPT_DATE)
+                .conflicts_with(OPT_FILE)
+                .conflicts_with(OPT_REFERENCE)
                 .help(OPT_SET_HELP_STRING),
         )
         .arg(
@@ -381,6 +428,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_UNIVERSAL)
                 .alias(OPT_UNIVERSAL_2)
                 .help("print or set Coordinated Universal Time (UTC)")
+                .overrides_with(OPT_UNIVERSAL)
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(OPT_FORMAT))
@@ -409,9 +457,7 @@ fn make_format_string(settings: &Settings) -> &str {
 
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
-fn parse_date<S: AsRef<str> + Clone>(
-    s: S,
-) -> Result<DateTime<FixedOffset>, (String, parse_datetime::ParseDateTimeError)> {
+fn parse_date<S: AsRef<str> + Clone>(s: S) -> MaybeParsedDatetime {
     parse_datetime::parse_datetime(s.as_ref()).map_err(|e| (s.as_ref().into(), e))
 }
 
