@@ -77,7 +77,7 @@ fn du_basics(s: &str) {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -132,20 +132,17 @@ fn test_du_invalid_size() {
         ts.ucmd()
             .arg(format!("--{s}=1fb4t"))
             .arg("/tmp")
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_only(format!("du: invalid suffix in --{s} argument '1fb4t'\n"));
         ts.ucmd()
             .arg(format!("--{s}=x"))
             .arg("/tmp")
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_only(format!("du: invalid --{s} argument 'x'\n"));
         ts.ucmd()
             .arg(format!("--{s}=1Y"))
             .arg("/tmp")
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_only(format!("du: --{s} argument '1Y' too large\n"));
     }
 }
@@ -1019,7 +1016,7 @@ fn test_du_symlink_fail() {
 
     at.symlink_file("non-existing.txt", "target.txt");
 
-    ts.ucmd().arg("-L").arg("target.txt").fails().code_is(1);
+    ts.ucmd().arg("-L").arg("target.txt").fails_with_code(1);
 }
 
 #[cfg(not(windows))]
@@ -1086,8 +1083,7 @@ fn test_du_files0_from_with_invalid_zero_length_file_names() {
 
     ts.ucmd()
         .arg("--files0-from=filelist")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_contains("testfile")
         .stderr_contains("filelist:1: invalid zero-length file name")
         .stderr_contains("filelist:3: invalid zero-length file name");
@@ -1133,8 +1129,7 @@ fn test_du_files0_from_stdin_with_invalid_zero_length_file_names() {
     new_ucmd!()
         .arg("--files0-from=-")
         .pipe_in("\0\0")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("-:1: invalid zero-length file name")
         .stderr_contains("-:2: invalid zero-length file name");
 }

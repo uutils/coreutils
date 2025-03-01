@@ -12,7 +12,7 @@ const ALGOS: [&str; 11] = [
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn test_nonexisting_file() {
 
     new_ucmd!()
         .arg(file_name)
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_contains(format!("cksum: {file_name}: No such file or directory"));
 }
@@ -301,32 +301,28 @@ fn test_check_algo() {
         .arg("lorem_ipsum.txt")
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
-        .code_is(1);
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
     new_ucmd!()
         .arg("-a=sysv")
         .arg("--check")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
-        .code_is(1);
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
     new_ucmd!()
         .arg("-a=crc")
         .arg("--check")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
-        .code_is(1);
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
     new_ucmd!()
         .arg("-a=crc32b")
         .arg("--check")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
-        .code_is(1);
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
 }
 
 #[test]
@@ -335,20 +331,18 @@ fn test_length_with_wrong_algorithm() {
         .arg("--length=16")
         .arg("--algorithm=md5")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b")
-        .code_is(1);
+        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b");
 
     new_ucmd!()
         .arg("--length=16")
         .arg("--algorithm=md5")
         .arg("-c")
         .arg("foo.sums")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b")
-        .code_is(1);
+        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b");
 }
 
 #[test]
@@ -356,10 +350,9 @@ fn test_length_not_supported() {
     new_ucmd!()
         .arg("--length=15")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("--length is only supported with --algorithm=blake2b")
-        .code_is(1);
+        .stderr_contains("--length is only supported with --algorithm=blake2b");
 
     new_ucmd!()
         .arg("-l")
@@ -368,10 +361,9 @@ fn test_length_not_supported() {
         .arg("-a")
         .arg("crc")
         .arg("/tmp/xxx")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("--length is only supported with --algorithm=blake2b")
-        .code_is(1);
+        .stderr_contains("--length is only supported with --algorithm=blake2b");
 }
 
 #[test]
@@ -394,7 +386,7 @@ fn test_length_greater_than_512() {
         .arg("--algorithm=blake2b")
         .arg("lorem_ipsum.txt")
         .arg("alice_in_wonderland.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is_fixture("length_larger_than_512.expected");
 }
@@ -443,10 +435,9 @@ fn test_raw_multiple_files() {
         .arg("--raw")
         .arg("lorem_ipsum.txt")
         .arg("alice_in_wonderland.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: the --raw option is not supported with multiple files")
-        .code_is(1);
+        .stderr_contains("cksum: the --raw option is not supported with multiple files");
 }
 
 #[test]
@@ -455,7 +446,7 @@ fn test_base64_raw_conflicts() {
         .arg("--base64")
         .arg("--raw")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_contains("--base64")
         .stderr_contains("cannot be used with")
@@ -749,12 +740,11 @@ fn test_conflicting_options() {
         .arg("--binary")
         .arg("--check")
         .arg("f")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_contains(
             "cksum: the --binary and --text options are meaningless when verifying checksums",
-        )
-        .code_is(1);
+        );
 
     scene
         .ucmd()
@@ -762,12 +752,11 @@ fn test_conflicting_options() {
         .arg("-c")
         .arg("-a")
         .arg("md5")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_contains(
             "cksum: the --binary and --text options are meaningless when verifying checksums",
-        )
-        .code_is(1);
+        );
 }
 
 #[test]
@@ -784,10 +773,9 @@ fn test_check_algo_err() {
         .arg("sm3")
         .arg("--check")
         .arg("f")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: f: no properly formatted checksum lines found")
-        .code_is(1);
+        .stderr_contains("cksum: f: no properly formatted checksum lines found");
 }
 
 #[test]
@@ -803,10 +791,9 @@ fn test_check_pipe() {
         .arg("--check")
         .arg("-")
         .pipe_in("f")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: 'standard input': no properly formatted checksum lines found")
-        .code_is(1);
+        .stderr_contains("cksum: 'standard input': no properly formatted checksum lines found");
 }
 
 #[test]

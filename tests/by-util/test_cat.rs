@@ -615,8 +615,7 @@ fn test_write_to_self() {
         .arg("first_file")
         .arg("first_file")
         .arg("second_file")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("cat: first_file: input file is output file\ncat: first_file: input file is output file\n");
 
     assert_eq!(

@@ -120,15 +120,14 @@ impl RandomFile {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_split_non_existing_file() {
     new_ucmd!()
         .arg("non-existing")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_is("split: cannot open 'non-existing' for reading: No such file or directory\n");
 }
 
@@ -403,26 +402,22 @@ fn test_split_lines_number() {
     scene
         .ucmd()
         .args(&["--lines", "0", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("split: invalid number of lines: 0\n");
     scene
         .ucmd()
         .args(&["-0", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("split: invalid number of lines: 0\n");
     scene
         .ucmd()
         .args(&["--lines", "2fb", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("split: invalid number of lines: '2fb'\n");
     scene
         .ucmd()
         .args(&["--lines", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("split: invalid number of lines: 'file'\n");
 }
 
@@ -476,8 +471,7 @@ fn test_split_obs_lines_within_invalid_combined_shorts() {
     scene
         .ucmd()
         .args(&["-2fb", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("error: unexpected argument '-f' found\n");
 }
 
@@ -545,14 +539,12 @@ fn test_split_both_lines_and_obs_lines_standalone() {
     scene
         .ucmd()
         .args(&["-l", "2", "-2", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: cannot split in more than one way\n");
     scene
         .ucmd()
         .args(&["--lines", "2", "-2", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: cannot split in more than one way\n");
 }
 
@@ -568,62 +560,52 @@ fn test_split_obs_lines_as_other_option_value() {
     scene
         .ucmd()
         .args(&["--lines", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of lines: '-200'\n");
     scene
         .ucmd()
         .args(&["-l", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of lines: '-200'\n");
     scene
         .ucmd()
         .args(&["-a", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid suffix length: '-200'\n");
     scene
         .ucmd()
         .args(&["--suffix-length", "-d200e", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid suffix length: '-d200e'\n");
     scene
         .ucmd()
         .args(&["-C", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of bytes: '-200'\n");
     scene
         .ucmd()
         .args(&["--line-bytes", "-x200a4", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of bytes: '-x200a4'\n");
     scene
         .ucmd()
         .args(&["-b", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of bytes: '-200'\n");
     scene
         .ucmd()
         .args(&["--bytes", "-200xd", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of bytes: '-200xd'\n");
     scene
         .ucmd()
         .args(&["-n", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of chunks: '-200'\n");
     scene
         .ucmd()
         .args(&["--number", "-e200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of chunks: '-e200'\n");
 }
 
@@ -677,14 +659,12 @@ fn test_split_obs_lines_within_combined_with_number() {
     scene
         .ucmd()
         .args(&["-3dxen", "4", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: cannot split in more than one way\n");
     scene
         .ucmd()
         .args(&["-dxe30n", "4", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: cannot split in more than one way\n");
 }
 
@@ -692,8 +672,7 @@ fn test_split_obs_lines_within_combined_with_number() {
 fn test_split_invalid_bytes_size() {
     new_ucmd!()
         .args(&["-b", "1024W"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("split: invalid number of bytes: '1024W'\n");
     #[cfg(target_pointer_width = "32")]
     {

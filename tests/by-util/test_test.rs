@@ -89,7 +89,7 @@ fn test_simple_or() {
 fn test_errors_miss_and_or() {
     new_ucmd!()
         .args(&["-o", "arg"])
-        .fails()
+        .fails_with_code(2)
         .stderr_contains("'-o': unary operator expected");
     new_ucmd!()
         .args(&["-a", "arg"])
@@ -101,8 +101,7 @@ fn test_errors_miss_and_or() {
 fn test_negated_or() {
     new_ucmd!()
         .args(&["!", "foo", "-o", "bar"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
     new_ucmd!().args(&["foo", "-o", "!", "bar"]).succeeds();
     new_ucmd!()
         .args(&["!", "foo", "-o", "!", "bar"])
@@ -348,7 +347,7 @@ fn test_non_existing_files() {
     let result = scenario
         .ucmd()
         .args(&["newer_file", "-nt", "regular_file"])
-        .fails();
+        .fails_with_code(1);
     assert!(result.stderr().is_empty());
 }
 
@@ -1006,25 +1005,21 @@ fn test_string_lt_gt_operator() {
         new_ucmd!().args(&[left, "<", right]).succeeds().no_output();
         new_ucmd!()
             .args(&[right, "<", left])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .no_output();
 
         new_ucmd!().args(&[right, ">", left]).succeeds().no_output();
         new_ucmd!()
             .args(&[left, ">", right])
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .no_output();
     }
     new_ucmd!()
         .args(&["", "<", ""])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .no_output();
     new_ucmd!()
         .args(&["", ">", ""])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .no_output();
 }

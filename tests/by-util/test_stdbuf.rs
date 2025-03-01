@@ -7,7 +7,7 @@ use crate::common::util::TestScenario;
 
 #[test]
 fn invalid_input() {
-    new_ucmd!().arg("-/").fails().code_is(125);
+    new_ucmd!().arg("-/").fails_with_code(125);
 }
 
 #[test]
@@ -15,8 +15,7 @@ fn test_permission() {
     new_ucmd!()
         .arg("-o1")
         .arg(".")
-        .fails()
-        .code_is(126)
+        .fails_with_code(126)
         .stderr_contains("Permission denied");
 }
 
@@ -25,8 +24,7 @@ fn test_no_such() {
     new_ucmd!()
         .arg("-o1")
         .arg("no_such")
-        .fails()
-        .code_is(127)
+        .fails_with_code(127)
         .stderr_contains("No such file or directory");
 }
 
@@ -88,20 +86,17 @@ fn test_stdbuf_invalid_mode_fails() {
     for option in &options {
         new_ucmd!()
             .args(&[*option, "1024R", "head"])
-            .fails()
-            .code_is(125)
+            .fails_with_code(125)
             .usage_error("invalid mode '1024R': Value too large for defined data type");
         new_ucmd!()
             .args(&[*option, "1Y", "head"])
-            .fails()
-            .code_is(125)
+            .fails_with_code(125)
             .stderr_contains("stdbuf: invalid mode '1Y': Value too large for defined data type");
         #[cfg(target_pointer_width = "32")]
         {
             new_ucmd!()
                 .args(&[*option, "5GB", "head"])
-                .fails()
-                .code_is(125)
+                .fails_with_code(125)
                 .stderr_contains(
                     "stdbuf: invalid mode '5GB': Value too large for defined data type",
                 );

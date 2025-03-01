@@ -8,7 +8,7 @@ use crate::common::util::{vec_of_size, TestScenario};
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]

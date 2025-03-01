@@ -42,7 +42,7 @@ fn str_to_filetime(format: &str, s: &str) -> FileTime {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -806,7 +806,7 @@ fn test_touch_leap_second() {
 fn test_touch_trailing_slash_no_create() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
-    ucmd.args(&["-c", "file/"]).fails().code_is(1);
+    ucmd.args(&["-c", "file/"]).fails_with_code(1);
 
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-c", "no-file/"]).succeeds();
@@ -822,7 +822,7 @@ fn test_touch_trailing_slash_no_create() {
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("loop", "loop");
-    ucmd.args(&["-c", "loop/"]).fails().code_is(1);
+    ucmd.args(&["-c", "loop/"]).fails_with_code(1);
     assert!(!at.file_exists("loop"));
 
     #[cfg(not(target_os = "macos"))]
@@ -831,7 +831,7 @@ fn test_touch_trailing_slash_no_create() {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("file2");
         at.relative_symlink_file("file2", "link1");
-        ucmd.args(&["-c", "link1/"]).fails().code_is(1);
+        ucmd.args(&["-c", "link1/"]).fails_with_code(1);
         assert!(at.file_exists("file2"));
         assert!(at.symlink_exists("link1"));
     }

@@ -57,9 +57,8 @@ const COLUMN_ARGS: &[&str] = &["-C", "--format=columns", "--for=columns"];
 fn test_invalid_flag() {
     new_ucmd!()
         .arg("--invalid-argument")
-        .fails()
-        .no_stdout()
-        .code_is(2);
+        .fails_with_code(2)
+        .no_stdout();
 }
 
 #[test]
@@ -77,9 +76,8 @@ fn test_invalid_value_returns_1() {
     ] {
         new_ucmd!()
             .arg(format!("{flag}=definitely_invalid_value"))
-            .fails()
-            .no_stdout()
-            .code_is(1);
+            .fails_with_code(1)
+            .no_stdout();
     }
 }
 
@@ -89,9 +87,8 @@ fn test_invalid_value_returns_2() {
     for flag in ["--block-size", "--width", "--tab-size"] {
         new_ucmd!()
             .arg(format!("{flag}=definitely_invalid_value"))
-            .fails()
-            .no_stdout()
-            .code_is(2);
+            .fails_with_code(2)
+            .no_stdout();
     }
 }
 
@@ -107,9 +104,8 @@ fn test_invalid_value_time_style() {
     new_ucmd!()
         .arg("-g")
         .arg("--time-style=definitely_invalid_value")
-        .fails()
-        .no_stdout()
-        .code_is(2);
+        .fails_with_code(2)
+        .no_stdout();
     // If it only looks temporarily like it might be used, no error:
     new_ucmd!()
         .arg("-l")
@@ -505,8 +501,7 @@ fn test_ls_io_errors() {
         .ucmd()
         .arg("-1")
         .arg("some-dir1")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("cannot open directory")
         .stderr_contains("Permission denied");
 
@@ -514,8 +509,7 @@ fn test_ls_io_errors() {
         .ucmd()
         .arg("-Li")
         .arg("some-dir2")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("cannot access")
         .stderr_contains("No such file or directory")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
@@ -530,8 +524,7 @@ fn test_ls_io_errors() {
         .ucmd()
         .arg("-laR")
         .arg("some-dir3")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("some-dir4")
         .stderr_contains("cannot open directory")
         .stderr_contains("Permission denied")
@@ -1980,8 +1973,7 @@ fn test_ls_styles() {
         .ucmd()
         .arg("-l")
         .arg("--time-style=invalid")
-        .fails()
-        .code_is(2);
+        .fails_with_code(2);
 
     //Overwrite options tests
     scene
@@ -4075,14 +4067,12 @@ fn test_ls_dangling_symlinks() {
         .ucmd()
         .arg("-L")
         .arg("temp_dir/dangle")
-        .fails()
-        .code_is(2);
+        .fails_with_code(2);
     scene
         .ucmd()
         .arg("-H")
         .arg("temp_dir/dangle")
-        .fails()
-        .code_is(2);
+        .fails_with_code(2);
 
     scene
         .ucmd()
@@ -4094,8 +4084,7 @@ fn test_ls_dangling_symlinks() {
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("cannot access")
         .stderr_contains("No such file or directory")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
@@ -4104,8 +4093,7 @@ fn test_ls_dangling_symlinks() {
         .ucmd()
         .arg("-LZ")
         .arg("temp_dir")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("cannot access")
         .stderr_contains("No such file or directory")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
@@ -4114,8 +4102,7 @@ fn test_ls_dangling_symlinks() {
         .ucmd()
         .arg("-Ll")
         .arg("temp_dir")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_contains("l?????????");
 
     #[cfg(unix)]
@@ -4308,8 +4295,7 @@ fn test_ls_dereference_looped_symlinks_recursive() {
     at.relative_symlink_dir("../loop", "loop/sub");
 
     ucmd.args(&["-RL", "loop"])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("not listing already-listed directory");
 }
 
@@ -4322,8 +4308,7 @@ fn test_dereference_dangling_color() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("wat", "nonexistent");
     ucmd.args(&["-L", "--color"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("No such file or directory")
         .stdout_is(out_exp);
 }
@@ -4458,8 +4443,7 @@ fn test_ls_perm_io_errors() {
         .ucmd()
         .arg("-l")
         .arg("d")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("Permission denied");
 }
 
@@ -4537,8 +4521,7 @@ fn test_ls_dired_and_zero_are_incompatible() {
         .arg("--dired")
         .arg("-l")
         .arg("--zero")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("--dired and --zero are incompatible");
 }
 
@@ -4917,8 +4900,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
 fn test_ls_invalid_block_size() {
     new_ucmd!()
         .arg("--block-size=invalid")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .no_stdout()
         .stderr_is("ls: invalid --block-size argument 'invalid'\n");
 }

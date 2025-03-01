@@ -10,14 +10,12 @@ use crate::common::util::{run_ucmd_as_root, TestScenario};
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(125);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
 
 #[test]
 fn test_missing_operand() {
-    let result = new_ucmd!().fails();
-
-    result.code_is(125);
+    let result = new_ucmd!().fails_with_code(125);
 
     assert!(result
         .stderr_str()
@@ -34,8 +32,7 @@ fn test_enter_chroot_fails() {
 
     at.mkdir("jail");
 
-    let result = ucmd.arg("jail").fails();
-    result.code_is(125);
+    let result = ucmd.arg("jail").fails_with_code(125);
     assert!(result
         .stderr_str()
         .starts_with("chroot: cannot chroot to 'jail': Operation not permitted (os error 1)"));
@@ -48,9 +45,8 @@ fn test_no_such_directory() {
     at.touch(at.plus_as_string("a"));
 
     ucmd.arg("a")
-        .fails()
-        .stderr_is("chroot: cannot change root directory to 'a': no such directory\n")
-        .code_is(125);
+        .fails_with_code(125)
+        .stderr_is("chroot: cannot change root directory to 'a': no such directory\n");
 }
 
 #[test]
@@ -160,9 +156,7 @@ fn test_preference_of_userspec() {
         .arg("--groups")
         .arg("ABC,DEF")
         .arg(format!("--userspec={username}:{group_name}"))
-        .fails();
-
-    result.code_is(125);
+        .fails_with_code(125);
 
     println!("result.stdout = {}", result.stdout_str());
     println!("result.stderr = {}", result.stderr_str());
@@ -216,9 +210,8 @@ fn test_chroot_skip_chdir_not_root() {
 
     ucmd.arg("--skip-chdir")
         .arg(dir)
-        .fails()
-        .stderr_contains("chroot: option --skip-chdir only permitted if NEWROOT is old '/'")
-        .code_is(125);
+        .fails_with_code(125)
+        .stderr_contains("chroot: option --skip-chdir only permitted if NEWROOT is old '/'");
 }
 
 #[test]

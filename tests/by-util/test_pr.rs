@@ -47,9 +47,8 @@ fn valid_last_modified_template_vars(from: DateTime<Utc>) -> Vec<Vec<(String, St
 fn test_invalid_flag() {
     new_ucmd!()
         .arg("--invalid-argument")
-        .fails()
-        .no_stdout()
-        .code_is(1);
+        .fails_with_code(1)
+        .no_stdout();
 }
 
 #[test]

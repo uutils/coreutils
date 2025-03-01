@@ -8,7 +8,7 @@ use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 #[test]
 fn test_sort_call_graph() {
@@ -89,8 +89,7 @@ fn test_cycle() {
     // The graph looks like:  a --> b <==> c --> d
     new_ucmd!()
         .pipe_in("a b b c c d c b")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("a\nc\nd\nb\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\n");
 }
@@ -106,8 +105,7 @@ fn test_two_cycles() {
     //
     new_ucmd!()
         .pipe_in("a b b c c b b d d b")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("a\nc\nd\nb\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\ntsort: -: input contains a loop:\ntsort: b\ntsort: d\n");
 }
