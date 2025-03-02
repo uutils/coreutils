@@ -8,14 +8,13 @@ use std::process::Stdio;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_no_args() {
     new_ucmd!()
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("missing operand");
 }
 

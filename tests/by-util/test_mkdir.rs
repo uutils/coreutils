@@ -15,14 +15,13 @@ use std::os::unix::fs::PermissionsExt;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_no_arg() {
     new_ucmd!()
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("error: the following required arguments were not provided:");
 }
 

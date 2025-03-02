@@ -7,7 +7,7 @@ use crate::common::util::{expected_result, TestScenario};
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -375,8 +375,7 @@ fn test_stdin_with_fs_option() {
         .arg("-f")
         .arg("-")
         .set_stdin(std::process::Stdio::null())
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("using '-' to denote standard input does not work in file system mode");
 }
 
@@ -475,13 +474,11 @@ fn test_printf_invalid_directive() {
 
     ts.ucmd()
         .args(&["--printf=%9", "."])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("'%9': invalid directive");
 
     ts.ucmd()
         .args(&["--printf=%9%", "."])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("'%9%': invalid directive");
 }

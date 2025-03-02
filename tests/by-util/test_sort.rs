@@ -66,15 +66,13 @@ fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
         .arg("asd")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("sort: invalid --buffer-size argument 'asd'\n");
 
     new_ucmd!()
         .arg("-S")
         .arg("100f")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("sort: invalid suffix in --buffer-size argument '100f'\n");
 
     // TODO Percentage sizes are not yet supported beyond Linux.
@@ -82,8 +80,7 @@ fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
         .arg("0x123%")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("sort: invalid --buffer-size argument '0x123%'\n");
 
     new_ucmd!()
@@ -91,8 +88,7 @@ fn test_invalid_buffer_size() {
         .arg("-S")
         .arg("1Y")
         .arg("ext_sort.txt")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("sort: --buffer-size argument '1Y' too large\n");
 
     #[cfg(target_pointer_width = "32")]
@@ -104,8 +100,7 @@ fn test_invalid_buffer_size() {
                 .arg("-S")
                 .arg(buffer_size)
                 .arg("ext_sort.txt")
-                .fails()
-                .code_is(2)
+                .fails_with_code(2)
                 .stderr_only(format!(
                     "sort: --buffer-size argument '{}' too large\n",
                     buffer_size
@@ -881,8 +876,7 @@ fn test_check_unique() {
     new_ucmd!()
         .args(&["-c", "-u"])
         .pipe_in("A\nA\n")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("sort: -:2: disorder: A\n");
 }
 
@@ -891,8 +885,7 @@ fn test_check_unique_combined() {
     new_ucmd!()
         .args(&["-cu"])
         .pipe_in("A\nA\n")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("sort: -:2: disorder: A\n");
 }
 
@@ -935,8 +928,7 @@ fn test_trailing_separator() {
 fn test_nonexistent_file() {
     new_ucmd!()
         .arg("nonexistent.txt")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only(
             #[cfg(not(windows))]
             "sort: cannot read: nonexistent.txt: No such file or directory\n",
@@ -1054,8 +1046,7 @@ fn test_batch_size_invalid() {
     TestScenario::new(util_name!())
         .ucmd()
         .arg("--batch-size=0")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("sort: invalid --batch-size argument '0'")
         .stderr_contains("sort: minimum --batch-size argument is '2'");
 }
@@ -1066,8 +1057,7 @@ fn test_batch_size_too_large() {
     TestScenario::new(util_name!())
         .ucmd()
         .arg(format!("--batch-size={large_batch_size}"))
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains(format!(
             "--batch-size argument '{large_batch_size}' too large"
         ));
@@ -1075,8 +1065,7 @@ fn test_batch_size_too_large() {
     TestScenario::new(util_name!())
         .ucmd()
         .arg(format!("--batch-size={large_batch_size}"))
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("maximum --batch-size argument with current rlimit is");
 }
 
@@ -1163,8 +1152,7 @@ fn test_verifies_out_file() {
             .args(&["-o", "nonexistent_dir/nonexistent_file"])
             .pipe_in(input)
             .ignore_stdin_write_error()
-            .fails()
-            .code_is(2)
+            .fails_with_code(2)
             .stderr_only(
                 #[cfg(not(windows))]
                 "sort: open failed: nonexistent_dir/nonexistent_file: No such file or directory\n",
@@ -1184,8 +1172,7 @@ fn test_verifies_files_after_keys() {
             "0",
             "nonexistent_dir/input_file",
         ])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("failed to parse key");
 }
 
@@ -1194,8 +1181,7 @@ fn test_verifies_files_after_keys() {
 fn test_verifies_input_files() {
     new_ucmd!()
         .args(&["/dev/random", "nonexistent_file"])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_is("sort: cannot read: nonexistent_file: No such file or directory\n");
 }
 
@@ -1252,8 +1238,7 @@ fn test_no_error_for_version() {
 fn test_wrong_args_exit_code() {
     new_ucmd!()
         .arg("--misspelled")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("--misspelled");
 }
 

@@ -13,7 +13,7 @@ fn generate(from: u32, to: u32) -> String {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -1467,12 +1467,10 @@ fn test_directory_input_file() {
 
     #[cfg(unix)]
     ucmd.args(&["test_directory", "1"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("csplit: read error: Is a directory\n");
     #[cfg(windows)]
     ucmd.args(&["test_directory", "1"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("csplit: cannot open 'test_directory' for reading: Permission denied\n");
 }

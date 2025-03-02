@@ -24,7 +24,7 @@ fn help() {
 
 #[test]
 fn invalid_input() {
-    new_ucmd!().arg("-/").fails().code_is(125);
+    new_ucmd!().arg("-/").fails_with_code(125);
 }
 
 #[test]
@@ -45,34 +45,34 @@ fn print() {
 
 #[test]
 fn invalid() {
-    new_ucmd!().arg("invalid").fails().code_is(1);
+    new_ucmd!().arg("invalid").fails_with_code(1);
 
     let args = &[
         "unconfined_u:unconfined_r:unconfined_t:s0",
         "inexistent-file",
     ];
-    new_ucmd!().args(args).fails().code_is(1);
+    new_ucmd!().args(args).fails_with_code(1);
 
     let args = &["invalid", "/bin/true"];
-    new_ucmd!().args(args).fails().code_is(1);
+    new_ucmd!().args(args).fails_with_code(1);
 
     let args = &["--compute", "inexistent-file"];
-    new_ucmd!().args(args).fails().code_is(1);
+    new_ucmd!().args(args).fails_with_code(1);
 
     let args = &["--compute", "--compute"];
-    new_ucmd!().args(args).fails().code_is(125);
+    new_ucmd!().args(args).fails_with_code(125);
 
     // clap has an issue that makes this test fail: https://github.com/clap-rs/clap/issues/1543
     // TODO: Enable this code once the issue is fixed in the clap version we're using.
-    //new_ucmd!().arg("--compute=example").fails().code_is(1);
+    //new_ucmd!().arg("--compute=example").fails_with_code(1);
 
     for flag in [
         "-t", "--type", "-u", "--user", "-r", "--role", "-l", "--range",
     ] {
-        new_ucmd!().arg(flag).fails().code_is(125);
+        new_ucmd!().arg(flag).fails_with_code(125);
 
         let args = &[flag, "example", flag, "example"];
-        new_ucmd!().args(args).fails().code_is(125);
+        new_ucmd!().args(args).fails_with_code(125);
     }
 }
 
@@ -81,7 +81,7 @@ fn invalid() {
 fn plain_context() {
     let ctx = "unconfined_u:unconfined_r:unconfined_t:s0-s0";
     new_ucmd!().args(&[ctx, "/bin/true"]).succeeds();
-    new_ucmd!().args(&[ctx, "/bin/false"]).fails().code_is(1);
+    new_ucmd!().args(&[ctx, "/bin/false"]).fails_with_code(1);
 
     let output = new_ucmd!().args(&[ctx, "sestatus", "-v"]).succeeds();
     let r = get_sestatus_context(output.stdout());
@@ -105,7 +105,7 @@ fn custom_context() {
     new_ucmd!().args(&["--compute", "/bin/true"]).succeeds();
 
     let args = &["--compute", "/bin/false"];
-    new_ucmd!().args(args).fails().code_is(1);
+    new_ucmd!().args(args).fails_with_code(1);
 
     let args = &["--type", t_ud, "/bin/true"];
     new_ucmd!().args(args).succeeds();

@@ -99,7 +99,7 @@ fn build_ascii_block(n: usize) -> Vec<u8> {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 // Sanity Tests
@@ -1563,8 +1563,7 @@ fn test_nocache_stdin_error() {
     let detail = "Invalid seek";
     new_ucmd!()
         .args(&["iflag=nocache", "count=0", "status=noxfer"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only(format!("dd: failed to discard cache for: 'standard input': {detail}\n0+0 records in\n0+0 records out\n"));
 }
 
@@ -1573,8 +1572,7 @@ fn test_nocache_stdin_error() {
 fn test_empty_count_number() {
     new_ucmd!()
         .args(&["count=B"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("dd: invalid number: ‘B’\n");
 }
 

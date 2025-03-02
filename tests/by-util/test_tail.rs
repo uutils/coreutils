@@ -67,7 +67,7 @@ const INVALID_UTF16: u16 = 0xD800;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -239,10 +239,9 @@ fn test_permission_denied() {
 
     ts.ucmd()
         .arg("unreadable")
-        .fails()
+        .fails_with_code(1)
         .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
-        .no_stdout()
-        .code_is(1);
+        .no_stdout();
 }
 
 // TODO: Add similar test for windows
@@ -263,10 +262,9 @@ fn test_permission_denied_multiple() {
 
     ts.ucmd()
         .args(&["file1", "unreadable", "file2"])
-        .fails()
+        .fails_with_code(1)
         .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
-        .stdout_is("==> file1 <==\n\n==> file2 <==\n")
-        .code_is(1);
+        .stdout_is("==> file1 <==\n\n==> file2 <==\n");
 }
 
 #[test]
@@ -284,10 +282,9 @@ fn test_follow_redirect_stdin_name_retry() {
         ts.ucmd()
             .set_stdin(File::open(at.plus("f")).unwrap())
             .args(&args)
-            .fails()
+            .fails_with_code(1)
             .no_stdout()
-            .stderr_is("tail: cannot follow '-' by name\n")
-            .code_is(1);
+            .stderr_is("tail: cannot follow '-' by name\n");
         args.pop();
     }
 }
@@ -311,17 +308,15 @@ fn test_stdin_redirect_dir() {
 
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory\n")
-        .code_is(1);
+        .stderr_is("tail: error reading 'standard input': Is a directory\n");
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory\n")
-        .code_is(1);
+        .stderr_is("tail: error reading 'standard input': Is a directory\n");
 }
 
 // On macOS path.is_dir() can be false for directories if it was a redirect,
@@ -344,17 +339,15 @@ fn test_stdin_redirect_dir_when_target_os_is_macos() {
 
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n")
-        .code_is(1);
+        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n");
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n")
-        .code_is(1);
+        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n");
 }
 
 #[test]
@@ -604,10 +597,9 @@ fn test_follow_multiple_untailable() {
     ucmd.arg("-f")
         .arg("DIR1")
         .arg("DIR2")
-        .fails()
+        .fails_with_code(1)
         .stderr_is(expected_stderr)
-        .stdout_is(expected_stdout)
-        .code_is(1);
+        .stdout_is(expected_stdout);
 }
 
 #[test]
@@ -625,7 +617,7 @@ fn test_follow_stdin_pipe() {
 fn test_follow_invalid_pid() {
     new_ucmd!()
         .args(&["-f", "--pid=-1234"])
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: invalid PID: '-1234'\n");
     new_ucmd!()
@@ -848,8 +840,7 @@ fn test_multiple_input_files_missing() {
         .stderr_is(
             "tail: cannot open 'missing1' for reading: No such file or directory\n\
                 tail: cannot open 'missing2' for reading: No such file or directory\n",
-        )
-        .code_is(1);
+        );
 }
 
 #[test]
@@ -987,9 +978,8 @@ fn test_sleep_interval() {
         .arg("-s")
         .arg("1..1")
         .arg(FOOBAR_TXT)
-        .fails()
-        .stderr_contains("invalid number of seconds: '1..1'")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_contains("invalid number of seconds: '1..1'");
 }
 
 /// Test for reading all but the first NUM bytes: `tail -c +3`.
@@ -2556,10 +2546,9 @@ fn test_follow_inotify_only_regular() {
 fn test_no_such_file() {
     new_ucmd!()
         .arg("missing")
-        .fails()
+        .fails_with_code(1)
         .stderr_is("tail: cannot open 'missing' for reading: No such file or directory\n")
-        .no_stdout()
-        .code_is(1);
+        .no_stdout();
 }
 
 #[test]
@@ -3471,9 +3460,8 @@ fn test_when_follow_retry_given_redirected_stdin_from_directory_then_correct_err
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .args(&["-f", "--retry"])
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 #[test]
@@ -3485,9 +3473,8 @@ fn test_when_argument_file_is_a_directory() {
     let expected = "tail: error reading 'dir': Is a directory\n";
     ts.ucmd()
         .arg("dir")
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 // TODO: make this work on windows
@@ -3523,9 +3510,8 @@ fn test_when_argument_file_is_a_symlink() {
     let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 // TODO: make this work on windows
@@ -3541,9 +3527,8 @@ fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
     let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 // TODO: make this work on windows
@@ -3565,18 +3550,16 @@ fn test_when_argument_file_is_a_faulty_symlink_then_error() {
 
     ts.ucmd()
         .arg("self")
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 
     at.symlink_file("missing", "broken");
 
     let expected = "tail: cannot open 'broken' for reading: No such file or directory";
     ts.ucmd()
         .arg("broken")
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 #[test]
@@ -3610,9 +3593,8 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
 
     ts.ucmd()
         .arg(socket)
-        .fails()
-        .stderr_only(&expected_stderr)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(&expected_stderr);
 
     let path = "file";
     let mut file = at.make_file(path);
@@ -3624,7 +3606,7 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     let expected_stdout = [format!("==> {path} <=="), random_string].join("\n");
     ts.ucmd()
         .args(&["-c", "+0", path, socket])
-        .fails()
+        .fails_with_code(1)
         .stdout_is(&expected_stdout)
         .stderr_is(&expected_stderr);
 
@@ -4691,73 +4673,64 @@ fn test_gnu_args_err() {
     scene
         .ucmd()
         .arg("+cl")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: cannot open '+cl' for reading: No such file or directory\n")
-        .code_is(1);
+        .stderr_is("tail: cannot open '+cl' for reading: No such file or directory\n");
     // err-2
     scene
         .ucmd()
         .arg("-cl")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: invalid number of bytes: 'l'\n")
-        .code_is(1);
+        .stderr_is("tail: invalid number of bytes: 'l'\n");
     // err-3
     scene
         .ucmd()
         .arg("+2cz")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: cannot open '+2cz' for reading: No such file or directory\n")
-        .code_is(1);
+        .stderr_is("tail: cannot open '+2cz' for reading: No such file or directory\n");
     // err-4
     scene
         .ucmd()
         .arg("-2cX")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: option used in invalid context -- 2\n")
-        .code_is(1);
+        .stderr_is("tail: option used in invalid context -- 2\n");
     // err-5
     scene
         .ucmd()
         .arg("-c99999999999999999999")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: invalid number of bytes: '99999999999999999999'\n")
-        .code_is(1);
+        .stderr_is("tail: invalid number of bytes: '99999999999999999999'\n");
     // err-6
     scene
         .ucmd()
         .arg("-c --")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: invalid number of bytes: '-'\n")
-        .code_is(1);
+        .stderr_is("tail: invalid number of bytes: '-'\n");
     scene
         .ucmd()
         .arg("-5cz")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: option used in invalid context -- 5\n")
-        .code_is(1);
+        .stderr_is("tail: option used in invalid context -- 5\n");
     scene
         .ucmd()
         .arg("-9999999999999999999b")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: invalid number: '-9999999999999999999b'\n")
-        .code_is(1);
+        .stderr_is("tail: invalid number: '-9999999999999999999b'\n");
     scene
         .ucmd()
         .arg("-999999999999999999999b")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is(
             "tail: invalid number: '-999999999999999999999b': Numerical result out of range\n",
-        )
-        .code_is(1);
+        );
 }
 
 #[test]
@@ -4800,10 +4773,9 @@ fn test_obsolete_encoding_unix() {
     scene
         .ucmd()
         .arg(invalid_utf8_arg)
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: bad argument encoding: '-�b'\n")
-        .code_is(1);
+        .stderr_is("tail: bad argument encoding: '-�b'\n");
 }
 
 #[test]
@@ -4818,10 +4790,9 @@ fn test_obsolete_encoding_windows() {
     scene
         .ucmd()
         .arg(&invalid_utf16_arg)
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: bad argument encoding: '-�b'\n")
-        .code_is(1);
+        .stderr_is("tail: bad argument encoding: '-�b'\n");
 }
 
 #[test]

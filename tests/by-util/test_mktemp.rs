@@ -644,8 +644,7 @@ fn test_too_few_xs_suffix_directory() {
 fn test_too_many_arguments() {
     new_ucmd!()
         .args(&["-q", "a", "b"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .usage_error("too many templates");
 }
 

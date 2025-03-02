@@ -9,7 +9,7 @@ use uucore::process::geteuid;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -214,9 +214,8 @@ fn test_date_format_without_plus() {
     // [+FORMAT]
     new_ucmd!()
         .arg("%s")
-        .fails()
-        .stderr_contains("date: invalid date '%s'")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_contains("date: invalid date '%s'");
 }
 
 #[test]

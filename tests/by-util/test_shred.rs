@@ -9,17 +9,17 @@ use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_invalid_remove_arg() {
-    new_ucmd!().arg("--remove=unknown").fails().code_is(1);
+    new_ucmd!().arg("--remove=unknown").fails_with_code(1);
 }
 
 #[test]
 fn test_ambiguous_remove_arg() {
-    new_ucmd!().arg("--remove=wip").fails().code_is(1);
+    new_ucmd!().arg("--remove=wip").fails_with_code(1);
 }
 
 #[test]

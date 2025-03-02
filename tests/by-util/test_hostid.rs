@@ -15,7 +15,6 @@ fn test_normal() {
 fn test_invalid_flag() {
     new_ucmd!()
         .arg("--invalid-argument")
-        .fails()
-        .no_stdout()
-        .code_is(1);
+        .fails_with_code(1)
+        .no_stdout();
 }

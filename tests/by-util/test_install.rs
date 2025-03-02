@@ -17,7 +17,7 @@ use uucore::process::{getegid, geteuid};
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -490,8 +490,7 @@ fn test_install_failing_omitting_directory() {
         .arg(file1)
         .arg(dir1)
         .arg(dir3)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("omitting directory");
     assert!(at.file_exists(format!("{dir3}/{file1}")));
 
@@ -500,8 +499,7 @@ fn test_install_failing_omitting_directory() {
         .ucmd()
         .arg(dir1)
         .arg(dir3)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("omitting directory");
 }
 
@@ -518,8 +516,7 @@ fn test_install_failing_no_such_file() {
     ucmd.arg(file1)
         .arg(file2)
         .arg(dir1)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("No such file or directory");
 }
 
@@ -1391,8 +1388,7 @@ fn test_install_missing_arguments() {
 
     scene
         .ucmd()
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .usage_error("missing file operand");
 
     scene
@@ -1630,14 +1626,12 @@ fn test_install_compare_option() {
     scene
         .ucmd()
         .args(&["-C", "--preserve-timestamps", first, second])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("Options --compare and --preserve-timestamps are mutually exclusive");
     scene
         .ucmd()
         .args(&["-C", "--strip", "--strip-program=echo", first, second])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("Options --compare and --strip are mutually exclusive");
 }
 

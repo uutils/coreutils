@@ -192,14 +192,13 @@ fn test_simple_format() {
     new_ucmd!().args(&["a-z", "-z"]).succeeds().stdout_is("a\n");
     new_ucmd!()
         .args(&["a", "b", "c"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("extra operand 'c'");
 }
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
