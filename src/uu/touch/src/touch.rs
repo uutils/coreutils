@@ -640,6 +640,30 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError
     Err(TouchError::InvalidDateFormat(s.to_owned()))
 }
 
+/// Prepends 19 or 20 to the year if it is a 2 digit year
+///
+/// GNU `touch` behavior:
+///
+/// - 68 and before is interpreted as 20xx
+/// - 69 and after is interpreted as 19xx
+fn prepend_century(s: &str) -> UResult<String> {
+    let first_two_digits = s[..2]
+        .parse::<u32>()
+        .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", s.quote())))?;
+    Ok(format!(
+        "{}{s}",
+        if first_two_digits > 68 { 19 } else { 20 }
+    ))
+}
+
+/// Parses a timestamp string into a FileTime.
+///
+/// This function attempts to parse a string into a FileTime
+/// As expected by gnu touch -t : `[[cc]yy]mmddhhmm[.ss]`
+///
+/// Note that  If the year is specified with only two digits,
+/// then cc is 20 for years in the range 0 … 68, and 19 for years in 69 … 99.
+/// in order to be compatible with GNU `touch`.
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
     use format::*;
 
@@ -648,9 +672,9 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     let (format, ts) = match s.chars().count() {
         15 => (YYYYMMDDHHMM_DOT_SS, s.to_owned()),
         12 => (YYYYMMDDHHMM, s.to_owned()),
-        // If we don't add "20", we have insufficient information to parse
-        13 => (YYYYMMDDHHMM_DOT_SS, format!("20{s}")),
-        10 => (YYYYMMDDHHMM, format!("20{s}")),
+        // If we don't add "19" or "20", we have insufficient information to parse
+        13 => (YYYYMMDDHHMM_DOT_SS, prepend_century(s)?),
+        10 => (YYYYMMDDHHMM, prepend_century(s)?),
         11 => (YYYYMMDDHHMM_DOT_SS, format!("{}{}", current_year(), s)),
         8 => (YYYYMMDDHHMM, format!("{}{}", current_year(), s)),
         _ => {
