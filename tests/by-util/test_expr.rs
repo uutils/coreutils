@@ -368,6 +368,20 @@ fn test_eager_evaluation() {
         .stderr_contains("division by zero");
 }
 
+#[test]
+fn test_long_input() {
+    const MAX_NUMBER: usize = 40000;
+
+    let mut args: Vec<String> = vec!["1".to_string()];
+
+    for i in 2..=MAX_NUMBER {
+        args.push('+'.to_string());
+        args.push(i.to_string());
+    }
+
+    new_ucmd!().args(&args).succeeds().stdout_is("800020000\n");
+}
+
 /// Regroup the testcases of the GNU test expr.pl
 mod gnu_expr {
     use crate::common::util::TestScenario;

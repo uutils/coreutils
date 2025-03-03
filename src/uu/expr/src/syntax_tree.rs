@@ -46,7 +46,11 @@ pub enum StringOp {
 }
 
 impl BinOp {
-    fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<NumOrStr> {
+    fn eval(
+        &self,
+        left: ExprResult<NumOrStr>,
+        right: ExprResult<NumOrStr>,
+    ) -> ExprResult<NumOrStr> {
         match self {
             Self::Relation(op) => op.eval(left, right),
             Self::Numeric(op) => op.eval(left, right),
@@ -56,9 +60,9 @@ impl BinOp {
 }
 
 impl RelationOp {
-    fn eval(&self, a: &AstNode, b: &AstNode) -> ExprResult<NumOrStr> {
-        let a = a.eval()?;
-        let b = b.eval()?;
+    fn eval(&self, a: ExprResult<NumOrStr>, b: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
+        let a = a?;
+        let b = b?;
         let b = if let (Ok(a), Ok(b)) = (&a.to_bigint(), &b.to_bigint()) {
             match self {
                 Self::Lt => a < b,
@@ -90,9 +94,13 @@ impl RelationOp {
 }
 
 impl NumericOp {
-    fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<NumOrStr> {
-        let a = left.eval()?.eval_as_bigint()?;
-        let b = right.eval()?.eval_as_bigint()?;
+    fn eval(
+        &self,
+        left: ExprResult<NumOrStr>,
+        right: ExprResult<NumOrStr>,
+    ) -> ExprResult<NumOrStr> {
+        let a = left?.eval_as_bigint()?;
+        let b = right?.eval_as_bigint()?;
         Ok(NumOrStr::Num(match self {
             Self::Add => a + b,
             Self::Sub => a - b,
@@ -112,33 +120,37 @@ impl NumericOp {
 }
 
 impl StringOp {
-    fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<NumOrStr> {
+    fn eval(
+        &self,
+        left: ExprResult<NumOrStr>,
+        right: ExprResult<NumOrStr>,
+    ) -> ExprResult<NumOrStr> {
         match self {
             Self::Or => {
-                let left = left.eval()?;
+                let left = left?;
                 if is_truthy(&left) {
                     return Ok(left);
                 }
-                let right = right.eval()?;
+                let right = right?;
                 if is_truthy(&right) {
                     return Ok(right);
                 }
                 Ok(0.into())
             }
             Self::And => {
-                let left = left.eval()?;
+                let left = left?;
                 if !is_truthy(&left) {
                     return Ok(0.into());
                 }
-                let right = right.eval()?;
+                let right = right?;
                 if !is_truthy(&right) {
                     return Ok(0.into());
                 }
                 Ok(left)
             }
             Self::Match => {
-                let left = left.eval()?.eval_as_string();
-                let right = right.eval()?.eval_as_string();
+                let left = left?.eval_as_string();
+                let right = right?.eval_as_string();
                 check_posix_regex_errors(&right)?;
                 let prefix = if right.starts_with('*') { r"^\" } else { "^" };
                 let re_string = format!("{prefix}{right}");
@@ -160,8 +172,8 @@ impl StringOp {
                 .into())
             }
             Self::Index => {
-                let left = left.eval()?.eval_as_string();
-                let right = right.eval()?.eval_as_string();
+                let left = left?.eval_as_string();
+                let right = right?.eval_as_string();
                 for (current_idx, ch_h) in left.chars().enumerate() {
                     for ch_n in right.to_string().chars() {
                         if ch_n == ch_h {
@@ -376,54 +388,106 @@ impl AstNode {
     }
 
     pub fn eval(&self) -> ExprResult<NumOrStr> {
-        match self {
-            Self::Evaluated { value } => Ok(value.clone()),
-            Self::Leaf { value } => Ok(value.to_string().into()),
-            Self::BinOp {
-                op_type,
-                left,
-                right,
-            } => op_type.eval(left, right),
-            Self::Substr {
-                string,
-                pos,
-                length,
-            } => {
-                let string: String = string.eval()?.eval_as_string();
+        // This function implements a recursive tree-walking algorithm, but uses an explicit
+        // stack approach instead of native recursion to avoid potential stack overflow
+        // on deeply nested expressions.
 
-                // The GNU docs say:
-                //
-                // > If either position or length is negative, zero, or
-                // > non-numeric, returns the null string.
-                //
-                // So we coerce errors into 0 to make that the only case we
-                // have to care about.
-                let pos = pos
-                    .eval()?
-                    .eval_as_bigint()
-                    .ok()
-                    .and_then(|n| n.to_usize())
-                    .unwrap_or(0);
-                let length = length
-                    .eval()?
-                    .eval_as_bigint()
-                    .ok()
-                    .and_then(|n| n.to_usize())
-                    .unwrap_or(0);
+        let mut stack = vec![self];
+        let mut result_stack = Vec::new();
 
-                let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) else {
-                    return Ok(String::new().into());
-                };
+        while let Some(node) = stack.pop() {
+            match node {
+                Self::Evaluated { value } => {
+                    result_stack.push(Ok(value.clone()));
+                }
+                Self::Leaf { value } => {
+                    result_stack.push(Ok(value.to_string().into()));
+                }
+                Self::BinOp {
+                    op_type,
+                    left,
+                    right,
+                } => {
+                    // Push onto the stack
+                    if result_stack.len() < 2 {
+                        stack.push(node);
+                        stack.push(right);
+                        stack.push(left);
+                        continue;
+                    }
 
-                Ok(string
-                    .chars()
-                    .skip(pos)
-                    .take(length)
-                    .collect::<String>()
-                    .into())
+                    // Then the results should be available
+                    let right_result = result_stack.pop().unwrap();
+                    let left_result = result_stack.pop().unwrap();
+
+                    let result = op_type.eval(left_result, right_result);
+                    result_stack.push(result);
+                }
+                Self::Substr {
+                    string,
+                    pos,
+                    length,
+                } => {
+                    // Push onto the stack
+                    if result_stack.len() < 3 {
+                        stack.push(node);
+                        stack.push(length);
+                        stack.push(pos);
+                        stack.push(string);
+                        continue;
+                    }
+
+                    // Then the results should be available
+                    let length_result = result_stack.pop().unwrap()?;
+                    let pos_result = result_stack.pop().unwrap()?;
+                    let string_result = result_stack.pop().unwrap()?;
+
+                    let string: String = string_result.eval_as_string();
+
+                    // The GNU docs say:
+                    //
+                    // > If either position or length is negative, zero, or
+                    // > non-numeric, returns the null string.
+                    //
+                    // So we coerce errors into 0 to make that the only case we
+                    // have to care about.
+                    let pos = pos_result
+                        .eval_as_bigint()
+                        .ok()
+                        .and_then(|n| n.to_usize())
+                        .unwrap_or(0);
+                    let length = length_result
+                        .eval_as_bigint()
+                        .ok()
+                        .and_then(|n| n.to_usize())
+                        .unwrap_or(0);
+
+                    if let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) {
+                        let result = string.chars().skip(pos).take(length).collect::<String>();
+                        result_stack.push(Ok(result.into()));
+                    } else {
+                        result_stack.push(Ok(String::new().into()));
+                    }
+                }
+                Self::Length { string } => {
+                    // Push onto the stack
+                    if result_stack.is_empty() {
+                        stack.push(node);
+                        stack.push(string);
+                        continue;
+                    }
+
+                    // Then the results should be available
+                    let string_result = result_stack.pop().unwrap()?;
+
+                    let length = string_result.eval_as_string().chars().count();
+                    result_stack.push(Ok(length.into()));
+                }
             }
-            Self::Length { string } => Ok(string.eval()?.eval_as_string().chars().count().into()),
         }
+
+        // The final result should be the only one left on the result stack
+        result_stack.pop().unwrap()
     }
 }
 
