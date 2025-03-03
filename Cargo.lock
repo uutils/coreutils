@@ -2098,7 +2098,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "selinux-sys",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -2348,11 +2348,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.11"
+version = "2.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
+checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
 dependencies = [
- "thiserror-impl 2.0.11",
+ "thiserror-impl 2.0.12",
 ]
 
 [[package]]
@@ -2368,9 +2368,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.11"
+version = "2.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
+checksum = "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2569,7 +2569,7 @@ version = "0.0.29"
 dependencies = [
  "clap",
  "nix",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2581,7 +2581,7 @@ dependencies = [
  "fts-sys",
  "libc",
  "selinux",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2615,7 +2615,7 @@ name = "uu_chroot"
 version = "0.0.29"
 dependencies = [
  "clap",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2659,7 +2659,7 @@ version = "0.0.29"
 dependencies = [
  "clap",
  "regex",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2739,7 +2739,7 @@ dependencies = [
  "chrono",
  "clap",
  "glob",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
  "windows-sys 0.59.0",
 ]
@@ -2779,7 +2779,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "onig",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2827,7 +2827,7 @@ name = "uu_groups"
 version = "0.0.29"
 dependencies = [
  "clap",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2848,7 +2848,7 @@ version = "0.0.29"
 dependencies = [
  "clap",
  "memchr",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2986,7 +2986,7 @@ dependencies = [
  "clap",
  "rand 0.9.0",
  "tempfile",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3010,7 +3010,7 @@ dependencies = [
  "fs_extra",
  "indicatif",
  "libc",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
  "windows-sys 0.59.0",
 ]
@@ -3040,7 +3040,7 @@ version = "0.0.29"
 dependencies = [
  "clap",
  "libc",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3183,7 +3183,7 @@ dependencies = [
  "clap",
  "libc",
  "selinux",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3195,7 +3195,7 @@ dependencies = [
  "clap",
  "num-bigint",
  "num-traits",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3245,7 +3245,7 @@ dependencies = [
  "rayon",
  "self_cell",
  "tempfile",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "unicode-width 0.2.0",
  "uucore",
 ]
@@ -3378,7 +3378,7 @@ dependencies = [
  "clap",
  "filetime",
  "parse_datetime",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
  "windows-sys 0.59.0",
 ]
@@ -3413,7 +3413,7 @@ name = "uu_tsort"
 version = "0.0.29"
 dependencies = [
  "clap",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3466,7 +3466,7 @@ version = "0.0.29"
 dependencies = [
  "chrono",
  "clap",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "utmp-classic",
  "uucore",
  "windows-sys 0.59.0",
@@ -3498,7 +3498,7 @@ dependencies = [
  "clap",
  "libc",
  "nix",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "unicode-width 0.2.0",
  "uucore",
 ]
@@ -3564,7 +3564,7 @@ dependencies = [
  "sha3",
  "sm3",
  "tempfile",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "time",
  "utmp-classic",
  "uucore_procs",
@@ -4020,7 +4020,7 @@ dependencies = [
  "flate2",
  "indexmap",
  "memchr",
- "thiserror 2.0.11",
+ "thiserror 2.0.12",
  "zopfli",
 ]
 
