@@ -325,7 +325,7 @@ rand = { version = "0.9.0", features = ["small_rng"] }
 rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
-rstest = "0.24.0"
+rstest = "0.25.0"
 rust-ini = "0.21.0"
 same-file = "1.0.6"
 self_cell = "1.0.4"
