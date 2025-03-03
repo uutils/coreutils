@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn test_thread_ids() {
-        let main_tid = unsafe { uucore::libc::gettid() };
+        let main_tid = unsafe { crate::libc::gettid() };
         std::thread::spawn(move || {
             let mut pid_entry = ProcessInformation::try_new(
                 PathBuf::from_str(&format!("/proc/{}", current_pid())).unwrap(),
@@ -482,7 +482,7 @@ mod tests {
 
             assert!(thread_ids.contains(&(main_tid as usize)));
 
-            let new_thread_tid = unsafe { uucore::libc::gettid() };
+            let new_thread_tid = unsafe { crate::libc::gettid() };
             assert!(thread_ids.contains(&(new_thread_tid as usize)));
         })
         .join()
@@ -507,9 +507,9 @@ mod tests {
             PathBuf::from_str(&format!("/proc/{}", current_pid())).unwrap(),
         )
         .unwrap();
-        assert_eq!(pid_entry.uid().unwrap(), uucore::process::getuid());
-        assert_eq!(pid_entry.euid().unwrap(), uucore::process::geteuid());
-        assert_eq!(pid_entry.gid().unwrap(), uucore::process::getgid());
-        assert_eq!(pid_entry.egid().unwrap(), uucore::process::getegid());
+        assert_eq!(pid_entry.uid().unwrap(), crate::process::getuid());
+        assert_eq!(pid_entry.euid().unwrap(), crate::process::geteuid());
+        assert_eq!(pid_entry.gid().unwrap(), crate::process::getgid());
+        assert_eq!(pid_entry.egid().unwrap(), crate::process::getegid());
     }
 }
