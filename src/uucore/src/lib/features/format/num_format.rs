@@ -350,11 +350,16 @@ fn format_float_scientific(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
+    let exp_char = match case {
+        Case::Lowercase => 'e',
+        Case::Uppercase => 'E',
+    };
+
     if f == 0.0 {
         return if force_decimal == ForceDecimal::Yes && precision == 0 {
-            "0.e+00".into()
+            format!("0.{exp_char}+00")
         } else {
-            format!("{:.*}e+00", precision, 0.0)
+            format!("{:.*}{exp_char}+00", precision, 0.0)
         };
     }
 
@@ -373,11 +378,6 @@ fn format_float_scientific(
         "."
     } else {
         ""
-    };
-
-    let exp_char = match case {
-        Case::Lowercase => 'e',
-        Case::Uppercase => 'E',
     };
 
     format!("{normalized:.precision$}{additional_dot}{exp_char}{exponent:+03}")
@@ -582,6 +582,10 @@ mod test {
         assert_eq!(f(12.345_678_9), "1.234568e+01");
         assert_eq!(f(1_000_000.0), "1.000000e+06");
         assert_eq!(f(99_999_999.0), "1.000000e+08");
+
+        let f = |x| format_float_scientific(x, 6, Case::Uppercase, ForceDecimal::No);
+        assert_eq!(f(0.0), "0.000000E+00");
+        assert_eq!(f(123_456.789), "1.234568E+05");
     }
 
     #[test]
