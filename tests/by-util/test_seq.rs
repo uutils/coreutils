@@ -735,7 +735,6 @@ fn test_format_option_default_precision_scientific() {
 }
 
 #[test]
-#[ignore = "Need issue #2660 to be fixed"]
 fn test_auto_precision() {
     new_ucmd!()
         .args(&["1", "0x1p-1", "2"])
@@ -744,7 +743,6 @@ fn test_auto_precision() {
 }
 
 #[test]
-#[ignore = "Need issue #3318 to be fixed"]
 fn test_undefined() {
     new_ucmd!()
         .args(&["1e-9223372036854775808"])
