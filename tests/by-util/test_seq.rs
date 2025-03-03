@@ -709,6 +709,30 @@ fn test_format_option() {
 }
 
 #[test]
+fn test_format_option_default_precision() {
+    new_ucmd!()
+        .args(&["-f", "%f", "0", "0.7", "2"])
+        .succeeds()
+        .stdout_only("0.000000\n0.700000\n1.400000\n");
+}
+
+#[test]
+fn test_format_option_default_precision_short() {
+    new_ucmd!()
+        .args(&["-f", "%g", "0", "0.987654321", "2"])
+        .succeeds()
+        .stdout_only("0\n0.987654\n1.97531\n");
+}
+
+#[test]
+fn test_format_option_default_precision_scientific() {
+    new_ucmd!()
+        .args(&["-f", "%E", "0", "0.7", "2"])
+        .succeeds()
+        .stdout_only("0.000000E+00\n7.000000E-01\n1.400000E+00\n");
+}
+
+#[test]
 #[ignore = "Need issue #2660 to be fixed"]
 fn test_auto_precision() {
     new_ucmd!()
