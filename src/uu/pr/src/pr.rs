@@ -869,8 +869,6 @@ fn read_stream_and_create_pages(
     let last_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
 
-    // TODO fix requires an MSRV of 1.82
-    #[allow(clippy::unnecessary_map_or)]
     Box::new(
         lines
             .flat_map(split_lines_if_form_feed)
@@ -919,7 +917,7 @@ fn read_stream_and_create_pages(
                 let current_page = x + 1;
 
                 current_page >= start_page
-                    && last_page.map_or(true, |last_page| current_page <= last_page)
+                    && last_page.is_none_or(|last_page| current_page <= last_page)
             }),
     )
 }

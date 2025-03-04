@@ -605,8 +605,7 @@ impl<'a> Line<'a> {
                 )?;
             }
         }
-        // TODO fix requires an MSRV of 1.82
-        #[allow(clippy::unnecessary_map_or)]
+
         if settings.mode != SortMode::Random
             && !settings.stable
             && !settings.unique
@@ -618,7 +617,7 @@ impl<'a> Line<'a> {
                 || settings
                     .selectors
                     .last()
-                    .map_or(true, |selector| selector != &FieldSelector::default()))
+                    .is_none_or(|selector| selector != &FieldSelector::default()))
         {
             // A last resort comparator is in use, underline the whole line.
             if self.line.is_empty() {
