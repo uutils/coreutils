@@ -497,11 +497,9 @@ pub fn uu_app() -> Command {
 }
 
 impl TermiosFlag for ControlFlags {
-    // TODO fix requires an MSRV of 1.82
-    #[allow(clippy::unnecessary_map_or)]
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
         termios.control_flags.contains(*self)
-            && group.map_or(true, |g| !termios.control_flags.intersects(g - *self))
+            && group.is_none_or(|g| !termios.control_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
@@ -510,11 +508,9 @@ impl TermiosFlag for ControlFlags {
 }
 
 impl TermiosFlag for InputFlags {
-    // TODO fix requires an MSRV of 1.82
-    #[allow(clippy::unnecessary_map_or)]
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
         termios.input_flags.contains(*self)
-            && group.map_or(true, |g| !termios.input_flags.intersects(g - *self))
+            && group.is_none_or(|g| !termios.input_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
@@ -523,11 +519,9 @@ impl TermiosFlag for InputFlags {
 }
 
 impl TermiosFlag for OutputFlags {
-    // TODO fix requires an MSRV of 1.82
-    #[allow(clippy::unnecessary_map_or)]
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
         termios.output_flags.contains(*self)
-            && group.map_or(true, |g| !termios.output_flags.intersects(g - *self))
+            && group.is_none_or(|g| !termios.output_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
@@ -536,11 +530,9 @@ impl TermiosFlag for OutputFlags {
 }
 
 impl TermiosFlag for LocalFlags {
-    // TODO fix requires an MSRV of 1.82
-    #[allow(clippy::unnecessary_map_or)]
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
         termios.local_flags.contains(*self)
-            && group.map_or(true, |g| !termios.local_flags.intersects(g - *self))
+            && group.is_none_or(|g| !termios.local_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {

@@ -508,14 +508,12 @@ impl StatPrinter {
                             grand_total += size;
                         }
 
-                        // TODO fix requires an MSRV of 1.82
-                        #[allow(clippy::unnecessary_map_or)]
                         if !self
                             .threshold
                             .is_some_and(|threshold| threshold.should_exclude(size))
                             && self
                                 .max_depth
-                                .map_or(true, |max_depth| stat_info.depth <= max_depth)
+                                .is_none_or(|max_depth| stat_info.depth <= max_depth)
                             && (!self.summarize || stat_info.depth == 0)
                         {
                             self.print_stat(&stat_info.stat, size)?;
