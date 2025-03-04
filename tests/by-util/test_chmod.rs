@@ -266,8 +266,7 @@ fn test_chmod_error_permissions() {
 
     ucmd.args(&["-w", "file"])
         .umask(0o022)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_is(
             // spell-checker:disable-next-line
             "chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x\n",
@@ -442,9 +441,8 @@ fn test_chmod_non_existing_file_silent() {
         .arg("--quiet")
         .arg("-r,a+w")
         .arg("does-not-exist")
-        .fails()
-        .no_stderr()
-        .code_is(1);
+        .fails_with_code(1)
+        .no_stderr();
 }
 
 #[test]
@@ -454,7 +452,7 @@ fn test_chmod_preserve_root() {
         .arg("--preserve-root")
         .arg("755")
         .arg("/")
-        .fails()
+        .fails_with_code(1)
         .stderr_contains("chmod: it is dangerous to operate recursively on '/'");
 }
 
@@ -478,8 +476,7 @@ fn test_chmod_symlink_non_existing_file() {
         .arg("755")
         .arg("-v")
         .arg(test_symlink)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_contains(expected_stdout)
         .stderr_contains(expected_stderr);
 
@@ -585,14 +582,13 @@ fn test_chmod_keep_setgid() {
 fn test_no_operands() {
     new_ucmd!()
         .arg("777")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .usage_error("missing operand");
 }
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -624,9 +620,8 @@ fn test_chmod_file_after_non_existing_file() {
         .arg("u+x")
         .arg("does-not-exist")
         .arg(TEST_FILE)
-        .fails()
-        .stderr_contains("chmod: cannot access 'does-not-exist': No such file or directory")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_contains("chmod: cannot access 'does-not-exist': No such file or directory");
 
     assert_eq!(at.metadata(TEST_FILE).permissions().mode(), 0o100_764);
 
@@ -636,9 +631,8 @@ fn test_chmod_file_after_non_existing_file() {
         .arg("--q")
         .arg("does-not-exist")
         .arg("file2")
-        .fails()
-        .no_stderr()
-        .code_is(1);
+        .fails_with_code(1)
+        .no_stderr();
     assert_eq!(at.metadata("file2").permissions().mode(), 0o100_764);
 }
 
@@ -669,8 +663,7 @@ fn test_chmod_file_symlink_after_non_existing_file() {
         .arg("-v")
         .arg(test_dangling_symlink)
         .arg(test_existing_symlink)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_contains(expected_stdout)
         .stderr_contains(expected_stderr);
     assert_eq!(

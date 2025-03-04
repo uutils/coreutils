@@ -189,8 +189,7 @@ fn test_error_filename_only() {
     // truncate: you must specify either '--size' or '--reference'
     new_ucmd!()
         .args(&["file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("error: the following required arguments were not provided:");
 }
 
@@ -199,8 +198,7 @@ fn test_invalid_option() {
     // truncate: cli parsing error returns 1
     new_ucmd!()
         .args(&["--this-arg-does-not-exist"])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -242,13 +240,11 @@ fn test_truncate_bytes_size() {
         .succeeds();
     new_ucmd!()
         .args(&["--size", "1024R", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("truncate: Invalid number: '1024R': Value too large for defined data type\n");
     new_ucmd!()
         .args(&["--size", "1Y", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type\n");
 }
 

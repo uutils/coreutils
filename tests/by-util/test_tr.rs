@@ -10,23 +10,21 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_invalid_input() {
     new_ucmd!()
         .args(&["1", "1", "<", "."])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("tr: extra operand '<'");
     #[cfg(unix)]
     new_ucmd!()
         .args(&["1", "1"])
         // will test "tr 1 1 < ."
         .set_stdin(std::process::Stdio::from(std::fs::File::open(".").unwrap()))
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("tr: read error: Is a directory");
 }
 
