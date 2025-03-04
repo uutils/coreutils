@@ -424,9 +424,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<P
     let len = prefix.len() + suffix.len() + rand;
     let mut buf = Vec::with_capacity(len);
     buf.extend(prefix.as_bytes());
-    // In Rust v1.82.0, use `repeat_n`:
-    // <https://doc.rust-lang.org/std/iter/fn.repeat_n.html>
-    buf.extend(iter::repeat(b'X').take(rand));
+    buf.extend(iter::repeat_n(b'X', rand));
     buf.extend(suffix.as_bytes());
 
     // Randomize.
