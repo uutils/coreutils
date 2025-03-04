@@ -408,7 +408,7 @@ impl CmdResult {
 
     /// Returns whether the program succeeded
     pub fn succeeded(&self) -> bool {
-        self.exit_status.map_or(true, |e| e.success())
+        self.exit_status.is_none_or(|e| e.success())
     }
 
     /// asserts that the command resulted in a success (zero) status code
