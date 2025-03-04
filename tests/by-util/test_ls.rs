@@ -98,8 +98,7 @@ fn test_invalid_value_time_style() {
     new_ucmd!()
         .arg("--time-style=definitely_invalid_value")
         .succeeds()
-        .no_stderr()
-        .code_is(0);
+        .no_stderr();
     // If it is used, error:
     new_ucmd!()
         .arg("-g")
@@ -112,8 +111,7 @@ fn test_invalid_value_time_style() {
         .arg("--time-style=definitely_invalid_value")
         .arg("--format=single-column")
         .succeeds()
-        .no_stderr()
-        .code_is(0);
+        .no_stderr();
 }
 
 #[test]
@@ -4110,8 +4108,7 @@ fn test_ls_dangling_symlinks() {
         // Check padding is the same for real files and dangling links, in non-long formats
         at.touch("temp_dir/real_file");
 
-        let real_file_res = scene.ucmd().arg("-Li1").arg("temp_dir").fails();
-        real_file_res.code_is(1);
+        let real_file_res = scene.ucmd().arg("-Li1").arg("temp_dir").fails_with_code(1);
         let real_file_stdout_len = String::from_utf8(real_file_res.stdout().to_owned())
             .ok()
             .unwrap()
@@ -4122,8 +4119,7 @@ fn test_ls_dangling_symlinks() {
             .unwrap()
             .len();
 
-        let dangle_file_res = scene.ucmd().arg("-Li1").arg("temp_dir").fails();
-        dangle_file_res.code_is(1);
+        let dangle_file_res = scene.ucmd().arg("-Li1").arg("temp_dir").fails_with_code(1);
         let dangle_stdout_len = String::from_utf8(dangle_file_res.stdout().to_owned())
             .ok()
             .unwrap()

@@ -16,13 +16,12 @@ fn test_invalid_arg() {
 #[cfg(unix)]
 fn test_normal() {
     let ts = TestScenario::new(util_name!());
-    let result = ts.ucmd().run();
     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
+    let result = ts.ucmd().succeeds();
 
     result
         .stdout_is(exp_result.stdout_str())
-        .stderr_is(exp_result.stderr_str())
-        .code_is(exp_result.code());
+        .stderr_is(exp_result.stderr_str());
 }
 
 #[test]

@@ -27,8 +27,8 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_valid_arg_exponents() {
-    new_ucmd!().arg("-h").succeeds().code_is(0);
-    new_ucmd!().arg("--exponents").succeeds().code_is(0);
+    new_ucmd!().arg("-h").succeeds();
+    new_ucmd!().arg("--exponents").succeeds();
 }
 
 #[test]

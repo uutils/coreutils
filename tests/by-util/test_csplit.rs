@@ -1412,9 +1412,8 @@ fn repeat_everything() {
         "9",
         "{5}",
     ])
-    .fails()
+    .fails_with_code(1)
     .no_stdout()
-    .code_is(1)
     .stderr_only("csplit: '9': line number out of range on repetition 5\n");
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be some splits created")

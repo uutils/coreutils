@@ -17,7 +17,7 @@ fn test_invalid_arg() {
 fn test_subcommand_return_code() {
     new_ucmd!().arg("1").arg("true").succeeds();
 
-    new_ucmd!().arg("1").arg("false").run().code_is(1);
+    new_ucmd!().arg("1").arg("false").fails_with_code(1);
 }
 
 #[test]
@@ -93,9 +93,8 @@ fn test_preserve_status() {
     for arg in ["-p", "--preserve-status"] {
         new_ucmd!()
             .args(&[arg, ".1", "sleep", "10"])
-            .fails()
             // 128 + SIGTERM = 128 + 15
-            .code_is(128 + 15)
+            .fails_with_code(128 + 15)
             .no_output();
     }
 }
@@ -108,7 +107,6 @@ fn test_preserve_status_even_when_send_signal() {
         new_ucmd!()
             .args(&["-s", cont_spelling, "--preserve-status", ".1", "sleep", "2"])
             .succeeds()
-            .code_is(0)
             .no_output();
     }
 }
@@ -118,12 +116,10 @@ fn test_dont_overflow() {
     new_ucmd!()
         .args(&["9223372036854775808d", "sleep", "0"])
         .succeeds()
-        .code_is(0)
         .no_output();
     new_ucmd!()
         .args(&["-k", "9223372036854775808d", "10", "sleep", "0"])
         .succeeds()
-        .code_is(0)
         .no_output();
 }
 
