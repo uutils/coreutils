@@ -386,10 +386,9 @@ fn test_follow_stdin_name_retry() {
     for _ in 0..2 {
         new_ucmd!()
             .args(&args)
-            .run()
+            .fails_with_code(1)
             .no_stdout()
-            .stderr_is("tail: cannot follow '-' by name\n")
-            .code_is(1);
+            .stderr_is("tail: cannot follow '-' by name\n");
         args.pop();
     }
 }
@@ -858,13 +857,12 @@ fn test_follow_missing() {
         new_ucmd!()
             .arg(follow_mode)
             .arg("missing")
-            .run()
+            .fails_with_code(1)
             .no_stdout()
             .stderr_is(
                 "tail: cannot open 'missing' for reading: No such file or directory\n\
                     tail: no files remaining\n",
-            )
-            .code_is(1);
+            );
     }
 }
 
@@ -877,17 +875,15 @@ fn test_follow_name_stdin() {
     ts.ucmd()
         .arg("--follow=name")
         .arg("-")
-        .run()
-        .stderr_is("tail: cannot follow '-' by name\n")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_is("tail: cannot follow '-' by name\n");
     ts.ucmd()
         .arg("--follow=name")
         .arg("FILE1")
         .arg("-")
         .arg("FILE2")
-        .run()
-        .stderr_is("tail: cannot follow '-' by name\n")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_is("tail: cannot follow '-' by name\n");
 }
 
 #[test]
@@ -916,9 +912,8 @@ fn test_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("DIR");
     ucmd.arg("DIR")
-        .run()
-        .stderr_is("tail: error reading 'DIR': Is a directory\n")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_is("tail: error reading 'DIR': Is a directory\n");
 }
 
 #[test]
@@ -930,14 +925,13 @@ fn test_dir_follow() {
         ts.ucmd()
             .arg(mode)
             .arg("DIR")
-            .run()
+            .fails_with_code(1)
             .no_stdout()
             .stderr_is(
                 "tail: error reading 'DIR': Is a directory\n\
                     tail: DIR: cannot follow end of this type of file; giving up on this name\n\
                     tail: no files remaining\n",
-            )
-            .code_is(1);
+            );
     }
 }
 
@@ -950,14 +944,13 @@ fn test_dir_follow_retry() {
         .arg("--follow=descriptor")
         .arg("--retry")
         .arg("DIR")
-        .run()
+        .fails_with_code(1)
         .stderr_is(
             "tail: warning: --retry only effective for the initial open\n\
                 tail: error reading 'DIR': Is a directory\n\
                 tail: DIR: cannot follow end of this type of file\n\
                 tail: no files remaining\n",
-        )
-        .code_is(1);
+        );
 }
 
 #[test]
@@ -1167,12 +1160,11 @@ fn test_bytes_for_funny_unix_files() {
             continue;
         }
         let args = ["--bytes", "1", file];
-        let result = ts.ucmd().args(&args).run();
         let exp_result = unwrap_or_return!(expected_result(&ts, &args));
+        let result = ts.ucmd().args(&args).succeeds();
         result
             .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str())
-            .code_is(exp_result.code());
+            .stderr_is(exp_result.stderr_str());
     }
 }
 
@@ -1200,13 +1192,11 @@ fn test_retry2() {
     let ts = TestScenario::new(util_name!());
     let missing = "missing";
 
-    let result = ts.ucmd().arg(missing).arg("--retry").run();
-    result
-        .stderr_is(
-            "tail: warning: --retry ignored; --retry is useful only when following\n\
+    let result = ts.ucmd().arg(missing).arg("--retry").fails_with_code(1);
+    result.stderr_is(
+        "tail: warning: --retry ignored; --retry is useful only when following\n\
                 tail: cannot open 'missing' for reading: No such file or directory\n",
-        )
-        .code_is(1);
+    );
 }
 
 #[test]
@@ -4491,9 +4481,8 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same
 fn test_args_sleep_interval_when_illegal_argument_then_usage_error(#[case] sleep_interval: &str) {
     new_ucmd!()
         .args(&["--sleep-interval", sleep_interval])
-        .run()
-        .usage_error(format!("invalid number of seconds: '{sleep_interval}'"))
-        .code_is(1);
+        .fails_with_code(1)
+        .usage_error(format!("invalid number of seconds: '{sleep_interval}'"));
 }
 
 #[test]
