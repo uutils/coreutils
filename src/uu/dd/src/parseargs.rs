@@ -31,7 +31,7 @@ pub enum ParseError {
     StatusLevelNotRecognized(String),
     Unimplemented(String),
     BsOutOfRange(String),
-    InvalidNumber(String),
+    InvalidNumber(ParseSizeError),
 }
 
 /// Contains a temporary state during parsing of the arguments
@@ -224,8 +224,8 @@ impl Parser {
             .to_bytes(ibs as u64);
         // GNU coreutils has a limit of i64 (intmax_t)
         if skip > i64::MAX as u64 {
-            return Err(ParseError::InvalidNumber(format!(
-                "'{skip}': Value too large for defined data type"
+            return Err(ParseError::InvalidNumber(ParseSizeError::SizeTooBig(
+                format!("'{skip}': Value too large for defined data type"),
             )));
         }
 
@@ -235,8 +235,8 @@ impl Parser {
             .to_bytes(obs as u64);
         // GNU coreutils has a limit of i64 (intmax_t)
         if seek > i64::MAX as u64 {
-            return Err(ParseError::InvalidNumber(format!(
-                "'{seek}': Value too large for defined data type"
+            return Err(ParseError::InvalidNumber(ParseSizeError::SizeTooBig(
+                format!("'{skip}': Value too large for defined data type"),
             )));
         }
 
@@ -529,7 +529,7 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
         (None, None, None) => match parser.parse_u64(s) {
             Ok(n) => (n, 1),
             Err(ParseSizeError::SizeTooBig(_)) => (u64::MAX, 1),
-            Err(_) => return Err(ParseError::InvalidNumber(full.to_string())),
+            Err(err) => return Err(ParseError::InvalidNumber(err)),
         },
         (Some(i), None, None) => (parse_bytes_only(s, i)?, 1),
         (None, Some(i), None) => (parse_bytes_only(s, i)?, 2),
@@ -568,9 +568,9 @@ pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
                 show_zero_multiplier_warning();
             }
             let num = parse_bytes_no_x(s, part)?;
-            total = total
-                .checked_mul(num)
-                .ok_or_else(|| ParseError::InvalidNumber(s.to_string()))?;
+            total = total.checked_mul(num).ok_or_else(|| {
+                ParseError::InvalidNumber(ParseSizeError::ParseFailure(s.to_string()))
+            })?;
         }
         Ok(total)
     }
