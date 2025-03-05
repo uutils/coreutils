@@ -243,6 +243,14 @@ impl HeadOptions {
     }
 }
 
+#[inline]
+fn wrap_in_stdout_error(err: io::Error) -> io::Error {
+    io::Error::new(
+        err.kind(),
+        format!("error writing 'standard output': {}", err),
+    )
+}
+
 fn read_n_bytes(input: impl Read, n: u64) -> std::io::Result<u64> {
     // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
@@ -251,12 +259,12 @@ fn read_n_bytes(input: impl Read, n: u64) -> std::io::Result<u64> {
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
 
-    let bytes_written = io::copy(&mut reader, &mut stdout)?;
+    let bytes_written = io::copy(&mut reader, &mut stdout).map_err(wrap_in_stdout_error)?;
 
     // Make sure we finish writing everything to the target before
     // exiting. Otherwise, when Rust is implicitly flushing, any
     // error will be silently ignored.
-    stdout.flush()?;
+    stdout.flush().map_err(wrap_in_stdout_error)?;
 
     Ok(bytes_written)
 }
@@ -268,12 +276,12 @@ fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std
     // Write those bytes to `stdout`.
     let mut stdout = std::io::stdout();
 
-    let bytes_written = io::copy(&mut reader, &mut stdout)?;
+    let bytes_written = io::copy(&mut reader, &mut stdout).map_err(wrap_in_stdout_error)?;
 
     // Make sure we finish writing everything to the target before
     // exiting. Otherwise, when Rust is implicitly flushing, any
     // error will be silently ignored.
-    stdout.flush()?;
+    stdout.flush().map_err(wrap_in_stdout_error)?;
 
     Ok(bytes_written)
 }
@@ -298,13 +306,13 @@ fn read_but_last_n_bytes(input: impl std::io::BufRead, n: u64) -> std::io::Resul
         // over the top. This gives a significant speedup (approx 4x).
         let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
         for byte in take_all_but(input.bytes(), n) {
-            writer.write_all(&[byte?])?;
+            writer.write_all(&[byte?]).map_err(wrap_in_stdout_error)?;
             bytes_written += 1;
         }
         // Make sure we finish writing everything to the target before
         // exiting. Otherwise, when Rust is implicitly flushing, any
         // error will be silently ignored.
-        writer.flush()?;
+        writer.flush().map_err(wrap_in_stdout_error)?;
     }
     Ok(bytes_written)
 }
@@ -318,15 +326,17 @@ fn read_but_last_n_lines(
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
+
         for bytes in take_all_but(lines(input, separator), n) {
             let bytes = bytes?;
             bytes_written += u64::try_from(bytes.len()).unwrap();
-            stdout.write_all(&bytes)?;
+
+            stdout.write_all(&bytes).map_err(wrap_in_stdout_error)?;
         }
         // Make sure we finish writing everything to the target before
         // exiting. Otherwise, when Rust is implicitly flushing, any
         // error will be silently ignored.
-        stdout.flush()?;
+        stdout.flush().map_err(wrap_in_stdout_error)?;
     }
     Ok(bytes_written)
 }
