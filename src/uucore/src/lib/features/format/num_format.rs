@@ -13,9 +13,8 @@ use super::{
     FormatError,
 };
 
-pub trait Formatter {
-    type Input;
-    fn fmt(&self, writer: impl Write, x: Self::Input) -> std::io::Result<()>;
+pub trait Formatter<T> {
+    fn fmt(&self, writer: impl Write, x: T) -> std::io::Result<()>;
     fn try_from_spec(s: Spec) -> Result<Self, FormatError>
     where
         Self: Sized;
@@ -75,10 +74,8 @@ pub struct SignedInt {
     pub alignment: NumberAlignment,
 }
 
-impl Formatter for SignedInt {
-    type Input = i64;
-
-    fn fmt(&self, writer: impl Write, x: Self::Input) -> std::io::Result<()> {
+impl Formatter<i64> for SignedInt {
+    fn fmt(&self, writer: impl Write, x: i64) -> std::io::Result<()> {
         let s = if self.precision > 0 {
             format!("{:0>width$}", x.abs(), width = self.precision)
         } else {
@@ -129,10 +126,8 @@ pub struct UnsignedInt {
     pub alignment: NumberAlignment,
 }
 
-impl Formatter for UnsignedInt {
-    type Input = u64;
-
-    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
+impl Formatter<u64> for UnsignedInt {
+    fn fmt(&self, mut writer: impl Write, x: u64) -> std::io::Result<()> {
         let mut s = match self.variant {
             UnsignedIntVariant::Decimal => format!("{x}"),
             UnsignedIntVariant::Octal(_) => format!("{x:o}"),
@@ -236,10 +231,8 @@ impl Default for Float {
     }
 }
 
-impl Formatter for Float {
-    type Input = f64;
-
-    fn fmt(&self, writer: impl Write, f: Self::Input) -> std::io::Result<()> {
+impl Formatter<f64> for Float {
+    fn fmt(&self, writer: impl Write, f: f64) -> std::io::Result<()> {
         let x = f.abs();
         let s = if x.is_finite() {
             match self.variant {
