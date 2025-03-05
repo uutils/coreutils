@@ -5,6 +5,11 @@
 
 // spell-checker:ignore (ToDO) ints paren prec multibytes
 
+use std::{
+    collections::BTreeMap,
+    sync::atomic::{AtomicU16, Ordering},
+};
+
 use num_bigint::{BigInt, ParseBigIntError};
 use num_traits::{ToPrimitive, Zero};
 use onig::{Regex, RegexOptions, Syntax};
@@ -354,7 +359,13 @@ impl NumOrStr {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum AstNode {
+pub struct AstNode {
+    id: u16,
+    inner: AstNodeInner,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum AstNodeInner {
     Evaluated {
         value: NumOrStr,
     },
@@ -382,8 +393,11 @@ impl AstNode {
     }
 
     pub fn evaluated(self) -> ExprResult<Self> {
-        Ok(Self::Evaluated {
-            value: self.eval()?,
+        Ok(Self {
+            id: get_next_id(),
+            inner: AstNodeInner::Evaluated {
+                value: self.eval()?,
+            },
         })
     }
 
@@ -393,56 +407,52 @@ impl AstNode {
         // on deeply nested expressions.
 
         let mut stack = vec![self];
-        let mut result_stack = Vec::new();
+        let mut result_stack = BTreeMap::new();
 
         while let Some(node) = stack.pop() {
-            match node {
-                Self::Evaluated { value } => {
-                    result_stack.push(Ok(value.clone()));
+            match &node.inner {
+                AstNodeInner::Evaluated { value, .. } => {
+                    result_stack.insert(node.id, Ok(value.clone()));
                 }
-                Self::Leaf { value } => {
-                    result_stack.push(Ok(value.to_string().into()));
+                AstNodeInner::Leaf { value, .. } => {
+                    result_stack.insert(node.id, Ok(value.to_string().into()));
                 }
-                Self::BinOp {
+                AstNodeInner::BinOp {
                     op_type,
                     left,
                     right,
                 } => {
-                    // Push onto the stack
-                    if result_stack.len() < 2 {
+                    let (Some(right), Some(left)) = (
+                        result_stack.remove(&right.id),
+                        result_stack.remove(&left.id),
+                    ) else {
                         stack.push(node);
                         stack.push(right);
                         stack.push(left);
                         continue;
-                    }
+                    };
 
-                    // Then the results should be available
-                    let right_result = result_stack.pop().unwrap();
-                    let left_result = result_stack.pop().unwrap();
-
-                    let result = op_type.eval(left_result, right_result);
-                    result_stack.push(result);
+                    let result = op_type.eval(left, right);
+                    result_stack.insert(node.id, result);
                 }
-                Self::Substr {
+                AstNodeInner::Substr {
                     string,
                     pos,
                     length,
                 } => {
-                    // Push onto the stack
-                    if result_stack.len() < 3 {
+                    let (Some(string), Some(pos), Some(length)) = (
+                        result_stack.remove(&string.id),
+                        result_stack.remove(&pos.id),
+                        result_stack.remove(&length.id),
+                    ) else {
                         stack.push(node);
-                        stack.push(length);
-                        stack.push(pos);
                         stack.push(string);
+                        stack.push(pos);
+                        stack.push(length);
                         continue;
-                    }
+                    };
 
-                    // Then the results should be available
-                    let length_result = result_stack.pop().unwrap()?;
-                    let pos_result = result_stack.pop().unwrap()?;
-                    let string_result = result_stack.pop().unwrap()?;
-
-                    let string: String = string_result.eval_as_string();
+                    let string: String = string?.eval_as_string();
 
                     // The GNU docs say:
                     //
@@ -451,12 +461,12 @@ impl AstNode {
                     //
                     // So we coerce errors into 0 to make that the only case we
                     // have to care about.
-                    let pos = pos_result
+                    let pos = pos?
                         .eval_as_bigint()
                         .ok()
                         .and_then(|n| n.to_usize())
                         .unwrap_or(0);
-                    let length = length_result
+                    let length = length?
                         .eval_as_bigint()
                         .ok()
                         .and_then(|n| n.to_usize())
@@ -464,31 +474,37 @@ impl AstNode {
 
                     if let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) {
                         let result = string.chars().skip(pos).take(length).collect::<String>();
-                        result_stack.push(Ok(result.into()));
+                        result_stack.insert(node.id, Ok(result.into()));
                     } else {
-                        result_stack.push(Ok(String::new().into()));
+                        result_stack.insert(node.id, Ok(String::new().into()));
                     }
                 }
-                Self::Length { string } => {
+                AstNodeInner::Length { string } => {
                     // Push onto the stack
-                    if result_stack.is_empty() {
+
+                    let Some(string) = result_stack.remove(&string.id) else {
                         stack.push(node);
                         stack.push(string);
                         continue;
-                    }
+                    };
 
-                    // Then the results should be available
-                    let string_result = result_stack.pop().unwrap()?;
-
-                    let length = string_result.eval_as_string().chars().count();
-                    result_stack.push(Ok(length.into()));
+                    let length = string?.eval_as_string().chars().count();
+                    result_stack.insert(node.id, Ok(length.into()));
                 }
             }
         }
 
         // The final result should be the only one left on the result stack
-        result_stack.pop().unwrap()
+        result_stack.remove(&self.id).unwrap()
     }
+}
+
+// We create unique identifiers for each node in the AST.
+// This is used to transform the recursive algorithm into an iterative one.
+// It is used to store the result of each node's evaluation in a BtreeMap.
+fn get_next_id() -> u16 {
+    static NODE_ID: AtomicU16 = AtomicU16::new(1);
+    NODE_ID.fetch_add(1, Ordering::Relaxed)
 }
 
 struct Parser<'a, S: AsRef<str>> {
@@ -560,10 +576,13 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
         let mut left = self.parse_precedence(precedence + 1)?;
         while let Some(op) = self.parse_op(precedence) {
             let right = self.parse_precedence(precedence + 1)?;
-            left = AstNode::BinOp {
-                op_type: op,
-                left: Box::new(left),
-                right: Box::new(right),
+            left = AstNode {
+                id: get_next_id(),
+                inner: AstNodeInner::BinOp {
+                    op_type: op,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
             };
         }
         Ok(left)
@@ -571,11 +590,11 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
 
     fn parse_simple_expression(&mut self) -> ExprResult<AstNode> {
         let first = self.next()?;
-        Ok(match first {
+        let inner = match first {
             "match" => {
                 let left = self.parse_expression()?;
                 let right = self.parse_expression()?;
-                AstNode::BinOp {
+                AstNodeInner::BinOp {
                     op_type: BinOp::String(StringOp::Match),
                     left: Box::new(left),
                     right: Box::new(right),
@@ -585,7 +604,7 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
                 let string = self.parse_expression()?;
                 let pos = self.parse_expression()?;
                 let length = self.parse_expression()?;
-                AstNode::Substr {
+                AstNodeInner::Substr {
                     string: Box::new(string),
                     pos: Box::new(pos),
                     length: Box::new(length),
@@ -594,7 +613,7 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
             "index" => {
                 let left = self.parse_expression()?;
                 let right = self.parse_expression()?;
-                AstNode::BinOp {
+                AstNodeInner::BinOp {
                     op_type: BinOp::String(StringOp::Index),
                     left: Box::new(left),
                     right: Box::new(right),
@@ -602,11 +621,11 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
             }
             "length" => {
                 let string = self.parse_expression()?;
-                AstNode::Length {
+                AstNodeInner::Length {
                     string: Box::new(string),
                 }
             }
-            "+" => AstNode::Leaf {
+            "+" => AstNodeInner::Leaf {
                 value: self.next()?.into(),
             },
             "(" => {
@@ -630,9 +649,13 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
                     }
                     Err(e) => return Err(e),
                 }
-                s
+                s.inner
             }
-            s => AstNode::Leaf { value: s.into() },
+            s => AstNodeInner::Leaf { value: s.into() },
+        };
+        Ok(AstNode {
+            id: get_next_id(),
+            inner,
         })
     }
 }
@@ -667,41 +690,9 @@ mod test {
     use crate::ExprError;
     use crate::ExprError::InvalidBracketContent;
 
-    use super::{check_posix_regex_errors, AstNode, BinOp, NumericOp, RelationOp, StringOp};
-
-    impl From<&str> for AstNode {
-        fn from(value: &str) -> Self {
-            Self::Leaf {
-                value: value.into(),
-            }
-        }
-    }
-
-    fn op(op_type: BinOp, left: impl Into<AstNode>, right: impl Into<AstNode>) -> AstNode {
-        AstNode::BinOp {
-            op_type,
-            left: Box::new(left.into()),
-            right: Box::new(right.into()),
-        }
-    }
-
-    fn length(string: impl Into<AstNode>) -> AstNode {
-        AstNode::Length {
-            string: Box::new(string.into()),
-        }
-    }
-
-    fn substr(
-        string: impl Into<AstNode>,
-        pos: impl Into<AstNode>,
-        length: impl Into<AstNode>,
-    ) -> AstNode {
-        AstNode::Substr {
-            string: Box::new(string.into()),
-            pos: Box::new(pos.into()),
-            length: Box::new(length.into()),
-        }
-    }
+    use super::{
+        check_posix_regex_errors, AstNode, AstNodeInner, BinOp, NumericOp, RelationOp, StringOp,
+    };
 
     #[test]
     fn infix_operators() {
@@ -722,55 +713,76 @@ mod test {
             (":", BinOp::String(StringOp::Match)),
         ];
         for (string, value) in cases {
-            assert_eq!(AstNode::parse(&["1", string, "2"]), Ok(op(value, "1", "2")));
+            let ast = AstNode::parse(&["1", string, "2"]).unwrap();
+            assert!(matches!(ast.inner,
+                    AstNodeInner::BinOp { op_type, left, right }
+                    if op_type == value
+                    && left.inner == AstNodeInner::Leaf { value: "1".to_string() }
+                    && right.inner == AstNodeInner::Leaf { value: "2".to_string() }
+            ));
         }
     }
 
     #[test]
     fn other_operators() {
-        assert_eq!(
-            AstNode::parse(&["match", "1", "2"]),
-            Ok(op(BinOp::String(StringOp::Match), "1", "2")),
-        );
-        assert_eq!(
-            AstNode::parse(&["index", "1", "2"]),
-            Ok(op(BinOp::String(StringOp::Index), "1", "2")),
-        );
-        assert_eq!(AstNode::parse(&["length", "1"]), Ok(length("1")),);
-        assert_eq!(
-            AstNode::parse(&["substr", "1", "2", "3"]),
-            Ok(substr("1", "2", "3")),
-        );
+        let ast = AstNode::parse(&["match", "1", "2"]).unwrap();
+        assert!(matches!(ast.inner,
+            AstNodeInner::BinOp { op_type, left, right }
+            if op_type == BinOp::String(StringOp::Match)
+            && left.inner == AstNodeInner::Leaf { value: "1".to_string() }
+            && right.inner == AstNodeInner::Leaf { value: "2".to_string() }
+        ));
+
+        let ast = AstNode::parse(&["length", "1"]).unwrap();
+        assert!(matches!(ast.inner,
+            AstNodeInner::Length { string }
+            if string.inner == AstNodeInner::Leaf { value: "1".to_string() }
+        ));
+
+        let ast = AstNode::parse(&["substr", "1", "2", "3"]).unwrap();
+        assert!(matches!(ast.inner,
+            AstNodeInner::Substr { string, pos, length }
+            if string.inner == AstNodeInner::Leaf { value: "1".to_string() }
+            && pos.inner == AstNodeInner::Leaf { value: "2".to_string() }
+            && length.inner == AstNodeInner::Leaf { value: "3".to_string() }
+        ));
     }
 
     #[test]
     fn precedence() {
-        assert_eq!(
-            AstNode::parse(&["1", "+", "2", "*", "3"]),
-            Ok(op(
-                BinOp::Numeric(NumericOp::Add),
-                "1",
-                op(BinOp::Numeric(NumericOp::Mul), "2", "3")
-            ))
-        );
-        assert_eq!(
-            AstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]),
-            Ok(op(
-                BinOp::Numeric(NumericOp::Mul),
-                op(BinOp::Numeric(NumericOp::Add), "1", "2")
-                    .evaluated()
-                    .unwrap(),
-                "3"
-            ))
-        );
-        assert_eq!(
-            AstNode::parse(&["1", "*", "2", "+", "3"]),
-            Ok(op(
-                BinOp::Numeric(NumericOp::Add),
-                op(BinOp::Numeric(NumericOp::Mul), "1", "2"),
-                "3"
-            )),
-        );
+        let ast = AstNode::parse(&["1", "+", "2", "*", "3"]).unwrap();
+        assert!(matches!(
+            ast.inner,
+            AstNodeInner::BinOp {
+                op_type: BinOp::Numeric(NumericOp::Add),
+                right,
+                ..
+            } if matches!(right.inner, AstNodeInner::BinOp {
+                op_type: BinOp::Numeric(NumericOp::Mul),
+                ..
+            }),
+        ));
+        let ast = AstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]).unwrap();
+        assert!(matches!(
+            ast.inner,
+            AstNodeInner::BinOp {
+                op_type: BinOp::Numeric(NumericOp::Mul),
+                left,
+                ..
+            } if left.eval().unwrap().eval_as_string() == "3",
+        ));
+        let ast = AstNode::parse(&["1", "*", "2", "+", "3"]).unwrap();
+        assert!(matches!(
+            ast.inner,
+            AstNodeInner::BinOp {
+                op_type: BinOp::Numeric(NumericOp::Add),
+                left,
+                ..
+            } if matches!(left.inner, AstNodeInner::BinOp {
+                op_type: BinOp::Numeric(NumericOp::Mul),
+                ..
+            }),
+        ));
     }
 
     #[test]

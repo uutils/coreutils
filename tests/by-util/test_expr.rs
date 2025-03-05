@@ -370,7 +370,13 @@ fn test_eager_evaluation() {
 
 #[test]
 fn test_long_input() {
+    // Giving expr an arbitrary long expression should succeed rather than end with a segfault due to a stack overflow.
+    #[cfg(not(windows))]
     const MAX_NUMBER: usize = 40000;
+
+    // On windows there is 8192 characters input limit
+    #[cfg(windows)]
+    const MAX_NUMBER: usize = 1300; // 7993 characters (with spaces)
 
     let mut args: Vec<String> = vec!["1".to_string()];
 
