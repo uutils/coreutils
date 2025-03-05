@@ -583,10 +583,7 @@ fn get_expected_digest_as_hex_string(
 ) -> Option<Cow<str>> {
     let ck = &line_info.checksum;
 
-    // TODO MSRV 1.82, replace `is_some_and` with `is_none_or`
-    // to improve readability. This closure returns True if a length hint provided
-    // and the argument isn't the same as the hint.
-    let against_hint = |len| len_hint.is_some_and(|l| l != len);
+    let against_hint = |len| len_hint.is_none_or(|l| l == len);
 
     if ck.len() % 2 != 0 {
         // If the length of the digest is not a multiple of 2, then it
@@ -594,9 +591,9 @@ fn get_expected_digest_as_hex_string(
         return None;
     }
 
-    // If the digest can be decoded as hexadecimal AND it length match the
+    // If the digest can be decoded as hexadecimal AND its length matches the
     // one expected (in case it's given), just go with it.
-    if ck.as_bytes().iter().all(u8::is_ascii_hexdigit) && !against_hint(ck.len()) {
+    if ck.as_bytes().iter().all(u8::is_ascii_hexdigit) && against_hint(ck.len()) {
         return Some(Cow::Borrowed(ck));
     }
 
@@ -608,7 +605,7 @@ fn get_expected_digest_as_hex_string(
         .ok()
         .and_then(|s| {
             // Check the digest length
-            if !against_hint(s.len()) {
+            if against_hint(s.len()) {
                 Some(s)
             } else {
                 None
