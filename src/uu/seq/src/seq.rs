@@ -149,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let format = options
         .format
-        .map(Format::<num_format::Float, f64>::parse)
+        .map(Format::<num_format::Float, &ExtendedBigDecimal>::parse)
         .transpose()?;
 
     let result = print_seq(
@@ -258,7 +258,7 @@ fn print_seq(
     terminator: &str,
     pad: bool,
     padding: usize,
-    format: Option<&Format<num_format::Float, f64>>,
+    format: Option<&Format<num_format::Float, &ExtendedBigDecimal>>,
 ) -> std::io::Result<()> {
     let stdout = stdout().lock();
     let mut stdout = BufWriter::new(stdout);
@@ -293,17 +293,7 @@ fn print_seq(
         // shouldn't have to do so much converting back and forth via
         // strings.
         match &format {
-            Some(f) => {
-                let float = match &value {
-                    ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
-                    ExtendedBigDecimal::Infinity => f64::INFINITY,
-                    ExtendedBigDecimal::MinusInfinity => f64::NEG_INFINITY,
-                    ExtendedBigDecimal::MinusZero => -0.0,
-                    ExtendedBigDecimal::Nan => f64::NAN,
-                    ExtendedBigDecimal::MinusNan => -f64::NAN,
-                };
-                f.fmt(&mut stdout, float)?;
-            }
+            Some(f) => f.fmt(&mut stdout, &value)?,
             None => write_value_float(&mut stdout, &value, padding, precision)?,
         }
         // TODO Implement augmenting addition.

@@ -5,12 +5,13 @@
 
 //! Utilities for formatting numbers in various formats
 
+use num_traits::ToPrimitive;
 use std::cmp::min;
 use std::io::Write;
 
 use super::{
     spec::{CanAsterisk, Spec},
-    FormatError,
+    ExtendedBigDecimal, FormatError,
 };
 
 pub trait Formatter<T> {
@@ -231,9 +232,19 @@ impl Default for Float {
     }
 }
 
-impl Formatter<f64> for Float {
-    fn fmt(&self, writer: impl Write, f: f64) -> std::io::Result<()> {
+impl Formatter<&ExtendedBigDecimal> for Float {
+    fn fmt(&self, writer: impl Write, e: &ExtendedBigDecimal) -> std::io::Result<()> {
+        // TODO: For now we just convert ExtendedBigDecimal back to f64, fix this.
+        let f = match e {
+            ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
+            ExtendedBigDecimal::Infinity => f64::INFINITY,
+            ExtendedBigDecimal::MinusInfinity => f64::NEG_INFINITY,
+            ExtendedBigDecimal::MinusZero => -0.0,
+            ExtendedBigDecimal::Nan => f64::NAN,
+            ExtendedBigDecimal::MinusNan => -f64::NAN,
+        };
         let x = f.abs();
+
         let s = if x.is_finite() {
             match self.variant {
                 FloatVariant::Decimal => {
