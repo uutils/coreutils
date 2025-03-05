@@ -10,11 +10,10 @@ use clap::{Arg, ArgAction, Command};
 use num_traits::{ToPrimitive, Zero};
 
 use uucore::error::{FromIo, UResult};
-use uucore::format::{num_format, sprintf, Format, FormatArgument};
+use uucore::format::{num_format, sprintf, ExtendedBigDecimal, Format, FormatArgument};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
-mod extendedbigdecimal;
 mod hexadecimalfloat;
 
 // public to allow fuzzing
@@ -24,7 +23,6 @@ pub mod number;
 mod number;
 mod numberparse;
 use crate::error::SeqError;
-use crate::extendedbigdecimal::ExtendedBigDecimal;
 use crate::number::PreciseNumber;
 
 const ABOUT: &str = help_about!("seq.md");
