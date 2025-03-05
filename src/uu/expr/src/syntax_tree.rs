@@ -358,13 +358,15 @@ impl NumOrStr {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct AstNode {
     id: u16,
     inner: AstNodeInner,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+// We derive Eq and PartialEq only for tests because we want to ignore the id field.
+#[derive(Debug, Clone)]
+#[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum AstNodeInner {
     Evaluated {
         value: NumOrStr,
@@ -691,8 +693,63 @@ mod test {
     use crate::ExprError::InvalidBracketContent;
 
     use super::{
-        check_posix_regex_errors, AstNode, AstNodeInner, BinOp, NumericOp, RelationOp, StringOp,
+        check_posix_regex_errors, get_next_id, AstNode, AstNodeInner, BinOp, NumericOp, RelationOp,
+        StringOp,
     };
+
+    impl PartialEq for AstNode {
+        fn eq(&self, other: &Self) -> bool {
+            self.inner == other.inner
+        }
+    }
+
+    impl Eq for AstNode {}
+
+    impl From<&str> for AstNode {
+        fn from(value: &str) -> Self {
+            Self {
+                id: get_next_id(),
+                inner: AstNodeInner::Leaf {
+                    value: value.into(),
+                },
+            }
+        }
+    }
+
+    fn op(op_type: BinOp, left: impl Into<AstNode>, right: impl Into<AstNode>) -> AstNode {
+        AstNode {
+            id: get_next_id(),
+            inner: AstNodeInner::BinOp {
+                op_type,
+                left: Box::new(left.into()),
+                right: Box::new(right.into()),
+            },
+        }
+    }
+
+    fn length(string: impl Into<AstNode>) -> AstNode {
+        AstNode {
+            id: get_next_id(),
+            inner: AstNodeInner::Length {
+                string: Box::new(string.into()),
+            },
+        }
+    }
+
+    fn substr(
+        string: impl Into<AstNode>,
+        pos: impl Into<AstNode>,
+        length: impl Into<AstNode>,
+    ) -> AstNode {
+        AstNode {
+            id: get_next_id(),
+            inner: AstNodeInner::Substr {
+                string: Box::new(string.into()),
+                pos: Box::new(pos.into()),
+                length: Box::new(length.into()),
+            },
+        }
+    }
 
     #[test]
     fn infix_operators() {
@@ -713,76 +770,55 @@ mod test {
             (":", BinOp::String(StringOp::Match)),
         ];
         for (string, value) in cases {
-            let ast = AstNode::parse(&["1", string, "2"]).unwrap();
-            assert!(matches!(ast.inner,
-                    AstNodeInner::BinOp { op_type, left, right }
-                    if op_type == value
-                    && left.inner == AstNodeInner::Leaf { value: "1".to_string() }
-                    && right.inner == AstNodeInner::Leaf { value: "2".to_string() }
-            ));
+            assert_eq!(AstNode::parse(&["1", string, "2"]), Ok(op(value, "1", "2")));
         }
     }
 
     #[test]
     fn other_operators() {
-        let ast = AstNode::parse(&["match", "1", "2"]).unwrap();
-        assert!(matches!(ast.inner,
-            AstNodeInner::BinOp { op_type, left, right }
-            if op_type == BinOp::String(StringOp::Match)
-            && left.inner == AstNodeInner::Leaf { value: "1".to_string() }
-            && right.inner == AstNodeInner::Leaf { value: "2".to_string() }
-        ));
-
-        let ast = AstNode::parse(&["length", "1"]).unwrap();
-        assert!(matches!(ast.inner,
-            AstNodeInner::Length { string }
-            if string.inner == AstNodeInner::Leaf { value: "1".to_string() }
-        ));
-
-        let ast = AstNode::parse(&["substr", "1", "2", "3"]).unwrap();
-        assert!(matches!(ast.inner,
-            AstNodeInner::Substr { string, pos, length }
-            if string.inner == AstNodeInner::Leaf { value: "1".to_string() }
-            && pos.inner == AstNodeInner::Leaf { value: "2".to_string() }
-            && length.inner == AstNodeInner::Leaf { value: "3".to_string() }
-        ));
+        assert_eq!(
+            AstNode::parse(&["match", "1", "2"]),
+            Ok(op(BinOp::String(StringOp::Match), "1", "2")),
+        );
+        assert_eq!(
+            AstNode::parse(&["index", "1", "2"]),
+            Ok(op(BinOp::String(StringOp::Index), "1", "2")),
+        );
+        assert_eq!(AstNode::parse(&["length", "1"]), Ok(length("1")),);
+        assert_eq!(
+            AstNode::parse(&["substr", "1", "2", "3"]),
+            Ok(substr("1", "2", "3")),
+        );
     }
 
     #[test]
     fn precedence() {
-        let ast = AstNode::parse(&["1", "+", "2", "*", "3"]).unwrap();
-        assert!(matches!(
-            ast.inner,
-            AstNodeInner::BinOp {
-                op_type: BinOp::Numeric(NumericOp::Add),
-                right,
-                ..
-            } if matches!(right.inner, AstNodeInner::BinOp {
-                op_type: BinOp::Numeric(NumericOp::Mul),
-                ..
-            }),
-        ));
-        let ast = AstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]).unwrap();
-        assert!(matches!(
-            ast.inner,
-            AstNodeInner::BinOp {
-                op_type: BinOp::Numeric(NumericOp::Mul),
-                left,
-                ..
-            } if left.eval().unwrap().eval_as_string() == "3",
-        ));
-        let ast = AstNode::parse(&["1", "*", "2", "+", "3"]).unwrap();
-        assert!(matches!(
-            ast.inner,
-            AstNodeInner::BinOp {
-                op_type: BinOp::Numeric(NumericOp::Add),
-                left,
-                ..
-            } if matches!(left.inner, AstNodeInner::BinOp {
-                op_type: BinOp::Numeric(NumericOp::Mul),
-                ..
-            }),
-        ));
+        assert_eq!(
+            AstNode::parse(&["1", "+", "2", "*", "3"]),
+            Ok(op(
+                BinOp::Numeric(NumericOp::Add),
+                "1",
+                op(BinOp::Numeric(NumericOp::Mul), "2", "3")
+            ))
+        );
+        assert_eq!(
+            AstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]),
+            Ok(op(
+                BinOp::Numeric(NumericOp::Mul),
+                op(BinOp::Numeric(NumericOp::Add), "1", "2")
+                    .evaluated()
+                    .unwrap(),
+                "3"
+            ))
+        );
+        assert_eq!(
+            AstNode::parse(&["1", "*", "2", "+", "3"]),
+            Ok(op(
+                BinOp::Numeric(NumericOp::Add),
+                op(BinOp::Numeric(NumericOp::Mul), "1", "2"),
+                "3"
+            )),
+        );
     }
 
     #[test]
