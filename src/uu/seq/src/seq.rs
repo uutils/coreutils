@@ -149,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let format = options
         .format
-        .map(Format::<num_format::Float>::parse)
+        .map(Format::<num_format::Float, f64>::parse)
         .transpose()?;
 
     let result = print_seq(
@@ -258,7 +258,7 @@ fn print_seq(
     terminator: &str,
     pad: bool,
     padding: usize,
-    format: Option<&Format<num_format::Float>>,
+    format: Option<&Format<num_format::Float, f64>>,
 ) -> std::io::Result<()> {
     let stdout = stdout().lock();
     let mut stdout = BufWriter::new(stdout);
