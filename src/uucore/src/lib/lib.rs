@@ -115,16 +115,13 @@ use nix::sys::signal::{
     sigaction, SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV,
 };
 use std::borrow::Cow;
-use std::ffi::OsStr;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
 use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::str;
-use std::sync::atomic::Ordering;
-
-use once_cell::sync::Lazy;
+use std::sync::{atomic::Ordering, LazyLock};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
@@ -194,9 +191,9 @@ pub fn set_utility_is_second_arg() {
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
 // So if we want only the first arg or so it's overkill. We cache it.
-static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
+static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect());
 
-static UTIL_NAME: Lazy<String> = Lazy::new(|| {
+static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let base_index = usize::from(get_utility_is_second_arg());
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
     let argv_index = base_index + is_man;
@@ -209,7 +206,7 @@ pub fn util_name() -> &'static str {
     &UTIL_NAME
 }
 
-static EXECUTION_PHRASE: Lazy<String> = Lazy::new(|| {
+static EXECUTION_PHRASE: LazyLock<String> = LazyLock::new(|| {
     if get_utility_is_second_arg() {
         ARGV.iter()
             .take(2)

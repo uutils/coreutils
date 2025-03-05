@@ -43,9 +43,7 @@ use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;
 use std::ptr;
-use std::sync::Mutex;
-
-use once_cell::sync::Lazy;
+use std::sync::{LazyLock, Mutex};
 
 extern "C" {
     /// From: `<https://man7.org/linux/man-pages/man3/getgrouplist.3.html>`
@@ -276,7 +274,7 @@ pub trait Locate<K> {
 // to, so we must copy all the data we want before releasing the lock.
 // (Technically we must also ensure that the raw functions aren't being called
 // anywhere else in the program.)
-static PW_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static PW_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 macro_rules! f {
     ($fnam:ident, $fid:ident, $t:ident, $st:ident) => {
