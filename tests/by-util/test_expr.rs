@@ -373,10 +373,14 @@ fn test_long_input() {
     // Giving expr an arbitrary long expression should succeed rather than end with a segfault due to a stack overflow.
     #[cfg(not(windows))]
     const MAX_NUMBER: usize = 40000;
+    #[cfg(not(windows))]
+    const RESULT: &str = "800020000\n";
 
     // On windows there is 8192 characters input limit
     #[cfg(windows)]
     const MAX_NUMBER: usize = 1300; // 7993 characters (with spaces)
+    #[cfg(windows)]
+    const RESULT: &str = "845650\n";
 
     let mut args: Vec<String> = vec!["1".to_string()];
 
@@ -385,7 +389,7 @@ fn test_long_input() {
         args.push(i.to_string());
     }
 
-    new_ucmd!().args(&args).succeeds().stdout_is("800020000\n");
+    new_ucmd!().args(&args).succeeds().stdout_is(RESULT);
 }
 
 /// Regroup the testcases of the GNU test expr.pl
