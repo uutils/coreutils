@@ -5,7 +5,6 @@
 // spell-checker:ignore anotherfile invalidchecksum regexes JWZG FFFD xffname prefixfilename bytelen bitlen hexdigit
 
 use data_encoding::BASE64;
-use lazy_static::lazy_static;
 use os_display::Quotable;
 use regex::bytes::{Match, Regex};
 use std::{
@@ -16,6 +15,7 @@ use std::{
     io::{self, stdin, BufReader, Read, Write},
     path::Path,
     str,
+    sync::LazyLock,
 };
 
 use crate::{
@@ -478,11 +478,9 @@ const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>
 // In this case, we ignore the *
 const SINGLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s(?P<filename>\*?(?-u:.*))$";
 
-lazy_static! {
-    static ref R_ALGO_BASED: Regex = Regex::new(ALGO_BASED_REGEX).unwrap();
-    static ref R_DOUBLE_SPACE: Regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
-    static ref R_SINGLE_SPACE: Regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
-}
+static R_ALGO_BASED: LazyLock<Regex> = LazyLock::new(|| Regex::new(ALGO_BASED_REGEX).unwrap());
+static R_DOUBLE_SPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(DOUBLE_SPACE_REGEX).unwrap());
+static R_SINGLE_SPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(SINGLE_SPACE_REGEX).unwrap());
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum LineFormat {

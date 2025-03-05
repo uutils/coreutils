@@ -3503,7 +3503,6 @@ dependencies = [
  "hex",
  "iana-time-zone",
  "itertools 0.14.0",
- "lazy_static",
  "libc",
  "md-5",
  "memchr",
