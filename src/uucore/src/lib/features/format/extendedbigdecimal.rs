@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore bigdecimal extendedbigdecimal extendedbigint
+// spell-checker:ignore bigdecimal extendedbigdecimal
 //! An arbitrary precision float that can also represent infinity, NaN, etc.
 //!
 //! The finite values are stored as [`BigDecimal`] instances. Because
@@ -68,7 +68,6 @@ pub enum ExtendedBigDecimal {
 }
 
 impl ExtendedBigDecimal {
-    #[cfg(test)]
     pub fn zero() -> Self {
         Self::BigDecimal(0.into())
     }
@@ -197,7 +196,7 @@ mod tests {
     use bigdecimal::BigDecimal;
     use num_traits::Zero;
 
-    use crate::extendedbigdecimal::ExtendedBigDecimal;
+    use crate::format::extendedbigdecimal::ExtendedBigDecimal;
 
     #[test]
     fn test_addition_infinity() {
