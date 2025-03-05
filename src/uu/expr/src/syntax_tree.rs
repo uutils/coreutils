@@ -264,7 +264,7 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
         (true, true, false) => Ok(()),
         (_, false, _) => Err(ExprError::UnmatchedOpeningBrace),
         (false, _, _) => Err(ExprError::UnmatchedOpeningParenthesis),
-        (true, true, true) => Err(ExprError::InvalidContent(r"\{\}".to_string())),
+        (true, true, true) => Err(ExprError::InvalidBracketContent),
     }
 }
 
@@ -601,7 +601,7 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 #[cfg(test)]
 mod test {
     use crate::ExprError;
-    use crate::ExprError::InvalidContent;
+    use crate::ExprError::InvalidBracketContent;
 
     use super::{check_posix_regex_errors, AstNode, BinOp, NumericOp, RelationOp, StringOp};
 
@@ -795,7 +795,7 @@ mod test {
     fn check_regex_empty_repeating_pattern() {
         assert_eq!(
             check_posix_regex_errors("ab\\{\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
+            Err(InvalidBracketContent)
         )
     }
 
@@ -804,27 +804,27 @@ mod test {
         assert_eq!(
             // out of order
             check_posix_regex_errors("ab\\{1,0\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
+            Err(InvalidBracketContent)
         );
         assert_eq!(
             check_posix_regex_errors("ab\\{1,a\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
+            Err(InvalidBracketContent)
         );
         assert_eq!(
             check_posix_regex_errors("ab\\{a,3\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
+            Err(InvalidBracketContent)
         );
         assert_eq!(
             check_posix_regex_errors("ab\\{a,b\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
+            Err(InvalidBracketContent)
         );
         assert_eq!(
             check_posix_regex_errors("ab\\{a,\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
+            Err(InvalidBracketContent)
         );
         assert_eq!(
             check_posix_regex_errors("ab\\{,b\\}"),
-            Err(InvalidContent(r"\{\}".to_string()))
+            Err(InvalidBracketContent)
         );
     }
 }
