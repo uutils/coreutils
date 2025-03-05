@@ -157,7 +157,7 @@ impl ProgUpdate {
             variant: FloatVariant::Shortest,
             ..Default::default()
         }
-        .fmt(&mut duration_str, duration)?;
+        .fmt(&mut duration_str, &duration.into())?;
         // We assume that printf will output valid UTF-8
         let duration_str = std::str::from_utf8(&duration_str).unwrap();
 
