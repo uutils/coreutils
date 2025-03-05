@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore extendedbigdecimal
 
 //! `printf`-style formatting
 //!
@@ -45,6 +46,7 @@ use std::{
     error::Error,
     fmt::Display,
     io::{stdout, Write},
+    marker::PhantomData,
     ops::ControlFlow,
 };
 
@@ -308,20 +310,21 @@ pub fn sprintf<'a>(
     Ok(writer)
 }
 
-/// A parsed format for a single float value
+/// A parsed format for a single numerical value of type T
 ///
-/// This is used by `seq`. It can be constructed with [`Format::parse`]
+/// This is used by `seq` and `csplit`. It can be constructed with [`Format::parse`]
 /// and can write a value with [`Format::fmt`].
 ///
 /// It can only accept a single specification without any asterisk parameters.
 /// If it does get more specifications, it will return an error.
-pub struct Format<F: Formatter> {
+pub struct Format<F: Formatter<T>, T> {
     prefix: Vec<u8>,
     suffix: Vec<u8>,
     formatter: F,
+    _marker: PhantomData<T>,
 }
 
-impl<F: Formatter> Format<F> {
+impl<F: Formatter<T>, T> Format<F, T> {
     pub fn parse(format_string: impl AsRef<[u8]>) -> Result<Self, FormatError> {
         let mut iter = parse_spec_only(format_string.as_ref());
 
@@ -362,10 +365,11 @@ impl<F: Formatter> Format<F> {
             prefix,
             suffix,
             formatter,
+            _marker: PhantomData,
         })
     }
 
-    pub fn fmt(&self, mut w: impl Write, f: F::Input) -> std::io::Result<()> {
+    pub fn fmt(&self, mut w: impl Write, f: T) -> std::io::Result<()> {
         w.write_all(&self.prefix)?;
         self.formatter.fmt(&mut w, f)?;
         w.write_all(&self.suffix)?;
