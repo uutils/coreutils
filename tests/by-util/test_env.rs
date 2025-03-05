@@ -477,16 +477,22 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
 fn test_gnu_e20() {
     let env_bin = String::from(crate::common::util::TESTS_BINARY) + " " + util_name!();
 
-    let (input, output) = (
-        [
-            String::from("-i"),
-            String::from(r#"-SA="B\_C=D" "#) + env_bin.escape_default().to_string().as_str() + "",
-        ],
-        "A=B C=D\n",
-    );
+    let input = [
+        String::from("-i"),
+        String::from(r#"-SA="B\_C=D" "#) + env_bin.escape_default().to_string().as_str() + "",
+    ];
 
-    let out = new_ucmd!().args(&input).succeeds();
-    assert_eq!(out.stdout_str(), output);
+    let mut output = "A=B C=D\n".to_string();
+
+    // Workaround for the test to pass when coverage is being run.
+    // If enabled, the binary called by env_bin will most probably be
+    // instrumented for coverage, and thus will set the
+    // __LLVM_PROFILE_RT_INIT_ONCE
+    if env::var("__LLVM_PROFILE_RT_INIT_ONCE").is_ok() {
+        output.push_str("__LLVM_PROFILE_RT_INIT_ONCE=__LLVM_PROFILE_RT_INIT_ONCE\n");
+    }
+
+    new_ucmd!().args(&input).succeeds().stdout_is(output);
 }
 
 #[test]
