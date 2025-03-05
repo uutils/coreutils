@@ -314,7 +314,6 @@ num-bigint = "0.4.4"
 num-prime = "0.4.4"
 num-traits = "0.2.19"
 number_prefix = "0.4"
-once_cell = "1.19.0"
 onig = { version = "~6.4", default-features = false }
 parse_datetime = "0.8.0"
 phf = "0.11.2"
@@ -366,7 +365,6 @@ uu_base32 = { version = "0.0.29", path = "src/uu/base32" }
 
 [dependencies]
 clap = { workspace = true }
-once_cell = { workspace = true }
 uucore = { workspace = true }
 clap_complete = { workspace = true }
 clap_mangen = { workspace = true }

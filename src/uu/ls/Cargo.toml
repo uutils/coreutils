@@ -24,7 +24,6 @@ glob = { workspace = true }
 hostname = { workspace = true }
 lscolors = { workspace = true }
 number_prefix = { workspace = true }
-once_cell = { workspace = true }
 selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
 uucore = { workspace = true, features = [
