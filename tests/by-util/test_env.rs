@@ -112,48 +112,47 @@ fn test_if_windows_batch_files_can_be_executed() {
 #[test]
 fn test_debug_1() {
     let ts = TestScenario::new(util_name!());
-    let result = ts
-        .ucmd()
+
+    ts.ucmd()
         .arg("-v")
         .arg(&ts.bin_path)
         .args(&["echo", "hello"])
-        .succeeds();
-    result.stderr_matches(
-        &Regex::new(concat!(
-            r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
-            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
-            r"   arg\[1\]= 'echo'\n",
-            r"   arg\[2\]= 'hello'"
-        ))
-        .unwrap(),
-    );
+        .succeeds()
+        .stderr_matches(
+            &Regex::new(concat!(
+                r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
+                r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
+                r"   arg\[1\]= 'echo'\n",
+                r"   arg\[2\]= 'hello'"
+            ))
+            .unwrap(),
+        );
 }
 
 #[cfg(feature = "echo")]
 #[test]
 fn test_debug_2() {
     let ts = TestScenario::new(util_name!());
-    let result = ts
-        .ucmd()
+    ts.ucmd()
         .arg("-vv")
         .arg(&ts.bin_path)
         .args(&["echo", "hello2"])
-        .succeeds();
-    result.stderr_matches(
-        &Regex::new(concat!(
-            r"input args:\n",
-            r"arg\[0\]: 'env'\n",
-            r"arg\[1\]: '-vv'\n",
-            r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
-            r"arg\[3\]: 'echo'\n",
-            r"arg\[4\]: 'hello2'\n",
-            r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
-            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
-            r"   arg\[1\]= 'echo'\n",
-            r"   arg\[2\]= 'hello2'"
-        ))
-        .unwrap(),
-    );
+        .succeeds()
+        .stderr_matches(
+            &Regex::new(concat!(
+                r"input args:\n",
+                r"arg\[0\]: 'env'\n",
+                r"arg\[1\]: '-vv'\n",
+                r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+                r"arg\[3\]: 'echo'\n",
+                r"arg\[4\]: 'hello2'\n",
+                r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
+                r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+                r"   arg\[1\]= 'echo'\n",
+                r"   arg\[2\]= 'hello2'"
+            ))
+            .unwrap(),
+        );
 }
 
 #[cfg(feature = "echo")]
@@ -161,48 +160,46 @@ fn test_debug_2() {
 fn test_debug1_part_of_string_arg() {
     let ts = TestScenario::new(util_name!());
 
-    let result = ts
-        .ucmd()
+    ts.ucmd()
         .arg("-vS FOO=BAR")
         .arg(&ts.bin_path)
         .args(&["echo", "hello1"])
-        .succeeds();
-    result.stderr_matches(
-        &Regex::new(concat!(
-            r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
-            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
-            r"   arg\[1\]= 'echo'\n",
-            r"   arg\[2\]= 'hello1'"
-        ))
-        .unwrap(),
-    );
+        .succeeds()
+        .stderr_matches(
+            &Regex::new(concat!(
+                r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
+                r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
+                r"   arg\[1\]= 'echo'\n",
+                r"   arg\[2\]= 'hello1'"
+            ))
+            .unwrap(),
+        );
 }
 
 #[cfg(feature = "echo")]
 #[test]
 fn test_debug2_part_of_string_arg() {
     let ts = TestScenario::new(util_name!());
-    let result = ts
-        .ucmd()
+    ts.ucmd()
         .arg("-vvS FOO=BAR")
         .arg(&ts.bin_path)
         .args(&["echo", "hello2"])
-        .succeeds();
-    result.stderr_matches(
-        &Regex::new(concat!(
-            r"input args:\n",
-            r"arg\[0\]: 'env'\n",
-            r"arg\[1\]: '-vvS FOO=BAR'\n",
-            r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
-            r"arg\[3\]: 'echo'\n",
-            r"arg\[4\]: 'hello2'\n",
-            r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
-            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
-            r"   arg\[1\]= 'echo'\n",
-            r"   arg\[2\]= 'hello2'"
-        ))
-        .unwrap(),
-    );
+        .succeeds()
+        .stderr_matches(
+            &Regex::new(concat!(
+                r"input args:\n",
+                r"arg\[0\]: 'env'\n",
+                r"arg\[1\]: '-vvS FOO=BAR'\n",
+                r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+                r"arg\[3\]: 'echo'\n",
+                r"arg\[4\]: 'hello2'\n",
+                r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
+                r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+                r"   arg\[1\]= 'echo'\n",
+                r"   arg\[2\]= 'hello2'"
+            ))
+            .unwrap(),
+        );
 }
 
 #[test]
@@ -291,10 +288,8 @@ fn test_multiple_name_value_pairs() {
 
 #[test]
 fn test_ignore_environment() {
-    let scene = TestScenario::new(util_name!());
-
-    scene.ucmd().arg("-i").succeeds().no_stdout();
-    scene.ucmd().arg("-").succeeds().no_stdout();
+    new_ucmd!().arg("-i").succeeds().no_stdout();
+    new_ucmd!().arg("-").succeeds().no_stdout();
 }
 
 #[test]
@@ -326,8 +321,7 @@ fn test_null_delimiter() {
 
 #[test]
 fn test_unset_variable() {
-    let out = TestScenario::new(util_name!())
-        .ucmd()
+    let out = new_ucmd!()
         .env("HOME", "FOO")
         .arg("-u")
         .arg("HOME")
@@ -349,16 +343,15 @@ fn test_fail_null_with_program() {
 #[cfg(not(windows))]
 #[test]
 fn test_change_directory() {
-    let scene = TestScenario::new(util_name!());
     let temporary_directory = tempdir().unwrap();
     let temporary_path = std::fs::canonicalize(temporary_directory.path()).unwrap();
+
     assert_ne!(env::current_dir().unwrap(), temporary_path);
 
     // command to print out current working directory
     let pwd = "pwd";
 
-    let out = scene
-        .ucmd()
+    let out = new_ucmd!()
         .arg("--chdir")
         .arg(&temporary_path)
         .arg(pwd)
@@ -370,7 +363,6 @@ fn test_change_directory() {
 #[cfg(windows)]
 #[test]
 fn test_change_directory() {
-    let scene = TestScenario::new(util_name!());
     let temporary_directory = tempdir().unwrap();
 
     let temporary_path = temporary_directory.path();
@@ -389,8 +381,7 @@ fn test_change_directory() {
     // command to print out current working directory
     let pwd = [&*cmd_path, "/C", "cd"];
 
-    let out = scene
-        .ucmd()
+    let out = new_ucmd!()
         .arg("--chdir")
         .arg(temporary_path)
         .args(&pwd)
@@ -401,12 +392,10 @@ fn test_change_directory() {
 
 #[test]
 fn test_fail_change_directory() {
-    let scene = TestScenario::new(util_name!());
     let some_non_existing_path = "some_nonexistent_path";
     assert!(!Path::new(some_non_existing_path).is_dir());
 
-    let out = scene
-        .ucmd()
+    let out = new_ucmd!()
         .arg("--chdir")
         .arg(some_non_existing_path)
         .arg("pwd")
@@ -418,95 +407,68 @@ fn test_fail_change_directory() {
 #[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument_no_quotes() {
-    let scene = TestScenario::new(util_name!());
-
-    let out = scene
-        .ucmd()
+    new_ucmd!()
         .arg("-S echo hello world")
         .succeeds()
-        .stdout_move_str();
-    assert_eq!(out, "hello world\n");
+        .stdout_is("hello world\n");
 }
 
 #[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument() {
-    let scene = TestScenario::new(util_name!());
-
-    let out = scene
-        .ucmd()
+    new_ucmd!()
         .arg("-S echo \"hello world\"")
         .succeeds()
-        .stdout_move_str();
-    assert_eq!(out, "hello world\n");
+        .stdout_is("hello world\n");
 }
 
 #[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_s_escaping_challenge() {
-    let scene = TestScenario::new(util_name!());
-
-    let out = scene
-        .ucmd()
+    new_ucmd!()
         .args(&[r#"-S echo "hello \"great\" world""#])
         .succeeds()
-        .stdout_move_str();
-    assert_eq!(out, "hello \"great\" world\n");
+        .stdout_is("hello \"great\" world\n");
 }
 
 #[test]
 fn test_split_string_into_args_s_escaped_c_not_allowed() {
-    let scene = TestScenario::new(util_name!());
-
-    let out = scene.ucmd().args(&[r#"-S"\c""#]).fails().stderr_move_str();
-    assert_eq!(
-        out,
-        "env: '\\c' must not appear in double-quoted -S string\n"
-    );
+    new_ucmd!()
+        .args(&[r#"-S"\c""#])
+        .fails()
+        .stderr_is("env: '\\c' must not appear in double-quoted -S string\n");
 }
 
 #[cfg(not(target_os = "windows"))] // no printf available
 #[test]
 fn test_split_string_into_args_s_whitespace_handling() {
-    let scene = TestScenario::new(util_name!());
-
-    let out = scene
-        .ucmd()
+    new_ucmd!()
         .args(&["-Sprintf x%sx\\n A \t B \x0B\x0C\r\n"])
         .succeeds()
-        .stdout_move_str();
-    assert_eq!(out, "xAx\nxBx\n");
+        .stdout_is("xAx\nxBx\n");
 }
 
 #[cfg(not(target_os = "windows"))] // no printf available
 #[test]
 fn test_split_string_into_args_long_option_whitespace_handling() {
-    let scene = TestScenario::new(util_name!());
-
-    let out = scene
-        .ucmd()
+    new_ucmd!()
         .args(&["--split-string printf x%sx\\n A \t B \x0B\x0C\r\n"])
         .succeeds()
-        .stdout_move_str();
-    assert_eq!(out, "xAx\nxBx\n");
+        .stdout_is("xAx\nxBx\n");
 }
 
 #[cfg(not(target_os = "windows"))] // no printf available
 #[test]
 fn test_split_string_into_args_debug_output_whitespace_handling() {
-    let scene = TestScenario::new(util_name!());
-
-    let out = scene
-        .ucmd()
+    new_ucmd!()
         .args(&["-vvS printf x%sx\\n A \t B \x0B\x0C\r\n"])
-        .succeeds();
-    assert_eq!(out.stdout_str(), "xAx\nxBx\n");
-    assert_eq!(
-        out.stderr_str(),
-        "input args:\narg[0]: 'env'\narg[1]: $\
+        .succeeds()
+        .stdout_is("xAx\nxBx\n")
+        .stderr_is(
+            "input args:\narg[0]: 'env'\narg[1]: $\
         '-vvS printf x%sx\\\\n A \\t B \\x0B\\x0C\\r\\n'\nexecuting: printf\
-        \n   arg[0]= 'printf'\n   arg[1]= $'x%sx\\n'\n   arg[2]= 'A'\n   arg[3]= 'B'\n"
-    );
+        \n   arg[0]= 'printf'\n   arg[1]= $'x%sx\\n'\n   arg[2]= 'A'\n   arg[3]= 'B'\n",
+        );
 }
 
 // FixMe: This test fails on MACOS:
@@ -516,8 +478,6 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
 #[cfg(not(target_os = "macos"))]
 #[test]
 fn test_gnu_e20() {
-    let scene = TestScenario::new(util_name!());
-
     let env_bin = String::from(crate::common::util::TESTS_BINARY) + " " + util_name!();
 
     let (input, output) = (
@@ -528,7 +488,7 @@ fn test_gnu_e20() {
         "A=B C=D\n",
     );
 
-    let out = scene.ucmd().args(&input).succeeds();
+    let out = new_ucmd!().args(&input).succeeds();
     assert_eq!(out.stdout_str(), output);
 }
 
@@ -630,9 +590,7 @@ fn test_env_parsing_errors() {
 
 #[test]
 fn test_env_with_empty_executable_single_quotes() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .args(&["-S''"]) // empty single quotes, considered as program name
         .fails_with_code(127)
         .no_stdout()
@@ -641,9 +599,7 @@ fn test_env_with_empty_executable_single_quotes() {
 
 #[test]
 fn test_env_with_empty_executable_double_quotes() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .args(&["-S\"\""]) // empty double quotes, considered as program name
         .fails_with_code(127)
         .no_stdout()
@@ -861,8 +817,7 @@ fn test_env_arg_ignore_signal_valid_signals() {
 #[test]
 #[cfg(unix)]
 fn test_env_arg_ignore_signal_empty() {
-    let ts = TestScenario::new(util_name!());
-    ts.ucmd()
+    new_ucmd!()
         .args(&["--ignore-signal=", "echo", "hello"])
         .succeeds()
         .no_stderr()
