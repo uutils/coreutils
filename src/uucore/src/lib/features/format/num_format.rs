@@ -324,8 +324,9 @@ fn get_sign_indicator<T: PartialOrd + Default>(sign: PositiveSign, x: &T) -> Str
 fn format_float_non_finite(f: f64, case: Case) -> String {
     debug_assert!(!f.is_finite());
     let mut s = format!("{f}");
-    if case == Case::Uppercase {
-        s.make_ascii_uppercase();
+    match case {
+        Case::Lowercase => s.make_ascii_lowercase(), // Forces NaN back to nan.
+        Case::Uppercase => s.make_ascii_uppercase(),
     }
     s
 }
@@ -548,6 +549,18 @@ mod test {
         assert_eq!(f(0), "0");
         assert_eq!(f(5), "05");
         assert_eq!(f(8), "010");
+    }
+
+    #[test]
+    fn non_finite_float() {
+        use super::format_float_non_finite;
+        let f = |x| format_float_non_finite(x, Case::Lowercase);
+        assert_eq!(f(f64::NAN), "nan");
+        assert_eq!(f(f64::INFINITY), "inf");
+
+        let f = |x| format_float_non_finite(x, Case::Uppercase);
+        assert_eq!(f(f64::NAN), "NAN");
+        assert_eq!(f(f64::INFINITY), "INF");
     }
 
     #[test]
