@@ -40,16 +40,27 @@ fn print_factors_str(
 
     let (factorization, remaining) = if x > BigUint::from_u32(1).unwrap() {
          // Branch to use the faster machine-factor library for 128-bit integers
-        if x < BigUint::from_u128(u128::MAX).unwrap(){
-            
-           let fctr = machine_factor::factorize_128(x.clone().try_into().unwrap());
-           let mut k = BTreeMap::new();
-            
-           for i in 0..fctr.len{
-               k.insert(BigUint::from_u128(fctr.factors[i]).unwrap(),BigUint::from_u8(fctr.powers[i]).unwrap());
-           }
-            
-           (k,None::<BigUint>);
+        if x <= BigUint::from_u64(u64::MAX).unwrap() {
+            let fctr = machine_factor::factorize(x.clone().try_into().unwrap());
+            let mut k = BTreeMap::new();
+            for i in 0..fctr.len {
+                k.insert(
+                    BigUint::from_u64(fctr.factors[i]).unwrap(),
+                    BigUint::from_u8(fctr.powers[i]).unwrap(),
+                );
+            }
+            (k, None::<BigUint>);
+        }
+        if x <= BigUint::from_u128(u128::MAX).unwrap() {
+            let fctr = machine_factor::factorize_128(x.clone().try_into().unwrap());
+            let mut k = BTreeMap::new();
+            for i in 0..fctr.len {
+                k.insert(
+                    BigUint::from_u128(fctr.factors[i]).unwrap(),
+                    BigUint::from_u8(fctr.powers[i]).unwrap(),
+                );
+            }
+            (k, None::<BigUint>);
         }
         
         num_prime::nt_funcs::factors(x.clone(), None)
