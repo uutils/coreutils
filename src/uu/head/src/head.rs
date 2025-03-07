@@ -238,7 +238,7 @@ impl HeadOptions {
             Some(v) => v.cloned().collect(),
             None => vec!["-".to_owned()],
         };
-        //println!("{:#?}", options);
+
         Ok(options)
     }
 }
