@@ -2,10 +2,19 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
+
+// spell-checker:ignore (arguments) Idate Idefinitely
+
+use crate::common::util::{AtPath, TestScenario};
+use filetime::{set_file_times, FileTime};
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use uucore::process::geteuid;
+
+fn set_file_times_unix(at: &AtPath, path: &str, secs_since_epoch: i64) {
+    let time = FileTime::from_unix_time(secs_since_epoch, 0);
+    set_file_times(at.plus_as_string(path), time, time).expect("touch failed");
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -229,10 +238,27 @@ fn test_date_format_literal() {
 fn test_date_set_valid() {
     if geteuid() == 0 {
         new_ucmd!()
+            .arg("-I")
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
             .succeeds()
-            .no_stdout()
+            .stdout_only("2020-03-12\n")
+            .no_stderr();
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_date_set_valid_repeated() {
+    if geteuid() == 0 {
+        new_ucmd!()
+            .arg("-I")
+            .arg("--set")
+            .arg("2021-03-12 13:30:00+08:00")
+            .arg("--set")
+            .arg("2022-03-12 13:30:00+08:00")
+            .succeeds()
+            .stdout_only("2022-03-12\n")
             .no_stderr();
     }
 }
@@ -252,6 +278,43 @@ fn test_date_set_permissions_error() {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00+08:00")
+            .fails();
+        result.no_stdout();
+        assert!(result.stderr_str().starts_with("date: cannot set date: "));
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_date_set_permissions_error_interpreted() {
+    // This implicitly tests that the given strings are interpreted as valid dates,
+    // because parsing errors would have been discovered earlier in the process.
+    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+        for date_string in [
+            "yesterday",
+            // TODO "a fortnight ago",
+            "42 days",
+            "2001-02-03",
+            "20010203",
+            // TODO "02/03/2001",
+        ] {
+            let result = new_ucmd!().arg("-s").arg(date_string).fails();
+            // stdout depends on the specific date; don't check the exact content:
+            assert!(!result.stdout_str().is_empty());
+            assert!(result.stderr_str().starts_with("date: cannot set date: "));
+        }
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_date_set_permissions_error_repeated() {
+    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+        let result = new_ucmd!()
+            .arg("--set")
+            .arg("2020-03-11 21:45:00+08:00")
+            .arg("--set")
+            .arg("2021-03-11 21:45:00+08:00")
             .fails();
         result.no_stdout();
         assert!(result.stderr_str().starts_with("date: cannot set date: "));
@@ -489,4 +552,135 @@ fn test_date_empty_tz() {
         .arg("+%Z")
         .succeeds()
         .stdout_only("UTC\n");
+}
+
+#[test]
+#[ignore = "known issue https://github.com/uutils/coreutils/issues/4254#issuecomment-2026446634"]
+fn test_format_conflict_self() {
+    for param in ["-I", "-Idate", "-R", "--rfc-3339=date"] {
+        new_ucmd!()
+            .arg(param)
+            .arg(param)
+            .fails()
+            .stderr_contains("multiple output formats specified");
+    }
+}
+
+#[test]
+#[ignore = "known issue https://github.com/uutils/coreutils/issues/4254#issuecomment-2026446634"]
+fn test_format_conflict_other() {
+    new_ucmd!()
+        .args(&["-I", "-Idate", "-R", "--rfc-3339=date"])
+        .fails()
+        .stderr_contains("multiple output formats specified");
+}
+
+#[test]
+#[ignore = "known issue https://github.com/uutils/coreutils/issues/4254#issuecomment-2026446634"]
+fn test_format_error_priority() {
+    // First, try to parse the value to "-I", even though it cannot be useful:
+    new_ucmd!()
+        .args(&["-R", "-Idefinitely_invalid"])
+        .fails()
+        .stderr_contains("definitely_invalid");
+    // And then raise an error:
+    new_ucmd!()
+        .args(&["-R", "-R"])
+        .fails()
+        .stderr_contains("multiple output formats specified");
+    // Even if a later argument would be "even more invalid":
+    new_ucmd!()
+        .args(&["-R", "-R", "-Idefinitely_invalid"])
+        .fails()
+        .stderr_contains("multiple output formats specified");
+}
+
+#[test]
+fn test_pick_last_date() {
+    new_ucmd!()
+        .arg("-d20020304")
+        .arg("-d20010203")
+        .arg("-I")
+        .succeeds()
+        .stdout_only("2001-02-03\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_repeat_from_file() {
+    const FILE1: &str = "file1";
+    const FILE2: &str = "file2";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        FILE1,
+        "2001-01-01 13:30:00+08:00\n2010-01-10 13:30:00+08:00\n",
+    );
+    at.write(FILE2, "2020-03-12 13:30:00+08:00\n");
+    ucmd.args(&["-I", "-f", FILE1, "-f", FILE2])
+        .succeeds()
+        .stdout_only("2020-03-12\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_repeat_flags() {
+    new_ucmd!()
+        .args(&["-d20010203", "-I", "--debug", "--debug", "-u", "-u"])
+        .succeeds()
+        .stdout_only("2001-02-03\n");
+    // stderr may or may not contain something.
+}
+
+#[test]
+fn test_repeat_reference_newer_last() {
+    const FILE1: &str = "file1";
+    const FILE2: &str = "file2";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch(FILE1);
+    at.touch(FILE2);
+    set_file_times_unix(&at, FILE1, 981_203_696); // 2001-02-03 12:34:56
+    set_file_times_unix(&at, FILE2, 1_323_779_696); // 2011-12-13 12:34:56
+    ucmd.args(&["-I", "-r", FILE1, "-r", FILE2])
+        .succeeds()
+        .stdout_only("2011-12-13\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_repeat_reference_older_last() {
+    const FILE1: &str = "file1";
+    const FILE2: &str = "file2";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch(FILE1);
+    at.touch(FILE2);
+    set_file_times_unix(&at, FILE1, 1_323_779_696); // 2011-12-13 12:34:56
+    set_file_times_unix(&at, FILE2, 981_203_696); // 2001-02-03 12:34:56
+    ucmd.args(&["-I", "-r", FILE1, "-r", FILE2])
+        .succeeds()
+        .stdout_only("2001-02-03\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_incompatible_args() {
+    for args in [
+        // Input with other input
+        vec!["-d", "now", "-f", "foo"],
+        vec!["-d", "now", "-r", "foo"],
+        vec!["-f", "foo", "-r", "foo"],
+        // Format with other format
+        vec!["-I", "-R"],
+        vec!["-I", "--rfc-3339=date"],
+        vec!["-R", "--rfc-3339=date"],
+        // Input with --set
+        vec!["-d", "now", "-s", "now"],
+        vec!["-r", "foo", "-s", "now"],
+        vec!["-f", "foo", "-s", "now"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .fails()
+            .no_stdout()
+            .stderr_contains(" cannot be used with ");
+    }
 }
