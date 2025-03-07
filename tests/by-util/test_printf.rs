@@ -887,6 +887,30 @@ fn float_with_zero_precision_should_pad() {
 }
 
 #[test]
+fn float_non_finite() {
+    new_ucmd!()
+        .args(&[
+            "%f %f %F %f %f %F",
+            "nan",
+            "-nan",
+            "nan",
+            "inf",
+            "-inf",
+            "inf",
+        ])
+        .succeeds()
+        .stdout_only("nan -nan NAN inf -inf INF");
+}
+
+#[test]
+fn float_zero_neg_zero() {
+    new_ucmd!()
+        .args(&["%f %f", "0.0", "-0.0"])
+        .succeeds()
+        .stdout_only("0.000000 -0.000000");
+}
+
+#[test]
 fn precision_check() {
     new_ucmd!()
         .args(&["%.3d", "1"])
