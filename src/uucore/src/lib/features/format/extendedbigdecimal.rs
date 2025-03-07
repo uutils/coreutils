@@ -25,6 +25,7 @@ use std::fmt::Display;
 use std::ops::Add;
 
 use bigdecimal::BigDecimal;
+use num_traits::FromPrimitive;
 use num_traits::Zero;
 
 #[derive(Debug, Clone)]
@@ -74,6 +75,28 @@ pub enum ExtendedBigDecimal {
     ///
     /// [0]: https://github.com/akubera/bigdecimal-rs/issues/67
     MinusNan,
+}
+
+impl From<f64> for ExtendedBigDecimal {
+    fn from(val: f64) -> Self {
+        if val.is_nan() {
+            if val.is_sign_negative() {
+                ExtendedBigDecimal::MinusNan
+            } else {
+                ExtendedBigDecimal::Nan
+            }
+        } else if val.is_infinite() {
+            if val.is_sign_negative() {
+                ExtendedBigDecimal::MinusInfinity
+            } else {
+                ExtendedBigDecimal::Infinity
+            }
+        } else if val.is_zero() && val.is_sign_negative() {
+            ExtendedBigDecimal::MinusZero
+        } else {
+            ExtendedBigDecimal::BigDecimal(BigDecimal::from_f64(val).unwrap())
+        }
+    }
 }
 
 impl ExtendedBigDecimal {
