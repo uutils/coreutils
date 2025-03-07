@@ -5,6 +5,7 @@
 
 //! Utilities for formatting numbers in various formats
 
+use num_traits::Signed;
 use num_traits::ToPrimitive;
 use std::cmp::min;
 use std::io::Write;
@@ -234,37 +235,44 @@ impl Default for Float {
 
 impl Formatter<&ExtendedBigDecimal> for Float {
     fn fmt(&self, writer: impl Write, e: &ExtendedBigDecimal) -> std::io::Result<()> {
-        // TODO: For now we just convert ExtendedBigDecimal back to f64, fix this.
-        let f = match e {
-            ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
-            ExtendedBigDecimal::Infinity => f64::INFINITY,
-            ExtendedBigDecimal::MinusInfinity => f64::NEG_INFINITY,
-            ExtendedBigDecimal::MinusZero => -0.0,
-            ExtendedBigDecimal::Nan => f64::NAN,
-            ExtendedBigDecimal::MinusNan => -f64::NAN,
+        /* TODO: Might be nice to implement Signed trait for ExtendedBigDecimal (for abs)
+         * at some point, but that requires implementing a _lot_ of traits.
+         * Note that "negative" would be the output of "is_sign_negative" on a f64:
+         * it returns true on `-0.0`.
+         */
+        let (abs, negative) = match e {
+            ExtendedBigDecimal::BigDecimal(bd) => {
+                (ExtendedBigDecimal::BigDecimal(bd.abs()), bd.is_negative())
+            }
+            ExtendedBigDecimal::MinusZero => (ExtendedBigDecimal::zero(), true),
+            ExtendedBigDecimal::Infinity => (ExtendedBigDecimal::Infinity, false),
+            ExtendedBigDecimal::MinusInfinity => (ExtendedBigDecimal::Infinity, true),
+            ExtendedBigDecimal::Nan => (ExtendedBigDecimal::Nan, false),
+            ExtendedBigDecimal::MinusNan => (ExtendedBigDecimal::Nan, true),
         };
-        let x = f.abs();
 
-        let s = if x.is_finite() {
-            match self.variant {
-                FloatVariant::Decimal => {
-                    format_float_decimal(x, self.precision, self.force_decimal)
-                }
-                FloatVariant::Scientific => {
-                    format_float_scientific(x, self.precision, self.case, self.force_decimal)
-                }
-                FloatVariant::Shortest => {
-                    format_float_shortest(x, self.precision, self.case, self.force_decimal)
-                }
-                FloatVariant::Hexadecimal => {
-                    format_float_hexadecimal(x, self.precision, self.case, self.force_decimal)
+        let s = match abs {
+            ExtendedBigDecimal::BigDecimal(bd) => {
+                // TODO: Convert format_float_* functions to take in a BigDecimal.
+                let x = bd.to_f64().unwrap();
+                match self.variant {
+                    FloatVariant::Decimal => {
+                        format_float_decimal(x, self.precision, self.force_decimal)
+                    }
+                    FloatVariant::Scientific => {
+                        format_float_scientific(x, self.precision, self.case, self.force_decimal)
+                    }
+                    FloatVariant::Shortest => {
+                        format_float_shortest(x, self.precision, self.case, self.force_decimal)
+                    }
+                    FloatVariant::Hexadecimal => {
+                        format_float_hexadecimal(x, self.precision, self.case, self.force_decimal)
+                    }
                 }
             }
-        } else {
-            format_float_non_finite(x, self.case)
+            _ => format_float_non_finite(&abs, self.case),
         };
-
-        let sign_indicator = get_sign_indicator(self.positive_sign, f.is_sign_negative());
+        let sign_indicator = get_sign_indicator(self.positive_sign, negative);
 
         write_output(writer, sign_indicator, s, self.width, self.alignment)
     }
@@ -322,12 +330,18 @@ fn get_sign_indicator(sign: PositiveSign, negative: bool) -> String {
     }
 }
 
-fn format_float_non_finite(f: f64, case: Case) -> String {
-    debug_assert!(!f.is_finite());
-    let mut s = format!("{f}");
-    match case {
-        Case::Lowercase => s.make_ascii_lowercase(), // Forces NaN back to nan.
-        Case::Uppercase => s.make_ascii_uppercase(),
+fn format_float_non_finite(e: &ExtendedBigDecimal, case: Case) -> String {
+    let mut s = match e {
+        ExtendedBigDecimal::Infinity => String::from("inf"),
+        ExtendedBigDecimal::Nan => String::from("nan"),
+        _ => {
+            debug_assert!(false);
+            String::from("INVALID")
+        }
+    };
+
+    if case == Case::Uppercase {
+        s.make_ascii_uppercase();
     }
     s
 }
@@ -532,7 +546,10 @@ fn write_output(
 
 #[cfg(test)]
 mod test {
-    use crate::format::num_format::{Case, ForceDecimal};
+    use crate::format::{
+        num_format::{Case, ForceDecimal},
+        ExtendedBigDecimal,
+    };
 
     #[test]
     fn unsigned_octal() {
@@ -559,12 +576,12 @@ mod test {
     fn non_finite_float() {
         use super::format_float_non_finite;
         let f = |x| format_float_non_finite(x, Case::Lowercase);
-        assert_eq!(f(f64::NAN), "nan");
-        assert_eq!(f(f64::INFINITY), "inf");
+        assert_eq!(f(&ExtendedBigDecimal::Nan), "nan");
+        assert_eq!(f(&ExtendedBigDecimal::Infinity), "inf");
 
         let f = |x| format_float_non_finite(x, Case::Uppercase);
-        assert_eq!(f(f64::NAN), "NAN");
-        assert_eq!(f(f64::INFINITY), "INF");
+        assert_eq!(f(&ExtendedBigDecimal::Nan), "NAN");
+        assert_eq!(f(&ExtendedBigDecimal::Infinity), "INF");
     }
 
     #[test]
