@@ -45,7 +45,7 @@ use std::io::Result as IOResult;
 use std::ptr;
 use std::sync::{LazyLock, Mutex};
 
-extern "C" {
+unsafe extern "C" {
     /// From: `<https://man7.org/linux/man-pages/man3/getgrouplist.3.html>`
     /// > The getgrouplist() function scans the group database to obtain
     /// > the list of groups that user belongs to.

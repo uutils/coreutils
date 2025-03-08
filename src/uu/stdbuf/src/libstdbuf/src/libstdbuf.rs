@@ -26,7 +26,7 @@ cpp! {{
     }
 }}
 
-extern "C" {
+unsafe extern "C" {
     fn __stdbuf_get_stdin() -> *mut FILE;
     fn __stdbuf_get_stdout() -> *mut FILE;
     fn __stdbuf_get_stderr() -> *mut FILE;
