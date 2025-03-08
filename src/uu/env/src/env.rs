@@ -743,7 +743,7 @@ mod tests {
 
     #[test]
     fn test_split_string_environment_vars_test() {
-        std::env::set_var("FOO", "BAR");
+        unsafe { std::env::set_var("FOO", "BAR") };
         assert_eq!(
             NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
             parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))

@@ -660,7 +660,7 @@ mod audit {
     }
     pub type c_auditinfo_addr_t = c_auditinfo_addr;
 
-    extern "C" {
+    unsafe extern "C" {
         pub fn getaudit(auditinfo_addr: *mut c_auditinfo_addr_t) -> c_int;
     }
 }
