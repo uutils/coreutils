@@ -14,7 +14,7 @@ pub enum ParseError {
 
 /// Parses obsolete syntax
 /// head -NUM\[kmzv\] // spell-checker:disable-line
-pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>, ParseError>> {
+pub fn parse_obsolete(src: &str) -> Option<Result<Vec<OsString>, ParseError>> {
     let mut chars = src.char_indices();
     if let Some((_, '-')) = chars.next() {
         let mut num_end = 0usize;
@@ -44,7 +44,7 @@ fn process_num_block(
     src: &str,
     last_char: char,
     chars: &mut std::str::CharIndices,
-) -> Option<Result<impl Iterator<Item = OsString>, ParseError>> {
+) -> Option<Result<Vec<OsString>, ParseError>> {
     match src.parse::<usize>() {
         Ok(num) => {
             let mut quiet = false;
