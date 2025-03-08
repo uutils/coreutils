@@ -13,7 +13,7 @@ const USAGE: &str = help_usage!("hostid.md");
 const ABOUT: &str = help_about!("hostid.md");
 
 // currently rust libc interface doesn't include gethostid
-extern "C" {
+unsafe extern "C" {
     pub fn gethostid() -> c_long;
 }
 
