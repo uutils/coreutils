@@ -64,7 +64,7 @@ fn print_factors_str(
             }
         }
         // default to num-prime for greater than 128-bit inputs
-        if x > BigUint::from_u128(1u128 << 127).unwrap() << 1 {
+        if x >= BigUint::from_u128(1u128 << 127).unwrap() << 1 {
             let (interim, rem_interim) = num_prime::nt_funcs::factors(x.clone(), None);
             k = interim;
             rem = rem_interim;
