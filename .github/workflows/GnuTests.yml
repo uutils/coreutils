@@ -217,6 +217,9 @@ jobs:
       run: |
         ## Compare test failures VS reference
         have_new_failures=""
+        ## Collect if we detect any non-intermittent failures
+        ## this will be used by util/compare_gnu_result.py
+        have_non_intermittent_failures=""
         REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
         ROOT_REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite-root.log'
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
@@ -271,6 +274,7 @@ jobs:
                   echo "::error ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   have_new_failures="true"
+                  have_non_intermittent_failures="true"
                 else
                   MSG="Skip an intermittent issue ${LINE} (fails in this run but passes in the 'main' branch)"
                   echo "::notice ::$MSG"
@@ -306,6 +310,7 @@ jobs:
                 echo "::error ::$MSG"
                 echo $MSG >> ${COMMENT_LOG}
                 have_new_failures="true"
+                have_non_intermittent_failures="true"
               fi
             done
 
@@ -340,9 +345,19 @@ jobs:
         # Compare root tests
         compare_tests '${{ steps.vars.outputs.path_GNU_tests }}/test-suite-root.log' "${ROOT_REF_LOG_FILE}" "root"
 
+        # Set environment variable to indicate whether all failures are intermittent
         if [ -n "${have_new_failures}" ]; then
-          echo "::error ::Found new test failures"
-          exit 1
+          if [ -n "${have_non_intermittent_failures}" ]; then
+            echo "ONLY_INTERMITTENT=false" >> $GITHUB_ENV
+            echo "::error ::Found new non-intermittent test failures"
+            exit 1
+          else
+            echo "ONLY_INTERMITTENT=true" >> $GITHUB_ENV
+            echo "::notice ::All test failures are from known intermittent tests"
+          fi
+        else
+          echo "ONLY_INTERMITTENT=true" >> $GITHUB_ENV
+          echo "::notice ::No new test failures detected"
         fi
     - name: Upload comparison log (for GnuComment workflow)
       if: success() || failure() # run regardless of prior step success/failure
