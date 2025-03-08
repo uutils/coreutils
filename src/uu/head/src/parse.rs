@@ -99,7 +99,7 @@ fn process_num_block(
                 options.push(OsString::from("-n"));
                 options.push(OsString::from(format!("{num}")));
             }
-            Some(Ok(options.into_iter()))
+            Some(Ok(options))
         }
         Err(_) => Some(Err(ParseError::Overflow)),
     }
@@ -140,7 +140,10 @@ mod tests {
         let r = parse_obsolete(src);
         match r {
             Some(s) => match s {
-                Ok(v) => Some(Ok(v.map(|s| s.to_str().unwrap().to_owned()).collect())),
+                Ok(v) => Some(Ok(v
+                    .into_iter()
+                    .map(|s| s.to_str().unwrap().to_owned())
+                    .collect())),
                 Err(e) => Some(Err(e)),
             },
             None => None,
