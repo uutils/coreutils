@@ -1009,14 +1009,15 @@ fn test_sha256_binary() {
     let ts = TestScenario::new(util_name!());
     assert_eq!(
         ts.fixtures.read("binary.sha256.expected"),
-        get_hash!(ts
-            .ucmd()
-            .arg("--sha256")
-            .arg("--bits=256")
-            .arg("binary.png")
-            .succeeds()
-            .no_stderr()
-            .stdout_str())
+        get_hash!(
+            ts.ucmd()
+                .arg("--sha256")
+                .arg("--bits=256")
+                .arg("binary.png")
+                .succeeds()
+                .no_stderr()
+                .stdout_str()
+        )
     );
 }
 
@@ -1025,14 +1026,15 @@ fn test_sha256_stdin_binary() {
     let ts = TestScenario::new(util_name!());
     assert_eq!(
         ts.fixtures.read("binary.sha256.expected"),
-        get_hash!(ts
-            .ucmd()
-            .arg("--sha256")
-            .arg("--bits=256")
-            .pipe_in_fixture("binary.png")
-            .succeeds()
-            .no_stderr()
-            .stdout_str())
+        get_hash!(
+            ts.ucmd()
+                .arg("--sha256")
+                .arg("--bits=256")
+                .pipe_in_fixture("binary.png")
+                .succeeds()
+                .no_stderr()
+                .stdout_str()
+        )
     );
 }
 

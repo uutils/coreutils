@@ -81,11 +81,7 @@ impl RelationOp {
                 Self::Geq => a >= b,
             }
         };
-        if b {
-            Ok(1.into())
-        } else {
-            Ok(0.into())
-        }
+        if b { Ok(1.into()) } else { Ok(0.into()) }
     }
 }
 
@@ -603,7 +599,7 @@ mod test {
     use crate::ExprError;
     use crate::ExprError::InvalidBracketContent;
 
-    use super::{check_posix_regex_errors, AstNode, BinOp, NumericOp, RelationOp, StringOp};
+    use super::{AstNode, BinOp, NumericOp, RelationOp, StringOp, check_posix_regex_errors};
 
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {

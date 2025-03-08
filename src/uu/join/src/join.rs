@@ -6,19 +6,19 @@
 // spell-checker:ignore (ToDO) autoformat FILENUM whitespaces pairable unpairable nocheck memmem
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, Command};
-use memchr::{memchr_iter, memmem::Finder, Memchr3};
+use clap::{Arg, ArgAction, Command, crate_version};
+use memchr::{Memchr3, memchr_iter, memmem::Finder};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
+use std::io::{BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
 

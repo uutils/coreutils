@@ -5,7 +5,7 @@
 // spell-checker:ignore overridable colorterm
 use crate::common::util::TestScenario;
 
-use dircolors::{guess_syntax, OutputFmt, StrUtils};
+use dircolors::{OutputFmt, StrUtils, guess_syntax};
 
 #[test]
 fn test_invalid_arg() {

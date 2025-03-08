@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::ArgAction;
-use clap::{crate_version, Arg, Command};
+use clap::{Arg, Command, crate_version};
 use std::env;
 use std::io;
 use std::path::PathBuf;

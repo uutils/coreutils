@@ -23,7 +23,9 @@ fn main() -> io::Result<()> {
 
     if tldr_zip.is_none() {
         println!("Warning: No tldr archive found, so the documentation will not include examples.");
-        println!("To include examples in the documentation, download the tldr archive and put it in the docs/ folder.");
+        println!(
+            "To include examples in the documentation, download the tldr archive and put it in the docs/ folder."
+        );
         println!();
         println!("  curl https://tldr.sh/assets/tldr.zip -o docs/tldr.zip");
         println!();

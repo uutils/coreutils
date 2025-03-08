@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr runlvline pidstr exitstr hoststr
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use uucore::{format_usage, help_about, help_usage};
 
 mod platform;

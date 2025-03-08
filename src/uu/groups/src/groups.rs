@@ -8,12 +8,12 @@
 use thiserror::Error;
 use uucore::{
     display::Quotable,
-    entries::{get_groups_gnu, gid2grp, Locate, Passwd},
+    entries::{Locate, Passwd, get_groups_gnu, gid2grp},
     error::{UError, UResult},
     format_usage, help_about, help_usage, show,
 };
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 
 mod options {
     pub const USERS: &str = "USERNAME";

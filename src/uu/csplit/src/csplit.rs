@@ -8,11 +8,11 @@
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
 use std::{
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     io::{BufRead, BufWriter, Write},
 };
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};

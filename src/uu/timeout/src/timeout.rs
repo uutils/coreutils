@@ -7,7 +7,7 @@
 mod status;
 
 use crate::status::ExitStatus;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
@@ -60,7 +60,7 @@ impl Config {
                         return Err(UUsageError::new(
                             ExitStatus::TimeoutFailed.into(),
                             format!("{}: invalid signal", signal_.quote()),
-                        ))
+                        ));
                     }
                     Some(signal_value) => signal_value,
                 }

@@ -33,12 +33,12 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use std::ffi::CStr;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
-use uucore::error::{set_exit_code, USimpleError};
+use uucore::error::{USimpleError, set_exit_code};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::line_ending::LineEnding;

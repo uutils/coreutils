@@ -207,7 +207,7 @@ mod tests {
 
         use uucore::fsext::MountInfo;
 
-        use crate::filesystem::{mount_info_from_path, FsError};
+        use crate::filesystem::{FsError, mount_info_from_path};
 
         // Create a fake `MountInfo` with the given directory name.
         fn mount_info(mount_dir: &str) -> MountInfo {
@@ -312,7 +312,7 @@ mod tests {
 
     #[cfg(not(windows))]
     mod over_mount {
-        use crate::filesystem::{is_over_mounted, Filesystem, FsError};
+        use crate::filesystem::{Filesystem, FsError, is_over_mounted};
         use uucore::fsext::MountInfo;
 
         fn mount_info_with_dev_name(mount_dir: &str, dev_name: Option<&str>) -> MountInfo {

@@ -9,7 +9,7 @@ use std::{env, fmt};
 
 use uucore::{
     display::Quotable,
-    parse_size::{parse_size_u64, ParseSizeError},
+    parse_size::{ParseSizeError, parse_size_u64},
 };
 
 /// The first ten powers of 1024.
@@ -216,7 +216,7 @@ mod tests {
 
     use std::env;
 
-    use crate::blocks::{to_magnitude_and_suffix, BlockSize, SuffixType};
+    use crate::blocks::{BlockSize, SuffixType, to_magnitude_and_suffix};
 
     #[test]
     fn test_to_magnitude_and_suffix_powers_of_1024() {

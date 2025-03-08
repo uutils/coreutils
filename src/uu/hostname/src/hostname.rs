@@ -11,7 +11,7 @@ use std::str;
 use std::{collections::hash_set::HashSet, ffi::OsString};
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
 use dns_lookup::lookup_host;
@@ -34,7 +34,7 @@ static OPT_HOST: &str = "host";
 mod wsa {
     use std::io;
 
-    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSAStartup, WSADATA};
+    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSADATA, WSAStartup};
 
     pub(super) struct WsaHandle(());
 

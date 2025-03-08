@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) getlogin userlogin
 
-use clap::{crate_version, Command};
+use clap::{Command, crate_version};
 use std::ffi::CStr;
 use uucore::{error::UResult, format_usage, help_about, help_usage, show_error};
 

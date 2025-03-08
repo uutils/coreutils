@@ -6,14 +6,14 @@
 // spell-checker:ignore (ToDO) delim mkdelim pairable
 
 use std::cmp::Ordering;
-use std::fs::{metadata, File};
-use std::io::{self, stdin, BufRead, BufReader, Read, Stdin};
+use std::fs::{File, metadata};
+use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::fs::paths_refer_to_same_file;
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 const ABOUT: &str = help_about!("comm.md");
 const USAGE: &str = help_usage!("comm.md");
