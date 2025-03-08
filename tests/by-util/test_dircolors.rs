@@ -16,25 +16,43 @@ fn test_invalid_arg() {
 fn test_shell_syntax() {
     use std::env;
     let last = env::var("SHELL");
-    env::set_var("SHELL", "/path/csh");
+    unsafe {
+        env::set_var("SHELL", "/path/csh");
+    }
     assert_eq!(OutputFmt::CShell, guess_syntax());
-    env::set_var("SHELL", "csh");
+    unsafe {
+        env::set_var("SHELL", "csh");
+    }
     assert_eq!(OutputFmt::CShell, guess_syntax());
-    env::set_var("SHELL", "/path/bash");
+    unsafe {
+        env::set_var("SHELL", "/path/bash");
+    }
     assert_eq!(OutputFmt::Shell, guess_syntax());
-    env::set_var("SHELL", "bash");
+    unsafe {
+        env::set_var("SHELL", "bash");
+    }
     assert_eq!(OutputFmt::Shell, guess_syntax());
-    env::set_var("SHELL", "/asd/bar");
+    unsafe {
+        env::set_var("SHELL", "/asd/bar");
+    }
     assert_eq!(OutputFmt::Shell, guess_syntax());
-    env::set_var("SHELL", "foo");
+    unsafe {
+        env::set_var("SHELL", "foo");
+    }
     assert_eq!(OutputFmt::Shell, guess_syntax());
-    env::set_var("SHELL", "");
+    unsafe {
+        env::set_var("SHELL", "");
+    }
     assert_eq!(OutputFmt::Unknown, guess_syntax());
-    env::remove_var("SHELL");
+    unsafe {
+        env::remove_var("SHELL");
+    }
     assert_eq!(OutputFmt::Unknown, guess_syntax());
 
     if let Ok(s) = last {
-        env::set_var("SHELL", s);
+        unsafe {
+            env::set_var("SHELL", s);
+        }
     }
 }
 

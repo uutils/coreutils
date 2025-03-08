@@ -1111,7 +1111,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .get_one::<String>(options::PARALLEL)
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
-        env::set_var("RAYON_NUM_THREADS", &settings.threads);
+        unsafe {
+            env::set_var("RAYON_NUM_THREADS", &settings.threads);
+        }
     }
 
     settings.buffer_size =

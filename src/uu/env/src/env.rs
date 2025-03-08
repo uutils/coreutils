@@ -163,7 +163,9 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
             for (key, value) in prop {
-                env::set_var(key, value);
+                unsafe {
+                    env::set_var(key, value);
+                }
             }
         }
     }
@@ -559,7 +561,9 @@ fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
     // remove all env vars if told to ignore presets
     if opts.ignore_env {
         for (ref name, _) in env::vars_os() {
-            env::remove_var(name);
+            unsafe {
+                env::remove_var(name);
+            }
         }
     }
 }
@@ -634,8 +638,9 @@ fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
                 format!("cannot unset {}: Invalid argument", name.quote()),
             ));
         }
-
-        env::remove_var(name);
+        unsafe {
+            env::remove_var(name);
+        }
     }
     Ok(())
 }
@@ -692,7 +697,9 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
             show_warning!("no name specified for value {}", val.quote());
             continue;
         }
-        env::set_var(name, val);
+        unsafe {
+            env::set_var(name, val);
+        }
     }
 }
 
