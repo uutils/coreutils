@@ -324,7 +324,9 @@ fn test_filter_with_env_var_set() {
     RandomFile::new(&at, name).add_lines(n_lines);
 
     let env_var_value = "some-value";
-    env::set_var("FILE", env_var_value);
+    unsafe {
+        env::set_var("FILE", env_var_value);
+    }
     ucmd.args(&[format!("--filter={}", "cat > $FILE").as_str(), name])
         .succeeds();
 
