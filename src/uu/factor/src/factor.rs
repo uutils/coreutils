@@ -40,30 +40,37 @@ fn print_factors_str(
 
     let (factorization, remaining) = if x > BigUint::from_u32(1).unwrap() {
          // Branch to use the faster machine-factor library for 128-bit integers
+      let mut k = BTreeMap::new();
+      let mut rem: Option<Vec<BigUint>> = None;
+         // 64-bit branch
         if x <= BigUint::from_u64(u64::MAX).unwrap() {
             let fctr = machine_factor::factorize(x.clone().try_into().unwrap());
-            let mut k = BTreeMap::new();
+
             for i in 0..fctr.len {
                 k.insert(
                     BigUint::from_u64(fctr.factors[i]).unwrap(),
-                    BigUint::from_u8(fctr.powers[i]).unwrap(),
+                    fctr.powers[i] as usize,
                 );
             }
-            (k, None::<BigUint>);
         }
-        if x <= BigUint::from_u128(u128::MAX).unwrap() {
+        // 128-bit branch
+        if x > BigUint::from_u64(u64::MAX).unwrap() && x <= BigUint::from_u128(u128::MAX).unwrap() {
             let fctr = machine_factor::factorize_128(x.clone().try_into().unwrap());
-            let mut k = BTreeMap::new();
             for i in 0..fctr.len {
                 k.insert(
                     BigUint::from_u128(fctr.factors[i]).unwrap(),
-                    BigUint::from_u8(fctr.powers[i]).unwrap(),
+                    fctr.powers[i] as usize,
                 );
             }
-            (k, None::<BigUint>);
         }
-        
-        num_prime::nt_funcs::factors(x.clone(), None)
+        // default to num-prime for greater than 128-bit inputs
+        if x > BigUint::from_u128(1u128 << 127).unwrap() << 1 {
+            let (interim, rem_interim) = num_prime::nt_funcs::factors(x.clone(), None);
+            k = interim;
+            rem = rem_interim;
+        }
+        (k, rem)  
+          
     } else {
         (BTreeMap::new(), None)
     };
