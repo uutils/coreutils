@@ -164,11 +164,11 @@ pub struct Passwd {
 /// ptr must point to a valid C string.
 ///
 /// Returns None if ptr is null.
-unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
+fn cstr2string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         None
     } else {
-        Some(CStr::from_ptr(ptr).to_string_lossy().into_owned())
+        Some(unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() })
     }
 }
 
