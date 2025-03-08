@@ -177,7 +177,7 @@ fn find_stdout() -> UResult<File> {
 }
 
 #[cfg(target_vendor = "apple")]
-extern "C" {
+unsafe extern "C" {
     fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
 }
 

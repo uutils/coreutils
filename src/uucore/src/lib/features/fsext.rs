@@ -367,7 +367,7 @@ use libc::c_int;
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
-extern "C" {
+unsafe extern "C" {
     #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
     #[link_name = "getmntinfo$INODE64"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;

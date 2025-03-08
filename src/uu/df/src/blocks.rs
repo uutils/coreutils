@@ -294,8 +294,8 @@ mod tests {
     #[test]
     fn test_default_block_size() {
         assert_eq!(BlockSize::Bytes(1024), BlockSize::default());
-        env::set_var("POSIXLY_CORRECT", "1");
+        unsafe { env::set_var("POSIXLY_CORRECT", "1") };
         assert_eq!(BlockSize::Bytes(512), BlockSize::default());
-        env::remove_var("POSIXLY_CORRECT");
+        unsafe { env::remove_var("POSIXLY_CORRECT") };
     }
 }
