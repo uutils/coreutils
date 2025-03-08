@@ -154,7 +154,7 @@ pub fn instantiate_current_writer(
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
         }
-        Some(ref filter_command) => Ok(BufWriter::new(Box::new(
+        Some(filter_command) => Ok(BufWriter::new(Box::new(
             // spawn a shell command and write to it
             FilterWriter::new(filter_command, filename)?,
         ) as Box<dyn Write>)),
