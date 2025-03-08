@@ -345,4 +345,4 @@ Alternatively you can install [Cygwin](https://www.cygwin.com) and/or use [WSL2]
 1. Tag the new release `git tag -a X.Y.Z` and `git push --tags`
 1. Once the CI is green, a new release will be automatically created in draft mode
 1. Write the release notes (it takes time) following previous examples
-1. Run `util/publish.sh` to publish the new release to crates.io
+1. Run `util/publish.sh --do-it` to publish the new release to crates.io
