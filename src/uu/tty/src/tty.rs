@@ -7,9 +7,9 @@
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use std::io::{IsTerminal, Write};
-use uucore::error::{set_exit_code, UResult};
+use uucore::error::{UResult, set_exit_code};
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("tty.md");

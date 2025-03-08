@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use std::ffi::OsString;
-use uucore::parse_size::{parse_size_u64, ParseSizeError};
+use uucore::parse_size::{ParseSizeError, parse_size_u64};
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum ParseError {
@@ -14,7 +14,7 @@ pub enum ParseError {
 
 /// Parses obsolete syntax
 /// head -NUM\[kmzv\] // spell-checker:disable-line
-pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>, ParseError>> {
+pub fn parse_obsolete(src: &str) -> Option<Result<Vec<OsString>, ParseError>> {
     let mut chars = src.char_indices();
     if let Some((_, '-')) = chars.next() {
         let mut num_end = 0usize;
@@ -44,7 +44,7 @@ fn process_num_block(
     src: &str,
     last_char: char,
     chars: &mut std::str::CharIndices,
-) -> Option<Result<impl Iterator<Item = OsString>, ParseError>> {
+) -> Option<Result<Vec<OsString>, ParseError>> {
     match src.parse::<usize>() {
         Ok(num) => {
             let mut quiet = false;
@@ -99,7 +99,7 @@ fn process_num_block(
                 options.push(OsString::from("-n"));
                 options.push(OsString::from(format!("{num}")));
             }
-            Some(Ok(options.into_iter()))
+            Some(Ok(options))
         }
         Err(_) => Some(Err(ParseError::Overflow)),
     }
@@ -140,7 +140,10 @@ mod tests {
         let r = parse_obsolete(src);
         match r {
             Some(s) => match s {
-                Ok(v) => Some(Ok(v.map(|s| s.to_str().unwrap().to_owned()).collect())),
+                Ok(v) => Some(Ok(v
+                    .into_iter()
+                    .map(|s| s.to_str().unwrap().to_owned())
+                    .collect())),
                 Err(e) => Some(Err(e)),
             },
             None => None,

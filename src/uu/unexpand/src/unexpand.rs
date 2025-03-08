@@ -5,11 +5,11 @@
 
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -60,7 +60,7 @@ fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
                 _ => {
                     return Err(ParseError::InvalidCharacter(
                         word.trim_start_matches(char::is_numeric).to_string(),
-                    ))
+                    ));
                 }
             },
         }

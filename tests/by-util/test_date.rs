@@ -266,9 +266,11 @@ fn test_date_set_mac_unavailable() {
         .arg("2020-03-11 21:45:00+08:00")
         .fails();
     result.no_stdout();
-    assert!(result
-        .stderr_str()
-        .starts_with("date: setting the date is not supported by macOS"));
+    assert!(
+        result
+            .stderr_str()
+            .starts_with("date: setting the date is not supported by macOS")
+    );
 }
 
 #[test]

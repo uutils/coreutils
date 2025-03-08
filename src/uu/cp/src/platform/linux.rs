@@ -341,7 +341,7 @@ pub(crate) fn copy_on_write(
         }
         (ReflinkMode::Auto, SparseMode::Always) => {
             copy_debug.sparse_detection = SparseDebug::Zeros; // Default SparseDebug val for
-                                                              // SparseMode::Always
+            // SparseMode::Always
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
                 copy_stream(source, dest, source_is_fifo).map(|_| ())
@@ -402,7 +402,7 @@ pub(crate) fn copy_on_write(
             clone(source, dest, CloneFallback::Error)
         }
         (ReflinkMode::Always, _) => {
-            return Err("`--reflink=always` can be used only with --sparse=auto".into())
+            return Err("`--reflink=always` can be used only with --sparse=auto".into());
         }
     };
     result.context(context)?;
@@ -525,7 +525,7 @@ fn handle_reflink_auto_sparse_auto(
         } else {
             copy_method = CopyMethod::SparseCopyWithoutHole;
         } // Since sparse_flag is true, sparse_detection shall be SeekHole for any non virtual
-          // regular sparse file and the file will be sparsely copied
+        // regular sparse file and the file will be sparsely copied
         copy_debug.sparse_detection = SparseDebug::SeekHole;
     }
 
@@ -558,7 +558,7 @@ fn handle_reflink_never_sparse_auto(
     if sparse_flag {
         if blocks == 0 && data_flag {
             copy_method = CopyMethod::FSCopy; // Handles virtual files which have size > 0 but no
-                                              // disk allocation
+        // disk allocation
         } else {
             copy_method = CopyMethod::SparseCopyWithoutHole; // Handles regular sparse-files
         }

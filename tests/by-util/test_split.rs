@@ -5,7 +5,7 @@
 // spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
 
 use crate::common::util::{AtPath, TestScenario};
-use rand::{rng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
@@ -13,7 +13,7 @@ use rlimit::Resource;
 use std::env;
 use std::path::Path;
 use std::{
-    fs::{read_dir, File},
+    fs::{File, read_dir},
     io::{BufWriter, Read, Write},
 };
 
@@ -324,7 +324,9 @@ fn test_filter_with_env_var_set() {
     RandomFile::new(&at, name).add_lines(n_lines);
 
     let env_var_value = "some-value";
-    env::set_var("FILE", env_var_value);
+    unsafe {
+        env::set_var("FILE", env_var_value);
+    }
     ucmd.args(&[format!("--filter={}", "cat > $FILE").as_str(), name])
         .succeeds();
 

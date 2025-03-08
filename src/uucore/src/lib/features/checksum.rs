@@ -12,7 +12,7 @@ use std::{
     ffi::OsStr,
     fmt::Display,
     fs::File,
-    io::{self, stdin, BufReader, Read, Write},
+    io::{self, BufReader, Read, Write, stdin},
     path::Path,
     str,
     sync::LazyLock,
@@ -22,8 +22,8 @@ use crate::{
     error::{FromIo, UError, UResult, USimpleError},
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
     sum::{
-        Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224,
-        Sha3_256, Sha3_384, Sha3_512, Sha512, Shake128, Shake256, Sm3, BSD, CRC, CRC32B, SYSV,
+        BSD, Blake2b, Blake3, CRC, CRC32B, Digest, DigestWriter, Md5, SYSV, Sha1, Sha3_224,
+        Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3,
     },
     util_name,
 };
@@ -603,11 +603,7 @@ fn get_expected_digest_as_hex_string(
         .ok()
         .and_then(|s| {
             // Check the digest length
-            if against_hint(s.len()) {
-                Some(s)
-            } else {
-                None
-            }
+            if against_hint(s.len()) { Some(s) } else { None }
         })
 }
 

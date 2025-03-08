@@ -274,8 +274,10 @@ mod linux_only {
             name,
             contents.len()
         );
-        assert!(contents.starts_with(&compare),
-                "Expected truncated output to be a prefix of the correct output, but it isn't.\n Correct: {contents}\n Compare: {compare}");
+        assert!(
+            contents.starts_with(&compare),
+            "Expected truncated output to be a prefix of the correct output, but it isn't.\n Correct: {contents}\n Compare: {compare}"
+        );
     }
 
     #[test]

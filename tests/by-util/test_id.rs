@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) coreutil
 
-use crate::common::util::{check_coreutil_version, expected_result, is_ci, whoami, TestScenario};
+use crate::common::util::{TestScenario, check_coreutil_version, expected_result, is_ci, whoami};
 
 const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced in GNU's coreutils 8.31
 

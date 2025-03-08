@@ -165,7 +165,7 @@ pub fn contain(ranges: &[Range], n: usize) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::{complement, Range};
+    use super::{Range, complement};
     use std::str::FromStr;
 
     fn m(a: Vec<Range>, b: &[Range]) {

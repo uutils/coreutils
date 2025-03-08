@@ -42,7 +42,7 @@ pub use spec::Spec;
 use std::{
     error::Error,
     fmt::Display,
-    io::{stdout, Write},
+    io::{Write, stdout},
     ops::ControlFlow,
 };
 
@@ -51,7 +51,7 @@ use os_display::Quotable;
 use crate::error::UError;
 
 pub use self::{
-    escape::{parse_escape_code, EscapedChar},
+    escape::{EscapedChar, parse_escape_code},
     num_format::Formatter,
 };
 

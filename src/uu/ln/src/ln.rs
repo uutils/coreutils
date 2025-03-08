@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
@@ -24,7 +24,7 @@ use std::os::unix::fs::symlink;
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
-use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 
 pub struct Settings {
     overwrite: OverwriteMode,

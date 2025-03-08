@@ -15,7 +15,7 @@ use crate::common::util::TestScenario;
 use std::time::{Duration, SystemTime};
 
 use rand::distr::{Distribution, Uniform};
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::SmallRng};
 
 const NUM_PRIMES: usize = 10000;
 const NUM_TESTS: usize = 100;

@@ -5,14 +5,14 @@
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process;
-use tempfile::tempdir;
 use tempfile::TempDir;
+use tempfile::tempdir;
 use uucore::error::{FromIo, UClapError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
 use uucore::{format_usage, help_about, help_section, help_usage};
@@ -171,7 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     format!("{EXEC_ERROR} No such file or directory"),
                 )),
                 _ => Err(USimpleError::new(1, format!("{EXEC_ERROR} {}", e))),
-            }
+            };
         }
     };
 

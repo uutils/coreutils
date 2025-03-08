@@ -5,14 +5,15 @@
 
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
-use crate::quoting_style::{escape_name, QuotingStyle};
+use crate::quoting_style::{QuotingStyle, escape_name};
 
 use super::{
+    ArgumentIter, FormatChar, FormatError,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
-    parse_escape_only, ArgumentIter, FormatChar, FormatError,
+    parse_escape_only,
 };
 use std::{io::Write, ops::ControlFlow};
 

@@ -3,10 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use std::cell::{OnceCell, RefCell};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, Stdin, Write};
+use std::io::{BufRead, BufReader, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
 use std::rc::Rc;
 use std::slice::Iter;

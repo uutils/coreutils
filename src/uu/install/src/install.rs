@@ -7,14 +7,14 @@
 
 mod mode;
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use file_diff::diff;
-use filetime::{set_file_times, FileTime};
+use filetime::{FileTime, set_file_times};
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::fs::File;
 use std::fs::{self, metadata};
-use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use uucore::backup_control::{self, BackupMode};
 use uucore::buf_copy::copy_stream;
@@ -23,7 +23,7 @@ use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
-use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
+use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
 use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
 

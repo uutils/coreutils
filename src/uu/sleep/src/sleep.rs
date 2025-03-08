@@ -11,7 +11,7 @@ use uucore::{
     format_usage, help_about, help_section, help_usage, show_error,
 };
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use fundu::{DurationParser, ParseError, SaturatingInto};
 
 static ABOUT: &str = help_about!("sleep.md");

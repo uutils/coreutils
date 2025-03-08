@@ -7,13 +7,13 @@
 
 use crate::unicode_table;
 use nom::{
+    IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take, take_till, take_until},
     character::complete::one_of,
     combinator::{map, map_opt, peek, recognize, value},
-    multi::{many0, many_m_n},
+    multi::{many_m_n, many0},
     sequence::{delimited, preceded, separated_pair, terminated},
-    IResult, Parser,
 };
 use std::{
     char,
@@ -62,16 +62,28 @@ impl Display for BadSequence {
                 write!(f, "when not truncating set1, string2 must be non-empty")
             }
             Self::ClassExceptLowerUpperInSet2 => {
-                write!(f, "when translating, the only character classes that may appear in set2 are 'upper' and 'lower'")
+                write!(
+                    f,
+                    "when translating, the only character classes that may appear in set2 are 'upper' and 'lower'"
+                )
             }
             Self::ClassInSet2NotMatchedBySet1 => {
-                write!(f, "when translating, every 'upper'/'lower' in set2 must be matched by a 'upper'/'lower' in the same position in set1")
+                write!(
+                    f,
+                    "when translating, every 'upper'/'lower' in set2 must be matched by a 'upper'/'lower' in the same position in set1"
+                )
             }
             Self::Set1LongerSet2EndsInClass => {
-                write!(f, "when translating with string1 longer than string2,\nthe latter string must not end with a character class")
+                write!(
+                    f,
+                    "when translating with string1 longer than string2,\nthe latter string must not end with a character class"
+                )
             }
             Self::ComplementMoreThanOneUniqueInSet2 => {
-                write!(f, "when translating with complemented character classes,\nstring2 must map all characters in the domain to one")
+                write!(
+                    f,
+                    "when translating with complemented character classes,\nstring2 must map all characters in the domain to one"
+                )
             }
             Self::BackwardsRange { end, start } => {
                 fn end_or_start_to_string(ut: &u32) -> String {
@@ -505,11 +517,7 @@ impl Sequence {
                     map(Self::parse_backslash_or_char, Ok),
                 )),
                 map(terminated(take_until("=]"), tag("=]")), |v: &[u8]| {
-                    if v.is_empty() {
-                        Ok(())
-                    } else {
-                        Err(v)
-                    }
+                    if v.is_empty() { Ok(()) } else { Err(v) }
                 }),
             ),
         )
