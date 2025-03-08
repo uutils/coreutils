@@ -355,9 +355,9 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
             }
 
             show_if_err!(match mode {
-                Mode::Bytes(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
-                Mode::Characters(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
-                Mode::Fields(ref ranges, ref opts) => cut_fields(stdin(), ranges, opts),
+                Mode::Bytes(ranges, opts) => cut_bytes(stdin(), ranges, opts),
+                Mode::Characters(ranges, opts) => cut_bytes(stdin(), ranges, opts),
+                Mode::Fields(ranges, opts) => cut_fields(stdin(), ranges, opts),
             });
 
             stdin_read = true;
