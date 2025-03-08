@@ -44,22 +44,22 @@ fn print_factors_str(
       let mut rem: Option<Vec<BigUint>> = None;
          // 64-bit branch
         if x <= BigUint::from_u64(u64::MAX).unwrap() {
-            let fctr = machine_factor::factorize(x.clone().try_into().unwrap());
+            let factor = machine_factor::factorize(x.clone().try_into().unwrap());
 
-            for i in 0..fctr.len {
+            for i in 0..factor.len {
                 k.insert(
-                    BigUint::from_u64(fctr.factors[i]).unwrap(),
-                    fctr.powers[i] as usize,
+                    BigUint::from_u64(factor.factors[i]).unwrap(),
+                    factor.powers[i] as usize,
                 );
             }
         }
         // 128-bit branch
         if x > BigUint::from_u64(u64::MAX).unwrap() && x <= BigUint::from_u128(u128::MAX).unwrap() {
-            let fctr = machine_factor::factorize_128(x.clone().try_into().unwrap());
-            for i in 0..fctr.len {
+            let factor = machine_factor::factorize_128(x.clone().try_into().unwrap());
+            for i in 0..factor.len {
                 k.insert(
-                    BigUint::from_u128(fctr.factors[i]).unwrap(),
-                    fctr.powers[i] as usize,
+                    BigUint::from_u128(factor.factors[i]).unwrap(),
+                    factor.powers[i] as usize,
                 );
             }
         }
