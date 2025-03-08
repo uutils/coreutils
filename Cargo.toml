@@ -17,7 +17,7 @@ readme = "README.md"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 rust-version = "1.85.0"
-edition = "2021"
+edition = "2024"
 
 build = "build.rs"
 
