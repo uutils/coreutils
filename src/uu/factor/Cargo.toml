@@ -24,7 +24,7 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 smallvec = { workspace = true }
 uucore = { workspace = true }
-machine-factor = { workspace = true}
+machine-factor = { workspace = true }
 num-bigint = { workspace = true }
 num-prime = { workspace = true }
 
