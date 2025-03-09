@@ -39,10 +39,10 @@ fn print_factors_str(
     };
 
     let (factorization, remaining) = if x > BigUint::from_u32(1).unwrap() {
-         // Branch to use the faster machine-factor library for 128-bit integers
-      let mut k = BTreeMap::new();
-      let mut rem: Option<Vec<BigUint>> = None;
-         // 64-bit branch
+        // Branch to use the faster machine-factor library for 128-bit integers
+        let mut k = BTreeMap::new();
+        let mut rem: Option<Vec<BigUint>> = None;
+        // 64-bit branch
         if x <= BigUint::from_u64(u64::MAX).unwrap() {
             let factor = machine_factor::factorize(x.clone().try_into().unwrap());
 
@@ -69,8 +69,7 @@ fn print_factors_str(
             k = interim;
             rem = rem_interim;
         }
-        (k, rem)  
-          
+        (k, rem)
     } else {
         (BTreeMap::new(), None)
     };
