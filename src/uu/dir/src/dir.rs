@@ -6,7 +6,7 @@
 use clap::Command;
 use std::ffi::OsString;
 use std::path::Path;
-use uu_ls::{options, Config, Format};
+use uu_ls::{Config, Format, options};
 use uucore::error::UResult;
 use uucore::quoting_style::{Quotes, QuotingStyle};
 

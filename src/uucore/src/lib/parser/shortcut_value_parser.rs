@@ -136,7 +136,7 @@ where
 mod tests {
     use std::ffi::OsStr;
 
-    use clap::{builder::PossibleValue, builder::TypedValueParser, error::ErrorKind, Command};
+    use clap::{Command, builder::PossibleValue, builder::TypedValueParser, error::ErrorKind};
 
     use super::ShortcutValueParser;
 

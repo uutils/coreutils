@@ -8,7 +8,7 @@ use std::fs::remove_file;
 use std::path::Path;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, Command};
+use clap::{Arg, Command, crate_version};
 
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};

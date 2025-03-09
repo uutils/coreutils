@@ -112,7 +112,7 @@ fn test_more_dir_arg() {
 #[test]
 #[cfg(target_family = "unix")]
 fn test_more_invalid_file_perms() {
-    use std::fs::{set_permissions, Permissions};
+    use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
 
     if std::io::stdout().is_terminal() {

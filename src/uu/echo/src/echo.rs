@@ -4,12 +4,12 @@
 // file that was distributed with this source code.
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
 use uucore::error::{UResult, USimpleError};
-use uucore::format::{parse_escape_only, EscapedChar, FormatChar};
+use uucore::format::{EscapedChar, FormatChar, parse_escape_only};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("echo.md");

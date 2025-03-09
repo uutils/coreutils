@@ -6,12 +6,12 @@
 // spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
 mod error;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use memchr::memmem;
 use memmap2::Mmap;
-use std::io::{stdin, stdout, BufWriter, Read, Write};
+use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{
-    fs::{read, File},
+    fs::{File, read},
     path::Path,
 };
 use uucore::display::Quotable;

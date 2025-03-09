@@ -9,7 +9,7 @@
 //! collection of data rows ([`Row`]), one per filesystem.
 use unicode_width::UnicodeWidthStr;
 
-use crate::blocks::{to_magnitude_and_suffix, SuffixType};
+use crate::blocks::{SuffixType, to_magnitude_and_suffix};
 use crate::columns::{Alignment, Column};
 use crate::filesystem::Filesystem;
 use crate::{BlockSize, Options};

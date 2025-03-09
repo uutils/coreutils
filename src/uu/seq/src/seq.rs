@@ -4,13 +4,13 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat
 use std::ffi::OsString;
-use std::io::{stdout, ErrorKind, Write};
+use std::io::{ErrorKind, Write, stdout};
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use num_traits::{ToPrimitive, Zero};
 
 use uucore::error::{FromIo, UResult};
-use uucore::format::{num_format, sprintf, Format, FormatArgument};
+use uucore::format::{Format, FormatArgument, num_format, sprintf};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;

@@ -9,10 +9,10 @@ use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
 use crate::paths::{HeaderPrinter, PathExtTail};
 use crate::text;
-use std::collections::hash_map::Keys;
 use std::collections::HashMap;
+use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
-use std::io::{stdout, BufRead, BufReader, BufWriter};
+use std::io::{BufRead, BufReader, BufWriter, stdout};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 

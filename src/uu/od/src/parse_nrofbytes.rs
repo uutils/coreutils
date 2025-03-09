@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use uucore::parse_size::{parse_size_u64, ParseSizeError};
+use uucore::parse_size::{ParseSizeError, parse_size_u64};
 
 pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
     let mut start = 0;

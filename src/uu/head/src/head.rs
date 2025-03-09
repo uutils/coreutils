@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (vars) seekable
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::fs::File;

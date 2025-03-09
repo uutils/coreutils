@@ -5,7 +5,7 @@
 
 use std::ffi::OsString;
 
-use clap::{crate_version, Command};
+use clap::{Command, crate_version};
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};

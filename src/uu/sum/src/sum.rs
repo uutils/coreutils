@@ -5,9 +5,9 @@
 
 // spell-checker:ignore (ToDO) sysv
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use std::fs::File;
-use std::io::{stdin, Read};
+use std::io::{Read, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
