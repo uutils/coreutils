@@ -487,8 +487,7 @@ fn test_chmod_symlink_non_existing_file() {
         .arg("-v")
         .arg("-f")
         .arg(test_symlink)
-        .run()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stderr()
         .stdout_contains(expected_stdout);
 
@@ -498,8 +497,7 @@ fn test_chmod_symlink_non_existing_file() {
         .ucmd()
         .arg("755")
         .arg(test_symlink)
-        .run()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stdout()
         .stderr_contains(expected_stderr);
 }

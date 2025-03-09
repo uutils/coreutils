@@ -102,13 +102,13 @@ fn test_chown_only_owner() {
     at.touch(file1);
 
     // since only superuser can change owner, we have to change from ourself to ourself
-    let result = scene
+    scene
         .ucmd()
         .arg(user_name)
         .arg("--verbose")
         .arg(file1)
-        .run();
-    result.stderr_contains("retained as");
+        .succeeds()
+        .stderr_contains("retained as");
 
     // try to change to another existing user, e.g. 'root'
     scene
@@ -672,16 +672,16 @@ fn test_chown_recursive() {
     at.touch(at.plus_as_string("a/b/c/c"));
     at.touch(at.plus_as_string("z/y"));
 
-    let result = scene
+    scene
         .ucmd()
         .arg("-R")
         .arg("--verbose")
         .arg(user_name)
         .arg("a")
         .arg("z")
-        .run();
-    result.stderr_contains("ownership of 'a/a' retained as");
-    result.stderr_contains("ownership of 'z/y' retained as");
+        .succeeds()
+        .stderr_contains("ownership of 'a/a' retained as")
+        .stderr_contains("ownership of 'z/y' retained as");
 }
 
 #[test]

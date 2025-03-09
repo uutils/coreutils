@@ -954,7 +954,12 @@ fn test_mv_update_option() {
     filetime::set_file_times(at.plus_as_string(file_a), now, now).unwrap();
     filetime::set_file_times(at.plus_as_string(file_b), now, later).unwrap();
 
-    scene.ucmd().arg("--update").arg(file_a).arg(file_b).run();
+    scene
+        .ucmd()
+        .arg("--update")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds();
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -1492,11 +1497,14 @@ fn test_mv_into_self_data() {
     at.touch(file1);
     at.touch(file2);
 
-    let result = scene.ucmd().arg(file1).arg(sub_dir).arg(sub_dir).run();
+    scene
+        .ucmd()
+        .arg(file1)
+        .arg(sub_dir)
+        .arg(sub_dir)
+        .fails_with_code(1);
 
     // sub_dir exists, file1 has been moved, file2 still exists.
-    result.code_is(1);
-
     assert!(at.dir_exists(sub_dir));
     assert!(at.file_exists(file1_result_location));
     assert!(at.file_exists(file2));
