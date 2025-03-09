@@ -123,8 +123,7 @@ fn test_stdin_stdout() {
     new_ucmd!()
         .args(&["status=none"])
         .pipe_in(input)
-        .run()
-        .no_stderr()
+        .succeeds()
         .stdout_only(output);
 }
 
@@ -138,8 +137,7 @@ fn test_stdin_stdout_count() {
     new_ucmd!()
         .args(&["status=none", "count=2", "ibs=128"])
         .pipe_in(input)
-        .run()
-        .no_stderr()
+        .succeeds()
         .stdout_only(output);
 }
 
@@ -151,8 +149,7 @@ fn test_stdin_stdout_count_bytes() {
     new_ucmd!()
         .args(&["status=none", "count=256", "iflag=count_bytes"])
         .pipe_in(input)
-        .run()
-        .no_stderr()
+        .succeeds()
         .stdout_only(output);
 }
 
@@ -164,8 +161,7 @@ fn test_stdin_stdout_skip() {
     new_ucmd!()
         .args(&["status=none", "skip=2", "ibs=128"])
         .pipe_in(input)
-        .run()
-        .no_stderr()
+        .succeeds()
         .stdout_only(output);
 }
 
@@ -177,8 +173,7 @@ fn test_stdin_stdout_skip_bytes() {
     new_ucmd!()
         .args(&["status=none", "skip=256", "ibs=128", "iflag=skip_bytes"])
         .pipe_in(input)
-        .run()
-        .no_stderr()
+        .succeeds()
         .stdout_only(output);
 }
 
@@ -189,10 +184,8 @@ fn test_stdin_stdout_skip_w_multiplier() {
     new_ucmd!()
         .args(&["status=none", "skip=5K", "iflag=skip_bytes"])
         .pipe_in(input)
-        .run()
-        .no_stderr()
-        .stdout_is(output)
-        .success();
+        .succeeds()
+        .stdout_is(output);
 }
 
 #[test]
@@ -202,10 +195,8 @@ fn test_stdin_stdout_count_w_multiplier() {
     new_ucmd!()
         .args(&["status=none", "count=2KiB", "iflag=count_bytes"])
         .pipe_in(input)
-        .run()
-        .no_stderr()
-        .stdout_is(output)
-        .success();
+        .succeeds()
+        .stdout_only(output);
 }
 
 #[test]
@@ -279,11 +270,10 @@ fn test_final_stats_noxfer() {
 #[test]
 fn test_final_stats_unspec() {
     new_ucmd!()
-        .run()
+        .succeeds()
         .stderr_contains("0+0 records in\n0+0 records out\n0 bytes copied, ")
         .stderr_matches(&Regex::new(r"\d(\.\d+)?(e-\d\d)? s, ").unwrap())
-        .stderr_contains("0.0 B/s")
-        .success();
+        .stderr_contains("0.0 B/s");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -311,7 +301,7 @@ fn test_noatime_does_not_update_infile_atime() {
 
     let pre_atime = fix.metadata(fname).accessed().unwrap();
 
-    ucmd.run().no_stderr().success();
+    ucmd.succeeds().no_output();
 
     let post_atime = fix.metadata(fname).accessed().unwrap();
     assert_eq!(pre_atime, post_atime);
@@ -331,7 +321,7 @@ fn test_noatime_does_not_update_ofile_atime() {
 
     let pre_atime = fix.metadata(fname).accessed().unwrap();
 
-    ucmd.pipe_in("").run().no_stderr().success();
+    ucmd.pipe_in("").succeeds().no_output();
 
     let post_atime = fix.metadata(fname).accessed().unwrap();
     assert_eq!(pre_atime, post_atime);
@@ -365,10 +355,8 @@ fn test_notrunc_does_not_truncate() {
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", "conv=notrunc", of!(&fname), "if=null.txt"])
-        .run()
-        .no_stdout()
-        .no_stderr()
-        .success();
+        .succeeds()
+        .no_output();
 
     assert_eq!(256, fix.metadata(fname).len());
 }
@@ -385,10 +373,8 @@ fn test_existing_file_truncated() {
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", "if=null.txt", of!(fname)])
-        .run()
-        .no_stdout()
-        .no_stderr()
-        .success();
+        .succeeds()
+        .no_output();
 
     assert_eq!(0, fix.metadata(fname).len());
 }
@@ -397,21 +383,18 @@ fn test_existing_file_truncated() {
 fn test_null_stats() {
     new_ucmd!()
         .arg("if=null.txt")
-        .run()
+        .succeeds()
         .stderr_contains("0+0 records in\n0+0 records out\n0 bytes copied, ")
         .stderr_matches(&Regex::new(r"\d(\.\d+)?(e-\d\d)? s, ").unwrap())
-        .stderr_contains("0.0 B/s")
-        .success();
+        .stderr_contains("0.0 B/s");
 }
 
 #[test]
 fn test_null_fullblock() {
     new_ucmd!()
         .args(&["if=null.txt", "status=none", "iflag=fullblock"])
-        .run()
-        .no_stdout()
-        .no_stderr()
-        .success();
+        .succeeds()
+        .no_output();
 }
 
 #[cfg(unix)]
@@ -444,8 +427,7 @@ fn test_fullblock() {
             "count=1",
             "iflag=fullblock",
         ])
-        .run();
-    ucmd.success();
+        .succeeds();
 
     let run_stats = &ucmd.stderr()[..exp_stats.len()];
     assert_eq!(exp_stats, run_stats);
@@ -459,10 +441,8 @@ fn test_ys_to_stdout() {
 
     new_ucmd!()
         .args(&["status=none", "if=y-nl-1k.txt"])
-        .run()
-        .no_stderr()
-        .stdout_is(output)
-        .success();
+        .succeeds()
+        .stdout_only(output);
 }
 
 #[test]
@@ -471,10 +451,8 @@ fn test_zeros_to_stdout() {
     let output = String::from_utf8(output).unwrap();
     new_ucmd!()
         .args(&["status=none", "if=zero-256k.txt"])
-        .run()
-        .no_stderr()
-        .stdout_is(output)
-        .success();
+        .succeeds()
+        .stdout_only(output);
 }
 
 #[cfg(target_pointer_width = "32")]
@@ -483,9 +461,8 @@ fn test_oversized_bs_32_bit() {
     for bs_param in ["bs", "ibs", "obs", "cbs"] {
         new_ucmd!()
             .args(&[format!("{}=5GB", bs_param)])
-            .run()
+            .fails()
             .no_stdout()
-            .failure()
             .code_is(1)
             .stderr_is(format!("dd: {}=N cannot fit into memory\n", bs_param));
     }
@@ -498,10 +475,8 @@ fn test_to_stdout_with_ibs_obs() {
 
     new_ucmd!()
         .args(&["status=none", "if=y-nl-1k.txt", "ibs=521", "obs=1031"])
-        .run()
-        .no_stderr()
-        .stdout_is(output)
-        .success();
+        .succeeds()
+        .stdout_only(output);
 }
 
 #[test]
@@ -512,10 +487,8 @@ fn test_ascii_10k_to_stdout() {
 
     new_ucmd!()
         .args(&["status=none", "if=ascii-10k.txt"])
-        .run()
-        .no_stderr()
-        .stdout_is(output)
-        .success();
+        .succeeds()
+        .stdout_only(output);
 }
 
 #[test]
@@ -527,10 +500,8 @@ fn test_zeros_to_file() {
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", inf!(test_fn), of!(tmp_fn)])
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .success();
+        .succeeds()
+        .no_output();
 
     cmp_file!(
         File::open(fixture_path!(&test_fn)).unwrap(),
@@ -553,10 +524,8 @@ fn test_to_file_with_ibs_obs() {
         "ibs=222",
         "obs=111",
     ])
-    .run()
-    .no_stderr()
-    .no_stdout()
-    .success();
+    .succeeds()
+    .no_output();
 
     cmp_file!(
         File::open(fixture_path!(&test_fn)).unwrap(),
@@ -573,10 +542,8 @@ fn test_ascii_521k_to_file() {
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", of!(tmp_fn)])
         .pipe_in(input.clone())
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .success();
+        .succeeds()
+        .no_output();
 
     assert_eq!(512 * 1024, fix.metadata(&tmp_fn).len());
 
@@ -605,10 +572,8 @@ fn test_ascii_5_gibi_to_file() {
         "if=/dev/zero",
         of!(tmp_fn),
     ])
-    .run()
-    .no_stderr()
-    .no_stdout()
-    .success();
+    .succeeds()
+    .no_output();
 
     assert_eq!(5 * 1024 * 1024 * 1024, fix.metadata(&tmp_fn).len());
 }
@@ -624,7 +589,7 @@ fn test_self_transfer() {
     assert!(fix.file_exists(fname));
     assert_eq!(256 * 1024, fix.metadata(fname).len());
 
-    ucmd.run().no_stdout().no_stderr().success();
+    ucmd.succeeds().no_output();
 
     assert!(fix.file_exists(fname));
     assert_eq!(256 * 1024, fix.metadata(fname).len());
@@ -639,10 +604,8 @@ fn test_unicode_filenames() {
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", inf!(test_fn), of!(tmp_fn)])
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .success();
+        .succeeds()
+        .no_output();
 
     cmp_file!(
         File::open(fixture_path!(&test_fn)).unwrap(),

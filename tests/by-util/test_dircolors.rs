@@ -68,7 +68,7 @@ fn test_keywords() {
 fn test_internal_db() {
     new_ucmd!()
         .arg("-p")
-        .run()
+        .succeeds()
         .stdout_is_fixture("internal.expected");
 }
 
@@ -76,7 +76,7 @@ fn test_internal_db() {
 fn test_ls_colors() {
     new_ucmd!()
         .arg("--print-ls-colors")
-        .run()
+        .succeeds()
         .stdout_is_fixture("ls_colors.expected");
 }
 
@@ -85,7 +85,7 @@ fn test_bash_default() {
     new_ucmd!()
         .env("TERM", "screen")
         .arg("-b")
-        .run()
+        .succeeds()
         .stdout_is_fixture("bash_def.expected");
 }
 
@@ -94,7 +94,7 @@ fn test_csh_default() {
     new_ucmd!()
         .env("TERM", "screen")
         .arg("-c")
-        .run()
+        .succeeds()
         .stdout_is_fixture("csh_def.expected");
 }
 #[test]
@@ -102,12 +102,12 @@ fn test_overridable_args() {
     new_ucmd!()
         .env("TERM", "screen")
         .arg("-bc")
-        .run()
+        .succeeds()
         .stdout_is_fixture("csh_def.expected");
     new_ucmd!()
         .env("TERM", "screen")
         .arg("-cb")
-        .run()
+        .succeeds()
         .stdout_is_fixture("bash_def.expected");
 }
 
@@ -228,14 +228,14 @@ fn test_helper(file_name: &str, term: &str) {
         .env("TERM", term)
         .arg("-c")
         .arg(format!("{file_name}.txt"))
-        .run()
+        .succeeds()
         .stdout_is_fixture(format!("{file_name}.csh.expected"));
 
     new_ucmd!()
         .env("TERM", term)
         .arg("-b")
         .arg(format!("{file_name}.txt"))
-        .run()
+        .succeeds()
         .stdout_is_fixture(format!("{file_name}.sh.expected"));
 }
 

@@ -315,7 +315,7 @@ fn run(input_string: &[u8], output_string: &[u8]) {
     new_ucmd!()
         .timeout(Duration::from_secs(240))
         .pipe_in(input_string)
-        .run()
+        .succeeds()
         .stdout_is(String::from_utf8(output_string.to_owned()).unwrap());
 }
 
@@ -344,7 +344,7 @@ fn test_primes_with_exponents() {
         .timeout(Duration::from_secs(240))
         .arg("--exponents")
         .pipe_in(input_string)
-        .run()
+        .succeeds()
         .stdout_is(String::from_utf8(output_string.as_bytes().to_owned()).unwrap());
 }
 

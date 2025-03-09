@@ -131,7 +131,7 @@ fn sub_b_string_handle_escapes() {
 fn sub_b_string_validate_field_params() {
     new_ucmd!()
         .args(&["hello %7b", "world"])
-        .run()
+        .fails()
         .stdout_is("hello ")
         .stderr_is("printf: %7b: invalid conversion specification\n");
 }
@@ -156,7 +156,7 @@ fn sub_q_string_non_printable() {
 fn sub_q_string_validate_field_params() {
     new_ucmd!()
         .args(&["hello %7q", "world"])
-        .run()
+        .fails()
         .stdout_is("hello ")
         .stderr_is("printf: %7q: invalid conversion specification\n");
 }

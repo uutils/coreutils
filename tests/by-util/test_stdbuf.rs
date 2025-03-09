@@ -37,7 +37,7 @@ fn test_stdbuf_unbuffered_stdout() {
     new_ucmd!()
         .args(&["-o0", "head"])
         .pipe_in("The quick brown fox jumps over the lazy dog.")
-        .run()
+        .succeeds()
         .stdout_is("The quick brown fox jumps over the lazy dog.");
 }
 
@@ -47,7 +47,7 @@ fn test_stdbuf_line_buffered_stdout() {
     new_ucmd!()
         .args(&["-oL", "head"])
         .pipe_in("The quick brown fox jumps over the lazy dog.")
-        .run()
+        .succeeds()
         .stdout_is("The quick brown fox jumps over the lazy dog.");
 }
 
@@ -68,7 +68,7 @@ fn test_stdbuf_trailing_var_arg() {
     new_ucmd!()
         .args(&["-i", "1024", "tail", "-1"])
         .pipe_in("The quick brown fox\njumps over the lazy dog.")
-        .run()
+        .succeeds()
         .stdout_is("jumps over the lazy dog.");
 }
 

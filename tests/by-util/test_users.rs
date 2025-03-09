@@ -39,6 +39,6 @@ fn test_users_check_name() {
 fn test_users_check_name_openbsd() {
     new_ucmd!()
         .args(&["openbsd_utmp"])
-        .run()
+        .succeeds()
         .stdout_contains("test");
 }
