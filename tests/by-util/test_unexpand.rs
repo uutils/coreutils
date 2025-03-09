@@ -15,7 +15,7 @@ fn unexpand_init_0() {
     new_ucmd!()
         .args(&["-t4"])
         .pipe_in(" 1\n  2\n   3\n    4\n")
-        .run()
+        .succeeds()
         .stdout_is(" 1\n  2\n   3\n\t4\n");
 }
 
@@ -24,7 +24,7 @@ fn unexpand_init_1() {
     new_ucmd!()
         .args(&["-t4"])
         .pipe_in("     5\n      6\n       7\n        8\n")
-        .run()
+        .succeeds()
         .stdout_is("\t 5\n\t  6\n\t   7\n\t\t8\n");
 }
 
@@ -33,7 +33,7 @@ fn unexpand_init_list_0() {
     new_ucmd!()
         .args(&["-t2,4"])
         .pipe_in(" 1\n  2\n   3\n    4\n")
-        .run()
+        .succeeds()
         .stdout_is(" 1\n\t2\n\t 3\n\t\t4\n");
 }
 
@@ -43,7 +43,7 @@ fn unexpand_init_list_1() {
     new_ucmd!()
         .args(&["-t2,4"])
         .pipe_in("     5\n      6\n       7\n        8\n")
-        .run()
+        .succeeds()
         .stdout_is("\t\t 5\n\t\t  6\n\t\t   7\n\t\t    8\n");
 }
 
@@ -52,7 +52,7 @@ fn unexpand_flag_a_0() {
     new_ucmd!()
         .args(&["--"])
         .pipe_in("e     E\nf      F\ng       G\nh        H\n")
-        .run()
+        .succeeds()
         .stdout_is("e     E\nf      F\ng       G\nh        H\n");
 }
 
@@ -61,7 +61,7 @@ fn unexpand_flag_a_1() {
     new_ucmd!()
         .args(&["-a"])
         .pipe_in("e     E\nf      F\ng       G\nh        H\n")
-        .run()
+        .succeeds()
         .stdout_is("e     E\nf      F\ng\tG\nh\t H\n");
 }
 
@@ -70,7 +70,7 @@ fn unexpand_flag_a_2() {
     new_ucmd!()
         .args(&["-t8"])
         .pipe_in("e     E\nf      F\ng       G\nh        H\n")
-        .run()
+        .succeeds()
         .stdout_is("e     E\nf      F\ng\tG\nh\t H\n");
 }
 
@@ -79,7 +79,7 @@ fn unexpand_first_only_0() {
     new_ucmd!()
         .args(&["-t3"])
         .pipe_in("        A     B")
-        .run()
+        .succeeds()
         .stdout_is("\t\t  A\t  B");
 }
 
@@ -88,7 +88,7 @@ fn unexpand_first_only_1() {
     new_ucmd!()
         .args(&["-t3", "--first-only"])
         .pipe_in("        A     B")
-        .run()
+        .succeeds()
         .stdout_is("\t\t  A     B");
 }
 
@@ -100,7 +100,7 @@ fn unexpand_trailing_space_0() {
     new_ucmd!()
         .args(&["-t4"])
         .pipe_in("123 \t1\n123 1\n123 \n123 ")
-        .run()
+        .succeeds()
         .stdout_is("123\t\t1\n123 1\n123 \n123 ");
 }
 
@@ -110,7 +110,7 @@ fn unexpand_trailing_space_1() {
     new_ucmd!()
         .args(&["-t1"])
         .pipe_in(" abc d e  f  g ")
-        .run()
+        .succeeds()
         .stdout_is("\tabc d e\t\tf\t\tg ");
 }
 
@@ -119,7 +119,7 @@ fn unexpand_spaces_follow_tabs_0() {
     // The two first spaces can be included into the first tab.
     new_ucmd!()
         .pipe_in("  \t\t   A")
-        .run()
+        .succeeds()
         .stdout_is("\t\t   A");
 }
 
@@ -134,7 +134,7 @@ fn unexpand_spaces_follow_tabs_1() {
     new_ucmd!()
         .args(&["-t1,4,5"])
         .pipe_in("a \t   B \t")
-        .run()
+        .succeeds()
         .stdout_is("a\t\t  B \t");
 }
 
@@ -143,17 +143,13 @@ fn unexpand_spaces_after_fields() {
     new_ucmd!()
         .args(&["-a"])
         .pipe_in("   \t        A B C D             A\t\n")
-        .run()
+        .succeeds()
         .stdout_is("\t\tA B C D\t\t    A\t\n");
 }
 
 #[test]
 fn unexpand_read_from_file() {
-    new_ucmd!()
-        .arg("with_spaces.txt")
-        .arg("-t4")
-        .run()
-        .success();
+    new_ucmd!().arg("with_spaces.txt").arg("-t4").succeeds();
 }
 
 #[test]
@@ -162,8 +158,7 @@ fn unexpand_read_from_two_file() {
         .arg("with_spaces.txt")
         .arg("with_spaces.txt")
         .arg("-t4")
-        .run()
-        .success();
+        .succeeds();
 }
 
 #[test]
@@ -171,7 +166,7 @@ fn test_tabs_shortcut() {
     new_ucmd!()
         .arg("-3")
         .pipe_in("   a   b")
-        .run()
+        .succeeds()
         .stdout_is("\ta   b");
 }
 
@@ -181,7 +176,7 @@ fn test_tabs_shortcut_combined_with_all_arg() {
         new_ucmd!()
             .args(&[all_arg, "-3"])
             .pipe_in("a  b  c")
-            .run()
+            .succeeds()
             .stdout_is("a\tb\tc");
     }
 
@@ -197,7 +192,7 @@ fn test_comma_separated_tabs_shortcut() {
     new_ucmd!()
         .args(&["-a", "-3,9"])
         .pipe_in("a  b     c")
-        .run()
+        .succeeds()
         .stdout_is("a\tb\tc");
 }
 

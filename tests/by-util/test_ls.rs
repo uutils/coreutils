@@ -1707,7 +1707,7 @@ fn test_ls_group_directories_first() {
         .ucmd()
         .arg("-1a")
         .arg("--group-directories-first")
-        .run();
+        .succeeds();
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
         dots.into_iter()
@@ -1721,7 +1721,7 @@ fn test_ls_group_directories_first() {
         .ucmd()
         .arg("-1ar")
         .arg("--group-directories-first")
-        .run();
+        .succeeds();
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
         (dirnames.into_iter().rev())
@@ -1735,8 +1735,8 @@ fn test_ls_group_directories_first() {
         .ucmd()
         .arg("-1aU")
         .arg("--group-directories-first")
-        .run();
-    let result2 = scene.ucmd().arg("-1aU").run();
+        .succeeds();
+    let result2 = scene.ucmd().arg("-1aU").succeeds();
     assert_eq!(result.stdout_str(), result2.stdout_str());
 }
 #[test]
@@ -1901,7 +1901,7 @@ fn test_ls_order_birthtime() {
     at.make_file("test-birthtime-2").sync_all().unwrap();
     at.open("test-birthtime-1");
 
-    let result = scene.ucmd().arg("--time=birth").arg("-t").run();
+    let result = scene.ucmd().arg("--time=birth").arg("-t").succeeds();
 
     #[cfg(not(windows))]
     assert_eq!(result.stdout_str(), "test-birthtime-2\ntest-birthtime-1\n");
@@ -2962,7 +2962,7 @@ fn test_ls_human_si() {
         .arg("-s")
         .arg("+1000k")
         .arg(file1)
-        .run();
+        .succeeds();
 
     scene
         .ucmd()
@@ -4002,13 +4002,13 @@ fn test_ls_sort_extension() {
         "", // because of '\n' at the end of the output
     ];
 
-    let result = scene.ucmd().arg("-1aX").run();
+    let result = scene.ucmd().arg("-1aX").succeeds();
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
         expected,
     );
 
-    let result = scene.ucmd().arg("-1a").arg("--sort=extension").run();
+    let result = scene.ucmd().arg("-1a").arg("--sort=extension").succeeds();
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
         expected,
@@ -4030,26 +4030,30 @@ fn test_ls_path() {
     at.touch(path);
 
     let expected_stdout = &format!("{path}\n");
-    scene.ucmd().arg(path).run().stdout_is(expected_stdout);
+    scene.ucmd().arg(path).succeeds().stdout_is(expected_stdout);
 
     let expected_stdout = &format!("./{path}\n");
     scene
         .ucmd()
         .arg(format!("./{path}"))
-        .run()
+        .succeeds()
         .stdout_is(expected_stdout);
 
     let abs_path = format!("{}/{}", at.as_string(), path);
     let expected_stdout = format!("{abs_path}\n");
 
-    scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
+    scene
+        .ucmd()
+        .arg(&abs_path)
+        .succeeds()
+        .stdout_is(expected_stdout);
 
     let expected_stdout = format!("{path}\n{file1}\n");
     scene
         .ucmd()
         .arg(file1)
         .arg(path)
-        .run()
+        .succeeds()
         .stdout_is(expected_stdout);
 }
 
@@ -4299,7 +4303,7 @@ fn test_ls_dereference_looped_symlinks_recursive() {
 fn test_dereference_dangling_color() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("wat", "nonexistent");
-    let out_exp = ucmd.args(&["--color"]).run().stdout_move_str();
+    let out_exp = ucmd.args(&["--color"]).succeeds().stdout_move_str();
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("wat", "nonexistent");
@@ -4314,7 +4318,7 @@ fn test_dereference_symlink_dir_color() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
     at.mkdir("dir1/link");
-    let out_exp = ucmd.args(&["--color", "dir1"]).run().stdout_move_str();
+    let out_exp = ucmd.args(&["--color", "dir1"]).succeeds().stdout_move_str();
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
@@ -4330,7 +4334,7 @@ fn test_dereference_symlink_file_color() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
     at.touch("dir1/link");
-    let out_exp = ucmd.args(&["--color", "dir1"]).run().stdout_move_str();
+    let out_exp = ucmd.args(&["--color", "dir1"]).succeeds().stdout_move_str();
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir1");
@@ -4558,7 +4562,7 @@ fn test_ls_dired_outputs_same_date_time_format() {
     let at = &scene.fixtures;
     at.mkdir("dir");
     at.mkdir("dir/a");
-    let binding = scene.ucmd().arg("-l").arg("dir").run();
+    let binding = scene.ucmd().arg("-l").arg("dir").succeeds();
     let long_output_str = binding.stdout_str();
     let split_lines: Vec<&str> = long_output_str.split('\n').collect();
     // the second line should contain the long output which includes date

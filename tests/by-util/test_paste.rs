@@ -146,7 +146,7 @@ fn test_combine_pairs_of_lines() {
         for d in ["-d", "--delimiters"] {
             new_ucmd!()
                 .args(&[s, d, "\t\n", "html_colors.txt"])
-                .run()
+                .succeeds()
                 .stdout_is_fixture("html_colors.expected");
         }
     }
