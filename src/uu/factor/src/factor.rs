@@ -39,7 +39,37 @@ fn print_factors_str(
     };
 
     let (factorization, remaining) = if x > BigUint::from_u32(1).unwrap() {
-        num_prime::nt_funcs::factors(x.clone(), None)
+        // Branch to use the faster machine-factor library for 128-bit integers
+        let mut k = BTreeMap::new();
+        let mut rem: Option<Vec<BigUint>> = None;
+        // 64-bit branch
+        if x <= BigUint::from_u64(u64::MAX).unwrap() {
+            let factor = machine_factor::factorize(x.clone().try_into().unwrap());
+
+            for i in 0..factor.len {
+                k.insert(
+                    BigUint::from_u64(factor.factors[i]).unwrap(),
+                    factor.powers[i] as usize,
+                );
+            }
+        }
+        // 128-bit branch
+        if x > BigUint::from_u64(u64::MAX).unwrap() && x <= BigUint::from_u128(u128::MAX).unwrap() {
+            let factor = machine_factor::factorize_128(x.clone().try_into().unwrap());
+            for i in 0..factor.len {
+                k.insert(
+                    BigUint::from_u128(factor.factors[i]).unwrap(),
+                    factor.powers[i] as usize,
+                );
+            }
+        }
+        // default to num-prime for greater than 128-bit inputs
+        if x >= BigUint::from_u128(1u128 << 127).unwrap() << 1 {
+            let (interim, rem_interim) = num_prime::nt_funcs::factors(x.clone(), None);
+            k = interim;
+            rem = rem_interim;
+        }
+        (k, rem)
     } else {
         (BTreeMap::new(), None)
     };
