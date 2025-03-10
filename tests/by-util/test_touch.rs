@@ -119,6 +119,69 @@ fn test_touch_set_mdhms_time() {
 }
 
 #[test]
+#[cfg(target_pointer_width = "64")]
+fn test_touch_2_digit_years_68() {
+    // 68 and before are 20xx
+    // it will fail on 32 bits, because of wraparound for anything after
+    // 2038-01-19
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_two_digit_68_time";
+
+    ucmd.args(&["-t", "6801010000", file])
+        .succeeds()
+        .no_output();
+
+    assert!(at.file_exists(file));
+
+    //  January 1, 2068, 00:00:00
+    let expected = FileTime::from_unix_time(3_092_601_600, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+fn test_touch_2_digit_years_2038() {
+    // Same as test_touch_2_digit_years_68 but for 32 bits systems
+    // we test a date before the y2038 bug
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_two_digit_68_time";
+
+    ucmd.args(&["-t", "3801010000", file])
+        .succeeds()
+        .no_output();
+
+    assert!(at.file_exists(file));
+
+    // January 1, 2038, 00:00:00
+    let expected = FileTime::from_unix_time(2_145_916_800, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+fn test_touch_2_digit_years_69() {
+    // 69 and after are 19xx
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_two_digit_69_time";
+
+    ucmd.args(&["-t", "6901010000", file])
+        .succeeds()
+        .no_output();
+
+    assert!(at.file_exists(file));
+    // January 1, 1969, 00:00:00
+    let expected = FileTime::from_unix_time(-31_536_000, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
 fn test_touch_set_ymdhm_time() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_ymdhm_time";
