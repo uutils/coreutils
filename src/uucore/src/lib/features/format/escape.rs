@@ -17,24 +17,37 @@ pub enum EscapedChar {
     End,
 }
 
-#[repr(u8)]
+#[derive(Clone, Copy, Default)]
+pub enum OctalParsing {
+    #[default]
+    TwoDigits = 2,
+    ThreeDigits = 3,
+}
+
 #[derive(Clone, Copy)]
 enum Base {
-    Oct = 8,
-    Hex = 16,
+    Oct(OctalParsing),
+    Hex,
 }
 
 impl Base {
+    fn as_base(&self) -> u8 {
+        match self {
+            Base::Oct(_) => 8,
+            Base::Hex => 16,
+        }
+    }
+
     fn max_digits(&self) -> u8 {
         match self {
-            Self::Oct => 3,
+            Self::Oct(parsing) => *parsing as u8,
             Self::Hex => 2,
         }
     }
 
     fn convert_digit(&self, c: u8) -> Option<u8> {
         match self {
-            Self::Oct => {
+            Self::Oct(_) => {
                 if matches!(c, b'0'..=b'7') {
                     Some(c - b'0')
                 } else {
@@ -68,7 +81,7 @@ fn parse_code(input: &mut &[u8], base: Base) -> Option<u8> {
         let Some(n) = base.convert_digit(*c) else {
             break;
         };
-        ret = ret.wrapping_mul(base as u8).wrapping_add(n);
+        ret = ret.wrapping_mul(base.as_base()).wrapping_add(n);
         *input = rest;
     }
 
@@ -87,7 +100,9 @@ fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
     for _ in 1..digits {
         let (c, rest) = input.split_first()?;
         let n = Base::Hex.convert_digit(*c)?;
-        ret = ret.wrapping_mul(Base::Hex as u32).wrapping_add(n as u32);
+        ret = ret
+            .wrapping_mul(Base::Hex.as_base() as u32)
+            .wrapping_add(n as u32);
         *input = rest;
     }
 
@@ -99,13 +114,16 @@ fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
 pub struct EscapeError {}
 
 /// Parse an escape sequence, like `\n` or `\xff`, etc.
-pub fn parse_escape_code(rest: &mut &[u8]) -> Result<EscapedChar, EscapeError> {
+pub fn parse_escape_code(
+    rest: &mut &[u8],
+    zero_octal_parsing: OctalParsing,
+) -> Result<EscapedChar, EscapeError> {
     if let [c, new_rest @ ..] = rest {
         // This is for the \NNN syntax for octal sequences.
         // Note that '0' is intentionally omitted because that
         // would be the \0NNN syntax.
         if let b'1'..=b'7' = c {
-            if let Some(parsed) = parse_code(rest, Base::Oct) {
+            if let Some(parsed) = parse_code(rest, Base::Oct(OctalParsing::ThreeDigits)) {
                 return Ok(EscapedChar::Byte(parsed));
             }
         }
@@ -131,7 +149,7 @@ pub fn parse_escape_code(rest: &mut &[u8]) -> Result<EscapedChar, EscapeError> {
                 }
             }
             b'0' => Ok(EscapedChar::Byte(
-                parse_code(rest, Base::Oct).unwrap_or(b'\0'),
+                parse_code(rest, Base::Oct(zero_octal_parsing)).unwrap_or(b'\0'),
             )),
             b'u' => Ok(EscapedChar::Char(parse_unicode(rest, 4).unwrap_or('\0'))),
             b'U' => Ok(EscapedChar::Char(parse_unicode(rest, 8).unwrap_or('\0'))),
