@@ -65,6 +65,15 @@ pub enum ExtendedBigDecimal {
     ///
     /// [0]: https://github.com/akubera/bigdecimal-rs/issues/67
     Nan,
+
+    /// Floating point negative NaN.
+    ///
+    /// This is represented as its own enumeration member instead of as
+    /// a [`BigDecimal`] because the `bigdecimal` library does not
+    /// support NaN, see [here][0].
+    ///
+    /// [0]: https://github.com/akubera/bigdecimal-rs/issues/67
+    MinusNan,
 }
 
 impl ExtendedBigDecimal {
@@ -91,6 +100,7 @@ impl Display for ExtendedBigDecimal {
             Self::MinusInfinity => f32::NEG_INFINITY.fmt(f),
             Self::MinusZero => (-0.0f32).fmt(f),
             Self::Nan => "nan".fmt(f),
+            Self::MinusNan => "-nan".fmt(f),
         }
     }
 }
@@ -116,19 +126,19 @@ impl Add for ExtendedBigDecimal {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => Self::BigDecimal(m.add(n)),
             (Self::BigDecimal(_), Self::MinusInfinity) => Self::MinusInfinity,
             (Self::BigDecimal(_), Self::Infinity) => Self::Infinity,
-            (Self::BigDecimal(_), Self::Nan) => Self::Nan,
             (Self::BigDecimal(m), Self::MinusZero) => Self::BigDecimal(m),
             (Self::Infinity, Self::BigDecimal(_)) => Self::Infinity,
             (Self::Infinity, Self::Infinity) => Self::Infinity,
             (Self::Infinity, Self::MinusZero) => Self::Infinity,
             (Self::Infinity, Self::MinusInfinity) => Self::Nan,
-            (Self::Infinity, Self::Nan) => Self::Nan,
             (Self::MinusInfinity, Self::BigDecimal(_)) => Self::MinusInfinity,
             (Self::MinusInfinity, Self::MinusInfinity) => Self::MinusInfinity,
             (Self::MinusInfinity, Self::MinusZero) => Self::MinusInfinity,
             (Self::MinusInfinity, Self::Infinity) => Self::Nan,
-            (Self::MinusInfinity, Self::Nan) => Self::Nan,
             (Self::Nan, _) => Self::Nan,
+            (_, Self::Nan) => Self::Nan,
+            (Self::MinusNan, _) => Self::MinusNan,
+            (_, Self::MinusNan) => Self::MinusNan,
             (Self::MinusZero, other) => other,
         }
     }
@@ -140,24 +150,23 @@ impl PartialEq for ExtendedBigDecimal {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => m.eq(n),
             (Self::BigDecimal(_), Self::MinusInfinity) => false,
             (Self::BigDecimal(_), Self::Infinity) => false,
-            (Self::BigDecimal(_), Self::Nan) => false,
             (Self::BigDecimal(_), Self::MinusZero) => false,
             (Self::Infinity, Self::BigDecimal(_)) => false,
             (Self::Infinity, Self::Infinity) => true,
             (Self::Infinity, Self::MinusZero) => false,
             (Self::Infinity, Self::MinusInfinity) => false,
-            (Self::Infinity, Self::Nan) => false,
             (Self::MinusInfinity, Self::BigDecimal(_)) => false,
             (Self::MinusInfinity, Self::Infinity) => false,
             (Self::MinusInfinity, Self::MinusZero) => false,
             (Self::MinusInfinity, Self::MinusInfinity) => true,
-            (Self::MinusInfinity, Self::Nan) => false,
-            (Self::Nan, _) => false,
             (Self::MinusZero, Self::BigDecimal(_)) => false,
             (Self::MinusZero, Self::Infinity) => false,
             (Self::MinusZero, Self::MinusZero) => true,
             (Self::MinusZero, Self::MinusInfinity) => false,
-            (Self::MinusZero, Self::Nan) => false,
+            (Self::Nan, _) => false,
+            (Self::MinusNan, _) => false,
+            (_, Self::Nan) => false,
+            (_, Self::MinusNan) => false,
         }
     }
 }
@@ -168,24 +177,23 @@ impl PartialOrd for ExtendedBigDecimal {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => m.partial_cmp(n),
             (Self::BigDecimal(_), Self::MinusInfinity) => Some(Ordering::Greater),
             (Self::BigDecimal(_), Self::Infinity) => Some(Ordering::Less),
-            (Self::BigDecimal(_), Self::Nan) => None,
             (Self::BigDecimal(m), Self::MinusZero) => m.partial_cmp(&BigDecimal::zero()),
             (Self::Infinity, Self::BigDecimal(_)) => Some(Ordering::Greater),
             (Self::Infinity, Self::Infinity) => Some(Ordering::Equal),
             (Self::Infinity, Self::MinusZero) => Some(Ordering::Greater),
             (Self::Infinity, Self::MinusInfinity) => Some(Ordering::Greater),
-            (Self::Infinity, Self::Nan) => None,
             (Self::MinusInfinity, Self::BigDecimal(_)) => Some(Ordering::Less),
             (Self::MinusInfinity, Self::Infinity) => Some(Ordering::Less),
             (Self::MinusInfinity, Self::MinusZero) => Some(Ordering::Less),
             (Self::MinusInfinity, Self::MinusInfinity) => Some(Ordering::Equal),
-            (Self::MinusInfinity, Self::Nan) => None,
-            (Self::Nan, _) => None,
             (Self::MinusZero, Self::BigDecimal(n)) => BigDecimal::zero().partial_cmp(n),
             (Self::MinusZero, Self::Infinity) => Some(Ordering::Less),
             (Self::MinusZero, Self::MinusZero) => Some(Ordering::Equal),
             (Self::MinusZero, Self::MinusInfinity) => Some(Ordering::Greater),
-            (Self::MinusZero, Self::Nan) => None,
+            (Self::Nan, _) => None,
+            (Self::MinusNan, _) => None,
+            (_, Self::Nan) => None,
+            (_, Self::MinusNan) => None,
         }
     }
 }
