@@ -3439,7 +3439,6 @@ dependencies = [
  "thiserror 2.0.12",
  "utmp-classic",
  "uucore",
- "windows-sys 0.59.0",
 ]
 
 [[package]]
