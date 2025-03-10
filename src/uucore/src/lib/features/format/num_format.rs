@@ -2,9 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
+// spell-checker:ignore bigdecimal
 //! Utilities for formatting numbers in various formats
 
+use bigdecimal::BigDecimal;
 use num_traits::Signed;
 use num_traits::ToPrimitive;
 use std::cmp::min;
@@ -257,7 +258,7 @@ impl Formatter<&ExtendedBigDecimal> for Float {
                 let x = bd.to_f64().unwrap();
                 match self.variant {
                     FloatVariant::Decimal => {
-                        format_float_decimal(x, self.precision, self.force_decimal)
+                        format_float_decimal(&bd, self.precision, self.force_decimal)
                     }
                     FloatVariant::Scientific => {
                         format_float_scientific(x, self.precision, self.case, self.force_decimal)
@@ -346,12 +347,12 @@ fn format_float_non_finite(e: &ExtendedBigDecimal, case: Case) -> String {
     s
 }
 
-fn format_float_decimal(f: f64, precision: usize, force_decimal: ForceDecimal) -> String {
-    debug_assert!(!f.is_sign_negative());
+fn format_float_decimal(bd: &BigDecimal, precision: usize, force_decimal: ForceDecimal) -> String {
+    debug_assert!(!bd.is_negative());
     if precision == 0 && force_decimal == ForceDecimal::Yes {
-        format!("{f:.0}.")
+        format!("{bd:.0}.")
     } else {
-        format!("{f:.precision$}")
+        format!("{bd:.precision$}")
     }
 }
 
@@ -546,6 +547,10 @@ fn write_output(
 
 #[cfg(test)]
 mod test {
+    use bigdecimal::BigDecimal;
+    use num_traits::FromPrimitive;
+    use std::str::FromStr;
+
     use crate::format::{
         num_format::{Case, ForceDecimal},
         ExtendedBigDecimal,
@@ -587,7 +592,7 @@ mod test {
     #[test]
     fn decimal_float() {
         use super::format_float_decimal;
-        let f = |x| format_float_decimal(x, 6, ForceDecimal::No);
+        let f = |x| format_float_decimal(&BigDecimal::from_f64(x).unwrap(), 6, ForceDecimal::No);
         assert_eq!(f(0.0), "0.000000");
         assert_eq!(f(1.0), "1.000000");
         assert_eq!(f(100.0), "100.000000");
@@ -597,6 +602,17 @@ mod test {
         assert_eq!(f(99_999_999.0), "99999999.000000");
         assert_eq!(f(1.999_999_5), "1.999999");
         assert_eq!(f(1.999_999_6), "2.000000");
+
+        let f = |x| format_float_decimal(&BigDecimal::from_f64(x).unwrap(), 0, ForceDecimal::Yes);
+        assert_eq!(f(100.0), "100.");
+
+        // Test arbitrary precision: long inputs that would not fit in a f64, print 24 digits after decimal point.
+        let f = |x| format_float_decimal(&BigDecimal::from_str(x).unwrap(), 24, ForceDecimal::No);
+        assert_eq!(f("0.12345678901234567890"), "0.123456789012345678900000");
+        assert_eq!(
+            f("1234567890.12345678901234567890"),
+            "1234567890.123456789012345678900000"
+        );
     }
 
     #[test]
