@@ -9,7 +9,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
 use uucore::error::{UResult, USimpleError};
-use uucore::format::{parse_escape_only, EscapedChar, FormatChar};
+use uucore::format::{parse_escape_only, EscapedChar, FormatChar, OctalParsing};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("echo.md");
@@ -135,7 +135,7 @@ fn execute(
         }
 
         if escaped {
-            for item in parse_escape_only(bytes) {
+            for item in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
                 match item {
                     EscapedChar::End => return Ok(()),
                     c => c.write(&mut *stdout_lock)?,
