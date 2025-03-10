@@ -25,12 +25,6 @@ uucore = { workspace = true, features = ["libc", "utmpx", "uptime"] }
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true }
 
-[target.'cfg(target_os="windows")'.dependencies]
-windows-sys = { workspace = true, features = [
-  "Win32_System_RemoteDesktop",
-  "Wdk_System_SystemInformation",
-] }
-
 [[bin]]
 name = "uptime"
 path = "src/main.rs"

@@ -150,7 +150,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     if uptime < 0 {
         Err(UptimeError::SystemUptime)?;
     }
-    Ok(uptime as i64)
+    Ok(uptime as i64 / 1000)
 }
 
 /// Get the system uptime in a human-readable format
