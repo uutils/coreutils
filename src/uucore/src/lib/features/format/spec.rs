@@ -348,7 +348,7 @@ impl Spec {
             Self::EscapedString => {
                 let s = args.get_str();
                 let mut parsed = Vec::new();
-                for c in parse_escape_only(s.as_bytes()) {
+                for c in parse_escape_only(s.as_bytes(), None) {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
