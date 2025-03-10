@@ -300,6 +300,7 @@ fn print_seq(
                     ExtendedBigDecimal::MinusInfinity => f64::NEG_INFINITY,
                     ExtendedBigDecimal::MinusZero => -0.0,
                     ExtendedBigDecimal::Nan => f64::NAN,
+                    ExtendedBigDecimal::MinusNan => -f64::NAN,
                 };
                 f.fmt(&mut stdout, float)?;
             }
