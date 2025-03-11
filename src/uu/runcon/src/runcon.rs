@@ -7,7 +7,7 @@
 use clap::builder::ValueParser;
 use uucore::error::{UClapError, UError, UResult};
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 use uucore::{format_usage, help_about, help_section, help_usage};
 

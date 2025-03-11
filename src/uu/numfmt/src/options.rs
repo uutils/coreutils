@@ -167,7 +167,7 @@ impl FromStr for FormatOptions {
                 _ => {
                     return Err(format!(
                         "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
-                    ))
+                    ));
                 }
             }
         }

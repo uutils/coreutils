@@ -8,10 +8,10 @@
 use uucore::display::Quotable;
 pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::perms::{chown_base, options, GidUidOwnerFilter, IfFrom};
+use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
 use uucore::{format_usage, help_about, help_usage};
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -76,7 +76,7 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
                 return Err(USimpleError::new(
                     1,
                     format!("invalid user: '{}'", from_group),
-                ))
+                ));
             }
         }
     } else {

@@ -49,7 +49,9 @@ impl WithEnvVarSet {
     /// Save previous value assigned to key, set key=value
     fn new(key: &str, value: &str) -> Self {
         let previous_env_value = env::var(key);
-        env::set_var(key, value);
+        unsafe {
+            env::set_var(key, value);
+        }
         Self {
             _previous_var_key: String::from(key),
             _previous_var_value: previous_env_value,
@@ -61,9 +63,13 @@ impl Drop for WithEnvVarSet {
     /// Restore previous value now that this is being dropped by context
     fn drop(&mut self) {
         if let Ok(ref prev_value) = self._previous_var_value {
-            env::set_var(&self._previous_var_key, prev_value);
+            unsafe {
+                env::set_var(&self._previous_var_key, prev_value);
+            }
         } else {
-            env::remove_var(&self._previous_var_key);
+            unsafe {
+                env::remove_var(&self._previous_var_key);
+            }
         }
     }
 }
@@ -148,7 +154,7 @@ pub fn instantiate_current_writer(
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
         }
-        Some(ref filter_command) => Ok(BufWriter::new(Box::new(
+        Some(filter_command) => Ok(BufWriter::new(Box::new(
             // spawn a shell command and write to it
             FilterWriter::new(filter_command, filename)?,
         ) as Box<dyn Write>)),

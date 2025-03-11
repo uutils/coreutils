@@ -18,7 +18,7 @@ use indicatif::ProgressBar;
 use uucore::display::Quotable;
 use uucore::error::UIoError;
 use uucore::fs::{
-    canonicalize, path_ends_with_terminator, FileInformation, MissingHandling, ResolveMode,
+    FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
 use uucore::show;
 use uucore::show_error;
@@ -26,8 +26,8 @@ use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, CopyResult, Error,
-    Options,
+    CopyResult, Error, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
+    copy_link,
 };
 
 /// Ensure a Windows path starts with a `\\?`.

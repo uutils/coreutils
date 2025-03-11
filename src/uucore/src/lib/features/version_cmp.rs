@@ -22,10 +22,10 @@ fn version_non_digit_cmp(a: &str, b: &str) -> Ordering {
             (None, Some(_)) => return Ordering::Less,
             (Some(_), None) => return Ordering::Greater,
             (Some(c1), Some(c2)) if c1.is_ascii_alphabetic() && !c2.is_ascii_alphabetic() => {
-                return Ordering::Less
+                return Ordering::Less;
             }
             (Some(c1), Some(c2)) if !c1.is_ascii_alphabetic() && c2.is_ascii_alphabetic() => {
-                return Ordering::Greater
+                return Ordering::Greater;
             }
             (Some(c1), Some(c2)) => return c1.cmp(&c2),
         }

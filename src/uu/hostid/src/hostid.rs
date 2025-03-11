@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) gethostid
 
-use clap::{crate_version, Command};
+use clap::{Command, crate_version};
 use libc::c_long;
 use uucore::{error::UResult, format_usage, help_about, help_usage};
 
@@ -13,7 +13,7 @@ const USAGE: &str = help_usage!("hostid.md");
 const ABOUT: &str = help_about!("hostid.md");
 
 // currently rust libc interface doesn't include gethostid
-extern "C" {
+unsafe extern "C" {
     pub fn gethostid() -> c_long;
 }
 

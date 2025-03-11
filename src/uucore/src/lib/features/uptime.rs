@@ -51,8 +51,8 @@ pub fn get_formatted_time() -> String {
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(target_os = "openbsd")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
-    use libc::clock_gettime;
     use libc::CLOCK_BOOTTIME;
+    use libc::clock_gettime;
 
     use libc::c_int;
     use libc::timespec;
@@ -209,7 +209,7 @@ pub fn get_nusers() -> usize {
 /// Returns the number of users currently logged in if successful, otherwise 0
 #[cfg(target_os = "openbsd")]
 pub fn get_nusers(file: &str) -> usize {
-    use utmp_classic::{parse_from_path, UtmpEntry};
+    use utmp_classic::{UtmpEntry, parse_from_path};
 
     let mut nusers = 0;
 

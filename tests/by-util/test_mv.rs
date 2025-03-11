@@ -1377,13 +1377,15 @@ fn test_mv_errors() {
     // $ at.mkdir dir && at.touch file
     // $ mv dir file
     // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
-    assert!(!scene
-        .ucmd()
-        .arg(dir)
-        .arg(file_a)
-        .fails()
-        .stderr_str()
-        .is_empty());
+    assert!(
+        !scene
+            .ucmd()
+            .arg(dir)
+            .arg(file_a)
+            .fails()
+            .stderr_str()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1448,15 +1450,17 @@ fn test_mv_interactive_error() {
     // $ at.mkdir dir && at.touch file
     // $ mv -i dir file
     // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
-    assert!(!scene
-        .ucmd()
-        .arg("-i")
-        .arg(dir)
-        .arg(file_a)
-        .pipe_in("y")
-        .fails()
-        .stderr_str()
-        .is_empty());
+    assert!(
+        !scene
+            .ucmd()
+            .arg("-i")
+            .arg(dir)
+            .arg(file_a)
+            .pipe_in("y")
+            .fails()
+            .stderr_str()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1581,13 +1585,17 @@ fn test_mv_seen_file() {
     let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
 
     #[cfg(not(unix))]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c\\f' with 'b/f'")
+    );
     #[cfg(unix)]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c/f' with 'b/f'")
+    );
 
     // a/f has been moved into c/f
     assert!(at.plus("c").join("f").exists());
@@ -1611,13 +1619,17 @@ fn test_mv_seen_multiple_files_to_directory() {
 
     let result = ts.ucmd().arg("a/f").arg("b/f").arg("b/g").arg("c").fails();
     #[cfg(not(unix))]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c\\f' with 'b/f'")
+    );
     #[cfg(unix)]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c/f' with 'b/f'")
+    );
 
     assert!(!at.plus("a").join("f").exists());
     assert!(at.plus("b").join("f").exists());
@@ -1756,7 +1768,7 @@ fn test_move_should_not_fallback_to_copy() {
 mod inter_partition_copying {
     use crate::common::util::TestScenario;
     use std::fs::{read_to_string, set_permissions, write};
-    use std::os::unix::fs::{symlink, PermissionsExt};
+    use std::os::unix::fs::{PermissionsExt, symlink};
     use tempfile::TempDir;
 
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.

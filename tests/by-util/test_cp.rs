@@ -1310,13 +1310,15 @@ fn test_cp_deref() {
         .join(TEST_COPY_TO_FOLDER)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
     // unlike -P/--no-deref, we expect a file, not a link
-    assert!(at.file_exists(
-        path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.file_exists(
+            path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
@@ -1347,13 +1349,15 @@ fn test_cp_no_deref() {
         .subdir
         .join(TEST_COPY_TO_FOLDER)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    assert!(at.is_symlink(
-        &path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.is_symlink(
+            &path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
@@ -1394,14 +1398,16 @@ fn test_cp_no_deref_link_onto_link() {
         .succeeds();
 
     // Ensure that the target of the destination was not modified.
-    assert!(!at
-        .symlink_metadata(TEST_HELLO_WORLD_DEST)
-        .file_type()
-        .is_symlink());
-    assert!(at
-        .symlink_metadata(TEST_HELLO_WORLD_DEST_SYMLINK)
-        .file_type()
-        .is_symlink());
+    assert!(
+        !at.symlink_metadata(TEST_HELLO_WORLD_DEST)
+            .file_type()
+            .is_symlink()
+    );
+    assert!(
+        at.symlink_metadata(TEST_HELLO_WORLD_DEST_SYMLINK)
+            .file_type()
+            .is_symlink()
+    );
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST_SYMLINK), "Hello, World!\n");
 }
 
@@ -2033,13 +2039,15 @@ fn test_cp_deref_folder_to_folder() {
         .subdir
         .join(TEST_COPY_TO_FOLDER_NEW)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    assert!(at.file_exists(
-        path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.file_exists(
+            path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
 
     let path_to_new = at.subdir.join(TEST_COPY_TO_FOLDER_NEW_FILE);
 
@@ -2129,13 +2137,15 @@ fn test_cp_no_deref_folder_to_folder() {
         .subdir
         .join(TEST_COPY_TO_FOLDER_NEW)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    assert!(at.is_symlink(
-        &path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.is_symlink(
+            &path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
 
     let path_to_new = at.subdir.join(TEST_COPY_TO_FOLDER_NEW_FILE);
 
@@ -2227,18 +2237,22 @@ fn test_cp_archive_recursive() {
     assert!(at.file_exists(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("1")));
     assert!(at.file_exists(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("2")));
 
-    assert!(at.is_symlink(
-        &at.subdir
-            .join(TEST_COPY_TO_FOLDER_NEW)
-            .join("1.link")
-            .to_string_lossy()
-    ));
-    assert!(at.is_symlink(
-        &at.subdir
-            .join(TEST_COPY_TO_FOLDER_NEW)
-            .join("2.link")
-            .to_string_lossy()
-    ));
+    assert!(
+        at.is_symlink(
+            &at.subdir
+                .join(TEST_COPY_TO_FOLDER_NEW)
+                .join("1.link")
+                .to_string_lossy()
+        )
+    );
+    assert!(
+        at.is_symlink(
+            &at.subdir
+                .join(TEST_COPY_TO_FOLDER_NEW)
+                .join("2.link")
+                .to_string_lossy()
+        )
+    );
 }
 
 #[test]
@@ -3947,13 +3961,17 @@ fn test_cp_seen_file() {
 
     let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
     #[cfg(not(unix))]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c\\f' with 'b/f'")
+    );
     #[cfg(unix)]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c/f' with 'b/f'")
+    );
 
     assert!(at.plus("c").join("f").exists());
 
@@ -6046,11 +6064,13 @@ fn test_cp_preserve_xattr_readonly_source() {
     );
 
     at.set_readonly(source_file);
-    assert!(scene
-        .fixtures
-        .metadata(source_file)
-        .permissions()
-        .readonly());
+    assert!(
+        scene
+            .fixtures
+            .metadata(source_file)
+            .permissions()
+            .readonly()
+    );
 
     scene
         .ucmd()

@@ -5,7 +5,7 @@ authors = ["nicoo <nicoo@debian.org>"]
 license = "MIT"
 description = "Benchmarks for the uu_factor integer factorization tool"
 homepage = "https://github.com/uutils/coreutils"
-edition = "2021"
+edition = "2024"
 
 [workspace]
 

@@ -5,13 +5,13 @@
 
 // spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shufable rvec fdata
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use memchr::memchr_iter;
 use rand::prelude::{IndexedRandom, SliceRandom};
 use rand::{Rng, RngCore};
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, Error, Read, Write};
+use std::io::{BufReader, BufWriter, Error, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};

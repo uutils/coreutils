@@ -16,7 +16,7 @@
 use std::fmt;
 use std::io::Read;
 
-use rand_core::{impls, RngCore};
+use rand_core::{RngCore, impls};
 
 /// An RNG that reads random bytes straight from any type supporting
 /// [`std::io::Read`], for example files.

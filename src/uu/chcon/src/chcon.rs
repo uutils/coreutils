@@ -9,7 +9,7 @@ use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{display::Quotable, format_usage, help_about, help_usage, show_error, show_warning};
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;

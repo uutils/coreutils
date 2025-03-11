@@ -14,11 +14,11 @@
 )]
 
 use crate::common::random::{AlphanumericNewline, RandomizedString};
+use crate::common::util::TestScenario;
 #[cfg(unix)]
 use crate::common::util::expected_result;
 #[cfg(not(windows))]
 use crate::common::util::is_ci;
-use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;

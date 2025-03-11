@@ -84,7 +84,7 @@ pub(crate) fn copy_on_write(
         // support COW).
         match reflink_mode {
             ReflinkMode::Always => {
-                return Err(format!("failed to clone {source:?} from {dest:?}: {error}").into())
+                return Err(format!("failed to clone {source:?} from {dest:?}: {error}").into());
             }
             _ => {
                 copy_debug.reflink = OffloadReflinkDebug::Yes;

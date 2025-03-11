@@ -10,7 +10,7 @@ use std::{
 };
 
 use crate::{
-    native_int_str::{to_native_int_representation, NativeCharInt, NativeIntStr},
+    native_int_str::{NativeCharInt, NativeIntStr, to_native_int_representation},
     string_parser::{Chunk, Error, StringParser},
 };
 

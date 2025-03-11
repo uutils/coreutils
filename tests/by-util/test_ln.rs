@@ -337,11 +337,13 @@ fn test_symlink_overwrite_dir_fail() {
     at.touch(path_a);
     at.mkdir(path_b);
 
-    assert!(!ucmd
-        .args(&["-s", "-T", path_a, path_b])
-        .fails()
-        .stderr_str()
-        .is_empty());
+    assert!(
+        !ucmd
+            .args(&["-s", "-T", path_a, path_b])
+            .fails()
+            .stderr_str()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -391,11 +393,13 @@ fn test_symlink_target_only() {
 
     at.mkdir(dir);
 
-    assert!(!ucmd
-        .args(&["-s", "-t", dir])
-        .fails()
-        .stderr_str()
-        .is_empty());
+    assert!(
+        !ucmd
+            .args(&["-s", "-t", dir])
+            .fails()
+            .stderr_str()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -797,13 +801,17 @@ fn test_ln_seen_file() {
     let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
 
     #[cfg(not(unix))]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c\\f' with 'b/f'")
+    );
     #[cfg(unix)]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c/f' with 'b/f'")
+    );
 
     assert!(at.plus("c").join("f").exists());
     // b/f still exists
