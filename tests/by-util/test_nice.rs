@@ -28,6 +28,7 @@ fn test_negative_adjustment() {
         res.stderr_str()
             .starts_with("nice: warning: setpriority: Permission denied")
     );
+}
 
 #[test]
 fn test_adjustment_with_no_command_should_error() {
