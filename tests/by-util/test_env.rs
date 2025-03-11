@@ -210,7 +210,7 @@ fn test_file_option() {
     let out = new_ucmd!()
         .arg("-f")
         .arg("vars.conf.txt")
-        .run()
+        .succeeds()
         .stdout_move_str();
 
     assert_eq!(
@@ -227,7 +227,7 @@ fn test_combined_file_set() {
         .arg("-f")
         .arg("vars.conf.txt")
         .arg("FOO=bar.alt")
-        .run()
+        .succeeds()
         .stdout_move_str();
 
     assert_eq!(out.lines().filter(|&line| line == "FOO=bar.alt").count(), 1);
@@ -259,7 +259,7 @@ fn test_unset_invalid_variables() {
     // Cannot test input with \0 in it, since output will also contain \0. rlimit::prlimit fails
     // with this error: Error { kind: InvalidInput, message: "nul byte found in provided data" }
     for var in ["", "a=b"] {
-        new_ucmd!().arg("-u").arg(var).run().stderr_only(format!(
+        new_ucmd!().arg("-u").arg(var).fails().stderr_only(format!(
             "env: cannot unset {}: Invalid argument\n",
             var.quote()
         ));
@@ -268,14 +268,17 @@ fn test_unset_invalid_variables() {
 
 #[test]
 fn test_single_name_value_pair() {
-    let out = new_ucmd!().arg("FOO=bar").run();
-
-    assert!(out.stdout_str().lines().any(|line| line == "FOO=bar"));
+    new_ucmd!()
+        .arg("FOO=bar")
+        .succeeds()
+        .stdout_str()
+        .lines()
+        .any(|line| line == "FOO=bar");
 }
 
 #[test]
 fn test_multiple_name_value_pairs() {
-    let out = new_ucmd!().arg("FOO=bar").arg("ABC=xyz").run();
+    let out = new_ucmd!().arg("FOO=bar").arg("ABC=xyz").succeeds();
 
     assert_eq!(
         out.stdout_str()
@@ -299,7 +302,7 @@ fn test_empty_name() {
     new_ucmd!()
         .arg("-i")
         .arg("=xyz")
-        .run()
+        .succeeds()
         .stderr_only("env: warning: no name specified for value 'xyz'\n");
 }
 

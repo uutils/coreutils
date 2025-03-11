@@ -75,6 +75,7 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
   "Win32_Storage_FileSystem",
   "Win32_Foundation",
   "Win32_System_RemoteDesktop",
+  "Win32_System_SystemInformation",
   "Win32_System_WindowsProgramming",
 ] }
 

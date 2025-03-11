@@ -265,7 +265,7 @@ fn test_with_stdin() {
     scenario
         .pipe_in_fixture("stdin.log")
         .args(&["--pages=1:2", "-n", "-"])
-        .run()
+        .succeeds()
         .stdout_is_templated_fixture_any(
             expected_file_path,
             &valid_last_modified_template_vars(start),
@@ -452,7 +452,7 @@ fn test_with_join_lines_option() {
     let start = Utc::now();
     scenario
         .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
-        .run()
+        .succeeds()
         .stdout_is_templated_fixture_any(
             expected_file_path,
             &valid_last_modified_template_vars(start),

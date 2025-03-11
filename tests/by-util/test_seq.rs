@@ -181,7 +181,7 @@ fn test_width_invalid_float() {
 fn test_count_up() {
     new_ucmd!()
         .args(&["10"])
-        .run()
+        .succeeds()
         .stdout_is("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
 }
 
@@ -189,11 +189,11 @@ fn test_count_up() {
 fn test_count_down() {
     new_ucmd!()
         .args(&["--", "5", "-1", "1"])
-        .run()
+        .succeeds()
         .stdout_is("5\n4\n3\n2\n1\n");
     new_ucmd!()
         .args(&["5", "-1", "1"])
-        .run()
+        .succeeds()
         .stdout_is("5\n4\n3\n2\n1\n");
 }
 
@@ -201,19 +201,19 @@ fn test_count_down() {
 fn test_separator_and_terminator() {
     new_ucmd!()
         .args(&["-s", ",", "-t", "!", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2,3,4,5,6!");
     new_ucmd!()
         .args(&["-s", ",", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2,3,4,5,6\n");
     new_ucmd!()
         .args(&["-s", "\n", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2\n3\n4\n5\n6\n");
     new_ucmd!()
         .args(&["-s", "\\n", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2\\n3\\n4\\n5\\n6\n");
 }
 
@@ -223,7 +223,7 @@ fn test_equalize_widths() {
     for arg in args {
         new_ucmd!()
             .args(&[arg, "5", "10"])
-            .run()
+            .succeeds()
             .stdout_is("05\n06\n07\n08\n09\n10\n");
     }
 }
@@ -255,7 +255,7 @@ fn test_big_numbers() {
 fn test_count_up_floats() {
     new_ucmd!()
         .args(&["10.0"])
-        .run()
+        .succeeds()
         .stdout_is("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
 }
 
@@ -263,11 +263,11 @@ fn test_count_up_floats() {
 fn test_count_down_floats() {
     new_ucmd!()
         .args(&["--", "5", "-1.0", "1"])
-        .run()
+        .succeeds()
         .stdout_is("5.0\n4.0\n3.0\n2.0\n1.0\n");
     new_ucmd!()
         .args(&["5", "-1", "1.0"])
-        .run()
+        .succeeds()
         .stdout_is("5\n4\n3\n2\n1\n");
 }
 
@@ -275,7 +275,7 @@ fn test_count_down_floats() {
 fn test_separator_and_terminator_floats() {
     new_ucmd!()
         .args(&["-s", ",", "-t", "!", "2.0", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2.0,3.0,4.0,5.0,6.0!");
 }
 
@@ -283,7 +283,7 @@ fn test_separator_and_terminator_floats() {
 fn test_equalize_widths_floats() {
     new_ucmd!()
         .args(&["-w", "5", "10.0"])
-        .run()
+        .succeeds()
         .stdout_is("05\n06\n07\n08\n09\n10\n");
 }
 

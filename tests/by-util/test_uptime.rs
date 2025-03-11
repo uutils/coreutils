@@ -263,7 +263,7 @@ fn test_uptime_with_dir() {
 fn test_uptime_check_users_openbsd() {
     new_ucmd!()
         .args(&["openbsd_utmp"])
-        .run()
+        .succeeds()
         .stdout_contains("4 users");
 }
 

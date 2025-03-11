@@ -503,8 +503,7 @@ fn test_is_not_empty() {
 fn test_nonexistent_file_size_test_is_false() {
     new_ucmd!()
         .args(&["-s", "nonexistent_file"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -613,8 +612,7 @@ fn test_parenthesized_literal() {
             .arg("(")
             .arg(test)
             .arg(")")
-            .run()
-            .code_is(1);
+            .fails_with_code(1);
     }
 }
 
@@ -828,8 +826,7 @@ fn test_inverted_parenthetical_bool_op_precedence() {
 fn test_dangling_parenthesis() {
     new_ucmd!()
         .args(&["(", "(", "a", "!=", "b", ")", "-o", "-n", "c"])
-        .run()
-        .code_is(2);
+        .fails_with_code(2);
     new_ucmd!()
         .args(&["(", "(", "a", "!=", "b", ")", "-o", "-n", "c", ")"])
         .succeeds();

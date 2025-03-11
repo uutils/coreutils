@@ -33,7 +33,7 @@ fn test_to_upper() {
     new_ucmd!()
         .args(&["a-z", "A-Z"])
         .pipe_in("!abcd!")
-        .run()
+        .succeeds()
         .stdout_is("!ABCD!");
 }
 
@@ -42,7 +42,7 @@ fn test_small_set2() {
     new_ucmd!()
         .args(&["0-9", "X"])
         .pipe_in("@0123456789")
-        .run()
+        .succeeds()
         .stdout_is("@XXXXXXXXXX");
 }
 
@@ -60,7 +60,7 @@ fn test_delete() {
     new_ucmd!()
         .args(&["-d", "a-z"])
         .pipe_in("aBcD")
-        .run()
+        .succeeds()
         .stdout_is("BD");
 }
 
@@ -95,7 +95,7 @@ fn test_delete_complement() {
     new_ucmd!()
         .args(&["-d", "-c", "a-z"])
         .pipe_in("aBcD")
-        .run()
+        .succeeds()
         .stdout_is("ac");
 }
 
@@ -118,7 +118,7 @@ fn test_complement1() {
     new_ucmd!()
         .args(&["-c", "a", "X"])
         .pipe_in("ab")
-        .run()
+        .succeeds()
         .stdout_is("aX");
 }
 
@@ -135,7 +135,7 @@ fn test_complement2() {
     new_ucmd!()
         .args(&["-c", "0-9", "x"])
         .pipe_in("Phone: 01234 567890")
-        .run()
+        .succeeds()
         .stdout_is("xxxxxxx01234x567890");
 }
 
@@ -144,7 +144,7 @@ fn test_complement3() {
     new_ucmd!()
         .args(&["-c", "abcdefgh", "123"])
         .pipe_in("the cat and the bat")
-        .run()
+        .succeeds()
         .stdout_is("3he3ca33a3d33he3ba3");
 }
 
@@ -155,7 +155,7 @@ fn test_complement4() {
     new_ucmd!()
         .args(&["-c", "0-@", "*-~"])
         .pipe_in("0x1y2z3")
-        .run()
+        .succeeds()
         .stdout_is("0~1~2~3");
 }
 
@@ -166,7 +166,7 @@ fn test_complement5() {
     new_ucmd!()
         .args(&["-c", r"\0-@", "*-~"])
         .pipe_in("0x1y2z3")
-        .run()
+        .succeeds()
         .stdout_is("0a1b2c3");
 }
 
@@ -236,7 +236,7 @@ fn test_squeeze_complement_two_sets() {
     new_ucmd!()
         .args(&["-sc", "a", "_"])
         .pipe_in("test a aa with 3 ___ spaaaces +++") // spell-checker:disable-line
-        .run()
+        .succeeds()
         .stdout_is("_a_aa_aaa_");
 }
 
@@ -245,7 +245,7 @@ fn test_translate_and_squeeze() {
     new_ucmd!()
         .args(&["-s", "x", "y"])
         .pipe_in("xx")
-        .run()
+        .succeeds()
         .stdout_is("y");
 }
 
@@ -254,7 +254,7 @@ fn test_translate_and_squeeze_multiple_lines() {
     new_ucmd!()
         .args(&["-s", "x", "y"])
         .pipe_in("xxaax\nxaaxx") // spell-checker:disable-line
-        .run()
+        .succeeds()
         .stdout_is("yaay\nyaay"); // spell-checker:disable-line
 }
 
@@ -272,7 +272,7 @@ fn test_delete_and_squeeze() {
     new_ucmd!()
         .args(&["-ds", "a-z", "A-Z"])
         .pipe_in("abBcB")
-        .run()
+        .succeeds()
         .stdout_is("B");
 }
 
@@ -281,7 +281,7 @@ fn test_delete_and_squeeze_complement() {
     new_ucmd!()
         .args(&["-dsc", "a-z", "A-Z"])
         .pipe_in("abBcB")
-        .run()
+        .succeeds()
         .stdout_is("abc");
 }
 
@@ -299,7 +299,7 @@ fn test_set1_longer_than_set2() {
     new_ucmd!()
         .args(&["abc", "xy"])
         .pipe_in("abcde")
-        .run()
+        .succeeds()
         .stdout_is("xyyde"); // spell-checker:disable-line
 }
 
@@ -308,7 +308,7 @@ fn test_set1_shorter_than_set2() {
     new_ucmd!()
         .args(&["ab", "xyz"])
         .pipe_in("abcde")
-        .run()
+        .succeeds()
         .stdout_is("xycde");
 }
 
@@ -336,7 +336,7 @@ fn test_truncate_with_set1_shorter_than_set2() {
     new_ucmd!()
         .args(&["-t", "ab", "xyz"])
         .pipe_in("abcde")
-        .run()
+        .succeeds()
         .stdout_is("xycde");
 }
 

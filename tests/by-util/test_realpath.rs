@@ -232,7 +232,7 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
     ucmd.arg("dir1/foo1")
         .arg("dir1/foo2")
         .arg("dir1/foo3")
-        .run()
+        .fails()
         .stdout_contains("/dir2/bar\n")
         .stdout_contains("/dir2/baz\n")
         .stderr_is("realpath: dir1/foo2: No such file or directory\n");
@@ -241,7 +241,7 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
     ucmd.arg("dir1/foo1")
         .arg("dir1/foo2")
         .arg("dir1/foo3")
-        .run()
+        .fails()
         .stdout_contains("\\dir2\\bar\n")
         .stdout_contains("\\dir2\\baz\n")
         .stderr_is("realpath: dir1/foo2: No such file or directory\n");
@@ -264,7 +264,7 @@ fn test_realpath_when_symlink_part_is_missing() {
     let expect2 = format!("dir2{MAIN_SEPARATOR}baz");
 
     ucmd.args(&["dir1/foo1", "dir1/foo2", "dir1/foo3", "dir1/foo4"])
-        .run()
+        .fails()
         .stdout_contains(expect1 + "\n")
         .stdout_contains(expect2 + "\n")
         .stderr_contains("realpath: dir1/foo2: No such file or directory\n")

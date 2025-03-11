@@ -30,11 +30,6 @@ pub mod options {
     pub static PATH: &str = "path";
 }
 
-#[cfg(windows)]
-extern "C" {
-    fn GetTickCount() -> u32;
-}
-
 #[derive(Debug, Error)]
 pub enum UptimeError {
     // io::Error wrapper

@@ -140,17 +140,19 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
 
 /// Get the system uptime
 ///
+/// # Arguments
+///
+/// boot_time will be ignored, pass None.
+///
 /// # Returns
 ///
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(windows)]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     use windows_sys::Win32::System::SystemInformation::GetTickCount;
+    // SAFETY: always return u32
     let uptime = unsafe { GetTickCount() };
-    if uptime < 0 {
-        Err(UptimeError::SystemUptime)?;
-    }
-    Ok(uptime as i64)
+    Ok(uptime as i64 / 1000)
 }
 
 /// Get the system uptime in a human-readable format
@@ -244,6 +246,7 @@ pub fn get_nusers() -> usize {
 
     let mut num_user = 0;
 
+    // SAFETY: WTS_CURRENT_SERVER_HANDLE is a valid handle
     unsafe {
         let mut session_info_ptr = ptr::null_mut();
         let mut session_count = 0;
@@ -335,6 +338,7 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     use libc::getloadavg;
 
     let mut avg: [c_double; 3] = [0.0; 3];
+    // SAFETY: checked whether it returns -1
     let loads: i32 = unsafe { getloadavg(avg.as_mut_ptr(), 3) };
 
     if loads == -1 {

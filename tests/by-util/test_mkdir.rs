@@ -36,7 +36,7 @@ fn test_mkdir_verbose() {
     new_ucmd!()
         .arg("test_dir")
         .arg("-v")
-        .run()
+        .succeeds()
         .stdout_is(expected);
 }
 

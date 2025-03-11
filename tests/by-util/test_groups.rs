@@ -19,7 +19,7 @@ fn test_invalid_arg() {
 #[cfg(unix)]
 fn test_groups() {
     let ts = TestScenario::new(util_name!());
-    let result = ts.ucmd().run();
+    let result = ts.ucmd().succeeds();
     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
 
     result
@@ -34,7 +34,7 @@ fn test_groups_username() {
     let test_users = [&whoami()[..]];
 
     let ts = TestScenario::new(util_name!());
-    let result = ts.ucmd().args(&test_users).run();
+    let result = ts.ucmd().args(&test_users).succeeds();
     let exp_result = unwrap_or_return!(expected_result(&ts, &test_users));
 
     result
@@ -53,7 +53,7 @@ fn test_groups_username_multiple() {
     let test_users = ["root", "man", "postfix", "sshd", &whoami()];
 
     let ts = TestScenario::new(util_name!());
-    let result = ts.ucmd().args(&test_users).run();
+    let result = ts.ucmd().args(&test_users).fails();
     let exp_result = unwrap_or_return!(expected_result(&ts, &test_users));
 
     result

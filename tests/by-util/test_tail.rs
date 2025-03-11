@@ -74,7 +74,7 @@ fn test_invalid_arg() {
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_stdin_default.expected")
         .no_stderr();
 }
@@ -84,7 +84,7 @@ fn test_stdin_explicit() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)
         .arg("-")
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_stdin_default.expected")
         .no_stderr();
 }
@@ -109,16 +109,13 @@ fn test_stdin_redirect_file() {
 
     ts.ucmd()
         .set_stdin(File::open(at.plus("f")).unwrap())
-        .run()
-        .stdout_is("foo")
-        .succeeded();
+        .succeeds()
+        .stdout_is("foo");
     ts.ucmd()
         .set_stdin(File::open(at.plus("f")).unwrap())
         .arg("-v")
-        .run()
-        .no_stderr()
-        .stdout_is("==> standard input <==\nfoo")
-        .succeeded();
+        .succeeds()
+        .stdout_only("==> standard input <==\nfoo");
 
     let mut p = ts
         .ucmd()
@@ -145,12 +142,7 @@ fn test_stdin_redirect_offset() {
     let mut fh = File::open(at.plus("k")).unwrap();
     fh.seek(SeekFrom::Start(2)).unwrap();
 
-    ts.ucmd()
-        .set_stdin(fh)
-        .run()
-        .no_stderr()
-        .stdout_is("2\n")
-        .succeeded();
+    ts.ucmd().set_stdin(fh).succeeds().stdout_only("2\n");
 }
 
 #[test]
@@ -170,12 +162,10 @@ fn test_stdin_redirect_offset2() {
     ts.ucmd()
         .set_stdin(fh)
         .args(&["k", "-", "l", "m"])
-        .run()
-        .no_stderr()
-        .stdout_is(
+        .succeeds()
+        .stdout_only(
             "==> k <==\n1\n2\n\n==> standard input <==\n2\n\n==> l <==\n3\n4\n\n==> m <==\n5\n6\n",
-        )
-        .succeeded();
+        );
 }
 
 #[test]
@@ -183,18 +173,8 @@ fn test_nc_0_wo_follow() {
     // verify that -[nc]0 without -f, exit without reading
 
     let ts = TestScenario::new(util_name!());
-    ts.ucmd()
-        .args(&["-n0", "missing"])
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .succeeded();
-    ts.ucmd()
-        .args(&["-c0", "missing"])
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .succeeded();
+    ts.ucmd().args(&["-n0", "missing"]).succeeds().no_output();
+    ts.ucmd().args(&["-c0", "missing"]).succeeds().no_output();
 }
 
 #[test]
@@ -212,16 +192,12 @@ fn test_nc_0_wo_follow2() {
 
     ts.ucmd()
         .args(&["-n0", "unreadable"])
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .succeeded();
+        .succeeds()
+        .no_output();
     ts.ucmd()
         .args(&["-c0", "unreadable"])
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .succeeded();
+        .succeeds()
+        .no_output();
 }
 
 // TODO: Add similar test for windows
@@ -410,7 +386,7 @@ fn test_follow_bad_fd() {
 fn test_single_default() {
     new_ucmd!()
         .arg(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_single_default.expected");
 }
 
@@ -420,7 +396,7 @@ fn test_n_greater_than_number_of_lines() {
         .arg("-n")
         .arg("99999999")
         .arg(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture(FOOBAR_TXT);
 }
 
@@ -429,7 +405,7 @@ fn test_null_default() {
     new_ucmd!()
         .arg("-z")
         .arg(FOOBAR_WITH_NULL_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_with_null_default.expected");
 }
 
@@ -606,7 +582,7 @@ fn test_follow_stdin_pipe() {
     new_ucmd!()
         .arg("-f")
         .pipe_in_fixture(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("follow_stdin.expected")
         .no_stderr();
 }
@@ -727,7 +703,7 @@ fn test_single_big_args() {
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
-    ucmd.arg(FILE).arg("-n").arg(format!("{N_ARG}")).run();
+    ucmd.arg(FILE).arg("-n").arg(format!("{N_ARG}")).succeeds();
     // .stdout_is(at.read(EXPECTED_FILE));
 }
 
@@ -737,7 +713,7 @@ fn test_bytes_single() {
         .arg("-c")
         .arg("10")
         .arg(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_bytes_single.expected");
 }
 
@@ -747,7 +723,7 @@ fn test_bytes_stdin() {
         .pipe_in_fixture(FOOBAR_TXT)
         .arg("-c")
         .arg("13")
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_bytes_stdin.expected")
         .no_stderr();
 }
@@ -813,7 +789,7 @@ fn test_lines_with_size_suffix() {
     ucmd.arg(FILE)
         .arg("-n")
         .arg("2K")
-        .run()
+        .succeeds()
         .stdout_is_fixture(EXPECTED_FILE);
 }
 
@@ -822,7 +798,7 @@ fn test_multiple_input_files() {
     new_ucmd!()
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_is_fixture("foobar_follow_multiple.expected");
 }
@@ -834,7 +810,7 @@ fn test_multiple_input_files_missing() {
         .arg("missing1")
         .arg(FOOBAR_2_TXT)
         .arg("missing2")
-        .run()
+        .fails()
         .stdout_is_fixture("foobar_follow_multiple.expected")
         .stderr_is(
             "tail: cannot open 'missing1' for reading: No such file or directory\n\
@@ -886,7 +862,7 @@ fn test_multiple_input_files_with_suppressed_headers() {
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
         .arg("-q")
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_multiple_quiet.expected");
 }
 
@@ -897,7 +873,7 @@ fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers
         .arg(FOOBAR_2_TXT)
         .arg("-v")
         .arg("-q")
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_multiple_quiet.expected");
 }
 
@@ -949,13 +925,13 @@ fn test_dir_follow_retry() {
 
 #[test]
 fn test_negative_indexing() {
-    let positive_lines_index = new_ucmd!().arg("-n").arg("5").arg(FOOBAR_TXT).run();
+    let positive_lines_index = new_ucmd!().arg("-n").arg("5").arg(FOOBAR_TXT).succeeds();
 
-    let negative_lines_index = new_ucmd!().arg("-n").arg("-5").arg(FOOBAR_TXT).run();
+    let negative_lines_index = new_ucmd!().arg("-n").arg("-5").arg(FOOBAR_TXT).succeeds();
 
-    let positive_bytes_index = new_ucmd!().arg("-c").arg("20").arg(FOOBAR_TXT).run();
+    let positive_bytes_index = new_ucmd!().arg("-c").arg("20").arg(FOOBAR_TXT).succeeds();
 
-    let negative_bytes_index = new_ucmd!().arg("-c").arg("-20").arg(FOOBAR_TXT).run();
+    let negative_bytes_index = new_ucmd!().arg("-c").arg("-20").arg(FOOBAR_TXT).succeeds();
 
     assert_eq!(positive_lines_index.stdout(), negative_lines_index.stdout());
     assert_eq!(positive_bytes_index.stdout(), negative_bytes_index.stdout());
@@ -1172,8 +1148,10 @@ fn test_retry1() {
     let file_name = "FILE";
     at.touch(file_name);
 
-    let result = ts.ucmd().arg(file_name).arg("--retry").run();
-    result
+    ts.ucmd()
+        .arg(file_name)
+        .arg("--retry")
+        .succeeds()
         .stderr_is("tail: warning: --retry ignored; --retry is useful only when following\n")
         .code_is(0);
 }
@@ -1186,11 +1164,14 @@ fn test_retry2() {
     let ts = TestScenario::new(util_name!());
     let missing = "missing";
 
-    let result = ts.ucmd().arg(missing).arg("--retry").fails_with_code(1);
-    result.stderr_is(
-        "tail: warning: --retry ignored; --retry is useful only when following\n\
+    ts.ucmd()
+        .arg(missing)
+        .arg("--retry")
+        .fails_with_code(1)
+        .stderr_is(
+            "tail: warning: --retry ignored; --retry is useful only when following\n\
                 tail: cannot open 'missing' for reading: No such file or directory\n",
-    );
+        );
 }
 
 #[test]
@@ -2565,7 +2546,7 @@ fn test_presume_input_pipe_default() {
     new_ucmd!()
         .arg("---presume-input-pipe")
         .pipe_in_fixture(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_stdin_default.expected")
         .no_stderr();
 }
@@ -3349,7 +3330,7 @@ fn test_seek_bytes_backward_outside_file() {
         .arg("-c")
         .arg("100")
         .arg(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture(FOOBAR_TXT);
 }
 
@@ -3359,7 +3340,7 @@ fn test_seek_bytes_forward_outside_file() {
         .arg("-c")
         .arg("+100")
         .arg(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is("");
 }
 
@@ -3626,8 +3607,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "-", "empty"])
         .set_stdin(File::open(at.plus("fifo")).unwrap())
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
@@ -3637,8 +3617,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "-", "empty"])
         .pipe_in("")
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> empty <==\n\
@@ -3648,8 +3627,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "empty", "-"])
         .pipe_in("")
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> empty <==\n\
@@ -3660,8 +3638,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "empty", "-"])
         .set_stdin(File::open(at.plus("fifo")).unwrap())
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
@@ -3672,8 +3649,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "-", "data"])
         .pipe_in("pipe data")
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> data <==\n\
@@ -3684,8 +3660,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "data", "-"])
         .pipe_in("pipe data")
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
@@ -3695,8 +3670,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "-", "-"])
         .pipe_in("pipe data")
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
@@ -3706,8 +3680,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "-", "-"])
         .set_stdin(File::open(at.plus("fifo")).unwrap())
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 }
 
@@ -3731,9 +3704,8 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .ucmd()
         .args(&["-c", "+0", "-", "empty", "-"])
         .set_stdin(File::open(at.plus("empty")).unwrap())
-        .run()
-        .stdout_only(expected)
-        .success();
+        .succeeds()
+        .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
                 \n\
@@ -3745,9 +3717,8 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .args(&["-c", "+0", "-", "empty", "-"])
         .pipe_in("")
         .stderr_to_stdout()
-        .run()
-        .stdout_only(expected)
-        .success();
+        .succeeds()
+        .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
                 pipe data\n\
@@ -3758,9 +3729,8 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .ucmd()
         .args(&["-c", "+0", "-", "data", "-"])
         .pipe_in("pipe data")
-        .run()
-        .stdout_only(expected)
-        .success();
+        .succeeds()
+        .stdout_only(expected);
 
     // Correct behavior in a sh shell is to remember the file pointer for the fifo, so we don't
     // print the fifo twice. This matches the behavior, if only the pipe is present without fifo
@@ -3798,9 +3768,8 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
             "echo pipe data | {} tail -c +0  - data - < fifo",
             scene.bin_path.display(),
         ))
-        .run()
-        .stdout_only(expected)
-        .success();
+        .succeeds()
+        .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
                 fifo data\n\
@@ -3811,9 +3780,8 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .ucmd()
         .args(&["-c", "+0", "-", "data", "-"])
         .set_stdin(File::open(at.plus("fifo")).unwrap())
-        .run()
-        .stdout_only(expected)
-        .success();
+        .succeeds()
+        .stdout_only(expected);
 }
 
 // Bug description: The content of a file is not printed to stdout if the output data does not
@@ -3861,9 +3829,8 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .ucmd()
         .args(&["--retry", "data"])
         .stderr_to_stdout()
-        .run()
-        .stdout_only(expected_stdout)
-        .success();
+        .succeeds()
+        .stdout_only(expected_stdout);
 
     let expected_stdout = format!(
         "tail: warning: --retry only effective for the initial open\n\
@@ -3890,9 +3857,8 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .ucmd()
         .args(&["--pid=1000", "data"])
         .stderr_to_stdout()
-        .run()
-        .stdout_only(expected_stdout)
-        .success();
+        .succeeds()
+        .stdout_only(expected_stdout);
 
     let expected_stdout = format!(
         "tail: warning: --retry ignored; --retry is useful only when following\n\
@@ -3903,16 +3869,14 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .ucmd()
         .args(&["--pid=1000", "--retry", "data"])
         .stderr_to_stdout()
-        .run()
-        .stdout_only(&expected_stdout)
-        .success();
+        .succeeds()
+        .stdout_only(&expected_stdout);
     scene
         .ucmd()
         .args(&["--pid=1000", "--pid=1000", "--retry", "data"])
         .stderr_to_stdout()
-        .run()
-        .stdout_only(expected_stdout)
-        .success();
+        .succeeds()
+        .stdout_only(expected_stdout);
 }
 
 /// TODO: Write similar tests for windows

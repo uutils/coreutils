@@ -155,13 +155,19 @@ fn test_or() {
         .succeeds()
         .stdout_only("12\n");
 
-    new_ucmd!().args(&["", "|", ""]).run().stdout_only("0\n");
+    new_ucmd!().args(&["", "|", ""]).fails().stdout_only("0\n");
 
-    new_ucmd!().args(&["", "|", "0"]).run().stdout_only("0\n");
+    new_ucmd!().args(&["", "|", "0"]).fails().stdout_only("0\n");
 
-    new_ucmd!().args(&["", "|", "00"]).run().stdout_only("0\n");
+    new_ucmd!()
+        .args(&["", "|", "00"])
+        .fails()
+        .stdout_only("0\n");
 
-    new_ucmd!().args(&["", "|", "-0"]).run().stdout_only("0\n");
+    new_ucmd!()
+        .args(&["", "|", "-0"])
+        .fails()
+        .stdout_only("0\n");
 }
 
 #[test]
@@ -188,17 +194,17 @@ fn test_and() {
 
     new_ucmd!()
         .args(&["0", "&", "a", "/", "5"])
-        .run()
+        .fails()
         .stdout_only("0\n");
 
     new_ucmd!()
         .args(&["", "&", "a", "/", "5"])
-        .run()
+        .fails()
         .stdout_only("0\n");
 
-    new_ucmd!().args(&["", "&", "1"]).run().stdout_only("0\n");
+    new_ucmd!().args(&["", "&", "1"]).fails().stdout_only("0\n");
 
-    new_ucmd!().args(&["", "&", ""]).run().stdout_only("0\n");
+    new_ucmd!().args(&["", "&", ""]).fails().stdout_only("0\n");
 }
 
 #[test]
