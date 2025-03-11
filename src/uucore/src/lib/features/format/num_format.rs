@@ -2,12 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore bigdecimal
+// spell-checker:ignore bigdecimal prec
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;
 use num_traits::Signed;
 use num_traits::ToPrimitive;
+use num_traits::Zero;
 use std::cmp::min;
 use std::io::Write;
 
@@ -261,7 +262,7 @@ impl Formatter<&ExtendedBigDecimal> for Float {
                         format_float_decimal(&bd, self.precision, self.force_decimal)
                     }
                     FloatVariant::Scientific => {
-                        format_float_scientific(x, self.precision, self.case, self.force_decimal)
+                        format_float_scientific(&bd, self.precision, self.case, self.force_decimal)
                     }
                     FloatVariant::Shortest => {
                         format_float_shortest(x, self.precision, self.case, self.force_decimal)
@@ -357,18 +358,18 @@ fn format_float_decimal(bd: &BigDecimal, precision: usize, force_decimal: ForceD
 }
 
 fn format_float_scientific(
-    f: f64,
+    bd: &BigDecimal,
     precision: usize,
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    debug_assert!(!f.is_sign_negative());
+    debug_assert!(!bd.is_negative());
     let exp_char = match case {
         Case::Lowercase => 'e',
         Case::Uppercase => 'E',
     };
 
-    if f == 0.0 {
+    if BigDecimal::zero().eq(bd) {
         return if force_decimal == ForceDecimal::Yes && precision == 0 {
             format!("0.{exp_char}+00")
         } else {
@@ -376,24 +377,29 @@ fn format_float_scientific(
         };
     }
 
-    let mut exponent: i32 = f.log10().floor() as i32;
-    let mut normalized = f / 10.0_f64.powi(exponent);
+    // Round bd to (1 + precision) digits (including the leading digit)
+    // We call `with_prec` twice as it will produce an extra digit if rounding overflows
+    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2).
+    let bd_round = bd
+        .with_prec(precision as u64 + 1)
+        .with_prec(precision as u64 + 1);
 
-    // If the normalized value will be rounded to a value greater than 10
-    // we need to correct.
-    if (normalized * 10_f64.powi(precision as i32)).round() / 10_f64.powi(precision as i32) >= 10.0
-    {
-        normalized /= 10.0;
-        exponent += 1;
-    }
+    // Convert to the form XXX * 10^-e (XXX is 1+precision digit long)
+    let (frac, e) = bd_round.as_bigint_and_exponent();
 
-    let additional_dot = if precision == 0 && ForceDecimal::Yes == force_decimal {
-        "."
-    } else {
-        ""
-    };
+    // Scale down "XXX" to "X.XX": that divides by 10^precision, so add that to the exponent.
+    let digits = frac.to_str_radix(10);
+    let (first_digit, remaining_digits) = digits.split_at(1);
+    let exponent = -e + precision as i64;
 
-    format!("{normalized:.precision$}{additional_dot}{exp_char}{exponent:+03}")
+    let dot =
+        if !remaining_digits.is_empty() || (precision == 0 && ForceDecimal::Yes == force_decimal) {
+            "."
+        } else {
+            ""
+        };
+
+    format!("{first_digit}{dot}{remaining_digits}{exp_char}{exponent:+03}")
 }
 
 fn format_float_shortest(
@@ -618,7 +624,14 @@ mod test {
     #[test]
     fn scientific_float() {
         use super::format_float_scientific;
-        let f = |x| format_float_scientific(x, 6, Case::Lowercase, ForceDecimal::No);
+        let f = |x| {
+            format_float_scientific(
+                &BigDecimal::from_f64(x).unwrap(),
+                6,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
         assert_eq!(f(0.0), "0.000000e+00");
         assert_eq!(f(1.0), "1.000000e+00");
         assert_eq!(f(100.0), "1.000000e+02");
@@ -627,7 +640,14 @@ mod test {
         assert_eq!(f(1_000_000.0), "1.000000e+06");
         assert_eq!(f(99_999_999.0), "1.000000e+08");
 
-        let f = |x| format_float_scientific(x, 6, Case::Uppercase, ForceDecimal::No);
+        let f = |x| {
+            format_float_scientific(
+                &BigDecimal::from_f64(x).unwrap(),
+                6,
+                Case::Uppercase,
+                ForceDecimal::No,
+            )
+        };
         assert_eq!(f(0.0), "0.000000E+00");
         assert_eq!(f(123_456.789), "1.234568E+05");
     }
@@ -636,7 +656,14 @@ mod test {
     fn scientific_float_zero_precision() {
         use super::format_float_scientific;
 
-        let f = |x| format_float_scientific(x, 0, Case::Lowercase, ForceDecimal::No);
+        let f = |x| {
+            format_float_scientific(
+                &BigDecimal::from_f64(x).unwrap(),
+                0,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
         assert_eq!(f(0.0), "0e+00");
         assert_eq!(f(1.0), "1e+00");
         assert_eq!(f(100.0), "1e+02");
@@ -645,7 +672,14 @@ mod test {
         assert_eq!(f(1_000_000.0), "1e+06");
         assert_eq!(f(99_999_999.0), "1e+08");
 
-        let f = |x| format_float_scientific(x, 0, Case::Lowercase, ForceDecimal::Yes);
+        let f = |x| {
+            format_float_scientific(
+                &BigDecimal::from_f64(x).unwrap(),
+                0,
+                Case::Lowercase,
+                ForceDecimal::Yes,
+            )
+        };
         assert_eq!(f(0.0), "0.e+00");
         assert_eq!(f(1.0), "1.e+00");
         assert_eq!(f(100.0), "1.e+02");
