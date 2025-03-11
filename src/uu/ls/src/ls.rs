@@ -3179,8 +3179,8 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
         if ft.is_char_device() || ft.is_block_device() {
             // A type cast is needed here as the `dev_t` type varies across OSes.
             let dev = metadata.rdev() as dev_t;
-            let major = unsafe { major(dev) };
-            let minor = unsafe { minor(dev) };
+            let major = major(dev);
+            let minor = minor(dev);
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }

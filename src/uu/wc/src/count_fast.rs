@@ -51,7 +51,7 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
     let null_rdev = stat::fstat(null_file.as_raw_fd())
         .map_err(|_| 0_usize)?
         .st_rdev as libc::dev_t;
-    if unsafe { (libc::major(null_rdev), libc::minor(null_rdev)) } != (1, 3) {
+    if (libc::major(null_rdev), libc::minor(null_rdev)) != (1, 3) {
         // This is not a proper /dev/null, writing to it is probably bad
         // Bit of an edge case, but it has been known to happen
         return Err(0);
