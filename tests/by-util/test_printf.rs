@@ -60,6 +60,14 @@ fn escaped_octal() {
 }
 
 #[test]
+fn escaped_octal_and_newline() {
+    new_ucmd!()
+        .args(&["\\0377\\n"])
+        .succeeds()
+        .stdout_only("\x1F7\n");
+}
+
+#[test]
 fn escaped_unicode_four_digit() {
     new_ucmd!().args(&["\\u0125"]).succeeds().stdout_only("ĥ");
 }

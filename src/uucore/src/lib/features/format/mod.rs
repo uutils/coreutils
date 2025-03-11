@@ -51,7 +51,7 @@ use os_display::Quotable;
 use crate::error::UError;
 
 pub use self::{
-    escape::{parse_escape_code, EscapedChar},
+    escape::{parse_escape_code, EscapedChar, OctalParsing},
     num_format::Formatter,
 };
 
@@ -184,10 +184,12 @@ pub fn parse_spec_and_escape(
         }
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(match parse_escape_code(&mut current) {
-                Ok(c) => Ok(FormatItem::Char(c)),
-                Err(_) => Err(FormatError::MissingHex),
-            })
+            Some(
+                match parse_escape_code(&mut current, OctalParsing::default()) {
+                    Ok(c) => Ok(FormatItem::Char(c)),
+                    Err(_) => Err(FormatError::MissingHex),
+                },
+            )
         }
         [c, rest @ ..] => {
             current = rest;
@@ -224,13 +226,19 @@ pub fn parse_spec_only(
 }
 
 /// Parse a format string containing escape sequences
-pub fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
+pub fn parse_escape_only(
+    fmt: &[u8],
+    zero_octal_parsing: OctalParsing,
+) -> impl Iterator<Item = EscapedChar> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(parse_escape_code(&mut current).unwrap_or(EscapedChar::Backslash(b'x')))
+            Some(
+                parse_escape_code(&mut current, zero_octal_parsing)
+                    .unwrap_or(EscapedChar::Backslash(b'x')),
+            )
         }
         [c, rest @ ..] => {
             current = rest;
