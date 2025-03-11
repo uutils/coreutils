@@ -494,7 +494,7 @@ fn test_zeros_to_file() {
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", &inf!(test_fn), &of!(tmp_fn)
+    ucmd.args(&["status=none", &inf!(test_fn), &of!(tmp_fn)])
         .succeeds()
         .no_output();
 
