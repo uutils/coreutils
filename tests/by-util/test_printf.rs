@@ -380,6 +380,14 @@ fn sub_num_dec_trunc() {
         .stdout_only("pi is ~ 3.14159");
 }
 
+#[test]
+fn sub_num_sci_negative() {
+    new_ucmd!()
+        .args(&["-1234 is %e", "-1234"])
+        .succeeds()
+        .stdout_only("-1234 is -1.234000e+03");
+}
+
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn sub_num_hex_float_lower() {
