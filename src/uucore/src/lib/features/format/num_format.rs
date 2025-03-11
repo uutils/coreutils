@@ -265,7 +265,7 @@ impl Formatter<&ExtendedBigDecimal> for Float {
                         format_float_scientific(&bd, self.precision, self.case, self.force_decimal)
                     }
                     FloatVariant::Shortest => {
-                        format_float_shortest(x, self.precision, self.case, self.force_decimal)
+                        format_float_shortest(&bd, self.precision, self.case, self.force_decimal)
                     }
                     FloatVariant::Hexadecimal => {
                         format_float_hexadecimal(x, self.precision, self.case, self.force_decimal)
@@ -403,50 +403,50 @@ fn format_float_scientific(
 }
 
 fn format_float_shortest(
-    f: f64,
+    bd: &BigDecimal,
     precision: usize,
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    debug_assert!(!f.is_sign_negative());
-    // Precision here is about how many digits should be displayed
-    // instead of how many digits for the fractional part, this means that if
-    // we pass this to rust's format string, it's always gonna be one less.
-    let precision = precision.saturating_sub(1);
+    debug_assert!(!bd.is_negative());
 
-    if f == 0.0 {
+    // Note: Precision here is how many digits should be displayed in total,
+    // instead of how many digits in the fractional part.
+
+    // Precision 0 is equivalent to precision 1.
+    let precision = precision.max(1);
+
+    if BigDecimal::zero().eq(bd) {
         return match (force_decimal, precision) {
-            (ForceDecimal::Yes, 0) => "0.".into(),
+            (ForceDecimal::Yes, 1) => "0.".into(),
             (ForceDecimal::Yes, _) => {
-                format!("{:.*}", precision, 0.0)
+                format!("{:.*}", precision - 1, 0.0)
             }
             (ForceDecimal::No, _) => "0".into(),
         };
     }
 
-    // Retrieve the exponent. Note that log10 is undefined for negative numbers.
-    // To avoid NaN or zero (due to i32 conversion), use the absolute value of f.
-    let mut exponent = f.abs().log10().floor() as i32;
-    if f != 0.0 && exponent < -4 || exponent > precision as i32 {
+    // Round bd to precision digits (including the leading digit)
+    // We call `with_prec` twice as it will produce an extra digit if rounding overflows
+    // (e.g. 9995.with_prec(3) => 1000 * 10^1, but we want 100 * 10^2).
+    let bd_round = bd.with_prec(precision as u64).with_prec(precision as u64);
+
+    // Convert to the form XXX * 10^-p (XXX is precision digit long)
+    let (frac, e) = bd_round.as_bigint_and_exponent();
+
+    let digits = frac.to_str_radix(10);
+    // If we end up with scientific formatting, we would convert XXX to X.XX:
+    // that divides by 10^(precision-1), so add that to the exponent.
+    let exponent = -e + precision as i64 - 1;
+
+    if exponent < -4 || exponent >= precision as i64 {
         // Scientific-ish notation (with a few differences)
-        let mut normalized = f / 10.0_f64.powi(exponent);
 
-        // If the normalized value will be rounded to a value greater than 10
-        // we need to correct.
-        if (normalized * 10_f64.powi(precision as i32)).round() / 10_f64.powi(precision as i32)
-            >= 10.0
-        {
-            normalized /= 10.0;
-            exponent += 1;
-        }
+        // Scale down "XXX" to "X.XX"
+        let (first_digit, remaining_digits) = digits.split_at(1);
 
-        let additional_dot = if precision == 0 && ForceDecimal::Yes == force_decimal {
-            "."
-        } else {
-            ""
-        };
-
-        let mut normalized = format!("{normalized:.precision$}");
+        // Always add the dot, we might trim it later.
+        let mut normalized = format!("{first_digit}.{remaining_digits}");
 
         if force_decimal == ForceDecimal::No {
             strip_fractional_zeroes_and_dot(&mut normalized);
@@ -457,18 +457,23 @@ fn format_float_shortest(
             Case::Uppercase => 'E',
         };
 
-        format!("{normalized}{additional_dot}{exp_char}{exponent:+03}")
+        format!("{normalized}{exp_char}{exponent:+03}")
     } else {
         // Decimal-ish notation with a few differences:
         //  - The precision works differently and specifies the total number
         //    of digits instead of the digits in the fractional part.
         //  - If we don't force the decimal, `.` and trailing `0` in the fractional part
         //    are trimmed.
-        let decimal_places = (precision as i32 - exponent) as usize;
-        let mut formatted = if decimal_places == 0 && force_decimal == ForceDecimal::Yes {
-            format!("{f:.0}.")
+        let mut formatted = if exponent < 0 {
+            // Small number, prepend some "0.00" string
+            let zeros = "0".repeat(-exponent as usize - 1);
+            format!("0.{zeros}{digits}")
         } else {
-            format!("{f:.decimal_places$}")
+            // exponent >= 0, slot in a dot at the right spot
+            let (first_digits, remaining_digits) = digits.split_at(exponent as usize + 1);
+
+            // Always add `.` even if it's trailing, we might trim it later
+            format!("{first_digits}.{remaining_digits}")
         };
 
         if force_decimal == ForceDecimal::No {
@@ -692,8 +697,17 @@ mod test {
     #[test]
     fn shortest_float() {
         use super::format_float_shortest;
-        let f = |x| format_float_shortest(x, 6, Case::Lowercase, ForceDecimal::No);
+        let f = |x| {
+            format_float_shortest(
+                &BigDecimal::from_f64(x).unwrap(),
+                6,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
         assert_eq!(f(0.0), "0");
+        assert_eq!(f(0.00001), "1e-05");
+        assert_eq!(f(0.0001), "0.0001");
         assert_eq!(f(1.0), "1");
         assert_eq!(f(100.0), "100");
         assert_eq!(f(123_456.789), "123457");
@@ -705,8 +719,17 @@ mod test {
     #[test]
     fn shortest_float_force_decimal() {
         use super::format_float_shortest;
-        let f = |x| format_float_shortest(x, 6, Case::Lowercase, ForceDecimal::Yes);
+        let f = |x| {
+            format_float_shortest(
+                &BigDecimal::from_f64(x).unwrap(),
+                6,
+                Case::Lowercase,
+                ForceDecimal::Yes,
+            )
+        };
         assert_eq!(f(0.0), "0.00000");
+        assert_eq!(f(0.00001), "1.00000e-05");
+        assert_eq!(f(0.0001), "0.000100000");
         assert_eq!(f(1.0), "1.00000");
         assert_eq!(f(100.0), "100.000");
         assert_eq!(f(123_456.789), "123457.");
@@ -718,18 +741,38 @@ mod test {
     #[test]
     fn shortest_float_force_decimal_zero_precision() {
         use super::format_float_shortest;
-        let f = |x| format_float_shortest(x, 0, Case::Lowercase, ForceDecimal::No);
+        let f = |x| {
+            format_float_shortest(
+                &BigDecimal::from_f64(x).unwrap(),
+                0,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
         assert_eq!(f(0.0), "0");
+        assert_eq!(f(0.00001), "1e-05");
+        assert_eq!(f(0.0001), "0.0001");
         assert_eq!(f(1.0), "1");
+        assert_eq!(f(10.0), "1e+01");
         assert_eq!(f(100.0), "1e+02");
         assert_eq!(f(123_456.789), "1e+05");
         assert_eq!(f(12.345_678_9), "1e+01");
         assert_eq!(f(1_000_000.0), "1e+06");
         assert_eq!(f(99_999_999.0), "1e+08");
 
-        let f = |x| format_float_shortest(x, 0, Case::Lowercase, ForceDecimal::Yes);
+        let f = |x| {
+            format_float_shortest(
+                &BigDecimal::from_f64(x).unwrap(),
+                0,
+                Case::Lowercase,
+                ForceDecimal::Yes,
+            )
+        };
         assert_eq!(f(0.0), "0.");
+        assert_eq!(f(0.00001), "1.e-05");
+        assert_eq!(f(0.0001), "0.0001");
         assert_eq!(f(1.0), "1.");
+        assert_eq!(f(10.0), "1.e+01");
         assert_eq!(f(100.0), "1.e+02");
         assert_eq!(f(123_456.789), "1.e+05");
         assert_eq!(f(12.345_678_9), "1.e+01");
@@ -773,7 +816,14 @@ mod test {
     #[test]
     fn shortest_float_abs_value_less_than_one() {
         use super::format_float_shortest;
-        let f = |x| format_float_shortest(x, 6, Case::Lowercase, ForceDecimal::No);
+        let f = |x| {
+            format_float_shortest(
+                &BigDecimal::from_f64(x).unwrap(),
+                6,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
         assert_eq!(f(0.1171875), "0.117188");
         assert_eq!(f(0.01171875), "0.0117188");
         assert_eq!(f(0.001171875), "0.00117187");
@@ -784,7 +834,14 @@ mod test {
     #[test]
     fn shortest_float_switch_decimal_scientific() {
         use super::format_float_shortest;
-        let f = |x| format_float_shortest(x, 6, Case::Lowercase, ForceDecimal::No);
+        let f = |x| {
+            format_float_shortest(
+                &BigDecimal::from_f64(x).unwrap(),
+                6,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
         assert_eq!(f(0.001), "0.001");
         assert_eq!(f(0.0001), "0.0001");
         assert_eq!(f(0.00001), "1e-05");
