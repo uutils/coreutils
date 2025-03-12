@@ -71,10 +71,18 @@ fn stdout_writer() -> Box<dyn Write> {
 }
 
 fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
+    let parsed_ranges = Range::from_list(list)?;
+
+    for r in &parsed_ranges {
+        if r.low < 1 {
+            return Err("fields and positions are numbered from 1".to_string());
+        }
+    }
+
     if complement {
-        Range::from_list(list).map(|r| uucore::ranges::complement(&r))
+        Ok(uucore::ranges::complement(&parsed_ranges))
     } else {
-        Range::from_list(list)
+        Ok(parsed_ranges)
     }
 }
 
