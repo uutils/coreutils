@@ -5,9 +5,9 @@
 // spell-checker:ignore bigdecimal prec
 //! Utilities for formatting numbers in various formats
 
+use bigdecimal::num_bigint::ToBigInt;
 use bigdecimal::BigDecimal;
 use num_traits::Signed;
-use num_traits::ToPrimitive;
 use num_traits::Zero;
 use std::cmp::min;
 use std::io::Write;
@@ -254,24 +254,20 @@ impl Formatter<&ExtendedBigDecimal> for Float {
         };
 
         let s = match abs {
-            ExtendedBigDecimal::BigDecimal(bd) => {
-                // TODO: Convert format_float_* functions to take in a BigDecimal.
-                let x = bd.to_f64().unwrap();
-                match self.variant {
-                    FloatVariant::Decimal => {
-                        format_float_decimal(&bd, self.precision, self.force_decimal)
-                    }
-                    FloatVariant::Scientific => {
-                        format_float_scientific(&bd, self.precision, self.case, self.force_decimal)
-                    }
-                    FloatVariant::Shortest => {
-                        format_float_shortest(&bd, self.precision, self.case, self.force_decimal)
-                    }
-                    FloatVariant::Hexadecimal => {
-                        format_float_hexadecimal(x, self.precision, self.case, self.force_decimal)
-                    }
+            ExtendedBigDecimal::BigDecimal(bd) => match self.variant {
+                FloatVariant::Decimal => {
+                    format_float_decimal(&bd, self.precision, self.force_decimal)
                 }
-            }
+                FloatVariant::Scientific => {
+                    format_float_scientific(&bd, self.precision, self.case, self.force_decimal)
+                }
+                FloatVariant::Shortest => {
+                    format_float_shortest(&bd, self.precision, self.case, self.force_decimal)
+                }
+                FloatVariant::Hexadecimal => {
+                    format_float_hexadecimal(&bd, self.precision, self.case, self.force_decimal)
+                }
+            },
             _ => format_float_non_finite(&abs, self.case),
         };
         let sign_indicator = get_sign_indicator(self.positive_sign, negative);
@@ -485,33 +481,109 @@ fn format_float_shortest(
 }
 
 fn format_float_hexadecimal(
-    f: f64,
+    bd: &BigDecimal,
     precision: usize,
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    debug_assert!(!f.is_sign_negative());
-    let (first_digit, mantissa, exponent) = if f == 0.0 {
-        (0, 0, 0)
-    } else {
-        let bits = f.to_bits();
-        let exponent_bits = ((bits >> 52) & 0x7ff) as i64;
-        let exponent = exponent_bits - 1023;
-        let mantissa = bits & 0xf_ffff_ffff_ffff;
-        (1, mantissa, exponent)
+    debug_assert!(!bd.is_negative());
+
+    let exp_char = match case {
+        Case::Lowercase => 'p',
+        Case::Uppercase => 'P',
     };
 
-    let mut s = match (precision, force_decimal) {
-        (0, ForceDecimal::No) => format!("0x{first_digit}p{exponent:+}"),
-        (0, ForceDecimal::Yes) => format!("0x{first_digit}.p{exponent:+}"),
-        _ => format!("0x{first_digit}.{mantissa:0>13x}p{exponent:+}"),
-    };
-
-    if case == Case::Uppercase {
-        s.make_ascii_uppercase();
+    if BigDecimal::zero().eq(bd) {
+        return if force_decimal == ForceDecimal::Yes && precision == 0 {
+            format!("0x0.{exp_char}+0")
+        } else {
+            format!("0x{:.*}{exp_char}+0", precision, 0.0)
+        };
     }
 
-    s
+    // Convert to the form frac10 * 10^exp
+    let (frac10, p) = bd.as_bigint_and_exponent();
+    // We cast this to u32 below, but we probably do not care about exponents
+    // that would overflow u32. We should probably detect this and fail
+    // gracefully though.
+    let exp10 = -p;
+
+    // We want something that looks like this: frac2 * 2^exp2,
+    // without losing precision.
+    // frac10 * 10^exp10 = (frac10 * 5^exp10) * 2^exp10 = frac2 * 2^exp2
+
+    // TODO: this is most accurate, but frac2 will grow a lot for large
+    // precision or exponent, and formatting will get very slow.
+    // The precision can't technically be a very large number (up to 32-bit int),
+    // but we can trim some of the lower digits, if we want to only keep what a
+    // `long double` (80-bit or 128-bit at most) implementation would be able to
+    // display.
+    // The exponent is less of a problem if we matched `long double` implementation,
+    // as a 80/128-bit floats only covers a 15-bit exponent.
+
+    let (mut frac2, mut exp2) = if exp10 >= 0 {
+        // Positive exponent. 5^exp10 is an integer, so we can just multiply.
+        (frac10 * 5.to_bigint().unwrap().pow(exp10 as u32), exp10)
+    } else {
+        // Negative exponent: We're going to need to divide by 5^-exp10,
+        // so we first shift left by some margin to make sure we do not lose digits.
+
+        // We want to make sure we have at least precision+1 hex digits to start with.
+        // Then, dividing by 5^-exp10 loses at most -exp10*3 binary digits
+        // (since 5^-exp10 < 8^-exp10), so we add that, and another bit for
+        // rounding.
+        let margin = ((precision + 1) as i64 * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
+
+        // frac10 * 10^exp10 = frac10 * 2^margin * 10^exp10 * 2^-margin =
+        // (frac10 * 2^margin * 5^exp10) * 2^exp10 * 2^-margin =
+        // (frac10 * 2^margin / 5^-exp10) * 2^(exp10-margin)
+        (
+            (frac10 << margin) / 5.to_bigint().unwrap().pow(-exp10 as u32),
+            exp10 - margin,
+        )
+    };
+
+    // Emulate x86(-64) behavior, we display 4 binary digits before the decimal point,
+    // so the value will always be between 0x8 and 0xf.
+    // TODO: Make this configurable? e.g. arm64 only displays 1 digit.
+    const BEFORE_BITS: usize = 4;
+    let wanted_bits = (BEFORE_BITS + precision * 4) as u64;
+    let bits = frac2.bits();
+
+    exp2 += bits as i64 - wanted_bits as i64;
+    if bits > wanted_bits {
+        // Shift almost all the way, round up if needed, then finish shifting.
+        frac2 >>= bits - wanted_bits - 1;
+        let add = frac2.bit(0);
+        frac2 >>= 1;
+
+        if add {
+            frac2 += 0x1;
+            if frac2.bits() > wanted_bits {
+                // We overflowed, drop one more hex digit.
+                // Note: Yes, the leading hex digit will now contain only 1 binary digit,
+                // but that emulates coreutils behavior on x86(-64).
+                frac2 >>= 4;
+                exp2 += 4;
+            }
+        }
+    } else {
+        frac2 <<= wanted_bits - bits;
+    };
+
+    // Convert "XXX" to "X.XX": that divides by 16^precision = 2^(4*precision), so add that to the exponent.
+    let digits = frac2.to_str_radix(16);
+    let (first_digit, remaining_digits) = digits.split_at(1);
+    let exponent = exp2 + (4 * precision) as i64;
+
+    let dot =
+        if !remaining_digits.is_empty() || (precision == 0 && ForceDecimal::Yes == force_decimal) {
+            "."
+        } else {
+            ""
+        };
+
+    format!("0x{first_digit}{dot}{remaining_digits}{exp_char}{exponent:+}")
 }
 
 fn strip_fractional_zeroes_and_dot(s: &mut String) {
@@ -782,21 +854,48 @@ mod test {
 
     #[test]
     fn hexadecimal_float() {
+        // It's important to create the BigDecimal from a string: going through a f64
+        // will lose some precision.
+
         use super::format_float_hexadecimal;
-        let f = |x| format_float_hexadecimal(x, 6, Case::Lowercase, ForceDecimal::No);
-        // TODO(#7364): These values do not match coreutils output, but are possible correct representations.
-        assert_eq!(f(0.00001), "0x1.4f8b588e368f1p-17");
-        assert_eq!(f(0.125), "0x1.0000000000000p-3");
-        assert_eq!(f(256.0), "0x1.0000000000000p+8");
-        assert_eq!(f(65536.0), "0x1.0000000000000p+16");
+        let f = |x| {
+            format_float_hexadecimal(
+                &BigDecimal::from_str(x).unwrap(),
+                6,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
+        assert_eq!(f("0"), "0x0.000000p+0");
+        assert_eq!(f("0.00001"), "0xa.7c5ac4p-20");
+        assert_eq!(f("0.125"), "0x8.000000p-6");
+        assert_eq!(f("256.0"), "0x8.000000p+5");
+        assert_eq!(f("65536.0"), "0x8.000000p+13");
+        assert_eq!(f("1.9999999999"), "0x1.000000p+1"); // Corner case: leading hex digit only contains 1 binary digit
 
-        let f = |x| format_float_hexadecimal(x, 0, Case::Lowercase, ForceDecimal::No);
-        assert_eq!(f(0.125), "0x1p-3");
-        assert_eq!(f(256.0), "0x1p+8");
+        let f = |x| {
+            format_float_hexadecimal(
+                &BigDecimal::from_str(x).unwrap(),
+                0,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
+        assert_eq!(f("0"), "0x0p+0");
+        assert_eq!(f("0.125"), "0x8p-6");
+        assert_eq!(f("256.0"), "0x8p+5");
 
-        let f = |x| format_float_hexadecimal(x, 0, Case::Lowercase, ForceDecimal::Yes);
-        assert_eq!(f(0.125), "0x1.p-3");
-        assert_eq!(f(256.0), "0x1.p+8");
+        let f = |x| {
+            format_float_hexadecimal(
+                &BigDecimal::from_str(x).unwrap(),
+                0,
+                Case::Lowercase,
+                ForceDecimal::Yes,
+            )
+        };
+        assert_eq!(f("0"), "0x0.p+0");
+        assert_eq!(f("0.125"), "0x8.p-6");
+        assert_eq!(f("256.0"), "0x8.p+5");
     }
 
     #[test]
