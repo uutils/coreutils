@@ -4407,7 +4407,7 @@ fn test_device_number() {
     let blk_dev_path = blk_dev.path();
     let blk_dev_meta = metadata(blk_dev_path.as_path()).unwrap();
     let blk_dev_number = blk_dev_meta.rdev() as dev_t;
-    let (major, minor) = unsafe { (major(blk_dev_number), minor(blk_dev_number)) };
+    let (major, minor) = (major(blk_dev_number), minor(blk_dev_number));
     let major_minor_str = format!("{major}, {minor}");
 
     let scene = TestScenario::new(util_name!());
