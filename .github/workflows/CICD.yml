@@ -1034,3 +1034,40 @@ jobs:
           echo "Running tests with --features=$f and --no-default-features"
           cargo test --features=$f --no-default-features
         done
+
+  test_selinux:
+    name: Build/SELinux
+    needs: [ min_version, deps ]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Setup Lima
+      uses: lima-vm/lima-actions/setup@v1
+      id: lima-actions-setup
+    - name: Cache ~/.cache/lima
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/lima
+        key: lima-${{ steps.lima-actions-setup.outputs.version }}
+    - name: Start Fedora VM with SELinux
+      run: limactl start --plain --name=default --cpus=1 --disk=30 --memory=4 --network=lima:user-v2 template://fedora
+    - name: Setup SSH
+      uses: lima-vm/lima-actions/ssh@v1
+    - name: Setup Rust and other build deps in VM
+      run: |
+        lima sudo dnf install gcc g++ git rustup libselinux-devel clang-devel -y
+        lima rustup-init -y --default-toolchain stable
+    - name: Verify SELinux Status
+      run: |
+        lima getenforce
+        lima ls -laZ /etc/selinux
+    - name: Clone Repository
+      run: |
+        lima git clone $GITHUB_SERVER_URL/$GITHUB_REPOSITORY
+    - name: Build and Test with SELinux
+      run: |
+        lima df -h
+        lima bash -c "cd coreutils && cargo test --features 'feat_selinux'"
