@@ -20,15 +20,6 @@ use uucore::mode::get_umask;
 
 use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
 
-// From /usr/include/linux/fs.h:
-// #define FICLONE		_IOW(0x94, 9, int)
-// Use a macro as libc::ioctl expects u32 or u64 depending on the arch
-macro_rules! FICLONE {
-    () => {
-        0x40049409
-    };
-}
-
 /// The fallback behavior for [`clone`] on failed system call.
 #[derive(Clone, Copy)]
 enum CloneFallback {
@@ -70,7 +61,15 @@ where
     let dst_file = File::create(&dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
-    let result = unsafe { libc::ioctl(dst_fd, FICLONE!(), src_fd) };
+    // Using .try_into().unwrap() is required as glibc, musl & android all have different type for ioctl()
+    #[allow(clippy::unnecessary_fallible_conversions)]
+    let result = unsafe {
+        libc::ioctl(
+            dst_fd,
+            linux_raw_sys::ioctl::FICLONE.try_into().unwrap(),
+            src_fd,
+        )
+    };
     if result == 0 {
         return Ok(());
     }
