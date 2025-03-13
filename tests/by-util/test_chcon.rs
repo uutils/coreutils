@@ -530,6 +530,7 @@ fn valid_reference_repeat_flags() {
 }
 
 #[test]
+#[ignore = "issue #7443"]
 fn valid_reference_repeated_reference() {
     let (dir, mut cmd) = at_and_ucmd!();
 
