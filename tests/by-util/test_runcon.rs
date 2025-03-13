@@ -51,7 +51,7 @@ fn invalid() {
         "unconfined_u:unconfined_r:unconfined_t:s0",
         "inexistent-file",
     ];
-    new_ucmd!().args(args).fails_with_code(1);
+    new_ucmd!().args(args).fails_with_code(127);
 
     let args = &["invalid", "/bin/true"];
     new_ucmd!().args(args).fails_with_code(1);
