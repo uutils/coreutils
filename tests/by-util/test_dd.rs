@@ -1552,6 +1552,8 @@ fn test_nocache_file() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(feature = "feat_selinux"))]
+// Disabled on SELinux for now
 fn test_skip_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
     let ts = TestScenario::new(util_name!());
@@ -1573,6 +1575,7 @@ fn test_skip_past_dev() {
 
 #[test]
 #[cfg(unix)]
+#[cfg(not(feature = "feat_selinux"))]
 fn test_seek_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
     let ts = TestScenario::new(util_name!());
