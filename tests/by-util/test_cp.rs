@@ -5812,6 +5812,34 @@ fn test_preserve_attrs_overriding_2() {
     }
 }
 
+#[test]
+fn test_symlink_to_subdir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.mkdir("dir");
+
+    ucmd.args(&["--symbolic", "file", "dir"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("can make relative symbolic links only in current directory\n");
+
+    assert!(at.dir_exists("dir"));
+    assert!(!at.file_exists("dir/file"));
+}
+
+#[test]
+fn test_symlink_from_subdir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    ucmd.args(&["--symbolic", "dir/file", "."]).succeeds();
+
+    assert!(at.symlink_exists("file"));
+}
+
 /// Test the behavior of preserving permissions when copying through a symlink
 #[test]
 #[cfg(unix)]
