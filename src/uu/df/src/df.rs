@@ -309,28 +309,6 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
     true
 }
 
-/// Keep only the specified subset of [`MountInfo`] instances.
-///
-/// The `opt` argument specifies a variety of ways of excluding
-/// [`MountInfo`] instances; see [`Options`] for more information.
-///
-/// Finally, if there are duplicate entries, the one with the shorter
-/// path is kept.
-fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
-    let mut result = vec![];
-    for mi in vmi {
-        // TODO The running time of the `is_best()` function is linear
-        // in the length of `result`. That makes the running time of
-        // this loop quadratic in the length of `vmi`. This could be
-        // improved by a more efficient implementation of `is_best()`,
-        // but `vmi` is probably not very long in practice.
-        if is_included(&mi, opt) && is_best(&result, &mi) {
-            result.push(mi);
-        }
-    }
-    result
-}
-
 /// Get all currently mounted filesystems.
 ///
 /// `opt` excludes certain filesystems from consideration and allows for the synchronization of filesystems before running; see
@@ -347,11 +325,17 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
         }
     }
 
-    // The list of all mounted filesystems.
-    //
-    // Filesystems excluded by the command-line options are
-    // not considered.
-    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list()?, opt);
+    let mut mounts = vec![];
+    for mi in read_fs_list()? {
+        // TODO The running time of the `is_best()` function is linear
+        // in the length of `result`. That makes the running time of
+        // this loop quadratic in the length of `vmi`. This could be
+        // improved by a more efficient implementation of `is_best()`,
+        // but `vmi` is probably not very long in practice.
+        if is_included(&mi, opt) && is_best(&mounts, &mi) {
+            mounts.push(mi);
+        }
+    }
 
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
@@ -394,7 +378,7 @@ where
                 if is_included(&fs.mount_info, opt) {
                     result.push(fs);
                 }
-            },
+            }
             Err(FsError::InvalidPath) => {
                 show!(USimpleError::new(
                     1,
@@ -879,18 +863,6 @@ mod tests {
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
             assert!(is_included(&m, &opt));
-        }
-    }
-
-    mod filter_mount_list {
-
-        use crate::{Options, filter_mount_list};
-
-        #[test]
-        fn test_empty() {
-            let opt = Options::default();
-            let mount_infos = vec![];
-            assert!(filter_mount_list(mount_infos, &opt).is_empty());
         }
     }
 }
