@@ -53,6 +53,16 @@ apt install rust-coreutils
 export PATH=/usr/lib/cargo/bin/coreutils:$PATH
 ```
 
+### Fedora
+
+[![Fedora package](https://repology.org/badge/version-for-repo/fedora_rawhide/uutils-coreutils.svg)](https://packages.fedoraproject.org/pkgs/rust-coreutils/uutils-coreutils)
+
+```shell
+dnf install uutils-coreutils
+# To use it:
+export PATH=/usr/libexec/uutils-coreutils:$PATH
+```
+
 ### Gentoo
 
 [![Gentoo package](https://repology.org/badge/version-for-repo/gentoo/uutils-coreutils.svg)](https://packages.gentoo.org/packages/sys-apps/uutils-coreutils)
@@ -87,6 +97,19 @@ nix-env -iA nixos.uutils-coreutils
 
 ```shell
 dnf install uutils-coreutils
+```
+
+### RHEL/AlmaLinux/CENTOS Stream/Rocky Linux/EPEL 9
+
+[![epel 9 package](https://repology.org/badge/version-for-repo/epel_9/uutils-coreutils.svg)](https://packages.fedoraproject.org/pkgs/rust-coreutils/uutils-coreutils/epel-9.html)
+
+```shell
+# Install EPEL 9 - Specific For RHEL please check codeready-builder-for-rhel-9 First then install epel
+dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm -y
+# Install Core Utils
+dnf install uutils-coreutils
+# To use it:
+export PATH=/usr/libexec/uutils-coreutils:$PATH
 ```
 
 ### Ubuntu
