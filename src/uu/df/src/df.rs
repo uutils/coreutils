@@ -12,8 +12,8 @@ use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, USimpleError};
-use uucore::fsext::{MountInfo, read_fs_list};
+use uucore::error::{get_exit_code, UError, UResult, USimpleError};
+use uucore::fsext::{read_fs_list, MountInfo};
 use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, help_about, help_section, help_usage, show};
 
@@ -243,7 +243,10 @@ fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     }
 
     // Don't show pseudo filesystems unless `--all` has been given.
-    if mi.dummy && !opt.show_all_fs {
+    // The "lofs" filesystem is a loopback
+    // filesystem present on Solaris and FreeBSD systems. It
+    // is similar to a symbolic link.
+    if (mi.dummy || mi.fs_type == "lofs") && !opt.show_all_fs {
         return false;
     }
 
@@ -379,29 +382,19 @@ where
     P: AsRef<Path>,
 {
     // The list of all mounted filesystems.
-    //
-    // Filesystems marked as `dummy` or of type "lofs" are not
-    // considered. The "lofs" filesystem is a loopback
-    // filesystem present on Solaris and FreeBSD systems. It
-    // is similar to a symbolic link.
-    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list()?, opt)
-        .into_iter()
-        .filter(|mi| mi.fs_type != "lofs" && !mi.dummy)
-        .collect();
+    let mounts: Vec<MountInfo> = read_fs_list()?;
 
     let mut result = vec![];
-
-    // this happens if the file system type doesn't exist
-    if mounts.is_empty() {
-        show!(USimpleError::new(1, "no file systems processed"));
-        return Ok(result);
-    }
 
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
     for path in paths {
         match Filesystem::from_path(&mounts, path) {
-            Ok(fs) => result.push(fs),
+            Ok(fs) => {
+                if is_included(&fs.mount_info, opt) {
+                    result.push(fs);
+                }
+            },
             Err(FsError::InvalidPath) => {
                 show!(USimpleError::new(
                     1,
@@ -423,6 +416,11 @@ where
             }
         }
     }
+    if get_exit_code() == 0 && result.is_empty() {
+        show!(USimpleError::new(1, "no file systems processed"));
+        return Ok(result);
+    }
+
     Ok(result)
 }
 
