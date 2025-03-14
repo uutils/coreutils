@@ -28,7 +28,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let error = match e.kind() {
             clap::error::ErrorKind::DisplayHelp => command.print_help(),
             clap::error::ErrorKind::DisplayVersion => {
-                writeln!(std::io::stdout(), "{}", command.render_version())
+                write!(std::io::stdout(), "{}", command.render_version())
             }
             _ => Ok(()),
         };
