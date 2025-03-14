@@ -12,8 +12,8 @@ use blocks::HumanReadable;
 use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::display::Quotable;
-use uucore::error::{get_exit_code, UError, UResult, USimpleError};
-use uucore::fsext::{read_fs_list, MountInfo};
+use uucore::error::{UError, UResult, USimpleError, get_exit_code};
+use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, help_about, help_section, help_usage, show};
 
