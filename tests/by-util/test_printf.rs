@@ -380,6 +380,14 @@ fn sub_num_dec_trunc() {
         .stdout_only("pi is ~ 3.14159");
 }
 
+#[test]
+fn sub_num_sci_negative() {
+    new_ucmd!()
+        .args(&["-1234 is %e", "-1234"])
+        .succeeds()
+        .stdout_only("-1234 is -1.234000e+03");
+}
+
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn sub_num_hex_float_lower() {
@@ -884,6 +892,30 @@ fn float_with_zero_precision_should_pad() {
         .args(&["%03.0f", "-1"])
         .succeeds()
         .stdout_only("-01");
+}
+
+#[test]
+fn float_non_finite() {
+    new_ucmd!()
+        .args(&[
+            "%f %f %F %f %f %F",
+            "nan",
+            "-nan",
+            "nan",
+            "inf",
+            "-inf",
+            "inf",
+        ])
+        .succeeds()
+        .stdout_only("nan -nan NAN inf -inf INF");
+}
+
+#[test]
+fn float_zero_neg_zero() {
+    new_ucmd!()
+        .args(&["%f %f", "0.0", "-0.0"])
+        .succeeds()
+        .stdout_only("0.000000 -0.000000");
 }
 
 #[test]
