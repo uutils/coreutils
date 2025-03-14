@@ -117,7 +117,7 @@ jobs:
     - name: Selinux - Install dependencies in VM
       run: |
         lima sudo dnf -y update
-        lima sudo dnf -y install git autoconf autopoint bison texinfo gperf gcc g++ gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel texinfo-tex wget automake patch
+        lima sudo dnf -y install git autoconf autopoint bison texinfo gperf gcc g++ gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel texinfo-tex wget automake patch quilt
         lima rustup-init -y --default-toolchain stable
 
     - name: Override submodule URL and initialize submodules
