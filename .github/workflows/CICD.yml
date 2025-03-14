@@ -1056,6 +1056,7 @@ jobs:
       run: limactl start --plain --name=default --cpus=1 --disk=30 --memory=4 --network=lima:user-v2 template://fedora
     - name: Setup SSH
       uses: lima-vm/lima-actions/ssh@v1
+    - run: rsync -v -a -e ssh . lima-default:~/work/
     - name: Setup Rust and other build deps in VM
       run: |
         lima sudo dnf install gcc g++ git rustup libselinux-devel clang-devel -y
@@ -1064,10 +1065,7 @@ jobs:
       run: |
         lima getenforce
         lima ls -laZ /etc/selinux
-    - name: Clone Repository
-      run: |
-        lima git clone $GITHUB_SERVER_URL/$GITHUB_REPOSITORY
     - name: Build and Test with SELinux
       run: |
-        lima df -h
-        lima bash -c "cd coreutils && cargo test --features 'feat_selinux'"
+        lima ls
+        lima bash -c "cd work && cargo test --features 'feat_selinux'"
