@@ -7,7 +7,7 @@ use crate::common::util::TestScenario;
 use std::fs::OpenOptions;
 
 #[test]
-fn test_exit_code() {
+fn test_no_args() {
     new_ucmd!().succeeds().no_output();
 }
 
