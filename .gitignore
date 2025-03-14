@@ -1,6 +1,7 @@
 # spell-checker:ignore (misc) direnv
 
 target/
+coverage/
 /src/*/gen_table
 /build/
 /tmp/
