@@ -1,4 +1,5 @@
 target/
+coverage/
 /src/*/gen_table
 /build/
 /tmp/
