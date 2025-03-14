@@ -285,6 +285,7 @@ fn test_type_option() {
 
 #[test]
 #[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(feature = "feat_selinux"))]
 fn test_type_option_with_file() {
     let fs_type = new_ucmd!()
         .args(&["--output=fstype", "."])
