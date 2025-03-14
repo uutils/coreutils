@@ -85,7 +85,7 @@ impl Formatter for SignedInt {
             x.abs().to_string()
         };
 
-        let sign_indicator = get_sign_indicator(self.positive_sign, &x);
+        let sign_indicator = get_sign_indicator(self.positive_sign, x.is_negative());
 
         write_output(writer, sign_indicator, s, self.width, self.alignment)
     }
@@ -239,8 +239,9 @@ impl Default for Float {
 impl Formatter for Float {
     type Input = f64;
 
-    fn fmt(&self, writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        let mut s = if x.is_finite() {
+    fn fmt(&self, writer: impl Write, f: Self::Input) -> std::io::Result<()> {
+        let x = f.abs();
+        let s = if x.is_finite() {
             match self.variant {
                 FloatVariant::Decimal => {
                     format_float_decimal(x, self.precision, self.force_decimal)
@@ -259,11 +260,7 @@ impl Formatter for Float {
             format_float_non_finite(x, self.case)
         };
 
-        // The format function will parse `x` together with its sign char,
-        // which should be placed in `sign_indicator`. So drop it here
-        s = if x < 0. { s[1..].to_string() } else { s };
-
-        let sign_indicator = get_sign_indicator(self.positive_sign, &x);
+        let sign_indicator = get_sign_indicator(self.positive_sign, f.is_sign_negative());
 
         write_output(writer, sign_indicator, s, self.width, self.alignment)
     }
@@ -293,13 +290,7 @@ impl Formatter for Float {
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
-            None => {
-                if matches!(variant, FloatVariant::Shortest) {
-                    6
-                } else {
-                    0
-                }
-            }
+            None => 6, // Default float precision (C standard)
             Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
@@ -315,8 +306,8 @@ impl Formatter for Float {
     }
 }
 
-fn get_sign_indicator<T: PartialOrd + Default>(sign: PositiveSign, x: &T) -> String {
-    if *x >= T::default() {
+fn get_sign_indicator(sign: PositiveSign, negative: bool) -> String {
+    if !negative {
         match sign {
             PositiveSign::None => String::new(),
             PositiveSign::Plus => String::from("+"),
@@ -330,13 +321,15 @@ fn get_sign_indicator<T: PartialOrd + Default>(sign: PositiveSign, x: &T) -> Str
 fn format_float_non_finite(f: f64, case: Case) -> String {
     debug_assert!(!f.is_finite());
     let mut s = format!("{f}");
-    if case == Case::Uppercase {
-        s.make_ascii_uppercase();
+    match case {
+        Case::Lowercase => s.make_ascii_lowercase(), // Forces NaN back to nan.
+        Case::Uppercase => s.make_ascii_uppercase(),
     }
     s
 }
 
 fn format_float_decimal(f: f64, precision: usize, force_decimal: ForceDecimal) -> String {
+    debug_assert!(!f.is_sign_negative());
     if precision == 0 && force_decimal == ForceDecimal::Yes {
         format!("{f:.0}.")
     } else {
@@ -350,11 +343,17 @@ fn format_float_scientific(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
+    debug_assert!(!f.is_sign_negative());
+    let exp_char = match case {
+        Case::Lowercase => 'e',
+        Case::Uppercase => 'E',
+    };
+
     if f == 0.0 {
         return if force_decimal == ForceDecimal::Yes && precision == 0 {
-            "0.e+00".into()
+            format!("0.{exp_char}+00")
         } else {
-            format!("{:.*}e+00", precision, 0.0)
+            format!("{:.*}{exp_char}+00", precision, 0.0)
         };
     }
 
@@ -375,11 +374,6 @@ fn format_float_scientific(
         ""
     };
 
-    let exp_char = match case {
-        Case::Lowercase => 'e',
-        Case::Uppercase => 'E',
-    };
-
     format!("{normalized:.precision$}{additional_dot}{exp_char}{exponent:+03}")
 }
 
@@ -389,6 +383,7 @@ fn format_float_shortest(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
+    debug_assert!(!f.is_sign_negative());
     // Precision here is about how many digits should be displayed
     // instead of how many digits for the fractional part, this means that if
     // we pass this to rust's format string, it's always gonna be one less.
@@ -465,21 +460,21 @@ fn format_float_hexadecimal(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    let (sign, first_digit, mantissa, exponent) = if f == 0.0 {
-        ("", 0, 0, 0)
+    debug_assert!(!f.is_sign_negative());
+    let (first_digit, mantissa, exponent) = if f == 0.0 {
+        (0, 0, 0)
     } else {
         let bits = f.to_bits();
-        let sign = if (bits >> 63) == 1 { "-" } else { "" };
         let exponent_bits = ((bits >> 52) & 0x7ff) as i64;
         let exponent = exponent_bits - 1023;
         let mantissa = bits & 0xf_ffff_ffff_ffff;
-        (sign, 1, mantissa, exponent)
+        (1, mantissa, exponent)
     };
 
     let mut s = match (precision, force_decimal) {
-        (0, ForceDecimal::No) => format!("{sign}0x{first_digit}p{exponent:+}"),
-        (0, ForceDecimal::Yes) => format!("{sign}0x{first_digit}.p{exponent:+}"),
-        _ => format!("{sign}0x{first_digit}.{mantissa:0>13x}p{exponent:+}"),
+        (0, ForceDecimal::No) => format!("0x{first_digit}p{exponent:+}"),
+        (0, ForceDecimal::Yes) => format!("0x{first_digit}.p{exponent:+}"),
+        _ => format!("0x{first_digit}.{mantissa:0>13x}p{exponent:+}"),
     };
 
     if case == Case::Uppercase {
@@ -557,6 +552,18 @@ mod test {
     }
 
     #[test]
+    fn non_finite_float() {
+        use super::format_float_non_finite;
+        let f = |x| format_float_non_finite(x, Case::Lowercase);
+        assert_eq!(f(f64::NAN), "nan");
+        assert_eq!(f(f64::INFINITY), "inf");
+
+        let f = |x| format_float_non_finite(x, Case::Uppercase);
+        assert_eq!(f(f64::NAN), "NAN");
+        assert_eq!(f(f64::INFINITY), "INF");
+    }
+
+    #[test]
     fn decimal_float() {
         use super::format_float_decimal;
         let f = |x| format_float_decimal(x, 6, ForceDecimal::No);
@@ -582,6 +589,10 @@ mod test {
         assert_eq!(f(12.345_678_9), "1.234568e+01");
         assert_eq!(f(1_000_000.0), "1.000000e+06");
         assert_eq!(f(99_999_999.0), "1.000000e+08");
+
+        let f = |x| format_float_scientific(x, 6, Case::Uppercase, ForceDecimal::No);
+        assert_eq!(f(0.0), "0.000000E+00");
+        assert_eq!(f(123_456.789), "1.234568E+05");
     }
 
     #[test]
@@ -664,22 +675,14 @@ mod test {
         assert_eq!(f(0.125), "0x1.0000000000000p-3");
         assert_eq!(f(256.0), "0x1.0000000000000p+8");
         assert_eq!(f(65536.0), "0x1.0000000000000p+16");
-        assert_eq!(f(-0.00001), "-0x1.4f8b588e368f1p-17");
-        assert_eq!(f(-0.125), "-0x1.0000000000000p-3");
-        assert_eq!(f(-256.0), "-0x1.0000000000000p+8");
-        assert_eq!(f(-65536.0), "-0x1.0000000000000p+16");
 
         let f = |x| format_float_hexadecimal(x, 0, Case::Lowercase, ForceDecimal::No);
         assert_eq!(f(0.125), "0x1p-3");
         assert_eq!(f(256.0), "0x1p+8");
-        assert_eq!(f(-0.125), "-0x1p-3");
-        assert_eq!(f(-256.0), "-0x1p+8");
 
         let f = |x| format_float_hexadecimal(x, 0, Case::Lowercase, ForceDecimal::Yes);
         assert_eq!(f(0.125), "0x1.p-3");
         assert_eq!(f(256.0), "0x1.p+8");
-        assert_eq!(f(-0.125), "-0x1.p-3");
-        assert_eq!(f(-256.0), "-0x1.p+8");
     }
 
     #[test]
@@ -705,11 +708,6 @@ mod test {
         assert_eq!(f(0.001171875), "0.00117187");
         assert_eq!(f(0.0001171875), "0.000117187");
         assert_eq!(f(0.001171875001), "0.00117188");
-        assert_eq!(f(-0.1171875), "-0.117188");
-        assert_eq!(f(-0.01171875), "-0.0117188");
-        assert_eq!(f(-0.001171875), "-0.00117187");
-        assert_eq!(f(-0.0001171875), "-0.000117187");
-        assert_eq!(f(-0.001171875001), "-0.00117188");
     }
 
     #[test]
@@ -720,9 +718,5 @@ mod test {
         assert_eq!(f(0.0001), "0.0001");
         assert_eq!(f(0.00001), "1e-05");
         assert_eq!(f(0.000001), "1e-06");
-        assert_eq!(f(-0.001), "-0.001");
-        assert_eq!(f(-0.0001), "-0.0001");
-        assert_eq!(f(-0.00001), "-1e-05");
-        assert_eq!(f(-0.000001), "-1e-06");
     }
 }

@@ -60,6 +60,14 @@ fn escaped_octal() {
 }
 
 #[test]
+fn escaped_octal_and_newline() {
+    new_ucmd!()
+        .args(&["\\0377\\n"])
+        .succeeds()
+        .stdout_only("\x1F7\n");
+}
+
+#[test]
 fn escaped_unicode_four_digit() {
     new_ucmd!().args(&["\\u0125"]).succeeds().stdout_only("ĥ");
 }
@@ -129,7 +137,7 @@ fn sub_b_string_handle_escapes() {
 fn sub_b_string_validate_field_params() {
     new_ucmd!()
         .args(&["hello %7b", "world"])
-        .run()
+        .fails()
         .stdout_is("hello ")
         .stderr_is("printf: %7b: invalid conversion specification\n");
 }
@@ -154,7 +162,7 @@ fn sub_q_string_non_printable() {
 fn sub_q_string_validate_field_params() {
     new_ucmd!()
         .args(&["hello %7q", "world"])
-        .run()
+        .fails()
         .stdout_is("hello ")
         .stderr_is("printf: %7q: invalid conversion specification\n");
 }
@@ -370,6 +378,14 @@ fn sub_num_dec_trunc() {
         .args(&["pi is ~ %g", "3.1415926535"])
         .succeeds()
         .stdout_only("pi is ~ 3.14159");
+}
+
+#[test]
+fn sub_num_sci_negative() {
+    new_ucmd!()
+        .args(&["-1234 is %e", "-1234"])
+        .succeeds()
+        .stdout_only("-1234 is -1.234000e+03");
 }
 
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
@@ -876,6 +892,30 @@ fn float_with_zero_precision_should_pad() {
         .args(&["%03.0f", "-1"])
         .succeeds()
         .stdout_only("-01");
+}
+
+#[test]
+fn float_non_finite() {
+    new_ucmd!()
+        .args(&[
+            "%f %f %F %f %f %F",
+            "nan",
+            "-nan",
+            "nan",
+            "inf",
+            "-inf",
+            "inf",
+        ])
+        .succeeds()
+        .stdout_only("nan -nan NAN inf -inf INF");
+}
+
+#[test]
+fn float_zero_neg_zero() {
+    new_ucmd!()
+        .args(&["%f %f", "0.0", "-0.0"])
+        .succeeds()
+        .stdout_only("0.000000 -0.000000");
 }
 
 #[test]

@@ -12,7 +12,7 @@ use super::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
-    parse_escape_only, ArgumentIter, FormatChar, FormatError,
+    parse_escape_only, ArgumentIter, FormatChar, FormatError, OctalParsing,
 };
 use std::{io::Write, ops::ControlFlow};
 
@@ -348,7 +348,7 @@ impl Spec {
             Self::EscapedString => {
                 let s = args.get_str();
                 let mut parsed = Vec::new();
-                for c in parse_escape_only(s.as_bytes()) {
+                for c in parse_escape_only(s.as_bytes(), OctalParsing::default()) {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {

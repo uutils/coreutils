@@ -155,13 +155,19 @@ fn test_or() {
         .succeeds()
         .stdout_only("12\n");
 
-    new_ucmd!().args(&["", "|", ""]).run().stdout_only("0\n");
+    new_ucmd!().args(&["", "|", ""]).fails().stdout_only("0\n");
 
-    new_ucmd!().args(&["", "|", "0"]).run().stdout_only("0\n");
+    new_ucmd!().args(&["", "|", "0"]).fails().stdout_only("0\n");
 
-    new_ucmd!().args(&["", "|", "00"]).run().stdout_only("0\n");
+    new_ucmd!()
+        .args(&["", "|", "00"])
+        .fails()
+        .stdout_only("0\n");
 
-    new_ucmd!().args(&["", "|", "-0"]).run().stdout_only("0\n");
+    new_ucmd!()
+        .args(&["", "|", "-0"])
+        .fails()
+        .stdout_only("0\n");
 }
 
 #[test]
@@ -188,17 +194,17 @@ fn test_and() {
 
     new_ucmd!()
         .args(&["0", "&", "a", "/", "5"])
-        .run()
+        .fails()
         .stdout_only("0\n");
 
     new_ucmd!()
         .args(&["", "&", "a", "/", "5"])
-        .run()
+        .fails()
         .stdout_only("0\n");
 
-    new_ucmd!().args(&["", "&", "1"]).run().stdout_only("0\n");
+    new_ucmd!().args(&["", "&", "1"]).fails().stdout_only("0\n");
 
-    new_ucmd!().args(&["", "&", ""]).run().stdout_only("0\n");
+    new_ucmd!().args(&["", "&", ""]).fails().stdout_only("0\n");
 }
 
 #[test]
@@ -366,6 +372,30 @@ fn test_eager_evaluation() {
         .args(&["(", "1", "/", "0"])
         .fails()
         .stderr_contains("division by zero");
+}
+
+#[test]
+fn test_long_input() {
+    // Giving expr an arbitrary long expression should succeed rather than end with a segfault due to a stack overflow.
+    #[cfg(not(windows))]
+    const MAX_NUMBER: usize = 40000;
+    #[cfg(not(windows))]
+    const RESULT: &str = "800020000\n";
+
+    // On windows there is 8192 characters input limit
+    #[cfg(windows)]
+    const MAX_NUMBER: usize = 1300; // 7993 characters (with spaces)
+    #[cfg(windows)]
+    const RESULT: &str = "845650\n";
+
+    let mut args: Vec<String> = vec!["1".to_string()];
+
+    for i in 2..=MAX_NUMBER {
+        args.push('+'.to_string());
+        args.push(i.to_string());
+    }
+
+    new_ucmd!().args(&args).succeeds().stdout_is(RESULT);
 }
 
 /// Regroup the testcases of the GNU test expr.pl

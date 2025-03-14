@@ -397,7 +397,7 @@ fn test_comma_with_plus_4() {
 fn test_args_override() {
     new_ucmd!()
         .args(&["-i", "-i", "with-trailing-tab.txt"])
-        .run()
+        .succeeds()
         .stdout_is(
             "// !note: file contains significant whitespace
 // * indentation uses <TAB> characters

@@ -610,9 +610,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.170"
+version = "0.2.171"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "875b3680cb2f8f71bdcf9a30f38d48282f5d3c95cbf9b3fa57269bb5d5c06828"
+checksum = "c19937216e9d3aa9956d9bb8dfc0b0c8beb6058fc4f7a4dc4d850edf86a237d6"
 
 [[package]]
 name = "libfuzzer-sys"
@@ -1099,11 +1099,10 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.18.0"
+version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c317e0a526ee6120d8dabad239c8dadca62b24b6f168914bbbc8e2fb1f0e567"
+checksum = "488960f40a3fd53d72c2a29a58722561dee8afdd175bd88e3db4677d7b2ba600"
 dependencies = [
- "cfg-if",
  "fastrand",
  "getrandom 0.3.1",
  "once_cell",
@@ -1188,7 +1187,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uu_cksum"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "clap",
  "hex",
@@ -1198,7 +1197,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cut"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "bstr",
  "clap",
@@ -1208,7 +1207,7 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "chrono",
  "clap",
@@ -1220,7 +1219,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "clap",
  "uucore",
@@ -1228,7 +1227,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "clap",
  "nix",
@@ -1238,7 +1237,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "clap",
  "num-bigint",
@@ -1250,7 +1249,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "clap",
  "uucore",
@@ -1258,7 +1257,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -1270,7 +1269,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "binary-heap-plus",
  "clap",
@@ -1291,7 +1290,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "clap",
  "memchr",
@@ -1300,7 +1299,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "clap",
  "libc",
@@ -1309,7 +1308,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "clap",
  "nom",
@@ -1318,7 +1317,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "bytecount",
  "clap",
@@ -1331,7 +1330,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "blake2b_simd",
  "blake3",
@@ -1394,7 +1393,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.0.29"
+version = "0.0.30"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1403,7 +1402,7 @@ dependencies = [
 
 [[package]]
 name = "uuhelp_parser"
-version = "0.0.29"
+version = "0.0.30"
 
 [[package]]
 name = "version_check"

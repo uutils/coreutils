@@ -2053,7 +2053,7 @@ mod gnu_cksum_c {
             .arg("--warn")
             .arg("--check")
             .arg("CHECKSUMS")
-            .run()
+            .fails()
             .stderr_contains("CHECKSUMS: 6: improperly formatted SM3 checksum line")
             .stderr_contains("CHECKSUMS: 9: improperly formatted BLAKE2b checksum line");
     }

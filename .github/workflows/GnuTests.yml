@@ -340,9 +340,14 @@ jobs:
         # Compare root tests
         compare_tests '${{ steps.vars.outputs.path_GNU_tests }}/test-suite-root.log' "${ROOT_REF_LOG_FILE}" "root"
 
+        # Set environment variable to indicate whether all failures are intermittent
         if [ -n "${have_new_failures}" ]; then
-          echo "::error ::Found new test failures"
+          echo "ONLY_INTERMITTENT=false" >> $GITHUB_ENV
+          echo "::error ::Found new non-intermittent test failures"
           exit 1
+        else
+          echo "ONLY_INTERMITTENT=true" >> $GITHUB_ENV
+          echo "::notice ::No new test failures detected"
         fi
     - name: Upload comparison log (for GnuComment workflow)
       if: success() || failure() # run regardless of prior step success/failure

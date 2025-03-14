@@ -662,8 +662,7 @@ fn test_appending_same_input_output() {
     ucmd.set_stdin(file_read);
     ucmd.set_stdout(file_write);
 
-    ucmd.run()
-        .failure()
+    ucmd.fails()
         .no_stdout()
         .stderr_contains("input file is output file");
 }

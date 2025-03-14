@@ -30,7 +30,7 @@ fn test_terse_fs_format() {
     let args = ["-f", "-t", "/proc"];
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
-    ts.ucmd().args(&args).run().stdout_is(expected_stdout);
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn test_fs_format() {
     let args = ["-f", "-c", FS_FORMAT_STR, "/dev/shm"];
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
-    ts.ucmd().args(&args).run().stdout_is(expected_stdout);
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
 #[cfg(unix)]

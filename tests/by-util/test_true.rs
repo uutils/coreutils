@@ -2,21 +2,26 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 use crate::common::util::TestScenario;
+use regex::Regex;
+
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
 
 #[test]
-fn test_exit_code() {
-    new_ucmd!().succeeds();
+fn test_no_args() {
+    new_ucmd!().succeeds().no_output();
 }
 
 #[test]
 fn test_version() {
+    let re = Regex::new(r"^true .*\d+\.\d+\.\d+\n$").unwrap();
+
     new_ucmd!()
         .args(&["--version"])
         .succeeds()
-        .stdout_contains("true");
+        .stdout_matches(&re);
 }
 
 #[test]
@@ -30,7 +35,7 @@ fn test_help() {
 #[test]
 fn test_short_options() {
     for option in ["-h", "-V"] {
-        new_ucmd!().arg(option).succeeds().stdout_is("");
+        new_ucmd!().arg(option).succeeds().no_output();
     }
 }
 
@@ -39,7 +44,7 @@ fn test_conflict() {
     new_ucmd!()
         .args(&["--help", "--version"])
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]

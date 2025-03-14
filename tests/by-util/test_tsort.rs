@@ -14,7 +14,7 @@ fn test_invalid_arg() {
 fn test_sort_call_graph() {
     new_ucmd!()
         .arg("call_graph.txt")
-        .run()
+        .succeeds()
         .stdout_is_fixture("call_graph.expected");
 }
 

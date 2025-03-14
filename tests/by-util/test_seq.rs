@@ -181,7 +181,7 @@ fn test_width_invalid_float() {
 fn test_count_up() {
     new_ucmd!()
         .args(&["10"])
-        .run()
+        .succeeds()
         .stdout_is("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
 }
 
@@ -189,11 +189,11 @@ fn test_count_up() {
 fn test_count_down() {
     new_ucmd!()
         .args(&["--", "5", "-1", "1"])
-        .run()
+        .succeeds()
         .stdout_is("5\n4\n3\n2\n1\n");
     new_ucmd!()
         .args(&["5", "-1", "1"])
-        .run()
+        .succeeds()
         .stdout_is("5\n4\n3\n2\n1\n");
 }
 
@@ -201,19 +201,19 @@ fn test_count_down() {
 fn test_separator_and_terminator() {
     new_ucmd!()
         .args(&["-s", ",", "-t", "!", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2,3,4,5,6!");
     new_ucmd!()
         .args(&["-s", ",", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2,3,4,5,6\n");
     new_ucmd!()
         .args(&["-s", "\n", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2\n3\n4\n5\n6\n");
     new_ucmd!()
         .args(&["-s", "\\n", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2\\n3\\n4\\n5\\n6\n");
 }
 
@@ -223,7 +223,7 @@ fn test_equalize_widths() {
     for arg in args {
         new_ucmd!()
             .args(&[arg, "5", "10"])
-            .run()
+            .succeeds()
             .stdout_is("05\n06\n07\n08\n09\n10\n");
     }
 }
@@ -255,7 +255,7 @@ fn test_big_numbers() {
 fn test_count_up_floats() {
     new_ucmd!()
         .args(&["10.0"])
-        .run()
+        .succeeds()
         .stdout_is("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
 }
 
@@ -263,11 +263,11 @@ fn test_count_up_floats() {
 fn test_count_down_floats() {
     new_ucmd!()
         .args(&["--", "5", "-1.0", "1"])
-        .run()
+        .succeeds()
         .stdout_is("5.0\n4.0\n3.0\n2.0\n1.0\n");
     new_ucmd!()
         .args(&["5", "-1", "1.0"])
-        .run()
+        .succeeds()
         .stdout_is("5\n4\n3\n2\n1\n");
 }
 
@@ -275,7 +275,7 @@ fn test_count_down_floats() {
 fn test_separator_and_terminator_floats() {
     new_ucmd!()
         .args(&["-s", ",", "-t", "!", "2.0", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2.0,3.0,4.0,5.0,6.0!");
 }
 
@@ -283,7 +283,7 @@ fn test_separator_and_terminator_floats() {
 fn test_equalize_widths_floats() {
     new_ucmd!()
         .args(&["-w", "5", "10.0"])
-        .run()
+        .succeeds()
         .stdout_is("05\n06\n07\n08\n09\n10\n");
 }
 
@@ -709,7 +709,30 @@ fn test_format_option() {
 }
 
 #[test]
-#[ignore = "Need issue #2660 to be fixed"]
+fn test_format_option_default_precision() {
+    new_ucmd!()
+        .args(&["-f", "%f", "0", "0.7", "2"])
+        .succeeds()
+        .stdout_only("0.000000\n0.700000\n1.400000\n");
+}
+
+#[test]
+fn test_format_option_default_precision_short() {
+    new_ucmd!()
+        .args(&["-f", "%g", "0", "0.987654321", "2"])
+        .succeeds()
+        .stdout_only("0\n0.987654\n1.97531\n");
+}
+
+#[test]
+fn test_format_option_default_precision_scientific() {
+    new_ucmd!()
+        .args(&["-f", "%E", "0", "0.7", "2"])
+        .succeeds()
+        .stdout_only("0.000000E+00\n7.000000E-01\n1.400000E+00\n");
+}
+
+#[test]
 fn test_auto_precision() {
     new_ucmd!()
         .args(&["1", "0x1p-1", "2"])
@@ -718,7 +741,6 @@ fn test_auto_precision() {
 }
 
 #[test]
-#[ignore = "Need issue #3318 to be fixed"]
 fn test_undefined() {
     new_ucmd!()
         .args(&["1e-9223372036854775808"])

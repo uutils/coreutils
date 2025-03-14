@@ -27,7 +27,7 @@ fn test_invalid_arg() {
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_default.expected");
 }
 
@@ -36,7 +36,7 @@ fn test_stdin_1_line_obsolete() {
     new_ucmd!()
         .args(&["-1"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
@@ -45,7 +45,7 @@ fn test_stdin_1_line() {
     new_ucmd!()
         .args(&["-n", "1"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
@@ -54,7 +54,7 @@ fn test_stdin_negative_23_line() {
     new_ucmd!()
         .args(&["-n", "-23"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
@@ -63,7 +63,7 @@ fn test_stdin_5_chars() {
     new_ucmd!()
         .args(&["-c", "5"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
@@ -71,7 +71,7 @@ fn test_stdin_5_chars() {
 fn test_single_default() {
     new_ucmd!()
         .arg(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_default.expected");
 }
 
@@ -79,7 +79,7 @@ fn test_single_default() {
 fn test_single_1_line_obsolete() {
     new_ucmd!()
         .args(&["-1", INPUT])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
@@ -87,7 +87,7 @@ fn test_single_1_line_obsolete() {
 fn test_single_1_line() {
     new_ucmd!()
         .args(&["-n", "1", INPUT])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
@@ -95,7 +95,7 @@ fn test_single_1_line() {
 fn test_single_5_chars() {
     new_ucmd!()
         .args(&["-c", "5", INPUT])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
@@ -103,7 +103,7 @@ fn test_single_5_chars() {
 fn test_verbose() {
     new_ucmd!()
         .args(&["-v", INPUT])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_verbose.expected");
 }
 
@@ -117,7 +117,7 @@ fn test_byte_syntax() {
     new_ucmd!()
         .args(&["-1c"])
         .pipe_in("abc")
-        .run()
+        .succeeds()
         .stdout_is("a");
 }
 
@@ -126,7 +126,7 @@ fn test_line_syntax() {
     new_ucmd!()
         .args(&["-n", "2048m"])
         .pipe_in("a\n")
-        .run()
+        .succeeds()
         .stdout_is("a\n");
 }
 
@@ -135,7 +135,7 @@ fn test_zero_terminated_syntax() {
     new_ucmd!()
         .args(&["-z", "-n", "1"])
         .pipe_in("x\0y")
-        .run()
+        .succeeds()
         .stdout_is("x\0");
 }
 
@@ -144,7 +144,7 @@ fn test_zero_terminated_syntax_2() {
     new_ucmd!()
         .args(&["-z", "-n", "2"])
         .pipe_in("x\0y")
-        .run()
+        .succeeds()
         .stdout_is("x\0y");
 }
 
@@ -153,7 +153,7 @@ fn test_zero_terminated_negative_lines() {
     new_ucmd!()
         .args(&["-z", "-n", "-1"])
         .pipe_in("x\0y\0z\0")
-        .run()
+        .succeeds()
         .stdout_is("x\0y\0");
 }
 
@@ -162,7 +162,7 @@ fn test_negative_byte_syntax() {
     new_ucmd!()
         .args(&["--bytes=-2"])
         .pipe_in("a\n")
-        .run()
+        .succeeds()
         .stdout_is("");
 }
 
@@ -241,14 +241,14 @@ fn test_multiple_nonexistent_files() {
 fn test_sequence_fixture() {
     new_ucmd!()
         .args(&["-n", "-10", "sequence"])
-        .run()
+        .succeeds()
         .stdout_is_fixture("sequence.expected");
 }
 #[test]
 fn test_file_backwards() {
     new_ucmd!()
         .args(&["-c", "-10", "lorem_ipsum.txt"])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_backwards_file.expected");
 }
 
@@ -256,7 +256,7 @@ fn test_file_backwards() {
 fn test_zero_terminated() {
     new_ucmd!()
         .args(&["-z", "zero_terminated.txt"])
-        .run()
+        .succeeds()
         .stdout_is_fixture("zero_terminated.expected");
 }
 
@@ -388,7 +388,7 @@ fn test_presume_input_pipe_default() {
     new_ucmd!()
         .args(&["---presume-input-pipe"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_default.expected");
 }
 
@@ -397,7 +397,7 @@ fn test_presume_input_pipe_5_chars() {
     new_ucmd!()
         .args(&["-c", "5", "---presume-input-pipe"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
@@ -805,7 +805,7 @@ fn test_write_to_dev_full() {
             new_ucmd!()
                 .pipe_in_fixture(INPUT)
                 .set_stdout(dev_full)
-                .run()
+                .fails()
                 .stderr_contains("error writing 'standard output': No space left on device");
         }
     }
