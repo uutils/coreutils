@@ -57,11 +57,16 @@ TOYBOX_ROOT := $(BASEDIR)/tmp
 TOYBOX_VER  := 0.8.8
 TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
-ifeq ($(SELINUX_ENABLED),)
-	SELINUX_ENABLED := 0
+
+ifdef SELINUX_ENABLED
+	override SELINUX_ENABLED := 0
+# Now check if we should enable it (only on non-Windows)
 	ifneq ($(OS),Windows_NT)
-		ifeq ($(shell /sbin/selinuxenabled 2>/dev/null ; echo $$?),0)
-			SELINUX_ENABLED := 1
+		ifeq ($(shell if [ -x /sbin/selinuxenabled ] && /sbin/selinuxenabled 2>/dev/null; then echo 0; else echo 1; fi),0)
+			override SELINUX_ENABLED := 1
+$(info /sbin/selinuxenabled successful)
+	    else
+$(info SELINUX_ENABLED=1 but /sbin/selinuxenabled failed)
 		endif
 	endif
 endif
