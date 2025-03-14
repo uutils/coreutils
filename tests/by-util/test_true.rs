@@ -9,7 +9,7 @@ use uutests::util::TestScenario;
 use uutests::util_name;
 
 #[test]
-fn test_exit_code() {
+fn test_no_args() {
     new_ucmd!().succeeds().no_output();
 }
 
