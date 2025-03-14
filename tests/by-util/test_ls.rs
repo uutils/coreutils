@@ -1102,6 +1102,8 @@ fn test_ls_long() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg(not(feature = "feat_selinux"))]
+// Disabled on the SELinux runner for now
 fn test_ls_long_format() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1474,6 +1476,8 @@ fn test_ls_long_total_size() {
 }
 
 #[test]
+#[cfg(not(feature = "feat_selinux"))]
+// Disabled on the SELinux runner for now
 fn test_ls_long_formats() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2749,6 +2753,8 @@ fn test_ls_color() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(not(feature = "feat_selinux"))]
+// Disabled on the SELinux runner for now
 fn test_ls_inode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5279,6 +5285,8 @@ fn test_acl_display() {
 // setting is also configured).
 #[cfg(unix)]
 #[test]
+#[cfg(not(feature = "feat_selinux"))]
+// Disabled on the SELinux runner for now
 fn test_ls_color_norm() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

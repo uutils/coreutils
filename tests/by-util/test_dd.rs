@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable
 
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "feat_selinux")))]
 use crate::common::util::run_ucmd_as_root_with_stdin_stdout;
 use crate::common::util::TestScenario;
 #[cfg(all(not(windows), feature = "printf"))]
