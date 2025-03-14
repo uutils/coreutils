@@ -1413,6 +1413,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "machine-factor"
+version = "0.2.0"
+dependencies = [
+ "machine-prime",
+]
+
+[[package]]
+name = "machine-prime"
+version = "1.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6dc82d8f07dbce4617251b99e6abd8b3c5758ac52fe74151fd0fb0b3c8945fee"
+
+[[package]]
 name = "md-5"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
