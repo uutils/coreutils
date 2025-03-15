@@ -195,6 +195,10 @@ jobs:
         lima cat /proc/filesystems
         lima bash -c "cd ~/work/uutils/ && bash util/run-gnu-test.sh \$(cat selinux-tests.txt)"
 
+    - name: Selinux - Run selinux tests as root
+      run: |
+        lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
+
     - name: Run GNU tests
       shell: bash
       run: |
