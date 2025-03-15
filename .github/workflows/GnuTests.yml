@@ -55,12 +55,14 @@ jobs:
         #
         SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
         ROOT_SUITE_LOG_FILE="${path_GNU_tests}/test-suite-root.log"
+        SELINUX_SUITE_LOG_FILE="${path_GNU_tests}/selinux-test-suite.log"
+        SELINUX_ROOT_SUITE_LOG_FILE="${path_GNU_tests}/selinux-test-suite-root.log"
         TEST_LOGS_GLOB="${path_GNU_tests}/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
         TEST_FILESET_PREFIX='test-fileset-IDs.sha1#'
         TEST_FILESET_SUFFIX='.txt'
         TEST_SUMMARY_FILE='gnu-result.json'
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
-        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
+        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE SELINUX_SUITE_LOG_FILE SELINUX_ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
     - name: Checkout code (uutil)
       uses: actions/checkout@v4
       with:
@@ -198,6 +200,19 @@ jobs:
     - name: Selinux - Run selinux tests as root
       run: |
         lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
+    - name: Selinux - Collect test logs
+      run: |
+        # Create directories for SELinux test logs
+        mkdir -p ${{ steps.vars.outputs.path_GNU_tests }}-selinux
+
+        # Copy the test logs from the Lima VM to the host
+        lima bash -c "mkdir -p ~/work/gnu/tests-selinux && cp ~/work/gnu/tests/test-suite.log ~/work/gnu/tests-selinux/ || echo 'No test-suite.log found'"
+        lima bash -c "cp ~/work/gnu/tests/test-suite-root.log ~/work/gnu/tests-selinux/ || echo 'No test-suite-root.log found'"
+        rsync -v -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./${{ steps.vars.outputs.path_GNU_tests }}-selinux/
+
+        # Copy SELinux logs to the main test directory for integrated processing
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite.log || echo "No SELinux test-suite.log found"
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite-root.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite-root.log || echo "No SELinux test-suite-root.log found"
 
     - name: Run GNU tests
       shell: bash
@@ -230,11 +245,13 @@ jobs:
         #
         SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
         ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.ROOT_SUITE_LOG_FILE }}'
-        ls -al ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
+        SELINUX_SUITE_LOG_FILE='${{ steps.vars.outputs.SELINUX_SUITE_LOG_FILE }}'
+        SELINUX_ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.SELINUX_ROOT_SUITE_LOG_FILE }}'
+        ls -al ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE} ${SELINUX_SUITE_LOG_FILE} ${SELINUX_ROOT_SUITE_LOG_FILE}
 
         if test -f "${SUITE_LOG_FILE}"
         then
-            source ${path_UUTILS}/util/analyze-gnu-results.sh ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
+            source ${path_UUTILS}/util/analyze-gnu-results.sh ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE} ${SELINUX_SUITE_LOG_FILE} ${SELINUX_ROOT_SUITE_LOG_FILE}
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
               echo "::error ::Failed to parse test results from '${SUITE_LOG_FILE}'; failing early"
               exit 1
@@ -287,7 +304,11 @@ jobs:
         have_new_failures=""
         REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
         ROOT_REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite-root.log'
+        SELINUX_REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/selinux-test-suite.log'
+        SELINUX_ROOT_REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/selinux-test-suite-root.log'
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
+
+
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         # https://github.com/uutils/coreutils/issues/4294
