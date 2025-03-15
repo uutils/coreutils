@@ -294,7 +294,11 @@ use_default := 1
 
 build-pkgs:
 ifneq (${MULTICALL}, y)
+ifdef BUILD_SPEC_FEATURE
+	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+else
 	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+endif
 endif
 
 build-coreutils:
