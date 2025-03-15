@@ -82,8 +82,13 @@ else
     # in case we would like to run tests requiring root
     if test -z "$1" -o "$1" == "run-root"; then
         if test -n "$CI"; then
-            echo "Running check-root to run only root tests"
-            sudo "${MAKE}" -j "$("${NPROC}")" check-root SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+            if test $# -ge 2; then
+                echo "Running check-root to run only selinux root tests"
+                sudo "${MAKE}" -j "$("${NPROC}")" check-root TESTS="$SPECIFIC_TESTS" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+            else
+                echo "Running check-root to run only root tests"
+                sudo "${MAKE}" -j "$("${NPROC}")" check-root SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+            fi
         fi
     fi
 fi
