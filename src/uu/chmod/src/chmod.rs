@@ -259,7 +259,7 @@ impl Chmoder {
                         // Don't try to change the mode of the symlink itself
                         continue;
                     }
-                    if !self.quiet {
+                    if !self.recursive && !self.quiet {
                         show!(USimpleError::new(
                             1,
                             format!("cannot operate on dangling symlink {}", filename.quote()),
