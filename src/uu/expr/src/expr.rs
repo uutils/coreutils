@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use syntax_tree::{is_truthy, AstNode};
 use thiserror::Error;
 use uucore::{
@@ -64,7 +64,7 @@ impl UError for ExprError {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(help_about!("expr.md"))
         .override_usage(format_usage(help_usage!("expr.md")))
         .after_help(help_section!("after help", "expr.md"))
@@ -102,7 +102,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if args.len() == 1 && args[0] == "--help" {
         let _ = uu_app().print_help();
     } else if args.len() == 1 && args[0] == "--version" {
-        println!("{} {}", uucore::util_name(), crate_version!())
+        println!("{} {}", uucore::util_name(), uucore::crate_version!())
     } else {
         // The first argument may be "--" and should be be ignored.
         let args = if !args.is_empty() && args[0] == "--" {

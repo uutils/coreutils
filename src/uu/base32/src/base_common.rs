@@ -5,7 +5,7 @@
 
 // spell-checker:ignore hexupper lsbf msbf unpadded nopad aGVsbG8sIHdvcmxkIQ
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -104,7 +104,7 @@ pub fn parse_base_cmd_args(
 
 pub fn base_app(about: &'static str, usage: &str) -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(about)
         .override_usage(format_usage(usage))
         .infer_long_args(true)

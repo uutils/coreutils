@@ -17,7 +17,7 @@ use uucore::fsext::{read_fs_list, MountInfo};
 use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, help_about, help_section, help_usage, show};
 
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 
 use std::error::Error;
 use std::ffi::OsString;
@@ -499,7 +499,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)

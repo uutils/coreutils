@@ -5,7 +5,7 @@
 
 // cSpell:ignore strs
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, Command};
+use clap::{builder::ValueParser, Arg, ArgAction, Command};
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
@@ -42,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .arg(

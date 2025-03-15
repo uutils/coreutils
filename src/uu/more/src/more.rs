@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 
-use clap::{crate_version, value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use crossterm::event::KeyEventKind;
 use crossterm::{
     cursor::{MoveTo, MoveUp},
@@ -170,7 +170,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .infer_long_args(true)
         .arg(
             Arg::new(options::PRINT_OVER)

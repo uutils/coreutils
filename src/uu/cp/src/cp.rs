@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::ValueParser, Arg, ArgAction, ArgMatches, Command};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
@@ -431,7 +431,7 @@ pub fn uu_app() -> Command {
         options::COPY_CONTENTS,
     ];
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(format!(

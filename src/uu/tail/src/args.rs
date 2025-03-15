@@ -7,8 +7,7 @@
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
-use clap::{crate_version, value_parser};
-use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 use std::ffi::OsString;
@@ -476,7 +475,7 @@ pub fn uu_app() -> Command {
     const POLLING_HELP: &str = "Disable 'ReadDirectoryChanges' support and use polling instead";
 
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

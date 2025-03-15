@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) ENOTDIR
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
 use std::io;
@@ -164,7 +164,7 @@ struct Opts {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

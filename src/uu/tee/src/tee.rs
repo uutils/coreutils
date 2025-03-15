@@ -5,7 +5,7 @@
 
 // cSpell:ignore POLLERR POLLRDBAND pfds revents
 
-use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, Command};
+use clap::{builder::PossibleValue, Arg, ArgAction, Command};
 use std::fs::OpenOptions;
 use std::io::{copy, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
@@ -99,7 +99,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)

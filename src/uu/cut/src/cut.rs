@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) delim sourcefiles
 
 use bstr::io::BufReadExt;
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::ValueParser, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, IsTerminal, Read, Write};
@@ -565,7 +565,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .after_help(AFTER_HELP)

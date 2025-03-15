@@ -6,7 +6,7 @@
 use std::ffi::OsString;
 use std::io::{stdout, ErrorKind, Write};
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use num_traits::{ToPrimitive, Zero};
 
 use uucore::error::{FromIo, UResult};
@@ -174,7 +174,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .trailing_var_arg(true)
         .infer_long_args(true)
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .arg(

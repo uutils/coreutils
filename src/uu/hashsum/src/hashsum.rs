@@ -6,7 +6,6 @@
 // spell-checker:ignore (ToDO) algo, algoname, regexes, nread, nonames
 
 use clap::builder::ValueParser;
-use clap::crate_version;
 use clap::value_parser;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command};
@@ -318,7 +317,7 @@ pub fn uu_app_common() -> Command {
     #[cfg(not(windows))]
     const TEXT_HELP: &str = "read in text mode (default)";
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

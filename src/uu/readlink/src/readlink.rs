@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) errno
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::fs;
 use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
@@ -101,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) gethostid
 
-use clap::{crate_version, Command};
+use clap::Command;
 use libc::c_long;
 use uucore::{error::UResult, format_usage, help_about, help_usage};
 
@@ -26,7 +26,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

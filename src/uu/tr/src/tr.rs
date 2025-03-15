@@ -9,7 +9,7 @@ mod operation;
 mod unicode_table;
 
 use crate::operation::DeleteOperation;
-use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use clap::{value_parser, Arg, ArgAction, Command};
 use operation::{
     translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
 };
@@ -160,7 +160,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

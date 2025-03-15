@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (path) eacces inacc rm-r4
 
-use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
+use clap::{builder::ValueParser, parser::ValueSource, Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
 use std::ops::BitOr;
@@ -175,7 +175,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

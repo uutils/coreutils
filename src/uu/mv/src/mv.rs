@@ -8,7 +8,7 @@
 mod error;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
+use clap::{error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
@@ -180,7 +180,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(format!(

@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (vars) seekable
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::fs::File;
@@ -72,7 +72,7 @@ type HeadResult<T> = Result<T, HeadError>;
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

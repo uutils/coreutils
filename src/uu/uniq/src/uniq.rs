@@ -4,8 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore badoption
 use clap::{
-    builder::ValueParser, crate_version, error::ContextKind, error::Error, error::ErrorKind, Arg,
-    ArgAction, ArgMatches, Command,
+    builder::ValueParser, error::ContextKind, error::Error, error::ErrorKind, Arg, ArgAction,
+    ArgMatches, Command,
 };
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -599,7 +599,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

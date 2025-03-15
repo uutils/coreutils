@@ -11,7 +11,7 @@ use std::str;
 use std::{collections::hash_set::HashSet, ffi::OsString};
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 
 #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
 use dns_lookup::lookup_host;
@@ -75,7 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

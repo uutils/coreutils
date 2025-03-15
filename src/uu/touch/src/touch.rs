@@ -13,7 +13,7 @@ use chrono::{
     TimeZone, Timelike,
 };
 use clap::builder::{PossibleValue, ValueParser};
-use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{set_file_times, set_symlink_file_times, FileTime};
 use std::borrow::Cow;
 use std::ffi::OsString;
@@ -257,7 +257,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

@@ -13,7 +13,7 @@ pub mod string_parser;
 pub mod variable_parser;
 
 use clap::builder::ValueParser;
-use clap::{crate_name, crate_version, Arg, ArgAction, Command};
+use clap::{crate_name, Arg, ArgAction, Command};
 use ini::Ini;
 use native_int_str::{
     from_native_int_representation_owned, Convert, NCvt, NativeIntStr, NativeIntString, NativeStr,
@@ -173,7 +173,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(crate_name!())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
