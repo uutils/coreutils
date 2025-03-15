@@ -178,6 +178,7 @@ feat_os_unix_musl = [
   "feat_require_crate_cpp",
   "feat_require_unix",
   "feat_require_unix_hostid",
+  "feat_require_unix_utmpx",
 ]
 feat_os_unix_android = [
   "feat_Tier1",
@@ -308,7 +309,7 @@ hostname = "0.4"
 iana-time-zone = "0.1.57"
 indicatif = "0.17.8"
 itertools = "0.14.0"
-libc = "0.2.153"
+libc = "0.2.172"
 linux-raw-sys = "0.9"
 lscolors = { version = "0.20.0", default-features = false, features = [
   "gnu_legacy",

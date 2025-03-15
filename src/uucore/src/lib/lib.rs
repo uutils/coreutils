@@ -89,7 +89,6 @@ pub use crate::features::signals;
     not(target_os = "fuchsia"),
     not(target_os = "openbsd"),
     not(target_os = "redox"),
-    not(target_env = "musl"),
     feature = "utmpx"
 ))]
 pub use crate::features::utmpx;
