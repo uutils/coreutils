@@ -240,6 +240,10 @@ sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]
 
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
 sed -i "s|require_built_ |# require_built_ |g" init.cfg
+
+# exit early for the selinux check. The first is enough for us.
+sed -i "s|# Independent of whether SELinux|return 0\n  #|g" init.cfg
+
 # Some tests are executed with the "nobody" user.
 # The check to verify if it works is based on the GNU coreutils version
 # making it too restrictive for us
