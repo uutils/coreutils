@@ -270,6 +270,7 @@ TEST_SPEC_FEATURE := test_unimplemented
 else ifeq ($(SELINUX_ENABLED),1)
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE := feat_selinux
+BUILD_SPEC_FEATURE := feat_selinux
 endif
 
 define TEST_BUSYBOX
@@ -297,7 +298,7 @@ ifneq (${MULTICALL}, y)
 endif
 
 build-coreutils:
-	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
+	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
 
 build: build-coreutils build-pkgs
 
