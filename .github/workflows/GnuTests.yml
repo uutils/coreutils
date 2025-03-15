@@ -208,7 +208,7 @@ jobs:
         # Copy the test logs from the Lima VM to the host
         lima bash -c "mkdir -p ~/work/gnu/tests-selinux && cp ~/work/gnu/tests/test-suite.log ~/work/gnu/tests-selinux/ || echo 'No test-suite.log found'"
         lima bash -c "cp ~/work/gnu/tests/test-suite-root.log ~/work/gnu/tests-selinux/ || echo 'No test-suite-root.log found'"
-        rsync -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./${{ steps.vars.outputs.path_GNU_tests }}-selinux/
+        rsync -v -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./${{ steps.vars.outputs.path_GNU_tests }}-selinux/
 
         # Copy SELinux logs to the main test directory for integrated processing
         cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite.log || echo "No SELinux test-suite.log found"
