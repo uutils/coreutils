@@ -41,7 +41,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.8
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.1.8
+      uses: vmactions/freebsd-vm@v1.1.9
       with:
         usesh: true
         sync: rsync
@@ -135,7 +135,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.8
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.1.8
+      uses: vmactions/freebsd-vm@v1.1.9
       with:
         usesh: true
         sync: rsync
