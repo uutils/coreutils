@@ -59,7 +59,8 @@ if [[ "$1" == "run-root" && "$has_selinux_tests" == true ]]; then
     shift
     if test -n "$CI"; then
         echo "Running SELinux tests as root"
-        sudo "${MAKE}" -j "$("${NPROC}")" check-root TESTS="$*" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+        # Don't use check-root here as the upstream root tests is hardcoded
+        sudo "${MAKE}" -j "$("${NPROC}")" check TESTS="$*" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
     fi
     exit 0
 elif test "$1" != "run-root"; then
