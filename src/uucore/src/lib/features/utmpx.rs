@@ -70,9 +70,21 @@ macro_rules! chars2string {
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmp";
 
+    #[cfg(not(target_env = "musl"))]
     pub use libc::__UT_HOSTSIZE as UT_HOSTSIZE;
+    #[cfg(target_env = "musl")]
+    pub use libc::UT_HOSTSIZE;
+
+    #[cfg(not(target_env = "musl"))]
     pub use libc::__UT_LINESIZE as UT_LINESIZE;
+    #[cfg(target_env = "musl")]
+    pub use libc::UT_LINESIZE;
+
+    #[cfg(not(target_env = "musl"))]
     pub use libc::__UT_NAMESIZE as UT_NAMESIZE;
+    #[cfg(target_env = "musl")]
+    pub use libc::UT_NAMESIZE;
+
     pub const UT_IDSIZE: usize = 4;
 
     pub use libc::ACCOUNTING;
