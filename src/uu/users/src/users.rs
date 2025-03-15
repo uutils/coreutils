@@ -9,7 +9,7 @@ use std::ffi::OsString;
 use std::path::Path;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, Command};
+use clap::{Arg, Command};
 use uucore::error::UResult;
 use uucore::{format_usage, help_about, help_usage};
 
@@ -87,7 +87,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

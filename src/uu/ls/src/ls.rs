@@ -30,7 +30,7 @@ use ansi_width::ansi_width;
 use chrono::{DateTime, Local, TimeDelta};
 use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
-    crate_version, Arg, ArgAction, Command,
+    Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
@@ -1227,7 +1227,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)

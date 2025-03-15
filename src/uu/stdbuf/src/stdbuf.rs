@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::process::ExitStatusExt;
@@ -193,7 +193,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))

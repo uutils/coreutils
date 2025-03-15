@@ -40,7 +40,7 @@ use crate::partialreader::PartialReader;
 use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
 use clap::ArgAction;
-use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
+use clap::{parser::ValueSource, Arg, ArgMatches, Command};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::parse_size::ParseSizeError;
@@ -251,7 +251,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)

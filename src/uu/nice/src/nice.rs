@@ -10,7 +10,7 @@ use std::ffi::{CString, OsString};
 use std::io::{Error, Write};
 use std::ptr;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use uucore::{
     error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
     format_usage, help_about, help_usage, show_error,
@@ -191,7 +191,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .trailing_var_arg(true)
         .infer_long_args(true)
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .arg(
             Arg::new(options::ADJUSTMENT)
                 .short('n')

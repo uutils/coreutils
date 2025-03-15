@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shufable rvec fdata
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use memchr::memchr_iter;
 use rand::prelude::{IndexedRandom, SliceRandom};
 use rand::{Rng, RngCore};
@@ -137,7 +137,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(ABOUT)
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(

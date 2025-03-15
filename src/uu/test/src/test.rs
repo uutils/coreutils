@@ -8,7 +8,7 @@
 pub(crate) mod error;
 mod parser;
 
-use clap::{crate_version, Command};
+use clap::Command;
 use error::{ParseError, ParseResult};
 use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
@@ -42,7 +42,7 @@ pub fn uu_app() -> Command {
     // Disable printing of -h and -v as valid alternatives for --help and --version,
     // since we don't recognize -h and -v as help/version flags.
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)

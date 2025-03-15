@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //spell-checker:ignore TAOCP indegree
-use clap::{crate_version, Arg, Command};
+use clap::{Arg, Command};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 use thiserror::Error;
@@ -75,7 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)

@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) execvp SIGHUP cproc vprocmgr cstrs homeout
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
 use std::env;
@@ -91,7 +91,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))

@@ -12,7 +12,7 @@ mod strategy;
 
 use crate::filenames::{FilenameIterator, Suffix, SuffixError};
 use crate::strategy::{NumberType, Strategy, StrategyError};
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
+use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
@@ -228,7 +228,7 @@ fn handle_preceding_options(
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))

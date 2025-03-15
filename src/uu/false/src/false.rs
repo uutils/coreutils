@@ -45,7 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(clap::crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
