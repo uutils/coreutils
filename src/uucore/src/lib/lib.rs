@@ -165,6 +165,25 @@ macro_rules! bin {
     };
 }
 
+/// Generate the version string for clap.
+///
+/// The generated string has the format `(<project name>) <version>`, for
+/// example: "(uutils coreutils) 0.30.0". clap will then prefix it with the util name.
+///
+/// To use this macro, you have to add `PROJECT_NAME_FOR_VERSION_STRING = "<project name>"` to the
+/// `[env]` section in `.cargo/config.toml`.
+#[macro_export]
+macro_rules! crate_version {
+    () => {
+        concat!(
+            "(",
+            env!("PROJECT_NAME_FOR_VERSION_STRING"),
+            ") ",
+            env!("CARGO_PKG_VERSION")
+        )
+    };
+}
+
 /// Generate the usage string for clap.
 ///
 /// This function does two things. It indents all but the first line to align
