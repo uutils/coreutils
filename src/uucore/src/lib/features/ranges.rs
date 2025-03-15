@@ -34,7 +34,7 @@ impl FromStr for Range {
     /// assert_eq!(Range::from_str("4-"), Ok(Range { low: 4, high: usize::MAX - 1 }));
     /// assert_eq!(Range::from_str("-4"), Ok(Range { low: 1, high: 4 }));
     /// assert_eq!(Range::from_str("2-4"), Ok(Range { low: 2, high: 4 }));
-    /// assert!(Range::from_str("0-4").is_err());
+    /// assert_eq!(Range::from_str("0-4"), Ok(Range { low: 0, high: 4 }));
     /// assert!(Range::from_str("4-2").is_err());
     /// assert!(Range::from_str("-").is_err());
     /// assert!(Range::from_str("a").is_err());
@@ -43,7 +43,6 @@ impl FromStr for Range {
     fn from_str(s: &str) -> Result<Self, &'static str> {
         fn parse(s: &str) -> Result<usize, &'static str> {
             match s.parse::<usize>() {
-                Ok(0) => Err("fields and positions are numbered from 1"),
                 // GNU fails when we are at the limit. Match their behavior
                 Ok(n) if n == usize::MAX => Err("byte/character offset is too large"),
                 Ok(n) => Ok(n),
@@ -242,6 +241,7 @@ mod test {
     fn test_from_str() {
         assert_eq!(Range::from_str("5"), Ok(Range { low: 5, high: 5 }));
         assert_eq!(Range::from_str("3-5"), Ok(Range { low: 3, high: 5 }));
+        assert_eq!(Range::from_str("0"), Ok(Range { low: 0, high: 0 }));
         assert_eq!(
             Range::from_str("5-3"),
             Err("high end of range less than low end")
@@ -255,10 +255,6 @@ mod test {
             })
         );
         assert_eq!(Range::from_str("-5"), Ok(Range { low: 1, high: 5 }));
-        assert_eq!(
-            Range::from_str("0"),
-            Err("fields and positions are numbered from 1")
-        );
 
         let max_value = format!("{}", usize::MAX);
         assert_eq!(
