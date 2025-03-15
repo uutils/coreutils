@@ -3,11 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore extendedbigdecimal bigdecimal hexdigit numberparse
-use crate::extendedbigdecimal::ExtendedBigDecimal;
 use crate::number::PreciseNumber;
 use crate::numberparse::ParseNumberError;
 use bigdecimal::BigDecimal;
 use num_traits::FromPrimitive;
+use uucore::format::ExtendedBigDecimal;
 
 /// The base of the hex number system
 const HEX_RADIX: u32 = 16;

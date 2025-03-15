@@ -15,9 +15,9 @@ use num_bigint::Sign;
 use num_traits::Num;
 use num_traits::Zero;
 
-use crate::extendedbigdecimal::ExtendedBigDecimal;
 use crate::hexadecimalfloat;
 use crate::number::PreciseNumber;
+use uucore::format::ExtendedBigDecimal;
 
 /// An error returned when parsing a number fails.
 #[derive(Debug, PartialEq, Eq)]
@@ -381,8 +381,8 @@ impl FromStr for PreciseNumber {
 #[cfg(test)]
 mod tests {
     use bigdecimal::BigDecimal;
+    use uucore::format::ExtendedBigDecimal;
 
-    use crate::extendedbigdecimal::ExtendedBigDecimal;
     use crate::number::PreciseNumber;
     use crate::numberparse::ParseNumberError;
 

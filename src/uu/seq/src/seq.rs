@@ -10,11 +10,10 @@ use clap::{Arg, ArgAction, Command};
 use num_traits::{ToPrimitive, Zero};
 
 use uucore::error::{FromIo, UResult};
-use uucore::format::{num_format, sprintf, Format, FormatArgument};
+use uucore::format::{num_format, sprintf, ExtendedBigDecimal, Format, FormatArgument};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
-mod extendedbigdecimal;
 mod hexadecimalfloat;
 
 // public to allow fuzzing
@@ -24,7 +23,6 @@ pub mod number;
 mod number;
 mod numberparse;
 use crate::error::SeqError;
-use crate::extendedbigdecimal::ExtendedBigDecimal;
 use crate::number::PreciseNumber;
 
 const ABOUT: &str = help_about!("seq.md");
@@ -151,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let format = options
         .format
-        .map(Format::<num_format::Float>::parse)
+        .map(Format::<num_format::Float, &ExtendedBigDecimal>::parse)
         .transpose()?;
 
     let result = print_seq(
@@ -260,7 +258,7 @@ fn print_seq(
     terminator: &str,
     pad: bool,
     padding: usize,
-    format: Option<&Format<num_format::Float>>,
+    format: Option<&Format<num_format::Float, &ExtendedBigDecimal>>,
 ) -> std::io::Result<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
@@ -295,16 +293,7 @@ fn print_seq(
         // shouldn't have to do so much converting back and forth via
         // strings.
         match &format {
-            Some(f) => {
-                let float = match &value {
-                    ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
-                    ExtendedBigDecimal::Infinity => f64::INFINITY,
-                    ExtendedBigDecimal::MinusInfinity => f64::NEG_INFINITY,
-                    ExtendedBigDecimal::MinusZero => -0.0,
-                    ExtendedBigDecimal::Nan => f64::NAN,
-                };
-                f.fmt(&mut stdout, float)?;
-            }
+            Some(f) => f.fmt(&mut stdout, &value)?,
             None => write_value_float(&mut stdout, &value, padding, precision)?,
         }
         // TODO Implement augmenting addition.
