@@ -181,9 +181,7 @@ SELINUX_PROGS := \
 
 ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
-endif
-
-ifeq ($(SELINUX_ENABLED),1)
+# Build the selinux command even if not on the system
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
