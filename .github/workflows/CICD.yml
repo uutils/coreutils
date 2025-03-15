@@ -267,6 +267,10 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.8
     - name: "`make build`"
@@ -402,7 +406,7 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install jq
+        sudo apt-get install jq libselinux1-dev
     - name: "`make install`"
       shell: bash
       run: |
@@ -847,6 +851,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
         ## Install/setup prerequisites
         make prepare-busytest
     - name: Run BusyBox test suite
@@ -939,6 +944,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
         ## Install/setup prerequisites
         make toybox-src
     - name: Run Toybox test suite
