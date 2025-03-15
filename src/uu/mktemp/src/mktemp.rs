@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (paths) GPGHome findxs
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::ValueParser, Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
@@ -346,7 +346,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

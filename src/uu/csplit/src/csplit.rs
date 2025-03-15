@@ -12,7 +12,7 @@ use std::{
     io::{BufRead, BufWriter, Write},
 };
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
@@ -597,7 +597,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .args_override_self(true)

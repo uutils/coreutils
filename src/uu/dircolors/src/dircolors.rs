@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -252,7 +252,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))

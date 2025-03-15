@@ -5,7 +5,7 @@
 
 use platform_info::*;
 
-use clap::{crate_version, Command};
+use clap::Command;
 use uucore::error::{UResult, USimpleError};
 use uucore::{help_about, help_section};
 
@@ -24,7 +24,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(SUMMARY)
         .infer_long_args(true)

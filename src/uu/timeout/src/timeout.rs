@@ -7,7 +7,7 @@
 mod status;
 
 use crate::status::ExitStatus;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new("timeout")
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .arg(

@@ -7,7 +7,7 @@
 mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::ffi::CString;
 use std::io::Error;
 use std::os::unix::prelude::OsStrExt;
@@ -239,7 +239,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

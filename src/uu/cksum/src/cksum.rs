@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 use clap::builder::ValueParser;
-use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use clap::{value_parser, Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufReader, Read, Write};
@@ -342,7 +342,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

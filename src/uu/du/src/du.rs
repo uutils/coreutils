@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use chrono::{DateTime, Local};
-use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::PossibleValue, Arg, ArgAction, ArgMatches, Command};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
@@ -824,7 +824,7 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
