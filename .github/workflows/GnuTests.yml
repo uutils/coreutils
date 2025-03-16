@@ -95,7 +95,7 @@ jobs:
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
 
     - name: Selinux - Start Fedora VM with SELinux
-      run: limactl start --plain --name=default --cpus=2 --disk=40 --memory=8 --network=lima:user-v2 template://fedora
+      run: limactl start --plain --name=default --cpus=4 --disk=40 --memory=8 --network=lima:user-v2 template://fedora
 
     - name: Selinux - Setup SSH
       uses: lima-vm/lima-actions/ssh@v1
@@ -201,17 +201,19 @@ jobs:
       run: |
         lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
 
-    - name: Selinux - Extract testing info from indiv logs into JSON
+    - name: Selinux - Extract testing info from individual logs into JSON
       shell: bash
       run : |
-        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > tests-selinux/selinux-gnu-full-result.json && cat tests-selinux/selinux-gnu-full-result.json"
+        lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests"
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/selinux-gnu-full-result.json && cat ~/work/gnu/tests-selinux/selinux-gnu-full-result.json"
 
     - name: Selinux - Collect test logs and test results
       run: |
         mkdir -p ${{ steps.vars.outputs.path_GNU_tests }}-selinux
 
         # Copy the test logs from the Lima VM to the host
-        lima bash -c "mkdir -p ~/work/gnu/tests-selinux && cp ~/work/gnu/tests/test-suite.log ~/work/gnu/tests-selinux/ || echo 'No test-suite.log found'"
+        lima bash -c "cp ~/work/gnu/tests/test-suite.log ~/work/gnu/tests-selinux/ || echo 'No test-suite.log found'"
         lima bash -c "cp ~/work/gnu/tests/test-suite-root.log ~/work/gnu/tests-selinux/ || echo 'No test-suite-root.log found'"
         rsync -v -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./${{ steps.vars.outputs.path_GNU_tests }}-selinux/
 
@@ -245,25 +247,27 @@ jobs:
       run: |
         ## Extract/summarize testing info
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        #
-        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        #
-        SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
-        ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.ROOT_SUITE_LOG_FILE }}'
-        SELINUX_SUITE_LOG_FILE='${{ steps.vars.outputs.SELINUX_SUITE_LOG_FILE }}'
-        SELINUX_ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.SELINUX_ROOT_SUITE_LOG_FILE }}'
-        ls -al ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE} ${SELINUX_SUITE_LOG_FILE} ${SELINUX_ROOT_SUITE_LOG_FILE}
 
-        if test -f "${SUITE_LOG_FILE}"
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+
+        # Check if the file exists
+        if test -f "${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}"
         then
-            source ${path_UUTILS}/util/analyze-gnu-results.sh ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE} ${SELINUX_SUITE_LOG_FILE} ${SELINUX_ROOT_SUITE_LOG_FILE}
+            # Run the Python script to analyze the JSON data
+            eval $(python3 ${path_UUTILS}/util/analyze-gnu-results.py ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }})
+
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
-              echo "::error ::Failed to parse test results from '${SUITE_LOG_FILE}'; failing early"
+              echo "::error ::Failed to parse test results from '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}'; failing early"
               exit 1
             fi
+
             output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR / SKIP: $SKIP"
             echo "${output}"
-            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
+
+            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then
+              echo "::warning ::${output}"
+            fi
+
             jq -n \
                   --arg date "$(date --rfc-email)" \
                   --arg sha "$GITHUB_SHA" \
@@ -277,9 +281,10 @@ jobs:
             HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
             outputs HASH
           else
-            echo "::error ::Failed to find summary of test results (missing '${SUITE_LOG_FILE}'); failing early"
+            echo "::error ::Failed to find summary of test results (missing '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}'); failing early"
             exit 1
           fi
+
           # Compress logs before upload (fails otherwise)
           gzip ${{ steps.vars.outputs.TEST_LOGS_GLOB }}
     - name: Reserve SHA1/ID of 'test-summary'
