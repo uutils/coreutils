@@ -253,6 +253,8 @@ impl Formatter<&ExtendedBigDecimal> for Float {
             ExtendedBigDecimal::MinusNan => (ExtendedBigDecimal::Nan, true),
         };
 
+        let mut alignment = self.alignment;
+
         let s = match abs {
             ExtendedBigDecimal::BigDecimal(bd) => match self.variant {
                 FloatVariant::Decimal => {
@@ -268,11 +270,17 @@ impl Formatter<&ExtendedBigDecimal> for Float {
                     format_float_hexadecimal(&bd, self.precision, self.case, self.force_decimal)
                 }
             },
-            _ => format_float_non_finite(&abs, self.case),
+            _ => {
+                // Pad non-finite numbers with spaces, not zeros.
+                if alignment == NumberAlignment::RightZero {
+                    alignment = NumberAlignment::RightSpace;
+                };
+                format_float_non_finite(&abs, self.case)
+            }
         };
         let sign_indicator = get_sign_indicator(self.positive_sign, negative);
 
-        write_output(writer, sign_indicator, s, self.width, self.alignment)
+        write_output(writer, sign_indicator, s, self.width, alignment)
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError>
