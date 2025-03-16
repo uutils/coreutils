@@ -81,6 +81,7 @@ struct TraversalOptions {
     dereference: Deref,
     count_links: bool,
     verbose: bool,
+    apparent_size: bool,
     excludes: Vec<Pattern>,
 }
 
@@ -89,7 +90,6 @@ struct StatPrinter {
     inodes: bool,
     max_depth: Option<usize>,
     threshold: Option<Threshold>,
-    apparent_size: bool,
     size_format: SizeFormat,
     time: Option<Time>,
     time_format: String,
@@ -127,8 +127,8 @@ struct FileInfo {
 struct Stat {
     path: PathBuf,
     is_dir: bool,
+    /// size on disk unless --apparent-size is passed
     size: u64,
-    blocks: u64,
     inodes: u64,
     inode: Option<FileInfo>,
     created: Option<u64>,
@@ -170,8 +170,17 @@ impl Stat {
             Ok(Self {
                 path: path.to_path_buf(),
                 is_dir: metadata.is_dir(),
-                size: if metadata.is_dir() { 0 } else { metadata.len() },
-                blocks: metadata.blocks(),
+                size: if options.apparent_size {
+                    if metadata.is_dir() {
+                        0
+                    } else {
+                        metadata.len()
+                    }
+                } else {
+                    // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
+                    // See: http://linux.die.net/man/2/stat
+                    metadata.blocks() * 512
+                },
                 inodes: 1,
                 inode: Some(file_info),
                 created: birth_u64(&metadata),
@@ -182,14 +191,20 @@ impl Stat {
 
         #[cfg(windows)]
         {
-            let size_on_disk = get_size_on_disk(path);
             let file_info = get_file_info(path);
 
             Ok(Self {
                 path: path.to_path_buf(),
                 is_dir: metadata.is_dir(),
-                size: if metadata.is_dir() { 0 } else { metadata.len() },
-                blocks: size_on_disk / 1024 * 2,
+                size: if options.apparent_size {
+                    if metadata.is_dir() {
+                        0
+                    } else {
+                        metadata.len()
+                    }
+                } else {
+                    get_size_on_disk(path)
+                },
                 inodes: 1,
                 inode: file_info,
                 created: windows_creation_time_to_unix_time(metadata.creation_time()),
@@ -376,7 +391,6 @@ fn du(
 
                                 if !options.separate_dirs {
                                     my_stat.size += this_stat.size;
-                                    my_stat.blocks += this_stat.blocks;
                                     my_stat.inodes += this_stat.inodes;
                                 }
                                 print_tx.send(Ok(StatPrintInfo {
@@ -385,7 +399,6 @@ fn du(
                                 }))?;
                             } else {
                                 my_stat.size += this_stat.size;
-                                my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
                                 if options.all {
                                     print_tx.send(Ok(StatPrintInfo {
@@ -485,12 +498,8 @@ impl StatPrinter {
     fn choose_size(&self, stat: &Stat) -> u64 {
         if self.inodes {
             stat.inodes
-        } else if self.apparent_size {
-            stat.size
         } else {
-            // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
-            // See: http://linux.die.net/man/2/stat
-            stat.blocks * 512
+            stat.size
         }
     }
 
@@ -705,6 +714,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         count_links,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
+        apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
     };
 
     let time_format = if time.is_some() {
@@ -727,7 +737,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 })
             })
             .transpose()?,
-        apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
         time,
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
