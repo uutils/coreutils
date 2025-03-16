@@ -46,6 +46,7 @@ Codacy
 Cygwin
 Deno
 EditorConfig
+EPEL
 FreeBSD
 Gmail
 GNU

@@ -103,3 +103,4 @@ xargs
 
 # * directories
 sbin
+libexec
