@@ -200,9 +200,14 @@ jobs:
     - name: Selinux - Run selinux tests as root
       run: |
         lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
-    - name: Selinux - Collect test logs
+
+    - name: Selinux - Extract testing info from indiv logs into JSON
+      shell: bash
+      run : |
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > tests-selinux/selinux-gnu-full-result.json && cat tests-selinux/selinux-gnu-full-result.json"
+
+    - name: Selinux - Collect test logs and test results
       run: |
-        # Create directories for SELinux test logs
         mkdir -p ${{ steps.vars.outputs.path_GNU_tests }}-selinux
 
         # Copy the test logs from the Lima VM to the host
@@ -211,8 +216,9 @@ jobs:
         rsync -v -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./${{ steps.vars.outputs.path_GNU_tests }}-selinux/
 
         # Copy SELinux logs to the main test directory for integrated processing
-        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite.log || echo "No SELinux test-suite.log found"
-        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite-root.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite-root.log || echo "No SELinux test-suite-root.log found"
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite.log
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite-root.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite-root.log
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/selinux-gnu-full-result.json ${{ steps.vars.outputs.path_GNU_tests }}/
 
     - name: Run GNU tests
       shell: bash
@@ -228,10 +234,9 @@ jobs:
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh" run-root
-    - name: Extract testing info into JSON
+    - name: Extract testing info from indiv logs into JSON
       shell: bash
       run : |
-        ## Extract testing info into JSON
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
     - name: Extract/summarize testing info
