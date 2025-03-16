@@ -65,8 +65,9 @@ jobs:
         TEST_ROOT_FULL_SUMMARY_FILE='gnu-root-full-result.json'
         TEST_SELINUX_FULL_SUMMARY_FILE='selinux-gnu-full-result.json'
         TEST_SELINUX_ROOT_FULL_SUMMARY_FILE='selinux-root-gnu-full-result.json'
+        AGGREGATED_SUMMARY_FILE='aggregated-result.json'
 
-        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE SELINUX_SUITE_LOG_FILE SELINUX_ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE TEST_ROOT_FULL_SUMMARY_FILE TEST_SELINUX_FULL_SUMMARY_FILE TEST_SELINUX_ROOT_FULL_SUMMARY_FILE
+        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE SELINUX_SUITE_LOG_FILE SELINUX_ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE TEST_ROOT_FULL_SUMMARY_FILE TEST_SELINUX_FULL_SUMMARY_FILE TEST_SELINUX_ROOT_FULL_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
     - name: Checkout code (uutil)
       uses: actions/checkout@v4
       with:
@@ -272,7 +273,7 @@ jobs:
         if test -f "${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}"
         then
             # Look at all individual results and summarize
-            eval $(python3 ${path_UUTILS}/util/analyze-gnu-results.py ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }})
+            eval $(python3 ${path_UUTILS}/util/analyze-gnu-results.py -o=${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }})
 
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
               echo "::error ::Failed to parse test results from '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}'; failing early"
@@ -325,21 +326,26 @@ jobs:
       with:
         name: gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
-    - name: Upload full json results
+    - name: Upload root json results
       uses: actions/upload-artifact@v4
       with:
         name: gnu-root-full-result.json
         path: ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }}
-    - name: Upload full json results
+    - name: Upload selinux json results
       uses: actions/upload-artifact@v4
       with:
         name: selinux-gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }}
-    - name: Upload full json results
+    - name: Upload selinux root json results
       uses: actions/upload-artifact@v4
       with:
         name: selinux-root-gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
+    - name: Upload aggregated json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: aggregated-result.json
+        path: ${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}
     - name: Compare test failures VS reference
       shell: bash
       run: |

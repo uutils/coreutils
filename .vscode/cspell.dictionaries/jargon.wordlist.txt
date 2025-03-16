@@ -142,6 +142,7 @@ whitespace
 wordlist
 wordlists
 xattrs
+xpass
 
 # * abbreviations
 consts
