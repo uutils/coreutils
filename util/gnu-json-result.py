@@ -9,7 +9,16 @@ from pathlib import Path
 
 out = {}
 
+if len(sys.argv) != 2:
+    print("Usage: python gnu-json-result.py <gnu_test_directory>")
+    sys.exit(1)
+
 test_dir = Path(sys.argv[1])
+if not test_dir.is_dir():
+    print(f"Directory {test_dir} does not exist.")
+    sys.exit(1)
+
+# Test all the logs from the test execution
 for filepath in test_dir.glob("**/*.log"):
     path = Path(filepath)
     current = out
