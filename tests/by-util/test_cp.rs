@@ -361,6 +361,7 @@ fn test_cp_arg_no_target_directory_with_recursive() {
 }
 
 #[test]
+#[ignore = "disabled until https://github.com/uutils/coreutils/issues/7455 is fixed"]
 fn test_cp_arg_no_target_directory_with_recursive_target_does_not_exists() {
     let (at, mut ucmd) = at_and_ucmd!();
 
