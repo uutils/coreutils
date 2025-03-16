@@ -13,6 +13,7 @@ canonicalizing
 capget
 codepoint
 codepoints
+codeready
 codegen
 colorizable
 colorize
