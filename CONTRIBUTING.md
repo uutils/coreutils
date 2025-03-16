@@ -19,7 +19,7 @@ Now follows a very important warning:
 > other implementations. This means that **we cannot accept any changes based on
 > the GNU source code**. To make sure that cannot happen, **you cannot link to
 > the GNU source code** either. It is however possible to look at other implementations
-> under a BSD or MIT license like [Apple's implementation](https://opensource.apple.com/source/file_cmds/)
+> under a BSD or MIT license like [Apple's implementation](https://github.com/apple-oss-distributions/file_cmds/)
 > or [OpenBSD](https://github.com/openbsd/src/tree/master/bin).
 
 Finally, feel free to join our [Discord](https://discord.gg/wQVJbvJ)!
@@ -304,7 +304,7 @@ completions:
 - [OpenBSD](https://github.com/openbsd/src/tree/master/bin)
 - [Busybox](https://github.com/mirror/busybox/tree/master/coreutils)
 - [Toybox (Android)](https://github.com/landley/toybox/tree/master/toys/posix)
-- [Mac OS](https://opensource.apple.com/source/file_cmds/)
+- [Mac OS](https://github.com/apple-oss-distributions/file_cmds/)
 - [V lang](https://github.com/vlang/coreutils)
 - [SerenityOS](https://github.com/SerenityOS/serenity/tree/master/Userland/Utilities)
 - [Initial Unix](https://github.com/dspinellis/unix-history-repo)
