@@ -349,11 +349,38 @@ fn test_cp_arg_no_target_directory_with_recursive() {
     at.touch("dir/a");
     at.touch("dir/b");
 
-    ucmd.arg("-rT").arg("dir").arg("dir2").succeeds();
+    ucmd.arg("-rT")
+        .arg("dir")
+        .arg("dir2")
+        .succeeds()
+        .no_output();
 
     assert!(at.plus("dir2").join("a").exists());
     assert!(at.plus("dir2").join("b").exists());
     assert!(!at.plus("dir2").join("dir").exists());
+}
+
+#[test]
+#[ignore = "disabled until https://github.com/uutils/coreutils/issues/7455 is fixed"]
+fn test_cp_arg_no_target_directory_with_recursive_target_does_not_exists() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.touch("dir/a");
+    at.touch("dir/b");
+
+    let target = "create_me";
+    assert!(!at.plus(target).exists());
+
+    ucmd.arg("-rT")
+        .arg("dir")
+        .arg(target)
+        .succeeds()
+        .no_output();
+
+    assert!(at.plus(target).join("a").exists());
+    assert!(at.plus(target).join("b").exists());
+    assert!(!at.plus(target).join("dir").exists());
 }
 
 #[test]
