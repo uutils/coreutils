@@ -243,17 +243,11 @@ trait Shufable {
     type Item: Writable;
     fn is_empty(&self) -> bool;
     fn choose(&self, rng: &mut WrappedRng) -> Self::Item;
-    // This type shouldn't even be known. However, because we want to support
-    // Rust 1.70, it is not possible to return "impl Iterator".
-    // TODO: When the MSRV is raised, rewrite this to return "impl Iterator".
-    type PartialShuffleIterator<'b>: Iterator<Item = Self::Item>
-    where
-        Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
         amount: usize,
-    ) -> Self::PartialShuffleIterator<'b>;
+    ) -> impl Iterator<Item = Self::Item>;
 }
 
 impl<'a> Shufable for Vec<&'a [u8]> {
@@ -267,15 +261,11 @@ impl<'a> Shufable for Vec<&'a [u8]> {
         // this is safe.
         (**self).choose(rng).unwrap()
     }
-    type PartialShuffleIterator<'b>
-        = std::iter::Copied<std::slice::Iter<'b, &'a [u8]>>
-    where
-        Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
         amount: usize,
-    ) -> Self::PartialShuffleIterator<'b> {
+    ) -> impl Iterator<Item = Self::Item> {
         // Note: "copied()" only copies the reference, not the entire [u8].
         (**self).partial_shuffle(rng, amount).0.iter().copied()
     }
@@ -289,12 +279,11 @@ impl<'a> Shufable for Vec<&'a OsStr> {
     fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
         (**self).choose(rng).unwrap()
     }
-    type PartialShuffleIterator<'b> = std::iter::Copied<std::slice::Iter<'b, &'a OsStr>> where Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
         amount: usize,
-    ) -> Self::PartialShuffleIterator<'b> {
+    ) -> impl Iterator<Item = Self::Item> {
         (**self).partial_shuffle(rng, amount).0.iter().copied()
     }
 }
@@ -307,15 +296,11 @@ impl Shufable for RangeInclusive<usize> {
     fn choose(&self, rng: &mut WrappedRng) -> usize {
         rng.random_range(self.clone())
     }
-    type PartialShuffleIterator<'b>
-        = NonrepeatingIterator<'b>
-    where
-        Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
         amount: usize,
-    ) -> Self::PartialShuffleIterator<'b> {
+    ) -> impl Iterator<Item = Self::Item> {
         NonrepeatingIterator::new(self.clone(), rng, amount)
     }
 }
