@@ -935,17 +935,19 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.8
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
     - name: Build coreutils as multiple binaries
       shell: bash
       run: |
         ## Build individual uutil binaries
         set -v
         make
-    - name: Install/setup prerequisites
+    - name: Run toybox src
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
-        ## Install/setup prerequisites
         make toybox-src
     - name: Run Toybox test suite
       id: summary
