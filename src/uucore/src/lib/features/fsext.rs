@@ -37,7 +37,8 @@ use windows_sys::Win32::{
     Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
     Storage::FileSystem::{
         FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
-        GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+        GetVolumeInformationW, GetVolumePathNameW, GetVolumePathNamesForVolumeNameW,
+        QueryDosDeviceW,
     },
     System::WindowsProgramming::DRIVE_REMOTE,
 };
@@ -576,22 +577,18 @@ impl FsUsage {
     }
     #[cfg(windows)]
     pub fn new(path: &Path) -> UResult<Self> {
-        let mut root_path = [0u16; MAX_PATH];
+        let mut volume_path = [0u16; MAX_PATH];
+        let path = to_nul_terminated_wide_string(path);
+
         let success = unsafe {
-            let path = to_nul_terminated_wide_string(path);
-            GetVolumePathNamesForVolumeNameW(
-                //path_utf8.as_ptr(),
+            GetVolumePathNameW(
                 path.as_ptr(),
-                root_path.as_mut_ptr(),
-                root_path.len() as u32,
-                ptr::null_mut(),
+                volume_path.as_mut_ptr(),
+                volume_path.len() as u32,
             )
         };
         if 0 == success {
-            let msg = format!(
-                "GetVolumePathNamesForVolumeNameW failed: {}",
-                IOError::last_os_error()
-            );
+            let msg = format!("GetVolumePathNameW failed: {}", IOError::last_os_error());
             return Err(USimpleError::new(EXIT_ERR, msg));
         }
 
@@ -600,15 +597,18 @@ impl FsUsage {
         let mut number_of_free_clusters = 0;
         let mut total_number_of_clusters = 0;
 
-        unsafe {
-            let path = to_nul_terminated_wide_string(path);
+        let success = unsafe {
             GetDiskFreeSpaceW(
-                path.as_ptr(),
+                volume_path.as_ptr(),
                 &mut sectors_per_cluster,
                 &mut bytes_per_sector,
                 &mut number_of_free_clusters,
                 &mut total_number_of_clusters,
-            );
+            )
+        };
+        if success == 0 {
+            let msg = format!("GetDiskFreeSpaceW failed: {}", IOError::last_os_error());
+            return Err(USimpleError::new(EXIT_ERR, msg));
         }
 
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
@@ -621,7 +621,7 @@ impl FsUsage {
             //  Total number of free blocks.
             bfree: number_of_free_clusters as u64,
             //  Total number of free blocks available to non-privileged processes.
-            bavail: 0,
+            bavail: number_of_free_clusters as u64,
             bavail_top_bit_set: ((bytes_per_sector as u64) & (1u64.rotate_right(1))) != 0,
             // Total number of file nodes (inodes) on the file system.
             files: 0, // Not available on windows
