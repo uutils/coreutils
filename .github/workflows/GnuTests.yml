@@ -62,7 +62,11 @@ jobs:
         TEST_FILESET_SUFFIX='.txt'
         TEST_SUMMARY_FILE='gnu-result.json'
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
-        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE SELINUX_SUITE_LOG_FILE SELINUX_ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
+        TEST_ROOT_FULL_SUMMARY_FILE='gnu-root-full-result.json'
+        TEST_SELINUX_FULL_SUMMARY_FILE='selinux-gnu-full-result.json'
+        TEST_SELINUX_ROOT_FULL_SUMMARY_FILE='selinux-root-gnu-full-result.json'
+
+        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE SELINUX_SUITE_LOG_FILE SELINUX_ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE TEST_ROOT_FULL_SUMMARY_FILE TEST_SELINUX_FULL_SUMMARY_FILE TEST_SELINUX_ROOT_FULL_SUMMARY_FILE
     - name: Checkout code (uutil)
       uses: actions/checkout@v4
       with:
@@ -189,6 +193,7 @@ jobs:
     - name: Selinux - Build for selinux tests
       run: |
         lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh"
+        lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
 
     - name: Selinux - Run selinux tests
       run: |
@@ -197,16 +202,19 @@ jobs:
         lima cat /proc/filesystems
         lima bash -c "cd ~/work/uutils/ && bash util/run-gnu-test.sh \$(cat selinux-tests.txt)"
 
-    - name: Selinux - Run selinux tests as root
-      run: |
-        lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
-
     - name: Selinux - Extract testing info from individual logs into JSON
       shell: bash
       run : |
-        lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
-        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests"
-        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/selinux-gnu-full-result.json && cat ~/work/gnu/tests-selinux/selinux-gnu-full-result.json"
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }}"
+
+    - name: Selinux/root - Run selinux tests
+      run: |
+        lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
+
+    - name: Selinux/root - Extract testing info from individual logs into JSON
+      shell: bash
+      run : |
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}"
 
     - name: Selinux - Collect test logs and test results
       run: |
@@ -220,7 +228,8 @@ jobs:
         # Copy SELinux logs to the main test directory for integrated processing
         cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite.log
         cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite-root.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite-root.log
-        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/selinux-gnu-full-result.json ${{ steps.vars.outputs.path_GNU_tests }}/
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }} .
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }} .
 
     - name: Run GNU tests
       shell: bash
@@ -229,6 +238,13 @@ jobs:
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh"
+
+    - name: Extract testing info from individual logs into JSON
+      shell: bash
+      run : |
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+
     - name: Run GNU root tests
       shell: bash
       run: |
@@ -236,11 +252,13 @@ jobs:
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh" run-root
-    - name: Extract testing info from indiv logs into JSON
+
+    - name: Extract testing info from individual logs (run as root) into JSON
       shell: bash
       run : |
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }}
+
     - name: Extract/summarize testing info
       id: summary
       shell: bash
@@ -253,8 +271,8 @@ jobs:
         # Check if the file exists
         if test -f "${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}"
         then
-            # Run the Python script to analyze the JSON data
-            eval $(python3 ${path_UUTILS}/util/analyze-gnu-results.py ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }})
+            # Look at all individual results and summarize
+            eval $(python3 ${path_UUTILS}/util/analyze-gnu-results.py ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }})
 
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
               echo "::error ::Failed to parse test results from '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}'; failing early"
@@ -307,6 +325,21 @@ jobs:
       with:
         name: gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+    - name: Upload full json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: gnu-root-full-result.json
+        path: ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }}
+    - name: Upload full json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: selinux-gnu-full-result.json
+        path: ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }}
+    - name: Upload full json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: selinux-root-gnu-full-result.json
+        path: ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
     - name: Compare test failures VS reference
       shell: bash
       run: |
