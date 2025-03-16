@@ -310,12 +310,12 @@ pub fn sprintf<'a>(
     Ok(writer)
 }
 
-/// A parsed format for a single numerical value of type T
+/// A format for a single numerical value of type T
 ///
-/// This is used by `seq` and `csplit`. It can be constructed with [`Format::parse`]
-/// and can write a value with [`Format::fmt`].
+/// This is used by `seq` and `csplit`. It can be constructed with [`Format::from_formatter`]
+/// or [`Format::parse`] and can write a value with [`Format::fmt`].
 ///
-/// It can only accept a single specification without any asterisk parameters.
+/// [`Format::parse`] can only accept a single specification without any asterisk parameters.
 /// If it does get more specifications, it will return an error.
 pub struct Format<F: Formatter<T>, T> {
     prefix: Vec<u8>,
@@ -325,6 +325,15 @@ pub struct Format<F: Formatter<T>, T> {
 }
 
 impl<F: Formatter<T>, T> Format<F, T> {
+    pub fn from_formatter(formatter: F) -> Self {
+        Self {
+            prefix: Vec::<u8>::new(),
+            suffix: Vec::<u8>::new(),
+            formatter,
+            _marker: PhantomData,
+        }
+    }
+
     pub fn parse(format_string: impl AsRef<[u8]>) -> Result<Self, FormatError> {
         let mut iter = parse_spec_only(format_string.as_ref());
 
