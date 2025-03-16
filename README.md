@@ -45,7 +45,7 @@ uutils aims to be a drop-in replacement for the GNU utils. Differences with GNU
 are treated as bugs.
 
 uutils aims to work on as many platforms as possible, to be able to use the same
-utils on Linux, Mac, Windows and other platforms. This ensures, for example,
+utils on Linux, macOS, Windows and other platforms. This ensures, for example,
 that scripts can be easily transferred between platforms.
 
 <div class="oranda-hide">
