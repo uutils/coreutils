@@ -103,16 +103,17 @@ def analyze_test_results(json_data):
         for test_name, result in tests.items():
             total_tests += 1
 
-            if result == "PASS":
-                pass_count += 1
-            elif result == "FAIL":
-                fail_count += 1
-            elif result == "SKIP":
-                skip_count += 1
-            elif result == "ERROR":
-                error_count += 1
-            elif result == "XPASS":
-                xpass_count += 1
+            match result:
+                case "PASS":
+                    pass_count += 1
+                case "FAIL":
+                    fail_count += 1
+                case "SKIP":
+                    skip_count += 1
+                case "ERROR":
+                    error_count += 1
+                case "XPASS":
+                    xpass_count += 1
 
     # Return the statistics
     return {
