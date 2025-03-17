@@ -57,11 +57,16 @@ TOYBOX_ROOT := $(BASEDIR)/tmp
 TOYBOX_VER  := 0.8.12
 TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
-ifeq ($(SELINUX_ENABLED),)
-	SELINUX_ENABLED := 0
+
+ifdef SELINUX_ENABLED
+	override SELINUX_ENABLED := 0
+# Now check if we should enable it (only on non-Windows)
 	ifneq ($(OS),Windows_NT)
-		ifeq ($(shell /sbin/selinuxenabled 2>/dev/null ; echo $$?),0)
-			SELINUX_ENABLED := 1
+		ifeq ($(shell if [ -x /sbin/selinuxenabled ] && /sbin/selinuxenabled 2>/dev/null; then echo 0; else echo 1; fi),0)
+			override SELINUX_ENABLED := 1
+$(info /sbin/selinuxenabled successful)
+	    else
+$(info SELINUX_ENABLED=1 but /sbin/selinuxenabled failed)
 		endif
 	endif
 endif
@@ -176,9 +181,7 @@ SELINUX_PROGS := \
 
 ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
-endif
-
-ifeq ($(SELINUX_ENABLED),1)
+# Build the selinux command even if not on the system
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
@@ -265,6 +268,7 @@ TEST_SPEC_FEATURE := test_unimplemented
 else ifeq ($(SELINUX_ENABLED),1)
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE := feat_selinux
+BUILD_SPEC_FEATURE := feat_selinux
 endif
 
 define TEST_BUSYBOX
@@ -288,11 +292,15 @@ use_default := 1
 
 build-pkgs:
 ifneq (${MULTICALL}, y)
+ifdef BUILD_SPEC_FEATURE
+	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+else
 	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+endif
 endif
 
 build-coreutils:
-	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
+	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
 
 build: build-coreutils build-pkgs
 

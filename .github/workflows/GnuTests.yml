@@ -55,12 +55,19 @@ jobs:
         #
         SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
         ROOT_SUITE_LOG_FILE="${path_GNU_tests}/test-suite-root.log"
+        SELINUX_SUITE_LOG_FILE="${path_GNU_tests}/selinux-test-suite.log"
+        SELINUX_ROOT_SUITE_LOG_FILE="${path_GNU_tests}/selinux-test-suite-root.log"
         TEST_LOGS_GLOB="${path_GNU_tests}/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
         TEST_FILESET_PREFIX='test-fileset-IDs.sha1#'
         TEST_FILESET_SUFFIX='.txt'
         TEST_SUMMARY_FILE='gnu-result.json'
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
-        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
+        TEST_ROOT_FULL_SUMMARY_FILE='gnu-root-full-result.json'
+        TEST_SELINUX_FULL_SUMMARY_FILE='selinux-gnu-full-result.json'
+        TEST_SELINUX_ROOT_FULL_SUMMARY_FILE='selinux-root-gnu-full-result.json'
+        AGGREGATED_SUMMARY_FILE='aggregated-result.json'
+
+        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE SELINUX_SUITE_LOG_FILE SELINUX_ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE TEST_ROOT_FULL_SUMMARY_FILE TEST_SELINUX_FULL_SUMMARY_FILE TEST_SELINUX_ROOT_FULL_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
     - name: Checkout code (uutil)
       uses: actions/checkout@v4
       with:
@@ -81,6 +88,44 @@ jobs:
         ref: ${{ steps.vars.outputs.repo_GNU_ref }}
         submodules: false
         persist-credentials: false
+
+    - name: Selinux - Setup Lima
+      uses: lima-vm/lima-actions/setup@v1
+      id: lima-actions-setup
+
+    - name: Selinux - Cache ~/.cache/lima
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/lima
+        key: lima-${{ steps.lima-actions-setup.outputs.version }}
+
+    - name: Selinux - Start Fedora VM with SELinux
+      run: limactl start --plain --name=default --cpus=4 --disk=40 --memory=8 --network=lima:user-v2 template://fedora
+
+    - name: Selinux - Setup SSH
+      uses: lima-vm/lima-actions/ssh@v1
+
+    - name: Selinux - Verify SELinux Status and Configuration
+      run: |
+        lima getenforce
+        lima ls -laZ /etc/selinux
+        lima sudo sestatus
+
+        # Ensure we're running in enforcing mode
+        lima sudo setenforce 1
+        lima getenforce
+
+        # Create test files with SELinux contexts for testing
+        lima sudo mkdir -p /var/test_selinux
+        lima sudo touch /var/test_selinux/test_file
+        lima sudo chcon -t etc_t /var/test_selinux/test_file
+        lima ls -Z /var/test_selinux/test_file  # Verify context
+
+    - name: Selinux - Install dependencies in VM
+      run: |
+        lima sudo dnf -y update
+        lima sudo dnf -y install git autoconf autopoint bison texinfo gperf gcc g++ gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel texinfo-tex wget automake patch quilt
+        lima rustup-init -y --default-toolchain stable
 
     - name: Override submodule URL and initialize submodules
       # Use github instead of upstream git server
@@ -125,12 +170,68 @@ jobs:
         sudo update-locale
         echo "After:"
         locale -a
+
+    - name: Selinux - Copy the sources to VM
+      run: |
+        rsync -a -e ssh . lima-default:~/work/
+
     - name: Build binaries
       shell: bash
       run: |
         ## Build binaries
         cd '${{ steps.vars.outputs.path_UUTILS }}'
         bash util/build-gnu.sh --release-build
+
+    - name: Selinux - Generate selinux tests list
+      run: |
+        # Find and list all tests that require SELinux
+        lima bash -c "cd ~/work/gnu/ && grep -l 'require_selinux_' -r tests/ > ~/work/uutils/selinux-tests.txt"
+        lima bash -c "cd ~/work/uutils/ && cat selinux-tests.txt"
+
+        # Count the tests
+        lima bash -c "cd ~/work/uutils/ && echo 'Found SELinux tests:'; wc -l selinux-tests.txt"
+
+    - name: Selinux - Build for selinux tests
+      run: |
+        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh"
+        lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
+
+    - name: Selinux - Run selinux tests
+      run: |
+        lima sudo setenforce 1
+        lima getenforce
+        lima cat /proc/filesystems
+        lima bash -c "cd ~/work/uutils/ && bash util/run-gnu-test.sh \$(cat selinux-tests.txt)"
+
+    - name: Selinux - Extract testing info from individual logs into JSON
+      shell: bash
+      run : |
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }}"
+
+    - name: Selinux/root - Run selinux tests
+      run: |
+        lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
+
+    - name: Selinux/root - Extract testing info from individual logs into JSON
+      shell: bash
+      run : |
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}"
+
+    - name: Selinux - Collect test logs and test results
+      run: |
+        mkdir -p ${{ steps.vars.outputs.path_GNU_tests }}-selinux
+
+        # Copy the test logs from the Lima VM to the host
+        lima bash -c "cp ~/work/gnu/tests/test-suite.log ~/work/gnu/tests-selinux/ || echo 'No test-suite.log found'"
+        lima bash -c "cp ~/work/gnu/tests/test-suite-root.log ~/work/gnu/tests-selinux/ || echo 'No test-suite-root.log found'"
+        rsync -v -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./${{ steps.vars.outputs.path_GNU_tests }}-selinux/
+
+        # Copy SELinux logs to the main test directory for integrated processing
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite.log
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite-root.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite-root.log
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }} .
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }} .
+
     - name: Run GNU tests
       shell: bash
       run: |
@@ -138,6 +239,13 @@ jobs:
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh"
+
+    - name: Extract testing info from individual logs into JSON
+      shell: bash
+      run : |
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+
     - name: Run GNU root tests
       shell: bash
       run: |
@@ -145,35 +253,40 @@ jobs:
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh" run-root
-    - name: Extract testing info into JSON
+
+    - name: Extract testing info from individual logs (run as root) into JSON
       shell: bash
       run : |
-        ## Extract testing info into JSON
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }}
+
     - name: Extract/summarize testing info
       id: summary
       shell: bash
       run: |
         ## Extract/summarize testing info
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        #
-        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        #
-        SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
-        ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.ROOT_SUITE_LOG_FILE }}'
-        ls -al ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
 
-        if test -f "${SUITE_LOG_FILE}"
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+
+        # Check if the file exists
+        if test -f "${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}"
         then
-            source ${path_UUTILS}/util/analyze-gnu-results.sh ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
+            # Look at all individual results and summarize
+            eval $(python3 ${path_UUTILS}/util/analyze-gnu-results.py -o=${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }})
+
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
-              echo "::error ::Failed to parse test results from '${SUITE_LOG_FILE}'; failing early"
+              echo "::error ::Failed to parse test results from '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}'; failing early"
               exit 1
             fi
+
             output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR / SKIP: $SKIP"
             echo "${output}"
-            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
+
+            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then
+              echo "::warning ::${output}"
+            fi
+
             jq -n \
                   --arg date "$(date --rfc-email)" \
                   --arg sha "$GITHUB_SHA" \
@@ -187,9 +300,10 @@ jobs:
             HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
             outputs HASH
           else
-            echo "::error ::Failed to find summary of test results (missing '${SUITE_LOG_FILE}'); failing early"
+            echo "::error ::Failed to find summary of test results (missing '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}'); failing early"
             exit 1
           fi
+
           # Compress logs before upload (fails otherwise)
           gzip ${{ steps.vars.outputs.TEST_LOGS_GLOB }}
     - name: Reserve SHA1/ID of 'test-summary'
@@ -212,6 +326,26 @@ jobs:
       with:
         name: gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+    - name: Upload root json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: gnu-root-full-result.json
+        path: ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }}
+    - name: Upload selinux json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: selinux-gnu-full-result.json
+        path: ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }}
+    - name: Upload selinux root json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: selinux-root-gnu-full-result.json
+        path: ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
+    - name: Upload aggregated json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: aggregated-result.json
+        path: ${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}
     - name: Compare test failures VS reference
       shell: bash
       run: |
@@ -219,7 +353,11 @@ jobs:
         have_new_failures=""
         REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
         ROOT_REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite-root.log'
+        SELINUX_REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/selinux-test-suite.log'
+        SELINUX_ROOT_REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/selinux-test-suite-root.log'
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
+
+
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         # https://github.com/uutils/coreutils/issues/4294
