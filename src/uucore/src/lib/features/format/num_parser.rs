@@ -5,7 +5,16 @@
 
 //! Utilities for parsing numbers in various formats
 
-// spell-checker:ignore powf copysign prec inity
+// spell-checker:ignore powf copysign prec inity bigdecimal extendedbigdecimal biguint
+
+use bigdecimal::{
+    num_bigint::{BigInt, BigUint, Sign},
+    BigDecimal,
+};
+use num_traits::ToPrimitive;
+use num_traits::Zero;
+
+use crate::format::extendedbigdecimal::ExtendedBigDecimal;
 
 /// Base for number parsing
 #[derive(Clone, Copy, PartialEq)]
@@ -68,31 +77,28 @@ impl<'a, T> ParseError<'a, T> {
 
 /// A number parser for binary, octal, decimal, hexadecimal and single characters.
 ///
-/// Internally, in order to get the maximum possible precision and cover the full
-/// range of u64 and i64 without losing precision for f64, the returned number is
-/// decomposed into:
-///   - A `base` value
-///   - A `neg` sign bit
-///   - A `integral` positive part
-///   - A `fractional` positive part
-///   - A `precision` representing the number of digits in the fractional part
+/// TODO: we just keep an ExtendedBigDecimal internally, so we don't really need this
+/// struct actually.
 ///
 /// If the fractional part cannot be represented on a `u64`, parsing continues
 /// silently by ignoring non-significant digits.
 pub struct ParsedNumber {
-    base: Base,
-    negative: bool,
-    integral: u64,
-    fractional: u64,
-    precision: usize,
+    number: ExtendedBigDecimal,
 }
 
 impl ParsedNumber {
     fn into_i64(self) -> Option<i64> {
-        if self.negative {
-            i64::try_from(-i128::from(self.integral)).ok()
-        } else {
-            i64::try_from(self.integral).ok()
+        match self.number {
+            ExtendedBigDecimal::BigDecimal(bd) => {
+                let (digits, scale) = bd.into_bigint_and_scale();
+                if scale == 0 {
+                    i64::try_from(digits).ok()
+                } else {
+                    None
+                }
+            }
+            ExtendedBigDecimal::MinusZero => Some(0),
+            _ => None,
         }
     }
 
@@ -108,21 +114,41 @@ impl ParsedNumber {
         }
     }
 
+    fn into_u64(self) -> Option<u64> {
+        match self.number {
+            ExtendedBigDecimal::BigDecimal(bd) => {
+                let (digits, scale) = bd.into_bigint_and_scale();
+                if scale == 0 {
+                    u64::try_from(digits).ok()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     /// Parse a number as u64. No fractional part is allowed.
     pub fn parse_u64(input: &str) -> Result<u64, ParseError<'_, u64>> {
         match Self::parse(input, true) {
-            Ok(v) | Err(ParseError::PartialMatch(v, _)) if v.negative => {
-                Err(ParseError::NotNumeric)
-            }
-            Ok(v) => Ok(v.integral),
-            Err(e) => Err(e.map(|v, rest| ParseError::PartialMatch(v.integral, rest))),
+            Ok(v) => v.into_u64().ok_or(ParseError::Overflow),
+            Err(e) => Err(e.map(|v, rest| {
+                v.into_u64()
+                    .map(|v| ParseError::PartialMatch(v, rest))
+                    .unwrap_or(ParseError::Overflow)
+            })),
         }
     }
 
     fn into_f64(self) -> f64 {
-        let n = self.integral as f64
-            + (self.fractional as f64) / (self.base as u8 as f64).powf(self.precision as f64);
-        if self.negative { -n } else { n }
+        match self.number {
+            ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
+            ExtendedBigDecimal::MinusZero => -0.0,
+            ExtendedBigDecimal::Nan => f64::NAN,
+            ExtendedBigDecimal::MinusNan => -f64::NAN,
+            ExtendedBigDecimal::Infinity => f64::INFINITY,
+            ExtendedBigDecimal::MinusInfinity => -f64::INFINITY,
+        }
     }
 
     /// Parse a number as f64
@@ -164,11 +190,7 @@ impl ParsedNumber {
         if let Some(rest) = input.strip_prefix('\'') {
             let mut chars = rest.char_indices().fuse();
             let v = chars.next().map(|(_, c)| Self {
-                base: Base::Decimal,
-                negative: false,
-                integral: u64::from(c),
-                fractional: 0,
-                precision: 0,
+                number: ExtendedBigDecimal::BigDecimal(u32::from(c).into()),
             });
             return match (v, chars.next()) {
                 (Some(v), None) => Ok(v),
@@ -209,36 +231,23 @@ impl ParsedNumber {
 
         // Parse the integral part of the number
         let mut chars = rest.chars().enumerate().fuse().peekable();
-        let mut integral = 0u64;
+        let mut digits = BigUint::zero();
+        let mut scale = 0i64;
         while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
             chars.next();
-            integral = integral
-                .checked_mul(base as u64)
-                .and_then(|n| n.checked_add(d))
-                .ok_or(ParseError::Overflow)?;
+            digits = digits * base as u8 + d;
         }
 
         // Parse the fractional part of the number if there can be one and the input contains
         // a '.' decimal separator.
-        let (mut fractional, mut precision) = (0u64, 0);
         if matches!(chars.peek(), Some(&(_, '.')))
             && matches!(base, Base::Decimal | Base::Hexadecimal)
             && !integral_only
         {
             chars.next();
-            let mut ended = false;
             while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
                 chars.next();
-                if !ended {
-                    if let Some(f) = fractional
-                        .checked_mul(base as u64)
-                        .and_then(|n| n.checked_add(d))
-                    {
-                        (fractional, precision) = (f, precision + 1);
-                    } else {
-                        ended = true;
-                    }
-                }
+                (digits, scale) = (digits * base as u8 + d, scale + 1);
             }
         }
 
@@ -247,15 +256,26 @@ impl ParsedNumber {
             return Err(ParseError::NotNumeric);
         }
 
+        // TODO: Might be nice to implement a ExtendedBigDecimal copysign or negation function to move away some of this logic...
+        let ebd = if digits == BigUint::zero() && negative {
+            ExtendedBigDecimal::MinusZero
+        } else {
+            let sign = if negative { Sign::Minus } else { Sign::Plus };
+            let signed_digits = BigInt::from_biguint(sign, digits);
+            let bd = if scale == 0 {
+                BigDecimal::from_bigint(signed_digits, 0)
+            } else if base == Base::Decimal {
+                BigDecimal::from_bigint(signed_digits, scale)
+            } else {
+                // Base is not 10, init at scale 0 then divide by base**scale.
+                BigDecimal::from_bigint(signed_digits, 0) / (base as u64).pow(scale as u32)
+            };
+            ExtendedBigDecimal::BigDecimal(bd)
+        };
+
         // Return what has been parsed so far. It there are extra characters, mark the
         // parsing as a partial match.
-        let parsed = Self {
-            base,
-            negative,
-            integral,
-            fractional,
-            precision,
-        };
+        let parsed = Self { number: ebd };
         if let Some((first_unparsed, _)) = chars.next() {
             Err(ParseError::PartialMatch(parsed, &rest[first_unparsed..]))
         } else {
@@ -277,7 +297,7 @@ mod tests {
         );
         assert!(matches!(
             ParsedNumber::parse_u64("-123"),
-            Err(ParseError::NotNumeric)
+            Err(ParseError::Overflow)
         ));
         assert!(matches!(
             ParsedNumber::parse_u64(""),
