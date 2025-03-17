@@ -155,32 +155,39 @@ impl ParsedNumber {
     pub fn parse_f64(input: &str) -> Result<f64, ParseError<'_, f64>> {
         match Self::parse(input, false) {
             Ok(v) => Ok(v.into_f64()),
-            Err(ParseError::NotNumeric) => Self::parse_f64_special_values(input),
             Err(e) => Err(e.map(|v, rest| ParseError::PartialMatch(v.into_f64(), rest))),
         }
     }
 
-    fn parse_f64_special_values(input: &str) -> Result<f64, ParseError<'_, f64>> {
-        let (sign, rest) = if let Some(input) = input.strip_prefix('-') {
-            (-1.0, input)
-        } else {
-            (1.0, input)
-        };
-        let prefix = rest
+    fn parse_special_value(input: &str, negative: bool) -> Result<Self, ParseError<'_, Self>> {
+        let prefix = input
             .chars()
             .take(3)
             .map(|c| c.to_ascii_lowercase())
             .collect::<String>();
-        let special = match prefix.as_str() {
-            "inf" => f64::INFINITY,
-            "nan" => f64::NAN,
-            _ => return Err(ParseError::NotNumeric),
-        }
-        .copysign(sign);
-        if rest.len() == 3 {
+        let special = Self {
+            number: match prefix.as_str() {
+                "inf" => {
+                    if negative {
+                        ExtendedBigDecimal::MinusInfinity
+                    } else {
+                        ExtendedBigDecimal::Infinity
+                    }
+                }
+                "nan" => {
+                    if negative {
+                        ExtendedBigDecimal::MinusNan
+                    } else {
+                        ExtendedBigDecimal::Nan
+                    }
+                }
+                _ => return Err(ParseError::NotNumeric),
+            },
+        };
+        if input.len() == 3 {
             Ok(special)
         } else {
-            Err(ParseError::PartialMatch(special, &rest[3..]))
+            Err(ParseError::PartialMatch(special, &input[3..]))
         }
     }
 
@@ -251,9 +258,13 @@ impl ParsedNumber {
             }
         }
 
-        // If nothing has been parsed, declare the parsing unsuccessful
+        // If nothing has been parsed, check if this is a special value, or declare the parsing unsuccessful
         if let Some((0, _)) = chars.peek() {
-            return Err(ParseError::NotNumeric);
+            if integral_only {
+                return Err(ParseError::NotNumeric);
+            } else {
+                return Self::parse_special_value(unsigned, negative);
+            }
         }
 
         // TODO: Might be nice to implement a ExtendedBigDecimal copysign or negation function to move away some of this logic...
