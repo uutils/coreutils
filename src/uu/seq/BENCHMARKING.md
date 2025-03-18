@@ -43,6 +43,16 @@ hyperfine -L seq seq,./target/release/seq "{seq} 0 0.000001 1"
 hyperfine -L seq seq,./target/release/seq "{seq} -100 1 1000000"
 ```
 
+It is also interesting to compare performance with large precision
+format. But in this case, the output itself should also be compared,
+as GNU `seq` may not provide the same precision (`uutils` version of
+`seq` provides arbitrary precision, while GNU `seq` appears to be
+limited to `long double` on the given platform, i.e. 64/80/128-bit
+float):
+```shell
+hyperfine -L seq seq,target/release/seq "{seq} -f%.30f 0 0.000001 1"
+```
+
 ## Optimizations
 
 ### Buffering stdout

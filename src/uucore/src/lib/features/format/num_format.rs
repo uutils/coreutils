@@ -354,11 +354,16 @@ fn format_float_non_finite(e: &ExtendedBigDecimal, case: Case) -> String {
 
 fn format_float_decimal(bd: &BigDecimal, precision: usize, force_decimal: ForceDecimal) -> String {
     debug_assert!(!bd.is_negative());
-    if precision == 0 && force_decimal == ForceDecimal::Yes {
-        format!("{bd:.0}.")
-    } else {
-        format!("{bd:.precision$}")
+    if precision == 0 {
+        let (bi, scale) = bd.as_bigint_and_scale();
+        if scale == 0 && force_decimal != ForceDecimal::Yes {
+            // Optimization when printing integers.
+            return bi.to_str_radix(10);
+        } else if force_decimal == ForceDecimal::Yes {
+            return format!("{bd:.0}.");
+        }
     }
+    format!("{bd:.precision$}")
 }
 
 fn format_float_scientific(
@@ -614,6 +619,11 @@ fn write_output(
     width: usize,
     alignment: NumberAlignment,
 ) -> std::io::Result<()> {
+    if width == 0 {
+        writer.write_all(sign_indicator.as_bytes())?;
+        writer.write_all(s.as_bytes())?;
+        return Ok(());
+    }
     // Take length of `sign_indicator`, which could be 0 or 1, into consideration when padding
     // by storing remaining_width indicating the actual width needed.
     // Using min() because self.width could be 0, 0usize - 1usize should be avoided
