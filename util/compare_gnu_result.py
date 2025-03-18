@@ -38,7 +38,7 @@ if pass_d < 0:
     )
 
     # Check if all failing tests are intermittent based on the environment variable
-    only_intermittent = ONLY_INTERMITTENT.lower() == 'true'
+    only_intermittent = ONLY_INTERMITTENT.lower() == "true"
 
     if only_intermittent:
         print("::notice ::All failing tests are in the ignored intermittent list")

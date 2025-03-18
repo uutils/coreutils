@@ -23,9 +23,7 @@ def config(name, val):
 
 sizes = {}
 
-for (strip, panic, opt, lto) in product(
-    STRIP_VALS, PANIC_VALS, OPT_LEVEL_VALS, LTO_VALS
-):
+for strip, panic, opt, lto in product(STRIP_VALS, PANIC_VALS, OPT_LEVEL_VALS, LTO_VALS):
     if RECOMPILE:
         cmd = [
             "cargo",
