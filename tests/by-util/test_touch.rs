@@ -4,12 +4,15 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
-use crate::common::util::{AtPath, TestScenario};
 #[cfg(not(target_os = "freebsd"))]
 use filetime::set_symlink_file_times;
 use filetime::FileTime;
 use std::fs::remove_file;
 use std::path::PathBuf;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::{AtPath, TestScenario};
+use uutests::util_name;
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.metadata(path);

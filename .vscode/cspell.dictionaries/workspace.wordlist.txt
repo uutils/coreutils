@@ -325,6 +325,7 @@ libc
 libstdbuf
 musl
 tmpd
+uchild
 ucmd
 ucommand
 utmpx
@@ -332,6 +333,7 @@ uucore
 uucore_procs
 uudoc
 uumain
+uutests
 uutil
 uutils
 

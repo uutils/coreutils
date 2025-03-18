@@ -9,6 +9,9 @@ use crate::common::util::TestScenario;
 use regex::Regex;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command};
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 // A child process the tests will try to kill.
 struct Target {

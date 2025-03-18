@@ -31,11 +31,13 @@ parts for getting started:
 
 - [`src/uu`](./src/uu/): The code for all utilities
 - [`src/uucore`](./src/uucore/): Crate containing all the shared code between
-  the utilities.
+  the utilities. This crate is also used outside of the Coreutils.
 - [`tests/by-util`](./tests/by-util/): The tests for all utilities.
 - [`src/bin/coreutils.rs`](./src/bin/coreutils.rs): Code for the multicall
   binary.
 - [`docs`](./docs/src): the documentation for the website
+- [`tests/uutests/`](./tests/uutests/): Crate implementing
+  the various functions to test uutils commands.
 
 Each utility is defined as a separate crate. The structure of each of these
 crates is as follows:
@@ -62,6 +64,8 @@ We have the following goals with our development:
 - **Reliable**: The utilities should never unexpectedly fail.
 - **Performant**: Our utilities should be written in fast idiomatic Rust. We aim
   to match or exceed the performance of the GNU utilities.
+  [hyperfine](https://github.com/sharkdp/hyperfine) is the recommended tool for
+  this task.
 - **Well-tested**: We should have a lot of tests to be able to guarantee
   reliability and compatibility.
 
