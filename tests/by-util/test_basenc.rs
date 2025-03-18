@@ -52,7 +52,7 @@ fn test_base64() {
 #[test]
 fn test_base64_decode() {
     new_ucmd!()
-        .args(&["--base64", "-d", "-D"])
+        .args(&["--base64", "-d"])
         .pipe_in("dG8+YmU/")
         .succeeds()
         .stdout_only("to>be?");
