@@ -52,7 +52,7 @@ fn test_base32_encode_file() {
 
 #[test]
 fn test_decode() {
-    for decode_param in ["-d", "--decode", "--dec"] {
+    for decode_param in ["-d", "--decode", "--dec", "-D"] {
         let input = "JBSWY3DPFQQFO33SNRSCC===\n"; // spell-checker:disable-line
         new_ucmd!()
             .arg(decode_param)

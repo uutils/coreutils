@@ -72,7 +72,7 @@ fn test_base64_encode_file() {
 
 #[test]
 fn test_decode() {
-    for decode_param in ["-d", "--decode", "--dec"] {
+    for decode_param in ["-d", "--decode", "--dec", "-D"] {
         let input = "aGVsbG8sIHdvcmxkIQ=="; // spell-checker:disable-line
         new_ucmd!()
             .arg(decode_param)
