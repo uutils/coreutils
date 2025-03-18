@@ -19,7 +19,38 @@ Finally, you can compare the performance of the two versions of `seq`
 by running, for example,
 
 ```shell
-hyperfine "seq 1000000" "target/release/seq 1000000"
+hyperfine -L seq seq,target/release/seq "{seq} 1000000"
 ```
+
+## Interesting test cases
+
+Performance characteristics may vary a lot depending on the parameters,
+and if custom formatting is required. In particular, it does appear
+that the GNU implementation is heavily optimized for positive integer
+outputs (which is probably the most common use case for `seq`).
+
+Specifying a format or fixed width will slow down the
+execution a lot (~15-20 times on GNU `seq`):
+```shell
+hyperfine -L seq seq,target/release/seq "{seq} -f%g 1000000"
+hyperfine -L seq seq,target/release/seq "{seq} -w 1000000"
+```
+
+Floating point increments, or any negative bound, also degrades the
+performance (~10-15 times on GNU `seq`):
+```shell
+hyperfine -L seq seq,./target/release/seq "{seq} 0 0.000001 1"
+hyperfine -L seq seq,./target/release/seq "{seq} -100 1 1000000"
+```
+
+## Optimizations
+
+### Buffering stdout
+
+The original `uutils` implementation of `seq` did unbuffered writes
+to stdout, causing a large number of system calls (and therefore a large amount
+of system time). Simply wrapping `stdout` in a `BufWriter` increased performance
+by about 2 times for a floating point increment test case, leading to similar
+performance compared with GNU `seq`.
 
 [0]: https://github.com/sharkdp/hyperfine

@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat
 use std::ffi::OsString;
-use std::io::{stdout, ErrorKind, Write};
+use std::io::{stdout, BufWriter, ErrorKind, Write};
 
 use clap::{Arg, ArgAction, Command};
 use num_traits::{ToPrimitive, Zero};
@@ -262,8 +262,8 @@ fn print_seq(
     padding: usize,
     format: Option<&Format<num_format::Float>>,
 ) -> std::io::Result<()> {
-    let stdout = stdout();
-    let mut stdout = stdout.lock();
+    let stdout = stdout().lock();
+    let mut stdout = BufWriter::new(stdout);
     let (first, increment, last) = range;
     let mut value = first;
     let padding = if pad {
