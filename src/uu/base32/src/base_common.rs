@@ -112,6 +112,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
         .arg(
             Arg::new(options::DECODE)
                 .short('d')
+                .visible_short_alias('D')
                 .long(options::DECODE)
                 .help("decode data")
                 .action(ArgAction::SetTrue)
