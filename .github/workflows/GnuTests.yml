@@ -324,17 +324,17 @@ jobs:
     - name: Upload full json results
       uses: actions/upload-artifact@v4
       with:
-        name: gnu-full-result.json
+        name: gnu-full-result
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
     - name: Upload root json results
       uses: actions/upload-artifact@v4
       with:
-        name: gnu-root-full-result.json
+        name: gnu-root-full-result
         path: ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }}
     - name: Upload selinux json results
       uses: actions/upload-artifact@v4
       with:
-        name: selinux-gnu-full-result.json
+        name: selinux-gnu-full-result
         path: ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }}
     - name: Upload selinux root json results
       uses: actions/upload-artifact@v4
@@ -344,7 +344,7 @@ jobs:
     - name: Upload aggregated json results
       uses: actions/upload-artifact@v4
       with:
-        name: aggregated-result.json
+        name: aggregated-result
         path: ${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}
     - name: Compare test failures VS reference
       shell: bash
