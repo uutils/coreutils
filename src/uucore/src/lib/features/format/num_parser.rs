@@ -221,9 +221,11 @@ fn parse(
 
     let trimmed_input = input.trim_ascii_start();
 
-    // Initial minus sign
+    // Initial minus/plus sign
     let (negative, unsigned) = if let Some(trimmed_input) = trimmed_input.strip_prefix('-') {
         (true, trimmed_input)
+    } else if let Some(trimmed_input) = trimmed_input.strip_prefix('+') {
+        (false, trimmed_input)
     } else {
         (false, trimmed_input)
     };
@@ -334,6 +336,7 @@ mod tests {
     #[test]
     fn test_decimal_i64() {
         assert_eq!(Ok(123), i64::extended_parse("123"));
+        assert_eq!(Ok(123), i64::extended_parse("+123"));
         assert_eq!(Ok(-123), i64::extended_parse("-123"));
         assert!(matches!(
             i64::extended_parse("--123"),
@@ -354,12 +357,14 @@ mod tests {
     #[test]
     fn test_decimal_f64() {
         assert_eq!(Ok(123.0), f64::extended_parse("123"));
+        assert_eq!(Ok(123.0), f64::extended_parse("+123"));
         assert_eq!(Ok(-123.0), f64::extended_parse("-123"));
         assert_eq!(Ok(123.0), f64::extended_parse("123."));
         assert_eq!(Ok(-123.0), f64::extended_parse("-123."));
         assert_eq!(Ok(123.0), f64::extended_parse("123.0"));
         assert_eq!(Ok(-123.0), f64::extended_parse("-123.0"));
         assert_eq!(Ok(123.15), f64::extended_parse("123.15"));
+        assert_eq!(Ok(123.15), f64::extended_parse("+123.15"));
         assert_eq!(Ok(-123.15), f64::extended_parse("-123.15"));
         assert_eq!(Ok(0.15), f64::extended_parse(".15"));
         assert_eq!(Ok(-0.15), f64::extended_parse("-.15"));
@@ -370,11 +375,21 @@ mod tests {
         assert!(matches!(f64::extended_parse("1.2.3"),
                          Err(ExtendedParserError::PartialMatch(f, ".3")) if f == 1.2));
         assert_eq!(Ok(f64::INFINITY), f64::extended_parse("inf"));
+        assert_eq!(Ok(f64::INFINITY), f64::extended_parse("+inf"));
         assert_eq!(Ok(f64::NEG_INFINITY), f64::extended_parse("-inf"));
+        assert_eq!(Ok(f64::INFINITY), f64::extended_parse("Inf"));
+        assert_eq!(Ok(f64::INFINITY), f64::extended_parse("InF"));
+        assert_eq!(Ok(f64::INFINITY), f64::extended_parse("INF"));
         assert!(f64::extended_parse("NaN").unwrap().is_nan());
         assert!(f64::extended_parse("NaN").unwrap().is_sign_positive());
+        assert!(f64::extended_parse("+NaN").unwrap().is_nan());
+        assert!(f64::extended_parse("+NaN").unwrap().is_sign_positive());
         assert!(f64::extended_parse("-NaN").unwrap().is_nan());
         assert!(f64::extended_parse("-NaN").unwrap().is_sign_negative());
+        assert!(f64::extended_parse("nan").unwrap().is_nan());
+        assert!(f64::extended_parse("nan").unwrap().is_sign_positive());
+        assert!(f64::extended_parse("NAN").unwrap().is_nan());
+        assert!(f64::extended_parse("NAN").unwrap().is_sign_positive());
         assert!(matches!(f64::extended_parse("-infinity"),
                          Err(ExtendedParserError::PartialMatch(f, "inity")) if f == f64::NEG_INFINITY));
         assert!(f64::extended_parse(&format!("{}", u64::MAX)).is_ok());
@@ -385,6 +400,7 @@ mod tests {
     fn test_hexadecimal() {
         assert_eq!(Ok(0x123), u64::extended_parse("0x123"));
         assert_eq!(Ok(0x123), u64::extended_parse("0X123"));
+        assert_eq!(Ok(0x123), u64::extended_parse("+0x123"));
         assert_eq!(Ok(0xfe), u64::extended_parse("0xfE"));
         assert_eq!(Ok(-0x123), i64::extended_parse("-0x123"));
 
@@ -397,6 +413,8 @@ mod tests {
     fn test_octal() {
         assert_eq!(Ok(0), u64::extended_parse("0"));
         assert_eq!(Ok(0o123), u64::extended_parse("0123"));
+        assert_eq!(Ok(0o123), u64::extended_parse("+0123"));
+        assert_eq!(Ok(-0o123), i64::extended_parse("-0123"));
         assert_eq!(Ok(0o123), u64::extended_parse("00123"));
         assert_eq!(Ok(0), u64::extended_parse("00"));
         assert!(matches!(
@@ -417,6 +435,8 @@ mod tests {
     fn test_binary() {
         assert_eq!(Ok(0b1011), u64::extended_parse("0b1011"));
         assert_eq!(Ok(0b1011), u64::extended_parse("0B1011"));
+        assert_eq!(Ok(0b1011), u64::extended_parse("+0b1011"));
+        assert_eq!(Ok(-0b1011), i64::extended_parse("-0b1011"));
     }
 
     #[test]
