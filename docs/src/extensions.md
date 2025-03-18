@@ -94,14 +94,6 @@ also provides a `-v`/`--verbose` flag.
 
 Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides `-s`/`--since` to show since when the system is up.
 
-## `base32`
+## `base32/base64/basenc`
 
-`base32` provides `-D` to decode data.
-
-## `base64`
-
-`base64` provides `-D` to decode data.
-
-## `basenc`
-
-`basenc` provides `-D` to decode data.
+`base32/base64/basenc` provides `-D` to decode data.
