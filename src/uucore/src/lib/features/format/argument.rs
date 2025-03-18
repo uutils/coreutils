@@ -5,7 +5,7 @@
 
 use crate::{
     error::set_exit_code,
-    features::format::num_parser::{ParseError, ParsedNumber},
+    features::format::num_parser::{ExtendedParser, ExtendedParserError},
     quoting_style::{Quotes, QuotingStyle, escape_name},
     show_error, show_warning,
 };
@@ -56,7 +56,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::UnsignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_u64(s), s),
+            FormatArgument::Unparsed(s) => extract_value(u64::extended_parse(s), s),
             _ => 0,
         }
     }
@@ -67,7 +67,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::SignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_i64(s), s),
+            FormatArgument::Unparsed(s) => extract_value(i64::extended_parse(s), s),
             _ => 0,
         }
     }
@@ -78,7 +78,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::Float(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_f64(s), s),
+            FormatArgument::Unparsed(s) => extract_value(f64::extended_parse(s), s),
             _ => 0.0,
         }
     }
@@ -91,7 +91,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
     }
 }
 
-fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T {
+fn extract_value<T: Default>(p: Result<T, ExtendedParserError<'_, T>>, input: &str) -> T {
     match p {
         Ok(v) => v,
         Err(e) => {
@@ -103,15 +103,15 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
                 },
             );
             match e {
-                ParseError::Overflow => {
+                ExtendedParserError::Overflow => {
                     show_error!("{}: Numerical result out of range", input.quote());
                     Default::default()
                 }
-                ParseError::NotNumeric => {
+                ExtendedParserError::NotNumeric => {
                     show_error!("{}: expected a numeric value", input.quote());
                     Default::default()
                 }
-                ParseError::PartialMatch(v, rest) => {
+                ExtendedParserError::PartialMatch(v, rest) => {
                     let bytes = input.as_encoded_bytes();
                     if !bytes.is_empty() && bytes[0] == b'\'' {
                         show_warning!(
