@@ -3,9 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) seekable
+// spell-checker:ignore (vars) seekable memrchr
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use memchr::memrchr_iter;
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::fs::File;
@@ -378,30 +379,50 @@ where
 
     let mut buffer = [0u8; BUF_SIZE];
 
-    let mut i = 0u64;
     let mut lines = 0u64;
+    let mut check_last_byte_first_loop = true;
+    let mut bytes_remaining_to_search = file_size;
 
     loop {
         // the casts here are ok, `buffer.len()` should never be above a few k
-        let bytes_remaining_to_search = file_size - i;
-        let bytes_to_read_this_loop = bytes_remaining_to_search.min(BUF_SIZE.try_into().unwrap());
+        let bytes_to_read_this_loop =
+            bytes_remaining_to_search.min(buffer.len().try_into().unwrap());
         let read_start_offset = bytes_remaining_to_search - bytes_to_read_this_loop;
         let buffer = &mut buffer[..bytes_to_read_this_loop.try_into().unwrap()];
+        bytes_remaining_to_search -= bytes_to_read_this_loop;
 
         input.seek(SeekFrom::Start(read_start_offset))?;
         input.read_exact(buffer)?;
-        for byte in buffer.iter().rev() {
-            if byte == &separator {
-                lines += 1;
-            }
-            // if it were just `n`,
+
+        // Unfortunately need special handling for the case that the input file doesn't have
+        // a terminating `separator` character.
+        // If the input file doesn't end with a `separator` character, add an extra line to our
+        // `line` counter. In the case that `n` is 0 we need to return here since we've
+        // obviously found our 0th-line-from-the-end offset.
+        if check_last_byte_first_loop {
+            check_last_byte_first_loop = false;
+            if let Some(last_byte_of_file) = buffer.last() {
+                if last_byte_of_file != &separator {
+                    if n == 0 {
+                        input.rewind()?;
+                        return Ok(file_size);
+                    }
+                    assert_eq!(lines, 0);
+                    lines = 1;
+                }
+            };
+        }
+
+        for separator_offset in memrchr_iter(separator, &buffer[..]) {
+            lines += 1;
             if lines == n + 1 {
                 input.rewind()?;
-                return Ok(file_size - i);
+                return Ok(read_start_offset
+                    + TryInto::<u64>::try_into(separator_offset).unwrap()
+                    + 1);
             }
-            i += 1;
         }
-        if file_size - i == 0 {
+        if read_start_offset == 0 {
             input.rewind()?;
             return Ok(0);
         }
@@ -752,5 +773,24 @@ mod tests {
             find_nth_line_from_end(&mut input, lines_in_input_file + 1000, b'\n').unwrap(),
             0
         );
+    }
+
+    #[test]
+    fn test_find_nth_line_from_end_non_terminated() {
+        // Validate the find_nth_line_from_end for files that are not terminated with a final
+        // newline character.
+        let input_file = "a\nb";
+        let mut input = Cursor::new(input_file);
+        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 3);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 2);
+    }
+
+    #[test]
+    fn test_find_nth_line_from_end_empty() {
+        // Validate the find_nth_line_from_end for files that are empty.
+        let input_file = "";
+        let mut input = Cursor::new(input_file);
+        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 0);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 0);
     }
 }
