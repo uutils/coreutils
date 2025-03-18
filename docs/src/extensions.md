@@ -96,4 +96,4 @@ Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provide
 
 ## `base32/base64/basenc`
 
-`base32/base64/basenc` provides `-D` to decode data.
+Just like on macOS, `base32/base64/basenc` provides `-D` to decode data.
