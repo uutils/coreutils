@@ -2,7 +2,7 @@
 
 [package]
 name = "uutests"
-version = "0.0.29"
+version = "0.0.30"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uutils ~ 'core' uutils test library (cross-platform)"
