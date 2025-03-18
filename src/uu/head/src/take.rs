@@ -86,7 +86,7 @@ impl TakeAllBuffer {
 ///     Chunks are read until at least we have enough data to write out the entire contents of the
 ///     first TakeAllBuffer in the queue whilst still retaining at least `n` bytes in the queue.
 ///     If we hit EoF at any point, stop reading.
-/// 2 - Asses whether we managed to queue up greater-than `n` bytes. If not, we must be done, in
+/// 2 - Assess whether we managed to queue up greater-than `n` bytes. If not, we must be done, in
 ///     which case break and return.
 /// 3 - Write either the full first buffer of data, or just enough bytes to get back down to having
 ///     the required `n` bytes of data queued.
