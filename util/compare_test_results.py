@@ -197,7 +197,7 @@ def main():
                 f.write(f"{line}\n")
 
     # Return exit code based on whether we found regressions
-    return 1 if len(real_regressions) > 0 else 0
+    return 1 if real_regressions else 0
 
 
 if __name__ == "__main__":
