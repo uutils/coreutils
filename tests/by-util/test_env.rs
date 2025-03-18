@@ -650,6 +650,103 @@ fn test_env_with_empty_executable_double_quotes() {
         .stderr_is("env: '': No such file or directory\n");
 }
 
+#[ignore = "See #6172"]
+#[test]
+fn test_env_with_gnu_reference_unset_invalid_variables() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-u=2EKt"]) // invalid variable name
+        .fails()
+        .code_is(125)
+        .no_stdout()
+        .stderr_contains("env: cannot unset '=2EKt': Invalid argument\n");
+
+    ts.ucmd()
+        .args(&["-0", "-u=o", "6=C"]) // invalid variable name
+        .fails()
+        .code_is(125)
+        .no_stdout()
+        .stderr_contains("env: cannot unset '=o': Invalid argument\n");
+
+    ts.ucmd()
+        .args(&["--unset=2EKt"]) // works with long option
+        .succeeds()
+        .stdout_contains("A=0d")
+        .stdout_contains("CZj=lYr");
+
+    ts.ucmd()
+        .args(&["-0", "--unset=o", "6=C"]) // works with long option
+        .succeeds()
+        .stdout_contains("A=0d")
+        .stdout_contains("CZj=lYr");
+
+    // env -i -0 -u=kQ4dALb1 A=0d CZj=lYr
+    // Output: A=0d\0CZj=lYr\0
+    ts.ucmd()
+        .args(&["-i", "-0", "-u=kQ4dALb1", "A=0d", "CZj=lYr"])
+        .succeeds()
+        .stdout_is("A=0d\0CZj=lYr\0")
+        .stderr_is("");
+
+    // env -- -u=kQ4dALb1 A=0d  CZj=lYr
+    // prints all environment variables
+    ts.ucmd()
+        .args(&["--", "-u=kQ4dALb1", "A=0d", "CZj=lYr"])
+        .succeeds()
+        .stdout_contains("A=0d")
+        .stdout_contains("CZj=lYr")
+        .stderr_is("");
+
+    // env D=ddsa - A=0d CZj=lYr
+    // env: ‘-’: No such file or directory
+    ts.ucmd()
+        .args(&["D=ddsa", "-", "A=0d", "CZj=lYr"])
+        .fails()
+        .code_is(127)
+        .no_stdout()
+        .stderr_contains("env: '-': No such file or directory\n");
+
+    // env -u=kQ4dALb1 - A=0d CZj=lYr
+    // Output:
+    // A=0d
+    // CZj=lYr
+    ts.ucmd()
+        .args(&["-u=kQ4dALb1", "-", "A=0d", "CZj=lYr"])
+        .succeeds()
+        .stdout_contains("A=0d")
+        .stdout_contains("CZj=lYr")
+        .stderr_is("");
+
+    // env -i -u=kQ4dALb1  A=0d CZj=lYr
+    // Output: A=0d
+    // CZj=lYr
+    ts.ucmd()
+        .args(&["-i", "-u=kQ4dALb1", "A=0d", "CZj=lYr"])
+        .succeeds()
+        .stdout_contains("A=0d")
+        .stdout_contains("CZj=lYr")
+        .stderr_is("");
+
+    // env echo gotcha -u=hello
+    // Output: gotcha -u=hello
+    ts.ucmd()
+        .args(&["echo", "gotcha", "-u=hello"])
+        .succeeds()
+        .stdout_contains("gotcha -u=hello")
+        .stderr_is("");
+
+    // env -vu=hello
+    // unset:    =hello
+    // env: cannot unset ‘=hello’: Invalid argument
+    ts.ucmd()
+        .args(&["-vu=hello"])
+        .fails()
+        .code_is(125)
+        .no_stdout()
+        .stderr_contains("env: cannot unset '=hello': Invalid argument\n");
+}
+
 #[test]
 #[cfg(all(unix, feature = "dirname", feature = "echo"))]
 fn test_env_overwrite_arg0() {
