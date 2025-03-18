@@ -75,8 +75,9 @@ collect_diff(2, "opt-level")
 collect_diff(3, "lto")
 
 
-def analyze(l):
-    return f"MIN: {float(min(l)):.3}, AVG: {float(sum(l)/len(l)):.3}, MAX: {float(max(l)):.3}"
+def analyze(change):
+    return f"""MIN: {float(min(change)):.3},
+        AVG: {float(sum(change) / len(change)):.3}, MAX: {float(max(change)):.3}"""
 
 
 print("Absolute changes")

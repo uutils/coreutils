@@ -29,6 +29,7 @@ Output:
   Prints shell export statements for TOTAL, PASS, FAIL, SKIP, XPASS, and ERROR
   that can be evaluated in a shell environment.
 """
+
 import json
 import sys
 from collections import defaultdict
