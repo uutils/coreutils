@@ -19,6 +19,7 @@ path = "src/ln.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["backup-control", "fs"] }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "ln"
