@@ -13,10 +13,9 @@ use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, sho
 
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::error::Error;
 use std::ffi::OsString;
-use std::fmt::Display;
 use std::fs;
+use thiserror::Error;
 
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
@@ -46,37 +45,24 @@ pub enum OverwriteMode {
     Force,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 enum LnError {
+    #[error("target {} is not a directory", _0.quote())]
     TargetIsDirectory(PathBuf),
+
+    #[error("")]
     SomeLinksFailed,
+
+    #[error("{} and {} are the same file", _0.quote(), _1.quote())]
     SameFile(PathBuf, PathBuf),
+
+    #[error("missing destination file operand after {}", _0.quote())]
     MissingDestination(PathBuf),
-    ExtraOperand(OsString),
-}
 
-impl Display for LnError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
-            Self::SameFile(s, d) => {
-                write!(f, "{} and {} are the same file", s.quote(), d.quote())
-            }
-            Self::SomeLinksFailed => Ok(()),
-            Self::MissingDestination(s) => {
-                write!(f, "missing destination file operand after {}", s.quote())
-            }
-            Self::ExtraOperand(s) => write!(
-                f,
-                "extra operand {}\nTry '{} --help' for more information.",
-                s.quote(),
-                uucore::execution_phrase()
-            ),
-        }
-    }
+    #[error("extra operand {}\nTry '{} --help' for more information.", 
+    format!("{:?}", _0).trim_matches('"'), _1)]
+    ExtraOperand(OsString, String),
 }
-
-impl Error for LnError {}
 
 impl UError for LnError {
     fn code(&self) -> i32 {
@@ -284,7 +270,11 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
         return Err(LnError::MissingDestination(files[0].clone()).into());
     }
     if files.len() > 2 {
-        return Err(LnError::ExtraOperand(files[2].clone().into()).into());
+        return Err(LnError::ExtraOperand(
+            files[2].clone().into(),
+            uucore::execution_phrase().to_string(),
+        )
+        .into());
     }
     assert!(!files.is_empty());
 
