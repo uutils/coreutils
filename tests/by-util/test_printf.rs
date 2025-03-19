@@ -993,6 +993,16 @@ fn float_flag_position_space_padding() {
 }
 
 #[test]
+fn float_large_precision() {
+    // Note: This does not match GNU coreutils output (0.100000000000000000001355252716 on x86),
+    // as we parse and format using ExtendedBigDecimal, which provides arbitrary precision.
+    new_ucmd!()
+        .args(&["%.30f", "0.1"])
+        .succeeds()
+        .stdout_only("0.100000000000000000000000000000");
+}
+
+#[test]
 fn float_non_finite_space_padding() {
     new_ucmd!()
         .args(&["% 5.2f|% 5.2f|% 5.2f|% 5.2f", "inf", "-inf", "nan", "-nan"])
