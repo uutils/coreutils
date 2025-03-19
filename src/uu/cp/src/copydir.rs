@@ -108,9 +108,9 @@ impl<'a> Context<'a> {
     /// - `root`: The source path from which the directory will be copied.
     /// - `target`: The target path to which the directory will be copied.
     /// - `no_target_dir`: A boolean indicating whether the root parent
-    ///    should consider wether or not the target directory exists.
+    ///    should consider whether or not the target directory exists.
     ///
-    /// `$ cp -r source target/` Typically behave differently wether `target`
+    /// `$ cp -r source target/` Typically behave differently whether `target`
     /// exists or not, end in `/` or `.`. the `--no-target-dir` flag can be
     /// used to force the behavior of the command in case where `target` exists,
     /// and is reflected in the `no_target_dir` parameter.
