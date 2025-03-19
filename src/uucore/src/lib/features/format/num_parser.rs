@@ -168,6 +168,15 @@ impl ExtendedParser for f64 {
     }
 }
 
+impl ExtendedParser for ExtendedBigDecimal {
+    /// Parse a number as an ExtendedBigDecimal
+    fn extended_parse(
+        input: &str,
+    ) -> Result<ExtendedBigDecimal, ExtendedParserError<'_, ExtendedBigDecimal>> {
+        parse(input, false)
+    }
+}
+
 fn parse_special_value(
     input: &str,
     negative: bool,
@@ -316,6 +325,12 @@ fn parse(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use bigdecimal::BigDecimal;
+
+    use crate::format::ExtendedBigDecimal;
+
     use super::{ExtendedParser, ExtendedParserError};
 
     #[test]
@@ -387,6 +402,9 @@ mod tests {
         );
         assert!(matches!(f64::extended_parse("1.2.3"),
                          Err(ExtendedParserError::PartialMatch(f, ".3")) if f == 1.2));
+        // Minus zero. 0.0 == -0.0 so we explicitly check the sign.
+        assert_eq!(Ok(0.0), f64::extended_parse("-0.0"));
+        assert!(f64::extended_parse("-0.0").unwrap().is_sign_negative());
         assert_eq!(Ok(f64::INFINITY), f64::extended_parse("inf"));
         assert_eq!(Ok(f64::INFINITY), f64::extended_parse("+inf"));
         assert_eq!(Ok(f64::NEG_INFINITY), f64::extended_parse("-inf"));
@@ -410,6 +428,55 @@ mod tests {
     }
 
     #[test]
+    fn test_decimal_extended_big_decimal() {
+        // f64 parsing above already tested a lot of these, just do a few.
+        // Careful, we usually cannot use From<f64> to get a precise ExtendedBigDecimal as numbers like 123.15 cannot be exactly represented by a f64.
+        assert_eq!(
+            Ok(ExtendedBigDecimal::BigDecimal(
+                BigDecimal::from_str("123").unwrap()
+            )),
+            ExtendedBigDecimal::extended_parse("123")
+        );
+        assert_eq!(
+            Ok(ExtendedBigDecimal::BigDecimal(
+                BigDecimal::from_str("123.15").unwrap()
+            )),
+            ExtendedBigDecimal::extended_parse("123.15")
+        );
+        // Very high precision that would not fit in a f64.
+        assert_eq!(
+            Ok(ExtendedBigDecimal::BigDecimal(
+                BigDecimal::from_str(".150000000000000000000000000000000000001").unwrap()
+            )),
+            ExtendedBigDecimal::extended_parse(".150000000000000000000000000000000000001")
+        );
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse("nan"),
+            Ok(ExtendedBigDecimal::Nan)
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse("-NAN"),
+            Ok(ExtendedBigDecimal::MinusNan)
+        ));
+        assert_eq!(
+            Ok(ExtendedBigDecimal::Infinity),
+            ExtendedBigDecimal::extended_parse("InF")
+        );
+        assert_eq!(
+            Ok(ExtendedBigDecimal::MinusInfinity),
+            ExtendedBigDecimal::extended_parse("-iNf")
+        );
+        assert_eq!(
+            Ok(ExtendedBigDecimal::zero()),
+            ExtendedBigDecimal::extended_parse("0.0")
+        );
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse("-0.0"),
+            Ok(ExtendedBigDecimal::MinusZero)
+        ));
+    }
+
+    #[test]
     fn test_hexadecimal() {
         assert_eq!(Ok(0x123), u64::extended_parse("0x123"));
         assert_eq!(Ok(0x123), u64::extended_parse("0X123"));
@@ -420,6 +487,13 @@ mod tests {
         assert_eq!(Ok(0.5), f64::extended_parse("0x.8"));
         assert_eq!(Ok(0.0625), f64::extended_parse("0x.1"));
         assert_eq!(Ok(15.007_812_5), f64::extended_parse("0xf.02"));
+
+        assert_eq!(
+            Ok(ExtendedBigDecimal::BigDecimal(
+                BigDecimal::from_str("0.0625").unwrap()
+            )),
+            ExtendedBigDecimal::extended_parse("0x.1")
+        );
     }
 
     #[test]
@@ -462,6 +536,12 @@ mod tests {
             f64::extended_parse("0b100.1"),
             Err(ExtendedParserError::PartialMatch(0f64, "b100.1"))
         ));
+
+        assert!(match ExtendedBigDecimal::extended_parse("0b100.1") {
+            Err(ExtendedParserError::PartialMatch(ebd, "b100.1")) =>
+                ebd == ExtendedBigDecimal::zero(),
+            _ => false,
+        });
     }
 
     #[test]
