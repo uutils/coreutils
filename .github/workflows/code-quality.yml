@@ -167,3 +167,23 @@ jobs:
 
       - name: Check
         run: npx --yes @taplo/cli fmt --check
+
+  python:
+    name: Style/Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: ruff
+        uses: astral-sh/ruff-action@v3
+        with:
+          src: "./util"
+
+      - name: ruff - format
+        uses: astral-sh/ruff-action@v3
+        with:
+          src: "./util"
+          args: format --check
