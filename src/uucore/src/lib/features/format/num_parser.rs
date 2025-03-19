@@ -210,6 +210,8 @@ fn parse_special_value(
     }
 }
 
+// TODO: As highlighted by clippy, this function _is_ high cognitive complexity, jumps
+// around between integer and float parsing, and should be split in multiple parts.
 #[allow(clippy::cognitive_complexity)]
 fn parse(
     input: &str,
@@ -267,21 +269,51 @@ fn parse(
     let mut chars = rest.chars().enumerate().fuse().peekable();
     let mut digits = BigUint::zero();
     let mut scale = 0i64;
+    let mut exponent = 0i64;
     while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
         chars.next();
         digits = digits * base as u8 + d;
     }
 
-    // Parse the fractional part of the number if there can be one and the input contains
-    // a '.' decimal separator.
-    if matches!(chars.peek(), Some(&(_, '.')))
-        && matches!(base, Base::Decimal | Base::Hexadecimal)
-        && !integral_only
-    {
-        chars.next();
-        while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
+    // Parse fractional/exponent part of the number for supported bases.
+    if matches!(base, Base::Decimal | Base::Hexadecimal) && !integral_only {
+        // Parse the fractional part of the number if there can be one and the input contains
+        // a '.' decimal separator.
+        if matches!(chars.peek(), Some(&(_, '.'))) {
             chars.next();
-            (digits, scale) = (digits * base as u8 + d, scale + 1);
+            while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
+                chars.next();
+                (digits, scale) = (digits * base as u8 + d, scale + 1);
+            }
+        }
+
+        let exp_char = match base {
+            Base::Decimal => 'e',
+            Base::Hexadecimal => 'p',
+            _ => unreachable!(),
+        };
+
+        // Parse the exponent part, only decimal numbers are allowed.
+        if chars.peek().is_some_and(|&(_, c)| c == exp_char) {
+            chars.next();
+            let exp_negative = match chars.peek() {
+                Some((_, '-')) => {
+                    chars.next();
+                    true
+                }
+                Some((_, '+')) => {
+                    chars.next();
+                    false
+                }
+                _ => false, // Something else, or nothing at all: keep going.
+            };
+            while let Some(d) = chars.peek().and_then(|&(_, c)| Base::Decimal.digit(c)) {
+                chars.next();
+                exponent = exponent * 10 + d as i64;
+            }
+            if exp_negative {
+                exponent = -exponent;
+            }
         }
     }
 
@@ -300,14 +332,23 @@ fn parse(
     } else {
         let sign = if negative { Sign::Minus } else { Sign::Plus };
         let signed_digits = BigInt::from_biguint(sign, digits);
-        let bd = if scale == 0 {
+        let bd = if scale == 0 && exponent == 0 {
             BigDecimal::from_bigint(signed_digits, 0)
         } else if base == Base::Decimal {
-            BigDecimal::from_bigint(signed_digits, scale)
+            BigDecimal::from_bigint(signed_digits, scale - exponent)
+        } else if base == Base::Hexadecimal {
+            // Base is 16, init at scale 0 then divide by base**scale.
+            let bd = BigDecimal::from_bigint(signed_digits, 0)
+                / BigDecimal::from_bigint(BigInt::from(16).pow(scale as u32), 0);
+            // Confusingly, exponent is in base 2 for hex floating point numbers.
+            if exponent >= 0 {
+                bd * 2u64.pow(exponent as u32)
+            } else {
+                bd / 2u64.pow(-exponent as u32)
+            }
         } else {
-            // Base is not 10, init at scale 0 then divide by base**scale.
-            BigDecimal::from_bigint(signed_digits, 0)
-                / BigDecimal::from_bigint(BigInt::from(base as u32).pow(scale as u32), 0)
+            // scale != 0, which means that integral_only is not set, so only base 10 and 16 are allowed.
+            unreachable!();
         };
         ExtendedBigDecimal::BigDecimal(bd)
     };
@@ -350,6 +391,10 @@ mod tests {
             u64::extended_parse("123.15"),
             Err(ExtendedParserError::PartialMatch(123, ".15"))
         ));
+        assert!(matches!(
+            u64::extended_parse("123e10"),
+            Err(ExtendedParserError::PartialMatch(123, "e10"))
+        ));
     }
 
     #[test]
@@ -370,6 +415,10 @@ mod tests {
         assert!(matches!(
             i64::extended_parse(&format!("{}", i64::MAX as u64 + 1)),
             Err(ExtendedParserError::Overflow)
+        ));
+        assert!(matches!(
+            i64::extended_parse("-123e10"),
+            Err(ExtendedParserError::PartialMatch(-123, "e10"))
         ));
     }
 
@@ -397,12 +446,18 @@ mod tests {
         assert_eq!(Ok(123.15), f64::extended_parse("0123.15"));
         assert_eq!(Ok(123.15), f64::extended_parse("+0123.15"));
         assert_eq!(Ok(-123.15), f64::extended_parse("-0123.15"));
+        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15e5"));
+        assert_eq!(Ok(-12315000.0), f64::extended_parse("-123.15e5"));
+        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15e+5"));
+        assert_eq!(Ok(0.0012315), f64::extended_parse("123.15e-5"));
         assert_eq!(
             Ok(0.15),
             f64::extended_parse(".150000000000000000000000000231313")
         );
         assert!(matches!(f64::extended_parse("1.2.3"),
                          Err(ExtendedParserError::PartialMatch(f, ".3")) if f == 1.2));
+        assert!(matches!(f64::extended_parse("123.15p5"),
+                        Err(ExtendedParserError::PartialMatch(f, "p5")) if f == 123.15));
         // Minus zero. 0.0 == -0.0 so we explicitly check the sign.
         assert_eq!(Ok(0.0), f64::extended_parse("-0.0"));
         assert!(f64::extended_parse("-0.0").unwrap().is_sign_negative());
@@ -443,6 +498,20 @@ mod tests {
                 BigDecimal::from_str("123.15").unwrap()
             )),
             ExtendedBigDecimal::extended_parse("123.15")
+        );
+        assert_eq!(
+            Ok(ExtendedBigDecimal::BigDecimal(BigDecimal::from_bigint(
+                12315.into(),
+                -98
+            ))),
+            ExtendedBigDecimal::extended_parse("123.15e100")
+        );
+        assert_eq!(
+            Ok(ExtendedBigDecimal::BigDecimal(BigDecimal::from_bigint(
+                12315.into(),
+                102
+            ))),
+            ExtendedBigDecimal::extended_parse("123.15e-100")
         );
         // Very high precision that would not fit in a f64.
         assert_eq!(
@@ -488,6 +557,12 @@ mod tests {
         assert_eq!(Ok(0.5), f64::extended_parse("0x.8"));
         assert_eq!(Ok(0.0625), f64::extended_parse("0x.1"));
         assert_eq!(Ok(15.007_812_5), f64::extended_parse("0xf.02"));
+        assert_eq!(Ok(16.0), f64::extended_parse("0x0.8p5"));
+        assert_eq!(Ok(0.0625), f64::extended_parse("0x1p-4"));
+
+        // We cannot really check that 'e' is not a valid exponent indicator for hex floats...
+        // but we can check that the number still gets parsed properly: 0x0.8e5 is 0x8e5 / 16**3
+        assert_eq!(Ok(0.555908203125), f64::extended_parse("0x0.8e5"));
 
         assert_eq!(
             Ok(ExtendedBigDecimal::BigDecimal(
