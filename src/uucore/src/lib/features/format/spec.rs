@@ -433,8 +433,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args).unwrap_or(6);
-                // TODO: We should implement some get_extendedBigDecimal function in args to avoid losing precision.
-                let f: ExtendedBigDecimal = args.get_f64().into();
+                let f: ExtendedBigDecimal = args.get_extended_big_decimal();
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
