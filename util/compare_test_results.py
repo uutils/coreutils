@@ -55,7 +55,6 @@ def identify_test_changes(current_flat, reference_flat):
         if status in ("FAIL", "ERROR"):
             if test_path in reference_flat:
                 if reference_flat[test_path] in ("PASS", "SKIP"):
-
                     regressions.append(test_path)
 
     # Find fixes (tests that were failing but now passing)
