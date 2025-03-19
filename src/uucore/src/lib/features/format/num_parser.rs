@@ -81,7 +81,7 @@ impl<'a, T> ExtendedParserError<'a, T> {
 /// A number parser for binary, octal, decimal, hexadecimal and single characters.
 ///
 /// It is implemented for `u64`/`i64`, where no fractional part is parsed,
-/// and `f64` float, where octal is not allowed.
+/// and `f64` float, where octal and binary formats are not allowed.
 pub trait ExtendedParser {
     // We pick a hopefully different name for our parser, to avoid clash with standard traits.
     fn extended_parse(input: &str) -> Result<Self, ExtendedParserError<'_, Self>>
@@ -235,12 +235,15 @@ fn parse(
     // will not be consumed in case the parsable string contains only "0": the leading extra "0"
     // will have no influence on the result.
     let (base, rest) = if let Some(rest) = unsigned.strip_prefix('0') {
-        if let Some(rest) = rest.strip_prefix(['b', 'B']) {
-            (Base::Binary, rest)
-        } else if let Some(rest) = rest.strip_prefix(['x', 'X']) {
+        if let Some(rest) = rest.strip_prefix(['x', 'X']) {
             (Base::Hexadecimal, rest)
         } else if integral_only {
-            (Base::Octal, unsigned)
+            // Binary/Octal only allowed for integer parsing.
+            if let Some(rest) = rest.strip_prefix(['b', 'B']) {
+                (Base::Binary, rest)
+            } else {
+                (Base::Octal, unsigned)
+            }
         } else {
             (Base::Decimal, unsigned)
         }
@@ -368,6 +371,16 @@ mod tests {
         assert_eq!(Ok(-123.15), f64::extended_parse("-123.15"));
         assert_eq!(Ok(0.15), f64::extended_parse(".15"));
         assert_eq!(Ok(-0.15), f64::extended_parse("-.15"));
+        // Leading 0(s) are _not_ octal when parsed as float
+        assert_eq!(Ok(123.0), f64::extended_parse("0123"));
+        assert_eq!(Ok(123.0), f64::extended_parse("+0123"));
+        assert_eq!(Ok(-123.0), f64::extended_parse("-0123"));
+        assert_eq!(Ok(123.0), f64::extended_parse("00123"));
+        assert_eq!(Ok(123.0), f64::extended_parse("+00123"));
+        assert_eq!(Ok(-123.0), f64::extended_parse("-00123"));
+        assert_eq!(Ok(123.15), f64::extended_parse("0123.15"));
+        assert_eq!(Ok(123.15), f64::extended_parse("+0123.15"));
+        assert_eq!(Ok(-123.15), f64::extended_parse("-0123.15"));
         assert_eq!(
             Ok(0.15),
             f64::extended_parse(".150000000000000000000000000231313")
@@ -429,6 +442,8 @@ mod tests {
             u64::extended_parse("0."),
             Err(ExtendedParserError::PartialMatch(0, "."))
         ));
+
+        // No float tests, leading zeros get parsed as decimal anyway.
     }
 
     #[test]
@@ -437,6 +452,16 @@ mod tests {
         assert_eq!(Ok(0b1011), u64::extended_parse("0B1011"));
         assert_eq!(Ok(0b1011), u64::extended_parse("+0b1011"));
         assert_eq!(Ok(-0b1011), i64::extended_parse("-0b1011"));
+
+        // Binary not allowed for floats
+        assert!(matches!(
+            f64::extended_parse("0b100"),
+            Err(ExtendedParserError::PartialMatch(0f64, "b100"))
+        ));
+        assert!(matches!(
+            f64::extended_parse("0b100.1"),
+            Err(ExtendedParserError::PartialMatch(0f64, "b100.1"))
+        ));
     }
 
     #[test]
