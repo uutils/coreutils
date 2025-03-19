@@ -8,6 +8,7 @@
 use clap::{builder::ValueParser, parser::ValueSource, Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
+use std::io::{stdin, IsTerminal};
 use std::ops::BitOr;
 #[cfg(not(windows))]
 use std::os::unix::ffi::OsStrExt;
@@ -576,6 +577,10 @@ fn prompt_dir(path: &Path, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
+    // Silently proceed if stdin is not interactive terminal
+    if !stdin().is_terminal() {
+        return true;
+    }
 
     // We can't use metadata.permissions.readonly for directories because it only works on files
     // So we have to handle whether a directory is writable manually
@@ -589,6 +594,10 @@ fn prompt_dir(path: &Path, options: &Options) -> bool {
 fn prompt_file(path: &Path, options: &Options) -> bool {
     // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {
+        return true;
+    }
+    // Silently proceed if stdin is not interactive terminal
+    if !stdin().is_terminal() {
         return true;
     }
     // If interactive is Always we want to check if the file is symlink to prompt the right message
@@ -615,6 +624,10 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
 }
 
 fn prompt_file_permission_readonly(path: &Path) -> bool {
+    // Silently proceed if stdin is not interactive terminal
+    if !stdin().is_terminal() {
+        return true;
+    }
     match fs::metadata(path) {
         Ok(_) if is_writable(path) => true,
         Ok(metadata) if metadata.len() == 0 => prompt_yes!(
