@@ -332,7 +332,7 @@ same-file = "1.0.6"
 self_cell = "1.0.4"
 # Remove the "=" once we moved to Rust edition 2024
 selinux = "= 0.5.0"
-selinux-sys = "= 0.6.13"
+selinux-sys = "= 0.6.14"
 signal-hook = "0.3.17"
 smallvec = { version = "1.13.2", features = ["union"] }
 tempfile = "3.15.0"
