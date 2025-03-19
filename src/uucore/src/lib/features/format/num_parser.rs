@@ -306,7 +306,8 @@ fn parse(
             BigDecimal::from_bigint(signed_digits, scale)
         } else {
             // Base is not 10, init at scale 0 then divide by base**scale.
-            BigDecimal::from_bigint(signed_digits, 0) / (base as u64).pow(scale as u32)
+            BigDecimal::from_bigint(signed_digits, 0)
+                / BigDecimal::from_bigint(BigInt::from(base as u32).pow(scale as u32), 0)
         };
         ExtendedBigDecimal::BigDecimal(bd)
     };
@@ -493,6 +494,14 @@ mod tests {
                 BigDecimal::from_str("0.0625").unwrap()
             )),
             ExtendedBigDecimal::extended_parse("0x.1")
+        );
+
+        // Precisely parse very large hexadecimal numbers (i.e. with a large division).
+        assert_eq!(
+            Ok(ExtendedBigDecimal::BigDecimal(
+                BigDecimal::from_str("15.999999999999999999999999948301211715435770320536956745627321652136743068695068359375").unwrap()
+            )),
+            ExtendedBigDecimal::extended_parse("0xf.fffffffffffffffffffff")
         );
     }
 
