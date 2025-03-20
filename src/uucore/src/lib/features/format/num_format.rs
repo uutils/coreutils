@@ -80,6 +80,10 @@ pub struct SignedInt {
 
 impl Formatter<i64> for SignedInt {
     fn fmt(&self, writer: impl Write, x: i64) -> std::io::Result<()> {
+        if self.precision == 0 && x == 0 {
+            return Ok(());
+        }
+
         let s = if self.precision > 0 {
             format!("{:0>width$}", x.abs(), width = self.precision)
         } else {
@@ -132,6 +136,10 @@ pub struct UnsignedInt {
 
 impl Formatter<u64> for UnsignedInt {
     fn fmt(&self, mut writer: impl Write, x: u64) -> std::io::Result<()> {
+        if self.precision == 0 && x == 0 {
+            return Ok(());
+        }
+
         let mut s = match self.variant {
             UnsignedIntVariant::Decimal => format!("{x}"),
             UnsignedIntVariant::Octal(_) => format!("{x:o}"),
