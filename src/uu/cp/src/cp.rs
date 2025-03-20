@@ -131,7 +131,7 @@ pub enum OverwriteMode {
 
 impl Default for OverwriteMode {
     fn default() -> Self {
-        Self::Clobber(Default::default())
+        Self::Clobber(ClobberMode::default())
     }
 }
 
@@ -144,6 +144,7 @@ pub enum ReflinkMode {
 }
 
 impl Default for ReflinkMode {
+    #[allow(clippy::derivable_impls)]
     fn default() -> Self {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
         {
@@ -320,23 +321,23 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             attributes_only: false,
-            backup: Default::default(),
+            backup: BackupMode::default(),
             copy_contents: false,
             cli_dereference: false,
-            copy_mode: Default::default(),
+            copy_mode: CopyMode::default(),
             dereference: false,
             no_target_dir: false,
             one_file_system: false,
-            overwrite: Default::default(),
+            overwrite: OverwriteMode::default(),
             parents: false,
-            sparse_mode: Default::default(),
+            sparse_mode: SparseMode::default(),
             strip_trailing_slashes: false,
-            reflink_mode: Default::default(),
-            attributes: Default::default(),
+            reflink_mode: ReflinkMode::default(),
+            attributes: Attributes::default(),
             recursive: false,
             backup_suffix: backup_control::DEFAULT_BACKUP_SUFFIX.to_owned(),
             target_dir: None,
-            update: Default::default(),
+            update: UpdateMode::default(),
             debug: false,
             verbose: false,
             progress_bar: false,
@@ -1148,7 +1149,7 @@ impl Options {
                         }
                     }
                 } else {
-                    Default::default()
+                    ReflinkMode::default()
                 }
             },
             sparse_mode: {

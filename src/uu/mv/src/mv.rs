@@ -91,10 +91,10 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            overwrite: Default::default(),
-            backup: Default::default(),
+            overwrite: OverwriteMode::default(),
+            backup: BackupMode::default(),
             suffix: backup_control::DEFAULT_BACKUP_SUFFIX.to_owned(),
-            update: Default::default(),
+            update: UpdateMode::default(),
             target_dir: None,
             no_target_dir: false,
             verbose: false,
