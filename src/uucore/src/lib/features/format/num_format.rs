@@ -662,9 +662,11 @@ mod test {
     use std::str::FromStr;
 
     use crate::format::{
-        ExtendedBigDecimal,
-        num_format::{Case, ForceDecimal},
+        ExtendedBigDecimal, Format,
+        num_format::{Case, Float, ForceDecimal, UnsignedInt},
     };
+
+    use super::{Formatter, SignedInt};
 
     #[test]
     fn unsigned_octal() {
@@ -1024,5 +1026,167 @@ mod test {
         assert_eq!(f(0.0001), "0.0001");
         assert_eq!(f(0.00001), "1e-05");
         assert_eq!(f(0.000001), "1e-06");
+    }
+
+    // Wrapper function to get a string out of Format.fmt()
+    fn fmt<U, T>(format: &Format<U, T>, n: T) -> String
+    where
+        U: Formatter<T>,
+    {
+        let mut v = Vec::<u8>::new();
+        format.fmt(&mut v, n as T).unwrap();
+        String::from_utf8_lossy(&v).to_string()
+    }
+
+    // Some end-to-end tests, `printf` will also test some of those but it's easier to add more
+    // tests here. We mostly focus on padding, negative numbers, and format specifiers that are not
+    // covered above.
+    #[test]
+    fn format_signed_int() {
+        let format = Format::<SignedInt, i64>::parse("%d").unwrap();
+        assert_eq!(fmt(&format, 123i64), "123");
+        assert_eq!(fmt(&format, -123i64), "-123");
+
+        let format = Format::<SignedInt, i64>::parse("%i").unwrap();
+        assert_eq!(fmt(&format, 123i64), "123");
+        assert_eq!(fmt(&format, -123i64), "-123");
+
+        let format = Format::<SignedInt, i64>::parse("%6d").unwrap();
+        assert_eq!(fmt(&format, 123i64), "   123");
+        assert_eq!(fmt(&format, -123i64), "  -123");
+
+        let format = Format::<SignedInt, i64>::parse("%06d").unwrap();
+        assert_eq!(fmt(&format, 123i64), "000123");
+        assert_eq!(fmt(&format, -123i64), "-00123");
+
+        let format = Format::<SignedInt, i64>::parse("%+6d").unwrap();
+        assert_eq!(fmt(&format, 123i64), "  +123");
+        assert_eq!(fmt(&format, -123i64), "  -123");
+
+        let format = Format::<SignedInt, i64>::parse("% d").unwrap();
+        assert_eq!(fmt(&format, 123i64), " 123");
+        assert_eq!(fmt(&format, -123i64), "-123");
+    }
+
+    #[test]
+    #[ignore = "Need issue #7509 to be fixed"]
+    fn format_signed_int_precision_zero() {
+        let format = Format::<SignedInt, i64>::parse("%.0d").unwrap();
+        assert_eq!(fmt(&format, 123i64), "123");
+        // From cppreference.com: "If both the converted value and the precision are ​0​ the conversion results in no characters."
+        assert_eq!(fmt(&format, 0i64), "");
+    }
+
+    #[test]
+    fn format_unsigned_int() {
+        let f = |fmt_str: &str, n: u64| {
+            let format = Format::<UnsignedInt, u64>::parse(fmt_str).unwrap();
+            fmt(&format, n)
+        };
+
+        assert_eq!(f("%u", 123u64), "123");
+        assert_eq!(f("%o", 123u64), "173");
+        assert_eq!(f("%#o", 123u64), "0173");
+        assert_eq!(f("%6x", 123u64), "    7b");
+        assert_eq!(f("%#6x", 123u64), "  0x7b");
+        assert_eq!(f("%06X", 123u64), "00007B");
+        assert_eq!(f("%+6u", 123u64), "   123"); // '+' is ignored for unsigned numbers.
+        assert_eq!(f("% u", 123u64), "123"); // ' ' is ignored for unsigned numbers.
+        assert_eq!(f("%#x", 0), "0"); // No prefix for 0
+    }
+
+    #[test]
+    #[ignore = "Need issues #7509 and #7510 to be fixed"]
+    fn format_unsigned_int_broken() {
+        // TODO: Merge this back into format_unsigned_int.
+        let f = |fmt_str: &str, n: u64| {
+            let format = Format::<UnsignedInt, u64>::parse(fmt_str).unwrap();
+            fmt(&format, n)
+        };
+
+        // #7509
+        assert_eq!(f("%.0o", 0), "");
+        assert_eq!(f("%#0o", 0), "0"); // Already correct, but probably an accident.
+        assert_eq!(f("%.0x", 0), "");
+        // #7510
+        assert_eq!(f("%#06x", 123u64), "0x007b");
+    }
+
+    #[test]
+    fn format_float_decimal() {
+        let format = Format::<Float, &ExtendedBigDecimal>::parse("%f").unwrap();
+        assert_eq!(fmt(&format, &123.0.into()), "123.000000");
+        assert_eq!(fmt(&format, &(-123.0).into()), "-123.000000");
+        assert_eq!(fmt(&format, &123.15e-8.into()), "0.000001");
+        assert_eq!(fmt(&format, &(-123.15e8).into()), "-12315000000.000000");
+        let zero_exp = |exp| ExtendedBigDecimal::BigDecimal(BigDecimal::from_bigint(0.into(), exp));
+        // We've had issues with "0e10"/"0e-10" formatting, and our current workaround is in Format.fmt function.
+        assert_eq!(fmt(&format, &zero_exp(0)), "0.000000");
+        assert_eq!(fmt(&format, &zero_exp(10)), "0.000000");
+        assert_eq!(fmt(&format, &zero_exp(-10)), "0.000000");
+
+        let format = Format::<Float, &ExtendedBigDecimal>::parse("%12f").unwrap();
+        assert_eq!(fmt(&format, &123.0.into()), "  123.000000");
+        assert_eq!(fmt(&format, &(-123.0).into()), " -123.000000");
+        assert_eq!(fmt(&format, &123.15e-8.into()), "    0.000001");
+        assert_eq!(fmt(&format, &(-123.15e8).into()), "-12315000000.000000");
+        assert_eq!(
+            fmt(&format, &(ExtendedBigDecimal::Infinity)),
+            "         inf"
+        );
+        assert_eq!(
+            fmt(&format, &(ExtendedBigDecimal::MinusInfinity)),
+            "        -inf"
+        );
+        assert_eq!(fmt(&format, &(ExtendedBigDecimal::Nan)), "         nan");
+        assert_eq!(
+            fmt(&format, &(ExtendedBigDecimal::MinusNan)),
+            "        -nan"
+        );
+
+        let format = Format::<Float, &ExtendedBigDecimal>::parse("%+#.0f").unwrap();
+        assert_eq!(fmt(&format, &123.0.into()), "+123.");
+        assert_eq!(fmt(&format, &(-123.0).into()), "-123.");
+        assert_eq!(fmt(&format, &123.15e-8.into()), "+0.");
+        assert_eq!(fmt(&format, &(-123.15e8).into()), "-12315000000.");
+        assert_eq!(fmt(&format, &(ExtendedBigDecimal::Infinity)), "+inf");
+        assert_eq!(fmt(&format, &(ExtendedBigDecimal::Nan)), "+nan");
+        assert_eq!(fmt(&format, &(ExtendedBigDecimal::MinusZero)), "-0.");
+
+        let format = Format::<Float, &ExtendedBigDecimal>::parse("%#06.0f").unwrap();
+        assert_eq!(fmt(&format, &123.0.into()), "00123.");
+        assert_eq!(fmt(&format, &(-123.0).into()), "-0123.");
+        assert_eq!(fmt(&format, &123.15e-8.into()), "00000.");
+        assert_eq!(fmt(&format, &(-123.15e8).into()), "-12315000000.");
+        assert_eq!(fmt(&format, &(ExtendedBigDecimal::Infinity)), "   inf");
+        assert_eq!(fmt(&format, &(ExtendedBigDecimal::MinusInfinity)), "  -inf");
+        assert_eq!(fmt(&format, &(ExtendedBigDecimal::Nan)), "   nan");
+        assert_eq!(fmt(&format, &(ExtendedBigDecimal::MinusNan)), "  -nan");
+    }
+
+    #[test]
+    fn format_float_others() {
+        let f = |fmt_str: &str, n: &ExtendedBigDecimal| {
+            let format = Format::<Float, &ExtendedBigDecimal>::parse(fmt_str).unwrap();
+            fmt(&format, n)
+        };
+
+        assert_eq!(f("%e", &(-123.0).into()), "-1.230000e+02");
+        assert_eq!(f("%#09.e", &(-100.0).into()), "-001.e+02");
+        assert_eq!(f("%# 9.E", &100.0.into()), "   1.E+02");
+        assert_eq!(f("% 12.2A", &(-100.0).into()), "  -0xC.80P+3");
+    }
+
+    #[test]
+    #[ignore = "Need issue #7510 to be fixed"]
+    fn format_float_others_broken() {
+        // TODO: Merge this back into format_float_others.
+        let f = |fmt_str: &str, n: &ExtendedBigDecimal| {
+            let format = Format::<Float, &ExtendedBigDecimal>::parse(fmt_str).unwrap();
+            fmt(&format, n)
+        };
+
+        // #7510
+        assert_eq!(f("%012.2a", &(-100.0).into()), "-0x00c.80p+3");
     }
 }
