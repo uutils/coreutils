@@ -5,7 +5,7 @@
 
 //! Utilities for parsing numbers in various formats
 
-// spell-checker:ignore powf copysign prec inity bigdecimal extendedbigdecimal biguint
+// spell-checker:ignore powf copysign prec inity infinit bigdecimal extendedbigdecimal biguint
 
 use bigdecimal::{
     BigDecimal,
@@ -181,33 +181,34 @@ fn parse_special_value(
     input: &str,
     negative: bool,
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<'_, ExtendedBigDecimal>> {
-    let prefix = input
-        .chars()
-        .take(3)
-        .map(|c| c.to_ascii_lowercase())
-        .collect::<String>();
-    let special = match prefix.as_str() {
-        "inf" => {
+    let input_lc = input.to_ascii_lowercase();
+
+    // Array of ("String to match", return value when sign positive, when sign negative)
+    const MATCH_TABLE: &[(&str, ExtendedBigDecimal)] = &[
+        ("infinity", ExtendedBigDecimal::Infinity),
+        ("inf", ExtendedBigDecimal::Infinity),
+        ("nan", ExtendedBigDecimal::Nan),
+    ];
+
+    for (str, ebd) in MATCH_TABLE.iter() {
+        if input_lc.starts_with(str) {
+            let mut special = ebd.clone();
             if negative {
-                ExtendedBigDecimal::MinusInfinity
-            } else {
-                ExtendedBigDecimal::Infinity
+                special = -special;
             }
-        }
-        "nan" => {
-            if negative {
-                ExtendedBigDecimal::MinusNan
+            let match_len = str.len();
+            return if input.len() == match_len {
+                Ok(special)
             } else {
-                ExtendedBigDecimal::Nan
-            }
+                Err(ExtendedParserError::PartialMatch(
+                    special,
+                    &input[match_len..],
+                ))
+            };
         }
-        _ => return Err(ExtendedParserError::NotNumeric),
-    };
-    if input.len() == 3 {
-        Ok(special)
-    } else {
-        Err(ExtendedParserError::PartialMatch(special, &input[3..]))
     }
+
+    Err(ExtendedParserError::NotNumeric)
 }
 
 // TODO: As highlighted by clippy, this function _is_ high cognitive complexity, jumps
@@ -467,6 +468,9 @@ mod tests {
         assert_eq!(Ok(f64::INFINITY), f64::extended_parse("Inf"));
         assert_eq!(Ok(f64::INFINITY), f64::extended_parse("InF"));
         assert_eq!(Ok(f64::INFINITY), f64::extended_parse("INF"));
+        assert_eq!(Ok(f64::INFINITY), f64::extended_parse("infinity"));
+        assert_eq!(Ok(f64::INFINITY), f64::extended_parse("+infiNIty"));
+        assert_eq!(Ok(f64::NEG_INFINITY), f64::extended_parse("-INfinity"));
         assert!(f64::extended_parse("NaN").unwrap().is_nan());
         assert!(f64::extended_parse("NaN").unwrap().is_sign_positive());
         assert!(f64::extended_parse("+NaN").unwrap().is_nan());
@@ -477,8 +481,10 @@ mod tests {
         assert!(f64::extended_parse("nan").unwrap().is_sign_positive());
         assert!(f64::extended_parse("NAN").unwrap().is_nan());
         assert!(f64::extended_parse("NAN").unwrap().is_sign_positive());
-        assert!(matches!(f64::extended_parse("-infinity"),
-                         Err(ExtendedParserError::PartialMatch(f, "inity")) if f == f64::NEG_INFINITY));
+        assert!(matches!(f64::extended_parse("-infinit"),
+                         Err(ExtendedParserError::PartialMatch(f, "init")) if f == f64::NEG_INFINITY));
+        assert!(matches!(f64::extended_parse("-infinity00"),
+                         Err(ExtendedParserError::PartialMatch(f, "00")) if f == f64::NEG_INFINITY));
         assert!(f64::extended_parse(&format!("{}", u64::MAX)).is_ok());
         assert!(f64::extended_parse(&format!("{}", i64::MIN)).is_ok());
     }
