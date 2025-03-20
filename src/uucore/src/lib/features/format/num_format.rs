@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore bigdecimal prec
+// spell-checker:ignore bigdecimal prec cppreference
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;
@@ -244,7 +244,13 @@ impl Formatter<&ExtendedBigDecimal> for Float {
          */
         let (abs, negative) = match e {
             ExtendedBigDecimal::BigDecimal(bd) => {
-                (ExtendedBigDecimal::BigDecimal(bd.abs()), bd.is_negative())
+                // Workaround printing bug in BigDecimal, force 0 to scale 0.
+                // TODO: Remove after https://github.com/akubera/bigdecimal-rs/issues/144 is fixed.
+                if bd.is_zero() {
+                    (ExtendedBigDecimal::zero(), false)
+                } else {
+                    (ExtendedBigDecimal::BigDecimal(bd.abs()), bd.is_negative())
+                }
             }
             ExtendedBigDecimal::MinusZero => (ExtendedBigDecimal::zero(), true),
             ExtendedBigDecimal::Infinity => (ExtendedBigDecimal::Infinity, false),
@@ -720,6 +726,21 @@ mod test {
     }
 
     #[test]
+    #[ignore = "Need https://github.com/akubera/bigdecimal-rs/issues/144 to be fixed"]
+    fn decimal_float_zero() {
+        use super::format_float_decimal;
+        // We've had issues with "0e10"/"0e-10" formatting.
+        // TODO: Enable after https://github.com/akubera/bigdecimal-rs/issues/144 is fixed,
+        // as our workaround is in .fmt.
+        let f = |digits, scale| {
+            format_float_decimal(&BigDecimal::from_bigint(digits, scale), 6, ForceDecimal::No)
+        };
+        assert_eq!(f(0.into(), 0), "0.000000");
+        assert_eq!(f(0.into(), -10), "0.000000");
+        assert_eq!(f(0.into(), 10), "0.000000");
+    }
+
+    #[test]
     fn scientific_float() {
         use super::format_float_scientific;
         let f = |x| {
@@ -748,6 +769,19 @@ mod test {
         };
         assert_eq!(f(0.0), "0.000000E+00");
         assert_eq!(f(123_456.789), "1.234568E+05");
+
+        // Test "0e10"/"0e-10". From cppreference.com: "If the value is ​0​, the exponent is also ​0​."
+        let f = |digits, scale| {
+            format_float_scientific(
+                &BigDecimal::from_bigint(digits, scale),
+                6,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
+        assert_eq!(f(0.into(), 0), "0.000000e+00");
+        assert_eq!(f(0.into(), -10), "0.000000e+00");
+        assert_eq!(f(0.into(), 10), "0.000000e+00");
     }
 
     #[test]
@@ -928,6 +962,19 @@ mod test {
         };
         assert_eq!(f("0.00001"), "0xA.7C5AC4P-20");
         assert_eq!(f("0.125"), "0x8.000000P-6");
+
+        // Test "0e10"/"0e-10". From cppreference.com: "If the value is ​0​, the exponent is also ​0​."
+        let f = |digits, scale| {
+            format_float_hexadecimal(
+                &BigDecimal::from_bigint(digits, scale),
+                6,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
+        assert_eq!(f(0.into(), 0), "0x0.000000p+0");
+        assert_eq!(f(0.into(), -10), "0x0.000000p+0");
+        assert_eq!(f(0.into(), 10), "0x0.000000p+0");
     }
 
     #[test]
