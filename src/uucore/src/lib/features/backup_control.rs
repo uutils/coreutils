@@ -114,13 +114,16 @@ static VALID_ARGS_HELP: &str = "Valid arguments are:
   - 'existing', 'nil'
   - 'numbered', 't'";
 
+pub const DEFAULT_BACKUP_SUFFIX: &str = "~";
+
 /// Available backup modes.
 ///
 /// The mapping of the backup modes to the CLI arguments is annotated on the
 /// enum variants.
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 pub enum BackupMode {
     /// Argument 'none', 'off'
+    #[default]
     NoBackup,
     /// Argument 'simple', 'never'
     SimpleBackup,
@@ -254,7 +257,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
     if let Some(suffix) = supplied_suffix {
         String::from(suffix)
     } else {
-        env::var("SIMPLE_BACKUP_SUFFIX").unwrap_or_else(|_| "~".to_owned())
+        env::var("SIMPLE_BACKUP_SUFFIX").unwrap_or_else(|_| DEFAULT_BACKUP_SUFFIX.to_owned())
     }
 }
 

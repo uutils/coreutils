@@ -49,9 +49,10 @@
 use clap::ArgMatches;
 
 /// Available update mode
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub enum UpdateMode {
     /// --update=`all`, ``
+    #[default]
     ReplaceAll,
     /// --update=`none`
     ReplaceNone,
