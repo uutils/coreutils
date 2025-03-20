@@ -47,7 +47,7 @@ pub enum InteractiveMode {
 pub struct Options {
     /// `-f`, `--force`
     pub force: bool,
-    /// Iterative mode, determines when the command will prompt.
+    /// Interactive mode, determines when the command will prompt.
     ///
     /// Set by the following arguments:
     /// - `-i`: [`InteractiveMode::Always`]
@@ -69,6 +69,10 @@ pub struct Options {
     pub dir: bool,
     /// `-v`, `--verbose`
     pub verbose: bool,
+    #[doc(hidden)]
+    /// `---presume-input-tty`
+    /// Always use `None`; GNU flag for testing use only
+    pub __presume_input_tty: Option<bool>,
 }
 
 const ABOUT: &str = help_about!("rm.md");
@@ -146,6 +150,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             recursive: matches.get_flag(OPT_RECURSIVE),
             dir: matches.get_flag(OPT_DIR),
             verbose: matches.get_flag(OPT_VERBOSE),
+            __presume_input_tty: if matches.get_flag(PRESUME_INPUT_TTY) {
+                Some(true)
+            } else {
+                None
+            },
         };
         if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
             let msg: String = format!(
@@ -162,7 +171,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     "?"
                 }
             );
-            if !prompt_yes!("{}", msg) {
+            if (stdin().is_terminal() || options.__presume_input_tty.unwrap_or(false))
+                && !prompt_yes!("{}", msg)
+            {
                 return Ok(());
             }
         }
@@ -578,7 +589,7 @@ fn prompt_dir(path: &Path, options: &Options) -> bool {
         return true;
     }
     // Silently proceed if stdin is not interactive terminal
-    if !stdin().is_terminal() {
+    if !(stdin().is_terminal() || options.__presume_input_tty.unwrap_or(false)) {
         return true;
     }
 
@@ -597,7 +608,7 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
         return true;
     }
     // Silently proceed if stdin is not interactive terminal
-    if !stdin().is_terminal() {
+    if !(stdin().is_terminal() || options.__presume_input_tty.unwrap_or(false)) {
         return true;
     }
     // If interactive is Always we want to check if the file is symlink to prompt the right message
@@ -624,10 +635,6 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
 }
 
 fn prompt_file_permission_readonly(path: &Path) -> bool {
-    // Silently proceed if stdin is not interactive terminal
-    if !stdin().is_terminal() {
-        return true;
-    }
     match fs::metadata(path) {
         Ok(_) if is_writable(path) => true,
         Ok(metadata) if metadata.len() == 0 => prompt_yes!(
@@ -638,8 +645,8 @@ fn prompt_file_permission_readonly(path: &Path) -> bool {
     }
 }
 
-// For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to to check mode bits. But other os don't have something similar afaik
-// Most cases are covered by keep eye out for edge cases
+// For directories finding if they are writable or not is a hassle. In Unix, we can use the built-in rust crate to check mode bits. But other os don't have something similar afaik
+// Most cases are covered but keep eye out for edge cases
 #[cfg(unix)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     match (
@@ -691,7 +698,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
-// I have this here for completeness but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
+// I have this here for completeness, but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
 #[cfg(not(windows))]
 #[cfg(not(unix))]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
