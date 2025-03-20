@@ -88,14 +88,32 @@ pub struct Options {
     pub debug: bool,
 }
 
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            overwrite: OverwriteMode::default(),
+            backup: BackupMode::default(),
+            suffix: backup_control::DEFAULT_BACKUP_SUFFIX.to_owned(),
+            update: UpdateMode::default(),
+            target_dir: None,
+            no_target_dir: false,
+            verbose: false,
+            strip_slashes: false,
+            progress_bar: false,
+            debug: false,
+        }
+    }
+}
+
 /// specifies behavior of the overwrite flag
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub enum OverwriteMode {
     /// '-n' '--no-clobber'   do not overwrite
     NoClobber,
     /// '-i' '--interactive'  prompt before overwrite
     Interactive,
     ///'-f' '--force'         overwrite without prompt
+    #[default]
     Force,
 }
 
