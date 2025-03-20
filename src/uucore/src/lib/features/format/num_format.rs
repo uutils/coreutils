@@ -585,7 +585,10 @@ fn format_float_hexadecimal(
     };
 
     // Convert "XXX" to "X.XX": that divides by 16^precision = 2^(4*precision), so add that to the exponent.
-    let digits = frac2.to_str_radix(16);
+    let mut digits = frac2.to_str_radix(16);
+    if case == Case::Uppercase {
+        digits.make_ascii_uppercase();
+    }
     let (first_digit, remaining_digits) = digits.split_at(1);
     let exponent = exp2 + (4 * precision) as i64;
 
@@ -914,6 +917,17 @@ mod test {
         assert_eq!(f("0"), "0x0.p+0");
         assert_eq!(f("0.125"), "0x8.p-6");
         assert_eq!(f("256.0"), "0x8.p+5");
+
+        let f = |x| {
+            format_float_hexadecimal(
+                &BigDecimal::from_str(x).unwrap(),
+                6,
+                Case::Uppercase,
+                ForceDecimal::No,
+            )
+        };
+        assert_eq!(f("0.00001"), "0xA.7C5AC4P-20");
+        assert_eq!(f("0.125"), "0x8.000000P-6");
     }
 
     #[test]
