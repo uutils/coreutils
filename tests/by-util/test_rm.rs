@@ -751,7 +751,6 @@ fn test_rm_prompts_no_tty() {
 
     scene
         .ucmd()
-        .set_stdin(Stdio::piped())
         .arg("-ri")
         .arg("a")
         .succeeds()
