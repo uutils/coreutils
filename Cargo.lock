@@ -3504,6 +3504,7 @@ dependencies = [
 name = "uucore"
 version = "0.0.30"
 dependencies = [
+ "bigdecimal",
  "blake2b_simd",
  "blake3",
  "chrono",
@@ -3523,6 +3524,7 @@ dependencies = [
  "md-5",
  "memchr",
  "nix",
+ "num-traits",
  "number_prefix",
  "os_display",
  "regex",

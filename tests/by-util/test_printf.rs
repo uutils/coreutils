@@ -991,6 +991,23 @@ fn float_flag_position_space_padding() {
 }
 
 #[test]
+fn float_non_finite_space_padding() {
+    new_ucmd!()
+        .args(&["% 5.2f|% 5.2f|% 5.2f|% 5.2f", "inf", "-inf", "nan", "-nan"])
+        .succeeds()
+        .stdout_only("  inf| -inf|  nan| -nan");
+}
+
+#[test]
+fn float_non_finite_zero_padding() {
+    // Zero-padding pads non-finite numbers with spaces.
+    new_ucmd!()
+        .args(&["%05.2f|%05.2f|%05.2f|%05.2f", "inf", "-inf", "nan", "-nan"])
+        .succeeds()
+        .stdout_only("  inf| -inf|  nan| -nan");
+}
+
+#[test]
 fn float_abs_value_less_than_one() {
     new_ucmd!()
         .args(&["%g", "0.1171875"])
