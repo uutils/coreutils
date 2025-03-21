@@ -211,6 +211,41 @@ fn parse_special_value(
     Err(ExtendedParserError::NotNumeric)
 }
 
+// Construct an ExtendedBigDecimal based on parsed data
+fn construct_extended_big_decimal(
+    digits: BigUint,
+    negative: bool,
+    base: Base,
+    scale: u64,
+    exponent: i64,
+) -> ExtendedBigDecimal {
+    if digits == BigUint::zero() && negative {
+        return ExtendedBigDecimal::MinusZero;
+    }
+
+    let sign = if negative { Sign::Minus } else { Sign::Plus };
+    let signed_digits = BigInt::from_biguint(sign, digits);
+    let bd = if scale == 0 && exponent == 0 {
+        BigDecimal::from_bigint(signed_digits, 0)
+    } else if base == Base::Decimal {
+        BigDecimal::from_bigint(signed_digits, scale as i64 - exponent)
+    } else if base == Base::Hexadecimal {
+        // Base is 16, init at scale 0 then divide by base**scale.
+        let bd = BigDecimal::from_bigint(signed_digits, 0)
+            / BigDecimal::from_bigint(BigInt::from(16).pow(scale as u32), 0);
+        // Confusingly, exponent is in base 2 for hex floating point numbers.
+        if exponent >= 0 {
+            bd * 2u64.pow(exponent as u32)
+        } else {
+            bd / 2u64.pow(-exponent as u32)
+        }
+    } else {
+        // scale != 0, which means that integral_only is not set, so only base 10 and 16 are allowed.
+        unreachable!();
+    };
+    ExtendedBigDecimal::BigDecimal(bd)
+}
+
 // TODO: As highlighted by clippy, this function _is_ high cognitive complexity, jumps
 // around between integer and float parsing, and should be split in multiple parts.
 #[allow(clippy::cognitive_complexity)]
@@ -327,32 +362,7 @@ fn parse(
         }
     }
 
-    // TODO: Might be nice to implement a ExtendedBigDecimal copysign or negation function to move away some of this logic...
-    let ebd = if digits == BigUint::zero() && negative {
-        ExtendedBigDecimal::MinusZero
-    } else {
-        let sign = if negative { Sign::Minus } else { Sign::Plus };
-        let signed_digits = BigInt::from_biguint(sign, digits);
-        let bd = if scale == 0 && exponent == 0 {
-            BigDecimal::from_bigint(signed_digits, 0)
-        } else if base == Base::Decimal {
-            BigDecimal::from_bigint(signed_digits, scale as i64 - exponent)
-        } else if base == Base::Hexadecimal {
-            // Base is 16, init at scale 0 then divide by base**scale.
-            let bd = BigDecimal::from_bigint(signed_digits, 0)
-                / BigDecimal::from_bigint(BigInt::from(16).pow(scale as u32), 0);
-            // Confusingly, exponent is in base 2 for hex floating point numbers.
-            if exponent >= 0 {
-                bd * 2u64.pow(exponent as u32)
-            } else {
-                bd / 2u64.pow(-exponent as u32)
-            }
-        } else {
-            // scale != 0, which means that integral_only is not set, so only base 10 and 16 are allowed.
-            unreachable!();
-        };
-        ExtendedBigDecimal::BigDecimal(bd)
-    };
+    let ebd = construct_extended_big_decimal(digits, negative, base, scale, exponent);
 
     // Return what has been parsed so far. It there are extra characters, mark the
     // parsing as a partial match.
