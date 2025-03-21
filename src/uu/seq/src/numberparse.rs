@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 use bigdecimal::BigDecimal;
 use num_traits::Zero;
-use uucore::format::num_parser::ExtendedParser;
+use uucore::format::num_parser::{ExtendedParser, ExtendedParserError};
 
 use crate::number::PreciseNumber;
 use uucore::format::ExtendedBigDecimal;
@@ -61,8 +61,9 @@ fn compute_num_integral_digits(input: &str, _number: &BigDecimal) -> usize {
     // If there is an exponent, reparse that (yes this is not optimal,
     // but we can't necessarily exactly recover that from the parsed number).
     if parts.len() == 2 {
-        let exp = parts[1].parse::<i64>().unwrap();
+        let exp = parts[1].parse::<i64>().unwrap_or(0);
         // For positive exponents, effectively expand the number. Ignore negative exponents.
+        // Also ignore overflowed exponents (default 0 above).
         if exp > 0 {
             digits + exp as usize
         } else {
@@ -80,6 +81,7 @@ impl FromStr for PreciseNumber {
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let ebd = match ExtendedBigDecimal::extended_parse(input) {
             Ok(ebd) => ebd,
+            Err(ExtendedParserError::Underflow(ebd)) => ebd, // Treat underflow as 0
             Err(_) => return Err(ParseNumberError::Float),
         };
 
@@ -95,7 +97,11 @@ impl FromStr for PreciseNumber {
             ExtendedBigDecimal::Nan | ExtendedBigDecimal::MinusNan => {
                 return Err(ParseNumberError::Nan);
             }
-            ExtendedBigDecimal::BigDecimal(ref bd) => bd.clone(),
+            ExtendedBigDecimal::BigDecimal(ref bd) => {
+                // TODO: `seq` treats small numbers < 1e-4950 as 0, we could do the same
+                // to avoid printing senselessly small numbers.
+                bd.clone()
+            }
             ExtendedBigDecimal::MinusZero => BigDecimal::zero(),
         };
 

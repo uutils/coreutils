@@ -911,6 +911,18 @@ fn test_parse_out_of_bounds_exponents() {
         .args(&["1e-9223372036854775808"])
         .succeeds()
         .stdout_only("");
+
+    // GNU seq supports arbitrarily small exponents (and treats the value as 0).
+    new_ucmd!()
+        .args(&["1e-922337203685477580800000000", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+
+    // Check we can also underflow to -0.0.
+    new_ucmd!()
+        .args(&["-1e-922337203685477580800000000", "1"])
+        .succeeds()
+        .stdout_only("-0\n1\n");
 }
 
 #[ignore]
