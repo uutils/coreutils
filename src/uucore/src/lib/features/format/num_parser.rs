@@ -432,7 +432,10 @@ fn parse(
         };
 
         // Parse the exponent part, only decimal numbers are allowed.
-        if chars.peek().is_some_and(|&(_, c)| c == exp_char) {
+        if chars
+            .peek()
+            .is_some_and(|&(_, c)| c.to_ascii_lowercase() == exp_char)
+        {
             chars.next();
             let exp_negative = match chars.peek() {
                 Some((_, '-')) => {
@@ -570,8 +573,8 @@ mod tests {
         assert_eq!(Ok(-123.15), f64::extended_parse("-0123.15"));
         assert_eq!(Ok(12315000.0), f64::extended_parse("123.15e5"));
         assert_eq!(Ok(-12315000.0), f64::extended_parse("-123.15e5"));
-        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15e+5"));
-        assert_eq!(Ok(0.0012315), f64::extended_parse("123.15e-5"));
+        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15E+5"));
+        assert_eq!(Ok(0.0012315), f64::extended_parse("123.15E-5"));
         assert_eq!(
             Ok(0.15),
             f64::extended_parse(".150000000000000000000000000231313")
@@ -655,7 +658,7 @@ mod tests {
                 12315.into(),
                 102
             ))),
-            ExtendedBigDecimal::extended_parse("123.15e-100")
+            ExtendedBigDecimal::extended_parse("123.15E-100")
         );
         // Very high precision that would not fit in a f64.
         assert_eq!(
@@ -724,7 +727,7 @@ mod tests {
         assert_eq!(Ok(0.0625), f64::extended_parse("0x.1"));
         assert_eq!(Ok(15.007_812_5), f64::extended_parse("0xf.02"));
         assert_eq!(Ok(16.0), f64::extended_parse("0x0.8p5"));
-        assert_eq!(Ok(0.0625), f64::extended_parse("0x1p-4"));
+        assert_eq!(Ok(0.0625), f64::extended_parse("0x1P-4"));
 
         // We cannot really check that 'e' is not a valid exponent indicator for hex floats...
         // but we can check that the number still gets parsed properly: 0x0.8e5 is 0x8e5 / 16**3
@@ -751,7 +754,7 @@ mod tests {
             Err(ExtendedParserError::Overflow(ExtendedBigDecimal::Infinity))
         ));
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("-0x100p{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("-0x100P{}", u32::MAX as u64 + 1)),
             Err(ExtendedParserError::Overflow(
                 ExtendedBigDecimal::MinusInfinity
             ))
