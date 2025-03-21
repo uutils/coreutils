@@ -2860,6 +2860,7 @@ dependencies = [
  "file_diff",
  "filetime",
  "libc",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2869,6 +2870,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "memchr",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2894,6 +2896,7 @@ name = "uu_ln"
 version = "0.0.30"
 dependencies = [
  "clap",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2919,6 +2922,7 @@ dependencies = [
  "number_prefix",
  "selinux",
  "terminal_size",
+ "thiserror 2.0.12",
  "uucore",
  "uutils_term_grid",
 ]
