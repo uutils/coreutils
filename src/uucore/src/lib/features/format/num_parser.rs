@@ -59,21 +59,48 @@ pub enum ExtendedParserError<'a, T> {
     /// The beginning of the input made sense and has been parsed,
     /// while the remaining doesn't.
     PartialMatch(T, &'a str),
-    /// The integral part has overflowed the requested type, or
-    /// has overflowed the `u64` internal storage when parsing the
-    /// integral part of a floating point number.
-    Overflow,
+    /// The value has overflowed the type storage. The returned value
+    /// is saturated (e.g. positive or negative infinity, or min/max
+    /// value for the integer type).
+    Overflow(T),
 }
 
-impl<'a, T> ExtendedParserError<'a, T> {
+impl<'a, T> ExtendedParserError<'a, T>
+where
+    T: Zero,
+{
+    // Extract the value out of an error, if possible.
+    fn extract(self) -> T {
+        match self {
+            Self::NotNumeric => T::zero(),
+            Self::Overflow(v) => v,
+            Self::PartialMatch(v, _) => v,
+        }
+    }
+
+    // Map an error to another, using the provided conversion function.
+    // The error (self) takes precedence over errors happening during the
+    // conversion.
     fn map<U>(
         self,
-        f: impl FnOnce(T, &'a str) -> ExtendedParserError<'a, U>,
-    ) -> ExtendedParserError<'a, U> {
+        f: impl FnOnce(T) -> Result<U, ExtendedParserError<'a, U>>,
+    ) -> ExtendedParserError<'a, U>
+    where
+        U: Zero,
+    {
+        fn extract<U>(v: Result<U, ExtendedParserError<'_, U>>) -> U
+        where
+            U: Zero,
+        {
+            v.unwrap_or_else(|e| e.extract())
+        }
+
         match self {
-            Self::NotNumeric => ExtendedParserError::NotNumeric,
-            Self::Overflow => ExtendedParserError::Overflow,
-            Self::PartialMatch(v, s) => f(v, s),
+            ExtendedParserError::NotNumeric => ExtendedParserError::NotNumeric,
+            ExtendedParserError::PartialMatch(v, rest) => {
+                ExtendedParserError::PartialMatch(extract(f(v)), rest)
+            }
+            ExtendedParserError::Overflow(v) => ExtendedParserError::Overflow(extract(f(v))),
         }
     }
 }
@@ -92,28 +119,34 @@ pub trait ExtendedParser {
 impl ExtendedParser for i64 {
     /// Parse a number as i64. No fractional part is allowed.
     fn extended_parse(input: &str) -> Result<i64, ExtendedParserError<'_, i64>> {
-        fn into_i64(ebd: ExtendedBigDecimal) -> Option<i64> {
+        fn into_i64<'a>(ebd: ExtendedBigDecimal) -> Result<i64, ExtendedParserError<'a, i64>> {
             match ebd {
                 ExtendedBigDecimal::BigDecimal(bd) => {
                     let (digits, scale) = bd.into_bigint_and_scale();
                     if scale == 0 {
-                        i64::try_from(digits).ok()
+                        let negative = digits.sign() == Sign::Minus;
+                        match i64::try_from(digits) {
+                            Ok(i) => Ok(i),
+                            _ => Err(ExtendedParserError::Overflow(if negative {
+                                i64::MIN
+                            } else {
+                                i64::MAX
+                            })),
+                        }
                     } else {
-                        None
+                        // Should not happen.
+                        Err(ExtendedParserError::NotNumeric)
                     }
                 }
-                ExtendedBigDecimal::MinusZero => Some(0),
-                _ => None,
+                ExtendedBigDecimal::MinusZero => Ok(0),
+                // No other case should not happen.
+                _ => Err(ExtendedParserError::NotNumeric),
             }
         }
 
         match parse(input, true) {
-            Ok(v) => into_i64(v).ok_or(ExtendedParserError::Overflow),
-            Err(e) => Err(e.map(|v, rest| {
-                into_i64(v)
-                    .map(|v| ExtendedParserError::PartialMatch(v, rest))
-                    .unwrap_or(ExtendedParserError::Overflow)
-            })),
+            Ok(v) => into_i64(v),
+            Err(e) => Err(e.map(into_i64)),
         }
     }
 }
@@ -121,27 +154,35 @@ impl ExtendedParser for i64 {
 impl ExtendedParser for u64 {
     /// Parse a number as u64. No fractional part is allowed.
     fn extended_parse(input: &str) -> Result<u64, ExtendedParserError<'_, u64>> {
-        fn into_u64(ebd: ExtendedBigDecimal) -> Option<u64> {
+        fn into_u64<'a>(ebd: ExtendedBigDecimal) -> Result<u64, ExtendedParserError<'a, u64>> {
             match ebd {
                 ExtendedBigDecimal::BigDecimal(bd) => {
                     let (digits, scale) = bd.into_bigint_and_scale();
                     if scale == 0 {
-                        u64::try_from(digits).ok()
+                        let negative = digits.sign() == Sign::Minus;
+                        match u64::try_from(digits) {
+                            Ok(i) => Ok(i),
+                            _ => Err(ExtendedParserError::Overflow(if negative {
+                                // TODO: We should wrap around here #7488
+                                0
+                            } else {
+                                u64::MAX
+                            })),
+                        }
                     } else {
-                        None
+                        // Should not happen.
+                        Err(ExtendedParserError::NotNumeric)
                     }
                 }
-                _ => None,
+                // TODO: Handle -0 too #7488
+                // No other case should not happen.
+                _ => Err(ExtendedParserError::NotNumeric),
             }
         }
 
         match parse(input, true) {
-            Ok(v) => into_u64(v).ok_or(ExtendedParserError::Overflow),
-            Err(e) => Err(e.map(|v, rest| {
-                into_u64(v)
-                    .map(|v| ExtendedParserError::PartialMatch(v, rest))
-                    .unwrap_or(ExtendedParserError::Overflow)
-            })),
+            Ok(v) => into_u64(v),
+            Err(e) => Err(e.map(into_u64)),
         }
     }
 }
@@ -149,21 +190,23 @@ impl ExtendedParser for u64 {
 impl ExtendedParser for f64 {
     /// Parse a number as f64
     fn extended_parse(input: &str) -> Result<f64, ExtendedParserError<'_, f64>> {
-        // TODO: This is generic, so this should probably be implemented as an ExtendedBigDecimal trait (ToPrimitive).
-        fn into_f64(ebd: ExtendedBigDecimal) -> f64 {
-            match ebd {
+        fn into_f64<'a>(ebd: ExtendedBigDecimal) -> Result<f64, ExtendedParserError<'a, f64>> {
+            // TODO: This is generic, so this should probably be implemented as an ExtendedBigDecimal trait (ToPrimitive).
+            let v = match ebd {
+                // TODO: bd -> f64 conversion can fail, handle that.
                 ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
                 ExtendedBigDecimal::MinusZero => -0.0,
                 ExtendedBigDecimal::Nan => f64::NAN,
                 ExtendedBigDecimal::MinusNan => -f64::NAN,
                 ExtendedBigDecimal::Infinity => f64::INFINITY,
                 ExtendedBigDecimal::MinusInfinity => -f64::INFINITY,
-            }
+            };
+            Ok(v)
         }
 
         match parse(input, false) {
-            Ok(v) => Ok(into_f64(v)),
-            Err(e) => Err(e.map(|v, rest| ExtendedParserError::PartialMatch(into_f64(v), rest))),
+            Ok(v) => into_f64(v),
+            Err(e) => Err(e.map(into_f64)),
         }
     }
 }
@@ -390,9 +433,10 @@ mod tests {
     fn test_decimal_u64() {
         assert_eq!(Ok(123), u64::extended_parse("123"));
         assert_eq!(Ok(u64::MAX), u64::extended_parse(&format!("{}", u64::MAX)));
+        // TODO: We should wrap around here #7488
         assert!(matches!(
             u64::extended_parse("-123"),
-            Err(ExtendedParserError::Overflow)
+            Err(ExtendedParserError::Overflow(0))
         ));
         assert!(matches!(
             u64::extended_parse(""),
@@ -421,15 +465,23 @@ mod tests {
         assert_eq!(Ok(i64::MIN), i64::extended_parse(&format!("{}", i64::MIN)));
         assert!(matches!(
             i64::extended_parse(&format!("{}", u64::MAX)),
-            Err(ExtendedParserError::Overflow)
+            Err(ExtendedParserError::Overflow(i64::MAX))
         ));
         assert!(matches!(
             i64::extended_parse(&format!("{}", i64::MAX as u64 + 1)),
-            Err(ExtendedParserError::Overflow)
+            Err(ExtendedParserError::Overflow(i64::MAX))
         ));
         assert!(matches!(
             i64::extended_parse("-123e10"),
             Err(ExtendedParserError::PartialMatch(-123, "e10"))
+        ));
+        assert!(matches!(
+            i64::extended_parse(&format!("{}", -(u64::MAX as i128))),
+            Err(ExtendedParserError::Overflow(i64::MIN))
+        ));
+        assert!(matches!(
+            i64::extended_parse(&format!("{}", i64::MIN as i128 - 1)),
+            Err(ExtendedParserError::Overflow(i64::MIN))
         ));
     }
 

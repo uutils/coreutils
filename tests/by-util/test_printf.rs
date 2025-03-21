@@ -675,6 +675,19 @@ fn test_overflow() {
     new_ucmd!()
         .args(&["%d", "36893488147419103232"])
         .fails_with_code(1)
+        .stdout_is("9223372036854775807")
+        .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
+
+    new_ucmd!()
+        .args(&["%d", "-36893488147419103232"])
+        .fails_with_code(1)
+        .stdout_is("-9223372036854775808")
+        .stderr_is("printf: '-36893488147419103232': Numerical result out of range\n");
+
+    new_ucmd!()
+        .args(&["%u", "36893488147419103232"])
+        .fails_with_code(1)
+        .stdout_is("18446744073709551615")
         .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
 }
 

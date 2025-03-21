@@ -105,9 +105,9 @@ fn extract_value<T: Default>(p: Result<T, ExtendedParserError<'_, T>>, input: &s
                 },
             );
             match e {
-                ExtendedParserError::Overflow => {
+                ExtendedParserError::Overflow(v) => {
                     show_error!("{}: Numerical result out of range", input.quote());
-                    Default::default()
+                    v
                 }
                 ExtendedParserError::NotNumeric => {
                     show_error!("{}: expected a numeric value", input.quote());
