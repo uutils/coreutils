@@ -26,6 +26,7 @@ lscolors = { workspace = true }
 number_prefix = { workspace = true }
 selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "colors",
   "custom-tz-fmt",
