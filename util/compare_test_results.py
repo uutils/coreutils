@@ -24,7 +24,10 @@ def flatten_test_results(results):
     flattened = {}
     for util, tests in results.items():
         for test_name, status in tests.items():
-            test_path = f"{util}/{test_name}"
+            # Build the full test path
+            test_path = f"tests/{util}/{test_name}"
+            # Remove the .log extension
+            test_path = test_path.replace(".log", "")
             flattened[test_path] = status
     return flattened
 
