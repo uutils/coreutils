@@ -268,7 +268,7 @@ fn parse(
     // Parse the integral part of the number
     let mut chars = rest.chars().enumerate().fuse().peekable();
     let mut digits = BigUint::zero();
-    let mut scale = 0i64;
+    let mut scale = 0u64;
     let mut exponent = 0i64;
     while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
         chars.next();
@@ -335,7 +335,7 @@ fn parse(
         let bd = if scale == 0 && exponent == 0 {
             BigDecimal::from_bigint(signed_digits, 0)
         } else if base == Base::Decimal {
-            BigDecimal::from_bigint(signed_digits, scale - exponent)
+            BigDecimal::from_bigint(signed_digits, scale as i64 - exponent)
         } else if base == Base::Hexadecimal {
             // Base is 16, init at scale 0 then divide by base**scale.
             let bd = BigDecimal::from_bigint(signed_digits, 0)
