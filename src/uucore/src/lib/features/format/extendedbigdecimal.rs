@@ -23,6 +23,7 @@
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::ops::Add;
+use std::ops::Neg;
 
 use bigdecimal::BigDecimal;
 use num_traits::FromPrimitive;
@@ -223,6 +224,27 @@ impl PartialOrd for ExtendedBigDecimal {
             (Self::MinusNan, _) => None,
             (_, Self::Nan) => None,
             (_, Self::MinusNan) => None,
+        }
+    }
+}
+
+impl Neg for ExtendedBigDecimal {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Self::BigDecimal(bd) => {
+                if bd.is_zero() {
+                    Self::MinusZero
+                } else {
+                    Self::BigDecimal(bd.neg())
+                }
+            }
+            Self::MinusZero => Self::BigDecimal(BigDecimal::zero()),
+            Self::Infinity => Self::MinusInfinity,
+            Self::MinusInfinity => Self::Infinity,
+            Self::Nan => Self::MinusNan,
+            Self::MinusNan => Self::Nan,
         }
     }
 }
