@@ -109,6 +109,10 @@ fn extract_value<T: Default>(p: Result<T, ExtendedParserError<'_, T>>, input: &s
                     show_error!("{}: Numerical result out of range", input.quote());
                     v
                 }
+                ExtendedParserError::Underflow(v) => {
+                    show_error!("{}: Numerical result out of range", input.quote());
+                    v
+                }
                 ExtendedParserError::NotNumeric => {
                     show_error!("{}: expected a numeric value", input.quote());
                     Default::default()
