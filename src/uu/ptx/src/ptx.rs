@@ -15,13 +15,11 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::num::ParseIntError;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
 
 const USAGE: &str = help_usage!("ptx.md");
 const ABOUT: &str = help_about!("ptx.md");
-
-const REGEX_CHARCLASS: &str = "^-]\\";
 
 #[derive(Debug)]
 enum OutFormat {
@@ -71,8 +69,12 @@ fn read_word_filter_file(
         .get_one::<String>(option)
         .expect("parsing options failed!")
         .to_string();
-    let file = File::open(filename)?;
-    let reader = BufReader::new(file);
+    let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
+        Box::new(stdin())
+    } else {
+        let file = File::open(filename)?;
+        Box::new(file)
+    });
     let mut words: HashSet<String> = HashSet::new();
     for word in reader.lines() {
         words.insert(word?);
@@ -88,7 +90,12 @@ fn read_char_filter_file(
     let filename = matches
         .get_one::<String>(option)
         .expect("parsing options failed!");
-    let mut reader = File::open(filename)?;
+    let mut reader: Box<dyn Read> = if filename == "-" {
+        Box::new(stdin())
+    } else {
+        let file = File::open(filename)?;
+        Box::new(file)
+    };
     let mut buffer = String::new();
     reader.read_to_string(&mut buffer)?;
     Ok(buffer.chars().collect())
@@ -155,18 +162,10 @@ impl WordFilter {
         let reg = match arg_reg {
             Some(arg_reg) => arg_reg,
             None => {
-                if break_set.is_some() {
+                if let Some(break_set) = break_set {
                     format!(
                         "[^{}]+",
-                        break_set
-                            .unwrap()
-                            .into_iter()
-                            .map(|c| if REGEX_CHARCLASS.contains(c) {
-                                format!("\\{c}")
-                            } else {
-                                c.to_string()
-                            })
-                            .collect::<String>()
+                        regex::escape(&break_set.into_iter().collect::<String>())
                     )
                 } else if config.gnu_ext {
                     "\\w+".to_owned()
@@ -260,10 +259,17 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
             .parse()
             .map_err(PtxError::ParseError)?;
     }
-    if matches.get_flag(options::FORMAT_ROFF) {
+    if let Some(format) = matches.get_one::<String>(options::FORMAT) {
+        config.format = match format.as_str() {
+            "roff" => OutFormat::Roff,
+            "tex" => OutFormat::Tex,
+            _ => unreachable!("should be caught by clap"),
+        };
+    }
+    if matches.get_flag(options::format::ROFF) {
         config.format = OutFormat::Roff;
     }
-    if matches.get_flag(options::FORMAT_TEX) {
+    if matches.get_flag(options::format::TEX) {
         config.format = OutFormat::Tex;
     }
     Ok(config)
@@ -277,20 +283,10 @@ struct FileContent {
 
 type FileMap = HashMap<String, FileContent>;
 
-fn read_input(input_files: &[String], config: &Config) -> std::io::Result<FileMap> {
+fn read_input(input_files: &[String]) -> std::io::Result<FileMap> {
     let mut file_map: FileMap = HashMap::new();
-    let mut files = Vec::new();
-    if input_files.is_empty() {
-        files.push("-");
-    } else if config.gnu_ext {
-        for file in input_files {
-            files.push(file);
-        }
-    } else {
-        files.push(&input_files[0]);
-    }
     let mut offset: usize = 0;
-    for filename in files {
+    for filename in input_files {
         let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
@@ -344,7 +340,7 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
                     continue;
                 }
                 if config.ignore_case {
-                    word = word.to_lowercase();
+                    word = word.to_uppercase();
                 }
                 word_set.insert(WordRef {
                     word,
@@ -693,15 +689,19 @@ fn write_traditional_output(
 }
 
 mod options {
+    pub mod format {
+        pub static ROFF: &str = "roff";
+        pub static TEX: &str = "tex";
+    }
+
     pub static FILE: &str = "file";
     pub static AUTO_REFERENCE: &str = "auto-reference";
     pub static TRADITIONAL: &str = "traditional";
     pub static FLAG_TRUNCATION: &str = "flag-truncation";
     pub static MACRO_NAME: &str = "macro-name";
-    pub static FORMAT_ROFF: &str = "format=roff";
+    pub static FORMAT: &str = "format";
     pub static RIGHT_SIDE_REFS: &str = "right-side-refs";
     pub static SENTENCE_REGEXP: &str = "sentence-regexp";
-    pub static FORMAT_TEX: &str = "format=tex";
     pub static WORD_REGEXP: &str = "word-regexp";
     pub static BREAK_FILE: &str = "break-file";
     pub static IGNORE_CASE: &str = "ignore-case";
@@ -715,21 +715,40 @@ mod options {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
-
-    let mut input_files: Vec<String> = match &matches.get_many::<String>(options::FILE) {
-        Some(v) => v.clone().cloned().collect(),
-        None => vec!["-".to_string()],
-    };
-
     let config = get_config(&matches)?;
-    let word_filter = WordFilter::new(&matches, &config)?;
-    let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
-    let word_set = create_word_set(&config, &word_filter, &file_map);
-    let output_file = if !config.gnu_ext && input_files.len() == 2 {
-        input_files.pop().unwrap()
+
+    let input_files;
+    let output_file;
+
+    let mut files = matches
+        .get_many::<String>(options::FILE)
+        .into_iter()
+        .flatten()
+        .cloned();
+
+    if !config.gnu_ext {
+        input_files = vec![files.next().unwrap_or("-".to_string())];
+        output_file = files.next().unwrap_or("-".to_string());
+        if let Some(file) = files.next() {
+            return Err(UUsageError::new(
+                1,
+                format!("extra operand {}", file.quote()),
+            ));
+        }
     } else {
-        "-".to_string()
-    };
+        input_files = {
+            let mut files = files.collect::<Vec<_>>();
+            if files.is_empty() {
+                files.push("-".to_string());
+            }
+            files
+        };
+        output_file = "-".to_string();
+    }
+
+    let word_filter = WordFilter::new(&matches, &config)?;
+    let file_map = read_input(&input_files).map_err_context(String::new)?;
+    let word_set = create_word_set(&config, &word_filter, &file_map);
     write_traditional_output(&config, &file_map, &word_set, &output_file)
 }
 
@@ -774,10 +793,24 @@ pub fn uu_app() -> Command {
                 .value_name("STRING"),
         )
         .arg(
-            Arg::new(options::FORMAT_ROFF)
+            Arg::new(options::FORMAT)
+                .long(options::FORMAT)
+                .hide(true)
+                .value_parser(["roff", "tex"])
+                .overrides_with_all([options::FORMAT, options::format::ROFF, options::format::TEX]),
+        )
+        .arg(
+            Arg::new(options::format::ROFF)
                 .short('O')
-                .long(options::FORMAT_ROFF)
                 .help("generate output as roff directives")
+                .overrides_with_all([options::FORMAT, options::format::ROFF, options::format::TEX])
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::format::TEX)
+                .short('T')
+                .help("generate output as TeX directives")
+                .overrides_with_all([options::FORMAT, options::format::ROFF, options::format::TEX])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -793,13 +826,6 @@ pub fn uu_app() -> Command {
                 .long(options::SENTENCE_REGEXP)
                 .help("for end of lines or end of sentences")
                 .value_name("REGEXP"),
-        )
-        .arg(
-            Arg::new(options::FORMAT_TEX)
-                .short('T')
-                .long(options::FORMAT_TEX)
-                .help("generate output as TeX directives")
-                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WORD_REGEXP)
