@@ -25,5 +25,8 @@ fn test_invalid_arg() {
 #[test]
 fn test_arch_output_is_not_empty() {
     let result = new_ucmd!().succeeds();
-    assert!(!result.stdout_str().trim().is_empty(), "arch output was empty");
+    assert!(
+        !result.stdout_str().trim().is_empty(),
+        "arch output was empty"
+    );
 }
