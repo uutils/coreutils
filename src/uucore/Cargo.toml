@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) zerocopy
+# spell-checker:ignore (features) bigdecimal zerocopy
 
 [package]
 name = "uucore"
@@ -58,6 +58,8 @@ blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
 crc32fast = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
+bigdecimal = { workspace = true, optional = true }
+num-traits = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace = true, optional = true }
@@ -94,7 +96,7 @@ fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys"]
 fsxattr = ["xattr"]
 lines = []
-format = ["itertools", "quoting-style"]
+format = ["bigdecimal", "itertools", "num-traits", "quoting-style"]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
