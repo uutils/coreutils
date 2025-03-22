@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
 use crate::common::util::TestScenario;
-use std::process::Stdio;
 
 #[test]
 fn test_invalid_arg() {
@@ -566,51 +565,52 @@ fn test_width_floats() {
         .stdout_only("09.0\n10.0\n");
 }
 
-// TODO This is duplicated from `test_yes.rs`; refactor them.
-/// Run `seq`, capture some of the output, close the pipe, and verify it.
-fn run(args: &[&str], expected: &[u8]) {
-    let mut cmd = new_ucmd!();
-    let mut child = cmd.args(args).set_stdout(Stdio::piped()).run_no_wait();
-    let buf = child.stdout_exact_bytes(expected.len());
-    child.close_stdout();
-    child.wait().unwrap().success();
-    assert_eq!(buf.as_slice(), expected);
-}
-
 #[test]
 fn test_neg_inf() {
-    run(&["--", "-inf", "0"], b"-inf\n-inf\n-inf\n");
+    new_ucmd!()
+        .args(&["--", "-inf", "0"])
+        .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
+        .success();
 }
 
 #[test]
 fn test_neg_infinity() {
-    run(&["--", "-infinity", "0"], b"-inf\n-inf\n-inf\n");
+    new_ucmd!()
+        .args(&["--", "-infinity", "0"])
+        .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
+        .success();
 }
 
 #[test]
 fn test_inf() {
-    run(&["inf"], b"1\n2\n3\n");
+    new_ucmd!()
+        .args(&["inf"])
+        .run_stdout_starts_with(b"1\n2\n3\n")
+        .success();
 }
 
 #[test]
 fn test_infinity() {
-    run(&["infinity"], b"1\n2\n3\n");
+    new_ucmd!()
+        .args(&["infinity"])
+        .run_stdout_starts_with(b"1\n2\n3\n")
+        .success();
 }
 
 #[test]
 fn test_inf_width() {
-    run(
-        &["-w", "1.000", "inf", "inf"],
-        b"1.000\n  inf\n  inf\n  inf\n",
-    );
+    new_ucmd!()
+        .args(&["-w", "1.000", "inf", "inf"])
+        .run_stdout_starts_with(b"1.000\n  inf\n  inf\n  inf\n")
+        .success();
 }
 
 #[test]
 fn test_neg_inf_width() {
-    run(
-        &["-w", "1.000", "-inf", "-inf"],
-        b"1.000\n -inf\n -inf\n -inf\n",
-    );
+    new_ucmd!()
+        .args(&["-w", "1.000", "-inf", "-inf"])
+        .run_stdout_starts_with(b"1.000\n -inf\n -inf\n -inf\n")
+        .success();
 }
 
 #[test]
