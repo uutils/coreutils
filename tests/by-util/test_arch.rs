@@ -21,3 +21,10 @@ fn test_arch_help() {
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
+
+#[test]
+fn test_arch_output_is_not_empty() {
+    let result = new_ucmd!().run();
+    result.success();
+    assert!(!result.stdout_str().trim().is_empty(), "arch output was empty");
+}
