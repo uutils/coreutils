@@ -13,7 +13,7 @@ use bigdecimal::BigDecimal;
 use num_traits::Zero;
 use uucore::format::num_parser::{ExtendedParser, ExtendedParserError};
 
-use crate::number::PreciseNumber;
+use crate::{hexadecimalfloat, number::PreciseNumber};
 use uucore::format::ExtendedBigDecimal;
 
 /// An error returned when parsing a number fails.
@@ -91,7 +91,7 @@ impl FromStr for PreciseNumber {
                 return Ok(PreciseNumber {
                     number: ebd,
                     num_integral_digits: 0,
-                    num_fractional_digits: 0,
+                    num_fractional_digits: Some(0),
                 });
             }
             ExtendedBigDecimal::Nan | ExtendedBigDecimal::MinusNan => {
@@ -108,7 +108,7 @@ impl FromStr for PreciseNumber {
         Ok(PreciseNumber {
             number: ebd,
             num_integral_digits: compute_num_integral_digits(input, &bd),
-            num_fractional_digits: 0, // TODO: Re-implement
+            num_fractional_digits: hexadecimalfloat::parse_precision(input),
         })
     }
 }
@@ -133,7 +133,18 @@ mod tests {
 
     /// Convenience function for getting the number of fractional digits.
     fn num_fractional_digits(s: &str) -> usize {
-        s.parse::<PreciseNumber>().unwrap().num_fractional_digits
+        s.parse::<PreciseNumber>()
+            .unwrap()
+            .num_fractional_digits
+            .unwrap()
+    }
+
+    /// Convenience function for making sure the number of fractional digits is "None"
+    fn num_fractional_digits_is_none(s: &str) -> bool {
+        s.parse::<PreciseNumber>()
+            .unwrap()
+            .num_fractional_digits
+            .is_none()
     }
 
     #[test]
@@ -302,7 +313,6 @@ mod tests {
 
     #[test]
     #[allow(clippy::cognitive_complexity)]
-    #[ignore = "Disable for now"]
     fn test_num_fractional_digits() {
         // no decimal, no exponent
         assert_eq!(num_fractional_digits("123"), 0);
@@ -337,6 +347,9 @@ mod tests {
         assert_eq!(num_fractional_digits("-0.0"), 1);
         assert_eq!(num_fractional_digits("-0e-1"), 1);
         assert_eq!(num_fractional_digits("-0.0e-1"), 2);
+        // Hexadecimal numbers
+        assert_eq!(num_fractional_digits("0xff"), 0);
+        assert!(num_fractional_digits_is_none("0xff.1"));
     }
 
     #[test]

@@ -74,11 +74,15 @@ fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
 }
 
 fn select_precision(
-    first: Option<usize>,
-    increment: Option<usize>,
-    last: Option<usize>,
+    first: &PreciseNumber,
+    increment: &PreciseNumber,
+    last: &PreciseNumber,
 ) -> Option<usize> {
-    match (first, increment, last) {
+    match (
+        first.num_fractional_digits,
+        increment.num_fractional_digits,
+        last.num_fractional_digits,
+    ) {
         (Some(0), Some(0), Some(0)) => Some(0),
         (Some(f), Some(i), Some(_)) => Some(f.max(i)),
         _ => None,
@@ -111,37 +115,37 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
 
-    let (first, first_precision) = if numbers.len() > 1 {
+    let first = if numbers.len() > 1 {
         match numbers[0].parse() {
-            Ok(num) => (num, hexadecimalfloat::parse_precision(numbers[0])),
+            Ok(num) => num,
             Err(e) => return Err(SeqError::ParseError(numbers[0].to_string(), e).into()),
         }
     } else {
-        (PreciseNumber::one(), Some(0))
+        PreciseNumber::one()
     };
-    let (increment, increment_precision) = if numbers.len() > 2 {
+    let increment = if numbers.len() > 2 {
         match numbers[1].parse() {
-            Ok(num) => (num, hexadecimalfloat::parse_precision(numbers[1])),
+            Ok(num) => num,
             Err(e) => return Err(SeqError::ParseError(numbers[1].to_string(), e).into()),
         }
     } else {
-        (PreciseNumber::one(), Some(0))
+        PreciseNumber::one()
     };
     if increment.is_zero() {
         return Err(SeqError::ZeroIncrement(numbers[1].to_string()).into());
     }
-    let (last, last_precision): (PreciseNumber, Option<usize>) = {
+    let last: PreciseNumber = {
         // We are guaranteed that `numbers.len()` is greater than zero
         // and at most three because of the argument specification in
         // `uu_app()`.
         let n: usize = numbers.len();
         match numbers[n - 1].parse() {
-            Ok(num) => (num, hexadecimalfloat::parse_precision(numbers[n - 1])),
+            Ok(num) => num,
             Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_string(), e).into()),
         }
     };
 
-    let precision = select_precision(first_precision, increment_precision, last_precision);
+    let precision = select_precision(&first, &increment, &last);
 
     // If a format was passed on the command line, use that.
     // If not, use some default format based on parameters precision.
