@@ -5,23 +5,27 @@
 
 // spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shufable rvec fdata
 
+use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use memchr::memchr_iter;
-use rand::prelude::{IndexedRandom, SliceRandom};
+use rand::prelude::SliceRandom;
+use rand::seq::IndexedRandom;
 use rand::{Rng, RngCore};
 use std::collections::HashSet;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, Error, Read, Write};
+use std::io::{stdin, stdout, BufWriter, Error, Read, Write};
 use std::ops::RangeInclusive;
-use uucore::display::Quotable;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
 
 mod rand_read_adapter;
 
 enum Mode {
-    Default(String),
-    Echo(Vec<String>),
+    Default(PathBuf),
+    Echo(Vec<OsString>),
     InputRange(RangeInclusive<usize>),
 }
 
@@ -30,8 +34,8 @@ static ABOUT: &str = help_about!("shuf.md");
 
 struct Options {
     head_count: usize,
-    output: Option<String>,
-    random_source: Option<String>,
+    output: Option<PathBuf>,
+    random_source: Option<PathBuf>,
     repeat: bool,
     sep: u8,
 }
@@ -54,80 +58,83 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mode = if matches.get_flag(options::ECHO) {
         Mode::Echo(
             matches
-                .get_many::<String>(options::FILE_OR_ARGS)
+                .get_many(options::FILE_OR_ARGS)
                 .unwrap_or_default()
-                .map(String::from)
+                .cloned()
                 .collect(),
         )
-    } else if let Some(range) = matches.get_one::<String>(options::INPUT_RANGE) {
-        match parse_range(range) {
-            Ok(m) => Mode::InputRange(m),
-            Err(msg) => {
-                return Err(USimpleError::new(1, msg));
-            }
-        }
+    } else if let Some(range) = matches.get_one(options::INPUT_RANGE).cloned() {
+        Mode::InputRange(range)
     } else {
         let mut operands = matches
-            .get_many::<String>(options::FILE_OR_ARGS)
+            .get_many::<OsString>(options::FILE_OR_ARGS)
             .unwrap_or_default();
         let file = operands.next().cloned().unwrap_or("-".into());
         if let Some(second_file) = operands.next() {
             return Err(UUsageError::new(
                 1,
-                format!("unexpected argument '{second_file}' found"),
+                format!("unexpected argument {} found", second_file.quote()),
             ));
         };
-        Mode::Default(file)
+        Mode::Default(file.into())
     };
 
     let options = Options {
-        head_count: {
-            let headcounts = matches
-                .get_many::<String>(options::HEAD_COUNT)
-                .unwrap_or_default()
-                .cloned()
-                .collect();
-            match parse_head_count(headcounts) {
-                Ok(val) => val,
-                Err(msg) => return Err(USimpleError::new(1, msg)),
-            }
-        },
-        output: matches.get_one::<String>(options::OUTPUT).map(String::from),
-        random_source: matches
-            .get_one::<String>(options::RANDOM_SOURCE)
-            .map(String::from),
+        // GNU shuf takes the lowest value passed, so we imitate that.
+        // It's probably a bug or an implementation artifact though.
+        // Busybox takes the final value which is more typical: later
+        // options override earlier options.
+        head_count: matches
+            .get_many::<usize>(options::HEAD_COUNT)
+            .unwrap_or_default()
+            .cloned()
+            .min()
+            .unwrap_or(usize::MAX),
+        output: matches.get_one(options::OUTPUT).cloned(),
+        random_source: matches.get_one(options::RANDOM_SOURCE).cloned(),
         repeat: matches.get_flag(options::REPEAT),
         sep: if matches.get_flag(options::ZERO_TERMINATED) {
-            0x00_u8
+            b'\0'
         } else {
-            0x0a_u8
+            b'\n'
         },
     };
 
-    if options.head_count == 0 {
-        // Do not attempt to read the random source or the input file.
-        // However, we must touch the output file, if given:
-        if let Some(s) = options.output {
-            File::create(&s[..])
+    let mut output = BufWriter::new(match options.output {
+        None => Box::new(stdout()) as Box<dyn OsWrite>,
+        Some(ref s) => {
+            let file = File::create(s)
                 .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
+            Box::new(file) as Box<dyn OsWrite>
         }
+    });
+
+    if options.head_count == 0 {
+        // In this case we do want to touch the output file but we can quit immediately.
         return Ok(());
     }
 
+    let mut rng = match options.random_source {
+        Some(ref r) => {
+            let file = File::open(r)
+                .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
+            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
+        }
+        None => WrappedRng::RngDefault(rand::rng()),
+    };
+
     match mode {
         Mode::Echo(args) => {
-            let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
-            find_seps(&mut evec, options.sep);
-            shuf_exec(&mut evec, options)?;
+            let mut evec: Vec<&OsStr> = args.iter().map(AsRef::as_ref).collect();
+            shuf_exec(&mut evec, &options, &mut rng, &mut output)?;
         }
         Mode::InputRange(mut range) => {
-            shuf_exec(&mut range, options)?;
+            shuf_exec(&mut range, &options, &mut rng, &mut output)?;
         }
         Mode::Default(filename) => {
             let fdata = read_input_file(&filename)?;
-            let mut fdata = vec![&fdata[..]];
-            find_seps(&mut fdata, options.sep);
-            shuf_exec(&mut fdata, options)?;
+            let mut items = split_seps(&fdata, options.sep);
+            shuf_exec(&mut items, &options, &mut rng, &mut output)?;
         }
     }
 
@@ -155,6 +162,7 @@ pub fn uu_app() -> Command {
                 .long(options::INPUT_RANGE)
                 .value_name("LO-HI")
                 .help("treat each number LO through HI as an input line")
+                .value_parser(parse_range)
                 .conflicts_with(options::FILE_OR_ARGS),
         )
         .arg(
@@ -163,7 +171,8 @@ pub fn uu_app() -> Command {
                 .long(options::HEAD_COUNT)
                 .value_name("COUNT")
                 .action(clap::ArgAction::Append)
-                .help("output at most COUNT lines"),
+                .help("output at most COUNT lines")
+                .value_parser(usize::from_str),
         )
         .arg(
             Arg::new(options::OUTPUT)
@@ -171,6 +180,7 @@ pub fn uu_app() -> Command {
                 .long(options::OUTPUT)
                 .value_name("FILE")
                 .help("write result to FILE instead of standard output")
+                .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -178,6 +188,7 @@ pub fn uu_app() -> Command {
                 .long(options::RANDOM_SOURCE)
                 .value_name("FILE")
                 .help("get random bytes from FILE")
+                .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -199,73 +210,44 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE_OR_ARGS)
                 .action(clap::ArgAction::Append)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
 
-fn read_input_file(filename: &str) -> UResult<Vec<u8>> {
-    let mut file = BufReader::new(if filename == "-" {
-        Box::new(stdin()) as Box<dyn Read>
+fn read_input_file(filename: &Path) -> UResult<Vec<u8>> {
+    if filename.as_os_str() == "-" {
+        let mut data = Vec::new();
+        stdin()
+            .read_to_end(&mut data)
+            .map_err_context(|| "read error".into())?;
+        Ok(data)
     } else {
-        let file = File::open(filename)
-            .map_err_context(|| format!("failed to open {}", filename.quote()))?;
-        Box::new(file) as Box<dyn Read>
-    });
-
-    let mut data = Vec::new();
-    file.read_to_end(&mut data)
-        .map_err_context(|| format!("failed reading {}", filename.quote()))?;
-
-    Ok(data)
+        std::fs::read(filename).map_err_context(|| filename.maybe_quote().to_string())
+    }
 }
 
-fn find_seps(data: &mut Vec<&[u8]>, sep: u8) {
-    // Special case: If data is empty (and does not even contain a single 'sep'
-    // to indicate the presence of the empty element), then behave as if the input contained no elements at all.
-    if data.len() == 1 && data[0].is_empty() {
-        data.clear();
-        return;
+fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
+    // A single trailing separator is ignored.
+    // If data is empty (and does not even contain a single 'sep'
+    // to indicate the presence of an empty element), then behave
+    // as if the input contained no elements at all.
+    let mut elements: Vec<&[u8]> = data.split(|&b| b == sep).collect();
+    if elements.last().is_some_and(|e| e.is_empty()) {
+        elements.pop();
     }
-
-    // need to use for loop so we don't borrow the vector as we modify it in place
-    // basic idea:
-    // * We don't care about the order of the result. This lets us slice the slices
-    //   without making a new vector.
-    // * Starting from the end of the vector, we examine each element.
-    // * If that element contains the separator, we remove it from the vector,
-    //   and then sub-slice it into slices that do not contain the separator.
-    // * We maintain the invariant throughout that each element in the vector past
-    //   the ith element does not have any separators remaining.
-    for i in (0..data.len()).rev() {
-        if data[i].contains(&sep) {
-            let this = data.swap_remove(i);
-            let mut p = 0;
-            for i in memchr_iter(sep, this) {
-                data.push(&this[p..i]);
-                p = i + 1;
-            }
-            if p < this.len() {
-                data.push(&this[p..]);
-            }
-        }
-    }
+    elements
 }
 
 trait Shufable {
     type Item: Writable;
     fn is_empty(&self) -> bool;
     fn choose(&self, rng: &mut WrappedRng) -> Self::Item;
-    // This type shouldn't even be known. However, because we want to support
-    // Rust 1.70, it is not possible to return "impl Iterator".
-    // TODO: When the MSRV is raised, rewrite this to return "impl Iterator".
-    type PartialShuffleIterator<'b>: Iterator<Item = Self::Item>
-    where
-        Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
         amount: usize,
-    ) -> Self::PartialShuffleIterator<'b>;
+    ) -> impl Iterator<Item = Self::Item>;
 }
 
 impl<'a> Shufable for Vec<&'a [u8]> {
@@ -279,16 +261,29 @@ impl<'a> Shufable for Vec<&'a [u8]> {
         // this is safe.
         (**self).choose(rng).unwrap()
     }
-    type PartialShuffleIterator<'b>
-        = std::iter::Copied<std::slice::Iter<'b, &'a [u8]>>
-    where
-        Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
         amount: usize,
-    ) -> Self::PartialShuffleIterator<'b> {
+    ) -> impl Iterator<Item = Self::Item> {
         // Note: "copied()" only copies the reference, not the entire [u8].
+        (**self).partial_shuffle(rng, amount).0.iter().copied()
+    }
+}
+
+impl<'a> Shufable for Vec<&'a OsStr> {
+    type Item = &'a OsStr;
+    fn is_empty(&self) -> bool {
+        (**self).is_empty()
+    }
+    fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
+        (**self).choose(rng).unwrap()
+    }
+    fn partial_shuffle<'b>(
+        &'b mut self,
+        rng: &'b mut WrappedRng,
+        amount: usize,
+    ) -> impl Iterator<Item = Self::Item> {
         (**self).partial_shuffle(rng, amount).0.iter().copied()
     }
 }
@@ -301,15 +296,11 @@ impl Shufable for RangeInclusive<usize> {
     fn choose(&self, rng: &mut WrappedRng) -> usize {
         rng.random_range(self.clone())
     }
-    type PartialShuffleIterator<'b>
-        = NonrepeatingIterator<'b>
-    where
-        Self: 'b;
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
         amount: usize,
-    ) -> Self::PartialShuffleIterator<'b> {
+    ) -> impl Iterator<Item = Self::Item> {
         NonrepeatingIterator::new(self.clone(), rng, amount)
     }
 }
@@ -330,7 +321,7 @@ impl<'a> NonrepeatingIterator<'a> {
     fn new(range: RangeInclusive<usize>, rng: &'a mut WrappedRng, amount: usize) -> Self {
         let capped_amount = if range.start() > range.end() {
             0
-        } else if *range.start() == 0 && *range.end() == usize::MAX {
+        } else if range == (0..=usize::MAX) {
             amount
         } else {
             amount.min(range.end() - range.start() + 1)
@@ -404,61 +395,49 @@ fn number_set_should_list_remaining(listed_count: usize, range_size: usize) -> b
 }
 
 trait Writable {
-    fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error>;
+    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error>;
 }
 
 impl Writable for &[u8] {
-    fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error> {
+    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
         output.write_all(self)
     }
 }
 
-impl Writable for usize {
-    fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error> {
-        output.write_all(format!("{self}").as_bytes())
+impl Writable for &OsStr {
+    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
+        output.write_all_os(self)
     }
 }
 
-fn shuf_exec(input: &mut impl Shufable, opts: Options) -> UResult<()> {
-    let mut output = BufWriter::new(match opts.output {
-        None => Box::new(stdout()) as Box<dyn Write>,
-        Some(s) => {
-            let file = File::create(&s[..])
-                .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
-            Box::new(file) as Box<dyn Write>
-        }
-    });
+impl Writable for usize {
+    fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
+        write!(output, "{self}")
+    }
+}
 
-    let mut rng = match opts.random_source {
-        Some(r) => {
-            let file = File::open(&r[..])
-                .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
-            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
-        }
-        None => WrappedRng::RngDefault(rand::rng()),
-    };
-
+fn shuf_exec(
+    input: &mut impl Shufable,
+    opts: &Options,
+    rng: &mut WrappedRng,
+    output: &mut BufWriter<Box<dyn OsWrite>>,
+) -> UResult<()> {
+    let ctx = || "write failed".to_string();
     if opts.repeat {
         if input.is_empty() {
             return Err(USimpleError::new(1, "no lines to repeat"));
         }
         for _ in 0..opts.head_count {
-            let r = input.choose(&mut rng);
+            let r = input.choose(rng);
 
-            r.write_all_to(&mut output)
-                .map_err_context(|| "write failed".to_string())?;
-            output
-                .write_all(&[opts.sep])
-                .map_err_context(|| "write failed".to_string())?;
+            r.write_all_to(output).map_err_context(ctx)?;
+            output.write_all(&[opts.sep]).map_err_context(ctx)?;
         }
     } else {
-        let shuffled = input.partial_shuffle(&mut rng, opts.head_count);
+        let shuffled = input.partial_shuffle(rng, opts.head_count);
         for r in shuffled {
-            r.write_all_to(&mut output)
-                .map_err_context(|| "write failed".to_string())?;
-            output
-                .write_all(&[opts.sep])
-                .map_err_context(|| "write failed".to_string())?;
+            r.write_all_to(output).map_err_context(ctx)?;
+            output.write_all(&[opts.sep]).map_err_context(ctx)?;
         }
     }
 
@@ -467,31 +446,16 @@ fn shuf_exec(input: &mut impl Shufable, opts: Options) -> UResult<()> {
 
 fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
     if let Some((from, to)) = input_range.split_once('-') {
-        let begin = from
-            .parse::<usize>()
-            .map_err(|_| format!("invalid input range: {}", from.quote()))?;
-        let end = to
-            .parse::<usize>()
-            .map_err(|_| format!("invalid input range: {}", to.quote()))?;
+        let begin = from.parse::<usize>().map_err(|e| e.to_string())?;
+        let end = to.parse::<usize>().map_err(|e| e.to_string())?;
         if begin <= end || begin == end + 1 {
             Ok(begin..=end)
         } else {
-            Err(format!("invalid input range: {}", input_range.quote()))
+            Err("start exceeds end".into())
         }
     } else {
-        Err(format!("invalid input range: {}", input_range.quote()))
+        Err("missing '-'".into())
     }
-}
-
-fn parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
-    let mut result = usize::MAX;
-    for count in headcounts {
-        match count.parse::<usize>() {
-            Ok(pv) => result = std::cmp::min(result, pv),
-            Err(_) => return Err(format!("invalid line count: {}", count.quote())),
-        }
-    }
-    Ok(result)
 }
 
 enum WrappedRng {
@@ -519,6 +483,31 @@ impl RngCore for WrappedRng {
             Self::RngFile(r) => r.fill_bytes(dest),
             Self::RngDefault(r) => r.fill_bytes(dest),
         }
+    }
+}
+
+#[cfg(test)]
+mod test_split_seps {
+    use super::split_seps;
+
+    #[test]
+    fn test_empty_input() {
+        assert!(split_seps(b"", b'\n').is_empty());
+    }
+
+    #[test]
+    fn test_single_blank_line() {
+        assert_eq!(split_seps(b"\n", b'\n'), &[b""]);
+    }
+
+    #[test]
+    fn test_with_trailing() {
+        assert_eq!(split_seps(b"a\nb\nc\n", b'\n'), &[b"a", b"b", b"c"]);
+    }
+
+    #[test]
+    fn test_without_trailing() {
+        assert_eq!(split_seps(b"a\nb\nc", b'\n'), &[b"a", b"b", b"c"]);
     }
 }
 
