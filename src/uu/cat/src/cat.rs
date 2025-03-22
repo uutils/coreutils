@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
 use std::fs::{metadata, File};
-use std::io::{self, IsTerminal, Read, Write};
+use std::io::{self, BufWriter, IsTerminal, Read, Write};
 /// Unix domain socket support
 #[cfg(unix)]
 use std::net::Shutdown;
@@ -511,7 +511,9 @@ fn write_lines<R: FdReadable>(
 ) -> CatResult<()> {
     let mut in_buf = [0; 1024 * 31];
     let stdout = io::stdout();
-    let mut writer = stdout.lock();
+    let stdout = stdout.lock();
+    // Add a 32K buffer for stdout - this greatly improves performance.
+    let mut writer = BufWriter::with_capacity(32 * 1024, stdout);
 
     while let Ok(n) = handle.reader.read(&mut in_buf) {
         if n == 0 {
@@ -560,6 +562,14 @@ fn write_lines<R: FdReadable>(
             }
             pos += offset + 1;
         }
+        // We need to flush the buffer each time around the loop in order to pass GNU tests.
+        // When we are reading the input from a pipe, the `handle.reader.read` call at the top
+        // of this loop will block (indefinitely) whist waiting for more data. The expectation
+        // however is that anything that's ready for output should show up in the meantime,
+        // and not be buffered internally to the `cat` process.
+        // Hence it's necessary to flush our buffer before every time we could potentially block
+        // on a `std::io::Read::read` call.
+        writer.flush()?;
     }
 
     Ok(())
