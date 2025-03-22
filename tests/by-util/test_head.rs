@@ -6,7 +6,9 @@
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 // spell-checker:ignore (words) seekable
 
-use crate::common::util::TestScenario;
+use uutests::util::TestScenario;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
+
 #[cfg(all(
     not(target_os = "windows"),
     not(target_os = "macos"),
