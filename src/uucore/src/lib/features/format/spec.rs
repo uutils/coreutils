@@ -12,7 +12,7 @@ use super::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
-    parse_escape_only, ArgumentIter, FormatChar, FormatError, OctalParsing,
+    parse_escape_only, ArgumentIter, ExtendedBigDecimal, FormatChar, FormatError, OctalParsing,
 };
 use std::{io::Write, ops::ControlFlow};
 
@@ -432,7 +432,8 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
                 let precision = resolve_asterisk(*precision, &mut args).unwrap_or(6);
-                let f = args.get_f64();
+                // TODO: We should implement some get_extendedBigDecimal function in args to avoid losing precision.
+                let f: ExtendedBigDecimal = args.get_f64().into();
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -447,7 +448,7 @@ impl Spec {
                     positive_sign: *positive_sign,
                     alignment: *alignment,
                 }
-                .fmt(writer, f)
+                .fmt(writer, &f)
                 .map_err(FormatError::IoError)
             }
         }
