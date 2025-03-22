@@ -187,3 +187,7 @@ jobs:
         with:
           src: "./util"
           args: format --check
+      - name: Run Python unit tests
+        shell: bash
+        run: |
+          python3 -m unittest util/test_compare_test_results.py

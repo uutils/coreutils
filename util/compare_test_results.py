@@ -143,12 +143,17 @@ def main():
     real_regressions = [r for r in regressions if r not in ignore_list]
     intermittent_regressions = [r for r in regressions if r in ignore_list]
 
+    # Filter out intermittent issues from fixes
+    real_fixes = [f for f in fixes if f not in ignore_list]
+    intermittent_fixes = [f for f in fixes if f in ignore_list]
+
     # Print summary stats
     print(f"Total tests in current run: {len(current_flat)}")
     print(f"Total tests in reference: {len(reference_flat)}")
     print(f"New regressions: {len(real_regressions)}")
     print(f"Intermittent regressions: {len(intermittent_regressions)}")
-    print(f"Fixed tests: {len(fixes)}")
+    print(f"Fixed tests: {len(real_fixes)}")
+    print(f"Intermittent fixes: {len(intermittent_fixes)}")
     print(f"Newly skipped tests: {len(newly_skipped)}")
     print(f"Newly passing tests (previously skipped): {len(newly_passing)}")
 
@@ -162,18 +167,26 @@ def main():
             print(f"::error ::{msg}", file=sys.stderr)
             output_lines.append(msg)
 
-    # Report intermittent issues
+    # Report intermittent issues (regressions)
     if intermittent_regressions:
-        print("\nINTERMITTENT ISSUES (ignored):", file=sys.stderr)
+        print("\nINTERMITTENT ISSUES (ignored regressions):", file=sys.stderr)
         for test in sorted(intermittent_regressions):
             msg = f"Skip an intermittent issue {test} (fails in this run but passes in the 'main' branch)"
             print(f"::notice ::{msg}", file=sys.stderr)
             output_lines.append(msg)
 
+    # Report intermittent issues (fixes)
+    if intermittent_fixes:
+        print("\nINTERMITTENT ISSUES (ignored fixes):", file=sys.stderr)
+        for test in sorted(intermittent_fixes):
+            msg = f"Skipping an intermittent issue {test} (passes in this run but fails in the 'main' branch)"
+            print(f"::notice ::{msg}", file=sys.stderr)
+            output_lines.append(msg)
+
     # Report fixes
-    if fixes:
+    if real_fixes:
         print("\nFIXED TESTS:", file=sys.stderr)
-        for test in sorted(fixes):
+        for test in sorted(real_fixes):
             msg = f"Congrats! The gnu test {test} is no longer failing!"
             print(f"::notice ::{msg}", file=sys.stderr)
             output_lines.append(msg)
