@@ -9,11 +9,9 @@
 //! [`PreciseNumber`] struct.
 use std::str::FromStr;
 
-use bigdecimal::BigDecimal;
-use num_traits::Zero;
 use uucore::format::num_parser::{ExtendedParser, ExtendedParserError};
 
-use crate::{hexadecimalfloat, number::PreciseNumber};
+use crate::number::PreciseNumber;
 use uucore::format::ExtendedBigDecimal;
 
 /// An error returned when parsing a number fails.
@@ -23,10 +21,11 @@ pub enum ParseNumberError {
     Nan,
 }
 
-// Compute the number of integral digits in input string. We know that the
-// string has already been parsed correctly, so we don't need to be too
-// careful.
-fn compute_num_integral_digits(input: &str, _number: &BigDecimal) -> usize {
+// Compute the number of integral and fractional digits in input string,
+// and wrap the result in a PreciseNumber.
+// We know that the string has already been parsed correctly, so we don't
+// need to be too careful.
+fn compute_num_digits(input: &str, ebd: ExtendedBigDecimal) -> PreciseNumber {
     let input = input.to_lowercase();
     let mut input = input.trim_start();
 
@@ -35,9 +34,20 @@ fn compute_num_integral_digits(input: &str, _number: &BigDecimal) -> usize {
         input = trimmed;
     }
 
-    // Integral digits for an hex number is ill-defined.
+    // Integral digits for any hex number is ill-defined (0 is fine as an output)
+    // Fractional digits for an floating hex number is ill-defined, return None
+    // as we'll totally ignore that number for precision computations.
+    // Still return 0 for hex integers though.
     if input.starts_with("0x") || input.starts_with("-0x") {
-        return 0;
+        return PreciseNumber {
+            number: ebd,
+            num_integral_digits: 0,
+            num_fractional_digits: if input.contains(".") || input.contains("p") {
+                None
+            } else {
+                Some(0)
+            },
+        };
     }
 
     // Split the exponent part, if any
@@ -45,17 +55,19 @@ fn compute_num_integral_digits(input: &str, _number: &BigDecimal) -> usize {
     debug_assert!(parts.len() <= 2);
 
     // Count all the digits up to `.`, `-` sign is included.
-    let digits: usize = match parts[0].find(".") {
+    let (mut int_digits, mut frac_digits) = match parts[0].find(".") {
         Some(i) => {
             // Cover special case .X and -.X where we behave as if there was a leading 0:
             // 0.X, -0.X.
-            match i {
+            let int_digits = match i {
                 0 => 1,
                 1 if parts[0].starts_with("-") => 2,
                 _ => i,
-            }
+            };
+
+            (int_digits, parts[0].len() - i - 1)
         }
-        None => parts[0].len(),
+        None => (parts[0].len(), 0),
     };
 
     // If there is an exponent, reparse that (yes this is not optimal,
@@ -63,14 +75,22 @@ fn compute_num_integral_digits(input: &str, _number: &BigDecimal) -> usize {
     if parts.len() == 2 {
         let exp = parts[1].parse::<i64>().unwrap_or(0);
         // For positive exponents, effectively expand the number. Ignore negative exponents.
-        // Also ignore overflowed exponents (default 0 above).
+        // Also ignore overflowed exponents (unwrap_or(0)).
         if exp > 0 {
-            digits + exp as usize
+            int_digits += exp.try_into().unwrap_or(0)
+        };
+        frac_digits = if exp < frac_digits as i64 {
+            // Subtract from i128 to avoid any overflow
+            (frac_digits as i128 - exp as i128).try_into().unwrap_or(0)
         } else {
-            digits
+            0
         }
-    } else {
-        digits
+    }
+
+    PreciseNumber {
+        number: ebd,
+        num_integral_digits: int_digits,
+        num_fractional_digits: Some(frac_digits),
     }
 }
 
@@ -80,36 +100,29 @@ impl FromStr for PreciseNumber {
     type Err = ParseNumberError;
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let ebd = match ExtendedBigDecimal::extended_parse(input) {
-            Ok(ebd) => ebd,
+            Ok(ebd) => match ebd {
+                // Handle special values
+                ExtendedBigDecimal::BigDecimal(_) | ExtendedBigDecimal::MinusZero => {
+                    // TODO: GNU `seq` treats small numbers < 1e-4950 as 0, we could do the same
+                    // to avoid printing senselessly small numbers.
+                    ebd
+                }
+                ExtendedBigDecimal::Infinity | ExtendedBigDecimal::MinusInfinity => {
+                    return Ok(PreciseNumber {
+                        number: ebd,
+                        num_integral_digits: 0,
+                        num_fractional_digits: Some(0),
+                    });
+                }
+                ExtendedBigDecimal::Nan | ExtendedBigDecimal::MinusNan => {
+                    return Err(ParseNumberError::Nan);
+                }
+            },
             Err(ExtendedParserError::Underflow(ebd)) => ebd, // Treat underflow as 0
             Err(_) => return Err(ParseNumberError::Float),
         };
 
-        // Handle special values, get a BigDecimal to help digit-counting.
-        let bd = match ebd {
-            ExtendedBigDecimal::Infinity | ExtendedBigDecimal::MinusInfinity => {
-                return Ok(PreciseNumber {
-                    number: ebd,
-                    num_integral_digits: 0,
-                    num_fractional_digits: Some(0),
-                });
-            }
-            ExtendedBigDecimal::Nan | ExtendedBigDecimal::MinusNan => {
-                return Err(ParseNumberError::Nan);
-            }
-            ExtendedBigDecimal::BigDecimal(ref bd) => {
-                // TODO: `seq` treats small numbers < 1e-4950 as 0, we could do the same
-                // to avoid printing senselessly small numbers.
-                bd.clone()
-            }
-            ExtendedBigDecimal::MinusZero => BigDecimal::zero(),
-        };
-
-        Ok(PreciseNumber {
-            number: ebd,
-            num_integral_digits: compute_num_integral_digits(input, &bd),
-            num_fractional_digits: hexadecimalfloat::parse_precision(input),
-        })
+        Ok(compute_num_digits(input, ebd))
     }
 }
 

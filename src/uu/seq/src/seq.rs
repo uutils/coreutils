@@ -15,7 +15,6 @@ use uucore::format::{ExtendedBigDecimal, Format, num_format};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
-mod hexadecimalfloat;
 
 // public to allow fuzzing
 #[cfg(fuzzing)]
