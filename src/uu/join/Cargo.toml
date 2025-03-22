@@ -20,6 +20,7 @@ path = "src/join.rs"
 clap = { workspace = true }
 uucore = { workspace = true }
 memchr = { workspace = true }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "join"
