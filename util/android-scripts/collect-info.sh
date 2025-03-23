@@ -13,8 +13,10 @@ echo "$HOME"
 PATH=$HOME/.cargo/bin:$PATH
 export PATH
 echo "$PATH"
+ls -l /data/data/com.termux/files/usr/bin || true
 pwd
 command -v rustc && rustc -Vv
 ls -la ~/.cargo/bin
 cargo --list
 cargo nextest --version
+env

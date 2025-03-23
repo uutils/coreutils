@@ -2,14 +2,14 @@
 
 # spell-checker:ignore nextest watchplus PIPESTATUS
 
-echo "PATH: $PATH"
+echo "PATH: $PATH, LD_PRELOAD=$LD_PRELOAD"
 
 export PATH=$HOME/.cargo/bin:$PATH
 export RUST_BACKTRACE=full
 export CARGO_TERM_COLOR=always
 export CARGO_INCREMENTAL=0
 
-echo "PATH: $PATH"
+echo "PATH: $PATH, LD_PRELOAD=$LD_PRELOAD"
 
 run_with_retry() {
     tries=$1
@@ -49,6 +49,19 @@ run_tests_in_subprocess() (
     watchplus 2 free -hm &
 
     nextest_params=(--profile ci --hide-progress-bar --features feat_os_unix_android)
+
+    set -x
+    cd ~/coreutils
+    cargo build -p uu_cat
+    ldd ./target/debug/cat
+    ldd $LD_PRELOAD
+    touch x
+    strace ./target/debug/cat x x x x x x 2>&1 | grep open
+    LD_PRELOAD= strace ./target/debug/cat x x x x x x 2>&1 | grep open
+
+    kill_all_background_jobs
+
+    return 1
 
     # run tests
     cd ~/coreutils && \
