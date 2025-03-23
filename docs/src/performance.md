@@ -1,3 +1,5 @@
+<!-- spell-checker:ignore taskset -->
+
 # Performance Profiling Tutorial
 
 ## Effective Benchmarking with Hyperfine
