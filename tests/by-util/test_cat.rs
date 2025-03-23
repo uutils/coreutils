@@ -98,7 +98,9 @@ fn test_fifo_symlink() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+// TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
+// #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_closes_file_descriptors() {
     // Each file creates a pipe, which has two file descriptors.
     // If they are not closed then five is certainly too many.

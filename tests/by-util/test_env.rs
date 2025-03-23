@@ -81,11 +81,13 @@ fn test_env_version() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_env_permissions() {
+    // Try to execute `empty` in test fixture, that does not have exec permission.
     new_ucmd!()
-        .arg(".")
+        .arg("./empty")
         .fails_with_code(126)
-        .stderr_is("env: '.': Permission denied\n");
+        .stderr_is("env: './empty': Permission denied\n");
 }
 
 #[test]
