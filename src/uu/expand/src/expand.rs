@@ -6,14 +6,13 @@
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag Preprocess
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::error::Error;
 use std::ffi::OsString;
-use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
+use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
@@ -61,42 +60,23 @@ fn is_digit_or_comma(c: char) -> bool {
 }
 
 /// Errors that can occur when parsing a `--tabs` argument.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum ParseError {
+    #[error("tab size contains invalid character(s): {}", .0.quote())]
     InvalidCharacter(String),
+    #[error("{} specifier not at start of number: {}", .0.quote(), .1.quote())]
     SpecifierNotAtStartOfNumber(String, String),
+    #[error("{} specifier only allowed with the last value", .0.quote())]
     SpecifierOnlyAllowedWithLastValue(String),
+    #[error("tab size cannot be 0")]
     TabSizeCannotBeZero,
+    #[error("tab stop is too large {}", .0.quote())]
     TabSizeTooLarge(String),
+    #[error("tab sizes must be ascending")]
     TabSizesMustBeAscending,
 }
 
-impl Error for ParseError {}
 impl UError for ParseError {}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidCharacter(s) => {
-                write!(f, "tab size contains invalid character(s): {}", s.quote())
-            }
-            Self::SpecifierNotAtStartOfNumber(specifier, s) => write!(
-                f,
-                "{} specifier not at start of number: {}",
-                specifier.quote(),
-                s.quote(),
-            ),
-            Self::SpecifierOnlyAllowedWithLastValue(specifier) => write!(
-                f,
-                "{} specifier only allowed with the last value",
-                specifier.quote()
-            ),
-            Self::TabSizeCannotBeZero => write!(f, "tab size cannot be 0"),
-            Self::TabSizeTooLarge(s) => write!(f, "tab stop is too large {}", s.quote()),
-            Self::TabSizesMustBeAscending => write!(f, "tab sizes must be ascending"),
-        }
-    }
-}
 
 /// Parse a list of tabstops from a `--tabs` argument.
 ///
