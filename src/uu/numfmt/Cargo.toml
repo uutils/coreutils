@@ -19,6 +19,7 @@ path = "src/numfmt.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["ranges"] }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "numfmt"
