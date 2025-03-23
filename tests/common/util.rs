@@ -1215,6 +1215,17 @@ impl TestScenario {
         command
     }
 
+    /// Returns builder for invoking a command in shell (e.g. sh -c 'cmd').
+    /// Paths given are treated relative to the environment's unique temporary
+    /// test directory.
+    pub fn cmd_shell<S: AsRef<OsStr>>(&self, cmd: S) -> UCommand {
+        let mut command = UCommand::new();
+        // Intentionally leave bin_path unset.
+        command.arg(cmd);
+        command.temp_dir(self.tmpd.clone());
+        command
+    }
+
     /// Returns builder for invoking any uutils command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn ccmd<S: AsRef<str>>(&self, util_name: S) -> UCommand {
@@ -4052,8 +4063,7 @@ mod tests {
         };
 
         let ts = TestScenario::new("util");
-        ts.cmd("sh")
-            .args(&["-c", "umask"])
+        ts.cmd_shell("umask")
             .umask(c_umask)
             .succeeds()
             .stdout_is(expected);
