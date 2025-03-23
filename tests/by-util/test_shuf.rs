@@ -847,3 +847,15 @@ fn test_range_repeat_empty_minus_one() {
         .no_stdout()
         .stderr_contains("invalid value '5-3' for '--input-range <LO-HI>': start exceeds end\n");
 }
+
+// This test fails if we forget to flush the `BufWriter`.
+#[test]
+#[cfg(target_os = "linux")]
+fn write_errors_are_reported() {
+    new_ucmd!()
+        .arg("-i1-10")
+        .arg("-o/dev/full")
+        .fails()
+        .no_stdout()
+        .stderr_is("shuf: write failed: No space left on device\n");
+}

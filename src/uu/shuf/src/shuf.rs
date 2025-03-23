@@ -386,6 +386,7 @@ fn shuf_exec(
             output.write_all(&[opts.sep]).map_err_context(ctx)?;
         }
     }
+    output.flush().map_err_context(ctx)?;
 
     Ok(())
 }
