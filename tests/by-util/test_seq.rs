@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
 use crate::common::util::TestScenario;
-use std::process::Stdio;
 
 #[test]
 fn test_invalid_arg() {
@@ -566,51 +565,52 @@ fn test_width_floats() {
         .stdout_only("09.0\n10.0\n");
 }
 
-// TODO This is duplicated from `test_yes.rs`; refactor them.
-/// Run `seq`, capture some of the output, close the pipe, and verify it.
-fn run(args: &[&str], expected: &[u8]) {
-    let mut cmd = new_ucmd!();
-    let mut child = cmd.args(args).set_stdout(Stdio::piped()).run_no_wait();
-    let buf = child.stdout_exact_bytes(expected.len());
-    child.close_stdout();
-    child.wait().unwrap().success();
-    assert_eq!(buf.as_slice(), expected);
-}
-
 #[test]
 fn test_neg_inf() {
-    run(&["--", "-inf", "0"], b"-inf\n-inf\n-inf\n");
+    new_ucmd!()
+        .args(&["--", "-inf", "0"])
+        .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
+        .success();
 }
 
 #[test]
 fn test_neg_infinity() {
-    run(&["--", "-infinity", "0"], b"-inf\n-inf\n-inf\n");
+    new_ucmd!()
+        .args(&["--", "-infinity", "0"])
+        .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
+        .success();
 }
 
 #[test]
 fn test_inf() {
-    run(&["inf"], b"1\n2\n3\n");
+    new_ucmd!()
+        .args(&["inf"])
+        .run_stdout_starts_with(b"1\n2\n3\n")
+        .success();
 }
 
 #[test]
 fn test_infinity() {
-    run(&["infinity"], b"1\n2\n3\n");
+    new_ucmd!()
+        .args(&["infinity"])
+        .run_stdout_starts_with(b"1\n2\n3\n")
+        .success();
 }
 
 #[test]
 fn test_inf_width() {
-    run(
-        &["-w", "1.000", "inf", "inf"],
-        b"1.000\n  inf\n  inf\n  inf\n",
-    );
+    new_ucmd!()
+        .args(&["-w", "1.000", "inf", "inf"])
+        .run_stdout_starts_with(b"1.000\n  inf\n  inf\n  inf\n")
+        .success();
 }
 
 #[test]
 fn test_neg_inf_width() {
-    run(
-        &["-w", "1.000", "-inf", "-inf"],
-        b"1.000\n -inf\n -inf\n -inf\n",
-    );
+    new_ucmd!()
+        .args(&["-w", "1.000", "-inf", "-inf"])
+        .run_stdout_starts_with(b"1.000\n -inf\n -inf\n -inf\n")
+        .success();
 }
 
 #[test]
@@ -935,4 +935,112 @@ fn test_parse_valid_hexadecimal_float_format_issues() {
         .args(&["0xa.a9p-30", "1"])
         .succeeds()
         .stdout_only("9.92804e-09\n1\n");
+}
+
+// GNU `seq` manual states that, when the parameters "all use a fixed point
+// decimal representation", the format should be `%.pf`, where the precision
+// is inferred from parameters. Else, `%g` is used.
+//
+// This is understandable, as translating hexadecimal precision to decimal precision
+// is not straightforward or intuitive to the user. There are some exceptions though,
+// if a mix of hexadecimal _integers_ and decimal floats are provided.
+//
+// The way precision is inferred is said to be able to "represent the output numbers
+// exactly". In practice, this means that trailing zeros in first/increment number are
+// considered, but not in the last number. This makes sense if we take that last number
+// as a "bound", and not really part of input/output.
+#[test]
+fn test_precision_corner_cases() {
+    // Mixed input with integer hex still uses precision in decimal float
+    new_ucmd!()
+        .args(&["0x1", "0.90", "3"])
+        .succeeds()
+        .stdout_is("1.00\n1.90\n2.80\n");
+
+    // Mixed input with hex float reverts to %g
+    new_ucmd!()
+        .args(&["0x1.00", "0.90", "3"])
+        .succeeds()
+        .stdout_is("1\n1.9\n2.8\n");
+
+    // Even if it's the last number.
+    new_ucmd!()
+        .args(&["1", "1.20", "0x3.000000"])
+        .succeeds()
+        .stdout_is("1\n2.2\n");
+
+    // Otherwise, precision in last number is ignored.
+    new_ucmd!()
+        .args(&["1", "1.20", "3.000000"])
+        .succeeds()
+        .stdout_is("1.00\n2.20\n");
+
+    // Infinity is ignored
+    new_ucmd!()
+        .args(&["1", "1.2", "inf"])
+        .run_stdout_starts_with(b"1.0\n2.2\n3.4\n")
+        .success();
+}
+
+// GNU `seq` manual only makes guarantees about `-w` working if the
+// provided numbers "all use a fixed point decimal representation",
+// and guides the user to use `-f` for other cases.
+#[test]
+fn test_equalize_widths_corner_cases() {
+    // Mixed input with hexadecimal does behave as expected
+    new_ucmd!()
+        .args(&["-w", "0x1", "5.2", "9"])
+        .succeeds()
+        .stdout_is("1.0\n6.2\n");
+
+    // Confusingly, the number of integral digits in the last number is
+    // used to pad the output numbers, while it is ignored for precision
+    // computation.
+    //
+    // This problem has been reported on list here:
+    // "bug#77179: seq incorrectly(?) pads output when last parameter magnitude"
+    // https://lists.gnu.org/archive/html/bug-coreutils/2025-03/msg00028.html
+    //
+    // TODO: This case could be handled correctly, consider fixing this in
+    // `uutils` implementation. Output should probably be "1.0\n6.2\n".
+    new_ucmd!()
+        .args(&["-w", "0x1", "5.2", "10.0000"])
+        .succeeds()
+        .stdout_is("01.0\n06.2\n");
+
+    // But if we fixed the case above, we need to make sure we still pad
+    // if the last number in the output requires an extra digit.
+    new_ucmd!()
+        .args(&["-w", "0x1", "5.2", "15.0000"])
+        .succeeds()
+        .stdout_is("01.0\n06.2\n11.4\n");
+
+    // GNU `seq` bails out if any hex float is in the output.
+    // Unlike the precision corner cases above, it is harder to justify
+    // this behavior for hexadecimal float inputs, as it is always be
+    // possible to output numbers with a fixed width.
+    //
+    // This problem has been reported on list here:
+    // "bug#76070: Subject: seq, hexadecimal args and equal width"
+    // https://lists.gnu.org/archive/html/bug-coreutils/2025-02/msg00007.html
+    //
+    // TODO: These cases could be handled correctly, consider fixing this in
+    // `uutils` implementation.
+    // If we ignore hexadecimal precision, the output should be "1.0\n6.2\n".
+    new_ucmd!()
+        .args(&["-w", "0x1.0000", "5.2", "10"])
+        .succeeds()
+        .stdout_is("1\n6.2\n");
+    // The equivalent `seq -w 1.0625 1.00002 3` correctly pads the first number: "1.06250\n2.06252\n"
+    new_ucmd!()
+        .args(&["-w", "0x1.1", "1.00002", "3"])
+        .succeeds()
+        .stdout_is("1.0625\n2.06252\n");
+
+    // We can't really pad with infinite number of zeros, so `-w` is ignored.
+    // (there is another test with infinity as an increment above)
+    new_ucmd!()
+        .args(&["-w", "1", "1.2", "inf"])
+        .run_stdout_starts_with(b"1.0\n2.2\n3.4\n")
+        .success();
 }

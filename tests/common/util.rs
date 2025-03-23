@@ -1847,6 +1847,18 @@ impl UCommand {
         let tmpdir_path = self.tmpd.as_ref().unwrap().path();
         format!("{}/{file_rel_path}", tmpdir_path.to_str().unwrap())
     }
+
+    /// Runs the command, checks that the stdout starts with "expected",
+    /// then terminates the command.
+    #[track_caller]
+    pub fn run_stdout_starts_with(&mut self, expected: &[u8]) -> CmdResult {
+        let mut child = self.set_stdout(Stdio::piped()).run_no_wait();
+        let buf = child.stdout_exact_bytes(expected.len());
+        child.close_stdout();
+
+        assert_eq!(buf.as_slice(), expected);
+        child.wait().unwrap()
+    }
 }
 
 impl std::fmt::Display for UCommand {
