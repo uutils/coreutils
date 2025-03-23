@@ -3032,6 +3032,7 @@ name = "uu_numfmt"
 version = "0.0.30"
 dependencies = [
  "clap",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
