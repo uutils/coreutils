@@ -32,6 +32,8 @@ enum Mode {
     InputRange(RangeInclusive<usize>),
 }
 
+const BUF_SIZE: usize = 64 * 1024;
+
 struct Options {
     head_count: usize,
     output: Option<PathBuf>,
@@ -100,15 +102,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    let mut output = BufWriter::new(match options.output {
-        None => Box::new(stdout()) as Box<dyn OsWrite>,
-        Some(ref s) => {
-            let file = File::create(s).map_err_context(
-                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
-            )?;
-            Box::new(file) as Box<dyn OsWrite>
-        }
-    });
+    let mut output = BufWriter::with_capacity(
+        BUF_SIZE,
+        match options.output {
+            None => Box::new(stdout()) as Box<dyn OsWrite>,
+            Some(ref s) => {
+                let file = File::create(s).map_err_context(
+                    || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+                )?;
+                Box::new(file) as Box<dyn OsWrite>
+            }
+        },
+    );
 
     if options.head_count == 0 {
         // In this case we do want to touch the output file but we can quit immediately.
