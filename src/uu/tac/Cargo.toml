@@ -24,6 +24,7 @@ memmap2 = { workspace = true }
 regex = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "tac"
