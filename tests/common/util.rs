@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs NOFILE
 
 #![allow(dead_code)]
 #![allow(
@@ -1480,7 +1480,13 @@ impl UCommand {
         soft_limit: u64,
         hard_limit: u64,
     ) -> &mut Self {
-        self.limits.push((resource, soft_limit, hard_limit));
+        if cfg!(target_os = "android") && resource == rlimit::Resource::NOFILE {
+            // TODO(#7542): Add an extra 2 file descriptors on Android: it's unclear
+            // why more fds are often open.
+            self.limits.push((resource, soft_limit + 2, hard_limit + 2));
+        } else {
+            self.limits.push((resource, soft_limit, hard_limit));
+        }
         self
     }
 
