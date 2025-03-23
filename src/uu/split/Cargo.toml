@@ -20,6 +20,7 @@ path = "src/split.rs"
 clap = { workspace = true }
 memchr = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "split"

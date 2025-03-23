@@ -15,11 +15,11 @@ use crate::strategy::{NumberType, Strategy, StrategyError};
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, parser::ValueSource};
 use std::env;
 use std::ffi::OsString;
-use std::fmt;
 use std::fs::{File, metadata};
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
@@ -411,31 +411,39 @@ struct Settings {
     io_blksize: Option<u64>,
 }
 
+#[derive(Debug, Error)]
 /// An error when parsing settings from command-line arguments.
 enum SettingsError {
     /// Invalid chunking strategy.
+    #[error("{0}")]
     Strategy(StrategyError),
 
     /// Invalid suffix length parameter.
+    #[error("{0}")]
     Suffix(SuffixError),
 
     /// Multi-character (Invalid) separator
+    #[error("multi-character separator {}", .0.quote())]
     MultiCharacterSeparator(String),
 
     /// Multiple different separator characters
+    #[error("multiple separator characters specified")]
     MultipleSeparatorCharacters,
 
     /// Using `--filter` with `--number` option sub-strategies that print Kth chunk out of N chunks to stdout
     /// K/N
     /// l/K/N
     /// r/K/N
+    #[error("--filter does not process a chunk extracted to stdout")]
     FilterWithKthChunkNumber,
 
     /// Invalid IO block size
+    #[error("invalid IO block size: {}", .0.quote())]
     InvalidIOBlockSize(String),
 
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
+    #[error("{OPT_FILTER} is currently not supported in this platform")]
     NotSupported,
 }
 
@@ -447,30 +455,6 @@ impl SettingsError {
             Self::Strategy(StrategyError::MultipleWays)
                 | Self::Suffix(SuffixError::ContainsSeparator(_))
         )
-    }
-}
-
-impl fmt::Display for SettingsError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Strategy(e) => e.fmt(f),
-            Self::Suffix(e) => e.fmt(f),
-            Self::MultiCharacterSeparator(s) => {
-                write!(f, "multi-character separator {}", s.quote())
-            }
-            Self::MultipleSeparatorCharacters => {
-                write!(f, "multiple separator characters specified")
-            }
-            Self::FilterWithKthChunkNumber => {
-                write!(f, "--filter does not process a chunk extracted to stdout")
-            }
-            Self::InvalidIOBlockSize(s) => write!(f, "invalid IO block size: {}", s.quote()),
-            #[cfg(windows)]
-            Self::NotSupported => write!(
-                f,
-                "{OPT_FILTER} is currently not supported in this platform"
-            ),
-        }
     }
 }
 
