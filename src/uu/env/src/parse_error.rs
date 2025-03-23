@@ -3,12 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::fmt;
+use thiserror::Error;
 
 use crate::string_parser;
 
 /// An error returned when string arg splitting fails.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Error)]
+#[error("{self:?}")]
 pub enum ParseError {
     MissingClosingQuote {
         pos: usize,
@@ -36,14 +37,6 @@ pub enum ParseError {
     ReachedEnd,
     ContinueWithDelimiter,
 }
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(format!("{self:?}").as_str())
-    }
-}
-
-impl std::error::Error for ParseError {}
 
 impl From<string_parser::Error> for ParseError {
     fn from(value: string_parser::Error) -> Self {
