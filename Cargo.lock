@@ -2662,6 +2662,7 @@ dependencies = [
  "libc",
  "nix",
  "signal-hook",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
