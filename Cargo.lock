@@ -3102,6 +3102,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "regex",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
