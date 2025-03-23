@@ -117,14 +117,13 @@ impl Default for Options {
 enum OptionsError {
     #[error("--block-size argument {} too large", .0.quote())]
     BlockSizeTooLarge(String),
-    #[error("invalid --block-size argument {}", .0.quote())]
+    #[error("invalid --block-size argument {}", .0)]
     InvalidBlockSize(String),
-    #[error("invalid suffix in --block-size argument {}", .0.quote())]
+    #[error("invalid suffix in --block-size argument {}", .0)]
     InvalidSuffix(String),
-
-    #[error("option --output: field used more than once {:?}", .0)]
+    #[error("option --output: field {} used more than once", .0)]
     ColumnError(ColumnError),
-    #[error("error getting the filesystem types to include in the output table")]
+    #[error("file system type {} both selected and excluded", .0[0].quote())]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
 
@@ -396,7 +395,8 @@ where
 
 #[derive(Debug, Error)]
 enum DfError {
-    #[error("problem while parsing command-line options")]
+    /// A problem while parsing command-line options.
+    #[error("{}", .0)]
     OptionsError(OptionsError),
 }
 
