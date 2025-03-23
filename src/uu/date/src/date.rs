@@ -318,6 +318,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(OPT_DATE)
                 .value_name("STRING")
+                .allow_hyphen_values(true)
                 .help("display time described by STRING, not 'now'"),
         )
         .arg(
