@@ -208,7 +208,7 @@ enum LsError {
     #[error("{}: not listing already-listed directory", .0.to_string_lossy())]
     AlreadyListedError(PathBuf),
 
-    #[error("invalid --time-style argument {0}\nPossible values are: {1:?}\n\nFor more information try --help")]
+    #[error("invalid --time-style argument {}\nPossible values are: {:?}\n\nFor more information try --help", .0.quote(), .1)]
     TimeStyleParseError(String, Vec<String>),
 }
 
