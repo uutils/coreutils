@@ -20,6 +20,7 @@ path = "src/expand.rs"
 clap = { workspace = true }
 unicode-width = { workspace = true }
 uucore = { workspace = true }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "expand"
