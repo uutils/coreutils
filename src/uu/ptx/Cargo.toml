@@ -20,6 +20,7 @@ path = "src/ptx.rs"
 clap = { workspace = true }
 regex = { workspace = true }
 uucore = { workspace = true }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "ptx"
