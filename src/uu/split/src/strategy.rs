@@ -7,7 +7,7 @@
 
 use crate::{OPT_BYTES, OPT_LINE_BYTES, OPT_LINES, OPT_NUMBER};
 use clap::{ArgMatches, parser::ValueSource};
-use std::fmt;
+use thiserror::Error;
 use uucore::{
     display::Quotable,
     parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
@@ -54,7 +54,7 @@ impl NumberType {
 }
 
 /// An error due to an invalid parameter to the `-n` command-line option.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Error)]
 pub enum NumberTypeError {
     /// The number of chunks was invalid.
     ///
@@ -69,6 +69,7 @@ pub enum NumberTypeError {
     /// -n r/N
     /// -n r/K/N
     /// ```
+    #[error("invalid number of chunks: {}", .0.quote())]
     NumberOfChunks(String),
 
     /// The chunk number was invalid.
@@ -83,6 +84,7 @@ pub enum NumberTypeError {
     /// -n l/K/N
     /// -n r/K/N
     /// ```
+    #[error("invalid chunk number: {}", .0.quote())]
     ChunkNumber(String),
 }
 
@@ -191,34 +193,23 @@ pub enum Strategy {
 }
 
 /// An error when parsing a chunking strategy from command-line arguments.
+#[derive(Debug, Error)]
 pub enum StrategyError {
     /// Invalid number of lines.
+    #[error("invalid number of lines: {0}")]
     Lines(ParseSizeError),
 
     /// Invalid number of bytes.
+    #[error("invalid number of bytes: {0}")]
     Bytes(ParseSizeError),
 
     /// Invalid number type.
+    #[error("{0}")]
     NumberType(NumberTypeError),
 
     /// Multiple chunking strategies were specified (but only one should be).
+    #[error("cannot split in more than one way")]
     MultipleWays,
-}
-
-impl fmt::Display for StrategyError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Lines(e) => write!(f, "invalid number of lines: {e}"),
-            Self::Bytes(e) => write!(f, "invalid number of bytes: {e}"),
-            Self::NumberType(NumberTypeError::NumberOfChunks(s)) => {
-                write!(f, "invalid number of chunks: {}", s.quote())
-            }
-            Self::NumberType(NumberTypeError::ChunkNumber(s)) => {
-                write!(f, "invalid chunk number: {}", s.quote())
-            }
-            Self::MultipleWays => write!(f, "cannot split in more than one way"),
-        }
-    }
 }
 
 impl Strategy {

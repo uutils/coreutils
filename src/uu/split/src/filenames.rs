@@ -39,8 +39,8 @@ use crate::{
     OPT_NUMERIC_SUFFIXES_SHORT, OPT_SUFFIX_LENGTH,
 };
 use clap::ArgMatches;
-use std::fmt;
 use std::path::is_separator;
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 
@@ -79,29 +79,19 @@ pub struct Suffix {
 }
 
 /// An error when parsing suffix parameters from command-line arguments.
+#[derive(Debug, Error)]
 pub enum SuffixError {
     /// Invalid suffix length parameter.
+    #[error("invalid suffix length: {}", .0.quote())]
     NotParsable(String),
 
     /// Suffix contains a directory separator, which is not allowed.
+    #[error("invalid suffix {}, contains directory separator", .0.quote())]
     ContainsSeparator(String),
 
     /// Suffix is not large enough to split into specified chunks
+    #[error("the suffix length needs to be at least {0}")]
     TooSmall(usize),
-}
-
-impl fmt::Display for SuffixError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::NotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
-            Self::TooSmall(i) => write!(f, "the suffix length needs to be at least {i}"),
-            Self::ContainsSeparator(s) => write!(
-                f,
-                "invalid suffix {}, contains directory separator",
-                s.quote()
-            ),
-        }
-    }
 }
 
 impl Suffix {
