@@ -13,8 +13,9 @@
 
 //! A wrapper around any Read to treat it as an RNG.
 
-use std::fmt;
-use std::io::Read;
+use std::cell::Cell;
+use std::io::{Error, Read};
+use std::rc::Rc;
 
 use rand_core::{RngCore, impls};
 
@@ -30,27 +31,33 @@ use rand_core::{RngCore, impls};
 ///
 /// `ReadRng` uses [`std::io::Read::read_exact`], which retries on interrupts.
 /// All other errors from the underlying reader, including when it does not
-/// have enough data, will only be reported through `try_fill_bytes`.
-/// The other [`RngCore`] methods will panic in case of an error.
+/// have enough data, will be reported via the public error field (which can
+/// be cloned in advance, as it uses [`Rc`]). This field must be checked for
+/// errors after every operation.
 ///
 /// [`OsRng`]: rand::rngs::OsRng
-#[derive(Debug)]
 pub struct ReadRng<R> {
     reader: R,
+    pub error: ErrorCell,
 }
+
+pub type ErrorCell = Rc<Cell<Option<std::io::Error>>>;
 
 impl<R: Read> ReadRng<R> {
     /// Create a new `ReadRng` from a `Read`.
     pub fn new(r: R) -> Self {
-        Self { reader: r }
+        Self {
+            reader: r,
+            error: Rc::default(),
+        }
     }
 
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), ReadError> {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
         if dest.is_empty() {
             return Ok(());
         }
         // Use `std::io::read_exact`, which retries on `ErrorKind::Interrupted`.
-        self.reader.read_exact(dest).map_err(ReadError)
+        self.reader.read_exact(dest)
     }
 }
 
@@ -64,25 +71,11 @@ impl<R: Read> RngCore for ReadRng<R> {
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.try_fill_bytes(dest).unwrap_or_else(|err| {
-            panic!("reading random bytes from Read implementation failed; error: {err}");
-        });
-    }
-}
-
-/// `ReadRng` error type
-#[derive(Debug)]
-pub struct ReadError(std::io::Error);
-
-impl fmt::Display for ReadError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ReadError: {}", self.0)
-    }
-}
-
-impl std::error::Error for ReadError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.0)
+        if let Err(err) = self.try_fill_bytes(dest) {
+            // Failed to deliver random data, so the caller must check the error
+            // cell before using the result.
+            self.error.set(Some(err));
+        }
     }
 }
 
