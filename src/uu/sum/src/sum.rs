@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{stdin, Read};
+use std::io::{Read, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};

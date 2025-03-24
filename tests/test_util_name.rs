@@ -23,9 +23,11 @@ fn execution_phrase_double() {
         .arg("--some-invalid-arg")
         .output()
         .unwrap();
-    assert!(String::from_utf8(output.stderr)
-        .unwrap()
-        .contains(&format!("Usage: {} ls", scenario.bin_path.display(),)));
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains(&format!("Usage: {} ls", scenario.bin_path.display(),))
+    );
 }
 
 #[test]

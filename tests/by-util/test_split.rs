@@ -5,7 +5,7 @@
 // spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
 
 use crate::common::util::{AtPath, TestScenario};
-use rand::{rng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
@@ -13,7 +13,7 @@ use rlimit::Resource;
 use std::env;
 use std::path::Path;
 use std::{
-    fs::{read_dir, File},
+    fs::{File, read_dir},
     io::{BufWriter, Read, Write},
 };
 

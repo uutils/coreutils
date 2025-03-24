@@ -4,11 +4,11 @@
 // file that was distributed with this source code.
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable
 
+use crate::common::util::TestScenario;
 #[cfg(all(unix, not(feature = "feat_selinux")))]
 use crate::common::util::run_ucmd_as_root_with_stdin_stdout;
-use crate::common::util::TestScenario;
 #[cfg(all(not(windows), feature = "printf"))]
-use crate::common::util::{UCommand, TESTS_BINARY};
+use crate::common::util::{TESTS_BINARY, UCommand};
 
 use regex::Regex;
 use uucore::io::OwnedFileDescriptorOrHandle;
@@ -30,21 +30,15 @@ use std::time::Duration;
 use tempfile::tempfile;
 
 macro_rules! inf {
-    ($fname:expr) => {{
-        &format!("if={}", $fname)
-    }};
+    ($fname:expr) => {{ &format!("if={}", $fname) }};
 }
 
 macro_rules! of {
-    ($fname:expr) => {{
-        &format!("of={}", $fname)
-    }};
+    ($fname:expr) => {{ &format!("of={}", $fname) }};
 }
 
 macro_rules! fixture_path {
-    ($fname:expr) => {{
-        PathBuf::from(format!("./tests/fixtures/dd/{}", $fname))
-    }};
+    ($fname:expr) => {{ PathBuf::from(format!("./tests/fixtures/dd/{}", $fname)) }};
 }
 
 macro_rules! assert_fixture_exists {

@@ -24,9 +24,10 @@ fn test_negative_adjustment() {
     // correctly.
 
     let res = new_ucmd!().args(&["-n", "-1", "true"]).succeeds();
-    assert!(res
-        .stderr_str()
-        .starts_with("nice: warning: setpriority: Permission denied")); // spell-checker:disable-line
+    assert!(
+        res.stderr_str()
+            .starts_with("nice: warning: setpriority: Permission denied")
+    ); // spell-checker:disable-line
 }
 
 #[test]

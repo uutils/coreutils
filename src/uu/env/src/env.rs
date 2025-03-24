@@ -13,14 +13,14 @@ pub mod string_parser;
 pub mod variable_parser;
 
 use clap::builder::ValueParser;
-use clap::{crate_name, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_name};
 use ini::Ini;
 use native_int_str::{
-    from_native_int_representation_owned, Convert, NCvt, NativeIntStr, NativeIntString, NativeStr,
+    Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
 };
 #[cfg(unix)]
 use nix::sys::signal::{
-    raise, sigaction, signal, SaFlags, SigAction, SigHandler, SigHandler::SigIgn, SigSet, Signal,
+    SaFlags, SigAction, SigHandler, SigHandler::SigIgn, SigSet, Signal, raise, sigaction, signal,
 };
 use std::borrow::Cow;
 use std::env;

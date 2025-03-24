@@ -5,9 +5,9 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
-use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 mod helper;

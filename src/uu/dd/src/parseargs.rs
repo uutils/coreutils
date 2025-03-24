@@ -630,8 +630,8 @@ fn conversion_mode(
 #[cfg(test)]
 mod tests {
 
-    use crate::parseargs::{parse_bytes_with_opt_multiplier, Parser};
     use crate::Num;
+    use crate::parseargs::{Parser, parse_bytes_with_opt_multiplier};
     use std::matches;
     const BIG: &str = "9999999999999999999999999999999999999999999999999999999999999";
 

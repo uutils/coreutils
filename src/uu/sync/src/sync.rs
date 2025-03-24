@@ -9,7 +9,7 @@ use clap::{Arg, ArgAction, Command};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::errno::Errno;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::{open, OFlag};
+use nix::fcntl::{OFlag, open};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::sys::stat::Mode;
 use std::path::Path;
@@ -81,7 +81,7 @@ mod platform {
     use uucore::error::{UResult, USimpleError};
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
-        GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
+        ERROR_NO_MORE_FILES, GetLastError, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
     };
     use windows_sys::Win32::Storage::FileSystem::{
         FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, FlushFileBuffers, GetDriveTypeW,

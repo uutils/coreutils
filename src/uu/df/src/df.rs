@@ -13,18 +13,18 @@ use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
-use uucore::fsext::{read_fs_list, MountInfo};
+use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, help_about, help_section, help_usage, show};
 
-use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
 use std::path::Path;
 
-use crate::blocks::{read_block_size, BlockSize};
+use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
@@ -749,7 +749,7 @@ mod tests {
 
     mod is_included {
 
-        use crate::{is_included, Options};
+        use crate::{Options, is_included};
         use uucore::fsext::MountInfo;
 
         /// Instantiate a [`MountInfo`] with the given fields.
@@ -886,7 +886,7 @@ mod tests {
 
     mod filter_mount_list {
 
-        use crate::{filter_mount_list, Options};
+        use crate::{Options, filter_mount_list};
 
         #[test]
         fn test_empty() {

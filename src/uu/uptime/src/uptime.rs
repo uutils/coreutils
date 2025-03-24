@@ -15,7 +15,7 @@ use uucore::uptime::*;
 
 use uucore::error::UResult;
 
-use clap::{builder::ValueParser, Arg, ArgAction, Command, ValueHint};
+use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
 use uucore::{format_usage, help_about, help_usage};
 

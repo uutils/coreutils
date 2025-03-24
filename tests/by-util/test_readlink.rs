@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore regfile
-use crate::common::util::{get_root_path, TestScenario};
+use crate::common::util::{TestScenario, get_root_path};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 

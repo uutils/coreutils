@@ -13,7 +13,7 @@ use std::{
     ffi::{OsStr, OsString},
     fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    io::{stdout, BufWriter, ErrorKind, Stdout, Write},
+    io::{BufWriter, ErrorKind, Stdout, Write, stdout},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -28,17 +28,19 @@ use std::{collections::HashSet, io::IsTerminal};
 use ansi_width::ansi_width;
 use chrono::{DateTime, Local, TimeDelta};
 use clap::{
-    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
     Arg, ArgAction, Command,
+    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
 use term_grid::{Direction, Filling, Grid, GridOptions};
 use thiserror::Error;
 use uucore::error::USimpleError;
-use uucore::format::human::{human_readable, SizeFormat};
+use uucore::format::human::{SizeFormat, human_readable};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
+#[cfg(unix)]
+use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -52,14 +54,12 @@ use uucore::fsxattr::has_acl;
     target_os = "solaris"
 ))]
 use uucore::libc::{dev_t, major, minor};
-#[cfg(unix)]
-use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
-use uucore::quoting_style::{self, escape_name, QuotingStyle};
+use uucore::quoting_style::{self, QuotingStyle, escape_name};
 use uucore::{
     custom_tz_fmt,
     display::Quotable,
-    error::{set_exit_code, UError, UResult},
+    error::{UError, UResult, set_exit_code},
     format_usage,
     fs::display_permissions,
     os_str_as_bytes_lossy,
@@ -70,9 +70,9 @@ use uucore::{
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 
 mod dired;
-use dired::{is_dired_arg_present, DiredOutput};
+use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
-use colors::{color_name, StyleManager};
+use colors::{StyleManager, color_name};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
@@ -2187,11 +2187,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             let md = {
                 // We will always try to deref symlinks to group directories, so PathData.md
                 // is not always useful.
-                if p.must_dereference {
-                    p.md.get()
-                } else {
-                    None
-                }
+                if p.must_dereference { p.md.get() } else { None }
             };
 
             !match md {
@@ -3119,11 +3115,7 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
     let len_adjusted = {
         let d = metadata.len() / config.file_size_block_size;
         let r = metadata.len() % config.file_size_block_size;
-        if r == 0 {
-            d
-        } else {
-            d + 1
-        }
+        if r == 0 { d } else { d + 1 }
     };
     SizeOrDeviceId::Size(display_size(len_adjusted, config))
 }

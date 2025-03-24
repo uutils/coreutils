@@ -5,7 +5,7 @@
 
 #[cfg(unix)]
 use crate::common::util::expected_result;
-use crate::common::util::{is_ci, whoami, TestScenario};
+use crate::common::util::{TestScenario, is_ci, whoami};
 
 #[test]
 fn test_invalid_arg() {

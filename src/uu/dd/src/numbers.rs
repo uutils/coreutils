@@ -90,7 +90,7 @@ pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> Strin
 #[cfg(test)]
 mod tests {
 
-    use crate::numbers::{to_magnitude_and_suffix, SuffixType};
+    use crate::numbers::{SuffixType, to_magnitude_and_suffix};
 
     #[test]
     fn test_to_magnitude_and_suffix_powers_of_1024() {

@@ -99,7 +99,7 @@ impl<B: BufRead> BufReadDecoder<B> {
                         }
                         match error.error_len() {
                             Some(invalid_sequence_length) => {
-                                break (BytesSource::BufRead(invalid_sequence_length), Err(()))
+                                break (BytesSource::BufRead(invalid_sequence_length), Err(()));
                             }
                             None => {
                                 self.bytes_consumed = buf.len();

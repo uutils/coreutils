@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::{ffi::OsString, io::Write};
-use uucore::error::{set_exit_code, UResult};
+use uucore::error::{UResult, set_exit_code};
 use uucore::help_about;
 
 const ABOUT: &str = help_about!("false.md");

@@ -13,7 +13,7 @@ use rand::{Rng, RngCore};
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{stdin, stdout, BufWriter, Error, Read, Write};
+use std::io::{BufWriter, Error, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;

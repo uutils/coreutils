@@ -1013,7 +1013,7 @@ mod tests_split_iterator {
 
     use std::ffi::OsString;
 
-    use env::native_int_str::{from_native_int_representation_owned, Convert, NCvt};
+    use env::native_int_str::{Convert, NCvt, from_native_int_representation_owned};
     use env::parse_error::ParseError;
 
     fn split(input: &str) -> Result<Vec<OsString>, ParseError> {
@@ -1250,8 +1250,8 @@ mod test_raw_string_parser {
 
     use env::{
         native_int_str::{
-            from_native_int_representation, from_native_int_representation_owned,
-            to_native_int_representation, NativeStr,
+            NativeStr, from_native_int_representation, from_native_int_representation_owned,
+            to_native_int_representation,
         },
         string_expander::StringExpander,
         string_parser,

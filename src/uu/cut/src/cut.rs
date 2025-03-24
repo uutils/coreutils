@@ -6,13 +6,13 @@
 // spell-checker:ignore (ToDO) delim sourcefiles
 
 use bstr::io::BufReadExt;
-use clap::{builder::ValueParser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, IsTerminal, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
 
@@ -370,16 +370,18 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
                 continue;
             }
 
-            show_if_err!(File::open(path)
-                .map_err_context(|| filename.maybe_quote().to_string())
-                .and_then(|file| {
-                    match &mode {
-                        Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
-                            cut_bytes(file, ranges, opts)
+            show_if_err!(
+                File::open(path)
+                    .map_err_context(|| filename.maybe_quote().to_string())
+                    .and_then(|file| {
+                        match &mode {
+                            Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
+                                cut_bytes(file, ranges, opts)
+                            }
+                            Mode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
                         }
-                        Mode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
-                    }
-                }));
+                    })
+            );
         }
     }
 }

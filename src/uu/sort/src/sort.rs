@@ -24,16 +24,16 @@ use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
-use nix::libc::{getrlimit, rlimit, RLIMIT_NOFILE};
-use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
-use rand::{rng, Rng};
+use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
+use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
+use rand::{Rng, rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::Range;
 use std::path::Path;
@@ -43,7 +43,7 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::strip_errno;
-use uucore::error::{set_exit_code, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::line_ending::LineEnding;
 use uucore::parse_size::{ParseSizeError, Parser};
 use uucore::shortcut_value_parser::ShortcutValueParser;
@@ -668,9 +668,9 @@ fn tokenize_default(line: &str, token_buffer: &mut Vec<Field>) {
 /// Split between separators. These separators are not included in fields.
 /// The result is stored into `token_buffer`.
 fn tokenize_with_separator(line: &str, separator: char, token_buffer: &mut Vec<Field>) {
-    let separator_indices =
-        line.char_indices()
-            .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
+    let separator_indices = line
+        .char_indices()
+        .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
     let mut start = 0;
     for sep_idx in separator_indices {
         token_buffer.push(start..sep_idx);
@@ -707,7 +707,7 @@ impl KeyPosition {
                     "failed to parse field index {} {}",
                     field.quote(),
                     e
-                ))
+                ));
             }
         };
         if field == 0 {
@@ -971,7 +971,9 @@ impl FieldSelector {
                 range
             }
             Resolution::TooLow | Resolution::EndOfChar(_) => {
-                unreachable!("This should only happen if the field start index is 0, but that should already have caused an error.")
+                unreachable!(
+                    "This should only happen if the field start index is 0, but that should already have caused an error."
+                )
             }
             // While for comparisons it's only important that this is an empty slice,
             // to produce accurate debug output we need to match an empty slice at the end of the line.

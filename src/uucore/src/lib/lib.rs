@@ -112,7 +112,7 @@ pub use crate::features::fsxattr;
 use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{
-    sigaction, SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV,
+    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
 };
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
@@ -121,7 +121,7 @@ use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::str;
-use std::sync::{atomic::Ordering, LazyLock};
+use std::sync::{LazyLock, atomic::Ordering};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.

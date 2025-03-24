@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
-    sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
+    sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel},
     thread::{self, JoinHandle},
 };
 
@@ -28,10 +28,10 @@ use compare::Compare;
 use uucore::error::UResult;
 
 use crate::{
+    GlobalSettings, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
     compare_by, open,
     tmp_dir::TmpDirWrapper,
-    GlobalSettings, Output, SortError,
 };
 
 /// If the output file occurs in the input files as well, copy the contents of the output file

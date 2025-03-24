@@ -7,9 +7,9 @@
 #[cfg(not(windows))]
 use regex::Regex;
 
+use crate::common::util::TestScenario;
 #[cfg(not(target_os = "windows"))]
 use crate::common::util::expected_result;
-use crate::common::util::TestScenario;
 
 #[cfg(not(target_os = "openbsd"))]
 const SUB_DIR: &str = "subdir/deeper";

@@ -12,7 +12,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter, Write as FmtWrite};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::ParseIntError;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};

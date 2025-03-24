@@ -20,10 +20,10 @@
 
 use std::borrow::Cow;
 
-use crate::native_int_str::from_native_int_representation;
 use crate::native_int_str::NativeCharInt;
 use crate::native_int_str::NativeIntStr;
 use crate::native_int_str::NativeIntString;
+use crate::native_int_str::from_native_int_representation;
 use crate::parse_error::ParseError;
 use crate::string_expander::StringExpander;
 use crate::string_parser::StringParser;
@@ -256,7 +256,7 @@ impl<'a> SplitIterator<'a> {
                     return Err(ParseError::MissingClosingQuote {
                         pos: self.get_parser().get_peek_position(),
                         c: '\'',
-                    })
+                    });
                 }
                 Some(SINGLE_QUOTES) => {
                     self.skip_one()?;
@@ -306,7 +306,7 @@ impl<'a> SplitIterator<'a> {
                     return Err(ParseError::MissingClosingQuote {
                         pos: self.get_parser().get_peek_position(),
                         c: '"',
-                    })
+                    });
                 }
                 Some(DOLLAR) => {
                     self.substitute_variable()?;

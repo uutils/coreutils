@@ -60,7 +60,7 @@ impl Config {
                         return Err(UUsageError::new(
                             ExitStatus::TimeoutFailed.into(),
                             format!("{}: invalid signal", signal_.quote()),
-                        ))
+                        ));
                     }
                     Some(signal_value) => signal_value,
                 }

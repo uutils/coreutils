@@ -5,7 +5,7 @@
 // spell-checker:ignore (ToDO) IOFBF IOLBF IONBF cstdio setvbuf
 
 use cpp::cpp;
-use libc::{c_char, c_int, fileno, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
+use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
 use std::env;
 use std::ptr;
 

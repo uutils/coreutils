@@ -4,9 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore NOFILE nonewline cmdline
 
+use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use crate::common::util::vec_of_size;
-use crate::common::util::TestScenario;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
 #[cfg(target_os = "linux")]

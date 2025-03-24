@@ -23,7 +23,7 @@ use std::os::unix::fs::symlink;
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
-use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 
 pub struct Settings {
     overwrite: OverwriteMode,

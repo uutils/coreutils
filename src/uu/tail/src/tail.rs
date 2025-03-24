@@ -21,17 +21,17 @@ mod platform;
 pub mod text;
 
 pub use args::uu_app;
-use args::{parse_args, FilterMode, Settings, Signum};
+use args::{FilterMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
 use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{get_exit_code, set_exit_code, FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, get_exit_code, set_exit_code};
 use uucore::{show, show_error};
 
 #[uucore::main]
@@ -45,7 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Err(USimpleError::new(
                 1,
                 format!("cannot follow {} by name", text::DASH.quote()),
-            ))
+            ));
         }
         // Exit early if we do not output anything. Note, that this may break a pipe
         // when tail is on the receiving side.

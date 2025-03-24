@@ -6,8 +6,8 @@
 // spell-checker:ignore (ToDO) execvp SIGHUP cproc vprocmgr cstrs homeout
 
 use clap::{Arg, ArgAction, Command};
+use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
-use libc::{SIGHUP, SIG_IGN};
 use std::env;
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
@@ -16,7 +16,7 @@ use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UClapError, UError, UResult};
+use uucore::error::{UClapError, UError, UResult, set_exit_code};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 const ABOUT: &str = help_about!("nohup.md");

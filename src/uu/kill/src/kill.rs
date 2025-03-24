@@ -11,7 +11,7 @@ use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::signals::{signal_by_name_or_value, signal_name_by_value, ALL_SIGNALS};
+use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
 use uucore::{format_usage, help_about, help_usage, show};
 
 static ABOUT: &str = help_about!("kill.md");
@@ -239,8 +239,10 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
 fn kill(sig: Option<Signal>, pids: &[i32]) {
     for &pid in pids {
         if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
-            show!(Error::from_raw_os_error(e as i32)
-                .map_err_context(|| format!("sending signal to {pid} failed")));
+            show!(
+                Error::from_raw_os_error(e as i32)
+                    .map_err_context(|| format!("sending signal to {pid} failed"))
+            );
         }
     }
 }

@@ -10,7 +10,7 @@ use clap::builder::ValueParser;
 use uucore::display::Quotable;
 use uucore::fs::display_permissions;
 use uucore::fsext::{
-    pretty_filetype, pretty_fstype, read_fs_list, statfs, BirthTime, FsMeta, StatFs,
+    BirthTime, FsMeta, StatFs, pretty_filetype, pretty_fstype, read_fs_list, statfs,
 };
 use uucore::libc::mode_t;
 use uucore::{
@@ -1197,7 +1197,7 @@ fn pretty_time(sec: i64, nsec: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{group_num, precision_trunc, Flags, Precision, ScanUtil, Stater, Token};
+    use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
 
     #[test]
     fn test_scanners() {

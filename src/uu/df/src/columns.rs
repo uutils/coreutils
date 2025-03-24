@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore itotal iused iavail ipcent pcent squashfs
 use crate::{OPT_INODES, OPT_OUTPUT, OPT_PRINT_TYPE};
-use clap::{parser::ValueSource, ArgMatches};
+use clap::{ArgMatches, parser::ValueSource};
 
 /// The columns in the output table produced by `df`.
 ///

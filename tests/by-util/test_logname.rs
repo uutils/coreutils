@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::{is_ci, TestScenario};
+use crate::common::util::{TestScenario, is_ci};
 use std::env;
 
 #[test]

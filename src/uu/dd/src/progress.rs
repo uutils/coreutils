@@ -22,7 +22,7 @@ use uucore::{
     format::num_format::{FloatVariant, Formatter},
 };
 
-use crate::numbers::{to_magnitude_and_suffix, SuffixType};
+use crate::numbers::{SuffixType, to_magnitude_and_suffix};
 
 #[derive(PartialEq, Eq)]
 pub(crate) enum ProgUpdateType {

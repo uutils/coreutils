@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::{builder::ValueParser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
