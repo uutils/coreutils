@@ -16,11 +16,11 @@ You can also [build uutils from source](build.md).
 
 ```shell
 # Linux
-cargo install coreutils --features unix
+cargo install coreutils --features unix --locked
 # MacOs
-cargo install coreutils --features macos
+cargo install coreutils --features macos --locked
 # Windows
-cargo install coreutils --features windows
+cargo install coreutils --features windows --locked
 ```
 
 ## Linux
