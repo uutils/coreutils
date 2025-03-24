@@ -76,5 +76,19 @@ write!(stdout, "{separator}")?
 
 The change above resulted in a ~10% speedup.
 
+### Fast increment path
+
+When dealing with positive integer values (first/increment/last), and
+the default format is used, we use a custom fast path that does arithmetic
+on u8 arrays (i.e. strings), instead of repeatedly calling into
+formatting format.
+
+This provides _massive_ performance gains, in the order of 10-20x compared
+with the default implementation, at the expense of some added code complexity.
+
+Just from performance numbers, it is clear that GNU `seq` uses similar
+tricks, but we are more liberal on when we use our fast path (e.g. large
+increments are supported). Our fast path implementation gets within ~10%
+of `seq` performance.
 
 [0]: https://github.com/sharkdp/hyperfine
