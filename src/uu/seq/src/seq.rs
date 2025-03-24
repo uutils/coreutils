@@ -2,11 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat
+// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 use std::ffi::OsString;
 use std::io::{stdout, BufWriter, ErrorKind, Write};
 
 use clap::{Arg, ArgAction, Command};
+use num_bigint::BigUint;
+use num_traits::Signed;
+use num_traits::ToPrimitive;
 use num_traits::Zero;
 
 use uucore::error::{FromIo, UResult};
@@ -182,12 +185,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    // Allow fast printing, `print_seq` will do further checks.
+    let fast_allowed = options.format.is_none() && !options.equal_width && precision == Some(0);
+
     let result = print_seq(
         (first.number, increment.number, last.number),
         &options.separator,
         &options.terminator,
         &format,
+        fast_allowed,
     );
+
     match result {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
@@ -237,6 +245,145 @@ pub fn uu_app() -> Command {
         )
 }
 
+fn ebd_to_biguint(ebd: &ExtendedBigDecimal) -> Option<BigUint> {
+    match ebd {
+        ExtendedBigDecimal::BigDecimal(big_decimal) => {
+            let (bi, scale) = big_decimal.as_bigint_and_scale();
+            if bi.is_negative() || scale > 0 || scale < -(u32::MAX as i64) {
+                return None;
+            }
+            bi.to_biguint()
+                .map(|bi| bi * BigUint::from(10u32).pow(-scale as u32))
+        }
+        _ => None,
+    }
+}
+
+// Add inc to the string val[start..end]. This operates on ASCII digits, assuming
+// val and inc are well formed.
+// Returns the new value for start.
+// TODO: Add unit tests for this?
+fn inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
+    let mut pos = end - 1;
+    let mut inc_pos = inc.len() - 1;
+    let mut carry = 0u8;
+
+    // First loop, add all digits of inc into val.
+    loop {
+        let mut new_val = (*inc)[inc_pos] + carry;
+        // Be careful here, only add existing digit of val.
+        if pos >= start {
+            new_val += (*val)[pos] - b'0';
+        }
+        if new_val > b'9' {
+            carry = 1;
+            new_val -= 10;
+        } else {
+            carry = 0;
+        }
+        (*val)[pos] = new_val;
+
+        pos -= 1;
+        if inc_pos == 0 {
+            break;
+        }
+        inc_pos -= 1;
+    }
+
+    // Done, now, if we have a carry, add that to the upper digits of val.
+    if carry == 0 {
+        return start.min(pos + 1);
+    }
+    loop {
+        if pos < start {
+            // The carry propagated so far that a new digit was added.
+            (*val)[pos] = b'1';
+            return pos; // == start - 1
+        }
+
+        if (*val)[pos] == b'9' {
+            // 9+1 = 10. Carry propagating, keep going.
+            (*val)[pos] = b'0';
+        } else {
+            // Carry stopped propagating, return unchanged start.
+            (*val)[pos] += 1;
+            return start;
+        }
+
+        pos -= 1;
+    }
+}
+
+/// Integer print, default format, positive increment: fast code path
+/// that avoids reformating digit at all iterations.
+/// TODO: We could easily support equal_width (we do quite a bit of work
+/// _not_ supporting that and aligning the number to the left).
+fn print_seq_fast(
+    mut stdout: impl Write,
+    first: &BigUint,
+    increment: u64,
+    last: &BigUint,
+    separator: &str,
+    terminator: &str,
+) -> std::io::Result<()> {
+    // Nothing to do, just return.
+    if last < first {
+        return Ok(());
+    }
+
+    // Do at most u64::MAX loops. We can print in the order of 1e8 digits per second,
+    // u64::MAX is 1e19, so it'd take hundreds of years for this to complete anyway.
+    // TODO: we can move this test to `print_seq` if we care about this case.
+    let loop_cnt = ((last - first) / increment).to_u64().unwrap_or(u64::MAX);
+    let mut i = 0u64;
+
+    // Format and print the first digit.
+    let first_str = first.to_string();
+    stdout.write_all(first_str.as_bytes())?;
+
+    // Makeshift log10.ceil
+    let last_length = last.to_string().len();
+
+    // Allocate a large u8 buffer, that contains a preformatted string
+    // of the `separator` followed by the number.
+    //
+    // | ... head space ... | separator | number |
+    // ^0                   ^ start     ^ pos    ^ end (==buf.len())
+    //
+    // We keep track of 2 indices in this buffer: start and pos.
+    // When printing, we take a slice between start and end.
+    let end = separator.len() + last_length;
+    let mut buf = vec![0u8; end];
+    let buf = buf.as_mut_slice();
+
+    let mut pos = end - first_str.len();
+    let mut start = pos - separator.len();
+
+    // Initialize buf with separator and first.
+    buf[start..pos].copy_from_slice(separator.as_bytes());
+    buf[pos..end].copy_from_slice(first_str.as_bytes());
+
+    // Prepare the number to increment with as a string
+    let inc_str = increment.to_string();
+    let inc_str = inc_str.as_bytes();
+
+    while i < loop_cnt {
+        let new_pos = inc(buf, pos, end, inc_str);
+        if pos != new_pos {
+            // Number overflowed, move the position to the right.
+            pos = new_pos;
+            // Move the separator.
+            start = new_pos - separator.len();
+            buf[start..pos].copy_from_slice(separator.as_bytes());
+        }
+        i += 1;
+        stdout.write_all(&buf[start..end])?;
+    }
+    write!(stdout, "{terminator}")?;
+    stdout.flush()?;
+    Ok(())
+}
+
 fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {
     if increment >= &T::zero() {
         next > last
@@ -245,16 +392,44 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
     }
 }
 
-/// Floating point based code path
+/// Floating point based code path ("slow" path)
 fn print_seq(
     range: RangeFloat,
     separator: &str,
     terminator: &str,
     format: &Format<num_format::Float, &ExtendedBigDecimal>,
+    fast_allowed: bool,
 ) -> std::io::Result<()> {
     let stdout = stdout().lock();
     let mut stdout = BufWriter::new(stdout);
     let (first, increment, last) = range;
+
+    // Test if we can use fast printing
+    let (first_bui, increment_bui, last_bui) = (
+        ebd_to_biguint(&first),
+        ebd_to_biguint(&increment),
+        ebd_to_biguint(&last),
+    );
+
+    // TODO: We could easily support last == infinity
+    // Clippy wants to use `if let Some(...) = ...` to avoid is_some/unwrap combination, but that's
+    // not possible within an "if" test with multiple sub-expressions.
+    #[allow(clippy::unnecessary_unwrap)]
+    if fast_allowed
+        && first_bui.is_some()
+        && increment_bui.is_some() // This implies increment is > 0
+        && last_bui.is_some()
+    {
+        return print_seq_fast(
+            stdout,
+            &first_bui.unwrap(),
+            increment_bui.unwrap().to_u64().unwrap(),
+            &last_bui.unwrap(),
+            separator,
+            terminator,
+        );
+    }
+
     let mut value = first;
 
     let mut is_first_iteration = true;
