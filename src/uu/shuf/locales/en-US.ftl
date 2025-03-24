@@ -19,6 +19,7 @@ shuf-error-unexpected-argument = unexpected argument { $arg } found
 shuf-error-failed-to-open-for-writing = failed to open { $file } for writing
 shuf-error-failed-to-open-random-source = failed to open random source { $file }
 shuf-error-read-error = read error
+shuf-error-read-random-bytes = reading random bytes failed
 shuf-error-no-lines-to-repeat = no lines to repeat
 shuf-error-start-exceeds-end = start exceeds end
 shuf-error-missing-dash = missing '-'

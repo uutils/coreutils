@@ -370,7 +370,7 @@ fn shuf_exec(
     output: &mut BufWriter<Box<dyn OsWrite>>,
 ) -> UResult<()> {
     let ctx = || translate!("shuf-error-write-failed");
-
+    let error_cell = rng.get_error_cell();
     if opts.repeat {
         if input.is_empty() {
             return Err(USimpleError::new(
@@ -380,12 +380,15 @@ fn shuf_exec(
         }
         for _ in 0..opts.head_count {
             let r = input.choose(rng);
+            WrappedRng::check_error(error_cell.as_ref())?;
 
             r.write_all_to(output).map_err_context(ctx)?;
             output.write_all(&[opts.sep]).map_err_context(ctx)?;
         }
     } else {
         let shuffled = input.partial_shuffle(rng, opts.head_count);
+        WrappedRng::check_error(error_cell.as_ref())?;
+
         for r in shuffled {
             r.write_all_to(output).map_err_context(ctx)?;
             output.write_all(&[opts.sep]).map_err_context(ctx)?;
@@ -413,6 +416,25 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
 enum WrappedRng {
     RngFile(rand_read_adapter::ReadRng<File>),
     RngDefault(rand::rngs::ThreadRng),
+}
+
+impl WrappedRng {
+    fn get_error_cell(&self) -> Option<rand_read_adapter::ErrorCell> {
+        if let Self::RngFile(adapter) = self {
+            Some(adapter.error.clone())
+        } else {
+            None
+        }
+    }
+
+    fn check_error(error_cell: Option<&rand_read_adapter::ErrorCell>) -> UResult<()> {
+        if let Some(cell) = error_cell {
+            if let Some(err) = cell.take() {
+                return Err(err.map_err_context(|| translate!("shuf-error-read-random-bytes")));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl RngCore for WrappedRng {
