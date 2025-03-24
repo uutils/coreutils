@@ -29,13 +29,13 @@ Finally, feel free to join our [Discord](https://discord.gg/wQVJbvJ)!
 uutils is a big project consisting of many parts. Here are the most important
 parts for getting started:
 
-- [`src/uu`](./src/uu/): The code for all utilities
-- [`src/uucore`](./src/uucore/): Crate containing all the shared code between
+- [`src/uu`](https://github.com/uutils/coreutils/tree/main/src/uu/): The code for all utilities
+- [`src/uucore`](https://github.com/uutils/coreutils/tree/main/src/uucore/): Crate containing all the shared code between
   the utilities.
-- [`tests/by-util`](./tests/by-util/): The tests for all utilities.
-- [`src/bin/coreutils.rs`](./src/bin/coreutils.rs): Code for the multicall
+- [`tests/by-util`](https://github.com/uutils/coreutils/tree/main/tests/by-util/): The tests for all utilities.
+- [`src/bin/coreutils.rs`](https://github.com/uutils/coreutils/tree/main/src/bin/coreutils.rs): Code for the multicall
   binary.
-- [`docs`](./docs/src): the documentation for the website
+- [`docs`](https://github.com/uutils/coreutils/tree/main/docs/src): the documentation for the website
 
 Each utility is defined as a separate crate. The structure of each of these
 crates is as follows:
