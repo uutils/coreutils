@@ -30,11 +30,15 @@ use std::time::Duration;
 use tempfile::tempfile;
 
 macro_rules! inf {
-    ($fname:expr) => {{ &format!("if={}", $fname) }};
+    ($fname:expr) => {
+        format!("if={}", $fname)
+    };
 }
 
 macro_rules! of {
-    ($fname:expr) => {{ &format!("of={}", $fname) }};
+    ($fname:expr) => {
+        format!("of={}", $fname)
+    };
 }
 
 macro_rules! fixture_path {
@@ -288,7 +292,7 @@ fn test_noatime_does_not_update_infile_atime() {
     assert_fixture_exists!(&fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "iflag=noatime", inf!(fname)]);
+    ucmd.args(&["status=none", "iflag=noatime", &inf!(fname)]);
 
     let pre_atime = fix.metadata(fname).accessed().unwrap();
 
@@ -308,7 +312,7 @@ fn test_noatime_does_not_update_ofile_atime() {
     assert_fixture_exists!(&fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "oflag=noatime", of!(fname)]);
+    ucmd.args(&["status=none", "oflag=noatime", &of!(fname)]);
 
     let pre_atime = fix.metadata(fname).accessed().unwrap();
 
@@ -325,7 +329,7 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
     assert_fixture_not_exists!(&fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["conv=nocreat", of!(&fname)])
+    ucmd.args(&["conv=nocreat", &of!(&fname)])
         .pipe_in("")
         .fails()
         .stderr_only(
@@ -345,7 +349,7 @@ fn test_notrunc_does_not_truncate() {
     }
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "conv=notrunc", of!(&fname), "if=null.txt"])
+    ucmd.args(&["status=none", "conv=notrunc", &of!(&fname), "if=null.txt"])
         .succeeds()
         .no_output();
 
@@ -363,7 +367,7 @@ fn test_existing_file_truncated() {
     }
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "if=null.txt", of!(fname)])
+    ucmd.args(&["status=none", "if=null.txt", &of!(fname)])
         .succeeds()
         .no_output();
 
@@ -407,7 +411,7 @@ fn test_fullblock() {
     let ucmd = new_ucmd!()
         .args(&[
             "if=/dev/urandom",
-            of!(&tmp_fn),
+            &of!(&tmp_fn),
             "bs=128M",
             // Note: In order for this test to actually test iflag=fullblock, the bs=VALUE
             // must be big enough to 'overwhelm' the urandom store of bytes.
@@ -490,7 +494,7 @@ fn test_zeros_to_file() {
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", inf!(test_fn), of!(tmp_fn)])
+    ucmd.args(&["status=none", &inf!(test_fn), &of!(tmp_fn)])
         .succeeds()
         .no_output();
 
@@ -510,8 +514,8 @@ fn test_to_file_with_ibs_obs() {
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&[
         "status=none",
-        inf!(test_fn),
-        of!(tmp_fn),
+        &inf!(test_fn),
+        &of!(tmp_fn),
         "ibs=222",
         "obs=111",
     ])
@@ -531,7 +535,7 @@ fn test_ascii_521k_to_file() {
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", of!(tmp_fn)])
+    ucmd.args(&["status=none", &of!(tmp_fn)])
         .pipe_in(input.clone())
         .succeeds()
         .no_output();
@@ -561,7 +565,7 @@ fn test_ascii_5_gibi_to_file() {
         "count=5G",
         "iflag=count_bytes",
         "if=/dev/zero",
-        of!(tmp_fn),
+        &of!(tmp_fn),
     ])
     .succeeds()
     .no_output();
@@ -575,7 +579,7 @@ fn test_self_transfer() {
     assert_fixture_exists!(fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "conv=notrunc", inf!(fname), of!(fname)]);
+    ucmd.args(&["status=none", "conv=notrunc", &inf!(fname), &of!(fname)]);
 
     assert!(fix.file_exists(fname));
     assert_eq!(256 * 1024, fix.metadata(fname).len());
@@ -594,7 +598,7 @@ fn test_unicode_filenames() {
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", inf!(test_fn), of!(tmp_fn)])
+    ucmd.args(&["status=none", &inf!(test_fn), &of!(tmp_fn)])
         .succeeds()
         .no_output();
 
