@@ -2,11 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat
+// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 use std::ffi::OsString;
 use std::io::{BufWriter, ErrorKind, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
+use num_bigint::BigUint;
+use num_traits::ToPrimitive;
 use num_traits::Zero;
 
 use uucore::error::{FromIo, UResult};
@@ -190,12 +192,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    // Allow fast printing, `print_seq` will do further checks.
+    let fast_allowed = options.format.is_none() && !options.equal_width && precision == Some(0);
+
     let result = print_seq(
         (first.number, increment.number, last.number),
         &options.separator,
         &options.terminator,
         &format,
+        fast_allowed,
     );
+
     match result {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
@@ -245,6 +252,118 @@ pub fn uu_app() -> Command {
         )
 }
 
+// Fast code path increment function.
+// Add inc to the string val[start..end]. This operates on ASCII digits, assuming
+// val and inc are well formed.
+// Returns the new value for start.
+fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
+    // To avoid a lot of casts to signed integers, we make sure to decrement pos
+    // as late as possible, so that it does not ever go negative.
+    let mut pos = end;
+    let mut carry = 0u8;
+
+    // First loop, add all digits of inc into val.
+    for inc_pos in (0..inc.len()).rev() {
+        pos -= 1;
+
+        let mut new_val = inc[inc_pos] + carry;
+        // Be careful here, only add existing digit of val.
+        if pos >= start {
+            new_val += val[pos] - b'0';
+        }
+        if new_val > b'9' {
+            carry = 1;
+            new_val -= 10;
+        } else {
+            carry = 0;
+        }
+        val[pos] = new_val;
+    }
+
+    // Done, now, if we have a carry, add that to the upper digits of val.
+    if carry == 0 {
+        return start.min(pos);
+    }
+    while pos > start {
+        pos -= 1;
+
+        if val[pos] == b'9' {
+            // 9+1 = 10. Carry propagating, keep going.
+            val[pos] = b'0';
+        } else {
+            // Carry stopped propagating, return unchanged start.
+            val[pos] += 1;
+            return start;
+        }
+    }
+
+    // The carry propagated so far that a new digit was added.
+    val[start - 1] = b'1';
+    start - 1
+}
+
+/// Integer print, default format, positive increment: fast code path
+/// that avoids reformating digit at all iterations.
+/// TODO: We could easily support equal_width (we do quite a bit of work
+/// _not_ supporting that and aligning the number to the left).
+fn fast_print_seq(
+    mut stdout: impl Write,
+    first: &BigUint,
+    increment: u64,
+    last: &BigUint,
+    separator: &str,
+    terminator: &str,
+) -> std::io::Result<()> {
+    // Nothing to do, just return.
+    if last < first {
+        return Ok(());
+    }
+
+    // Do at most u64::MAX loops. We can print in the order of 1e8 digits per second,
+    // u64::MAX is 1e19, so it'd take hundreds of years for this to complete anyway.
+    // TODO: we can move this test to `print_seq` if we care about this case.
+    let loop_cnt = ((last - first) / increment).to_u64().unwrap_or(u64::MAX);
+
+    // Format the first number.
+    let first_str = first.to_string();
+
+    // Makeshift log10.ceil
+    let last_length = last.to_string().len();
+
+    // Allocate a large u8 buffer, that contains a preformatted string
+    // of the number followed by the `separator`.
+    //
+    // | ... head space ... | number | separator |
+    // ^0                   ^ start  ^ num_end   ^ size (==buf.len())
+    //
+    // We keep track of start in this buffer, as the number grows.
+    // When printing, we take a slice between start and end.
+    let size = separator.len() + last_length;
+    let mut buf = vec![0u8; size];
+    let buf = buf.as_mut_slice();
+
+    let num_end = buf.len() - separator.len();
+    let mut start = num_end - first_str.len();
+
+    // Initialize buf with first and separator.
+    buf[start..num_end].copy_from_slice(first_str.as_bytes());
+    buf[num_end..].copy_from_slice(separator.as_bytes());
+
+    // Prepare the number to increment with as a string
+    let inc_str = increment.to_string();
+    let inc_str = inc_str.as_bytes();
+
+    for _ in 0..loop_cnt {
+        stdout.write_all(&buf[start..])?;
+        start = fast_inc(buf, start, num_end, inc_str);
+    }
+    // Write the last number without separator, but with terminator.
+    stdout.write_all(&buf[start..num_end])?;
+    write!(stdout, "{terminator}")?;
+    stdout.flush()?;
+    Ok(())
+}
+
 fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {
     if increment >= &T::zero() {
         next > last
@@ -253,16 +372,40 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
     }
 }
 
-/// Floating point based code path
+/// Arbitrary precision decimal number code path ("slow" path)
 fn print_seq(
     range: RangeFloat,
     separator: &str,
     terminator: &str,
     format: &Format<num_format::Float, &ExtendedBigDecimal>,
+    fast_allowed: bool,
 ) -> std::io::Result<()> {
     let stdout = stdout().lock();
     let mut stdout = BufWriter::new(stdout);
     let (first, increment, last) = range;
+
+    if fast_allowed {
+        // Test if we can use fast code path.
+        // First try to convert the range to BigUint (u64 for the increment).
+        let (first_bui, increment_u64, last_bui) = (
+            first.to_biguint(),
+            increment.to_biguint().and_then(|x| x.to_u64()),
+            last.to_biguint(),
+        );
+        if let (Some(first_bui), Some(increment_u64), Some(last_bui)) =
+            (first_bui, increment_u64, last_bui)
+        {
+            return fast_print_seq(
+                stdout,
+                &first_bui,
+                increment_u64,
+                &last_bui,
+                separator,
+                terminator,
+            );
+        }
+    }
+
     let mut value = first;
 
     let mut is_first_iteration = true;
@@ -280,4 +423,59 @@ fn print_seq(
     }
     stdout.flush()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_fast_inc_simple() {
+        use crate::fast_inc;
+
+        let mut val = [b'.', b'.', b'.', b'0', b'_'];
+        let inc = [b'4'].as_ref();
+        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 3);
+        assert_eq!(val, "...4_".as_bytes());
+        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 3);
+        assert_eq!(val, "...8_".as_bytes());
+        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 2); // carried 1 more digit
+        assert_eq!(val, "..12_".as_bytes());
+
+        let mut val = [b'0', b'_'];
+        let inc = [b'2'].as_ref();
+        assert_eq!(fast_inc(val.as_mut(), 0, 1, inc), 0);
+        assert_eq!(val, "2_".as_bytes());
+        assert_eq!(fast_inc(val.as_mut(), 0, 1, inc), 0);
+        assert_eq!(val, "4_".as_bytes());
+        assert_eq!(fast_inc(val.as_mut(), 0, 1, inc), 0);
+        assert_eq!(val, "6_".as_bytes());
+    }
+
+    // Check that we handle increment > val correctly.
+    #[test]
+    fn test_fast_inc_large_inc() {
+        use crate::fast_inc;
+
+        let mut val = [b'.', b'.', b'.', b'7', b'_'];
+        let inc = "543".as_bytes();
+        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 1); // carried 2 more digits
+        assert_eq!(val, ".550_".as_bytes());
+        assert_eq!(fast_inc(val.as_mut(), 1, 4, inc), 0); // carried 1 more digit
+        assert_eq!(val, "1093_".as_bytes());
+    }
+
+    // Check that we handle longer carries
+    #[test]
+    fn test_fast_inc_carry() {
+        use crate::fast_inc;
+
+        let mut val = [b'.', b'9', b'9', b'9', b'_'];
+        let inc = "1".as_bytes();
+        assert_eq!(fast_inc(val.as_mut(), 1, 4, inc), 0);
+        assert_eq!(val, "1000_".as_bytes());
+
+        let mut val = [b'.', b'9', b'9', b'9', b'_'];
+        let inc = "11".as_bytes();
+        assert_eq!(fast_inc(val.as_mut(), 1, 4, inc), 0);
+        assert_eq!(val, "1010_".as_bytes());
+    }
 }
