@@ -16,7 +16,7 @@ repository = "https://github.com/uutils/coreutils"
 readme = "README.md"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-rust-version = "1.82.0"
+rust-version = "1.85.0"
 edition = "2021"
 
 build = "build.rs"
