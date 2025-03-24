@@ -187,10 +187,8 @@ then build your usual yocto image.
 
 ## Non-standard packages
 
-### `coreutils-hybrid` (AUR)
+### `coreutils-uutils` (AUR)
 
-[![AUR package](https://repology.org/badge/version-for-repo/aur/coreutils-hybrid.svg)](https://aur.archlinux.org/packages/coreutils-hybrid)
+[AUR package](https://aur.archlinux.org/packages/coreutils-uutils)
 
-A GNU coreutils / uutils coreutils hybrid package. Uses stable uutils
-programs mixed with GNU counterparts if uutils counterpart is
-unfinished or buggy.
+Cross-platform Rust rewrite of the GNU coreutils being used as actual system coreutils.
