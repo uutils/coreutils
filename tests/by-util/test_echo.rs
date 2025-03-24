@@ -243,13 +243,31 @@ fn test_hyphen_values_between() {
 }
 
 #[test]
-fn test_double_hyphens() {
+fn test_double_hyphens_at_start() {
     new_ucmd!().arg("--").succeeds().stdout_only("--\n");
     new_ucmd!()
         .arg("--")
         .arg("--")
         .succeeds()
         .stdout_only("-- --\n");
+}
+
+#[test]
+fn test_double_hyphens_between() {
+    new_ucmd!()
+        .arg("a")
+        .arg("--")
+        .arg("b")
+        .succeeds()
+        .stdout_only("a -- b\n");
+
+    new_ucmd!()
+        .arg("foo ")
+        .arg("-- --")
+        .arg("bar")
+        .arg("hehehe")
+        .succeeds()
+        .stdout_only("foo  -- -- bar hehehe\n");
 }
 
 #[test]
