@@ -181,11 +181,13 @@ impl ParsedNumber {
             };
         }
 
+        let trimmed_input = input.trim_ascii_start();
+
         // Initial minus sign
-        let (negative, unsigned) = if let Some(input) = input.strip_prefix('-') {
-            (true, input)
+        let (negative, unsigned) = if let Some(trimmed_input) = trimmed_input.strip_prefix('-') {
+            (true, trimmed_input)
         } else {
-            (false, input)
+            (false, trimmed_input)
         };
 
         // Parse an optional base prefix ("0b" / "0B" / "0" / "0x" / "0X"). "0" is octal unless a
@@ -383,5 +385,40 @@ mod tests {
     fn test_binary() {
         assert_eq!(Ok(0b1011), ParsedNumber::parse_u64("0b1011"));
         assert_eq!(Ok(0b1011), ParsedNumber::parse_u64("0B1011"));
+    }
+
+    #[test]
+    fn test_parsing_with_leading_whitespace() {
+        assert_eq!(Ok(1), ParsedNumber::parse_u64(" 0x1"));
+        assert_eq!(Ok(-2), ParsedNumber::parse_i64(" -0x2"));
+        assert_eq!(Ok(-3), ParsedNumber::parse_i64(" \t-0x3"));
+        assert_eq!(Ok(-4), ParsedNumber::parse_i64(" \n-0x4"));
+        assert_eq!(Ok(-5), ParsedNumber::parse_i64(" \n\t\u{000d}-0x5"));
+
+        // Ensure that trailing whitespace is still a partial match
+        assert_eq!(
+            Err(ParseError::PartialMatch(6, " ")),
+            ParsedNumber::parse_u64("0x6 ")
+        );
+        assert_eq!(
+            Err(ParseError::PartialMatch(7, "\t")),
+            ParsedNumber::parse_u64("0x7\t")
+        );
+        assert_eq!(
+            Err(ParseError::PartialMatch(8, "\n")),
+            ParsedNumber::parse_u64("0x8\n")
+        );
+
+        // Ensure that unicode non-ascii whitespace is a partial match
+        assert_eq!(
+            Err(ParseError::NotNumeric),
+            ParsedNumber::parse_i64("\u{2029}-0x9")
+        );
+
+        // Ensure that whitespace after the number has "started" is not allowed
+        assert_eq!(
+            Err(ParseError::NotNumeric),
+            ParsedNumber::parse_i64("- 0x9")
+        );
     }
 }
