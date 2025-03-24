@@ -260,7 +260,7 @@ fn print_seq(
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
-            write!(stdout, "{separator}")?;
+            stdout.write_all(separator.as_bytes())?;
         }
         format.fmt(&mut stdout, &value)?;
         // TODO Implement augmenting addition.
@@ -268,7 +268,7 @@ fn print_seq(
         is_first_iteration = false;
     }
     if !is_first_iteration {
-        write!(stdout, "{terminator}")?;
+        stdout.write_all(terminator.as_bytes())?;
     }
     stdout.flush()?;
     Ok(())
