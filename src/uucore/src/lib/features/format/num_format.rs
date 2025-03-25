@@ -509,9 +509,9 @@ fn format_float_hexadecimal(
 ) -> String {
     debug_assert!(!bd.is_negative());
 
-    let exp_char = match case {
-        Case::Lowercase => 'p',
-        Case::Uppercase => 'P',
+    let (prefix, exp_char) = match case {
+        Case::Lowercase => ("0x", 'p'),
+        Case::Uppercase => ("0X", 'P'),
     };
 
     if BigDecimal::zero().eq(bd) {
@@ -607,7 +607,7 @@ fn format_float_hexadecimal(
             ""
         };
 
-    format!("0x{first_digit}{dot}{remaining_digits}{exp_char}{exponent:+}")
+    format!("{prefix}{first_digit}{dot}{remaining_digits}{exp_char}{exponent:+}")
 }
 
 fn strip_fractional_zeroes_and_dot(s: &mut String) {
@@ -964,8 +964,8 @@ mod test {
                 ForceDecimal::No,
             )
         };
-        assert_eq!(f("0.00001"), "0xA.7C5AC4P-20");
-        assert_eq!(f("0.125"), "0x8.000000P-6");
+        assert_eq!(f("0.00001"), "0XA.7C5AC4P-20");
+        assert_eq!(f("0.125"), "0X8.000000P-6");
 
         // Test "0e10"/"0e-10". From cppreference.com: "If the value is ​0​, the exponent is also ​0​."
         let f = |digits, scale| {
@@ -1178,7 +1178,7 @@ mod test {
         assert_eq!(f("%e", &(-123.0).into()), "-1.230000e+02");
         assert_eq!(f("%#09.e", &(-100.0).into()), "-001.e+02");
         assert_eq!(f("%# 9.E", &100.0.into()), "   1.E+02");
-        assert_eq!(f("% 12.2A", &(-100.0).into()), "  -0xC.80P+3");
+        assert_eq!(f("% 12.2A", &(-100.0).into()), "  -0XC.80P+3");
     }
 
     #[test]
