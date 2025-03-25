@@ -524,12 +524,15 @@ fn format_float_hexadecimal(
     // We have arbitrary precision in base 10, so we can't always represent
     // the value exactly (e.g. 0.1 is c.ccccc...).
     //
-    // Emulate x86(-64) behavior, where 64 bits are printed in total, that's
-    // 16 hex digits, including 1 before the decimal point (so 15 after).
+    // Note that this is the maximum precision, trailing 0's are trimmed when
+    // printing.
+    //
+    // Emulate x86(-64) behavior, where 64 bits at _most_ are printed in total,
+    // that's 16 hex digits, including 1 before the decimal point (so 15 after).
     //
     // TODO: Make this configurable? e.g. arm64 value would be 28 (f128),
     // arm value 13 (f64).
-    let precision = precision.unwrap_or(15);
+    let max_precision = precision.unwrap_or(15);
 
     let (prefix, exp_char) = match case {
         Case::Lowercase => ("0x", 'p'),
@@ -537,10 +540,12 @@ fn format_float_hexadecimal(
     };
 
     if BigDecimal::zero().eq(bd) {
-        return if force_decimal == ForceDecimal::Yes && precision == 0 {
+        // To print 0, we don't ever need any digits after the decimal point, so default to
+        // that if precision is not specified.
+        return if force_decimal == ForceDecimal::Yes && precision.unwrap_or(0) == 0 {
             format!("0x0.{exp_char}+0")
         } else {
-            format!("0x{:.*}{exp_char}+0", precision, 0.0)
+            format!("0x{:.*}{exp_char}+0", precision.unwrap_or(0), 0.0)
         };
     }
 
@@ -575,7 +580,8 @@ fn format_float_hexadecimal(
         // Then, dividing by 5^-exp10 loses at most -exp10*3 binary digits
         // (since 5^-exp10 < 8^-exp10), so we add that, and another bit for
         // rounding.
-        let margin = ((precision + 1) as i64 * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
+        let margin =
+            ((max_precision + 1) as i64 * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
 
         // frac10 * 10^exp10 = frac10 * 2^margin * 10^exp10 * 2^-margin =
         // (frac10 * 2^margin * 5^exp10) * 2^exp10 * 2^-margin =
@@ -590,7 +596,7 @@ fn format_float_hexadecimal(
     // so the value will always be between 0x8 and 0xf.
     // TODO: Make this configurable? e.g. arm64 only displays 1 digit.
     const BEFORE_BITS: usize = 4;
-    let wanted_bits = (BEFORE_BITS + precision * 4) as u64;
+    let wanted_bits = (BEFORE_BITS + max_precision * 4) as u64;
     let bits = frac2.bits();
 
     exp2 += bits as i64 - wanted_bits as i64;
@@ -620,16 +626,37 @@ fn format_float_hexadecimal(
         digits.make_ascii_uppercase();
     }
     let (first_digit, remaining_digits) = digits.split_at(1);
-    let exponent = exp2 + (4 * precision) as i64;
+    let exponent = exp2 + (4 * max_precision) as i64;
 
-    let dot =
-        if !remaining_digits.is_empty() || (precision == 0 && ForceDecimal::Yes == force_decimal) {
-            "."
-        } else {
-            ""
-        };
+    let mut remaining_digits = remaining_digits.to_string();
+    if precision.is_none() {
+        // Trim trailing zeros
+        strip_fractional_zeroes(&mut remaining_digits);
+    }
+
+    let dot = if !remaining_digits.is_empty()
+        || (precision.unwrap_or(0) == 0 && ForceDecimal::Yes == force_decimal)
+    {
+        "."
+    } else {
+        ""
+    };
 
     format!("{prefix}{first_digit}{dot}{remaining_digits}{exp_char}{exponent:+}")
+}
+
+fn strip_fractional_zeroes(s: &mut String) {
+    let mut trim_to = s.len();
+    for (pos, c) in s.char_indices().rev() {
+        if pos + c.len_utf8() == trim_to {
+            if c == '0' {
+                trim_to = pos;
+            } else {
+                break;
+            }
+        }
+    }
+    s.truncate(trim_to);
 }
 
 fn strip_fractional_zeroes_and_dot(s: &mut String) {
@@ -993,6 +1020,37 @@ mod test {
         };
         assert_eq!(f("0"), "0x0.p+0");
         assert_eq!(f("0.125"), "0x8.p-6");
+        assert_eq!(f("256.0"), "0x8.p+5");
+
+        // Default precision, maximum 13 digits (x86-64 behavior)
+        let f = |x| {
+            format_float_hexadecimal(
+                &BigDecimal::from_str(x).unwrap(),
+                None,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
+        assert_eq!(f("0"), "0x0p+0");
+        assert_eq!(f("0.00001"), "0xa.7c5ac471b478423p-20");
+        assert_eq!(f("0.125"), "0x8p-6");
+        assert_eq!(f("4.25"), "0x8.8p-1");
+        assert_eq!(f("17.203125"), "0x8.9ap+1");
+        assert_eq!(f("256.0"), "0x8p+5");
+        assert_eq!(f("1000.01"), "0xf.a00a3d70a3d70a4p+6");
+        assert_eq!(f("65536.0"), "0x8p+13");
+
+        let f = |x| {
+            format_float_hexadecimal(
+                &BigDecimal::from_str(x).unwrap(),
+                None,
+                Case::Lowercase,
+                ForceDecimal::Yes,
+            )
+        };
+        assert_eq!(f("0"), "0x0.p+0");
+        assert_eq!(f("0.125"), "0x8.p-6");
+        assert_eq!(f("4.25"), "0x8.8p-1");
         assert_eq!(f("256.0"), "0x8.p+5");
 
         let f = |x| {

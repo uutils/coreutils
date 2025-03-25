@@ -390,7 +390,6 @@ fn sub_num_sci_negative() {
         .stdout_only("-1234 is -1.234000e+03");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn sub_num_hex_float_lower() {
     new_ucmd!()
@@ -399,7 +398,6 @@ fn sub_num_hex_float_lower() {
         .stdout_only("0xep-4");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn sub_num_hex_float_upper() {
     new_ucmd!()
