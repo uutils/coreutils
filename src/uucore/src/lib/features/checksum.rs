@@ -1341,8 +1341,7 @@ mod tests {
     }
 
     #[test]
-    fn test_algo_based_regex() {
-        let algo_based_regex = Regex::new(ALGO_BASED_REGEX).unwrap();
+    fn test_algo_based_parser() {
         #[allow(clippy::type_complexity)]
         let test_cases: &[(&[u8], Option<(&[u8], Option<&[u8]>, &[u8], &[u8])>)] = &[
             (b"SHA256 (example.txt) = d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Some((b"SHA256", None, b"example.txt", b"d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"))),
@@ -1353,27 +1352,30 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let captures = algo_based_regex.captures(input);
+            let line_info = LineFormat::parse_algo_based(input);
             match expected {
                 Some((algo, bits, filename, checksum)) => {
-                    assert!(captures.is_some());
-                    let captures = captures.unwrap();
-                    assert_eq!(&captures.name("algo").unwrap().as_bytes(), algo);
-                    assert_eq!(&captures.name("bits").map(|m| m.as_bytes()), bits);
-                    assert_eq!(&captures.name("filename").unwrap().as_bytes(), filename);
-                    assert_eq!(&captures.name("checksum").unwrap().as_bytes(), checksum);
+                    assert!(line_info.is_some());
+                    let line_info = line_info.unwrap();
+                    assert_eq!(&line_info.algo_name.unwrap().as_bytes(), algo);
+                    assert_eq!(
+                        line_info
+                            .algo_bit_len
+                            .map(|m| m.to_string().as_bytes().to_owned()),
+                        bits.map(|b| b.to_owned())
+                    );
+                    assert_eq!(&line_info.filename, filename);
+                    assert_eq!(&line_info.checksum.as_bytes(), checksum);
                 }
                 None => {
-                    assert!(captures.is_none());
+                    assert!(line_info.is_none());
                 }
             }
         }
     }
 
     #[test]
-    fn test_double_space_regex() {
-        let double_space_regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
-
+    fn test_double_space_parser() {
         #[allow(clippy::type_complexity)]
         let test_cases: &[(&[u8], Option<(&[u8], &[u8])>)] = &[
             (
@@ -1400,24 +1402,23 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let captures = double_space_regex.captures(input);
+            let line_info = LineFormat::parse_untagged(input);
             match expected {
                 Some((checksum, filename)) => {
-                    assert!(captures.is_some());
-                    let captures = captures.unwrap();
-                    assert_eq!(&captures.name("checksum").unwrap().as_bytes(), checksum);
-                    assert_eq!(&captures.name("filename").unwrap().as_bytes(), filename);
+                    assert!(line_info.is_some());
+                    let line_info = line_info.unwrap();
+                    assert_eq!(&line_info.filename, filename);
+                    assert_eq!(&line_info.checksum.as_bytes(), checksum);
                 }
                 None => {
-                    assert!(captures.is_none());
+                    assert!(line_info.is_none());
                 }
             }
         }
     }
 
     #[test]
-    fn test_single_space_regex() {
-        let single_space_regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
+    fn test_single_space_parser() {
         #[allow(clippy::type_complexity)]
         let test_cases: &[(&[u8], Option<(&[u8], &[u8])>)] = &[
             (
@@ -1440,16 +1441,16 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let captures = single_space_regex.captures(input);
+            let line_info = LineFormat::parse_single_space(input);
             match expected {
                 Some((checksum, filename)) => {
-                    assert!(captures.is_some());
-                    let captures = captures.unwrap();
-                    assert_eq!(&captures.name("checksum").unwrap().as_bytes(), checksum);
-                    assert_eq!(&captures.name("filename").unwrap().as_bytes(), filename);
+                    assert!(line_info.is_some());
+                    let line_info = line_info.unwrap();
+                    assert_eq!(&line_info.filename, filename);
+                    assert_eq!(&line_info.checksum.as_bytes(), checksum);
                 }
                 None => {
-                    assert!(captures.is_none());
+                    assert!(line_info.is_none());
                 }
             }
         }
@@ -1457,68 +1458,69 @@ mod tests {
 
     #[test]
     fn test_line_info() {
-        let mut cached_regex = None;
+        let mut cached_line_format = None;
 
-        // Test algo-based regex
+        // Test algo-based parser
         let line_algo_based =
             OsString::from("MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e");
-        let line_info = LineInfo::parse(&line_algo_based, &mut cached_regex).unwrap();
+        let line_info = LineInfo::parse(&line_algo_based, &mut cached_line_format).unwrap();
         assert_eq!(line_info.algo_name.as_deref(), Some("MD5"));
         assert!(line_info.algo_bit_len.is_none());
         assert_eq!(line_info.filename, b"example.txt");
         assert_eq!(line_info.checksum, "d41d8cd98f00b204e9800998ecf8427e");
         assert_eq!(line_info.format, LineFormat::AlgoBased);
-        assert!(cached_regex.is_none());
+        assert!(cached_line_format.is_none());
 
-        // Test double-space regex
+        // Test double-space parser
         let line_double_space = OsString::from("d41d8cd98f00b204e9800998ecf8427e  example.txt");
-        let line_info = LineInfo::parse(&line_double_space, &mut cached_regex).unwrap();
+        let line_info = LineInfo::parse(&line_double_space, &mut cached_line_format).unwrap();
         assert!(line_info.algo_name.is_none());
         assert!(line_info.algo_bit_len.is_none());
         assert_eq!(line_info.filename, b"example.txt");
         assert_eq!(line_info.checksum, "d41d8cd98f00b204e9800998ecf8427e");
         assert_eq!(line_info.format, LineFormat::Untagged);
-        assert!(cached_regex.is_some());
+        assert!(cached_line_format.is_some());
 
-        cached_regex = None;
+        cached_line_format = None;
 
-        // Test single-space regex
+        // Test single-space parser
         let line_single_space = OsString::from("d41d8cd98f00b204e9800998ecf8427e example.txt");
-        let line_info = LineInfo::parse(&line_single_space, &mut cached_regex).unwrap();
+        let line_info = LineInfo::parse(&line_single_space, &mut cached_line_format).unwrap();
         assert!(line_info.algo_name.is_none());
         assert!(line_info.algo_bit_len.is_none());
         assert_eq!(line_info.filename, b"example.txt");
         assert_eq!(line_info.checksum, "d41d8cd98f00b204e9800998ecf8427e");
         assert_eq!(line_info.format, LineFormat::SingleSpace);
-        assert!(cached_regex.is_some());
+        assert!(cached_line_format.is_some());
 
-        cached_regex = None;
+        cached_line_format = None;
 
         // Test invalid checksum line
         let line_invalid = OsString::from("invalid checksum line");
-        assert!(LineInfo::parse(&line_invalid, &mut cached_regex).is_none());
-        assert!(cached_regex.is_none());
+        assert!(LineInfo::parse(&line_invalid, &mut cached_line_format).is_none());
+        assert!(cached_line_format.is_none());
 
         // Test leading space before checksum line
         let line_algo_based_leading_space =
             OsString::from("   MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e");
-        let line_info = LineInfo::parse(&line_algo_based_leading_space, &mut cached_regex).unwrap();
+        let line_info =
+            LineInfo::parse(&line_algo_based_leading_space, &mut cached_line_format).unwrap();
         assert_eq!(line_info.format, LineFormat::AlgoBased);
-        assert!(cached_regex.is_none());
+        assert!(cached_line_format.is_none());
 
         // Test trailing space after checksum line (should fail)
         let line_algo_based_leading_space =
             OsString::from("MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e ");
-        let res = LineInfo::parse(&line_algo_based_leading_space, &mut cached_regex);
+        let res = LineInfo::parse(&line_algo_based_leading_space, &mut cached_line_format);
         assert!(res.is_none());
-        assert!(cached_regex.is_none());
+        assert!(cached_line_format.is_none());
     }
 
     #[test]
     fn test_get_expected_digest() {
         let line = OsString::from("SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=");
-        let mut cached_regex = None;
-        let line_info = LineInfo::parse(&line, &mut cached_regex).unwrap();
+        let mut cached_line_format = None;
+        let line_info = LineInfo::parse(&line, &mut cached_line_format).unwrap();
 
         let result = get_expected_digest_as_hex_string(&line_info, None);
 
@@ -1532,8 +1534,8 @@ mod tests {
     fn test_get_expected_checksum_invalid() {
         // The line misses a '=' at the end to be valid base64
         let line = OsString::from("SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU");
-        let mut cached_regex = None;
-        let line_info = LineInfo::parse(&line, &mut cached_regex).unwrap();
+        let mut cached_line_format = None;
+        let line_info = LineInfo::parse(&line, &mut cached_line_format).unwrap();
 
         let result = get_expected_digest_as_hex_string(&line_info, None);
 
