@@ -6,7 +6,7 @@
 #[cfg(target_os = "openbsd")]
 use crate::common::util::TestScenario;
 #[cfg(not(target_os = "openbsd"))]
-use crate::common::util::{expected_result, TestScenario};
+use crate::common::util::{TestScenario, expected_result};
 use pinky::Capitalize;
 #[cfg(not(target_os = "openbsd"))]
 use uucore::entries::{Locate, Passwd};

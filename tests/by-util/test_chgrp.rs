@@ -124,8 +124,7 @@ fn test_preserve_root_symlink() {
     ] {
         let (at, mut ucmd) = at_and_ucmd!();
         at.symlink_file(d, file);
-        let expected_error =
-            "chgrp: it is dangerous to operate recursively on 'test_chgrp_symlink2root' (same as '/')\nchgrp: use --no-preserve-root to override this failsafe\n";
+        let expected_error = "chgrp: it is dangerous to operate recursively on 'test_chgrp_symlink2root' (same as '/')\nchgrp: use --no-preserve-root to override this failsafe\n";
         ucmd.arg("--preserve-root")
             .arg("-HR")
             .arg("bin")

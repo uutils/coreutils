@@ -34,7 +34,7 @@ static OPT_HOST: &str = "host";
 mod wsa {
     use std::io;
 
-    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSAStartup, WSADATA};
+    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSADATA, WSAStartup};
 
     pub(super) struct WsaHandle(());
 

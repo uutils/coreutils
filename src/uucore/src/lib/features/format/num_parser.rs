@@ -122,11 +122,7 @@ impl ParsedNumber {
     fn into_f64(self) -> f64 {
         let n = self.integral as f64
             + (self.fractional as f64) / (self.base as u8 as f64).powf(self.precision as f64);
-        if self.negative {
-            -n
-        } else {
-            n
-        }
+        if self.negative { -n } else { n }
     }
 
     /// Parse a number as f64

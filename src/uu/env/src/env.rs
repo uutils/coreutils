@@ -13,14 +13,14 @@ pub mod string_parser;
 pub mod variable_parser;
 
 use clap::builder::ValueParser;
-use clap::{crate_name, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_name};
 use ini::Ini;
 use native_int_str::{
-    from_native_int_representation_owned, Convert, NCvt, NativeIntStr, NativeIntString, NativeStr,
+    Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
 };
 #[cfg(unix)]
 use nix::sys::signal::{
-    raise, sigaction, signal, SaFlags, SigAction, SigHandler, SigHandler::SigIgn, SigSet, Signal,
+    SaFlags, SigAction, SigHandler, SigHandler::SigIgn, SigSet, Signal, raise, sigaction, signal,
 };
 use std::borrow::Cow;
 use std::env;
@@ -163,7 +163,9 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
             for (key, value) in prop {
-                env::set_var(key, value);
+                unsafe {
+                    env::set_var(key, value);
+                }
             }
         }
     }
@@ -559,7 +561,9 @@ fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
     // remove all env vars if told to ignore presets
     if opts.ignore_env {
         for (ref name, _) in env::vars_os() {
-            env::remove_var(name);
+            unsafe {
+                env::remove_var(name);
+            }
         }
     }
 }
@@ -634,8 +638,9 @@ fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
                 format!("cannot unset {}: Invalid argument", name.quote()),
             ));
         }
-
-        env::remove_var(name);
+        unsafe {
+            env::remove_var(name);
+        }
     }
     Ok(())
 }
@@ -692,7 +697,9 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
             show_warning!("no name specified for value {}", val.quote());
             continue;
         }
-        env::set_var(name, val);
+        unsafe {
+            env::set_var(name, val);
+        }
     }
 }
 
@@ -736,7 +743,7 @@ mod tests {
 
     #[test]
     fn test_split_string_environment_vars_test() {
-        std::env::set_var("FOO", "BAR");
+        unsafe { std::env::set_var("FOO", "BAR") };
         assert_eq!(
             NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
             parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))

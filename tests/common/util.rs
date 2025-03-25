@@ -29,12 +29,12 @@ use std::collections::VecDeque;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, hard_link, remove_file, File, OpenOptions};
+use std::fs::{self, File, OpenOptions, hard_link, remove_file};
 use std::io::{self, BufWriter, Read, Result, Write};
 #[cfg(unix)]
 use std::os::fd::OwnedFd;
 #[cfg(unix)]
-use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file, PermissionsExt};
+use std::os::unix::fs::{PermissionsExt, symlink as symlink_dir, symlink as symlink_file};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 #[cfg(unix)]
@@ -47,7 +47,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::thread::{sleep, JoinHandle};
+use std::thread::{JoinHandle, sleep};
 use std::time::{Duration, Instant};
 use std::{env, hint, mem, thread};
 use tempfile::{Builder, TempDir};
@@ -506,7 +506,9 @@ impl CmdResult {
     /// whose bytes equal those of the passed in slice
     #[track_caller]
     pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
-        assert_eq!(self.stdout, msg.as_ref(),
+        assert_eq!(
+            self.stdout,
+            msg.as_ref(),
             "stdout as bytes wasn't equal to expected bytes. Result as strings:\nstdout  ='{:?}'\nexpected='{:?}'",
             std::str::from_utf8(&self.stdout),
             std::str::from_utf8(msg.as_ref()),
@@ -780,11 +782,7 @@ pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
 }
 
 pub fn get_root_path() -> &'static str {
-    if cfg!(windows) {
-        "C:\\"
-    } else {
-        "/"
-    }
+    if cfg!(windows) { "C:\\" } else { "/" }
 }
 
 /// Compares the extended attributes (xattrs) of two files or directories.
@@ -1874,10 +1872,11 @@ impl UCommand {
 
 impl std::fmt::Display for UCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut comm_string: Vec<String> = vec![self
-            .bin_path
-            .as_ref()
-            .map_or(String::new(), |p| p.display().to_string())];
+        let mut comm_string: Vec<String> = vec![
+            self.bin_path
+                .as_ref()
+                .map_or(String::new(), |p| p.display().to_string()),
+        ];
         comm_string.extend(self.args.iter().map(|s| s.to_string_lossy().to_string()));
         f.write_str(&comm_string.join(" "))
     }
@@ -2062,11 +2061,7 @@ impl<'a> UChildAssertion<'a> {
     // Assert that the child process is alive
     #[track_caller]
     pub fn is_alive(&mut self) -> &mut Self {
-        match self
-            .uchild
-            .raw
-            .try_wait()
-        {
+        match self.uchild.raw.try_wait() {
             Ok(Some(status)) => panic!(
                 "Assertion failed. Expected '{}' to be running but exited with status={}.\nstdout: {}\nstderr: {}",
                 uucore::util_name(),
@@ -2084,17 +2079,14 @@ impl<'a> UChildAssertion<'a> {
     // Assert that the child process has exited
     #[track_caller]
     pub fn is_not_alive(&mut self) -> &mut Self {
-        match self
-            .uchild
-            .raw
-            .try_wait()
-        {
+        match self.uchild.raw.try_wait() {
             Ok(None) => panic!(
                 "Assertion failed. Expected '{}' to be not running but was alive.\nstdout: {}\nstderr: {}",
                 uucore::util_name(),
                 self.uchild.stdout_all(),
-                self.uchild.stderr_all()),
-            Ok(_) =>  {},
+                self.uchild.stderr_all()
+            ),
+            Ok(_) => {}
             Err(error) => panic!("Assertion failed with error '{error:?}'"),
         }
 
@@ -4051,11 +4043,7 @@ mod tests {
         // make sure we are not testing against the same umask
         let c_umask = if p_umask == 0o002 { 0o007 } else { 0o002 };
         let expected = if cfg!(target_os = "android") {
-            if p_umask == 0o002 {
-                "007\n"
-            } else {
-                "002\n"
-            }
+            if p_umask == 0o002 { "007\n" } else { "002\n" }
         } else if p_umask == 0o002 {
             "0007\n"
         } else {

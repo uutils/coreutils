@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use crate::common::util::{AtPath, TestScenario, UCommand};
-use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
+use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
 static TEST_FILE: &str = "file";
@@ -238,8 +238,7 @@ fn test_chmod_ugoa() {
 fn test_chmod_umask_expected() {
     let current_umask = uucore::mode::get_umask();
     assert_eq!(
-        current_umask,
-        0o022,
+        current_umask, 0o022,
         "Unexpected umask value: expected 022 (octal), but got {:03o}. Please adjust the test environment.",
         current_umask
     );

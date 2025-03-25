@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore libc's
+// spell-checker:ignore libc's setpriority
 use crate::common::util::TestScenario;
 
 #[test]
@@ -24,9 +24,10 @@ fn test_negative_adjustment() {
     // correctly.
 
     let res = new_ucmd!().args(&["-n", "-1", "true"]).succeeds();
-    assert!(res
-        .stderr_str()
-        .starts_with("nice: warning: setpriority: Permission denied")); // spell-checker:disable-line
+    assert!(
+        res.stderr_str()
+            .starts_with("nice: warning: setpriority: Permission denied")
+    ); // spell-checker:disable-line
 }
 
 #[test]

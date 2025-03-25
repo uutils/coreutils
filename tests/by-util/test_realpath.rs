@@ -3,11 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore nusr
-use crate::common::util::{get_root_path, TestScenario};
+use crate::common::util::{TestScenario, get_root_path};
 
 #[cfg(windows)]
 use regex::Regex;
-use std::path::{Path, MAIN_SEPARATOR};
+use std::path::{MAIN_SEPARATOR, Path};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 

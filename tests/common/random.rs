@@ -5,7 +5,7 @@
 #![allow(clippy::naive_bytecount)]
 
 use rand::distr::{Distribution, Uniform};
-use rand::{rng, Rng};
+use rand::{Rng, rng};
 
 /// Samples alphanumeric characters `[A-Za-z0-9]` including newline `\n`
 ///

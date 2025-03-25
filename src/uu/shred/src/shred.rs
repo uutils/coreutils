@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
 use libc::S_IWUSR;
-use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Seek, Write};
 #[cfg(unix)]
@@ -229,7 +229,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(USimpleError::new(
                     1,
                     format!("invalid number of passes: {}", s.quote()),
-                ))
+                ));
             }
         },
         None => unreachable!(),
@@ -456,7 +456,7 @@ fn wipe_file(
             pass_sequence.shuffle(&mut rng); // randomize the order of application
 
             let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
-                                              // Evenly space random passes; ensures one at the beginning and end
+            // Evenly space random passes; ensures one at the beginning and end
             for i in 0..n_random {
                 pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
             }
@@ -493,8 +493,10 @@ fn wipe_file(
         }
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
-        show_if_err!(do_pass(&mut file, &pass_type, exact, size)
-            .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
+        show_if_err!(
+            do_pass(&mut file, &pass_type, exact, size)
+                .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))
+        );
     }
 
     if remove_method != RemoveMethod::None {

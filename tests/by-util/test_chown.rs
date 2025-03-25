@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
 
-use crate::common::util::{is_ci, run_ucmd_as_root, CmdResult, TestScenario};
+use crate::common::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::process::geteuid;
 

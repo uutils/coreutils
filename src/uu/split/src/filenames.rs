@@ -200,7 +200,7 @@ impl Suffix {
         }
 
         // Auto pre-calculate new suffix length (auto-width) if necessary
-        if let Strategy::Number(ref number_type) = strategy {
+        if let Strategy::Number(number_type) = strategy {
             let chunks = number_type.num_chunks();
             let required_length = ((start as u64 + chunks) as f64)
                 .log(stype.radix() as f64)

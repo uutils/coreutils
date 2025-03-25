@@ -6,7 +6,7 @@
 // spell-checker:ignore lsbf msbf
 
 use clap::{Arg, ArgAction, Command};
-use uu_base32::base_common::{self, Config, BASE_CMD_PARSE_ERROR};
+use uu_base32::base_common::{self, BASE_CMD_PARSE_ERROR, Config};
 use uucore::error::UClapError;
 use uucore::{
     encoding::Format,

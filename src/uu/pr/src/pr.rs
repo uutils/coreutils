@@ -11,8 +11,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
 use regex::Regex;
-use std::fs::{metadata, File};
-use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Write};
+use std::fs::{File, metadata};
+use std::io::{BufRead, BufReader, Lines, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 

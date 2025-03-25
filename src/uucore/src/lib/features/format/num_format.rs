@@ -5,16 +5,16 @@
 // spell-checker:ignore bigdecimal prec
 //! Utilities for formatting numbers in various formats
 
-use bigdecimal::num_bigint::ToBigInt;
 use bigdecimal::BigDecimal;
+use bigdecimal::num_bigint::ToBigInt;
 use num_traits::Signed;
 use num_traits::Zero;
 use std::cmp::min;
 use std::io::Write;
 
 use super::{
-    spec::{CanAsterisk, Spec},
     ExtendedBigDecimal, FormatError,
+    spec::{CanAsterisk, Spec},
 };
 
 pub trait Formatter<T> {
@@ -656,8 +656,8 @@ mod test {
     use std::str::FromStr;
 
     use crate::format::{
-        num_format::{Case, ForceDecimal},
         ExtendedBigDecimal,
+        num_format::{Case, ForceDecimal},
     };
 
     #[test]

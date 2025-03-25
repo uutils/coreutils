@@ -5,9 +5,9 @@
 
 // cSpell:ignore POLLERR POLLRDBAND pfds revents
 
-use clap::{builder::PossibleValue, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, builder::PossibleValue};
 use std::fs::OpenOptions;
-use std::io::{copy, stdin, stdout, Error, ErrorKind, Read, Result, Write};
+use std::io::{Error, ErrorKind, Read, Result, Write, copy, stdin, stdout};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -391,7 +391,7 @@ impl Read for NamedReader {
 pub fn ensure_stdout_not_broken() -> Result<bool> {
     use nix::{
         poll::{PollFd, PollFlags, PollTimeout},
-        sys::stat::{fstat, SFlag},
+        sys::stat::{SFlag, fstat},
     };
     use std::os::fd::{AsFd, AsRawFd};
 

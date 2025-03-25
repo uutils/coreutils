@@ -5,12 +5,12 @@
 //! Determine the strategy for breaking up the input (file or stdin) into chunks
 //! based on the command line options
 
-use crate::{OPT_BYTES, OPT_LINES, OPT_LINE_BYTES, OPT_NUMBER};
-use clap::{parser::ValueSource, ArgMatches};
+use crate::{OPT_BYTES, OPT_LINE_BYTES, OPT_LINES, OPT_NUMBER};
+use clap::{ArgMatches, parser::ValueSource};
 use std::fmt;
 use uucore::{
     display::Quotable,
-    parse_size::{parse_size_u64, parse_size_u64_max, ParseSizeError},
+    parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
 };
 
 /// Sub-strategy of the [`Strategy::Number`]

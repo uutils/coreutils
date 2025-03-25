@@ -9,7 +9,7 @@ use clap::Command;
 use std::ffi::CStr;
 use uucore::{error::UResult, format_usage, help_about, help_usage, show_error};
 
-extern "C" {
+unsafe extern "C" {
     // POSIX requires using getlogin (or equivalent code)
     pub fn getlogin() -> *const libc::c_char;
 }

@@ -23,12 +23,14 @@ fn test_mknod_help() {
 #[test]
 #[cfg(not(windows))]
 fn test_mknod_version() {
-    assert!(new_ucmd!()
-        .arg("--version")
-        .succeeds()
-        .no_stderr()
-        .stdout_str()
-        .starts_with("mknod"));
+    assert!(
+        new_ucmd!()
+            .arg("--version")
+            .succeeds()
+            .no_stderr()
+            .stdout_str()
+            .starts_with("mknod")
+    );
 }
 
 #[test]

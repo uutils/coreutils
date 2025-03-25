@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (flags) runlevel mesg
 
-use crate::common::util::{expected_result, TestScenario};
+use crate::common::util::{TestScenario, expected_result};
 
 #[test]
 fn test_invalid_arg() {

@@ -12,13 +12,13 @@ mod strategy;
 
 use crate::filenames::{FilenameIterator, Suffix, SuffixError};
 use crate::strategy::{NumberType, Strategy, StrategyError};
-use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
+use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, parser::ValueSource};
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
-use std::fs::{metadata, File};
+use std::fs::{File, metadata};
 use std::io;
-use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
@@ -1041,7 +1041,9 @@ impl ManageOutFiles for OutFiles {
             }
 
             // If this fails - give up and propagate the error
-            uucore::show_error!("at file descriptor limit, but no file descriptor left to close. Closed {count} writers before.");
+            uucore::show_error!(
+                "at file descriptor limit, but no file descriptor left to close. Closed {count} writers before."
+            );
             return Err(maybe_writer.err().unwrap().into());
         }
     }

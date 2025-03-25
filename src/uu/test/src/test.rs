@@ -10,7 +10,7 @@ mod parser;
 
 use clap::Command;
 use error::{ParseError, ParseResult};
-use parser::{parse, Operator, Symbol, UnaryOperator};
+use parser::{Operator, Symbol, UnaryOperator, parse};
 use std::ffi::{OsStr, OsString};
 use std::fs;
 #[cfg(unix)]
@@ -69,11 +69,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
     let result = parse(args).map(|mut stack| eval(&mut stack))??;
 
-    if result {
-        Ok(())
-    } else {
-        Err(1.into())
-    }
+    if result { Ok(()) } else { Err(1.into()) }
 }
 
 /// Evaluate a stack of Symbols, returning the result of the evaluation or

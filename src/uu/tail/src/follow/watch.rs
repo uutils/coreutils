@@ -12,9 +12,9 @@ use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, channel, Receiver};
+use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, set_exit_code};
 use uucore::show_error;
 
 pub struct WatcherRx {
@@ -566,7 +566,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 return Err(USimpleError::new(
                     1,
                     format!("{} resources exhausted", text::BACKEND),
-                ))
+                ));
             }
             Ok(Err(e)) => return Err(USimpleError::new(1, format!("NotifyError: {e}"))),
             Err(mpsc::RecvTimeoutError::Timeout) => {

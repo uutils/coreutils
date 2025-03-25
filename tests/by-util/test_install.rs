@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) helloworld nodir objdump n'source
 
-use crate::common::util::{is_ci, run_ucmd_as_root, TestScenario};
+use crate::common::util::{TestScenario, is_ci, run_ucmd_as_root};
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;

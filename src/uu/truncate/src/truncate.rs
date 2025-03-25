@@ -5,14 +5,14 @@
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
 use clap::{Arg, ArgAction, Command};
-use std::fs::{metadata, OpenOptions};
+use std::fs::{OpenOptions, metadata};
 use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::parse_size::{parse_size_u64, ParseSizeError};
+use uucore::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -229,7 +229,7 @@ fn truncate_reference_and_size(
             return Err(USimpleError::new(
                 1,
                 String::from("you must specify a relative '--size' with '--reference'"),
-            ))
+            ));
         }
         Ok(m) => m,
     };
@@ -408,8 +408,8 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_mode_and_size;
     use crate::TruncateMode;
+    use crate::parse_mode_and_size;
 
     #[test]
     fn test_parse_mode_and_size() {

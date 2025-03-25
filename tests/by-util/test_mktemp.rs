@@ -8,9 +8,9 @@ use crate::common::util::TestScenario;
 
 use uucore::display::Quotable;
 
-use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::path::MAIN_SEPARATOR;
+use std::path::PathBuf;
 use tempfile::tempdir;
 
 #[cfg(unix)]
