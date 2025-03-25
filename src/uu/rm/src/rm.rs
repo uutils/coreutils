@@ -556,28 +556,33 @@ fn validate_single_filesystem(path: &Path) -> Result<(), String> {
 /// Check if a path is on the same file system when `--one-file-system` or `--preserve-root=all` options are enabled.
 /// Return `true` if the path can be processed, `false` if it should be skipped.
 fn check_one_fs(path: &Path, options: &Options) -> bool {
-    // If neigher `--one-file-system` nor `--preserve-root=all` is active,
+    // If neither `--one-file-system` nor `--preserve-root=all` is active,
     // always proceed
     if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
         return true;
     }
 
-    match validate_single_filesystem(path) {
-        Ok(()) => true,
-        Err(additional_reason) => {
-            if !additional_reason.is_empty() {
-                show_error!("{}", additional_reason);
-            }
-            show_error!(
-                "skipping {}, since it's on a different device",
-                path.quote()
-            );
-            if options.preserve_root == PreserveRoot::YesAll {
-                show_error!("and --preserve-root=all is in effect");
-            }
-            false
+    let result = validate_single_filesystem(path);
+    if result.is_ok() {
+        return true;
+    }
+
+    if let Err(additional_reason) = result {
+        if !additional_reason.is_empty() {
+            show_error!("{}", additional_reason);
         }
     }
+
+    show_error!(
+        "skipping {}, since it's on a different device",
+        path.quote()
+    );
+
+    if options.preserve_root == PreserveRoot::YesAll {
+        show_error!("and --preserve-root=all is in effect");
+    }
+
+    false
 }
 
 fn handle_dir(path: &Path, options: &Options) -> bool {
