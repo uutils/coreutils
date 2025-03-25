@@ -513,7 +513,7 @@ uucore = { workspace = true, features = [
   "utmpx",
 ] }
 walkdir = { workspace = true }
-hex-literal = "0.4.1"
+hex-literal = "1.0.0"
 rstest = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
