@@ -517,7 +517,7 @@ jobs:
           - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix"         , use-cross: no, workspace-tests: true }
+          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos } # M1 CPU
