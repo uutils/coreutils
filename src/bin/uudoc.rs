@@ -114,7 +114,7 @@ fn main() -> io::Result<()> {
             "| util             | Linux | macOS | Windows | FreeBSD | Android |\n\
              | ---------------- | ----- | ----- | ------- | ------- | ------- |"
         )?;
-        for (&name, _) in &utils {
+        for &(&name, _) in &utils {
             if name == "[" {
                 continue;
             }
