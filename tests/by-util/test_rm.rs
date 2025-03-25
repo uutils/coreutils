@@ -1021,5 +1021,68 @@ fn test_rm_one_file_system() {
     // Cleanup
     let _ = scene.cmd("umount").arg(bind_mount_point).run();
     let _ = scene.cmd("umount").arg(mount_point).run();
-    let _ = fs::remove_file(img_path);
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_rm_preserve_root() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        println!("Skipping test_rm_one_file_system: must be run as root");
+        return;
+    }
+
+    // Define paths for temporary files and directories
+    let img_path = "/tmp/fs.img";
+    let mount_point = "/tmp/fs";
+    let src_dir = "a/b";
+    let bind_mount_point = "a";
+
+    // Create filesystem image
+    scene
+        .cmd("dd")
+        .args(&[
+            "if=/dev/zero",
+            &format!("of={}", img_path),
+            "bs=1M",
+            "count=50",
+        ])
+        .succeeds();
+
+    // Create ext4 filesystem
+    scene.cmd("/sbin/mkfs.ext4").arg(img_path).succeeds();
+
+    // Prepare directory structure
+    at.mkdir_all(src_dir);
+    at.mkdir_all(mount_point);
+
+    // Mount as loop device
+    scene
+        .cmd("mount")
+        .args(&["-o", "loop", img_path, mount_point])
+        .succeeds();
+
+    // Create test directory
+    at.mkdir_all(&format!("{}/x", mount_point));
+
+    // Create bind mount
+    scene
+        .cmd("mount")
+        .args(&["--bind", mount_point, bind_mount_point])
+        .succeeds();
+
+    // Run the test
+    scene
+        .ucmd()
+        .args(&["--preserve-root=all", "-rf", bind_mount_point])
+        .fails()
+        .stderr_contains(format!("rm: skipping '{}'", bind_mount_point))
+        .stderr_contains(format!("rm: and --preserve-root=all is in effect"));
+
+    // Cleanup
+    let _ = scene.cmd("umount").arg(bind_mount_point).run();
+    let _ = scene.cmd("umount").arg(mount_point).run();
 }
