@@ -859,3 +859,162 @@ fn write_errors_are_reported() {
         .no_stdout()
         .stderr_is("shuf: write failed: No space left on device\n");
 }
+
+// On 32-bit platforms, if we cast carelessly, this will give no output.
+#[test]
+fn test_head_count_does_not_overflow_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.append("input.txt", "hello\n");
+
+    ucmd.arg(format!("-n{}", u64::from(u32::MAX) + 1))
+        .arg("input.txt")
+        .succeeds()
+        .stdout_is("hello\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_head_count_does_not_overflow_args() {
+    new_ucmd!()
+        .arg(format!("-n{}", u64::from(u32::MAX) + 1))
+        .arg("-e")
+        .arg("goodbye")
+        .succeeds()
+        .stdout_is("goodbye\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_head_count_does_not_overflow_range() {
+    new_ucmd!()
+        .arg(format!("-n{}", u64::from(u32::MAX) + 1))
+        .arg("-i1-1")
+        .succeeds()
+        .stdout_is("1\n")
+        .no_stderr();
+}
+
+// Test reproducibility and compatibility of --random-source.
+// These hard-coded results match those of GNU shuf. They should not be changed.
+
+#[test]
+fn test_gnu_compat_range_repeat() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xfb\x83\x8f\x21\x9b\x3c\x2d\xc5\x73\xa5\x58\x6c\x54\x2f\x59\xf8",
+    );
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("-r")
+        .arg("-i1-99")
+        .fails_with_code(1)
+        .stderr_is("shuf: end of random source\n")
+        .stdout_is("38\n30\n10\n26\n23\n61\n46\n99\n75\n43\n10\n89\n10\n44\n24\n59\n22\n51\n");
+}
+
+#[test]
+fn test_gnu_compat_args_no_repeat() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("-e")
+        .args(&["1", "2", "3", "4", "5", "6", "7"][..])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("7\n1\n2\n5\n3\n4\n6\n");
+}
+
+#[test]
+fn test_gnu_compat_from_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    at.append("input.txt", "1\n2\n3\n4\n5\n6\n7\n");
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .set_stdin(at.open("input.txt"))
+        .succeeds()
+        .no_stderr()
+        .stdout_is("7\n1\n2\n5\n3\n4\n6\n");
+}
+
+#[test]
+fn test_gnu_compat_from_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    at.append("input.txt", "1\n2\n3\n4\n5\n6\n7\n");
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("input.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("7\n1\n2\n5\n3\n4\n6\n");
+}
+
+#[test]
+fn test_gnu_compat_limited_from_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    at.append("input.txt", "1\n2\n3\n4\n5\n6\n7\n");
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("-n5")
+        .arg("input.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("7\n1\n2\n5\n3\n");
+}
+
+// This specific case causes GNU to give different results than other modes.
+#[ignore = "disabled until fixed"]
+#[test]
+fn test_gnu_compat_limited_from_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    at.append("input.txt", "1\n2\n3\n4\n5\n6\n7\n");
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("-n7")
+        .set_stdin(at.open("input.txt"))
+        .succeeds()
+        .no_stderr()
+        .stdout_is("6\n5\n1\n3\n2\n7\n4\n");
+}
+
+// We haven't reverse-engineered GNU's nonrepeating integer sampling yet.
+#[ignore = "disabled until fixed"]
+#[test]
+fn test_gnu_compat_range_no_repeat() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.append_bytes(
+        "random_bytes.bin",
+        b"\xd1\xfd\xb9\x9a\xf5\x81\x71\x42\xf9\x7a\x59\x79\xd4\x9c\x8c\x7d",
+    );
+
+    ucmd.arg("--random-source=random_bytes.bin")
+        .arg("-i1-10")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("10\n2\n8\n7\n3\n9\n6\n5\n1\n4\n");
+}

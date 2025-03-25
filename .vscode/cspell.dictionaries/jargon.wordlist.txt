@@ -93,6 +93,7 @@ mergeable
 microbenchmark
 microbenchmarks
 microbenchmarking
+monomorphized
 multibyte
 multicall
 nmerge
@@ -107,6 +108,7 @@ nolinks
 nonblock
 nonportable
 nonprinting
+nonrepeating
 nonseekable
 notrunc
 nowrite
