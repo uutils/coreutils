@@ -918,16 +918,31 @@ fn test_bracket_syntax_version() {
 #[allow(non_snake_case)]
 #[cfg(unix)]
 fn test_file_N() {
+    use std::{fs::FileTimes, time::Duration};
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     let f = at.make_file("file");
-    f.set_modified(std::time::UNIX_EPOCH).unwrap();
 
+    // Set the times so that the file is accessed _after_ being modified
+    // => test -N return false.
+    let times = FileTimes::new()
+        .set_accessed(std::time::UNIX_EPOCH + Duration::from_secs(123))
+        .set_modified(std::time::UNIX_EPOCH);
+    f.set_times(times).unwrap();
+    // TODO: stat call for debugging #7570, remove?
+    println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
     scene.ucmd().args(&["-N", "file"]).fails();
-    // The file will have different create/modified data
-    // so, test -N will return 0
-    at.touch("file");
+
+    // Set the times so that the file is modified _after_ being accessed
+    // => test -N return true.
+    let times = FileTimes::new()
+        .set_accessed(std::time::UNIX_EPOCH)
+        .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(123));
+    f.set_times(times).unwrap();
+    // TODO: stat call for debugging #7570, remove?
+    println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
     scene.ucmd().args(&["-N", "file"]).succeeds();
 }
 
