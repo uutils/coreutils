@@ -6,16 +6,11 @@
 // spell-checker:ignore (ToDO) gethostid
 
 use clap::Command;
-use libc::c_long;
+use libc::{c_long, gethostid};
 use uucore::{error::UResult, format_usage, help_about, help_usage};
 
 const USAGE: &str = help_usage!("hostid.md");
 const ABOUT: &str = help_about!("hostid.md");
-
-// currently rust libc interface doesn't include gethostid
-unsafe extern "C" {
-    pub fn gethostid() -> c_long;
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
