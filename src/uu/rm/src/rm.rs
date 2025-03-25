@@ -17,6 +17,7 @@ use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::fsext::{read_fs_list, MountInfo};
 use uucore::{
     format_usage, help_about, help_section, help_usage, os_str_as_bytes, prompt_yes, show_error,
 };
@@ -482,8 +483,86 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
     error
 }
 
+/// Return a reference to the best matching `MountInfo` whose `mount_dir`
+/// is a prefix of the canonicalized `path`.
+fn mount_for_path<'a>(path: &Path, mounts: &'a [MountInfo]) -> Option<&'a MountInfo> {
+    let canonical = path.canonicalize().ok()?;
+    let mut best: Option<(&MountInfo, usize)> = None;
+
+    // Each `MountInfo` has a `mount_dir` that we compare.
+    for mi in mounts {
+        if mi.mount_dir.is_empty() {
+            continue;
+        }
+        let mount_dir = PathBuf::from(&mi.mount_dir);
+        if canonical.starts_with(&mount_dir) {
+            let len = mount_dir.as_os_str().len();
+            // Pick the mount with the longest matching prefix.
+            if best.is_none() || len > best.as_ref().unwrap().1 {
+                best = Some((mi, len));
+            }
+        }
+    }
+    best.map(|(mi, _len)| mi)
+}
+
+/// Validates that a path is on the same file system as its parent.
+/// Return `OK(())` if the path is on the same file system,
+/// or an additional error describing why it should be skipped.
+fn validate_single_filesystem(path: &Path) -> Result<(), String> {
+    // Read mount information
+    let fs_list = read_fs_list().map_err(|err| format!("cannot read mount info: {err}"))?;
+
+    // Canonicalize the path
+    let child_canon = path
+        .canonicalize()
+        .map_err(|err| format!("cannot canonicalize {}: {err}", path.quote()))?;
+
+    // Get parent path, handling root case
+    let parent_canon = child_canon.parent().ok_or("")?.to_path_buf();
+
+    // Find mount points for child and parent
+    let child_mount = mount_for_path(&child_canon, &fs_list).ok_or("")?;
+
+    let parent_mount = mount_for_path(&parent_canon, &fs_list).ok_or("")?;
+
+    // Check if child and parent are on the same device
+    if child_mount.dev_id != parent_mount.dev_id {
+        return Err(String::new());
+    }
+
+    Ok(())
+}
+
+/// Check if a path is on the same file system when `--one-file-system` option is enabled.
+/// Return `true` if the path can be processed, `false` if it should be skipped.
+fn check_one_fs(path: &Path, options: &Options) -> bool {
+    // If `--one-file-system` is not active, always proceed
+    if !options.one_fs {
+        return true;
+    }
+
+    match validate_single_filesystem(path) {
+        Ok(()) => true,
+        Err(additional_reason) => {
+            if !additional_reason.is_empty() {
+                show_error!("{}", additional_reason);
+            }
+            show_error!(
+                "skipping {}, since it's on a different device",
+                path.quote()
+            );
+            false
+        }
+    }
+}
+
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
+
+    if !check_one_fs(path, options) {
+        return true;
+    }
 
     let path = clean_trailing_slashes(path);
     if path_is_current_or_parent_directory(path) {
