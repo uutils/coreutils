@@ -1,32 +1,30 @@
 // spell-checker:ignore nonrepeating
 
+// TODO: this iterator is not compatible with GNU when --random-source is used
+
 use std::{collections::HashSet, ops::RangeInclusive};
 
-use rand::{Rng, seq::SliceRandom};
+use uucore::error::UResult;
 
 use crate::WrappedRng;
 
 enum NumberSet {
-    AlreadyListed(HashSet<usize>),
-    Remaining(Vec<usize>),
+    AlreadyListed(HashSet<u64>),
+    Remaining(Vec<u64>),
 }
 
 pub(crate) struct NonrepeatingIterator<'a> {
-    range: RangeInclusive<usize>,
+    range: RangeInclusive<u64>,
     rng: &'a mut WrappedRng,
-    remaining_count: usize,
+    remaining_count: u64,
     buf: NumberSet,
 }
 
 impl<'a> NonrepeatingIterator<'a> {
-    pub(crate) fn new(
-        range: RangeInclusive<usize>,
-        rng: &'a mut WrappedRng,
-        amount: usize,
-    ) -> Self {
+    pub(crate) fn new(range: RangeInclusive<u64>, rng: &'a mut WrappedRng, amount: u64) -> Self {
         let capped_amount = if range.start() > range.end() {
             0
-        } else if range == (0..=usize::MAX) {
+        } else if range == (0..=u64::MAX) {
             amount
         } else {
             amount.min(range.end() - range.start() + 1)
@@ -39,12 +37,12 @@ impl<'a> NonrepeatingIterator<'a> {
         }
     }
 
-    fn produce(&mut self) -> usize {
+    fn produce(&mut self) -> UResult<u64> {
         debug_assert!(self.range.start() <= self.range.end());
         match &mut self.buf {
             NumberSet::AlreadyListed(already_listed) => {
                 let chosen = loop {
-                    let guess = self.rng.random_range(self.range.clone());
+                    let guess = self.rng.choose_from_range(self.range.clone())?;
                     let newly_inserted = already_listed.insert(guess);
                     if newly_inserted {
                         break guess;
@@ -54,32 +52,32 @@ impl<'a> NonrepeatingIterator<'a> {
                 // the number of attempts to find a number that hasn't been chosen yet increases.
                 // Therefore, we need to switch at some point from "set of already returned values" to "list of remaining values".
                 let range_size = (self.range.end() - self.range.start()).saturating_add(1);
-                if number_set_should_list_remaining(already_listed.len(), range_size) {
+                if number_set_should_list_remaining(already_listed.len() as u64, range_size) {
                     let mut remaining = self
                         .range
                         .clone()
                         .filter(|n| !already_listed.contains(n))
                         .collect::<Vec<_>>();
-                    assert!(remaining.len() >= self.remaining_count);
-                    remaining.partial_shuffle(&mut self.rng, self.remaining_count);
-                    remaining.truncate(self.remaining_count);
+                    assert!(remaining.len() as u64 >= self.remaining_count);
+                    remaining.truncate(self.remaining_count as usize);
+                    self.rng.shuffle(&mut remaining, usize::MAX)?;
                     self.buf = NumberSet::Remaining(remaining);
                 }
-                chosen
+                Ok(chosen)
             }
             NumberSet::Remaining(remaining_numbers) => {
                 debug_assert!(!remaining_numbers.is_empty());
                 // We only enter produce() when there is at least one actual element remaining, so popping must always return an element.
-                remaining_numbers.pop().unwrap()
+                Ok(remaining_numbers.pop().unwrap())
             }
         }
     }
 }
 
 impl Iterator for NonrepeatingIterator<'_> {
-    type Item = usize;
+    type Item = UResult<u64>;
 
-    fn next(&mut self) -> Option<usize> {
+    fn next(&mut self) -> Option<UResult<u64>> {
         if self.range.is_empty() || self.remaining_count == 0 {
             return None;
         }
@@ -89,7 +87,7 @@ impl Iterator for NonrepeatingIterator<'_> {
 }
 
 // This could be a method, but it is much easier to test as a stand-alone function.
-fn number_set_should_list_remaining(listed_count: usize, range_size: usize) -> bool {
+fn number_set_should_list_remaining(listed_count: u64, range_size: u64) -> bool {
     // Arbitrarily determine the switchover point to be around 25%. This is because:
     // - HashSet has a large space overhead for the hash table load factor.
     // - This means that somewhere between 25-40%, the memory required for a "positive" HashSet and a "negative" Vec should be the same.
@@ -107,17 +105,17 @@ mod test_number_set_decision {
 
     #[test]
     fn test_stay_positive_large_remaining_first() {
-        assert_eq!(false, number_set_should_list_remaining(0, usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(0, u64::MAX));
     }
 
     #[test]
     fn test_stay_positive_large_remaining_second() {
-        assert_eq!(false, number_set_should_list_remaining(1, usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(1, u64::MAX));
     }
 
     #[test]
     fn test_stay_positive_large_remaining_tenth() {
-        assert_eq!(false, number_set_should_list_remaining(9, usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(9, u64::MAX));
     }
 
     #[test]
@@ -161,22 +159,19 @@ mod test_number_set_decision {
     // Ensure that we are overflow-free:
     #[test]
     fn test_no_crash_exceed_max_size1() {
-        assert_eq!(false, number_set_should_list_remaining(12345, usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(12345, u64::MAX));
     }
 
     #[test]
     fn test_no_crash_exceed_max_size2() {
         assert_eq!(
             true,
-            number_set_should_list_remaining(usize::MAX - 1, usize::MAX)
+            number_set_should_list_remaining(u64::MAX - 1, u64::MAX)
         );
     }
 
     #[test]
     fn test_no_crash_exceed_max_size3() {
-        assert_eq!(
-            true,
-            number_set_should_list_remaining(usize::MAX, usize::MAX)
-        );
+        assert_eq!(true, number_set_should_list_remaining(u64::MAX, u64::MAX));
     }
 }

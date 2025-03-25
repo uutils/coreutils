@@ -7,12 +7,11 @@
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use rand::prelude::SliceRandom;
-use rand::seq::IndexedRandom;
-use rand::{Rng, RngCore};
+use rand::Rng;
+use rand::seq::{IndexedRandom, SliceRandom};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufWriter, Error, Read, Write, stdin, stdout};
+use std::io::{BufReader, BufWriter, Error, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -21,21 +20,21 @@ use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
+mod compat_random_source;
 mod nonrepeating_iterator;
-mod rand_read_adapter;
 
 use nonrepeating_iterator::NonrepeatingIterator;
 
 enum Mode {
     Default(PathBuf),
     Echo(Vec<OsString>),
-    InputRange(RangeInclusive<usize>),
+    InputRange(RangeInclusive<u64>),
 }
 
 const BUF_SIZE: usize = 64 * 1024;
 
 struct Options {
-    head_count: usize,
+    head_count: u64,
     output: Option<PathBuf>,
     random_source: Option<PathBuf>,
     repeat: bool,
@@ -87,11 +86,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Busybox takes the final value which is more typical: later
         // options override earlier options.
         head_count: matches
-            .get_many::<usize>(options::HEAD_COUNT)
+            .get_many::<u64>(options::HEAD_COUNT)
             .unwrap_or_default()
             .copied()
             .min()
-            .unwrap_or(usize::MAX),
+            .unwrap_or(u64::MAX),
         output: matches.get_one(options::OUTPUT).cloned(),
         random_source: matches.get_one(options::RANDOM_SOURCE).cloned(),
         repeat: matches.get_flag(options::REPEAT),
@@ -125,7 +124,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let file = File::open(r).map_err_context(
                 || translate!("shuf-error-failed-to-open-random-source", "file" => r.quote()),
             )?;
-            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
+            let file = BufReader::new(file);
+            WrappedRng::RngFile(compat_random_source::RandomSourceAdapter::new(file))
         }
         None => WrappedRng::RngDefault(rand::rng()),
     };
@@ -180,7 +180,7 @@ pub fn uu_app() -> Command {
                 .value_name("COUNT")
                 .action(ArgAction::Append)
                 .help(translate!("shuf-help-head-count"))
-                .value_parser(usize::from_str),
+                .value_parser(u64::from_str),
         )
         .arg(
             Arg::new(options::OUTPUT)
@@ -250,12 +250,15 @@ fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
 trait Shufable {
     type Item: Writable;
     fn is_empty(&self) -> bool;
-    fn choose(&self, rng: &mut WrappedRng) -> Self::Item;
+    fn choose(&self, rng: &mut WrappedRng) -> UResult<Self::Item>;
+    // In some modes we shuffle ahead of time and in some as we generate
+    // so we unfortunately need to double-wrap UResult.
+    // But it's monomorphized so the optimizer will hopefully Take Care Of It™.
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
-        amount: usize,
-    ) -> impl Iterator<Item = Self::Item>;
+        amount: u64,
+    ) -> UResult<impl Iterator<Item = UResult<Self::Item>>>;
 }
 
 impl<'a> Shufable for Vec<&'a [u8]> {
@@ -265,20 +268,22 @@ impl<'a> Shufable for Vec<&'a [u8]> {
         (**self).is_empty()
     }
 
-    fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
-        // Note: "copied()" only copies the reference, not the entire [u8].
-        // Returns None if the slice is empty. We checked this before, so
-        // this is safe.
-        (**self).choose(rng).unwrap()
+    fn choose(&self, rng: &mut WrappedRng) -> UResult<Self::Item> {
+        rng.choose(self)
     }
 
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
-        amount: usize,
-    ) -> impl Iterator<Item = Self::Item> {
-        // Note: "copied()" only copies the reference, not the entire [u8].
-        (**self).partial_shuffle(rng, amount).0.iter().copied()
+        amount: u64,
+    ) -> UResult<impl Iterator<Item = UResult<Self::Item>>> {
+        // On 32-bit platforms it's possible that amount > usize::MAX.
+        // We saturate as usize::MAX since all of our shuffling modes require storing
+        // elements in memory so more than usize::MAX elements won't fit anyway.
+        // (With --repeat an output larger than usize::MAX is possible. But --repeat
+        // uses `choose()`.)
+        let amount = usize::try_from(amount).unwrap_or(usize::MAX);
+        Ok(rng.shuffle(self, amount)?.iter().copied().map(Ok))
     }
 }
 
@@ -289,36 +294,37 @@ impl<'a> Shufable for Vec<&'a OsStr> {
         (**self).is_empty()
     }
 
-    fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
-        (**self).choose(rng).unwrap()
+    fn choose(&self, rng: &mut WrappedRng) -> UResult<Self::Item> {
+        rng.choose(self)
     }
 
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
-        amount: usize,
-    ) -> impl Iterator<Item = Self::Item> {
-        (**self).partial_shuffle(rng, amount).0.iter().copied()
+        amount: u64,
+    ) -> UResult<impl Iterator<Item = UResult<Self::Item>>> {
+        let amount = usize::try_from(amount).unwrap_or(usize::MAX);
+        Ok(rng.shuffle(self, amount)?.iter().copied().map(Ok))
     }
 }
 
-impl Shufable for RangeInclusive<usize> {
-    type Item = usize;
+impl Shufable for RangeInclusive<u64> {
+    type Item = u64;
 
     fn is_empty(&self) -> bool {
         self.is_empty()
     }
 
-    fn choose(&self, rng: &mut WrappedRng) -> usize {
-        rng.random_range(self.clone())
+    fn choose(&self, rng: &mut WrappedRng) -> UResult<Self::Item> {
+        rng.choose_from_range(self.clone())
     }
 
     fn partial_shuffle<'b>(
         &'b mut self,
         rng: &'b mut WrappedRng,
-        amount: usize,
-    ) -> impl Iterator<Item = Self::Item> {
-        NonrepeatingIterator::new(self.clone(), rng, amount)
+        amount: u64,
+    ) -> UResult<impl Iterator<Item = UResult<Self::Item>>> {
+        Ok(NonrepeatingIterator::new(self.clone(), rng, amount))
     }
 }
 
@@ -338,7 +344,7 @@ impl Writable for &OsStr {
     }
 }
 
-impl Writable for usize {
+impl Writable for u64 {
     fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
         // The itoa crate is surprisingly much more efficient than a formatted write.
         // It speeds up `shuf -r -n1000000 -i1-1024` by 1.8×.
@@ -354,7 +360,6 @@ fn shuf_exec(
     output: &mut BufWriter<Box<dyn OsWrite>>,
 ) -> UResult<()> {
     let ctx = || translate!("shuf-error-write-failed");
-    let error_cell = rng.get_error_cell();
     if opts.repeat {
         if input.is_empty() {
             return Err(USimpleError::new(
@@ -363,17 +368,16 @@ fn shuf_exec(
             ));
         }
         for _ in 0..opts.head_count {
-            let r = input.choose(rng);
-            WrappedRng::check_error(error_cell.as_ref())?;
+            let r = input.choose(rng)?;
 
             r.write_all_to(output).map_err_context(ctx)?;
             output.write_all(&[opts.sep]).map_err_context(ctx)?;
         }
     } else {
-        let shuffled = input.partial_shuffle(rng, opts.head_count);
-        WrappedRng::check_error(error_cell.as_ref())?;
+        let shuffled = input.partial_shuffle(rng, opts.head_count)?;
 
         for r in shuffled {
+            let r = r?;
             r.write_all_to(output).map_err_context(ctx)?;
             output.write_all(&[opts.sep]).map_err_context(ctx)?;
         }
@@ -383,10 +387,10 @@ fn shuf_exec(
     Ok(())
 }
 
-fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
+fn parse_range(input_range: &str) -> Result<RangeInclusive<u64>, String> {
     if let Some((from, to)) = input_range.split_once('-') {
-        let begin = from.parse::<usize>().map_err(|e| e.to_string())?;
-        let end = to.parse::<usize>().map_err(|e| e.to_string())?;
+        let begin = from.parse::<u64>().map_err(|e| e.to_string())?;
+        let end = to.parse::<u64>().map_err(|e| e.to_string())?;
         if begin <= end || begin == end + 1 {
             Ok(begin..=end)
         } else {
@@ -398,48 +402,36 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
 }
 
 enum WrappedRng {
-    RngFile(rand_read_adapter::ReadRng<File>),
     RngDefault(rand::rngs::ThreadRng),
+    RngFile(compat_random_source::RandomSourceAdapter<BufReader<File>>),
 }
 
 impl WrappedRng {
-    fn get_error_cell(&self) -> Option<rand_read_adapter::ErrorCell> {
-        if let Self::RngFile(adapter) = self {
-            Some(adapter.error.clone())
-        } else {
-            None
-        }
-    }
-
-    fn check_error(error_cell: Option<&rand_read_adapter::ErrorCell>) -> UResult<()> {
-        if let Some(cell) = error_cell {
-            if let Some(err) = cell.take() {
-                return Err(err.map_err_context(|| translate!("shuf-error-read-random-bytes")));
+    fn choose<T: Copy>(&mut self, vals: &[T]) -> UResult<T> {
+        match self {
+            Self::RngDefault(rng) => Ok(*vals.choose(rng).unwrap()),
+            Self::RngFile(adapter) => {
+                assert!(!vals.is_empty());
+                let idx = adapter.get_value(vals.len() as u64 - 1)? as usize;
+                Ok(vals[idx])
             }
         }
-        Ok(())
     }
-}
 
-impl RngCore for WrappedRng {
-    fn next_u32(&mut self) -> u32 {
+    fn shuffle<'a, T>(&mut self, vals: &'a mut [T], amount: usize) -> UResult<&'a mut [T]> {
         match self {
-            Self::RngFile(r) => r.next_u32(),
-            Self::RngDefault(r) => r.next_u32(),
+            Self::RngDefault(rng) => Ok(vals.partial_shuffle(rng, amount).0),
+            Self::RngFile(adapter) => adapter.shuffle(vals, amount),
         }
     }
 
-    fn next_u64(&mut self) -> u64 {
+    fn choose_from_range(&mut self, range: RangeInclusive<u64>) -> UResult<u64> {
         match self {
-            Self::RngFile(r) => r.next_u64(),
-            Self::RngDefault(r) => r.next_u64(),
-        }
-    }
-
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        match self {
-            Self::RngFile(r) => r.fill_bytes(dest),
-            Self::RngDefault(r) => r.fill_bytes(dest),
+            Self::RngDefault(rng) => Ok(rng.random_range(range)),
+            Self::RngFile(adapter) => {
+                let offset = adapter.get_value(*range.end() - *range.start())?;
+                Ok(*range.start() + offset)
+            }
         }
     }
 }
