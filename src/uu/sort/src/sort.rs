@@ -460,6 +460,13 @@ impl<'a> Line<'a> {
         if settings.precomputed.needs_tokens {
             tokenize(line, settings.separator, token_buffer);
         }
+        if settings.mode == SortMode::Numeric {
+            // exclude inf, nan, scientific notation
+            let line_num_float = (!line.contains(char::is_alphabetic))
+                .then(|| line.parse::<f64>().ok())
+                .flatten();
+            line_data.line_num_floats.push(line_num_float);
+        }
         for (selector, selection) in settings
             .selectors
             .iter()
@@ -1563,6 +1570,24 @@ fn compare_by<'a>(
     let mut selection_index = 0;
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
+
+    if let (Some(Some(a_f64)), Some(Some(b_f64))) = (
+        a_line_data.line_num_floats.get(a.index),
+        b_line_data.line_num_floats.get(b.index),
+    ) {
+        // we don't use total_cmp() because it always sorts -0 before 0
+        if let Some(cmp) = a_f64.partial_cmp(b_f64) {
+            // don't trust `Ordering::Equal` if lines are not fully equal
+            if cmp != Ordering::Equal || a.line == b.line {
+                return if global_settings.reverse {
+                    cmp.reverse()
+                } else {
+                    cmp
+                };
+            }
+        }
+    }
+
     for selector in &global_settings.selectors {
         let (a_str, b_str) = if selector.needs_selection {
             let selections = (
