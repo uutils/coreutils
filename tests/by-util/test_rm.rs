@@ -1080,7 +1080,7 @@ fn test_rm_preserve_root() {
         .args(&["--preserve-root=all", "-rf", bind_mount_point])
         .fails()
         .stderr_contains(format!("rm: skipping '{}'", bind_mount_point))
-        .stderr_contains(format!("rm: and --preserve-root=all is in effect"));
+        .stderr_contains("rm: and --preserve-root=all is in effect".to_string());
 
     // Cleanup
     let _ = scene.cmd("umount").arg(bind_mount_point).run();
