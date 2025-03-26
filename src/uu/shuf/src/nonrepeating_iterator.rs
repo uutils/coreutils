@@ -1,74 +1,85 @@
-// spell-checker:ignore nonrepeating
-
-// TODO: this iterator is not compatible with GNU when --random-source is used
-
-use std::{collections::HashSet, ops::RangeInclusive};
+use std::collections::HashMap;
+use std::ops::RangeInclusive;
 
 use uucore::error::UResult;
 
 use crate::WrappedRng;
 
-enum NumberSet {
-    AlreadyListed(HashSet<u64>),
-    Remaining(Vec<u64>),
+/// An iterator that samples from an integer range without repetition.
+///
+/// This is based on Fisher-Yates, and it's required for backward compatibility
+/// that it behaves exactly like Fisher-Yates if --random-source or --random-seed
+/// is used. But we have a few tricks:
+///
+/// - In the beginning we use a hash table instead of an array. This way we lazily
+///   keep track of swaps without allocating the entire range upfront.
+///
+/// - When the hash table starts to get big relative to the remaining items
+///   we switch over to an array.
+///
+/// - We store the array backwards so that we can shrink it as we go and free excess
+///   memory every now and then.
+///
+/// Both the hash table and the array give the same output.
+///
+/// There's room for optimization:
+///
+/// - Switching over from the hash table to the array is costly. If we happen to know
+///   (through --head-count) that only few draws remain then it would be better not
+///   to switch.
+///
+/// - If the entire range gets used then we might as well allocate an array to start
+///   with. But if the user e.g. pipes through `head` rather than using --head-count
+///   we can't know whether that's the case, so there's a tradeoff.
+///
+///   GNU decides the other way: --head-count is noticeably faster than | head.
+pub(crate) struct NonrepeatingIterator<'a> {
+    rng: &'a mut WrappedRng,
+    values: Values,
 }
 
-pub(crate) struct NonrepeatingIterator<'a> {
-    range: RangeInclusive<u64>,
-    rng: &'a mut WrappedRng,
-    remaining_count: u64,
-    buf: NumberSet,
+enum Values {
+    Full(Vec<u64>),
+    Sparse(RangeInclusive<u64>, HashMap<u64, u64>),
 }
 
 impl<'a> NonrepeatingIterator<'a> {
-    pub(crate) fn new(range: RangeInclusive<u64>, rng: &'a mut WrappedRng, amount: u64) -> Self {
-        let capped_amount = if range.start() > range.end() {
-            0
-        } else if range == (0..=u64::MAX) {
-            amount
-        } else {
-            amount.min(range.end() - range.start() + 1)
-        };
-        NonrepeatingIterator {
-            range,
-            rng,
-            remaining_count: capped_amount,
-            buf: NumberSet::AlreadyListed(HashSet::default()),
-        }
+    pub(crate) fn new(range: RangeInclusive<u64>, rng: &'a mut WrappedRng) -> Self {
+        let values = Values::Sparse(range, HashMap::default());
+        NonrepeatingIterator { rng, values }
     }
 
     fn produce(&mut self) -> UResult<u64> {
-        debug_assert!(self.range.start() <= self.range.end());
-        match &mut self.buf {
-            NumberSet::AlreadyListed(already_listed) => {
-                let chosen = loop {
-                    let guess = self.rng.choose_from_range(self.range.clone())?;
-                    let newly_inserted = already_listed.insert(guess);
-                    if newly_inserted {
-                        break guess;
-                    }
-                };
-                // Once a significant fraction of the interval has already been enumerated,
-                // the number of attempts to find a number that hasn't been chosen yet increases.
-                // Therefore, we need to switch at some point from "set of already returned values" to "list of remaining values".
-                let range_size = (self.range.end() - self.range.start()).saturating_add(1);
-                if number_set_should_list_remaining(already_listed.len() as u64, range_size) {
-                    let mut remaining = self
-                        .range
-                        .clone()
-                        .filter(|n| !already_listed.contains(n))
-                        .collect::<Vec<_>>();
-                    assert!(remaining.len() as u64 >= self.remaining_count);
-                    remaining.truncate(self.remaining_count as usize);
-                    self.rng.shuffle(&mut remaining, usize::MAX)?;
-                    self.buf = NumberSet::Remaining(remaining);
+        match &mut self.values {
+            Values::Full(items) => {
+                let this_idx = items.len() - 1;
+
+                let other_idx = self.rng.choose_from_range(0..=items.len() as u64 - 1)? as usize;
+                // Flip the index to pretend we're going left-to-right
+                let other_idx = items.len() - other_idx - 1;
+
+                items.swap(this_idx, other_idx);
+
+                let val = items.pop().unwrap();
+                if items.len().is_power_of_two() && items.len() >= 512 {
+                    items.shrink_to_fit();
                 }
-                Ok(chosen)
+                Ok(val)
             }
-            NumberSet::Remaining(remaining_numbers) => {
-                debug_assert!(!remaining_numbers.is_empty());
-                // We only enter produce() when there is at least one actual element remaining, so popping must always return an element.
-                Ok(remaining_numbers.pop().unwrap())
+            Values::Sparse(range, items) => {
+                let this_idx = *range.start();
+                let this_val = items.remove(&this_idx).unwrap_or(this_idx);
+
+                let other_idx = self.rng.choose_from_range(range.clone())?;
+
+                let val = if this_idx == other_idx {
+                    this_val
+                } else {
+                    items.insert(other_idx, this_val).unwrap_or(other_idx)
+                };
+                *range = *range.start() + 1..=*range.end();
+
+                Ok(val)
             }
         }
     }
@@ -77,101 +88,24 @@ impl<'a> NonrepeatingIterator<'a> {
 impl Iterator for NonrepeatingIterator<'_> {
     type Item = UResult<u64>;
 
-    fn next(&mut self) -> Option<UResult<u64>> {
-        if self.range.is_empty() || self.remaining_count == 0 {
-            return None;
+    fn next(&mut self) -> Option<Self::Item> {
+        match &self.values {
+            Values::Full(items) if items.is_empty() => return None,
+            Values::Full(_) => (),
+            Values::Sparse(range, _) if range.is_empty() => return None,
+            Values::Sparse(range, items) => {
+                let range_len = range.size_hint().0 as u64;
+                if items.len() as u64 >= range_len / 8 {
+                    self.values = Values::Full(hashmap_to_vec(range.clone(), items));
+                }
+            }
         }
-        self.remaining_count -= 1;
+
         Some(self.produce())
     }
 }
 
-// This could be a method, but it is much easier to test as a stand-alone function.
-fn number_set_should_list_remaining(listed_count: u64, range_size: u64) -> bool {
-    // Arbitrarily determine the switchover point to be around 25%. This is because:
-    // - HashSet has a large space overhead for the hash table load factor.
-    // - This means that somewhere between 25-40%, the memory required for a "positive" HashSet and a "negative" Vec should be the same.
-    // - HashSet has a small but non-negligible overhead for each lookup, so we have a slight preference for Vec anyway.
-    // - At 25%, on average 1.33 attempts are needed to find a number that hasn't been taken yet.
-    // - Finally, "24%" is computationally the simplest:
-    listed_count >= range_size / 4
-}
-
-#[cfg(test)]
-// Since the computed value is a bool, it is more readable to write the expected value out:
-#[allow(clippy::bool_assert_comparison)]
-mod test_number_set_decision {
-    use super::number_set_should_list_remaining;
-
-    #[test]
-    fn test_stay_positive_large_remaining_first() {
-        assert_eq!(false, number_set_should_list_remaining(0, u64::MAX));
-    }
-
-    #[test]
-    fn test_stay_positive_large_remaining_second() {
-        assert_eq!(false, number_set_should_list_remaining(1, u64::MAX));
-    }
-
-    #[test]
-    fn test_stay_positive_large_remaining_tenth() {
-        assert_eq!(false, number_set_should_list_remaining(9, u64::MAX));
-    }
-
-    #[test]
-    fn test_stay_positive_smallish_range_first() {
-        assert_eq!(false, number_set_should_list_remaining(0, 12345));
-    }
-
-    #[test]
-    fn test_stay_positive_smallish_range_second() {
-        assert_eq!(false, number_set_should_list_remaining(1, 12345));
-    }
-
-    #[test]
-    fn test_stay_positive_smallish_range_tenth() {
-        assert_eq!(false, number_set_should_list_remaining(9, 12345));
-    }
-
-    #[test]
-    fn test_stay_positive_small_range_not_too_early() {
-        assert_eq!(false, number_set_should_list_remaining(1, 10));
-    }
-
-    // Don't want to test close to the border, in case we decide to change the threshold.
-    // However, at 50% coverage, we absolutely should switch:
-    #[test]
-    fn test_switch_half() {
-        assert_eq!(true, number_set_should_list_remaining(1234, 2468));
-    }
-
-    // Ensure that the decision is monotonous:
-    #[test]
-    fn test_switch_late1() {
-        assert_eq!(true, number_set_should_list_remaining(12340, 12345));
-    }
-
-    #[test]
-    fn test_switch_late2() {
-        assert_eq!(true, number_set_should_list_remaining(12344, 12345));
-    }
-
-    // Ensure that we are overflow-free:
-    #[test]
-    fn test_no_crash_exceed_max_size1() {
-        assert_eq!(false, number_set_should_list_remaining(12345, u64::MAX));
-    }
-
-    #[test]
-    fn test_no_crash_exceed_max_size2() {
-        assert_eq!(
-            true,
-            number_set_should_list_remaining(u64::MAX - 1, u64::MAX)
-        );
-    }
-
-    #[test]
-    fn test_no_crash_exceed_max_size3() {
-        assert_eq!(true, number_set_should_list_remaining(u64::MAX, u64::MAX));
-    }
+fn hashmap_to_vec(range: RangeInclusive<u64>, map: &HashMap<u64, u64>) -> Vec<u64> {
+    let lookup = |idx| *map.get(&idx).unwrap_or(&idx);
+    range.rev().map(lookup).collect()
 }

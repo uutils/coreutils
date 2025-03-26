@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) unwritable
+use std::fmt::Write;
+
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -1002,8 +1004,6 @@ fn test_gnu_compat_limited_from_stdin() {
         .stdout_is("6\n5\n1\n3\n2\n7\n4\n");
 }
 
-// We haven't reverse-engineered GNU's nonrepeating integer sampling yet.
-#[ignore = "disabled until fixed"]
 #[test]
 fn test_gnu_compat_range_no_repeat() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1060,10 +1060,55 @@ fn test_seed_range_repeat() {
 
 #[test]
 fn test_seed_range_no_repeat() {
+    let expected = "8\n9\n1\n5\n2\n6\n4\n3\n10\n7\n";
+
     new_ucmd!()
         .arg("--random-seed=12345")
         .arg("-i1-10")
         .succeeds()
         .no_stderr()
-        .stdout_is("8\n9\n5\n10\n1\n2\n4\n7\n3\n6\n");
+        .stdout_is(expected);
+
+    // Piping from e.g. seq gives identical results.
+    new_ucmd!()
+        .arg("--random-seed=12345")
+        .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(expected);
+}
+
+// Test a longer input to exercise some more code paths in the sparse representation.
+#[test]
+fn test_seed_long_range_no_repeat() {
+    let expected = "\
+        1\n3\n35\n37\n36\n45\n72\n17\n18\n40\n67\n74\n81\n77\n14\n90\n\
+        7\n12\n80\n54\n23\n61\n29\n41\n15\n56\n6\n32\n82\n76\n11\n2\n100\n\
+        50\n60\n97\n73\n79\n91\n89\n85\n86\n66\n70\n22\n55\n8\n83\n39\n27\n";
+
+    new_ucmd!()
+        .arg("--random-seed=67890")
+        .arg("-i1-100")
+        .arg("-n50")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(expected);
+
+    let mut test_input = String::new();
+    for n in 1..=100 {
+        writeln!(&mut test_input, "{n}").unwrap();
+    }
+
+    new_ucmd!()
+        .arg("--random-seed=67890")
+        .pipe_in(test_input.as_bytes())
+        .arg("-n50")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_empty_range_no_repeat() {
+    new_ucmd!().arg("-i4-3").succeeds().no_stderr().no_stdout();
 }

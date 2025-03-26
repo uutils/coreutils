@@ -33,9 +33,6 @@ use sha3::{Digest as _, Sha3_256};
 ///
 ///   - Without --repeat, use these to do left-to-right modern Fisher-Yates.
 ///
-///   - Or for --input-range without --repeat, do whatever NonrepeatingIterator does.
-///     (We may want to change that. Watch this space.)
-///
 /// # Why it works like this
 ///
 /// - Unicode string: Greatest common denominator between platforms. Windows doesn't
