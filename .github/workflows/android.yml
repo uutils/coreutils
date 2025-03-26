@@ -1,6 +1,8 @@
 name: Android
 
-# spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader dtolnay juliangruber
+# spell-checker:ignore (people) reactivecircus Swatinem dtolnay juliangruber
+# spell-checker:ignore (shell/tools) TERMUX nextest udevadm pkill
+# spell-checker:ignore (misc) swiftshader playstore DATALOSS noaudio
 
 on:
   pull_request:
@@ -152,7 +154,7 @@ jobs:
         # The version vX at the end of the key is just a development version to avoid conflicts in
         # the github cache during the development of this workflow
         key: ${{ matrix.arch }}_${{ matrix.target}}_${{ steps.read_rustc_hash.outputs.content }}_${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}_v3
-    - name: Collect information about runner ressources
+    - name: Collect information about runner resources
       if: always()
       continue-on-error: true
       run: |
@@ -179,7 +181,7 @@ jobs:
           util/android-commands.sh build
           util/android-commands.sh tests
           if [ "${{ steps.rust-cache.outputs.cache-hit }}" != 'true' ]; then util/android-commands.sh sync_image; fi; exit 0
-    - name: Collect information about runner ressources
+    - name: Collect information about runner resources
       if: always()
       continue-on-error: true
       run: |
@@ -197,7 +199,7 @@ jobs:
       with:
         name: test_output_${{ env.AVD_CACHE_KEY }}
         path: output
-    - name: Collect information about runner ressources
+    - name: Collect information about runner resources
       if: always()
       continue-on-error: true
       run: |

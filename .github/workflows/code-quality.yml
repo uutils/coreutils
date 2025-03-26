@@ -1,6 +1,7 @@
 name: Code Quality
 
-# spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader dtolnay juliangruber
+# spell-checker:ignore (people) reactivecircus Swatinem dtolnay juliangruber pell taplo
+# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote
 
 on:
   pull_request:

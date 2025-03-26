@@ -1,5 +1,7 @@
 name: GnuComment
 
+# spell-checker:ignore zizmor backquote
+
 on:
   workflow_run:
     workflows: ["GnuTests"]

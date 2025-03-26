@@ -1,6 +1,6 @@
 name: FixPR
 
-# spell-checker:ignore Swatinem dtolnay
+# spell-checker:ignore Swatinem dtolnay dedupe
 
 # Trigger automated fixes for PRs being merged (with associated commits)
 

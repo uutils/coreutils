@@ -1,4 +1,5 @@
 # EditorConfig (is awesome!; ref: http://EditorConfig.org; v2022.02.11 [rivy])
+# spell-checker:ignore akefile shellcheck vcproj
 
 # * top-most EditorConfig file
 root = true
@@ -52,7 +53,7 @@ indent_style = space
 switch_case_indent = true
 
 [*.{sln,vc{,x}proj{,.*},[Ss][Ln][Nn],[Vv][Cc]{,[Xx]}[Pp][Rr][Oo][Jj]{,.*}}]
-# MSVC sln/vcproj/vcxproj files, when used, will persistantly revert to CRLF EOLNs and eat final EOLs
+# MSVC sln/vcproj/vcxproj files, when used, will persistently revert to CRLF EOLNs and eat final EOLs
 end_of_line = crlf
 insert_final_newline = false
 
