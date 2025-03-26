@@ -243,6 +243,37 @@ fn test_hyphen_values_between() {
 }
 
 #[test]
+fn test_double_hyphens_at_start() {
+    new_ucmd!().arg("--").succeeds().stdout_only("--\n");
+    new_ucmd!()
+        .arg("--")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-- --\n");
+
+    new_ucmd!()
+        .arg("--")
+        .arg("a")
+        .succeeds()
+        .stdout_only("-- a\n");
+
+    new_ucmd!()
+        .arg("--")
+        .arg("a")
+        .arg("b")
+        .succeeds()
+        .stdout_only("-- a b\n");
+
+    new_ucmd!()
+        .arg("--")
+        .arg("a")
+        .arg("b")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-- a b --\n");
+}
+
+#[test]
 fn test_double_hyphens() {
     new_ucmd!().arg("--").succeeds().stdout_only("--\n");
     new_ucmd!()
@@ -250,6 +281,29 @@ fn test_double_hyphens() {
         .arg("--")
         .succeeds()
         .stdout_only("-- --\n");
+
+    new_ucmd!()
+        .arg("a")
+        .arg("--")
+        .arg("b")
+        .succeeds()
+        .stdout_only("a -- b\n");
+
+    new_ucmd!()
+        .arg("a")
+        .arg("--")
+        .arg("b")
+        .arg("--")
+        .succeeds()
+        .stdout_only("a -- b --\n");
+
+    new_ucmd!()
+        .arg("a")
+        .arg("b")
+        .arg("--")
+        .arg("--")
+        .succeeds()
+        .stdout_only("a b -- --\n");
 }
 
 #[test]

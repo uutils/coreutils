@@ -27,12 +27,10 @@ mod options {
 // follows. In order to use '--' as a value, we have to inject an additional '--'
 fn handle_double_hyphens(args: impl uucore::Args) -> impl uucore::Args {
     let mut result = Vec::new();
-    let mut is_first_double_hyphen = true;
 
-    for arg in args {
-        if arg == "--" && is_first_double_hyphen {
+    for (i, arg) in args.enumerate() {
+        if arg == "--" && i == 1 {
             result.push(OsString::from("--"));
-            is_first_double_hyphen = false;
         }
         result.push(arg);
     }
