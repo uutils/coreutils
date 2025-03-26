@@ -335,6 +335,7 @@ icu_locale = "2.0.0"
 icu_provider = "2.0.0"
 indicatif = "0.18.0"
 itertools = "0.14.0"
+itoa = "1.0.15"
 jiff = "0.2.18"
 libc = "0.2.172"
 lscolors = { version = "0.21.0", default-features = false, features = [
