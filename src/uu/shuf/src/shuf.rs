@@ -330,7 +330,8 @@ impl Writable for &OsStr {
 
 impl Writable for usize {
     fn write_all_to(&self, output: &mut impl OsWrite) -> Result<(), Error> {
-        write!(output, "{self}")
+        let mut buf = itoa::Buffer::new();
+        output.write_all(buf.format(*self).as_bytes())
     }
 }
 
