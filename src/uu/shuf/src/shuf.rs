@@ -5,16 +5,20 @@
 
 // spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shufable rvec fdata
 
-use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, Command};
-use rand::Rng;
-use rand::seq::{IndexedRandom, SliceRandom};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Error, Read, Write, stdin, stdout};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+
+use clap::{Arg, ArgAction, Command, builder::ValueParser};
+use rand::rngs::ThreadRng;
+use rand::{
+    Rng,
+    seq::{IndexedRandom, SliceRandom},
+};
+
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -22,8 +26,11 @@ use uucore::translate;
 
 mod compat_random_source;
 mod nonrepeating_iterator;
+mod random_seed;
 
+use compat_random_source::RandomSourceAdapter;
 use nonrepeating_iterator::NonrepeatingIterator;
+use random_seed::SeededRng;
 
 enum Mode {
     Default(PathBuf),
@@ -36,9 +43,15 @@ const BUF_SIZE: usize = 64 * 1024;
 struct Options {
     head_count: u64,
     output: Option<PathBuf>,
-    random_source: Option<PathBuf>,
+    random_source: RandomSource,
     repeat: bool,
     sep: u8,
+}
+
+enum RandomSource {
+    None,
+    Seed(String),
+    File(PathBuf),
 }
 
 mod options {
@@ -47,6 +60,7 @@ mod options {
     pub static HEAD_COUNT: &str = "head-count";
     pub static OUTPUT: &str = "output";
     pub static RANDOM_SOURCE: &str = "random-source";
+    pub static RANDOM_SEED: &str = "random-seed";
     pub static REPEAT: &str = "repeat";
     pub static ZERO_TERMINATED: &str = "zero-terminated";
     pub static FILE_OR_ARGS: &str = "file-or-args";
@@ -80,6 +94,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Mode::Default(file.into())
     };
 
+    let random_source = if let Some(filename) = matches.get_one(options::RANDOM_SOURCE).cloned() {
+        RandomSource::File(filename)
+    } else if let Some(seed) = matches.get_one(options::RANDOM_SEED).cloned() {
+        RandomSource::Seed(seed)
+    } else {
+        RandomSource::None
+    };
+
     let options = Options {
         // GNU shuf takes the lowest value passed, so we imitate that.
         // It's probably a bug or an implementation artifact though.
@@ -92,7 +114,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .min()
             .unwrap_or(u64::MAX),
         output: matches.get_one(options::OUTPUT).cloned(),
-        random_source: matches.get_one(options::RANDOM_SOURCE).cloned(),
+        random_source,
         repeat: matches.get_flag(options::REPEAT),
         sep: if matches.get_flag(options::ZERO_TERMINATED) {
             b'\0'
@@ -120,14 +142,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let mut rng = match options.random_source {
-        Some(ref r) => {
+        RandomSource::None => WrappedRng::Default(rand::rng()),
+        RandomSource::Seed(ref seed) => WrappedRng::Seed(SeededRng::new(seed)),
+        RandomSource::File(ref r) => {
             let file = File::open(r).map_err_context(
                 || translate!("shuf-error-failed-to-open-random-source", "file" => r.quote()),
             )?;
             let file = BufReader::new(file);
-            WrappedRng::RngFile(compat_random_source::RandomSourceAdapter::new(file))
+            WrappedRng::File(compat_random_source::RandomSourceAdapter::new(file))
         }
-        None => WrappedRng::RngDefault(rand::rng()),
     };
 
     match mode {
@@ -190,6 +213,15 @@ pub fn uu_app() -> Command {
                 .help(translate!("shuf-help-output"))
                 .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::FilePath),
+        )
+        .arg(
+            Arg::new(options::RANDOM_SEED)
+                .long(options::RANDOM_SEED)
+                .value_name("STRING")
+                .help(translate!("shuf-help-random-seed"))
+                .value_parser(ValueParser::string())
+                .value_hint(clap::ValueHint::Other)
+                .conflicts_with(options::RANDOM_SOURCE),
         )
         .arg(
             Arg::new(options::RANDOM_SOURCE)
@@ -402,36 +434,33 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<u64>, String> {
 }
 
 enum WrappedRng {
-    RngDefault(rand::rngs::ThreadRng),
-    RngFile(compat_random_source::RandomSourceAdapter<BufReader<File>>),
+    Default(ThreadRng),
+    Seed(SeededRng),
+    File(RandomSourceAdapter<BufReader<File>>),
 }
 
 impl WrappedRng {
     fn choose<T: Copy>(&mut self, vals: &[T]) -> UResult<T> {
         match self {
-            Self::RngDefault(rng) => Ok(*vals.choose(rng).unwrap()),
-            Self::RngFile(adapter) => {
-                assert!(!vals.is_empty());
-                let idx = adapter.get_value(vals.len() as u64 - 1)? as usize;
-                Ok(vals[idx])
-            }
+            Self::Default(rng) => Ok(*vals.choose(rng).unwrap()),
+            Self::Seed(rng) => Ok(rng.choose_from_slice(vals)),
+            Self::File(rng) => rng.choose_from_slice(vals),
         }
     }
 
     fn shuffle<'a, T>(&mut self, vals: &'a mut [T], amount: usize) -> UResult<&'a mut [T]> {
         match self {
-            Self::RngDefault(rng) => Ok(vals.partial_shuffle(rng, amount).0),
-            Self::RngFile(adapter) => adapter.shuffle(vals, amount),
+            Self::Default(rng) => Ok(vals.partial_shuffle(rng, amount).0),
+            Self::Seed(rng) => Ok(rng.shuffle(vals, amount)),
+            Self::File(rng) => rng.shuffle(vals, amount),
         }
     }
 
     fn choose_from_range(&mut self, range: RangeInclusive<u64>) -> UResult<u64> {
         match self {
-            Self::RngDefault(rng) => Ok(rng.random_range(range)),
-            Self::RngFile(adapter) => {
-                let offset = adapter.get_value(*range.end() - *range.start())?;
-                Ok(*range.start() + offset)
-            }
+            Self::Default(rng) => Ok(rng.random_range(range)),
+            Self::Seed(rng) => Ok(rng.choose_from_range(range)),
+            Self::File(rng) => rng.choose_from_range(range),
         }
     }
 }

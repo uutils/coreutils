@@ -1,4 +1,9 @@
-use std::io::BufRead;
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+use std::{io::BufRead, ops::RangeInclusive};
 
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::translate;
@@ -42,7 +47,7 @@ impl<R> RandomSourceAdapter<R> {
 }
 
 impl<R: BufRead> RandomSourceAdapter<R> {
-    pub fn get_value(&mut self, at_most: u64) -> UResult<u64> {
+    fn generate_at_most(&mut self, at_most: u64) -> UResult<u64> {
         while self.entropy < at_most {
             let buf = self
                 .reader
@@ -88,8 +93,19 @@ impl<R: BufRead> RandomSourceAdapter<R> {
             self.state %= num_possibilities;
             self.entropy %= num_possibilities;
             // I sure hope the compiler optimizes this tail call.
-            self.get_value(at_most)
+            self.generate_at_most(at_most)
         }
+    }
+
+    pub fn choose_from_range(&mut self, range: RangeInclusive<u64>) -> UResult<u64> {
+        let offset = self.generate_at_most(*range.end() - *range.start())?;
+        Ok(*range.start() + offset)
+    }
+
+    pub fn choose_from_slice<T: Copy>(&mut self, vals: &[T]) -> UResult<T> {
+        assert!(!vals.is_empty());
+        let idx = self.generate_at_most(vals.len() as u64 - 1)? as usize;
+        Ok(vals[idx])
     }
 
     pub fn shuffle<'a, T>(&mut self, vals: &'a mut [T], amount: usize) -> UResult<&'a mut [T]> {
@@ -99,7 +115,7 @@ impl<R: BufRead> RandomSourceAdapter<R> {
         // No clue what they might do differently and why.
         let amount = amount.min(vals.len());
         for idx in 0..amount {
-            let other_idx = self.get_value((vals.len() - idx - 1) as u64)? as usize + idx;
+            let other_idx = self.generate_at_most((vals.len() - idx - 1) as u64)? as usize + idx;
             vals.swap(idx, other_idx);
         }
         Ok(&mut vals[..amount])
