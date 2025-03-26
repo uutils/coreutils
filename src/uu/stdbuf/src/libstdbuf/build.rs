@@ -7,5 +7,7 @@
 use cpp_build::Config;
 
 fn main() {
-    Config::new().pic(true).build("src/libstdbuf.rs");
+    if cfg!(unix) {
+        Config::new().pic(true).build("src/libstdbuf.rs");
+    }
 }

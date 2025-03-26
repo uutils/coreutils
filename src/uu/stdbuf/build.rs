@@ -9,7 +9,7 @@ use std::env::current_exe;
 use std::fs;
 use std::path::Path;
 
-#[cfg(not(any(target_vendor = "apple", target_os = "windows")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 mod platform {
     pub const DYLIB_EXT: &str = ".so";
 }
@@ -19,12 +19,8 @@ mod platform {
     pub const DYLIB_EXT: &str = ".dylib";
 }
 
-#[cfg(target_os = "windows")]
-mod platform {
-    pub const DYLIB_EXT: &str = ".dll";
-}
-
-fn main() {
+#[cfg(unix)]
+fn find_and_copy_libstdbuf() {
     let current_exe = current_exe().unwrap();
 
     let out_dir_string = env::var("OUT_DIR").unwrap();
@@ -46,4 +42,9 @@ fn main() {
         .expect("unable to find libstdbuf");
 
     fs::copy(libstdbuf.path(), out_dir.join("libstdbuf.so")).unwrap();
+}
+
+fn main() {
+    #[cfg(unix)]
+    find_and_copy_libstdbuf()
 }
