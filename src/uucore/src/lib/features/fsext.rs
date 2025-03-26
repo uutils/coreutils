@@ -880,7 +880,7 @@ where
 }
 
 #[cfg(unix)]
-pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
+pub fn pretty_filetype(mode: mode_t, size: u64) -> String {
     match mode & S_IFMT {
         S_IFREG => {
             if size == 0 {
@@ -896,9 +896,9 @@ pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
         S_IFIFO => "fifo",
         S_IFSOCK => "socket",
         // TODO: Other file types
-        // See coreutils/gnulib/lib/file-type.c // spell-checker:disable-line
-        _ => "weird file",
+        _ => return format!("weird file ({:07o})", mode & S_IFMT),
     }
+    .to_owned()
 }
 
 pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
@@ -1036,7 +1036,7 @@ mod tests {
         assert_eq!("character special file", pretty_filetype(S_IFCHR, 0));
         assert_eq!("regular file", pretty_filetype(S_IFREG, 1));
         assert_eq!("regular empty file", pretty_filetype(S_IFREG, 0));
-        assert_eq!("weird file", pretty_filetype(0, 0));
+        assert_eq!("weird file (0000000)", pretty_filetype(0, 0));
     }
 
     #[test]

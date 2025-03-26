@@ -910,9 +910,7 @@ impl Stater {
                     // raw mode in hex
                     'f' => OutputType::UnsignedHex(meta.mode() as u64),
                     // file type
-                    'F' => OutputType::Str(
-                        pretty_filetype(meta.mode() as mode_t, meta.len()).to_owned(),
-                    ),
+                    'F' => OutputType::Str(pretty_filetype(meta.mode() as mode_t, meta.len())),
                     // group ID of owner
                     'g' => OutputType::Unsigned(meta.gid() as u64),
                     // group name of owner
