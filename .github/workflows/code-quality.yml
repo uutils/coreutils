@@ -154,7 +154,7 @@ jobs:
         cfg_files=($(shopt -s nullglob ; echo {.vscode,.}/{,.}c[sS]pell{.json,.config{.js,.cjs,.json,.yaml,.yml},.yaml,.yml} ;))
         cfg_file=${cfg_files[0]}
         unset CSPELL_CFG_OPTION ; if [ -n "$cfg_file" ]; then CSPELL_CFG_OPTION="--config $cfg_file" ; fi
-        S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
+        S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress .) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   toml_format:

@@ -19,6 +19,7 @@
 
   // files to ignore (globs supported)
   "ignorePaths": [
+    ".git/**",
     "Cargo.lock",
     "oranda.json",
     "target/**",
@@ -27,6 +28,8 @@
     "vendor/**",
     "**/*.svg"
   ],
+
+  "enableGlobDot": true,
 
   // words to ignore (even if they are in the flagWords)
   "ignoreWords": [],
