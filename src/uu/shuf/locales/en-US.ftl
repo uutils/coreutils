@@ -10,6 +10,7 @@ shuf-help-echo = treat each ARG as an input line
 shuf-help-input-range = treat each number LO through HI as an input line
 shuf-help-head-count = output at most COUNT lines
 shuf-help-output = write result to FILE instead of standard output
+shuf-help-random-seed = seed with STRING for reproducible output
 shuf-help-random-source = get random bytes from FILE
 shuf-help-repeat = output lines can be repeated
 shuf-help-zero-terminated = line delimiter is NUL, not newline

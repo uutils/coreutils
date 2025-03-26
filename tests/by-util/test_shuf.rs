@@ -1018,3 +1018,52 @@ fn test_gnu_compat_range_no_repeat() {
         .no_stderr()
         .stdout_is("10\n2\n8\n7\n3\n9\n6\n5\n1\n4\n");
 }
+
+// Test reproducibility of --random-seed.
+// These results are arbitrary but they should not change unless we choose to break compatibility.
+
+#[test]
+fn test_seed_args_repeat() {
+    new_ucmd!()
+        .arg("--random-seed=🌱")
+        .arg("-e")
+        .arg("-r")
+        .arg("-n10")
+        .args(&["foo", "bar", "baz", "qux"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("qux\nbar\nbaz\nfoo\nbaz\nqux\nqux\nfoo\nqux\nqux\n");
+}
+
+#[test]
+fn test_seed_args_no_repeat() {
+    new_ucmd!()
+        .arg("--random-seed=🌱")
+        .arg("-e")
+        .args(&["foo", "bar", "baz", "qux"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("qux\nbaz\nfoo\nbar\n");
+}
+
+#[test]
+fn test_seed_range_repeat() {
+    new_ucmd!()
+        .arg("--random-seed=🦀")
+        .arg("-r")
+        .arg("-i1-99")
+        .arg("-n10")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("60\n44\n38\n41\n63\n43\n31\n71\n46\n90\n");
+}
+
+#[test]
+fn test_seed_range_no_repeat() {
+    new_ucmd!()
+        .arg("--random-seed=12345")
+        .arg("-i1-10")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("8\n9\n5\n10\n1\n2\n4\n7\n3\n6\n");
+}
