@@ -8,6 +8,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
+use std::os::unix::ffi::OsStrExt;
 use uucore::error::{UResult, USimpleError};
 use uucore::format::{parse_escape_only, EscapedChar, FormatChar, OctalParsing};
 use uucore::{format_usage, help_about, help_section, help_usage};
@@ -28,11 +29,16 @@ mod options {
 fn handle_double_hyphens(args: impl uucore::Args) -> impl uucore::Args {
     let mut result = Vec::new();
     let mut is_first_double_hyphen = true;
+    let mut option_index = 0;
 
     for (i, arg) in args.enumerate() {
-        if i < 2 && arg == "--" && is_first_double_hyphen {
-            result.push(OsString::from("--"));
-            is_first_double_hyphen = false;
+        if is_first_double_hyphen {
+            if i < option_index + 2 && arg == "--" {
+                result.push(OsString::from("--"));
+                is_first_double_hyphen = false;
+            } else if arg.as_bytes()[0] == b'-' {
+                option_index = i
+            }
         }
         result.push(arg);
     }
