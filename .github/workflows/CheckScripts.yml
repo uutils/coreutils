@@ -1,6 +1,6 @@
 name: CheckScripts
 
-# spell-checker:ignore ludeeus mfinelli
+# spell-checker:ignore ludeeus mfinelli shellcheck scandir shfmt
 
 env:
   SCRIPT_DIR: 'util'

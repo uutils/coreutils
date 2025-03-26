@@ -1,6 +1,6 @@
 name: Fuzzing
 
-# spell-checker:ignore fuzzer
+# spell-checker:ignore fuzzer dtolnay Swatinem
 
 on:
   pull_request:
