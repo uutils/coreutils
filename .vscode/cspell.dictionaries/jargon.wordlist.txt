@@ -44,6 +44,7 @@ fileio
 filesystem
 filesystems
 flamegraph
+footgun
 fsxattr
 fullblock
 getfacl
