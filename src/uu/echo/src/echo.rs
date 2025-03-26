@@ -29,7 +29,8 @@ fn handle_double_hyphens(args: impl uucore::Args) -> impl uucore::Args {
     let mut result = Vec::new();
 
     for (i, arg) in args.enumerate() {
-        if arg == "--" && i == 1 {
+        // check for argument at index 1 which is the first argument to echo (0 being "echo")
+        if i == 1 && arg == "--" {
             result.push(OsString::from("--"));
         }
         result.push(arg);
