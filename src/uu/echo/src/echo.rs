@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
@@ -23,63 +23,107 @@ mod options {
     pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
 }
 
-fn is_echo_flag(arg: &OsString) -> bool {
-    matches!(arg.to_str(), Some("-e" | "-E" | "-n"))
+struct EchoFlags {
+    pub n: bool,
+    pub e: bool,
+    pub is_hyphen: bool,
 }
 
-// A workaround because clap interprets the first '--' as a marker that a value
-// follows. In order to use '--' as a value, we have to inject an additional '--'
-fn handle_double_hyphens(args: impl uucore::Args) -> impl uucore::Args {
-    let mut result = Vec::new();
-    let mut is_first_argument = true;
-    let mut args_iter = args.into_iter();
+fn is_echo_flag(arg: &OsString) -> Option<EchoFlags>{
+    let bytes = arg.as_encoded_bytes();
+    if bytes.first() == Some(&b'-') {
+        // this is a single hyphen which is pseudo flag (stops search for more flags but has no
+        // effect)
+        if arg.len() == 1 {
+            return Some(EchoFlags{
+                n: true,
+                e: false,
+                is_hyphen: true
+            });
+        } else {
+            let mut trailing_newline = true;
+            let mut escape = false;
 
-    if let Some(first_val) = args_iter.next() {
-        // the first argument ('echo') gets pushed before we start with the checks for flags/'--'
-        result.push(first_val);
-        // We need to skip any possible Flag arguments until we find the first argument to echo that
-        // is not a flag. If the first argument is double hyphen we inject an additional '--'
-        // otherwise we switch is_first_argument boolean to skip the checks for any further arguments
-        for arg in args_iter {
-            if is_first_argument && !is_echo_flag(&arg) {
-                is_first_argument = false;
-                if arg == "--" {
-                    result.push(OsString::from("--"));
+            for c in &bytes[1..] {
+                match c {
+                    b'e' => escape = true,
+                    b'E' => escape = false,
+                    b'n' => trailing_newline = false,
+                    // if there is any char in an argument starting with '-' doesnt match e/E/n
+                    // present means that this argument is not a flag
+                    _ => return None,
                 }
             }
-            result.push(arg);
+            return Some(EchoFlags{
+                n: trailing_newline,
+                e: escape,
+                is_hyphen: false
+            });
         }
     }
-
-    result.into_iter()
+    // argumetn doesnt start with '-' == no flag
+    None
 }
 
-fn collect_args(matches: &ArgMatches) -> Vec<OsString> {
-    matches
-        .get_many::<OsString>(options::STRING)
-        .map_or_else(Vec::new, |values| values.cloned().collect())
+fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
+    let mut result = Vec::new();
+    let mut trailing_newline = true;
+    let mut escape = false;
+    let mut args_iter = args.into_iter();
+
+    // We need to skip any possible Flag arguments until we find the first argument to echo that
+    // is not a flag. If the first argument is double hyphen we inject an additional '--'
+    // otherwise we switch is_first_argument boolean to skip the checks for any further arguments
+    for arg in &mut args_iter {
+        if let Some(echo_flags) = is_echo_flag(&arg) {
+            if echo_flags.is_hyphen {
+                // a single hyphen also breaks search for flags
+                result.push(arg);
+                break;
+            }
+            trailing_newline = echo_flags.n;
+            escape = echo_flags.e;
+        } else {
+            // first found argument stops search for flags, from here everything is handled as a
+            // normal attribute
+            result.push(arg);
+            break;
+        }
+    }
+    // push the remaining argumetns into result vector
+    for arg in args_iter {
+        result.push(arg);
+    }
+    (result, trailing_newline, escape)
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let is_posixly_correct = env::var("POSIXLY_CORRECT").is_ok();
+    let is_posixly_correct = if let Ok(posixly_correct) = env::var("POSIXLY_CORRECT")  {
+        posixly_correct == "1"
+    } else {
+        false
+    };
 
+    let args_iter = args.skip(1);
     let (args, trailing_newline, escaped) = if is_posixly_correct {
-        let mut args_iter = args.skip(1).peekable();
+        let mut args_iter = args_iter.peekable();
 
         if args_iter.peek() == Some(&OsString::from("-n")) {
-            let matches = uu_app().get_matches_from(handle_double_hyphens(args_iter));
-            let args = collect_args(&matches);
+            // if POSIXLY_CORRECT is set and the first argument is the "-n" flag
+            // we filter flags normally but 'escaped' is activated nontheless
+            let (args, _, _) = filter_echo_flags(args_iter);
             (args, false, true)
         } else {
-            let args: Vec<_> = args_iter.collect();
+            // if POSIXLY_CORRECT is set and the first argument is not the "-n" flag
+            // we just collect all arguments as every argument is considered an argument
+             let args: Vec<OsString> = args_iter.collect();
             (args, true, true)
         }
+
     } else {
-        let matches = uu_app().get_matches_from(handle_double_hyphens(args.into_iter()));
-        let trailing_newline = !matches.get_flag(options::NO_NEWLINE);
-        let escaped = matches.get_flag(options::ENABLE_BACKSLASH_ESCAPE);
-        let args = collect_args(&matches);
+        // if POSIXLY_CORRECT is not set we filter the flags normally
+        let (args, trailing_newline, escaped) = filter_echo_flags(args_iter);
         (args, trailing_newline, escaped)
     };
 

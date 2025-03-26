@@ -273,6 +273,59 @@ fn test_double_hyphens_at_start() {
         .stdout_only("-- a b --\n");
 }
 
+
+#[test]
+fn test_double_hyphens_after_single_hyphen() {
+    new_ucmd!()
+        .arg("-")
+        .arg("--")
+        .succeeds()
+        .stdout_only("- --\n");
+
+    new_ucmd!()
+        .arg("-")
+        .arg("-n")
+        .arg("--")
+        .succeeds()
+        .stdout_only("- -n --\n");
+
+    new_ucmd!()
+        .arg("-n")
+        .arg("-")
+        .arg("--")
+        .succeeds()
+        .stdout_only("- --");
+}
+
+#[test]
+fn test_flag_like_arguments_which_are_no_flags() {
+    new_ucmd!()
+        .arg("-efjkow")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-efjkow --\n");
+
+    new_ucmd!()
+        .arg("--")
+        .arg("-efjkow")
+        .succeeds()
+        .stdout_only("-- -efjkow\n");
+
+    new_ucmd!()
+        .arg("-efjkow")
+        .arg("-n")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-efjkow -n --\n");
+
+    new_ucmd!()
+        .arg("-n")
+        .arg("--")
+        .arg("-efjkow")
+        .succeeds()
+        .stdout_only("-- -efjkow");
+}
+
 #[test]
 fn test_double_hyphens_after_flags() {
     new_ucmd!()
@@ -288,6 +341,18 @@ fn test_double_hyphens_after_flags() {
         .arg("foo\n")
         .succeeds()
         .stdout_only("-- foo\n");
+
+    new_ucmd!()
+        .arg("-ne")
+        .arg("--")
+        .succeeds()
+        .stdout_only("--");
+
+    new_ucmd!()
+        .arg("-neE")
+        .arg("--")
+        .succeeds()
+        .stdout_only("--");
 
     new_ucmd!()
         .arg("-e")
