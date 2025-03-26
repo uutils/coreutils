@@ -1001,8 +1001,6 @@ fn test_gnu_compat_limited_from_stdin() {
         .stdout_is("6\n5\n1\n3\n2\n7\n4\n");
 }
 
-// We haven't reverse-engineered GNU's nonrepeating integer sampling yet.
-#[ignore = "disabled until fixed"]
 #[test]
 fn test_gnu_compat_range_no_repeat() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1064,5 +1062,22 @@ fn test_seed_range_no_repeat() {
         .arg("-i1-10")
         .succeeds()
         .no_stderr()
-        .stdout_is("8\n9\n5\n10\n1\n2\n4\n7\n3\n6\n");
+        .stdout_is("8\n9\n1\n5\n2\n6\n4\n3\n10\n7\n");
+}
+
+// The nonrepeating integer generator has a mode that doesn't kick in below 16 elements.
+// This has no visible effect but it's important that the tests exercise the codepath.
+#[test]
+fn test_seed_long_range_no_repeat() {
+    new_ucmd!()
+        .arg("--random-seed=67890")
+        .arg("-i1-100")
+        .arg("-n50")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(
+            "1\n3\n35\n37\n36\n45\n72\n17\n18\n40\n67\n74\n81\n77\n14\n90\
+            \n7\n12\n80\n54\n23\n61\n29\n41\n15\n56\n6\n32\n82\n76\n11\n2\n100\
+            \n50\n60\n97\n73\n79\n91\n89\n85\n86\n66\n70\n22\n55\n8\n83\n39\n27\n",
+        );
 }
