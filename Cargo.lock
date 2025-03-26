@@ -3806,6 +3806,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "itoa",
  "rand 0.9.2",
  "rand_core 0.9.3",
  "tempfile",
