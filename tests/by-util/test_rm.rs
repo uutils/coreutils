@@ -973,10 +973,12 @@ fn test_rm_one_file_system() {
     }
 
     // Define paths for temporary files and directories
-    let img_path = "/tmp/fs.img";
-    let mount_point = "/tmp/fs";
+    let img_path = "fs.img";
+    let mount_point = "fs";
     let src_dir = "a/b";
     let bind_mount_point = "a";
+
+    at.touch(img_path);
 
     // Create filesystem image
     scene
@@ -1021,6 +1023,10 @@ fn test_rm_one_file_system() {
     // Cleanup
     let _ = scene.cmd("umount").arg(bind_mount_point).run();
     let _ = scene.cmd("umount").arg(mount_point).run();
+    let _ = scene
+        .cmd("rm")
+        .args(&["-rf", mount_point, bind_mount_point])
+        .run();
 }
 
 #[test]
@@ -1036,10 +1042,12 @@ fn test_rm_preserve_root() {
     }
 
     // Define paths for temporary files and directories
-    let img_path = "/tmp/fs.img";
-    let mount_point = "/tmp/fs";
+    let img_path = "fs.img";
+    let mount_point = "fs";
     let src_dir = "a/b";
     let bind_mount_point = "a";
+
+    at.touch(img_path);
 
     // Create filesystem image
     scene
@@ -1080,9 +1088,13 @@ fn test_rm_preserve_root() {
         .args(&["--preserve-root=all", "-rf", bind_mount_point])
         .fails()
         .stderr_contains(format!("rm: skipping '{}'", bind_mount_point))
-        .stderr_contains("rm: and --preserve-root=all is in effect".to_string());
+        .stderr_contains("rm: and --preserve-root=all is in effect");
 
     // Cleanup
     let _ = scene.cmd("umount").arg(bind_mount_point).run();
     let _ = scene.cmd("umount").arg(mount_point).run();
+    let _ = scene
+        .cmd("rm")
+        .args(&["-rf", mount_point, bind_mount_point])
+        .run();
 }
