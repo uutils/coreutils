@@ -1,3 +1,4 @@
+use chrono::{DateTime, Duration, Utc};
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
@@ -409,6 +410,31 @@ fn test_date_string_human() {
             .arg("+%Y-%m-%d %S:%M")
             .succeeds()
             .stdout_matches(&re);
+    }
+}
+
+#[test]
+fn test_negative_offset() {
+    let data_formats = vec![
+        ("-1 hour", Duration::hours(1)),
+        ("-1 hours", Duration::hours(1)),
+        ("-1 day", Duration::days(1)),
+        ("-2 weeks", Duration::weeks(2)),
+    ];
+    for (date_format, offset) in data_formats {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_format)
+            .arg("--rfc-3339=seconds")
+            .succeeds()
+            .stdout_str_check(|out| {
+                let date = DateTime::parse_from_rfc3339(out.trim()).unwrap();
+
+                // Is the resulting date roughly what is expected?
+                let expected_date = Utc::now() - offset;
+                date > expected_date - Duration::minutes(10)
+                    && date < expected_date + Duration::minutes(10)
+            });
     }
 }
 
