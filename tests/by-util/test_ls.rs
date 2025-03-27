@@ -4786,7 +4786,7 @@ fn test_ls_subdired_complex() {
 }
 
 #[test]
-fn test_ls_cf_output_should_be_delimited_by_tab() {
+fn test_ls_cf_output_should_be_delimited_by_spaces() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("e");
@@ -4795,7 +4795,7 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
 
     ucmd.args(&["-CF", "e"])
         .succeeds()
-        .stdout_is("a2345/\tb/\n");
+        .stdout_is("a2345/  b/\n");
 }
 
 #[cfg(all(unix, feature = "dd"))]
