@@ -24,7 +24,6 @@ path = "src/cp.rs"
 clap = { workspace = true }
 filetime = { workspace = true }
 libc = { workspace = true }
-linux-raw-sys = { workspace = true }
 quick-error = { workspace = true }
 selinux = { workspace = true, optional = true }
 uucore = { workspace = true, features = [
@@ -39,10 +38,14 @@ uucore = { workspace = true, features = [
 ] }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(unix)'.dependencies]
 xattr = { workspace = true }
 exacl = { workspace = true, optional = true }
+
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+linux-raw-sys = { workspace = true }
 
 [[bin]]
 name = "cp"

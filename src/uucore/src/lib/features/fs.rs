@@ -7,12 +7,14 @@
 
 // spell-checker:ignore backport
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 use libc::{
     S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH,
     S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
     mode_t,
 };
+use rustix::fs::lstat;
+use rustix::fs::stat;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
@@ -22,8 +24,12 @@ use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
+#[cfg(any(unix, target_os = "wasi"))]
+use std::os::fd::AsFd;
+
 #[cfg(unix)]
-use std::os::unix::{fs::MetadataExt, io::AsRawFd};
+use std::os::unix::fs::MetadataExt;
+
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
@@ -31,7 +37,7 @@ use winapi_util::AsHandleRef;
 /// Used to check if the `mode` has its `perm` bit set.
 ///
 /// This macro expands to `mode & perm != 0`.
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 #[macro_export]
 macro_rules! has {
     ($mode:expr, $perm:expr) => {
@@ -41,15 +47,17 @@ macro_rules! has {
 
 /// Information to uniquely identify a file
 pub struct FileInformation(
-    #[cfg(unix)] nix::sys::stat::FileStat,
+    #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
     #[cfg(windows)] winapi_util::file::Information,
 );
 
 impl FileInformation {
     /// Get information from a currently open file
-    #[cfg(unix)]
-    pub fn from_file(file: &impl AsRawFd) -> IOResult<Self> {
-        let stat = nix::sys::stat::fstat(file.as_raw_fd())?;
+    #[cfg(any(unix, target_os = "wasi"))]
+    pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
+        use rustix::fs::fstat;
+
+        let stat = fstat(file)?;
         Ok(Self(stat))
     }
 
@@ -65,12 +73,12 @@ impl FileInformation {
     /// If `path` points to a symlink and `dereference` is true, information about
     /// the link's target will be returned.
     pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             let stat = if dereference {
-                nix::sys::stat::stat(path.as_ref())
+                stat(path.as_ref())
             } else {
-                nix::sys::stat::lstat(path.as_ref())
+                lstat(path.as_ref())
             };
             Ok(Self(stat?))
         }
@@ -92,7 +100,7 @@ impl FileInformation {
     }
 
     pub fn file_size(&self) -> u64 {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             assert!(self.0.st_size >= 0, "File size is negative");
             self.0.st_size.try_into().unwrap()
@@ -110,7 +118,7 @@ impl FileInformation {
 
     pub fn number_of_links(&self) -> u64 {
         #[cfg(all(
-            unix,
+            any(unix, target_os = "wasi"),
             not(target_vendor = "apple"),
             not(target_os = "aix"),
             not(target_os = "android"),
@@ -127,7 +135,7 @@ impl FileInformation {
         ))]
         return self.0.st_nlink;
         #[cfg(all(
-            unix,
+            any(unix, target_os = "wasi"),
             any(
                 target_vendor = "apple",
                 target_os = "android",
@@ -166,7 +174,7 @@ impl FileInformation {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
@@ -185,7 +193,7 @@ impl Eq for FileInformation {}
 
 impl Hash for FileInformation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             self.0.st_dev.hash(state);
             self.0.st_ino.hash(state);
@@ -468,7 +476,7 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
 /// - 'l' for symbolic links
 /// - 's' for sockets
 /// - '?' for any other unrecognized file types
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 fn get_file_display(mode: mode_t) -> char {
     match mode & S_IFMT {
         S_IFDIR => 'd',
@@ -486,7 +494,7 @@ fn get_file_display(mode: mode_t) -> char {
 // The logic below is more readable written this way.
 #[allow(clippy::if_not_else)]
 #[allow(clippy::cognitive_complexity)]
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 /// Display the permissions of a file on a unix like system
 pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String {
     let mut result;
@@ -684,9 +692,13 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 /// # Arguments
 ///
 /// * `path` - A reference to the path to be checked.
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 pub fn path_ends_with_terminator(path: &Path) -> bool {
+    #[cfg(unix)]
     use std::os::unix::prelude::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
+
     path.as_os_str()
         .as_bytes()
         .last()
@@ -712,10 +724,10 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
 ///
 /// * `bool` - Returns `true` if stdin is a directory, `false` otherwise.
 pub fn is_stdin_directory(stdin: &Stdin) -> bool {
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     {
-        use nix::sys::stat::fstat;
-        let mode = fstat(stdin.as_raw_fd()).unwrap().st_mode as mode_t;
+        use rustix::fs::fstat;
+        let mode = fstat(stdin).unwrap().st_mode as mode_t;
         has!(mode, S_IFDIR)
     }
 
@@ -732,7 +744,7 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
 
 pub mod sane_blksize {
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(all(not(target_os = "windows"), not(target_os = "wasi")))]
     use std::os::unix::fs::MetadataExt;
     use std::{fs::metadata, path::Path};
 
@@ -756,12 +768,12 @@ pub mod sane_blksize {
     /// If the metadata contain invalid values a meaningful adaption
     /// of that value is done.
     pub fn sane_blksize_from_metadata(_metadata: &std::fs::Metadata) -> u64 {
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(all(not(target_os = "windows"), not(target_os = "wasi")))]
         {
             sane_blksize(_metadata.blksize())
         }
 
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "wasi"))]
         {
             DEFAULT
         }
