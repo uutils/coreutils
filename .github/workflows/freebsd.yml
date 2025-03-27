@@ -39,7 +39,7 @@ jobs:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Prepare, build and test
       uses: vmactions/freebsd-vm@v1.1.9
       with:
@@ -133,7 +133,7 @@ jobs:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Prepare, build and test
       uses: vmactions/freebsd-vm@v1.1.9
       with:
