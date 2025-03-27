@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore anotherfile invalidchecksum JWZG FFFD xffname prefixfilename bytelen bitlen hexdigit
+// spell-checker:ignore anotherfile invalidchecksum JWZG FFFD xffname prefixfilename bytelen bitlen hexdigit rsplit
 
 use data_encoding::BASE64;
 use os_display::Quotable;
@@ -484,10 +484,24 @@ impl LineFormat {
         let algo_start = if trimmed.starts_with(b"\\") { 1 } else { 0 };
         let rest = &trimmed[algo_start..];
 
+        enum SubCase {
+            Posix,
+            OpenSSL,
+        }
         // find the next parenthesis  using byte search (not next whitespace) because openssl's
         // tagged format does not put a space before (filename)
+
         let par_idx = rest.iter().position(|&b| b == b'(')?;
-        let algo_substring = &rest[..par_idx].trim_ascii();
+        let sub_case = if rest[par_idx - 1] == b' ' {
+            SubCase::Posix
+        } else {
+            SubCase::OpenSSL
+        };
+
+        let algo_substring = match sub_case {
+            SubCase::Posix => &rest[..par_idx - 1],
+            SubCase::OpenSSL => &rest[..par_idx],
+        };
         let mut algo_parts = algo_substring.splitn(2, |&b| b == b'-');
         let algo = algo_parts.next()?;
 
@@ -509,8 +523,10 @@ impl LineFormat {
         let algo_utf8 = unsafe { String::from_utf8_unchecked(algo.to_vec()) };
         // stripping '(' not ' (' since we matched on ( not whitespace because of openssl.
         let after_paren = rest.get(par_idx + 1..)?;
-        let (filename, checksum) = ByteSliceExt::split_once(after_paren, b") = ")
-            .or_else(|| ByteSliceExt::split_once(after_paren, b")= "))?;
+        let (filename, checksum) = match sub_case {
+            SubCase::Posix => ByteSliceExt::rsplit_once(after_paren, b") = ")?,
+            SubCase::OpenSSL => ByteSliceExt::rsplit_once(after_paren, b")= ")?,
+        };
 
         fn is_valid_checksum(checksum: &[u8]) -> bool {
             if checksum.is_empty() {
@@ -608,13 +624,20 @@ impl LineFormat {
 
 // Helper trait for byte slice operations
 trait ByteSliceExt {
-    fn split_once(&self, pattern: &[u8]) -> Option<(&Self, &Self)>;
+    /// Look for a pattern from right to left, return surrounding parts if found.
+    fn rsplit_once(&self, pattern: &[u8]) -> Option<(&Self, &Self)>;
 }
 
 impl ByteSliceExt for [u8] {
-    fn split_once(&self, pattern: &[u8]) -> Option<(&Self, &Self)> {
-        let pos = self.windows(pattern.len()).position(|w| w == pattern)?;
-        Some((&self[..pos], &self[pos + pattern.len()..]))
+    fn rsplit_once(&self, pattern: &[u8]) -> Option<(&Self, &Self)> {
+        let pos = self
+            .windows(pattern.len())
+            .rev()
+            .position(|w| w == pattern)?;
+        Some((
+            &self[..self.len() - pattern.len() - pos],
+            &self[self.len() - pos..],
+        ))
     }
 }
 
@@ -1345,30 +1368,67 @@ mod tests {
         #[allow(clippy::type_complexity)]
         let test_cases: &[(&[u8], Option<(&[u8], Option<&[u8]>, &[u8], &[u8])>)] = &[
             (b"SHA256 (example.txt) = d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Some((b"SHA256", None, b"example.txt", b"d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"))),
-            // cspell:disable-next-line
+            // cspell:disable
             (b"BLAKE2b-512 (file) = abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef", Some((b"BLAKE2b", Some(b"512"), b"file", b"abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef"))),
             (b" MD5 (test) = 9e107d9d372bb6826bd81d3542a419d6", Some((b"MD5", None, b"test", b"9e107d9d372bb6826bd81d3542a419d6"))),
             (b"SHA-1 (anotherfile) = a9993e364706816aba3e25717850c26c9cd0d89d", Some((b"SHA", Some(b"1"), b"anotherfile", b"a9993e364706816aba3e25717850c26c9cd0d89d"))),
+            (b" MD5 (anothertest) = fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"anothertest", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b" MD5(anothertest2) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b" MD5(weirdfilename0)= stillfilename)= fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename0)= stillfilename", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b" MD5(weirdfilename1)= )= fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename1)= ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b" MD5(weirdfilename2) = )= fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename2) = ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b" MD5 (weirdfilename3)= ) = fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename3)= ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b" MD5 (weirdfilename4) = ) = fds65dsf46as5df4d6f54asds5d7f7g9", Some((b"MD5", None, b"weirdfilename4) = ", b"fds65dsf46as5df4d6f54asds5d7f7g9"))),
+            (b" MD5(weirdfilename5)= ) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b" MD5(weirdfilename6) = ) = fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b" MD5 (weirdfilename7)= )= fds65dsf46as5df4d6f54asds5d7f7g9", None),
+            (b" MD5 (weirdfilename8) = )= fds65dsf46as5df4d6f54asds5d7f7g9", None),
         ];
 
+        // cspell:enable
         for (input, expected) in test_cases {
             let line_info = LineFormat::parse_algo_based(input);
             match expected {
                 Some((algo, bits, filename, checksum)) => {
-                    assert!(line_info.is_some());
+                    assert!(
+                        line_info.is_some(),
+                        "expected Some, got None for {}",
+                        String::from_utf8_lossy(filename)
+                    );
                     let line_info = line_info.unwrap();
-                    assert_eq!(&line_info.algo_name.unwrap().as_bytes(), algo);
+                    assert_eq!(
+                        &line_info.algo_name.unwrap().as_bytes(),
+                        algo,
+                        "failed for {}",
+                        String::from_utf8_lossy(filename)
+                    );
                     assert_eq!(
                         line_info
                             .algo_bit_len
                             .map(|m| m.to_string().as_bytes().to_owned()),
-                        bits.map(|b| b.to_owned())
+                        bits.map(|b| b.to_owned()),
+                        "failed for {}",
+                        String::from_utf8_lossy(filename)
                     );
-                    assert_eq!(&line_info.filename, filename);
-                    assert_eq!(&line_info.checksum.as_bytes(), checksum);
+                    assert_eq!(
+                        &line_info.filename,
+                        filename,
+                        "failed for {}",
+                        String::from_utf8_lossy(filename)
+                    );
+                    assert_eq!(
+                        &line_info.checksum.as_bytes(),
+                        checksum,
+                        "failed for {}",
+                        String::from_utf8_lossy(filename)
+                    );
                 }
                 None => {
-                    assert!(line_info.is_none());
+                    assert!(
+                        line_info.is_none(),
+                        "failed for {}",
+                        String::from_utf8_lossy(input)
+                    );
                 }
             }
         }
