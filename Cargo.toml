@@ -578,6 +578,7 @@ single_char_pattern = "warn"
 explicit_iter_loop = "warn"
 if_not_else = "warn"
 manual_let_else = "warn"
+panic = "warn"
 
 all = { level = "deny", priority = -1 }
 cargo = { level = "warn", priority = -1 }
