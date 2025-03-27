@@ -274,6 +274,53 @@ fn test_double_hyphens_at_start() {
 }
 
 #[test]
+fn test_double_hyphens_after_flags() {
+    new_ucmd!()
+        .arg("-e")
+        .arg("--")
+        .succeeds()
+        .stdout_only("--\n");
+
+    new_ucmd!()
+        .arg("-n")
+        .arg("-e")
+        .arg("--")
+        .arg("foo\n")
+        .succeeds()
+        .stdout_only("-- foo\n");
+
+    new_ucmd!()
+        .arg("-e")
+        .arg("--")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-- --\n");
+
+    new_ucmd!()
+        .arg("-e")
+        .arg("--")
+        .arg("a")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-- a --\n");
+
+    new_ucmd!()
+        .arg("-n")
+        .arg("--")
+        .arg("a")
+        .succeeds()
+        .stdout_only("-- a");
+
+    new_ucmd!()
+        .arg("-n")
+        .arg("--")
+        .arg("a")
+        .arg("--")
+        .succeeds()
+        .stdout_only("-- a --");
+}
+
+#[test]
 fn test_double_hyphens() {
     new_ucmd!().arg("--").succeeds().stdout_only("--\n");
     new_ucmd!()
