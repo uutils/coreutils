@@ -41,7 +41,7 @@ use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum EnvError {
     #[error("no terminating quote in -S string")]
     EnvMissingClosingQuote(usize,char),
