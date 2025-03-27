@@ -24,8 +24,19 @@ Run `cargo build --release` before benchmarking after you make a change!
 
 ## Sorting numbers
 
-- Generate a list of numbers: `seq 0 100000 | sort -R > shuffled_numbers.txt`.
-- Benchmark numeric sorting with hyperfine: `hyperfine "target/release/coreutils sort shuffled_numbers.txt -n -o output.txt"`.
+- Generate a list of numbers:
+  ```
+  shuf -i 1-1000000 -n 1000000 > shuffled_numbers.txt
+  # or
+  seq 1 1000000 | sort -R > shuffled_numbers.txt
+  ```
+- Benchmark numeric sorting with hyperfine
+  ```
+  hyperfine --warmup 3 \
+    '/tmp/gnu-sort -n /tmp/shuffled_numbers.txt'
+    '/tmp/uu_before sort -n /tmp/shuffled_numbers.txt'
+    '/tmp/uu_after sort -n /tmp/shuffled_numbers.txt'
+  ```
 
 ## Sorting numbers with -g
 
