@@ -20,6 +20,7 @@
 
 use std::borrow::Cow;
 
+use crate::EnvError;
 use crate::native_int_str::NativeCharInt;
 use crate::native_int_str::NativeIntStr;
 use crate::native_int_str::NativeIntString;
@@ -27,7 +28,6 @@ use crate::native_int_str::from_native_int_representation;
 use crate::string_expander::StringExpander;
 use crate::string_parser::StringParser;
 use crate::variable_parser::VariableParser;
-use crate::EnvError;
 
 const BACKSLASH: char = '\\';
 const DOUBLE_QUOTES: char = '\"';
@@ -127,7 +127,10 @@ impl<'a> SplitIterator<'a> {
     }
 
     fn make_invalid_sequence_backslash_xin_minus_s(&self, c: char) -> EnvError {
-        EnvError::EnvInvalidSequenceBackslashXInMinusS(self.expander.get_parser().get_peek_position(),c)
+        EnvError::EnvInvalidSequenceBackslashXInMinusS(
+            self.expander.get_parser().get_peek_position(),
+            c,
+        )
     }
 
     fn state_root(&mut self) -> Result<(), EnvError> {
@@ -165,7 +168,10 @@ impl<'a> SplitIterator<'a> {
 
     fn state_delimiter_backslash(&mut self) -> Result<(), EnvError> {
         match self.get_current_char() {
-            None => Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(self.get_parser().get_peek_position(),"Delimiter".into())),
+            None => Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                self.get_parser().get_peek_position(),
+                "Delimiter".into(),
+            )),
             Some('_') | Some(NEW_LINE) => {
                 self.skip_one()?;
                 Ok(())
@@ -217,7 +223,10 @@ impl<'a> SplitIterator<'a> {
 
     fn state_unquoted_backslash(&mut self) -> Result<(), EnvError> {
         match self.get_current_char() {
-            None => Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(self.get_parser().get_peek_position(),"Unquoted".into())),
+            None => Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                self.get_parser().get_peek_position(),
+                "Unquoted".into(),
+            )),
             Some(NEW_LINE) => {
                 self.skip_one()?;
                 Ok(())
@@ -245,8 +254,8 @@ impl<'a> SplitIterator<'a> {
             match self.get_current_char() {
                 None => {
                     return Err(EnvError::EnvMissingClosingQuote(
-                        self.get_parser().get_peek_position(), 
-                        '\''
+                        self.get_parser().get_peek_position(),
+                        '\'',
                     ));
                 }
                 Some(SINGLE_QUOTES) => {
@@ -266,7 +275,7 @@ impl<'a> SplitIterator<'a> {
 
     fn split_single_quoted_backslash(&mut self) -> Result<(), EnvError> {
         match self.get_current_char() {
-            None => Err(EnvError::EnvMissingClosingQuote (
+            None => Err(EnvError::EnvMissingClosingQuote(
                 self.get_parser().get_peek_position(),
                 '\'',
             )),
@@ -295,8 +304,8 @@ impl<'a> SplitIterator<'a> {
             match self.get_current_char() {
                 None => {
                     return Err(EnvError::EnvMissingClosingQuote(
-                        self.get_parser().get_peek_position(), 
-                        '"'
+                        self.get_parser().get_peek_position(),
+                        '"',
                     ));
                 }
                 Some(DOLLAR) => {
@@ -319,7 +328,7 @@ impl<'a> SplitIterator<'a> {
 
     fn state_double_quoted_backslash(&mut self) -> Result<(), EnvError> {
         match self.get_current_char() {
-            None => Err(EnvError::EnvMissingClosingQuote (
+            None => Err(EnvError::EnvMissingClosingQuote(
                 self.get_parser().get_peek_position(),
                 '"',
             )),
@@ -331,7 +340,7 @@ impl<'a> SplitIterator<'a> {
                 self.take_one()?;
                 Ok(())
             }
-            Some('c') => Err(EnvError::EnvBackslashCNotAllowedInDoubleQuotes (
+            Some('c') => Err(EnvError::EnvBackslashCNotAllowedInDoubleQuotes(
                 self.get_parser().get_peek_position(),
             )),
             Some(c) if self.check_and_replace_ascii_escape_code(c)? => Ok(()),

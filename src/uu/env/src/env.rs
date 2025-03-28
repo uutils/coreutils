@@ -44,13 +44,13 @@ use thiserror::Error;
 #[derive(Debug, Error, PartialEq)]
 pub enum EnvError {
     #[error("no terminating quote in -S string")]
-    EnvMissingClosingQuote(usize,char),
+    EnvMissingClosingQuote(usize, char),
     #[error("invalid backslash at end of string in -S")]
-    EnvInvalidBackslashAtEndOfStringInMinusS(usize,String),
+    EnvInvalidBackslashAtEndOfStringInMinusS(usize, String),
     #[error("'\\c' must not appear in double-quoted -S string")]
     EnvBackslashCNotAllowedInDoubleQuotes(usize),
     #[error("invalid sequence '\\{}' in -S",.1)]
-    EnvInvalidSequenceBackslashXInMinusS(usize,char),
+    EnvInvalidSequenceBackslashXInMinusS(usize, char),
     #[error("Missing closing brace")]
     EnvParsingOfVariableMissingClosingBrace(usize),
     #[error("Missing variable name")]
@@ -58,15 +58,15 @@ pub enum EnvError {
     #[error("Missing closing brace after default value at {}",.0)]
     EnvParsingOfVariableMissingClosingBraceAfterValue(usize),
     #[error("Unexpected character: '{}', expected variable name must not start with 0..9",.1)]
-    EnvParsingOfVariableUnexpectedNumber(usize,String),
+    EnvParsingOfVariableUnexpectedNumber(usize, String),
     #[error("Unexpected character: '{}', expected a closing brace ('}}') or colon (':')",.1)]
-    EnvParsingOfVariableExceptedBraceOrColon(usize,String),
+    EnvParsingOfVariableExceptedBraceOrColon(usize, String),
     #[error("")]
     EnvReachedEnd,
     #[error("")]
     EnvContinueWithDelimiter,
     #[error("{}{:?}",.0,.1)]
-    EnvInternalError(usize,string_parser::Error),
+    EnvInternalError(usize, string_parser::Error),
 }
 
 impl From<string_parser::Error> for EnvError {
@@ -308,32 +308,28 @@ pub fn uu_app() -> Command {
 
 pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>> {
     split_iterator::split(text).map_err(|e| match e {
-        EnvError::EnvBackslashCNotAllowedInDoubleQuotes (_) => {
+        EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_) => USimpleError::new(125, e.to_string()),
+        EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _) => {
             USimpleError::new(125, e.to_string())
         }
-        EnvError::EnvInvalidBackslashAtEndOfStringInMinusS ( _, _ ) => {
+        EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
             USimpleError::new(125, e.to_string())
         }
-        EnvError::EnvInvalidSequenceBackslashXInMinusS ( _, _ ) => {
-            USimpleError::new(125, e.to_string())
+        EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
+        EnvError::EnvParsingOfVariableMissingClosingBrace(pos) => {
+            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
         }
-        EnvError::EnvMissingClosingQuote ( _, _ ) => {
-            USimpleError::new(125, e.to_string())
+        EnvError::EnvParsingOfMissingVariable(pos) => {
+            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
         }
-        EnvError::EnvParsingOfVariableMissingClosingBrace ( pos ) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e.to_string()))
+        EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => {
+            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
         }
-        EnvError::EnvParsingOfMissingVariable ( pos ) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e.to_string()))
+        EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => {
+            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
         }
-        EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue ( pos ) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e.to_string()))
-        }
-        EnvError::EnvParsingOfVariableUnexpectedNumber ( pos, _ ) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e.to_string()))
-        }
-        EnvError::EnvParsingOfVariableExceptedBraceOrColon ( pos, _ ) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}" ,e.to_string()))
+        EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => {
+            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
         }
         _ => USimpleError::new(125, format!("Error: {e:?}")),
     })
@@ -840,7 +836,12 @@ mod tests {
         // Test EnvInvalidSequenceBackslashXInMinusS
         let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \x""#));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("invalid sequence '\\x' in -S"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid sequence '\\x' in -S")
+        );
 
         // Test EnvMissingClosingQuote
         let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo "#));
@@ -853,11 +854,21 @@ mod tests {
         // Test variable-related errors
         let result = parse_args_from_str(&NCvt::convert(r#"echo ${FOO"#));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("variable name issue (at 10): Missing closing brace"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("variable name issue (at 10): Missing closing brace")
+        );
 
         let result = parse_args_from_str(&NCvt::convert(r#"echo ${FOO:-value"#));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("variable name issue (at 17): Missing closing brace after default value"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("variable name issue (at 17): Missing closing brace after default value")
+        );
 
         let result = parse_args_from_str(&NCvt::convert(r#"echo ${1FOO}"#));
         assert!(result.is_err());

@@ -1013,7 +1013,10 @@ mod tests_split_iterator {
 
     use std::ffi::OsString;
 
-    use env::{native_int_str::{from_native_int_representation_owned, Convert, NCvt}, EnvError};
+    use env::{
+        EnvError,
+        native_int_str::{Convert, NCvt, from_native_int_representation_owned},
+    };
 
     fn split(input: &str) -> Result<Vec<OsString>, EnvError> {
         ::env::split_iterator::split(&NCvt::convert(input)).map(|vec| {
@@ -1122,15 +1125,24 @@ mod tests_split_iterator {
     fn split_trailing_backslash() {
         assert_eq!(
             split("\\"),
-            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS (1, "Delimiter".into()))
+            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                1,
+                "Delimiter".into()
+            ))
         );
         assert_eq!(
             split(" \\"),
-            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS (2, "Delimiter".into()))
+            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                2,
+                "Delimiter".into()
+            ))
         );
         assert_eq!(
             split("a\\"),
-            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS (2, "Unquoted".into()))
+            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                2,
+                "Unquoted".into()
+            ))
         );
     }
 
@@ -1138,23 +1150,14 @@ mod tests_split_iterator {
     fn split_errors() {
         assert_eq!(
             split("'abc"),
-            Err(EnvError::EnvMissingClosingQuote ( 4, '\'' ))
+            Err(EnvError::EnvMissingClosingQuote(4, '\''))
         );
-        assert_eq!(
-            split("\""),
-            Err(EnvError::EnvMissingClosingQuote ( 1, '"' ))
-        );
-        assert_eq!(
-            split("'\\"),
-            Err(EnvError::EnvMissingClosingQuote ( 2, '\'' ))
-        );
-        assert_eq!(
-            split("'\\"),
-            Err(EnvError::EnvMissingClosingQuote ( 2, '\'' ))
-        );
+        assert_eq!(split("\""), Err(EnvError::EnvMissingClosingQuote(1, '"')));
+        assert_eq!(split("'\\"), Err(EnvError::EnvMissingClosingQuote(2, '\'')));
+        assert_eq!(split("'\\"), Err(EnvError::EnvMissingClosingQuote(2, '\'')));
         assert_eq!(
             split(r#""$""#),
-            Err(EnvError::EnvParsingOfMissingVariable (2)),
+            Err(EnvError::EnvParsingOfMissingVariable(2)),
         );
     }
 
@@ -1162,23 +1165,25 @@ mod tests_split_iterator {
     fn split_error_fail_with_unknown_escape_sequences() {
         assert_eq!(
             split("\\a"),
-            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS (1,  'a'))
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(1, 'a'))
         );
         assert_eq!(
             split("\"\\a\""),
-            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS (2,  'a'))
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
         assert_eq!(
             split("'\\a'"),
-            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS (2,  'a'))
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
         assert_eq!(
             split(r#""\a""#),
-            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS (2,  'a'))
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
         assert_eq!(
             split(r"\🦉"),
-            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS (1, '\u{FFFD}'))
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(
+                1, '\u{FFFD}'
+            ))
         );
     }
 
