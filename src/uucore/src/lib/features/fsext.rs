@@ -29,6 +29,9 @@ static EXIT_ERR: i32 = 1;
 use crate::show_warning;
 
 #[cfg(windows)]
+use std::path::PathBuf;
+
+#[cfg(windows)]
 use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
@@ -259,12 +262,20 @@ impl MountInfo {
                 let mount_root = to_nul_terminated_wide_string(&mount_root);
                 GetDriveTypeW(mount_root.as_ptr())
             };
+
+        let mount_dir = Path::new(&mount_root)
+            .canonicalize()
+            .unwrap_or(PathBuf::new())
+            .to_str()
+            .unwrap()
+            .to_string();
+
         Some(Self {
             dev_id: volume_name,
             dev_name,
             fs_type: fs_type.unwrap_or_default(),
             mount_root,
-            mount_dir: String::new(),
+            mount_dir,
             mount_option: String::new(),
             remote,
             dummy: false,
