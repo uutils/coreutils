@@ -572,3 +572,113 @@ fn test_date_empty_tz() {
         .succeeds()
         .stdout_only("UTC\n");
 }
+
+#[test]
+fn test_date_tz_utc() {
+    new_ucmd!()
+        .env("TZ", "UTC0")
+        .arg("+%Z")
+        .succeeds()
+        .stdout_only("UTC\n");
+}
+
+#[test]
+fn test_date_tz_berlin() {
+    new_ucmd!()
+        .env("TZ", "Europe/Berlin")
+        .arg("+%Z")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^(CET|CEST)\n$").unwrap());
+}
+
+#[test]
+fn test_date_tz_vancouver() {
+    new_ucmd!()
+        .env("TZ", "America/Vancouver")
+        .arg("+%Z")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^(PDT|PST)\n$").unwrap());
+}
+
+#[test]
+fn test_date_tz_invalid() {
+    new_ucmd!()
+        .env("TZ", "Invalid/Timezone")
+        .arg("+%Z")
+        .succeeds()
+        .stdout_only("UTC\n");
+}
+
+#[test]
+fn test_date_tz_with_format() {
+    new_ucmd!()
+        .env("TZ", "Europe/Berlin")
+        .arg("+%Y-%m-%d %H:%M:%S %Z")
+        .succeeds()
+        .stdout_matches(
+            &Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (CET|CEST)\n$").unwrap(),
+        );
+}
+
+#[test]
+fn test_date_tz_with_utc_flag() {
+    new_ucmd!()
+        .env("TZ", "Europe/Berlin")
+        .arg("-u")
+        .arg("+%Z")
+        .succeeds()
+        .stdout_only("UTC\n");
+}
+
+#[test]
+fn test_date_tz_with_date_string() {
+    new_ucmd!()
+        .env("TZ", "Asia/Tokyo")
+        .arg("-d")
+        .arg("2024-01-01 12:00:00")
+        .arg("+%Y-%m-%d %H:%M:%S %Z")
+        .succeeds()
+        .stdout_only("2024-01-01 12:00:00 JST\n");
+}
+
+#[test]
+fn test_date_tz_with_relative_time() {
+    new_ucmd!()
+        .env("TZ", "America/Vancouver")
+        .arg("-d")
+        .arg("1 hour ago")
+        .arg("+%Y-%m-%d %H:%M:%S %Z")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} PDT\n$").unwrap());
+}
+
+#[test]
+fn test_date_utc_time() {
+    // Test that -u flag shows correct UTC time
+    new_ucmd!().arg("-u").arg("+%H:%M").succeeds();
+
+    // Test that -u flag shows UTC timezone
+    new_ucmd!()
+        .arg("-u")
+        .arg("+%Z")
+        .succeeds()
+        .stdout_only("UTC\n");
+
+    // Test that -u flag with specific timestamp shows correct UTC time
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("@0")
+        .succeeds()
+        .stdout_only("Thu Jan  1 00:00:00 UTC 1970\n");
+}
+
+#[test]
+fn test_date_empty_tz_time() {
+    new_ucmd!()
+        .env("TZ", "")
+        .arg("-d")
+        .arg("@0")
+        .succeeds()
+        .stdout_only("Thu Jan  1 00:00:00 UTC 1970\n");
+}
