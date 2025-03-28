@@ -7,7 +7,9 @@
 // spell-checker:ignore abbccd abcac acabc andand bigcmp bignum emptysub
 // spell-checker:ignore orempty oror
 
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_no_arguments() {
@@ -400,7 +402,9 @@ fn test_long_input() {
 
 /// Regroup the testcases of the GNU test expr.pl
 mod gnu_expr {
-    use crate::common::util::TestScenario;
+    use uutests::new_ucmd;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
 
     #[test]
     fn test_a() {

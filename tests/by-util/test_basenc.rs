@@ -5,7 +5,9 @@
 
 // spell-checker: ignore (encodings) lsbf msbf
 
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_z85_not_padded_decode() {
