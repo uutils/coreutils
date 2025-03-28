@@ -8,7 +8,10 @@
 
 use std::time::Duration;
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {

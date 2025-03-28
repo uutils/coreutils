@@ -5,8 +5,10 @@
 
 // spell-checker:ignore (flags) runlevel mesg
 
-use crate::common::util::{TestScenario, expected_result};
-
+use uutests::new_ucmd;
+use uutests::unwrap_or_return;
+use uutests::util::{TestScenario, expected_result};
+use uutests::util_name;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);

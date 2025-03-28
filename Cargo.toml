@@ -365,6 +365,7 @@ uucore = { version = "0.0.30", package = "uucore", path = "src/uucore" }
 uucore_procs = { version = "0.0.30", package = "uucore_procs", path = "src/uucore_procs" }
 uu_ls = { version = "0.0.30", path = "src/uu/ls" }
 uu_base32 = { version = "0.0.30", path = "src/uu/base32" }
+uutests = { version = "0.0.30", package = "uutests", path = "tests/uutests/" }
 
 [dependencies]
 clap = { workspace = true }
@@ -504,6 +505,7 @@ sha1 = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
 time = { workspace = true, features = ["local-offset"] }
 unindent = "0.2.3"
+uutests = { workspace = true }
 uucore = { workspace = true, features = [
   "mode",
   "entries",
@@ -514,6 +516,7 @@ uucore = { workspace = true, features = [
 walkdir = { workspace = true }
 hex-literal = "1.0.0"
 rstest = { workspace = true }
+ctor = "0.4.1"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
 procfs = { version = "0.17", default-features = false }
