@@ -6,7 +6,7 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
+use chrono::{DateTime, FixedOffset, Local, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{Arg, ArgAction, Command};
@@ -136,6 +136,24 @@ impl From<&str> for Rfc3339Format {
     }
 }
 
+/// Check if we should use UTC time based on the utc flag and TZ environment variable
+fn should_use_utc(utc: bool) -> bool {
+    // Either the -u flag is set or the TZ environment variable is empty
+    utc || matches!(std::env::var("TZ"), Ok(tz) if tz.is_empty())
+}
+
+/// Get the current time, considering the utc flag and TZ environment variable
+fn get_current_time(utc: bool) -> DateTime<Local> {
+    if should_use_utc(utc) {
+        // When -u flag is used or TZ is empty, we should use UTC time
+        // Simply convert UTC to Local without adjusting the time value
+        Utc::now().into()
+    } else {
+        // Use local time when neither condition is met
+        Local::now()
+    }
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -167,7 +185,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        let ref_time = Local::now();
+        let ref_time = get_current_time(matches.get_flag(OPT_UNIVERSAL));
         if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date.as_str()) {
             let duration = new_time.signed_duration_since(ref_time);
             DateSource::Human(duration)
@@ -212,11 +230,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return set_system_datetime(date);
     } else {
         // Get the current time, either in the local time zone or UTC.
-        let now: DateTime<FixedOffset> = if settings.utc {
-            let now = Utc::now();
-            now.with_timezone(&now.offset().fix())
+        let now = get_current_time(settings.utc);
+        // Convert to FixedOffset for consistent timezone handling
+        let now_fixed = if should_use_utc(settings.utc) {
+            // When -u flag is used or TZ is empty, use actual UTC time with zero offset
+            let utc_now = Utc::now();
+            utc_now.with_timezone(&FixedOffset::east_opt(0).unwrap())
         } else {
-            let now = Local::now();
+            // Otherwise use the local timezone's offset
             now.with_timezone(now.offset())
         };
 
@@ -230,7 +251,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             DateSource::Human(relative_time) => {
                 // Double check the result is overflow or not of the current_time + relative_time
                 // it may cause a panic of chrono::datetime::DateTime add
-                match now.checked_add_signed(relative_time) {
+                match now_fixed.checked_add_signed(relative_time) {
                     Some(date) => {
                         let iter = std::iter::once(Ok(date));
                         Box::new(iter)
@@ -262,7 +283,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Box::new(iter)
             }
             DateSource::Now => {
-                let iter = std::iter::once(Ok(now));
+                let iter = std::iter::once(Ok(now_fixed));
                 Box::new(iter)
             }
         };
@@ -273,7 +294,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for date in dates {
             match date {
                 Ok(date) => {
-                    let format_string = custom_time_format(format_string);
+                    let format_string = if should_use_utc(settings.utc) {
+                        // When -u flag is used or TZ is empty, replace %Z with UTC directly
+                        format_string.replace("%Z", "UTC")
+                    } else {
+                        custom_time_format(format_string)
+                    };
+
                     // Refuse to pass this string to chrono as it is crashing in this crate
                     if format_string.contains("%#z") {
                         return Err(USimpleError::new(
@@ -290,10 +317,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             format!("invalid format {}", format_string.replace("%f", "%N")),
                         ));
                     }
-                    let formatted = date
+
+                    // When -u flag is used or TZ is empty, ensure we format using UTC time
+                    let date_to_format = if should_use_utc(settings.utc) {
+                        // Convert the date to UTC to ensure correct time display
+                        date.with_timezone(&Utc)
+                            .with_timezone(&FixedOffset::east_opt(0).unwrap())
+                    } else {
+                        date
+                    };
+
+                    let formatted = date_to_format
                         .format_with_items(format_items)
                         .to_string()
                         .replace("%f", "%N");
+
                     println!("{formatted}");
                 }
                 Err((input, _err)) => show!(USimpleError::new(

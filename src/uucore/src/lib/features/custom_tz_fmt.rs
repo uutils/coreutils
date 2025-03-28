@@ -11,11 +11,15 @@ use iana_time_zone::get_timezone;
 ///
 /// For example, "UTC" or "CET" or "PDT"
 fn timezone_abbreviation() -> String {
+    // Check if we're in UTC mode (either through TZ=UTC0 or -u flag)
     let tz = match std::env::var("TZ") {
-        // TODO Support other time zones...
+        // If TZ is set to UTC0 or empty, use UTC
         Ok(s) if s == "UTC0" || s.is_empty() => Tz::Etc__UTC,
-        _ => match get_timezone() {
-            Ok(tz_str) => tz_str.parse().unwrap(),
+        // If TZ is set to any other value, try to parse it
+        Ok(tz_str) => tz_str.parse().unwrap_or(Tz::Etc__UTC),
+        // If TZ is not set, try to get the system timezone
+        Err(_) => match get_timezone() {
+            Ok(tz_str) => tz_str.parse().unwrap_or(Tz::Etc__UTC),
             Err(_) => Tz::Etc__UTC,
         },
     };
