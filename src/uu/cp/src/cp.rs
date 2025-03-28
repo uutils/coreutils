@@ -1736,11 +1736,14 @@ fn symlink_file(
 ) -> CopyResult<()> {
     #[cfg(not(windows))]
     {
-        std::os::unix::fs::symlink(source, dest).context(format!(
-            "cannot create symlink {} to {}",
-            get_filename(dest).unwrap_or("invalid file name").quote(),
-            get_filename(source).unwrap_or("invalid file name").quote()
-        ))?;
+        rustix::fs::symlink(source, dest).map_err(|e| {
+            Error::Error(format!(
+                "cannot create symlink {} to {}: {}",
+                get_filename(dest).unwrap_or("invalid file name").quote(),
+                get_filename(source).unwrap_or("invalid file name").quote(),
+                e
+            ))
+        })?;
     }
     #[cfg(windows)]
     {
@@ -1750,6 +1753,7 @@ fn symlink_file(
             get_filename(source).unwrap_or("invalid file name").quote()
         ))?;
     }
+
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
     }

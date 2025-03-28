@@ -30,7 +30,6 @@ dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
 wild = "2.2.1"
 glob = { workspace = true }
-iana-time-zone = { workspace = true }
 # * optional
 itertools = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
@@ -63,8 +62,16 @@ num-traits = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace = true, optional = true }
-nix = { workspace = true, features = ["fs", "uio", "zerocopy", "signal"] }
+nix = { workspace = true, features = ["uio", "zerocopy", "signal"] }
+rustix = { workspace = true, features = ["fs"] }
 xattr = { workspace = true, optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+iana-time-zone = { workspace = true, features = ["fallback"] }
+rustix = { workspace = true, features = ["fs"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+iana-time-zone = { workspace = true }
 
 [dev-dependencies]
 clap = { workspace = true }
