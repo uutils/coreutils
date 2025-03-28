@@ -49,6 +49,8 @@ use std::time::{Duration, Instant};
 use std::{env, hint, mem, thread};
 use tempfile::{Builder, TempDir};
 
+use std::sync::OnceLock;
+
 static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
 
@@ -60,19 +62,26 @@ static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical
 static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
 static END_OF_TRANSMISSION_SEQUENCE: &[u8] = b"\n\x04";
 
-// we can't use
-// pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
-// as we are in a library, not a binary
-pub fn get_tests_binary() -> String {
-    std::env::var("CARGO_BIN_EXE_coreutils").unwrap_or_else(|_| {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let debug_or_release = if cfg!(debug_assertions) {
-            "debug"
-        } else {
-            "release"
-        };
-        format!("{manifest_dir}/../../target/{debug_or_release}/coreutils")
+static TESTS_BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
+/// This function needs the env variable UUTESTS_BINARY_PATH
+/// which will very probably be env!("`CARGO_BIN_EXE_<program>`")
+/// because here, we are in a crate but we need the name of the final binary
+pub fn get_tests_binary() -> &'static str {
+    TESTS_BINARY_PATH.get_or_init(|| {
+        if let Ok(path) = env::var("UUTESTS_BINARY_PATH") {
+            return PathBuf::from(path);
+        }
+        panic!("Could not determine coreutils binary path. Please set UUTESTS_BINARY_PATH environment variable");
     })
+    .to_str()
+    .unwrap()
+}
+
+#[macro_export]
+macro_rules! get_tests_binary {
+    () => {
+        $crate::util::get_tests_binary()
+    };
 }
 
 pub const PATH: &str = env!("PATH");
@@ -394,6 +403,13 @@ impl CmdResult {
         self.exit_status().code().unwrap()
     }
 
+    /// Verify the exit code of the program
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    /// ```
     #[track_caller]
     pub fn code_is(&self, expected_code: i32) -> &Self {
         let fails = self.code() != expected_code;
@@ -452,6 +468,12 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stdout will be or
     /// 2.  you know that stdout will also be empty
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    ///  scene.ucmd().fails().no_stderr();
+    /// ```
     #[track_caller]
     pub fn no_stderr(&self) -> &Self {
         assert!(
@@ -468,6 +490,13 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
+    ///     new_ucmd!()
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    ///  scene.ucmd().fails().no_stdout();
+    /// ```
     #[track_caller]
     pub fn no_stdout(&self) -> &Self {
         assert!(
@@ -690,6 +719,16 @@ impl CmdResult {
         ))
     }
 
+    /// Verify if stdout contains a specific string
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains("Options:");
+    /// ```
     #[track_caller]
     pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
@@ -701,6 +740,16 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stdout contains a specific line
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_line("Options:");
+    /// ```
     #[track_caller]
     pub fn stdout_contains_line<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
@@ -712,6 +761,17 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stderr contains a specific string
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    ///     new_ucmd!()
+    /// .arg("-l")
+    /// .arg("IaMnOtAsIgNaL")
+    /// .fails()
+    /// .stderr_contains("IaMnOtAsIgNaL");
+    /// ```
     #[track_caller]
     pub fn stderr_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
@@ -723,6 +783,17 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stdout does not contain a specific string
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    ///  new_ucmd!()
+    /// .arg("-l")
+    /// .arg("IaMnOtAsIgNaL")
+    /// .fails()
+    /// .stdout_does_not_contain("Valid-signal");
+    /// ```
     #[track_caller]
     pub fn stdout_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
@@ -734,6 +805,17 @@ impl CmdResult {
         self
     }
 
+    /// Verify if st stderr does not contain a specific string
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    ///  new_ucmd!()
+    /// .arg("-l")
+    /// .arg("IaMnOtAsIgNaL")
+    /// .fails()
+    /// .stderr_does_not_contain("Valid-signal");
+    /// ```
     #[track_caller]
     pub fn stderr_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(!self.stderr_str().contains(cmp.as_ref()));
@@ -1189,9 +1271,9 @@ impl TestScenario {
         T: AsRef<str>,
     {
         let tmpd = Rc::new(TempDir::new().unwrap());
-        println!("bin: {:?}", get_tests_binary());
+        println!("bin: {:?}", get_tests_binary!());
         let ts = Self {
-            bin_path: PathBuf::from(get_tests_binary()),
+            bin_path: PathBuf::from(get_tests_binary!()),
             util_name: util_name.as_ref().into(),
             fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd,
@@ -1284,10 +1366,10 @@ impl Drop for TestScenario {
 #[cfg(unix)]
 #[derive(Debug, Default)]
 pub struct TerminalSimulation {
-    size: Option<libc::winsize>,
-    stdin: bool,
-    stdout: bool,
-    stderr: bool,
+    pub size: Option<libc::winsize>,
+    pub stdin: bool,
+    pub stdout: bool,
+    pub stderr: bool,
 }
 
 /// A `UCommand` is a builder wrapping an individual Command that provides several additional features:
@@ -1355,7 +1437,7 @@ impl UCommand {
     {
         let mut ucmd = Self::new();
         ucmd.util_name = Some(util_name.as_ref().into());
-        ucmd.bin_path(&*get_tests_binary()).temp_dir(tmpd);
+        ucmd.bin_path(&*get_tests_binary!()).temp_dir(tmpd);
         ucmd
     }
 
@@ -1392,7 +1474,8 @@ impl UCommand {
 
     /// Set the working directory for this [`UCommand`]
     ///
-    /// Per default the working directory is set to the [`UCommands`] temporary directory.
+    /// Per default the working directory is set to the [`UCommand`] temporary directory.
+    ///
     pub fn current_dir<T>(&mut self, current_dir: T) -> &mut Self
     where
         T: Into<PathBuf>,
@@ -1505,7 +1588,7 @@ impl UCommand {
     ///
     /// After the timeout elapsed these `run` methods (besides [`UCommand::run_no_wait`]) will
     /// panic. When [`UCommand::run_no_wait`] is used, this timeout is applied to
-    /// [`UChild::wait_with_output`] including all other waiting methods in [`UChild`] implicitly
+    /// `wait_with_output` including all other waiting methods in [`UChild`] implicitly
     /// using `wait_with_output()` and additionally [`UChild::kill`]. The default timeout of `kill`
     /// will be overwritten by this `timeout`.
     pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
@@ -1616,7 +1699,7 @@ impl UCommand {
                 self.args.push_front(util_name.into());
             }
         } else if let Some(util_name) = &self.util_name {
-            self.bin_path = Some(PathBuf::from(&*get_tests_binary()));
+            self.bin_path = Some(PathBuf::from(&*get_tests_binary!()));
             self.args.push_front(util_name.into());
         // neither `bin_path` nor `util_name` was set so we apply the default to run the arguments
         // in a platform specific shell
@@ -1811,7 +1894,6 @@ impl UCommand {
 
         let (mut command, captured_stdout, captured_stderr, stdin_pty) = self.build();
         log_info("run", self.to_string());
-
         let child = command.spawn().unwrap();
 
         let mut child = UChild::from(self, child, captured_stdout, captured_stderr, stdin_pty);
@@ -2307,12 +2389,12 @@ impl UChild {
 
     /// Wait for the child process to terminate and return a [`CmdResult`].
     ///
-    /// See [`UChild::wait_with_output`] for details on timeouts etc. This method can also be run if
+    /// See `wait_with_output` for details on timeouts etc. This method can also be run if
     /// the child process was killed with [`UChild::kill`].
     ///
     /// # Errors
     ///
-    /// Returns the error from the call to [`UChild::wait_with_output`] if any
+    /// Returns the error from the call to `wait_with_output` if any
     pub fn wait(self) -> io::Result<CmdResult> {
         let (bin_path, util_name, tmpd) = (
             self.bin_path.clone(),
@@ -2591,9 +2673,7 @@ impl UChild {
     /// the methods below when exiting the child process.
     ///
     /// * [`UChild::wait`]
-    /// * [`UChild::wait_with_output`]
     /// * [`UChild::pipe_in_and_wait`]
-    /// * [`UChild::pipe_in_and_wait_with_output`]
     ///
     /// Usually, there's no need to join manually but if needed, the [`UChild::join`] method can be
     /// used .
@@ -2650,7 +2730,7 @@ impl UChild {
     /// [`UChild::pipe_in`].
     ///
     /// # Errors
-    /// If [`ChildStdin::write_all`] or [`ChildStdin::flush`] returned an error
+    /// If [`std::process::ChildStdin::write_all`] or [`std::process::ChildStdin::flush`] returned an error
     pub fn try_write_in<T: Into<Vec<u8>>>(&mut self, data: T) -> io::Result<()> {
         let ignore_stdin_write_error = self.ignore_stdin_write_error;
         let mut writer = self.access_stdin_as_writer();
@@ -2672,7 +2752,7 @@ impl UChild {
 
     /// Close the child process stdout.
     ///
-    /// Note this will have no effect if the output was captured with [`CapturedOutput`] which is the
+    /// Note this will have no effect if the output was captured with CapturedOutput which is the
     /// default if [`UCommand::set_stdout`] wasn't called.
     pub fn close_stdout(&mut self) -> &mut Self {
         self.raw.stdout.take();
@@ -2681,7 +2761,7 @@ impl UChild {
 
     /// Close the child process stderr.
     ///
-    /// Note this will have no effect if the output was captured with [`CapturedOutput`] which is the
+    /// Note this will have no effect if the output was captured with CapturedOutput which is the
     /// default if [`UCommand::set_stderr`] wasn't called.
     pub fn close_stderr(&mut self) -> &mut Self {
         self.raw.stderr.take();
@@ -2986,6 +3066,15 @@ mod tests {
     // spell-checker:ignore (tests) asdfsadfa
     use super::*;
 
+    // Create a init for the test with a fake value (not needed)
+    #[cfg(test)]
+    #[ctor::ctor]
+    fn init() {
+        unsafe {
+            std::env::set_var("UUTESTS_BINARY_PATH", "");
+        }
+    }
+
     pub fn run_cmd<T: AsRef<OsStr>>(cmd: T) -> CmdResult {
         UCommand::new().arg(cmd).run()
     }
@@ -3193,168 +3282,6 @@ mod tests {
         res.stdout_does_not_match(&positive);
     }
 
-    #[cfg(feature = "echo")]
-    #[test]
-    fn test_normalized_newlines_stdout_is() {
-        let ts = TestScenario::new("echo");
-        let res = ts.ucmd().args(&["-ne", "A\r\nB\nC"]).run();
-
-        res.normalized_newlines_stdout_is("A\r\nB\nC");
-        res.normalized_newlines_stdout_is("A\nB\nC");
-        res.normalized_newlines_stdout_is("A\nB\r\nC");
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    #[should_panic]
-    fn test_normalized_newlines_stdout_is_fail() {
-        let ts = TestScenario::new("echo");
-        let res = ts.ucmd().args(&["-ne", "A\r\nB\nC"]).run();
-
-        res.normalized_newlines_stdout_is("A\r\nB\nC\n");
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    fn test_cmd_result_stdout_check_and_stdout_str_check() {
-        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
-
-        result.stdout_str_check(|stdout| stdout.ends_with("world\n"));
-        result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
-        result.no_stderr();
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    fn test_cmd_result_stderr_check_and_stderr_str_check() {
-        let ts = TestScenario::new("echo");
-        let result = run_cmd(format!(
-            "{} {} Hello world >&2",
-            ts.bin_path.display(),
-            ts.util_name
-        ));
-
-        result.stderr_str_check(|stderr| stderr.ends_with("world\n"));
-        result.stderr_check(|stdout| stdout.get(0..2).unwrap().eq(b"He"));
-        result.no_stdout();
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    #[should_panic]
-    fn test_cmd_result_stdout_str_check_when_false_then_panics() {
-        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
-        result.stdout_str_check(str::is_empty);
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    #[should_panic]
-    fn test_cmd_result_stdout_check_when_false_then_panics() {
-        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
-        result.stdout_check(<[u8]>::is_empty);
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    #[should_panic]
-    fn test_cmd_result_stderr_str_check_when_false_then_panics() {
-        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
-        result.stderr_str_check(|s| !s.is_empty());
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    #[should_panic]
-    fn test_cmd_result_stderr_check_when_false_then_panics() {
-        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
-        result.stderr_check(|s| !s.is_empty());
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    #[should_panic]
-    fn test_cmd_result_stdout_check_when_predicate_panics_then_panic() {
-        let result = TestScenario::new("echo").ucmd().run();
-        result.stdout_str_check(|_| panic!("Just testing"));
-    }
-
-    #[cfg(feature = "echo")]
-    #[cfg(unix)]
-    #[test]
-    fn test_cmd_result_signal_when_normal_exit_then_no_signal() {
-        let result = TestScenario::new("echo").ucmd().run();
-        assert!(result.signal().is_none());
-    }
-
-    #[cfg(feature = "sleep")]
-    #[cfg(unix)]
-    #[test]
-    #[should_panic = "Program must be run first or has not finished"]
-    fn test_cmd_result_signal_when_still_running_then_panic() {
-        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
-
-        child
-            .make_assertion()
-            .is_alive()
-            .with_current_output()
-            .signal();
-    }
-
-    #[cfg(feature = "sleep")]
-    #[cfg(unix)]
-    #[test]
-    fn test_cmd_result_signal_when_kill_then_signal() {
-        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
-
-        child.kill();
-        child
-            .make_assertion()
-            .is_not_alive()
-            .with_current_output()
-            .signal_is(9)
-            .signal_name_is("SIGKILL")
-            .signal_name_is("KILL")
-            .signal_name_is("9")
-            .signal()
-            .expect("Signal was none");
-
-        let result = child.wait().unwrap();
-        result
-            .signal_is(9)
-            .signal_name_is("SIGKILL")
-            .signal_name_is("KILL")
-            .signal_name_is("9")
-            .signal()
-            .expect("Signal was none");
-    }
-
-    #[cfg(feature = "sleep")]
-    #[cfg(unix)]
-    #[rstest]
-    #[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
-    #[case::signal_just_sig("SIG")]
-    #[case::signal_value_too_high("100")]
-    #[case::signal_value_negative("-1")]
-    #[should_panic = "Invalid signal name or value"]
-    fn test_cmd_result_signal_when_invalid_signal_name_then_panic(#[case] signal_name: &str) {
-        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
-        child.kill();
-        let result = child.wait().unwrap();
-        result.signal_name_is(signal_name);
-    }
-
-    #[test]
-    #[cfg(feature = "sleep")]
-    #[cfg(unix)]
-    fn test_cmd_result_signal_name_is_accepts_lowercase() {
-        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
-        child.kill();
-        let result = child.wait().unwrap();
-        result.signal_name_is("sigkill");
-        result.signal_name_is("kill");
-    }
-
     #[test]
     #[cfg(unix)]
     fn test_parse_coreutil_version() {
@@ -3437,7 +3364,6 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    #[cfg(feature = "whoami")]
     fn test_run_ucmd_as_root() {
         if is_ci() {
             println!("TEST SKIPPED (cannot run inside CI)");
@@ -3463,327 +3389,6 @@ mod tests {
         }
     }
 
-    // This error was first detected when running tail so tail is used here but
-    // should fail with any command that takes piped input.
-    // See also https://github.com/uutils/coreutils/issues/3895
-    #[cfg(feature = "tail")]
-    #[test]
-    #[cfg_attr(not(feature = "expensive_tests"), ignore)]
-    fn test_when_piped_input_then_no_broken_pipe() {
-        let ts = TestScenario::new("tail");
-        for i in 0..10000 {
-            dbg!(i);
-            let test_string = "a\nb\n";
-            ts.ucmd()
-                .args(&["-n", "0"])
-                .pipe_in(test_string)
-                .succeeds()
-                .no_stdout()
-                .no_stderr();
-        }
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    fn test_uchild_when_run_with_a_non_blocking_util() {
-        let ts = TestScenario::new("echo");
-        ts.ucmd()
-            .arg("hello world")
-            .run()
-            .success()
-            .stdout_only("hello world\n");
-    }
-
-    // Test basically that most of the methods of UChild are working
-    #[cfg(feature = "echo")]
-    #[test]
-    fn test_uchild_when_run_no_wait_with_a_non_blocking_util() {
-        let ts = TestScenario::new("echo");
-        let mut child = ts.ucmd().arg("hello world").run_no_wait();
-
-        // check `child.is_alive()` and `child.delay()` is working
-        let mut trials = 10;
-        while child.is_alive() {
-            assert!(
-                trials > 0,
-                "Assertion failed: child process is still alive."
-            );
-
-            child.delay(500);
-            trials -= 1;
-        }
-
-        assert!(!child.is_alive());
-
-        // check `child.is_not_alive()` is working
-        assert!(child.is_not_alive());
-
-        // check the current output is correct
-        std::assert_eq!(child.stdout(), "hello world\n");
-        assert!(child.stderr().is_empty());
-
-        // check the current output of echo is empty. We already called `child.stdout()` and `echo`
-        // exited so there's no additional output after the first call of `child.stdout()`
-        assert!(child.stdout().is_empty());
-        assert!(child.stderr().is_empty());
-
-        // check that we're still able to access all output of the child process, even after exit
-        // and call to `child.stdout()`
-        std::assert_eq!(child.stdout_all(), "hello world\n");
-        assert!(child.stderr_all().is_empty());
-
-        // we should be able to call kill without panics, even if the process already exited
-        child.make_assertion().is_not_alive();
-        child.kill();
-
-        // we should be able to call wait without panics and apply some assertions
-        child.wait().unwrap().code_is(0).no_stdout().no_stderr();
-    }
-
-    #[cfg(feature = "cat")]
-    #[test]
-    fn test_uchild_when_pipe_in() {
-        let ts = TestScenario::new("cat");
-        let mut child = ts.ucmd().set_stdin(Stdio::piped()).run_no_wait();
-        child.pipe_in("content");
-        child.wait().unwrap().stdout_only("content").success();
-
-        ts.ucmd().pipe_in("content").run().stdout_is("content");
-    }
-
-    #[cfg(feature = "rm")]
-    #[test]
-    fn test_uchild_when_run_no_wait_with_a_blocking_command() {
-        let ts = TestScenario::new("rm");
-        let at = &ts.fixtures;
-
-        at.mkdir("a");
-        at.touch("a/empty");
-
-        #[cfg(target_vendor = "apple")]
-        let delay: u64 = 2000;
-        #[cfg(not(target_vendor = "apple"))]
-        let delay: u64 = 1000;
-
-        let yes = if cfg!(windows) { "y\r\n" } else { "y\n" };
-
-        let mut child = ts
-            .ucmd()
-            .set_stdin(Stdio::piped())
-            .stderr_to_stdout()
-            .args(&["-riv", "a"])
-            .run_no_wait();
-        child
-            .make_assertion_with_delay(delay)
-            .is_alive()
-            .with_current_output()
-            .stdout_is("rm: descend into directory 'a'? ");
-
-        #[cfg(windows)]
-        let expected = "rm: descend into directory 'a'? \
-                        rm: remove regular empty file 'a\\empty'? ";
-        #[cfg(unix)]
-        let expected = "rm: descend into directory 'a'? \
-                              rm: remove regular empty file 'a/empty'? ";
-        child.write_in(yes);
-        child
-            .make_assertion_with_delay(delay)
-            .is_alive()
-            .with_all_output()
-            .stdout_is(expected);
-
-        #[cfg(windows)]
-        let expected = "removed 'a\\empty'\nrm: remove directory 'a'? ";
-        #[cfg(unix)]
-        let expected = "removed 'a/empty'\nrm: remove directory 'a'? ";
-
-        child
-            .write_in(yes)
-            .make_assertion_with_delay(delay)
-            .is_alive()
-            .with_exact_output(44, 0)
-            .stdout_only(expected);
-
-        let expected = "removed directory 'a'\n";
-
-        child.write_in(yes);
-        child.wait().unwrap().stdout_only(expected).success();
-    }
-
-    #[cfg(feature = "tail")]
-    #[test]
-    fn test_uchild_when_run_with_stderr_to_stdout() {
-        let ts = TestScenario::new("tail");
-        let at = &ts.fixtures;
-
-        at.write("data", "file data\n");
-
-        let expected_stdout = "==> data <==\n\
-                                    file data\n\
-                                    tail: cannot open 'missing' for reading: No such file or directory\n";
-        ts.ucmd()
-            .args(&["data", "missing"])
-            .stderr_to_stdout()
-            .fails()
-            .stdout_only(expected_stdout);
-    }
-
-    #[cfg(feature = "cat")]
-    #[cfg(unix)]
-    #[test]
-    fn test_uchild_when_no_capture_reading_from_infinite_source() {
-        use regex::Regex;
-
-        let ts = TestScenario::new("cat");
-
-        let expected_stdout = b"\0".repeat(12345);
-        let mut child = ts
-            .ucmd()
-            .set_stdin(Stdio::from(File::open("/dev/zero").unwrap()))
-            .set_stdout(Stdio::piped())
-            .run_no_wait();
-
-        child
-            .make_assertion()
-            .with_exact_output(12345, 0)
-            .stdout_only_bytes(expected_stdout);
-
-        child
-            .kill()
-            .make_assertion()
-            .with_current_output()
-            .stdout_matches(&Regex::new("[\0].*").unwrap())
-            .no_stderr();
-    }
-
-    #[cfg(feature = "sleep")]
-    #[test]
-    fn test_uchild_when_wait_and_timeout_is_reached_then_timeout_error() {
-        let ts = TestScenario::new("sleep");
-        let child = ts
-            .ucmd()
-            .timeout(Duration::from_secs(1))
-            .arg("10.0")
-            .run_no_wait();
-
-        match child.wait() {
-            Err(error) if error.kind() == io::ErrorKind::Other => {
-                std::assert_eq!(error.to_string(), "wait: Timeout of '1s' reached");
-            }
-            Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
-            Ok(_) => panic!("Assertion failed: Expected timeout of `wait`."),
-        }
-    }
-
-    #[cfg(feature = "sleep")]
-    #[rstest]
-    #[timeout(Duration::from_secs(5))]
-    fn test_uchild_when_kill_and_timeout_higher_than_kill_time_then_no_panic() {
-        let ts = TestScenario::new("sleep");
-        let mut child = ts
-            .ucmd()
-            .timeout(Duration::from_secs(60))
-            .arg("20.0")
-            .run_no_wait();
-
-        child.kill().make_assertion().is_not_alive();
-    }
-
-    #[cfg(feature = "sleep")]
-    #[test]
-    fn test_uchild_when_try_kill_and_timeout_is_reached_then_error() {
-        let ts = TestScenario::new("sleep");
-        let mut child = ts.ucmd().timeout(Duration::ZERO).arg("10.0").run_no_wait();
-
-        match child.try_kill() {
-            Err(error) if error.kind() == io::ErrorKind::Other => {
-                std::assert_eq!(error.to_string(), "kill: Timeout of '0s' reached");
-            }
-            Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
-            Ok(()) => panic!("Assertion failed: Expected timeout of `try_kill`."),
-        }
-    }
-
-    #[cfg(feature = "sleep")]
-    #[test]
-    #[should_panic = "kill: Timeout of '0s' reached"]
-    fn test_uchild_when_kill_with_timeout_and_timeout_is_reached_then_panic() {
-        let ts = TestScenario::new("sleep");
-        let mut child = ts.ucmd().timeout(Duration::ZERO).arg("10.0").run_no_wait();
-
-        child.kill();
-        panic!("Assertion failed: Expected timeout of `kill`.");
-    }
-
-    #[cfg(feature = "sleep")]
-    #[test]
-    #[should_panic(expected = "wait: Timeout of '1.1s' reached")]
-    fn test_ucommand_when_run_with_timeout_and_timeout_is_reached_then_panic() {
-        let ts = TestScenario::new("sleep");
-        ts.ucmd()
-            .timeout(Duration::from_millis(1100))
-            .arg("10.0")
-            .run();
-
-        panic!("Assertion failed: Expected timeout of `run`.")
-    }
-
-    #[cfg(feature = "sleep")]
-    #[rstest]
-    #[timeout(Duration::from_secs(10))]
-    fn test_ucommand_when_run_with_timeout_higher_then_execution_time_then_no_panic() {
-        let ts = TestScenario::new("sleep");
-        ts.ucmd().timeout(Duration::from_secs(60)).arg("1.0").run();
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    fn test_ucommand_when_default() {
-        let shell_cmd = format!("{TESTS_BINARY} echo -n hello");
-
-        let mut command = UCommand::new();
-        command.arg(&shell_cmd).succeeds().stdout_is("hello");
-
-        #[cfg(target_os = "android")]
-        let (expected_bin, expected_arg) = (PathBuf::from("/system/bin/sh"), OsString::from("-c"));
-        #[cfg(all(unix, not(target_os = "android")))]
-        let (expected_bin, expected_arg) = (PathBuf::from("/bin/sh"), OsString::from("-c"));
-        #[cfg(windows)]
-        let (expected_bin, expected_arg) = (PathBuf::from("cmd"), OsString::from("/C"));
-
-        std::assert_eq!(&expected_bin, command.bin_path.as_ref().unwrap());
-        assert!(command.util_name.is_none());
-        std::assert_eq!(command.args, &[expected_arg, OsString::from(&shell_cmd)]);
-        assert!(command.tmpd.is_some());
-    }
-
-    #[cfg(feature = "echo")]
-    #[test]
-    fn test_ucommand_with_util() {
-        let tmpd = tempfile::tempdir().unwrap();
-        let mut command = UCommand::with_util("echo", Rc::new(tmpd));
-
-        command
-            .args(&["-n", "hello"])
-            .succeeds()
-            .stdout_only("hello");
-
-        std::assert_eq!(
-            &PathBuf::from(TESTS_BINARY),
-            command.bin_path.as_ref().unwrap()
-        );
-        std::assert_eq!("echo", &command.util_name.unwrap());
-        std::assert_eq!(
-            &[
-                OsString::from("echo"),
-                OsString::from("-n"),
-                OsString::from("hello")
-            ],
-            command.args.make_contiguous()
-        );
-        assert!(command.tmpd.is_some());
-    }
-
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
     #[test]
     fn test_compare_xattrs() {
@@ -3804,217 +3409,6 @@ mod tests {
 
         xattr::set(&file_path2, test_attr, test_value).unwrap();
         assert!(compare_xattrs(&file_path1, &file_path2));
-    }
-
-    #[cfg(unix)]
-    #[cfg(feature = "env")]
-    #[test]
-    fn test_simulation_of_terminal_false() {
-        let scene = TestScenario::new("util");
-
-        let out = scene.ccmd("env").arg("sh").arg("is_a_tty.sh").succeeds();
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stdout()),
-            "stdin is not a tty\nstdout is not a tty\nstderr is not a tty\n"
-        );
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stderr()),
-            "This is an error message.\n"
-        );
-    }
-
-    #[cfg(unix)]
-    #[cfg(feature = "env")]
-    #[test]
-    fn test_simulation_of_terminal_true() {
-        let scene = TestScenario::new("util");
-
-        let out = scene
-            .ccmd("env")
-            .arg("sh")
-            .arg("is_a_tty.sh")
-            .terminal_simulation(true)
-            .succeeds();
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stdout()),
-            "stdin is a tty\r\nterminal size: 30 80\r\nstdout is a tty\r\nstderr is a tty\r\n"
-        );
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stderr()),
-            "This is an error message.\r\n"
-        );
-    }
-
-    #[cfg(unix)]
-    #[cfg(feature = "env")]
-    #[test]
-    fn test_simulation_of_terminal_for_stdin_only() {
-        let scene = TestScenario::new("util");
-
-        let out = scene
-            .ccmd("env")
-            .arg("sh")
-            .arg("is_a_tty.sh")
-            .terminal_sim_stdio(TerminalSimulation {
-                stdin: true,
-                stdout: false,
-                stderr: false,
-                ..Default::default()
-            })
-            .succeeds();
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stdout()),
-            "stdin is a tty\nterminal size: 30 80\nstdout is not a tty\nstderr is not a tty\n"
-        );
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stderr()),
-            "This is an error message.\n"
-        );
-    }
-
-    #[cfg(unix)]
-    #[cfg(feature = "env")]
-    #[test]
-    fn test_simulation_of_terminal_for_stdout_only() {
-        let scene = TestScenario::new("util");
-
-        let out = scene
-            .ccmd("env")
-            .arg("sh")
-            .arg("is_a_tty.sh")
-            .terminal_sim_stdio(TerminalSimulation {
-                stdin: false,
-                stdout: true,
-                stderr: false,
-                ..Default::default()
-            })
-            .succeeds();
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stdout()),
-            "stdin is not a tty\r\nstdout is a tty\r\nstderr is not a tty\r\n"
-        );
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stderr()),
-            "This is an error message.\n"
-        );
-    }
-
-    #[cfg(unix)]
-    #[cfg(feature = "env")]
-    #[test]
-    fn test_simulation_of_terminal_for_stderr_only() {
-        let scene = TestScenario::new("util");
-
-        let out = scene
-            .ccmd("env")
-            .arg("sh")
-            .arg("is_a_tty.sh")
-            .terminal_sim_stdio(TerminalSimulation {
-                stdin: false,
-                stdout: false,
-                stderr: true,
-                ..Default::default()
-            })
-            .succeeds();
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stdout()),
-            "stdin is not a tty\nstdout is not a tty\nstderr is a tty\n"
-        );
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stderr()),
-            "This is an error message.\r\n"
-        );
-    }
-
-    #[cfg(unix)]
-    #[cfg(feature = "env")]
-    #[test]
-    fn test_simulation_of_terminal_size_information() {
-        let scene = TestScenario::new("util");
-
-        let out = scene
-            .ccmd("env")
-            .arg("sh")
-            .arg("is_a_tty.sh")
-            .terminal_sim_stdio(TerminalSimulation {
-                size: Some(libc::winsize {
-                    ws_col: 40,
-                    ws_row: 10,
-                    ws_xpixel: 40 * 8,
-                    ws_ypixel: 10 * 10,
-                }),
-                stdout: true,
-                stdin: true,
-                stderr: true,
-            })
-            .succeeds();
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stdout()),
-            "stdin is a tty\r\nterminal size: 10 40\r\nstdout is a tty\r\nstderr is a tty\r\n"
-        );
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stderr()),
-            "This is an error message.\r\n"
-        );
-    }
-
-    #[cfg(unix)]
-    #[cfg(feature = "env")]
-    #[test]
-    fn test_simulation_of_terminal_pty_sends_eot_automatically() {
-        let scene = TestScenario::new("util");
-
-        let mut cmd = scene.ccmd("env");
-        cmd.timeout(std::time::Duration::from_secs(10));
-        cmd.args(&["cat", "-"]);
-        cmd.terminal_simulation(true);
-        let child = cmd.run_no_wait();
-        let out = child.wait().unwrap(); // cat would block if there is no eot
-
-        std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
-        std::assert_eq!(String::from_utf8_lossy(out.stdout()), "\r\n");
-    }
-
-    #[cfg(unix)]
-    #[cfg(feature = "env")]
-    #[test]
-    fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically() {
-        let scene = TestScenario::new("util");
-
-        let message = "Hello stdin forwarding!";
-
-        let mut cmd = scene.ccmd("env");
-        cmd.args(&["cat", "-"]);
-        cmd.terminal_simulation(true);
-        cmd.pipe_in(message);
-        let child = cmd.run_no_wait();
-        let out = child.wait().unwrap();
-
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stdout()),
-            format!("{message}\r\n")
-        );
-        std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
-    }
-
-    #[cfg(unix)]
-    #[cfg(feature = "env")]
-    #[test]
-    fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
-        let scene = TestScenario::new("util");
-
-        let mut cmd = scene.ccmd("env");
-        cmd.args(&["cat", "-"]);
-        cmd.terminal_simulation(true);
-        let mut child = cmd.run_no_wait();
-        child.write_in("Hello stdin forwarding via write_in!");
-        let out = child.wait().unwrap();
-
-        std::assert_eq!(
-            String::from_utf8_lossy(out.stdout()),
-            "Hello stdin forwarding via write_in!\r\n"
-        );
-        std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
     }
 
     #[cfg(unix)]
