@@ -29,14 +29,14 @@ struct EchoFlags {
     pub is_hyphen: bool,
 }
 
-fn is_echo_flag(arg: &OsString) -> Option<EchoFlags>{
+fn is_echo_flag(arg: &OsString) -> Option<EchoFlags> {
     let bytes = arg.as_encoded_bytes();
     if bytes.first() == Some(&b'-') {
         let mut flags = EchoFlags {
-                n: false,
-                e: false,
-                is_hyphen: false
-            };
+            n: false,
+            e: false,
+            is_hyphen: false,
+        };
         // this is a single hyphen which is pseudo flag (stops search for more flags but has no
         // effect)
         if arg.len() == 1 {
@@ -48,7 +48,7 @@ fn is_echo_flag(arg: &OsString) -> Option<EchoFlags>{
                     b'e' => flags.e = true,
                     b'E' => flags.e = false,
                     b'n' => flags.n = true,
-                    // if there is any char in an argument starting with '-' doesnt match e/E/n
+                    // if there is any char in an argument starting with '-' doesn't match e/E/n
                     // present means that this argument is not a flag
                     _ => return None,
                 }
@@ -57,7 +57,7 @@ fn is_echo_flag(arg: &OsString) -> Option<EchoFlags>{
             return Some(flags);
         }
     }
-    // argumetn doesnt start with '-' == no flag
+    // argument doesn't start with '-' == no flag
     None
 }
 
@@ -88,7 +88,7 @@ fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
             break;
         }
     }
-    // push the remaining argumetns into result vector
+    // push the remaining arguments into result vector
     for arg in args_iter {
         result.push(arg);
     }
@@ -97,7 +97,7 @@ fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let is_posixly_correct = if let Ok(posixly_correct) = env::var("POSIXLY_CORRECT")  {
+    let is_posixly_correct = if let Ok(posixly_correct) = env::var("POSIXLY_CORRECT") {
         posixly_correct == "1"
     } else {
         false
@@ -109,16 +109,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         if args_iter.peek() == Some(&OsString::from("-n")) {
             // if POSIXLY_CORRECT is set and the first argument is the "-n" flag
-            // we filter flags normally but 'escaped' is activated nontheless
+            // we filter flags normally but 'escaped' is activated nonetheless
             let (args, _, _) = filter_echo_flags(args_iter);
             (args, false, true)
         } else {
             // if POSIXLY_CORRECT is set and the first argument is not the "-n" flag
             // we just collect all arguments as every argument is considered an argument
-             let args: Vec<OsString> = args_iter.collect();
+            let args: Vec<OsString> = args_iter.collect();
             (args, true, true)
         }
-
     } else {
         // if POSIXLY_CORRECT is not set we filter the flags normally
         let (args, trailing_newline, escaped) = filter_echo_flags(args_iter);

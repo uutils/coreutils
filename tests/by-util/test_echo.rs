@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) araba merci
+// spell-checker:ignore (words) araba merci efjkow
 
 use crate::common::util::TestScenario;
 
@@ -273,7 +273,6 @@ fn test_double_hyphens_at_start() {
         .stdout_only("-- a b --\n");
 }
 
-
 #[test]
 fn test_double_hyphens_after_single_hyphen() {
     new_ucmd!()
@@ -326,9 +325,8 @@ fn test_flag_like_arguments_which_are_no_flags() {
         .stdout_only("-- -efjkow");
 }
 
-
 #[test]
-fn test_backshlash_n_last_char_in_last_argument() {
+fn test_backslash_n_last_char_in_last_argument() {
     new_ucmd!()
         .arg("-n")
         .arg("-e")
@@ -357,7 +355,6 @@ fn test_backshlash_n_last_char_in_last_argument() {
         .succeeds()
         .stdout_only("-- foo\n\n");
 }
-
 
 #[test]
 fn test_double_hyphens_after_flags() {
