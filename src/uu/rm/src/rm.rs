@@ -17,7 +17,7 @@ use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::fsext::{read_fs_list, MountInfo};
+use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::{
     format_usage, help_about, help_section, help_usage, os_str_as_bytes, prompt_yes, show_error,
 };
