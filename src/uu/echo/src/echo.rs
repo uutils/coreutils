@@ -32,33 +32,29 @@ struct EchoFlags {
 fn is_echo_flag(arg: &OsString) -> Option<EchoFlags>{
     let bytes = arg.as_encoded_bytes();
     if bytes.first() == Some(&b'-') {
+        let mut flags = EchoFlags {
+                n: false,
+                e: false,
+                is_hyphen: false
+            };
         // this is a single hyphen which is pseudo flag (stops search for more flags but has no
         // effect)
         if arg.len() == 1 {
-            return Some(EchoFlags{
-                n: true,
-                e: false,
-                is_hyphen: true
-            });
+            flags.is_hyphen = true;
+            return Some(flags);
         } else {
-            let mut trailing_newline = true;
-            let mut escape = false;
-
             for c in &bytes[1..] {
                 match c {
-                    b'e' => escape = true,
-                    b'E' => escape = false,
-                    b'n' => trailing_newline = false,
+                    b'e' => flags.e = true,
+                    b'E' => flags.e = false,
+                    b'n' => flags.n = true,
                     // if there is any char in an argument starting with '-' doesnt match e/E/n
                     // present means that this argument is not a flag
                     _ => return None,
                 }
             }
-            return Some(EchoFlags{
-                n: trailing_newline,
-                e: escape,
-                is_hyphen: false
-            });
+
+            return Some(flags);
         }
     }
     // argumetn doesnt start with '-' == no flag
@@ -81,7 +77,9 @@ fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
                 result.push(arg);
                 break;
             }
-            trailing_newline = echo_flags.n;
+            if echo_flags.n {
+                trailing_newline = false;
+            }
             escape = echo_flags.e;
         } else {
             // first found argument stops search for flags, from here everything is handled as a

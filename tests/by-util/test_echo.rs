@@ -326,6 +326,39 @@ fn test_flag_like_arguments_which_are_no_flags() {
         .stdout_only("-- -efjkow");
 }
 
+
+#[test]
+fn test_backshlash_n_last_char_in_last_argument() {
+    new_ucmd!()
+        .arg("-n")
+        .arg("-e")
+        .arg("--")
+        .arg("foo\n")
+        .succeeds()
+        .stdout_only("-- foo\n");
+
+    new_ucmd!()
+        .arg("-e")
+        .arg("--")
+        .arg("foo\\n")
+        .succeeds()
+        .stdout_only("-- foo\n\n");
+
+    new_ucmd!()
+        .arg("-n")
+        .arg("--")
+        .arg("foo\n")
+        .succeeds()
+        .stdout_only("-- foo\n");
+
+    new_ucmd!()
+        .arg("--")
+        .arg("foo\n")
+        .succeeds()
+        .stdout_only("-- foo\n\n");
+}
+
+
 #[test]
 fn test_double_hyphens_after_flags() {
     new_ucmd!()
