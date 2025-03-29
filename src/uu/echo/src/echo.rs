@@ -115,11 +115,7 @@ fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Check POSIX compatibility mode
-    let is_posixly_correct = if let Ok(posixly_correct) = env::var("POSIXLY_CORRECT") {
-        posixly_correct == "1"
-    } else {
-        false
-    };
+    let is_posixly_correct = env::var("POSIXLY_CORRECT").is_ok();
 
     let args_iter = args.skip(1);
     let (args, trailing_newline, escaped) = if is_posixly_correct {
