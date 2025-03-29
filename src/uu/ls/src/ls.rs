@@ -3232,7 +3232,11 @@ fn display_item_name(
         };
 
         if let Some(c) = char_opt {
+
             name.push(OsStr::new(&c.to_string()));
+            if c == '/' {
+                name.push(OsStr::new("\0"));
+            }
         }
     }
 
