@@ -892,8 +892,9 @@ fn test_chmod_symlink_to_dangling_recursive() {
         .arg("755")
         .arg("-R")
         .arg(symlink)
-        .fails()
-        .stderr_is("chmod: cannot operate on dangling symlink 'symlink'\n");
+        .succeeds()
+        .stdout_is("")
+        .stderr_is("");
     assert_eq!(
         at.symlink_metadata(symlink).permissions().mode(),
         get_expected_symlink_permissions(),
