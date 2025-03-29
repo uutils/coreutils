@@ -29,9 +29,6 @@ static EXIT_ERR: i32 = 1;
 use crate::show_warning;
 
 #[cfg(windows)]
-use std::path::PathBuf;
-
-#[cfg(windows)]
 use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
@@ -265,7 +262,7 @@ impl MountInfo {
 
         let mount_dir = Path::new(&mount_root)
             .canonicalize()
-            .unwrap_or(PathBuf::new())
+            .unwrap_or_default()
             .to_str()
             .unwrap()
             .to_string();
