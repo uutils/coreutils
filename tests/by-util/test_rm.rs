@@ -788,11 +788,7 @@ fn test_uchild_when_run_no_wait_with_a_blocking_command() {
     at.mkdir("a");
     at.touch("a/empty");
 
-    #[cfg(target_vendor = "apple")]
     let delay: u64 = 2000;
-    #[cfg(not(target_vendor = "apple"))]
-    let delay: u64 = 1000;
-
     let yes = if cfg!(windows) { "y\r\n" } else { "y\n" };
 
     let mut child = ts
