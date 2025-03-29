@@ -420,6 +420,7 @@ fn test_rm_interactive_once_prompt() {
     at.touch(file4);
 
     ucmd.arg("--interactive=once")
+        .arg("---presume-input-tty")
         .arg(file1)
         .arg(file2)
         .arg(file3)
@@ -427,6 +428,65 @@ fn test_rm_interactive_once_prompt() {
         .pipe_in("y")
         .succeeds()
         .stderr_contains("remove 4 arguments?");
+
+    assert!(!at.file_exists(file1));
+    assert!(!at.file_exists(file2));
+    assert!(!at.file_exists(file3));
+    assert!(!at.file_exists(file4));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_rm_interactive_once_prompt_term_sim() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_rm_interactive_once_recursive_prompt_file1";
+    let file2 = "test_rm_interactive_once_recursive_prompt_file2";
+    let file3 = "test_rm_interactive_once_recursive_prompt_file3";
+    let file4 = "test_rm_interactive_once_recursive_prompt_file4";
+
+    at.touch(file1);
+    at.touch(file2);
+    at.touch(file3);
+    at.touch(file4);
+
+    ucmd.arg("--interactive=once")
+        .arg(file1)
+        .arg(file2)
+        .arg(file3)
+        .arg(file4)
+        .terminal_simulation(true)
+        .pipe_in("y")
+        .succeeds()
+        .stderr_contains("remove 4 arguments?");
+
+    assert!(!at.file_exists(file1));
+    assert!(!at.file_exists(file2));
+    assert!(!at.file_exists(file3));
+    assert!(!at.file_exists(file4));
+}
+
+#[test]
+fn test_rm_interactive_once_prompt_no_tty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_rm_interactive_once_recursive_prompt_file1";
+    let file2 = "test_rm_interactive_once_recursive_prompt_file2";
+    let file3 = "test_rm_interactive_once_recursive_prompt_file3";
+    let file4 = "test_rm_interactive_once_recursive_prompt_file4";
+
+    at.touch(file1);
+    at.touch(file2);
+    at.touch(file3);
+    at.touch(file4);
+
+    ucmd.arg("--interactive=once")
+        .arg(file1)
+        .arg(file2)
+        .arg(file3)
+        .arg(file4)
+        .succeeds()
+        .no_output();
 
     assert!(!at.file_exists(file1));
     assert!(!at.file_exists(file2));
@@ -444,6 +504,7 @@ fn test_rm_interactive_once_recursive_prompt() {
 
     ucmd.arg("--interactive=once")
         .arg("-r")
+        .arg("---presume-input-tty")
         .arg(file1)
         .pipe_in("y")
         .succeeds()
@@ -580,6 +641,214 @@ fn test_rm_prompts() {
     assert!(!at.dir_exists("a"));
 }
 
+#[cfg(feature = "chmod")]
+#[cfg(not(windows))]
+#[test]
+fn test_rm_prompts_term_sim() {
+    use std::io::Write;
+
+    // Needed for talking with stdin on platforms where CRLF or LF matters
+    const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
+
+    let mut answers = [
+        "rm: descend into directory 'a'?",
+        "rm: remove write-protected regular empty file 'a/empty-no-write'?",
+        "rm: remove symbolic link 'a/slink'?",
+        "rm: remove symbolic link 'a/slink-dot'?",
+        "rm: remove write-protected regular file 'a/f-no-write'?",
+        "rm: remove regular empty file 'a/empty'?",
+        "rm: remove directory 'a/b'?",
+        "rm: remove write-protected directory 'a/b-no-write'?",
+        "rm: remove directory 'a'?",
+    ];
+
+    answers.sort();
+
+    let yes = format!("y{END_OF_LINE}");
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("a/");
+
+    let file_1 = "a/empty";
+    let file_2 = "a/empty-no-write";
+    let file_3 = "a/f-no-write";
+
+    at.touch(file_1);
+    at.touch(file_2);
+    at.make_file(file_3)
+        .write_all(b"not-empty")
+        .expect("Couldn't write to a/f-no-write");
+
+    at.symlink_dir("a/empty-f", "a/slink");
+    at.symlink_dir(".", "a/slink-dot");
+
+    let dir_1 = "a/b/";
+    let dir_2 = "a/b-no-write/";
+
+    at.mkdir(dir_1);
+    at.mkdir(dir_2);
+
+    scene
+        .ccmd("chmod")
+        .arg("u-w")
+        .arg(file_3)
+        .arg(dir_2)
+        .arg(file_2)
+        .succeeds();
+
+    let result = scene
+        .ucmd()
+        .arg("-ri")
+        .arg("a")
+        .terminal_simulation(true)
+        .pipe_in(yes.repeat(9))
+        .succeeds();
+
+    let mut trimmed_output = Vec::new();
+    for string in result.stderr_str().split("rm: ") {
+        if !string.is_empty() {
+            let trimmed_string = format!("rm: {string}").trim().to_string();
+            trimmed_output.push(trimmed_string);
+        }
+    }
+
+    trimmed_output.sort();
+
+    assert_eq!(trimmed_output.len(), answers.len());
+
+    for (i, checking_string) in trimmed_output.iter().enumerate() {
+        assert_eq!(checking_string, answers[i]);
+    }
+
+    assert!(!at.dir_exists("a"));
+}
+
+#[cfg(feature = "chmod")]
+#[test]
+fn test_rm_prompts_presume_tty() {
+    use std::io::Write;
+
+    // Needed for talking with stdin on platforms where CRLF or LF matters
+    const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
+
+    let mut answers = [
+        "rm: descend into directory 'a'?",
+        "rm: remove write-protected regular empty file 'a/empty-no-write'?",
+        "rm: remove symbolic link 'a/slink'?",
+        "rm: remove symbolic link 'a/slink-dot'?",
+        "rm: remove write-protected regular file 'a/f-no-write'?",
+        "rm: remove regular empty file 'a/empty'?",
+        "rm: remove directory 'a/b'?",
+        "rm: remove write-protected directory 'a/b-no-write'?",
+        "rm: remove directory 'a'?",
+    ];
+
+    answers.sort();
+
+    let yes = format!("y{END_OF_LINE}");
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("a/");
+
+    let file_1 = "a/empty";
+    let file_2 = "a/empty-no-write";
+    let file_3 = "a/f-no-write";
+
+    at.touch(file_1);
+    at.touch(file_2);
+    at.make_file(file_3)
+        .write_all(b"not-empty")
+        .expect("Couldn't write to a/f-no-write");
+
+    at.symlink_dir("a/empty-f", "a/slink");
+    at.symlink_dir(".", "a/slink-dot");
+
+    let dir_1 = "a/b/";
+    let dir_2 = "a/b-no-write/";
+
+    at.mkdir(dir_1);
+    at.mkdir(dir_2);
+
+    scene
+        .ccmd("chmod")
+        .arg("u-w")
+        .arg(file_3)
+        .arg(dir_2)
+        .arg(file_2)
+        .succeeds();
+
+    let result = scene
+        .ucmd()
+        .arg("-ri")
+        .arg("---presume-input-tty")
+        .arg("a")
+        .pipe_in(yes.repeat(9))
+        .succeeds();
+
+    let mut trimmed_output = Vec::new();
+    for string in result.stderr_str().split("rm: ") {
+        if !string.is_empty() {
+            let trimmed_string = format!("rm: {string}").trim().to_string();
+            trimmed_output.push(trimmed_string);
+        }
+    }
+
+    trimmed_output.sort();
+
+    assert_eq!(trimmed_output.len(), answers.len());
+
+    for (i, checking_string) in trimmed_output.iter().enumerate() {
+        assert_eq!(checking_string, answers[i]);
+    }
+
+    assert!(!at.dir_exists("a"));
+}
+#[cfg(feature = "chmod")]
+#[test]
+fn test_rm_prompts_no_tty() {
+    use std::io::Write;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("a/");
+
+    let file_1 = "a/empty";
+    let file_2 = "a/empty-no-write";
+    let file_3 = "a/f-no-write";
+
+    at.touch(file_1);
+    at.touch(file_2);
+    at.make_file(file_3)
+        .write_all(b"not-empty")
+        .expect("Couldn't write to a/f-no-write");
+
+    at.symlink_dir("a/empty-f", "a/slink");
+    at.symlink_dir(".", "a/slink-dot");
+
+    let dir_1 = "a/b/";
+    let dir_2 = "a/b-no-write/";
+
+    at.mkdir(dir_1);
+    at.mkdir(dir_2);
+
+    scene
+        .ccmd("chmod")
+        .arg("u-w")
+        .arg(file_3)
+        .arg(dir_2)
+        .arg(file_2)
+        .succeeds();
+
+    scene.ucmd().arg("-r").arg("a").succeeds().no_output();
+
+    assert!(!at.dir_exists("a"));
+}
+
 #[test]
 fn test_rm_force_prompts_order() {
     // Needed for talking with stdin on platforms where CRLF or LF matters
@@ -647,7 +916,12 @@ fn test_prompt_write_protected_yes() {
 
     scene.ccmd("chmod").arg("0").arg(file_1).succeeds();
 
-    scene.ucmd().arg(file_1).pipe_in("y").succeeds();
+    scene
+        .ucmd()
+        .arg("---presume-input-tty")
+        .arg(file_1)
+        .pipe_in("y")
+        .succeeds();
     assert!(!at.file_exists(file_1));
 }
 
@@ -662,7 +936,12 @@ fn test_prompt_write_protected_no() {
 
     scene.ccmd("chmod").arg("0").arg(file_2).succeeds();
 
-    scene.ucmd().arg(file_2).pipe_in("n").succeeds();
+    scene
+        .ucmd()
+        .arg("---presume-input-tty")
+        .arg(file_2)
+        .pipe_in("n")
+        .succeeds();
     assert!(at.file_exists(file_2));
 }
 
