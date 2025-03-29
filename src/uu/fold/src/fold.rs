@@ -162,7 +162,12 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
         while i < len {
             let width = if len - i >= width { width } else { len - i };
             let slice = {
-                let slice = &line[i..i + width];
+                // cannot directly slice the line as it might panic if boundaries
+                // split a char
+                let slice = (0..=width)
+                    .rev()
+                    .find_map(|w| line.get(i..i + w))
+                    .unwrap_or("");
                 if spaces && i + width < len {
                     match slice.rfind(|c: char| c.is_whitespace() && c != '\r') {
                         Some(m) => &slice[..=m],
