@@ -9,11 +9,11 @@ use clap::{Arg, ArgAction, Command};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::error::Error;
-use std::fmt::{Display, Formatter, Write as FmtWrite};
+use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::ParseIntError;
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
@@ -194,27 +194,17 @@ struct WordRef {
     filename: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum PtxError {
+    #[error("There is no dumb format with GNU extensions disabled")]
     DumbFormat,
+    #[error("{0} not implemented yet")]
     NotImplemented(&'static str),
+    #[error("{0}")]
     ParseError(ParseIntError),
 }
 
-impl Error for PtxError {}
 impl UError for PtxError {}
-
-impl Display for PtxError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::DumbFormat => {
-                write!(f, "There is no dumb format with GNU extensions disabled")
-            }
-            Self::NotImplemented(s) => write!(f, "{s} not implemented yet"),
-            Self::ParseError(e) => e.fmt(f),
-        }
-    }
-}
 
 fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     let mut config = Config::default();

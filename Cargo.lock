@@ -2662,6 +2662,7 @@ dependencies = [
  "libc",
  "nix",
  "signal-hook",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2727,6 +2728,7 @@ dependencies = [
  "clap",
  "nix",
  "rust-ini",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2735,6 +2737,7 @@ name = "uu_expand"
 version = "0.0.30"
 dependencies = [
  "clap",
+ "thiserror 2.0.12",
  "unicode-width 0.2.0",
  "uucore",
 ]
@@ -3029,6 +3032,7 @@ name = "uu_numfmt"
 version = "0.0.30"
 dependencies = [
  "clap",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3101,6 +3105,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "regex",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3226,6 +3231,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "memchr",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3293,6 +3299,7 @@ dependencies = [
  "memchr",
  "memmap2",
  "regex",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3410,6 +3417,7 @@ name = "uu_unexpand"
 version = "0.0.30"
 dependencies = [
  "clap",
+ "thiserror 2.0.12",
  "unicode-width 0.2.0",
  "uucore",
 ]
