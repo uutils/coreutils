@@ -48,7 +48,7 @@
         default = pkgsFor.${system}.pkgs.mkShell {
           packages = build_deps ++ gnu_testing_deps;
 
-          RUSTC_VERSION = "1.82";
+          RUSTC_VERSION = "1.85";
           LIBCLANG_PATH = pkgsFor.${system}.lib.makeLibraryPath [pkgsFor.${system}.llvmPackages_latest.libclang.lib];
           shellHook = ''
             export PATH=$PATH:''${CARGO_HOME:-~/.cargo}/bin

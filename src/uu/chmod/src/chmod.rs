@@ -11,12 +11,12 @@ use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, ExitCode, UResult, USimpleError, UUsageError};
+use uucore::error::{ExitCode, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::perms::{configure_symlink_and_recursion, TraverseSymlinks};
+use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
 const ABOUT: &str = help_about!("chmod.md");
@@ -107,7 +107,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(USimpleError::new(
                     1,
                     format!("cannot stat attributes of {}: {}", fref.quote(), err),
-                ))
+                ));
             }
         },
         None => None,
@@ -298,7 +298,7 @@ impl Chmoder {
                     format!(
                         "it is dangerous to operate recursively on {}\nchmod: use --no-preserve-root to override this failsafe",
                         filename.quote()
-                    )
+                    ),
                 ));
             }
             if self.recursive {

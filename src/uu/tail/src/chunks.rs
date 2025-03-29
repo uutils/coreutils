@@ -627,7 +627,7 @@ impl LinesChunkBuffer {
 
 #[cfg(test)]
 mod tests {
-    use crate::chunks::{BytesChunk, BUFFER_SIZE};
+    use crate::chunks::{BUFFER_SIZE, BytesChunk};
 
     #[test]
     fn test_bytes_chunk_from_when_offset_is_zero() {

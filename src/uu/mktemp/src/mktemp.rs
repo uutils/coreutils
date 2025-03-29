@@ -5,8 +5,8 @@
 
 // spell-checker:ignore (paths) GPGHome findxs
 
-use clap::{builder::ValueParser, Arg, ArgAction, ArgMatches, Command};
-use uucore::display::{println_verbatim, Quotable};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
+use uucore::display::{Quotable, println_verbatim};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
 
@@ -14,7 +14,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::iter;
-use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 #[cfg(unix)]
 use std::fs;

@@ -8,14 +8,14 @@
 mod flags;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
+use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
-    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags,
-    OutputFlags, SpecialCharacterIndices, Termios,
+    ControlFlags, InputFlags, LocalFlags, OutputFlags, SpecialCharacterIndices, Termios,
+    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::fs::File;
-use std::io::{self, stdout, Stdout};
+use std::io::{self, Stdout, stdout};
 use std::ops::ControlFlow;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;

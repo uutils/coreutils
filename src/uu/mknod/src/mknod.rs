@@ -5,13 +5,13 @@
 
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO
 
-use clap::{value_parser, Arg, ArgMatches, Command};
-use libc::{dev_t, mode_t};
+use clap::{Arg, ArgMatches, Command, value_parser};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
+use libc::{dev_t, mode_t};
 use std::ffi::CString;
 
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("mknod.md");

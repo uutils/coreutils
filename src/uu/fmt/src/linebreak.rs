@@ -8,8 +8,8 @@
 use std::io::{BufWriter, Stdout, Write};
 use std::{cmp, mem};
 
-use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 use crate::FmtOptions;
+use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 
 struct BreakArgs<'a> {
     opts: &'a FmtOptions,
@@ -465,11 +465,7 @@ fn restart_active_breaks<'a>(
 // Number of spaces to add before a word, based on mode, newline, sentence start.
 fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize {
     if uniform || newline {
-        if start || (newline && punct) {
-            2
-        } else {
-            1
-        }
+        if start || (newline && punct) { 2 } else { 1 }
     } else {
         0
     }

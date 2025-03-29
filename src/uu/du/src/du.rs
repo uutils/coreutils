@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use chrono::{DateTime, Local};
-use clap::{builder::PossibleValue, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
@@ -24,19 +24,19 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use thiserror::Error;
-use uucore::display::{print_verbatim, Quotable};
-use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
+use uucore::display::{Quotable, print_verbatim};
+use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
-use uucore::parse_size::{parse_size_u64, ParseSizeError};
+use uucore::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
-    FILE_STANDARD_INFO,
+    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
+    GetFileInformationByHandleEx,
 };
 
 mod options {
@@ -593,7 +593,7 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("cannot open '{file_name}' for reading: No such file or directory"),
-                ))
+                ));
             }
             Err(e) => return Err(e),
         }

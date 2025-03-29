@@ -9,12 +9,12 @@ mod operation;
 mod unicode_table;
 
 use crate::operation::DeleteOperation;
-use clap::{value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use operation::{
-    translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
+    Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
 };
 use std::ffi::OsString;
-use std::io::{stdin, stdout, BufWriter};
+use std::io::{BufWriter, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;

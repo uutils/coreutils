@@ -14,7 +14,7 @@
 use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{
-    signal, SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE,
+    SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE, signal,
 };
 
 /// The default signal value.

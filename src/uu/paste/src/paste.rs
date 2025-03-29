@@ -6,7 +6,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, Stdin, Write};
+use std::io::{BufRead, BufReader, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
 use std::rc::Rc;
 use std::slice::Iter;

@@ -8,7 +8,7 @@
 mod error;
 
 use clap::builder::ValueParser;
-use clap::{error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
@@ -19,13 +19,13 @@ use std::io;
 use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
-use std::path::{absolute, Path, PathBuf};
+use std::path::{Path, PathBuf, absolute};
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::{
-    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file, canonicalize,
-    path_ends_with_terminator, MissingHandling, ResolveMode,
+    MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
+    are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
@@ -37,8 +37,8 @@ pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
 use fs_extra::dir::{
-    get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
-    TransitProcess, TransitProcessResult,
+    CopyOptions as DirCopyOptions, TransitProcess, TransitProcessResult, get_size as dir_get_size,
+    move_dir, move_dir_with_progress,
 };
 
 use crate::error::MvError;

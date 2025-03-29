@@ -22,18 +22,19 @@ use std::{
 use itertools::Itertools;
 use uucore::error::UResult;
 
+use crate::Output;
 use crate::chunks::RecycledChunk;
 use crate::merge::ClosedTmpFile;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
 use crate::tmp_dir::TmpDirWrapper;
-use crate::Output;
 use crate::{
+    GlobalSettings,
     chunks::{self, Chunk},
-    compare_by, merge, sort_by, GlobalSettings,
+    compare_by, merge, sort_by,
 };
-use crate::{print_sorted, Line};
+use crate::{Line, print_sorted};
 
 const START_BUFFER_SIZE: usize = 8_000;
 

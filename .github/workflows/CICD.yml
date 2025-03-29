@@ -2,16 +2,16 @@ name: CICD
 
 # spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl taiki
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
-# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers
-# spell-checker:ignore (people) Peltoche rivy dtolnay
-# spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt utmpdump xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
+# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel
+# spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
+# spell-checker:ignore (shell/tools) binutils choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.82.0"
+  RUST_MIN_SRV: "1.85.0"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -21,7 +21,7 @@ on:
     tags:
       - '*'
     branches:
-      - main
+      - '*'
 
 permissions:
   contents: read # to fetch code (actions/checkout)
@@ -118,7 +118,7 @@ jobs:
         components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -178,7 +178,7 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -272,7 +272,7 @@ jobs:
       run: |
         sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: "`make build`"
       shell: bash
       run: |
@@ -346,7 +346,7 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -375,7 +375,7 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -400,7 +400,7 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install dependencies
       shell: bash
       run: |
@@ -517,11 +517,11 @@ jobs:
           - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix"         , use-cross: no, workspace-tests: true }
+          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
-          - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos } # M1 CPU
-          - { os: macos-13       , target: x86_64-apple-darwin         , features: feat_os_macos }
+          - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos, workspace-tests: true } # M1 CPU
+          - { os: macos-13       , target: x86_64-apple-darwin         , features: feat_os_macos, workspace-tests: true }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
@@ -538,7 +538,7 @@ jobs:
       with:
         key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -847,7 +847,7 @@ jobs:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -934,7 +934,7 @@ jobs:
         components: rustfmt
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
       shell: bash
       run: |

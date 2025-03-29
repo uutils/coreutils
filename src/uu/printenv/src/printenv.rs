@@ -50,11 +50,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    if error_found {
-        Err(1.into())
-    } else {
-        Ok(())
-    }
+    if error_found { Err(1.into()) } else { Ok(()) }
 }
 
 pub fn uu_app() -> Command {

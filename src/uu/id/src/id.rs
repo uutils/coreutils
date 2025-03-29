@@ -38,7 +38,7 @@ use std::ffi::CStr;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
-use uucore::error::{set_exit_code, USimpleError};
+use uucore::error::{USimpleError, set_exit_code};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::line_ending::LineEnding;
@@ -660,7 +660,7 @@ mod audit {
     }
     pub type c_auditinfo_addr_t = c_auditinfo_addr;
 
-    extern "C" {
+    unsafe extern "C" {
         pub fn getaudit(auditinfo_addr: *mut c_auditinfo_addr_t) -> c_int;
     }
 }

@@ -5,17 +5,17 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 use clap::builder::ValueParser;
-use clap::{value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufReader, Read, Write};
+use std::io::{self, BufReader, Read, Write, stdin, stdout};
 use std::iter;
 use std::path::Path;
 use uucore::checksum::{
-    calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
-    ChecksumError, ChecksumOptions, ChecksumVerbose, ALGORITHM_OPTIONS_BLAKE2B,
-    ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC, ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV,
-    SUPPORTED_ALGORITHMS,
+    ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
+    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, ChecksumError, ChecksumOptions,
+    ChecksumVerbose, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
+    perform_checksum_validation,
 };
 use uucore::{
     encoding,

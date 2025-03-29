@@ -4,7 +4,9 @@
 // file that was distributed with this source code.
 use std::fs::File;
 
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 #[cfg(not(windows))]

@@ -9,9 +9,9 @@ mod error;
 use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
-use std::io::{stdin, stdout, BufWriter, Read, Write};
+use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{
-    fs::{read, File},
+    fs::{File, read},
     path::Path,
 };
 use uucore::display::Quotable;

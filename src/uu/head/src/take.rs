@@ -362,7 +362,7 @@ mod tests {
     use std::io::{BufRead, BufReader};
 
     use crate::take::{
-        copy_all_but_n_bytes, copy_all_but_n_lines, take_lines, TakeAllBuffer, TakeAllLinesBuffer,
+        TakeAllBuffer, TakeAllLinesBuffer, copy_all_but_n_bytes, copy_all_but_n_lines, take_lines,
     };
 
     #[test]

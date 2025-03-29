@@ -70,20 +70,20 @@ macro_rules! chars2string {
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmp";
 
-    #[cfg(target_env = "musl")]
-    pub use libc::UT_HOSTSIZE;
     #[cfg(not(target_env = "musl"))]
     pub use libc::__UT_HOSTSIZE as UT_HOSTSIZE;
-
     #[cfg(target_env = "musl")]
-    pub use libc::UT_LINESIZE;
+    pub use libc::UT_HOSTSIZE;
+
     #[cfg(not(target_env = "musl"))]
     pub use libc::__UT_LINESIZE as UT_LINESIZE;
-
     #[cfg(target_env = "musl")]
-    pub use libc::UT_NAMESIZE;
+    pub use libc::UT_LINESIZE;
+
     #[cfg(not(target_env = "musl"))]
     pub use libc::__UT_NAMESIZE as UT_NAMESIZE;
+    #[cfg(target_env = "musl")]
+    pub use libc::UT_NAMESIZE;
 
     pub const UT_IDSIZE: usize = 4;
 
@@ -238,7 +238,7 @@ impl Utmpx {
         let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
 
         if !hostname.is_empty() {
-            use dns_lookup::{getaddrinfo, AddrInfoHints};
+            use dns_lookup::{AddrInfoHints, getaddrinfo};
 
             const AI_CANONNAME: i32 = 0x2;
             let hints = AddrInfoHints {

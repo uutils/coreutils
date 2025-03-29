@@ -5,7 +5,7 @@
 
 // cSpell:ignore strs
 
-use clap::{builder::ValueParser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};

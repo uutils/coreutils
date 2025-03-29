@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn basic_literal() {
@@ -1052,4 +1054,30 @@ fn float_switch_switch_decimal_scientific() {
         .args(&["%g", "0.00001"])
         .succeeds()
         .stdout_only("1e-05");
+}
+
+#[test]
+fn float_arg_with_whitespace() {
+    new_ucmd!()
+        .args(&["%f", " \u{0020}\u{000d}\t\n0.000001"])
+        .succeeds()
+        .stdout_only("0.000001");
+
+    new_ucmd!()
+        .args(&["%f", "0.1 "])
+        .fails()
+        .stderr_contains("value not completely converted");
+
+    // Unicode whitespace should not be allowed in a number
+    new_ucmd!()
+        .args(&["%f", "\u{2029}0.1"])
+        .fails()
+        .stderr_contains("expected a numeric value");
+
+    // A input string with a whitespace special character that has
+    // not already been expanded should fail.
+    new_ucmd!()
+        .args(&["%f", "\\t0.1"])
+        .fails()
+        .stderr_contains("expected a numeric value");
 }

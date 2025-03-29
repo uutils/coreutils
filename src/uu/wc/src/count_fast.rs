@@ -13,7 +13,7 @@ use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
-use libc::{sysconf, S_IFREG, _SC_PAGESIZE};
+use libc::{_SC_PAGESIZE, S_IFREG, sysconf};
 #[cfg(unix)]
 use nix::sys::stat;
 #[cfg(unix)]

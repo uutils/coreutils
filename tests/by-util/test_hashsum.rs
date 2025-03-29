@@ -2,7 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
+
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 // spell-checker:ignore checkfile, nonames, testf, ntestf
 macro_rules! get_hash(
     ($str:expr) => (
@@ -14,7 +17,7 @@ macro_rules! test_digest {
     ($($id:ident $t:ident $size:expr)*) => ($(
 
     mod $id {
-        use crate::common::util::*;
+        use uutests::util::*;
         static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
         static BITS_ARG: &'static str = concat!("--bits=", stringify!($size));
         static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");
@@ -72,6 +75,9 @@ macro_rules! test_digest {
         #[cfg(windows)]
         #[test]
         fn test_text_mode() {
+            use uutests::new_ucmd;
+            use uutests::util_name;
+
             // TODO Replace this with hard-coded files that store the
             // expected output of text mode on an input file that has
             // "\r\n" line endings.
@@ -1009,14 +1015,15 @@ fn test_sha256_binary() {
     let ts = TestScenario::new(util_name!());
     assert_eq!(
         ts.fixtures.read("binary.sha256.expected"),
-        get_hash!(ts
-            .ucmd()
-            .arg("--sha256")
-            .arg("--bits=256")
-            .arg("binary.png")
-            .succeeds()
-            .no_stderr()
-            .stdout_str())
+        get_hash!(
+            ts.ucmd()
+                .arg("--sha256")
+                .arg("--bits=256")
+                .arg("binary.png")
+                .succeeds()
+                .no_stderr()
+                .stdout_str()
+        )
     );
 }
 
@@ -1025,14 +1032,15 @@ fn test_sha256_stdin_binary() {
     let ts = TestScenario::new(util_name!());
     assert_eq!(
         ts.fixtures.read("binary.sha256.expected"),
-        get_hash!(ts
-            .ucmd()
-            .arg("--sha256")
-            .arg("--bits=256")
-            .pipe_in_fixture("binary.png")
-            .succeeds()
-            .no_stderr()
-            .stdout_str())
+        get_hash!(
+            ts.ucmd()
+                .arg("--sha256")
+                .arg("--bits=256")
+                .pipe_in_fixture("binary.png")
+                .succeeds()
+                .no_stderr()
+                .stdout_str()
+        )
     );
 }
 

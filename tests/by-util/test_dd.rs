@@ -4,11 +4,14 @@
 // file that was distributed with this source code.
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable
 
-#[cfg(all(unix, not(feature = "feat_selinux")))]
-use crate::common::util::run_ucmd_as_root_with_stdin_stdout;
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::run_ucmd_as_root_with_stdin_stdout;
 #[cfg(all(not(windows), feature = "printf"))]
-use crate::common::util::{UCommand, TESTS_BINARY};
+use uutests::util::{UCommand, get_tests_binary};
+use uutests::util_name;
 
 use regex::Regex;
 use uucore::io::OwnedFileDescriptorOrHandle;
@@ -30,21 +33,19 @@ use std::time::Duration;
 use tempfile::tempfile;
 
 macro_rules! inf {
-    ($fname:expr) => {{
-        &format!("if={}", $fname)
-    }};
+    ($fname:expr) => {
+        format!("if={}", $fname)
+    };
 }
 
 macro_rules! of {
-    ($fname:expr) => {{
-        &format!("of={}", $fname)
-    }};
+    ($fname:expr) => {
+        format!("of={}", $fname)
+    };
 }
 
 macro_rules! fixture_path {
-    ($fname:expr) => {{
-        PathBuf::from(format!("./tests/fixtures/dd/{}", $fname))
-    }};
+    ($fname:expr) => {{ PathBuf::from(format!("./tests/fixtures/dd/{}", $fname)) }};
 }
 
 macro_rules! assert_fixture_exists {
@@ -294,7 +295,7 @@ fn test_noatime_does_not_update_infile_atime() {
     assert_fixture_exists!(&fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "iflag=noatime", inf!(fname)]);
+    ucmd.args(&["status=none", "iflag=noatime", &inf!(fname)]);
 
     let pre_atime = fix.metadata(fname).accessed().unwrap();
 
@@ -314,7 +315,7 @@ fn test_noatime_does_not_update_ofile_atime() {
     assert_fixture_exists!(&fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "oflag=noatime", of!(fname)]);
+    ucmd.args(&["status=none", "oflag=noatime", &of!(fname)]);
 
     let pre_atime = fix.metadata(fname).accessed().unwrap();
 
@@ -331,7 +332,7 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
     assert_fixture_not_exists!(&fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["conv=nocreat", of!(&fname)])
+    ucmd.args(&["conv=nocreat", &of!(&fname)])
         .pipe_in("")
         .fails()
         .stderr_only(
@@ -351,7 +352,7 @@ fn test_notrunc_does_not_truncate() {
     }
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "conv=notrunc", of!(&fname), "if=null.txt"])
+    ucmd.args(&["status=none", "conv=notrunc", &of!(&fname), "if=null.txt"])
         .succeeds()
         .no_output();
 
@@ -369,7 +370,7 @@ fn test_existing_file_truncated() {
     }
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "if=null.txt", of!(fname)])
+    ucmd.args(&["status=none", "if=null.txt", &of!(fname)])
         .succeeds()
         .no_output();
 
@@ -413,7 +414,7 @@ fn test_fullblock() {
     let ucmd = new_ucmd!()
         .args(&[
             "if=/dev/urandom",
-            of!(&tmp_fn),
+            &of!(&tmp_fn),
             "bs=128M",
             // Note: In order for this test to actually test iflag=fullblock, the bs=VALUE
             // must be big enough to 'overwhelm' the urandom store of bytes.
@@ -496,7 +497,7 @@ fn test_zeros_to_file() {
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", inf!(test_fn), of!(tmp_fn)])
+    ucmd.args(&["status=none", &inf!(test_fn), &of!(tmp_fn)])
         .succeeds()
         .no_output();
 
@@ -516,8 +517,8 @@ fn test_to_file_with_ibs_obs() {
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&[
         "status=none",
-        inf!(test_fn),
-        of!(tmp_fn),
+        &inf!(test_fn),
+        &of!(tmp_fn),
         "ibs=222",
         "obs=111",
     ])
@@ -537,7 +538,7 @@ fn test_ascii_521k_to_file() {
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", of!(tmp_fn)])
+    ucmd.args(&["status=none", &of!(tmp_fn)])
         .pipe_in(input.clone())
         .succeeds()
         .no_output();
@@ -567,7 +568,7 @@ fn test_ascii_5_gibi_to_file() {
         "count=5G",
         "iflag=count_bytes",
         "if=/dev/zero",
-        of!(tmp_fn),
+        &of!(tmp_fn),
     ])
     .succeeds()
     .no_output();
@@ -581,7 +582,7 @@ fn test_self_transfer() {
     assert_fixture_exists!(fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "conv=notrunc", inf!(fname), of!(fname)]);
+    ucmd.args(&["status=none", "conv=notrunc", &inf!(fname), &of!(fname)]);
 
     assert!(fix.file_exists(fname));
     assert_eq!(256 * 1024, fix.metadata(fname).len());
@@ -600,7 +601,7 @@ fn test_unicode_filenames() {
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", inf!(test_fn), of!(tmp_fn)])
+    ucmd.args(&["status=none", &inf!(test_fn), &of!(tmp_fn)])
         .succeeds()
         .no_output();
 
@@ -1507,9 +1508,9 @@ fn test_skip_input_fifo() {
 #[test]
 fn test_multiple_processes_reading_stdin() {
     // TODO Investigate if this is possible on Windows.
-    let printf = format!("{TESTS_BINARY} printf 'abcdef\n'");
-    let dd_skip = format!("{TESTS_BINARY} dd bs=1 skip=3 count=0");
-    let dd = format!("{TESTS_BINARY} dd");
+    let printf = format!("{} printf 'abcdef\n'", get_tests_binary());
+    let dd_skip = format!("{} dd bs=1 skip=3 count=0", get_tests_binary());
+    let dd = format!("{} dd", get_tests_binary());
     UCommand::new()
         .arg(format!("{printf} | ( {dd_skip} && {dd} ) 2> /dev/null"))
         .succeeds()
@@ -1611,7 +1612,7 @@ fn test_reading_partial_blocks_from_fifo() {
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
-    let mut reader_command = Command::new(TESTS_BINARY);
+    let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
         .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
@@ -1655,7 +1656,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // until the writer process starts).
     //
     // `bs=N` takes precedence over `ibs=N` and `obs=N`.
-    let mut reader_command = Command::new(TESTS_BINARY);
+    let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
         .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
         .stdout(Stdio::piped())

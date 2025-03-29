@@ -21,7 +21,10 @@ impl<'a> VariableParser<'a, '_> {
             if c.is_ascii_digit() {
                 return Err(ParseError::ParsingOfVariableNameFailed {
                     pos: self.parser.get_peek_position(),
-                    msg: format!("Unexpected character: '{c}', expected variable name must not start with 0..9") });
+                    msg: format!(
+                        "Unexpected character: '{c}', expected variable name must not start with 0..9"
+                    ),
+                });
             }
         }
         Ok(())
@@ -44,8 +47,10 @@ impl<'a> VariableParser<'a, '_> {
             match self.get_current_char() {
                 None => {
                     return Err(ParseError::ParsingOfVariableNameFailed {
-                        pos: self.parser.get_peek_position(), msg: "Missing closing brace".into() })
-                },
+                        pos: self.parser.get_peek_position(),
+                        msg: "Missing closing brace".into(),
+                    });
+                }
                 Some(c) if !c.is_ascii() || c.is_ascii_alphanumeric() || c == '_' => {
                     self.skip_one()?;
                 }
@@ -56,32 +61,35 @@ impl<'a> VariableParser<'a, '_> {
                             None => {
                                 return Err(ParseError::ParsingOfVariableNameFailed {
                                     pos: self.parser.get_peek_position(),
-                                    msg: "Missing closing brace after default value".into() })
-                            },
+                                    msg: "Missing closing brace after default value".into(),
+                                });
+                            }
                             Some('}') => {
                                 default_end = Some(self.parser.get_peek_position());
                                 self.skip_one()?;
-                                break
-                            },
+                                break;
+                            }
                             Some(_) => {
                                 self.skip_one()?;
-                            },
+                            }
                         }
                     }
                     break;
-                },
+                }
                 Some('}') => {
                     varname_end = self.parser.get_peek_position();
                     default_end = None;
                     self.skip_one()?;
                     break;
-                },
+                }
                 Some(c) => {
                     return Err(ParseError::ParsingOfVariableNameFailed {
                         pos: self.parser.get_peek_position(),
-                        msg: format!("Unexpected character: '{c}', expected a closing brace ('}}') or colon (':')")
-                    })
-                },
+                        msg: format!(
+                            "Unexpected character: '{c}', expected a closing brace ('}}') or colon (':')"
+                        ),
+                    });
+                }
             };
         }
 
@@ -144,7 +152,7 @@ impl<'a> VariableParser<'a, '_> {
                 return Err(ParseError::ParsingOfVariableNameFailed {
                     pos: self.parser.get_peek_position(),
                     msg: "missing variable name".into(),
-                })
+                });
             }
             Some('{') => {
                 self.skip_one()?;

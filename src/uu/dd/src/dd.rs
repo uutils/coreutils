@@ -22,7 +22,7 @@ use nix::fcntl::FcntlArg::F_SETFL;
 use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::ProgUpdateType;
-use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
+use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
 use uucore::io::OwnedFileDescriptorOrHandle;
 
 use std::cmp;
@@ -41,7 +41,7 @@ use std::os::unix::{
 use std::os::windows::{fs::MetadataExt, io::AsHandle};
 use std::path::Path;
 use std::sync::atomic::AtomicU8;
-use std::sync::{atomic::Ordering::Relaxed, mpsc, Arc};
+use std::sync::{Arc, atomic::Ordering::Relaxed, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -50,12 +50,12 @@ use gcd::Gcd;
 #[cfg(target_os = "linux")]
 use nix::{
     errno::Errno,
-    fcntl::{posix_fadvise, PosixFadviseAdvice},
+    fcntl::{PosixFadviseAdvice, posix_fadvise},
 };
 use uucore::display::Quotable;
-#[cfg(unix)]
-use uucore::error::{set_exit_code, USimpleError};
 use uucore::error::{FromIo, UResult};
+#[cfg(unix)]
+use uucore::error::{USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]
 use uucore::show_if_err;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
@@ -417,11 +417,7 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
         flag |= libc::O_SYNC;
     }
 
-    if flag == 0 {
-        None
-    } else {
-        Some(flag)
-    }
+    if flag == 0 { None } else { Some(flag) }
 }
 
 impl Read for Input<'_> {
@@ -832,10 +828,9 @@ impl<'a> Output<'a> {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
-            show_if_err!(self
-                .dst
-                .discard_cache(offset, len)
-                .map_err_context(|| "failed to discard cache for: 'standard output'".to_string()));
+            show_if_err!(self.dst.discard_cache(offset, len).map_err_context(|| {
+                "failed to discard cache for: 'standard output'".to_string()
+            }));
         }
         #[cfg(target_os = "linux")]
         {
@@ -1241,11 +1236,7 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
         flag |= libc::O_SYNC;
     }
 
-    if flag == 0 {
-        None
-    } else {
-        Some(flag)
-    }
+    if flag == 0 { None } else { Some(flag) }
 }
 
 /// Read from an input (that is, a source of bytes) into the given buffer.
@@ -1441,7 +1432,7 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use crate::{calc_bsize, Output, Parser};
+    use crate::{Output, Parser, calc_bsize};
 
     use std::path::Path;
 

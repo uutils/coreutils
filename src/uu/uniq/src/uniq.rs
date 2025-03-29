@@ -4,16 +4,16 @@
 // file that was distributed with this source code.
 // spell-checker:ignore badoption
 use clap::{
-    builder::ValueParser, error::ContextKind, error::Error, error::ErrorKind, Arg, ArgAction,
-    ArgMatches, Command,
+    Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
+    error::ErrorKind,
 };
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::posix::{posix_version, OBSOLETE};
+use uucore::posix::{OBSOLETE, posix_version};
 use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -139,11 +139,7 @@ impl Uniq {
     }
 
     fn get_line_terminator(&self) -> u8 {
-        if self.zero_terminated {
-            0
-        } else {
-            b'\n'
-        }
+        if self.zero_terminated { 0 } else { b'\n' }
     }
 
     fn cmp_keys(&self, first: &[u8], second: &[u8]) -> bool {

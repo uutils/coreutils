@@ -63,4 +63,18 @@ of system time). Simply wrapping `stdout` in a `BufWriter` increased performance
 by about 2 times for a floating point increment test case, leading to similar
 performance compared with GNU `seq`.
 
+### Directly print strings
+
+As expected, directly printing a string:
+```rust
+stdout.write_all(separator.as_bytes())?
+```
+is quite a bit faster than using format to do the same operation:
+```rust
+write!(stdout, "{separator}")?
+```
+
+The change above resulted in a ~10% speedup.
+
+
 [0]: https://github.com/sharkdp/hyperfine

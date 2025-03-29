@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
 
-use clap::{builder::ValueParser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
@@ -29,11 +29,11 @@ use quick_error::ResultExt;
 
 use platform::copy_on_write;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
+use uucore::error::{UClapError, UError, UResult, UUsageError, set_exit_code};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop, normalize_path,
-    path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
-    ResolveMode,
+    FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
+    get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
+    paths_refer_to_same_file,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -1498,7 +1498,7 @@ fn file_mode_for_interactive_overwrite(
     {
         #[cfg(unix)]
         {
-            use libc::{mode_t, S_IWUSR};
+            use libc::{S_IWUSR, mode_t};
             use std::os::unix::prelude::MetadataExt;
 
             match path.metadata() {
@@ -1631,9 +1631,9 @@ pub(crate) fn copy_attributes(
     #[cfg(unix)]
     handle_preserve(&attributes.ownership, || -> CopyResult<()> {
         use std::os::unix::prelude::MetadataExt;
-        use uucore::perms::wrap_chown;
         use uucore::perms::Verbosity;
         use uucore::perms::VerbosityLevel;
+        use uucore::perms::wrap_chown;
 
         let dest_uid = source_metadata.uid();
         let dest_gid = source_metadata.gid();
@@ -2627,7 +2627,7 @@ fn disk_usage_directory(p: &Path) -> io::Result<u64> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{aligned_ancestors, localize_to_target, Attributes, Preserve};
+    use crate::{Attributes, Preserve, aligned_ancestors, localize_to_target};
     use std::path::Path;
 
     #[test]

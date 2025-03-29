@@ -12,7 +12,7 @@ use std::fs::{read_dir, remove_dir};
 use std::io;
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, strip_errno, UResult};
+use uucore::error::{UResult, set_exit_code, strip_errno};
 
 use uucore::{format_usage, help_about, help_usage, show_error, util_name};
 

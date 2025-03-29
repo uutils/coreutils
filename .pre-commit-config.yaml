@@ -15,3 +15,9 @@ repos:
         pass_filenames: false
         types: [file, rust]
         language: system
+    -   id: cspell
+        name: Code spell checker (cspell)
+        description: Run cspell to check for spelling errors.
+        entry: cspell --
+        pass_filenames: true
+        language: system

@@ -11,8 +11,8 @@ use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
-    for_base_common::{BASE32, BASE32HEX, BASE64, BASE64URL, BASE64_NOPAD, HEXUPPER_PERMISSIVE},
-    Format, Z85Wrapper, BASE2LSBF, BASE2MSBF,
+    BASE2LSBF, BASE2MSBF, Format, Z85Wrapper,
+    for_base_common::{BASE32, BASE32HEX, BASE64, BASE64_NOPAD, BASE64URL, HEXUPPER_PERMISSIVE},
 };
 use uucore::encoding::{EncodingWrapper, SupportsFastDecodeAndEncode};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
@@ -291,7 +291,7 @@ pub fn get_supports_fast_decode_and_encode(
 }
 
 pub mod fast_encode {
-    use crate::base_common::{format_read_error, WRAP_DEFAULT};
+    use crate::base_common::{WRAP_DEFAULT, format_read_error};
     use std::{
         collections::VecDeque,
         io::{self, ErrorKind, Read, Write},

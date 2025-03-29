@@ -5,7 +5,7 @@
 // spell-checker:ignore (ToDO) IOFBF IOLBF IONBF cstdio setvbuf
 
 use cpp::cpp;
-use libc::{c_char, c_int, fileno, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
+use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
 use std::env;
 use std::ptr;
 
@@ -26,7 +26,7 @@ cpp! {{
     }
 }}
 
-extern "C" {
+unsafe extern "C" {
     fn __stdbuf_get_stdin() -> *mut FILE;
     fn __stdbuf_get_stdout() -> *mut FILE;
     fn __stdbuf_get_stderr() -> *mut FILE;
@@ -64,15 +64,15 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 
 /// # Safety
 /// ToDO ... (safety note)
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf() {
     if let Ok(val) = env::var("_STDBUF_E") {
-        set_buffer(__stdbuf_get_stderr(), &val);
+        set_buffer(unsafe { __stdbuf_get_stderr() }, &val);
     }
     if let Ok(val) = env::var("_STDBUF_I") {
-        set_buffer(__stdbuf_get_stdin(), &val);
+        set_buffer(unsafe { __stdbuf_get_stdin() }, &val);
     }
     if let Ok(val) = env::var("_STDBUF_O") {
-        set_buffer(__stdbuf_get_stdout(), &val);
+        set_buffer(unsafe { __stdbuf_get_stdout() }, &val);
     }
 }

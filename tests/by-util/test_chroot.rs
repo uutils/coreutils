@@ -4,9 +4,12 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot
 
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
 #[cfg(not(target_os = "android"))]
-use crate::common::util::is_ci;
-use crate::common::util::{run_ucmd_as_root, TestScenario};
+use uutests::util::is_ci;
+use uutests::util::{TestScenario, run_ucmd_as_root};
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -17,9 +20,11 @@ fn test_invalid_arg() {
 fn test_missing_operand() {
     let result = new_ucmd!().fails_with_code(125);
 
-    assert!(result
-        .stderr_str()
-        .starts_with("error: the following required arguments were not provided"));
+    assert!(
+        result
+            .stderr_str()
+            .starts_with("error: the following required arguments were not provided")
+    );
 
     assert!(result.stderr_str().contains("<newroot>"));
 }
@@ -33,9 +38,11 @@ fn test_enter_chroot_fails() {
     at.mkdir("jail");
 
     let result = ucmd.arg("jail").fails_with_code(125);
-    assert!(result
-        .stderr_str()
-        .starts_with("chroot: cannot chroot to 'jail': Operation not permitted (os error 1)"));
+    assert!(
+        result
+            .stderr_str()
+            .starts_with("chroot: cannot chroot to 'jail': Operation not permitted (os error 1)")
+    );
 }
 
 #[test]

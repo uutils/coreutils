@@ -10,11 +10,10 @@ use std::os::windows::fs::MetadataExt;
 use std::{cell::OnceCell, num::IntErrorKind};
 use std::{
     cmp::Reverse,
-    error::Error,
     ffi::{OsStr, OsString},
-    fmt::{Display, Write as FmtWrite},
+    fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    io::{stdout, BufWriter, ErrorKind, Stdout, Write},
+    io::{BufWriter, ErrorKind, Stdout, Write, stdout},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -29,17 +28,19 @@ use std::{collections::HashSet, io::IsTerminal};
 use ansi_width::ansi_width;
 use chrono::{DateTime, Local, TimeDelta};
 use clap::{
-    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
     Arg, ArgAction, Command,
+    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
 use term_grid::{Direction, Filling, Grid, GridOptions};
-
+use thiserror::Error;
 use uucore::error::USimpleError;
-use uucore::format::human::{human_readable, SizeFormat};
+use uucore::format::human::{SizeFormat, human_readable};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
+#[cfg(unix)]
+use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -53,14 +54,12 @@ use uucore::fsxattr::has_acl;
     target_os = "solaris"
 ))]
 use uucore::libc::{dev_t, major, minor};
-#[cfg(unix)]
-use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
-use uucore::quoting_style::{self, escape_name, QuotingStyle};
+use uucore::quoting_style::{self, QuotingStyle, escape_name};
 use uucore::{
     custom_tz_fmt,
     display::Quotable,
-    error::{set_exit_code, UError, UResult},
+    error::{UError, UResult, set_exit_code},
     format_usage,
     fs::display_permissions,
     os_str_as_bytes_lossy,
@@ -71,9 +70,9 @@ use uucore::{
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 
 mod dired;
-use dired::{is_dired_arg_present, DiredOutput};
+use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
-use colors::{color_name, StyleManager};
+use colors::{StyleManager, color_name};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
@@ -175,14 +174,41 @@ const POSIXLY_CORRECT_BLOCK_SIZE: u64 = 512;
 const DEFAULT_BLOCK_SIZE: u64 = 1024;
 const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 enum LsError {
+    #[error("invalid line width: '{0}'")]
     InvalidLineWidth(String),
-    IOError(std::io::Error),
-    IOErrorContext(std::io::Error, PathBuf, bool),
+
+    #[error("general io error: {0}")]
+    IOError(#[from] std::io::Error),
+
+    #[error("{}", match .1.kind() {
+        ErrorKind::NotFound => format!("cannot access '{}': No such file or directory", .0.to_string_lossy()),
+        ErrorKind::PermissionDenied => match .1.raw_os_error().unwrap_or(1) {
+            1 => format!("cannot access '{}': Operation not permitted", .0.to_string_lossy()),
+            _ => if .0.is_dir() {
+                format!("cannot open directory '{}': Permission denied", .0.to_string_lossy())
+            } else {
+                format!("cannot open file '{}': Permission denied", .0.to_string_lossy())
+            },
+        },
+        _ => match .1.raw_os_error().unwrap_or(1) {
+            9 => format!("cannot open directory '{}': Bad file descriptor", .0.to_string_lossy()),
+            _ => format!("unknown io error: '{:?}', '{:?}'", .0.to_string_lossy(), .1),
+        },
+    })]
+    IOErrorContext(PathBuf, std::io::Error, bool),
+
+    #[error("invalid --block-size argument '{0}'")]
     BlockSizeParseError(String),
+
+    #[error("--dired and --zero are incompatible")]
     DiredAndZeroAreIncompatible,
+
+    #[error("{}: not listing already-listed directory", .0.to_string_lossy())]
     AlreadyListedError(PathBuf),
+
+    #[error("invalid --time-style argument {}\nPossible values are: {:?}\n\nFor more information try --help", .0.quote(), .1)]
     TimeStyleParseError(String, Vec<String>),
 }
 
@@ -197,100 +223,6 @@ impl UError for LsError {
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_, _) => 2,
-        }
-    }
-}
-
-impl Error for LsError {}
-
-impl Display for LsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::BlockSizeParseError(s) => {
-                write!(f, "invalid --block-size argument {}", s.quote())
-            }
-            Self::DiredAndZeroAreIncompatible => {
-                write!(f, "--dired and --zero are incompatible")
-            }
-            Self::TimeStyleParseError(s, possible_time_styles) => {
-                write!(
-                    f,
-                    "invalid --time-style argument {}\nPossible values are: {:?}\n\nFor more information try --help",
-                    s.quote(),
-                    possible_time_styles
-                )
-            }
-            Self::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
-            Self::IOError(e) => write!(f, "general io error: {e}"),
-            Self::IOErrorContext(e, p, _) => {
-                let error_kind = e.kind();
-                let errno = e.raw_os_error().unwrap_or(1i32);
-
-                match error_kind {
-                    // No such file or directory
-                    ErrorKind::NotFound => {
-                        write!(
-                            f,
-                            "cannot access '{}': No such file or directory",
-                            p.to_string_lossy(),
-                        )
-                    }
-                    // Permission denied and Operation not permitted
-                    ErrorKind::PermissionDenied =>
-                    {
-                        #[allow(clippy::wildcard_in_or_patterns)]
-                        match errno {
-                            1i32 => {
-                                write!(
-                                    f,
-                                    "cannot access '{}': Operation not permitted",
-                                    p.to_string_lossy(),
-                                )
-                            }
-                            13i32 | _ => {
-                                if p.is_dir() {
-                                    write!(
-                                        f,
-                                        "cannot open directory '{}': Permission denied",
-                                        p.to_string_lossy(),
-                                    )
-                                } else {
-                                    write!(
-                                        f,
-                                        "cannot open file '{}': Permission denied",
-                                        p.to_string_lossy(),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    _ => match errno {
-                        9i32 => {
-                            // only should ever occur on a read_dir on a bad fd
-                            write!(
-                                f,
-                                "cannot open directory '{}': Bad file descriptor",
-                                p.to_string_lossy(),
-                            )
-                        }
-                        _ => {
-                            write!(
-                                f,
-                                "unknown io error: '{:?}', '{:?}'",
-                                p.to_string_lossy(),
-                                e
-                            )
-                        }
-                    },
-                }
-            }
-            Self::AlreadyListedError(path) => {
-                write!(
-                    f,
-                    "{}: not listing already-listed directory",
-                    path.to_string_lossy()
-                )
-            }
         }
     }
 }
@@ -2054,8 +1986,8 @@ impl PathData {
                             }
                         }
                         show!(LsError::IOErrorContext(
-                            err,
                             self.p_buf.clone(),
+                            err,
                             self.command_line
                         ));
                         None
@@ -2161,8 +2093,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 // flush stdout buffer before the error to preserve formatting and order
                 out.flush()?;
                 show!(LsError::IOErrorContext(
-                    err,
                     path_data.p_buf.clone(),
+                    err,
                     path_data.command_line
                 ));
                 continue;
@@ -2255,11 +2187,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             let md = {
                 // We will always try to deref symlinks to group directories, so PathData.md
                 // is not always useful.
-                if p.must_dereference {
-                    p.md.get()
-                } else {
-                    None
-                }
+                if p.must_dereference { p.md.get() } else { None }
             };
 
             !match md {
@@ -2396,8 +2324,8 @@ fn enter_directory(
                 Err(err) => {
                     out.flush()?;
                     show!(LsError::IOErrorContext(
-                        err,
                         e.p_buf.clone(),
+                        err,
                         e.command_line
                     ));
                     continue;
@@ -3187,11 +3115,7 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
     let len_adjusted = {
         let d = metadata.len() / config.file_size_block_size;
         let r = metadata.len() % config.file_size_block_size;
-        if r == 0 {
-            d
-        } else {
-            d + 1
-        }
+        if r == 0 { d } else { d + 1 }
     };
     SizeOrDeviceId::Size(display_size(len_adjusted, config))
 }
@@ -3365,7 +3289,7 @@ fn display_item_name(
                 }
             }
             Err(err) => {
-                show!(LsError::IOErrorContext(err, path.p_buf.clone(), false));
+                show!(LsError::IOErrorContext(path.p_buf.clone(), err, false));
             }
         }
     }
@@ -3448,7 +3372,7 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
             Err(err) => {
                 // The Path couldn't be dereferenced, so return early and set exit code 1
                 // to indicate a minor error
-                show!(LsError::IOErrorContext(err, p_buf.to_path_buf(), false));
+                show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
                 return substitute_string;
             }
             Ok(_md) => (),

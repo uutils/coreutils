@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) fullname
 
 use clap::{Arg, ArgAction, Command};
-use std::path::{is_separator, PathBuf};
+use std::path::{PathBuf, is_separator};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
 use uucore::line_ending::LineEnding;

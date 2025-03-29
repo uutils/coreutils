@@ -10,13 +10,13 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::{format_usage, help_about, help_usage, show_error};
 
 const ABOUT: &str = help_about!("expand.md");
@@ -496,8 +496,8 @@ fn expand(options: &Options) -> UResult<()> {
 mod tests {
     use crate::is_digit_or_comma;
 
-    use super::next_tabstop;
     use super::RemainingMode;
+    use super::next_tabstop;
 
     #[test]
     fn test_next_tabstop_remaining_mode_none() {

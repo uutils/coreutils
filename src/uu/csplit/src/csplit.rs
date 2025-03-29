@@ -8,7 +8,7 @@
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
 use std::{
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     io::{BufRead, BufWriter, Write},
 };
 

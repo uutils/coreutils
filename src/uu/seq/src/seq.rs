@@ -4,14 +4,14 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat
 use std::ffi::OsString;
-use std::io::{stdout, BufWriter, ErrorKind, Write};
+use std::io::{BufWriter, ErrorKind, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
 use num_traits::Zero;
 
 use uucore::error::{FromIo, UResult};
 use uucore::format::num_format::FloatVariant;
-use uucore::format::{num_format, ExtendedBigDecimal, Format};
+use uucore::format::{ExtendedBigDecimal, Format, num_format};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
@@ -260,7 +260,7 @@ fn print_seq(
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
-            write!(stdout, "{separator}")?;
+            stdout.write_all(separator.as_bytes())?;
         }
         format.fmt(&mut stdout, &value)?;
         // TODO Implement augmenting addition.
@@ -268,7 +268,7 @@ fn print_seq(
         is_first_iteration = false;
     }
     if !is_first_iteration {
-        write!(stdout, "{terminator}")?;
+        stdout.write_all(terminator.as_bytes())?;
     }
     stdout.flush()?;
     Ok(())

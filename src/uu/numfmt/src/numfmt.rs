@@ -7,7 +7,7 @@ use crate::errors::*;
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
-use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 use std::io::{BufRead, Write};
 use std::str::FromStr;
 
@@ -378,8 +378,8 @@ mod tests {
     use uucore::error::get_exit_code;
 
     use super::{
-        handle_args, handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions,
-        InvalidModes, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit,
+        FormatOptions, InvalidModes, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit,
+        handle_args, handle_buffer, parse_unit_size, parse_unit_size_suffix,
     };
     use std::io::{BufReader, Error, ErrorKind, Read};
     struct MockBuffer {}
