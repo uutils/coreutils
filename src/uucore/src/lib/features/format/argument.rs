@@ -5,12 +5,14 @@
 
 use crate::{
     error::set_exit_code,
-    features::format::num_parser::{ParseError, ParsedNumber},
+    features::format::num_parser::{ExtendedParser, ExtendedParserError},
     quoting_style::{Quotes, QuotingStyle, escape_name},
     show_error, show_warning,
 };
 use os_display::Quotable;
 use std::ffi::OsStr;
+
+use super::ExtendedBigDecimal;
 
 /// An argument for formatting
 ///
@@ -25,7 +27,7 @@ pub enum FormatArgument {
     String(String),
     UnsignedInt(u64),
     SignedInt(i64),
-    Float(f64),
+    Float(ExtendedBigDecimal),
     /// Special argument that gets coerced into the other variants
     Unparsed(String),
 }
@@ -34,7 +36,7 @@ pub trait ArgumentIter<'a>: Iterator<Item = &'a FormatArgument> {
     fn get_char(&mut self) -> u8;
     fn get_i64(&mut self) -> i64;
     fn get_u64(&mut self) -> u64;
-    fn get_f64(&mut self) -> f64;
+    fn get_extended_big_decimal(&mut self) -> ExtendedBigDecimal;
     fn get_str(&mut self) -> &'a str;
 }
 
@@ -56,7 +58,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::UnsignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_u64(s), s),
+            FormatArgument::Unparsed(s) => extract_value(u64::extended_parse(s), s),
             _ => 0,
         }
     }
@@ -67,19 +69,19 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::SignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_i64(s), s),
+            FormatArgument::Unparsed(s) => extract_value(i64::extended_parse(s), s),
             _ => 0,
         }
     }
 
-    fn get_f64(&mut self) -> f64 {
+    fn get_extended_big_decimal(&mut self) -> ExtendedBigDecimal {
         let Some(next) = self.next() else {
-            return 0.0;
+            return ExtendedBigDecimal::zero();
         };
         match next {
-            FormatArgument::Float(n) => *n,
-            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_f64(s), s),
-            _ => 0.0,
+            FormatArgument::Float(n) => n.clone(),
+            FormatArgument::Unparsed(s) => extract_value(ExtendedBigDecimal::extended_parse(s), s),
+            _ => ExtendedBigDecimal::zero(),
         }
     }
 
@@ -91,7 +93,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
     }
 }
 
-fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T {
+fn extract_value<T: Default>(p: Result<T, ExtendedParserError<'_, T>>, input: &str) -> T {
     match p {
         Ok(v) => v,
         Err(e) => {
@@ -103,15 +105,15 @@ fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T 
                 },
             );
             match e {
-                ParseError::Overflow => {
+                ExtendedParserError::Overflow => {
                     show_error!("{}: Numerical result out of range", input.quote());
                     Default::default()
                 }
-                ParseError::NotNumeric => {
+                ExtendedParserError::NotNumeric => {
                     show_error!("{}: expected a numeric value", input.quote());
                     Default::default()
                 }
-                ParseError::PartialMatch(v, rest) => {
+                ExtendedParserError::PartialMatch(v, rest) => {
                     let bytes = input.as_encoded_bytes();
                     if !bytes.is_empty() && bytes[0] == b'\'' {
                         show_warning!(
