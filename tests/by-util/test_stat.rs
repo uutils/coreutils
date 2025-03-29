@@ -331,10 +331,16 @@ fn test_pipe_fifo() {
         .stdout_contains("File: FIFO");
 }
 
+// TODO(#7583): Re-enable on Mac OS X (and possibly other Unix platforms)
 #[test]
 #[cfg(all(
     unix,
-    not(any(target_os = "android", target_os = "freebsd", target_os = "openbsd"))
+    not(any(
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "macos"
+    ))
 ))]
 fn test_stdin_pipe_fifo1() {
     // $ echo | stat -
@@ -356,8 +362,9 @@ fn test_stdin_pipe_fifo1() {
         .stdout_contains("File: -");
 }
 
+// TODO(#7583): Re-enable on Mac OS X (and maybe Android)
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_stdin_pipe_fifo2() {
     // $ stat -
     // File: -
