@@ -2675,20 +2675,10 @@ fn display_grid(
             .map(|s| s.to_string_lossy().into_owned())
             .collect();
 
-        // Determine whether to use tabs for separation based on whether any entry ends with '/'.
-        // If any entry ends with '/', it indicates that the -F flag is likely used to classify directories.
-        let use_tabs = names.iter().any(|name| name.ends_with('/'));
-
-        let filling = if use_tabs {
-            Filling::Text("\t".to_string())
-        } else {
-            Filling::Spaces(2)
-        };
-
         let grid = Grid::new(
             names,
             GridOptions {
-                filling,
+                filling: Filling::Spaces(2),
                 direction,
                 width: width as usize,
             },
