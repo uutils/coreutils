@@ -24,31 +24,37 @@ mod options {
 }
 
 struct EchoFlags {
-    pub n: bool,
-    pub e: bool,
-    pub is_hyphen: bool,
+    // n flag == true
+    // default = false
+    pub disable_newline: bool,
+    // e flag == true, E flag == false
+    // default = false
+    pub escape: bool,
+    // '-' argument
+    // default = false
+    pub is_single_hyphen: bool,
 }
 
 fn is_echo_flag(arg: &OsString) -> Option<EchoFlags> {
     let bytes = arg.as_encoded_bytes();
     if bytes.first() == Some(&b'-') {
         let mut flags = EchoFlags {
-            n: false,
-            e: false,
-            is_hyphen: false,
+            disable_newline: false,
+            escape: false,
+            is_single_hyphen: false,
         };
         // this is a single hyphen which is pseudo flag (stops search for more flags but has no
         // effect)
         if arg.len() == 1 {
-            flags.is_hyphen = true;
+            flags.is_single_hyphen = true;
             return Some(flags);
         } else {
             for c in &bytes[1..] {
                 match c {
-                    b'e' => flags.e = true,
-                    b'E' => flags.e = false,
-                    b'n' => flags.n = true,
-                    // if there is any char in an argument starting with '-' doesn't match e/E/n
+                    b'e' => flags.escape = true,
+                    b'E' => flags.escape = false,
+                    b'n' => flags.disable_newline = true,
+                    // if there is any char in an argument starting with '-' that doesn't match e/E/n
                     // present means that this argument is not a flag
                     _ => return None,
                 }
@@ -72,15 +78,15 @@ fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
     // otherwise we switch is_first_argument boolean to skip the checks for any further arguments
     for arg in &mut args_iter {
         if let Some(echo_flags) = is_echo_flag(&arg) {
-            if echo_flags.is_hyphen {
+            if echo_flags.is_single_hyphen {
                 // a single hyphen also breaks search for flags
                 result.push(arg);
                 break;
             }
-            if echo_flags.n {
+            if echo_flags.disable_newline {
                 trailing_newline = false;
             }
-            escape = echo_flags.e;
+            escape = echo_flags.escape;
         } else {
             // first found argument stops search for flags, from here everything is handled as a
             // normal attribute
