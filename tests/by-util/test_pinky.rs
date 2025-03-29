@@ -3,13 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[cfg(target_os = "openbsd")]
-use crate::common::util::TestScenario;
-#[cfg(not(target_os = "openbsd"))]
-use crate::common::util::{TestScenario, expected_result};
 use pinky::Capitalize;
 #[cfg(not(target_os = "openbsd"))]
 use uucore::entries::{Locate, Passwd};
+use uutests::new_ucmd;
+use uutests::unwrap_or_return;
+#[cfg(target_os = "openbsd")]
+use uutests::util::TestScenario;
+#[cfg(not(target_os = "openbsd"))]
+use uutests::util::{TestScenario, expected_result};
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {

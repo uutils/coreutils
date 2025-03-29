@@ -1,0 +1,45 @@
+# spell-checker:ignore (features) zerocopy serde
+
+[package]
+name = "uutests"
+version = "0.0.30"
+authors = ["uutils developers"]
+license = "MIT"
+description = "uutils ~ 'core' uutils test library (cross-platform)"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/main/src/tests/common"
+# readme = "README.md"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2024"
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lib]
+path = "src/lib/lib.rs"
+
+[dependencies]
+glob = { workspace = true }
+libc = { workspace = true }
+pretty_assertions = "1.4.0"
+rand = { workspace = true }
+regex = { workspace = true }
+tempfile = { workspace = true }
+time = { workspace = true, features = ["local-offset"] }
+uucore = { workspace = true, features = [
+  "mode",
+  "entries",
+  "process",
+  "signals",
+  "utmpx",
+] }
+ctor = "0.4.1"
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["process", "signal", "user", "term"] }
+rlimit = "0.10.1"
+xattr = { workspace = true }

@@ -4,11 +4,14 @@
 // file that was distributed with this source code.
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable
 
-use crate::common::util::TestScenario;
-#[cfg(all(unix, not(feature = "feat_selinux")))]
-use crate::common::util::run_ucmd_as_root_with_stdin_stdout;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::run_ucmd_as_root_with_stdin_stdout;
 #[cfg(all(not(windows), feature = "printf"))]
-use crate::common::util::{TESTS_BINARY, UCommand};
+use uutests::util::{UCommand, get_tests_binary};
+use uutests::util_name;
 
 use regex::Regex;
 use uucore::io::OwnedFileDescriptorOrHandle;
@@ -1505,9 +1508,9 @@ fn test_skip_input_fifo() {
 #[test]
 fn test_multiple_processes_reading_stdin() {
     // TODO Investigate if this is possible on Windows.
-    let printf = format!("{TESTS_BINARY} printf 'abcdef\n'");
-    let dd_skip = format!("{TESTS_BINARY} dd bs=1 skip=3 count=0");
-    let dd = format!("{TESTS_BINARY} dd");
+    let printf = format!("{} printf 'abcdef\n'", get_tests_binary());
+    let dd_skip = format!("{} dd bs=1 skip=3 count=0", get_tests_binary());
+    let dd = format!("{} dd", get_tests_binary());
     UCommand::new()
         .arg(format!("{printf} | ( {dd_skip} && {dd} ) 2> /dev/null"))
         .succeeds()
@@ -1609,7 +1612,7 @@ fn test_reading_partial_blocks_from_fifo() {
 
     // Start a `dd` process that reads from the fifo (so it will wait
     // until the writer process starts).
-    let mut reader_command = Command::new(TESTS_BINARY);
+    let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
         .args(["dd", "ibs=3", "obs=3", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
@@ -1653,7 +1656,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // until the writer process starts).
     //
     // `bs=N` takes precedence over `ibs=N` and `obs=N`.
-    let mut reader_command = Command::new(TESTS_BINARY);
+    let mut reader_command = Command::new(get_tests_binary());
     let child = reader_command
         .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={fifoname}")])
         .stdout(Stdio::piped())
