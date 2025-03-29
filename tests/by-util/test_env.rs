@@ -1017,10 +1017,12 @@ mod tests_split_iterator {
 
     use std::ffi::OsString;
 
-    use env::native_int_str::{Convert, NCvt, from_native_int_representation_owned};
-    use env::parse_error::ParseError;
+    use env::{
+        EnvError,
+        native_int_str::{Convert, NCvt, from_native_int_representation_owned},
+    };
 
-    fn split(input: &str) -> Result<Vec<OsString>, ParseError> {
+    fn split(input: &str) -> Result<Vec<OsString>, EnvError> {
         ::env::split_iterator::split(&NCvt::convert(input)).map(|vec| {
             vec.into_iter()
                 .map(from_native_int_representation_owned)
@@ -1127,24 +1129,24 @@ mod tests_split_iterator {
     fn split_trailing_backslash() {
         assert_eq!(
             split("\\"),
-            Err(ParseError::InvalidBackslashAtEndOfStringInMinusS {
-                pos: 1,
-                quoting: "Delimiter".into()
-            })
+            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                1,
+                "Delimiter".into()
+            ))
         );
         assert_eq!(
             split(" \\"),
-            Err(ParseError::InvalidBackslashAtEndOfStringInMinusS {
-                pos: 2,
-                quoting: "Delimiter".into()
-            })
+            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                2,
+                "Delimiter".into()
+            ))
         );
         assert_eq!(
             split("a\\"),
-            Err(ParseError::InvalidBackslashAtEndOfStringInMinusS {
-                pos: 2,
-                quoting: "Unquoted".into()
-            })
+            Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                2,
+                "Unquoted".into()
+            ))
         );
     }
 
@@ -1152,26 +1154,14 @@ mod tests_split_iterator {
     fn split_errors() {
         assert_eq!(
             split("'abc"),
-            Err(ParseError::MissingClosingQuote { pos: 4, c: '\'' })
+            Err(EnvError::EnvMissingClosingQuote(4, '\''))
         );
-        assert_eq!(
-            split("\""),
-            Err(ParseError::MissingClosingQuote { pos: 1, c: '"' })
-        );
-        assert_eq!(
-            split("'\\"),
-            Err(ParseError::MissingClosingQuote { pos: 2, c: '\'' })
-        );
-        assert_eq!(
-            split("'\\"),
-            Err(ParseError::MissingClosingQuote { pos: 2, c: '\'' })
-        );
+        assert_eq!(split("\""), Err(EnvError::EnvMissingClosingQuote(1, '"')));
+        assert_eq!(split("'\\"), Err(EnvError::EnvMissingClosingQuote(2, '\'')));
+        assert_eq!(split("'\\"), Err(EnvError::EnvMissingClosingQuote(2, '\'')));
         assert_eq!(
             split(r#""$""#),
-            Err(ParseError::ParsingOfVariableNameFailed {
-                pos: 2,
-                msg: "Missing variable name".into()
-            }),
+            Err(EnvError::EnvParsingOfMissingVariable(2)),
         );
     }
 
@@ -1179,26 +1169,25 @@ mod tests_split_iterator {
     fn split_error_fail_with_unknown_escape_sequences() {
         assert_eq!(
             split("\\a"),
-            Err(ParseError::InvalidSequenceBackslashXInMinusS { pos: 1, c: 'a' })
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(1, 'a'))
         );
         assert_eq!(
             split("\"\\a\""),
-            Err(ParseError::InvalidSequenceBackslashXInMinusS { pos: 2, c: 'a' })
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
         assert_eq!(
             split("'\\a'"),
-            Err(ParseError::InvalidSequenceBackslashXInMinusS { pos: 2, c: 'a' })
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
         assert_eq!(
             split(r#""\a""#),
-            Err(ParseError::InvalidSequenceBackslashXInMinusS { pos: 2, c: 'a' })
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(2, 'a'))
         );
         assert_eq!(
             split(r"\🦉"),
-            Err(ParseError::InvalidSequenceBackslashXInMinusS {
-                pos: 1,
-                c: '\u{FFFD}'
-            })
+            Err(EnvError::EnvInvalidSequenceBackslashXInMinusS(
+                1, '\u{FFFD}'
+            ))
         );
     }
 

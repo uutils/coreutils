@@ -2727,6 +2727,7 @@ dependencies = [
  "clap",
  "nix",
  "rust-ini",
+ "thiserror 2.0.12",
  "uucore",
 ]
 

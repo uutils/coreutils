@@ -20,11 +20,11 @@
 
 use std::borrow::Cow;
 
+use crate::EnvError;
 use crate::native_int_str::NativeCharInt;
 use crate::native_int_str::NativeIntStr;
 use crate::native_int_str::NativeIntString;
 use crate::native_int_str::from_native_int_representation;
-use crate::parse_error::ParseError;
 use crate::string_expander::StringExpander;
 use crate::string_parser::StringParser;
 use crate::variable_parser::VariableParser;
@@ -62,14 +62,14 @@ impl<'a> SplitIterator<'a> {
         }
     }
 
-    fn skip_one(&mut self) -> Result<(), ParseError> {
+    fn skip_one(&mut self) -> Result<(), EnvError> {
         self.expander
             .get_parser_mut()
             .consume_one_ascii_or_all_non_ascii()?;
         Ok(())
     }
 
-    fn take_one(&mut self) -> Result<(), ParseError> {
+    fn take_one(&mut self) -> Result<(), EnvError> {
         Ok(self.expander.take_one()?)
     }
 
@@ -94,7 +94,7 @@ impl<'a> SplitIterator<'a> {
         self.expander.get_parser_mut()
     }
 
-    fn substitute_variable<'x>(&'x mut self) -> Result<(), ParseError> {
+    fn substitute_variable<'x>(&'x mut self) -> Result<(), EnvError> {
         let mut var_parse = VariableParser::<'a, '_> {
             parser: self.get_parser_mut(),
         };
@@ -116,7 +116,7 @@ impl<'a> SplitIterator<'a> {
         Ok(())
     }
 
-    fn check_and_replace_ascii_escape_code(&mut self, c: char) -> Result<bool, ParseError> {
+    fn check_and_replace_ascii_escape_code(&mut self, c: char) -> Result<bool, EnvError> {
         if let Some(replace) = REPLACEMENTS.iter().find(|&x| x.0 == c) {
             self.skip_one()?;
             self.push_char_to_word(replace.1);
@@ -126,24 +126,24 @@ impl<'a> SplitIterator<'a> {
         Ok(false)
     }
 
-    fn make_invalid_sequence_backslash_xin_minus_s(&self, c: char) -> ParseError {
-        ParseError::InvalidSequenceBackslashXInMinusS {
-            pos: self.expander.get_parser().get_peek_position(),
+    fn make_invalid_sequence_backslash_xin_minus_s(&self, c: char) -> EnvError {
+        EnvError::EnvInvalidSequenceBackslashXInMinusS(
+            self.expander.get_parser().get_peek_position(),
             c,
-        }
+        )
     }
 
-    fn state_root(&mut self) -> Result<(), ParseError> {
+    fn state_root(&mut self) -> Result<(), EnvError> {
         loop {
             match self.state_delimiter() {
-                Err(ParseError::ContinueWithDelimiter) => {}
-                Err(ParseError::ReachedEnd) => return Ok(()),
+                Err(EnvError::EnvContinueWithDelimiter) => {}
+                Err(EnvError::EnvReachedEnd) => return Ok(()),
                 result => return result,
             }
         }
     }
 
-    fn state_delimiter(&mut self) -> Result<(), ParseError> {
+    fn state_delimiter(&mut self) -> Result<(), EnvError> {
         loop {
             match self.get_current_char() {
                 None => return Ok(()),
@@ -166,12 +166,12 @@ impl<'a> SplitIterator<'a> {
         }
     }
 
-    fn state_delimiter_backslash(&mut self) -> Result<(), ParseError> {
+    fn state_delimiter_backslash(&mut self) -> Result<(), EnvError> {
         match self.get_current_char() {
-            None => Err(ParseError::InvalidBackslashAtEndOfStringInMinusS {
-                pos: self.get_parser().get_peek_position(),
-                quoting: "Delimiter".into(),
-            }),
+            None => Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                self.get_parser().get_peek_position(),
+                "Delimiter".into(),
+            )),
             Some('_') | Some(NEW_LINE) => {
                 self.skip_one()?;
                 Ok(())
@@ -181,18 +181,18 @@ impl<'a> SplitIterator<'a> {
                 self.take_one()?;
                 self.state_unquoted()
             }
-            Some('c') => Err(ParseError::ReachedEnd),
+            Some('c') => Err(EnvError::EnvReachedEnd),
             Some(c) if self.check_and_replace_ascii_escape_code(c)? => self.state_unquoted(),
             Some(c) => Err(self.make_invalid_sequence_backslash_xin_minus_s(c)),
         }
     }
 
-    fn state_unquoted(&mut self) -> Result<(), ParseError> {
+    fn state_unquoted(&mut self) -> Result<(), EnvError> {
         loop {
             match self.get_current_char() {
                 None => {
                     self.push_word_to_words();
-                    return Err(ParseError::ReachedEnd);
+                    return Err(EnvError::EnvReachedEnd);
                 }
                 Some(DOLLAR) => {
                     self.substitute_variable()?;
@@ -221,12 +221,12 @@ impl<'a> SplitIterator<'a> {
         }
     }
 
-    fn state_unquoted_backslash(&mut self) -> Result<(), ParseError> {
+    fn state_unquoted_backslash(&mut self) -> Result<(), EnvError> {
         match self.get_current_char() {
-            None => Err(ParseError::InvalidBackslashAtEndOfStringInMinusS {
-                pos: self.get_parser().get_peek_position(),
-                quoting: "Unquoted".into(),
-            }),
+            None => Err(EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(
+                self.get_parser().get_peek_position(),
+                "Unquoted".into(),
+            )),
             Some(NEW_LINE) => {
                 self.skip_one()?;
                 Ok(())
@@ -234,11 +234,11 @@ impl<'a> SplitIterator<'a> {
             Some('_') => {
                 self.skip_one()?;
                 self.push_word_to_words();
-                Err(ParseError::ContinueWithDelimiter)
+                Err(EnvError::EnvContinueWithDelimiter)
             }
             Some('c') => {
                 self.push_word_to_words();
-                Err(ParseError::ReachedEnd)
+                Err(EnvError::EnvReachedEnd)
             }
             Some(DOLLAR) | Some(BACKSLASH) | Some(SINGLE_QUOTES) | Some(DOUBLE_QUOTES) => {
                 self.take_one()?;
@@ -249,14 +249,14 @@ impl<'a> SplitIterator<'a> {
         }
     }
 
-    fn state_single_quoted(&mut self) -> Result<(), ParseError> {
+    fn state_single_quoted(&mut self) -> Result<(), EnvError> {
         loop {
             match self.get_current_char() {
                 None => {
-                    return Err(ParseError::MissingClosingQuote {
-                        pos: self.get_parser().get_peek_position(),
-                        c: '\'',
-                    });
+                    return Err(EnvError::EnvMissingClosingQuote(
+                        self.get_parser().get_peek_position(),
+                        '\'',
+                    ));
                 }
                 Some(SINGLE_QUOTES) => {
                     self.skip_one()?;
@@ -273,12 +273,12 @@ impl<'a> SplitIterator<'a> {
         }
     }
 
-    fn split_single_quoted_backslash(&mut self) -> Result<(), ParseError> {
+    fn split_single_quoted_backslash(&mut self) -> Result<(), EnvError> {
         match self.get_current_char() {
-            None => Err(ParseError::MissingClosingQuote {
-                pos: self.get_parser().get_peek_position(),
-                c: '\'',
-            }),
+            None => Err(EnvError::EnvMissingClosingQuote(
+                self.get_parser().get_peek_position(),
+                '\'',
+            )),
             Some(NEW_LINE) => {
                 self.skip_one()?;
                 Ok(())
@@ -299,14 +299,14 @@ impl<'a> SplitIterator<'a> {
         }
     }
 
-    fn state_double_quoted(&mut self) -> Result<(), ParseError> {
+    fn state_double_quoted(&mut self) -> Result<(), EnvError> {
         loop {
             match self.get_current_char() {
                 None => {
-                    return Err(ParseError::MissingClosingQuote {
-                        pos: self.get_parser().get_peek_position(),
-                        c: '"',
-                    });
+                    return Err(EnvError::EnvMissingClosingQuote(
+                        self.get_parser().get_peek_position(),
+                        '"',
+                    ));
                 }
                 Some(DOLLAR) => {
                     self.substitute_variable()?;
@@ -326,12 +326,12 @@ impl<'a> SplitIterator<'a> {
         }
     }
 
-    fn state_double_quoted_backslash(&mut self) -> Result<(), ParseError> {
+    fn state_double_quoted_backslash(&mut self) -> Result<(), EnvError> {
         match self.get_current_char() {
-            None => Err(ParseError::MissingClosingQuote {
-                pos: self.get_parser().get_peek_position(),
-                c: '"',
-            }),
+            None => Err(EnvError::EnvMissingClosingQuote(
+                self.get_parser().get_peek_position(),
+                '"',
+            )),
             Some(NEW_LINE) => {
                 self.skip_one()?;
                 Ok(())
@@ -340,18 +340,18 @@ impl<'a> SplitIterator<'a> {
                 self.take_one()?;
                 Ok(())
             }
-            Some('c') => Err(ParseError::BackslashCNotAllowedInDoubleQuotes {
-                pos: self.get_parser().get_peek_position(),
-            }),
+            Some('c') => Err(EnvError::EnvBackslashCNotAllowedInDoubleQuotes(
+                self.get_parser().get_peek_position(),
+            )),
             Some(c) if self.check_and_replace_ascii_escape_code(c)? => Ok(()),
             Some(c) => Err(self.make_invalid_sequence_backslash_xin_minus_s(c)),
         }
     }
 
-    fn state_comment(&mut self) -> Result<(), ParseError> {
+    fn state_comment(&mut self) -> Result<(), EnvError> {
         loop {
             match self.get_current_char() {
-                None => return Err(ParseError::ReachedEnd),
+                None => return Err(EnvError::EnvReachedEnd),
                 Some(NEW_LINE) => {
                     self.skip_one()?;
                     return Ok(());
@@ -363,13 +363,13 @@ impl<'a> SplitIterator<'a> {
         }
     }
 
-    pub fn split(mut self) -> Result<Vec<NativeIntString>, ParseError> {
+    pub fn split(mut self) -> Result<Vec<NativeIntString>, EnvError> {
         self.state_root()?;
         Ok(self.words)
     }
 }
 
-pub fn split(s: &NativeIntStr) -> Result<Vec<NativeIntString>, ParseError> {
+pub fn split(s: &NativeIntStr) -> Result<Vec<NativeIntString>, EnvError> {
     let split_args = SplitIterator::new(s).split()?;
     Ok(split_args)
 }
