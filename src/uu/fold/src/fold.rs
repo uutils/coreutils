@@ -148,7 +148,7 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
         buf.clear();
         if file
             .read_until(b'\n', &mut buf)
-            .map_err_context(||"failed to read line".to_string())?
+            .map_err_context(|| "failed to read line".to_string())?
             == 0
         {
             break;
