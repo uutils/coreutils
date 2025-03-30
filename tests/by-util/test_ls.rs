@@ -4366,28 +4366,36 @@ fn test_tabsize_option() {
     scene.ucmd().arg("-T").fails();
 }
 
-#[ignore = "issue #3624"]
 #[test]
 fn test_tabsize_formatting() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
     at.touch("aaaaaaaa");
     at.touch("bbbb");
     at.touch("cccc");
     at.touch("dddddddd");
 
-    ucmd.args(&["-T", "4"])
-        .succeeds()
-        .stdout_is("aaaaaaaa bbbb\ncccc\t dddddddd");
+    // Need additional options to simulate columns output.
 
-    ucmd.args(&["-T", "2"])
+    scene
+        .ucmd()
+        .args(&["-x", "-w20", "-T4"])
         .succeeds()
-        .stdout_is("aaaaaaaa bbbb\ncccc\t\t dddddddd");
+        .stdout_is("aaaaaaaa  bbbb\ncccc\t  dddddddd\n");
+
+    scene
+        .ucmd()
+        .args(&["-x", "-w20", "-T2"])
+        .succeeds()
+        .stdout_is("aaaaaaaa\tbbbb\ncccc\t\t\tdddddddd\n");
 
     // use spaces
-    ucmd.args(&["-T", "0"])
+    scene
+        .ucmd()
+        .args(&["-x", "-w20", "-T0"])
         .succeeds()
-        .stdout_is("aaaaaaaa bbbb\ncccc     dddddddd");
+        .stdout_is("aaaaaaaa  bbbb\ncccc      dddddddd\n");
 }
 
 #[cfg(any(
