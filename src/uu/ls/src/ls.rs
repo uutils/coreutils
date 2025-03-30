@@ -33,7 +33,7 @@ use clap::{
 };
 use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
-use term_grid::{Direction, Filling, Grid, GridOptions};
+use term_grid::{Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
 use uucore::error::USimpleError;
 use uucore::format::human::{SizeFormat, human_readable};
@@ -91,7 +91,7 @@ pub mod options {
         pub static LONG: &str = "long";
         pub static COLUMNS: &str = "C";
         pub static ACROSS: &str = "x";
-        pub static TAB_SIZE: &str = "tabsize"; // silently ignored (see #3624)
+        pub static TAB_SIZE: &str = "tabsize";
         pub static COMMAS: &str = "m";
         pub static LONG_NO_OWNER: &str = "g";
         pub static LONG_NO_GROUP: &str = "o";
@@ -385,6 +385,7 @@ pub struct Config {
     line_ending: LineEnding,
     dired: bool,
     hyperlink: bool,
+    tab_size: usize,
 }
 
 // Fields that can be removed or added to the long format
@@ -1086,6 +1087,15 @@ impl Config {
             Dereference::DirArgs
         };
 
+        let tab_size = match needs_color {
+            false => options
+                .get_one::<String>(options::format::TAB_SIZE)
+                .and_then(|size| size.parse::<usize>().ok())
+                .or_else(|| std::env::var("TABSIZE").ok().and_then(|s| s.parse().ok())),
+            _ => Some(0),
+        }
+        .unwrap_or(SPACES_IN_TAB);
+
         Ok(Self {
             format,
             files,
@@ -1123,6 +1133,7 @@ impl Config {
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
             hyperlink,
+            tab_size,
         })
     }
 }
@@ -1239,13 +1250,12 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // silently ignored (see #3624)
             Arg::new(options::format::TAB_SIZE)
                 .short('T')
                 .long(options::format::TAB_SIZE)
                 .env("TABSIZE")
                 .value_name("COLS")
-                .help("Assume tab stops at each COLS instead of 8 (unimplemented)"),
+                .help("Assume tab stops at each COLS instead of 8"),
         )
         .arg(
             Arg::new(options::format::COMMAS)
