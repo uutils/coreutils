@@ -3,11 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDOs) ncount routput
+// spell-checker:ignore (ToDOs) ncount routput rposition
 
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{self, stdin, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -165,10 +165,13 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
         while i < len {
             let width = if len - i >= width { width } else { len - i };
             let slice = {
-                let slice = &line.as_bytes()[i..i+width];
+                let slice = &line.as_bytes()[i..i + width];
 
                 if spaces && i + width < len {
-                    match slice.iter().rposition(|&b| b.is_ascii_whitespace() && b != b'\r') {
+                    match slice
+                        .iter()
+                        .rposition(|&b| b.is_ascii_whitespace() && b != b'\r')
+                    {
                         Some(m) => &slice[..=m],
                         None => slice,
                     }
