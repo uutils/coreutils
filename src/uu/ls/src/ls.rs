@@ -33,7 +33,7 @@ use clap::{
 };
 use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
-use term_grid::{Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
+use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
 use uucore::error::USimpleError;
 use uucore::format::human::{SizeFormat, human_readable};
@@ -2700,7 +2700,7 @@ fn display_grid(
             .collect();
 
         let filling = match tab_size {
-            0 => Filling::Spaces(2),
+            0 => Filling::Spaces(DEFAULT_SEPARATOR_SIZE),
             _ => Filling::Tabs(tab_size),
         };
 
