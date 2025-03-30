@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin};
+use std::io::{self, stdin, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -141,6 +141,9 @@ fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResul
 fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> UResult<()> {
     let mut line = String::new();
 
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
+
     loop {
         if file
             .read_line(&mut line)
@@ -162,14 +165,10 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
         while i < len {
             let width = if len - i >= width { width } else { len - i };
             let slice = {
-                // cannot directly slice the line as it might panic if boundaries
-                // split a char
-                let slice = (0..=width)
-                    .rev()
-                    .find_map(|w| line.get(i..i + w))
-                    .unwrap_or("");
+                let slice = &line.as_bytes()[i..i+width];
+
                 if spaces && i + width < len {
-                    match slice.rfind(|c: char| c.is_whitespace() && c != '\r') {
+                    match slice.iter().rposition(|&b| b.is_ascii_whitespace() && b != b'\r') {
                         Some(m) => &slice[..=m],
                         None => slice,
                     }
@@ -181,7 +180,7 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             // Don't duplicate trailing newlines: if the slice is "\n", the
             // previous iteration folded just before the end of the line and
             // has already printed this newline.
-            if slice == "\n" {
+            if slice == b"\n" {
                 break;
             }
 
@@ -190,9 +189,10 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             let at_eol = i >= len;
 
             if at_eol {
-                print!("{slice}");
+                let _ = handle.write_all(slice);
             } else {
-                println!("{slice}");
+                let _ = handle.write_all(slice);
+                let _ = handle.write_all(b"\n");
             }
         }
 
