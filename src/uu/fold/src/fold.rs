@@ -139,33 +139,33 @@ fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResul
 ///
 ///  If `spaces` is `true`, attempt to break lines at whitespace boundaries.
 fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> UResult<()> {
-    let mut line = String::new();
+    let mut buf: Vec<u8> = Vec::with_capacity(128);
 
-    let stdout = io::stdout();
-    let mut handle = stdout.lock();
+    let stdout_handle = io::stdout();
+    let mut stdout_lock = stdout_handle.lock();
 
     loop {
+        buf.clear();
         if file
-            .read_line(&mut line)
-            .map_err_context(|| "failed to read line".to_string())?
+            .read_until(b'\n', &mut buf)
+            .map_err_context(||"failed to read line".to_string())?
             == 0
         {
             break;
         }
 
-        if line == "\n" {
+        if buf == b"\n" {
             println!();
-            line.truncate(0);
             continue;
         }
 
-        let len = line.len();
+        let len = buf.len();
         let mut i = 0;
 
         while i < len {
             let width = if len - i >= width { width } else { len - i };
             let slice = {
-                let slice = &line.as_bytes()[i..i + width];
+                let slice = &buf[i..i + width];
 
                 if spaces && i + width < len {
                     match slice
@@ -192,14 +192,12 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             let at_eol = i >= len;
 
             if at_eol {
-                let _ = handle.write_all(slice);
+                stdout_lock.write_all(slice)?;
             } else {
-                let _ = handle.write_all(slice);
-                let _ = handle.write_all(b"\n");
+                stdout_lock.write_all(slice)?;
+                stdout_lock.write_all(b"\n")?;
             }
         }
-
-        line.truncate(0);
     }
 
     Ok(())
