@@ -8,6 +8,7 @@
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use selinux::SecurityContext;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
@@ -29,6 +30,8 @@ mod options {
     pub const PARENTS: &str = "parents";
     pub const VERBOSE: &str = "verbose";
     pub const DIRS: &str = "dirs";
+    pub const SELINUX: &str = "z";
+    pub const CONTEXT: &str = "context";
 }
 
 #[cfg(windows)]
@@ -72,6 +75,58 @@ fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
     mode::strip_minus_from_mode(args)
 }
 
+// Add a new function to handle setting the SELinux security context
+#[cfg(target_os = "linux")]
+fn set_selinux_security_context(path: &Path, context: Option<&String>) -> Result<(), String> {
+    // Get SELinux kernel support
+    let support = selinux::kernel_support();
+
+    // If SELinux is not enabled, return early
+    if support == selinux::KernelSupport::Unsupported {
+        return Err("SELinux is not enabled on this system".to_string());
+    }
+
+    // If a specific context was provided, use it
+    if let Some(ctx_str) = context {
+        // Use the provided context
+        match SecurityContext::of_path(path, false, false) {
+            Ok(_) => {
+                // Create a CString from the context string
+                let c_context = std::ffi::CString::new(ctx_str.as_str())
+                    .map_err(|_| "Invalid context string (contains null bytes)".to_string())?;
+
+                // Create a security context from the string
+                let security_context = match selinux::OpaqueSecurityContext::from_c_str(&c_context)
+                {
+                    Ok(ctx) => ctx,
+                    Err(e) => return Err(format!("Failed to create security context: {}", e)),
+                };
+
+                // Convert back to string for the API
+                let context_str = match security_context.to_c_string() {
+                    Ok(ctx) => ctx,
+                    Err(e) => return Err(format!("Failed to convert context to string: {}", e)),
+                };
+
+                // Set the context on the file
+                let sc = SecurityContext::from_c_str(&context_str, false);
+
+                match sc.set_for_path(path, false, false) {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(format!("Failed to set context: {}", e)),
+                }
+            }
+            Err(e) => Err(format!("Failed to get current context: {}", e)),
+        }
+    } else {
+        // If no context was specified, use the default context for the path
+        match SecurityContext::set_default_for_path(path) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Failed to set default context: {}", e)),
+        }
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args.collect_lossy();
@@ -91,8 +146,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let verbose = matches.get_flag(options::VERBOSE);
     let recursive = matches.get_flag(options::PARENTS);
 
+    // Extract the SELinux related flags and options
+    let set_selinux_context = matches.get_flag(options::SELINUX);
+    let context = matches.get_one::<String>(options::CONTEXT);
+
     match get_mode(&matches, mode_had_minus_prefix) {
-        Ok(mode) => exec(dirs, recursive, mode, verbose),
+        Ok(mode) => exec(
+            dirs,
+            recursive,
+            mode,
+            verbose,
+            set_selinux_context || context.is_some(),
+            context,
+        ),
         Err(f) => Err(USimpleError::new(1, f)),
     }
 }
@@ -125,6 +191,15 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(options::SELINUX)
+                .short('Z')
+                .help("set SELinux security context of each created directory to the default type")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(Arg::new(options::CONTEXT).long(options::CONTEXT).value_name("CTX").help(
+            "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX",
+        ))
+        .arg(
             Arg::new(options::DIRS)
                 .action(ArgAction::Append)
                 .num_args(1..)
@@ -137,12 +212,26 @@ pub fn uu_app() -> Command {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+fn exec(
+    dirs: ValuesRef<OsString>,
+    recursive: bool,
+    mode: u32,
+    verbose: bool,
+    set_selinux_context: bool,
+    context: Option<&String>,
+) -> UResult<()> {
     for dir in dirs {
         let path_buf = PathBuf::from(dir);
         let path = path_buf.as_path();
 
-        show_if_err!(mkdir(path, recursive, mode, verbose));
+        show_if_err!(mkdir(
+            path,
+            recursive,
+            mode,
+            verbose,
+            set_selinux_context,
+            context
+        ));
     }
     Ok(())
 }
@@ -160,7 +249,14 @@ fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) ->
 ///
 /// To match the GNU behavior, a path with the last directory being a single dot
 /// (like `some/path/to/.`) is created (with the dot stripped).
-pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+pub fn mkdir(
+    path: &Path,
+    recursive: bool,
+    mode: u32,
+    verbose: bool,
+    set_selinux_context: bool,
+    context: Option<&String>,
+) -> UResult<()> {
     if path.as_os_str().is_empty() {
         return Err(USimpleError::new(
             1,
@@ -173,7 +269,15 @@ pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<
     // std::fs::create_dir("foo/."); fails in pure Rust
     let path_buf = dir_strip_dot_for_creation(path);
     let path = path_buf.as_path();
-    create_dir(path, recursive, verbose, false, mode)
+    create_dir(
+        path,
+        recursive,
+        verbose,
+        false,
+        mode,
+        set_selinux_context,
+        context,
+    )
 }
 
 #[cfg(any(unix, target_os = "redox"))]
@@ -200,6 +304,8 @@ fn create_dir(
     verbose: bool,
     is_parent: bool,
     mode: u32,
+    set_selinux_context: bool,
+    context: Option<&String>,
 ) -> UResult<()> {
     let path_exists = path.exists();
     if path_exists && !recursive {
@@ -214,7 +320,15 @@ fn create_dir(
 
     if recursive {
         match path.parent() {
-            Some(p) => create_dir(p, recursive, verbose, true, mode)?,
+            Some(p) => create_dir(
+                p,
+                recursive,
+                verbose,
+                true,
+                mode,
+                set_selinux_context,
+                context,
+            )?,
             None => {
                 USimpleError::new(1, "failed to create whole tree");
             }
@@ -255,6 +369,18 @@ fn create_dir(
             let new_mode = mode;
 
             chmod(path, new_mode)?;
+
+            // Apply SELinux context if requested
+            #[cfg(target_os = "linux")]
+            if set_selinux_context {
+                if let Err(e) = set_selinux_security_context(path, context) {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("failed to set SELinux security context: {}", e),
+                    ));
+                }
+            }
+
             Ok(())
         }
 
