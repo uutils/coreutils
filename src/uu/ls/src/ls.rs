@@ -2564,10 +2564,24 @@ fn display_items(
 
         match config.format {
             Format::Columns => {
-                display_grid(names, config.width, Direction::TopToBottom, out, quoted)?;
+                display_grid(
+                    names,
+                    config.width,
+                    Direction::TopToBottom,
+                    out,
+                    quoted,
+                    config.tab_size,
+                )?;
             }
             Format::Across => {
-                display_grid(names, config.width, Direction::LeftToRight, out, quoted)?;
+                display_grid(
+                    names,
+                    config.width,
+                    Direction::LeftToRight,
+                    out,
+                    quoted,
+                    config.tab_size,
+                )?;
             }
             Format::Commas => {
                 let mut current_col = 0;
@@ -2635,6 +2649,7 @@ fn display_grid(
     direction: Direction,
     out: &mut BufWriter<Stdout>,
     quoted: bool,
+    tab_size: usize,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -2684,14 +2699,9 @@ fn display_grid(
             .map(|s| s.to_string_lossy().into_owned())
             .collect();
 
-        // Determine whether to use tabs for separation based on whether any entry ends with '/'.
-        // If any entry ends with '/', it indicates that the -F flag is likely used to classify directories.
-        let use_tabs = names.iter().any(|name| name.ends_with('/'));
-
-        let filling = if use_tabs {
-            Filling::Text("\t".to_string())
-        } else {
-            Filling::Spaces(2)
+        let filling = match tab_size {
+            0 => Filling::Spaces(2),
+            _ => Filling::Tabs(tab_size),
         };
 
         let grid = Grid::new(
