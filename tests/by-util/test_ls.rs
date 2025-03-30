@@ -837,7 +837,7 @@ fn test_ls_columns() {
 
     for option in COLUMN_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
-        result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
+        result.stdout_only("test-columns-1\ttest-columns-2\ttest-columns-3\ttest-columns-4\n");
     }
 
     for option in COLUMN_ARGS {
@@ -846,7 +846,7 @@ fn test_ls_columns() {
             .arg("-w=40")
             .arg(option)
             .succeeds()
-            .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
+            .stdout_only("test-columns-1\ttest-columns-3\ntest-columns-2\ttest-columns-4\n");
     }
 
     // On windows we are always able to get the terminal size, so we can't simulate falling back to the
@@ -859,7 +859,7 @@ fn test_ls_columns() {
                 .env("COLUMNS", "40")
                 .arg(option)
                 .succeeds()
-                .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
+                .stdout_only("test-columns-1\ttest-columns-3\ntest-columns-2\ttest-columns-4\n");
         }
 
         scene
@@ -867,7 +867,7 @@ fn test_ls_columns() {
             .env("COLUMNS", "garbage")
             .arg("-C")
             .succeeds()
-            .stdout_is("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n")
+            .stdout_is("test-columns-1\ttest-columns-2\ttest-columns-3\ttest-columns-4\n")
             .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'\n");
     }
     scene
