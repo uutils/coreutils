@@ -1188,7 +1188,7 @@ jobs:
     - run: rsync -v -a -e ssh . lima-default:~/work/
     - name: Setup Rust and other build deps in VM
       run: |
-        lima sudo dnf install gcc g++ git rustup libselinux-devel clang-devel -y
+        lima sudo dnf install gcc g++ git rustup libselinux-devel clang-devel attr -y
         lima rustup-init -y --default-toolchain stable
     - name: Verify SELinux Status
       run: |
