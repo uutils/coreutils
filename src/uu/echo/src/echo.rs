@@ -23,57 +23,49 @@ mod options {
     pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
 }
 
-/// Holds the parsed flags for echo command:
+/// Holds the options for echo command:
 /// -n (disable newline)
 /// -e/-E (escape handling),
-/// '-' (stop processing flags).
-struct EchoFlags {
-    /// -n flag: if true, don't output trailing newline
-    /// Default: false
-    pub disable_newline: bool,
+struct EchoOptions {
+    /// -n flag option: if true, output a trailing newline (-n disables it)
+    /// Default: true
+    pub trailing_newline: bool,
 
     /// -e enables escape interpretation, -E disables it
     /// Default: false (escape interpretation disabled)
     pub escape: bool,
-
-    /// Single hyphen '-' argument (stops flag processing)
-    /// Default: false
-    pub is_single_hyphen: bool,
 }
 
 /// Checks if an argument is a valid echo flag
-/// Returns EchoFlags if valid, None otherwise
-fn is_echo_flag(arg: &OsString) -> Option<EchoFlags> {
+/// Returns true if valid echo flag found
+fn is_echo_flag(arg: &OsString, echo_options: &mut EchoOptions) -> bool {
     let bytes = arg.as_encoded_bytes();
-    if bytes.first() == Some(&b'-') {
-        let mut flags = EchoFlags {
-            disable_newline: false,
-            escape: false,
-            is_single_hyphen: false,
-        };
-        // Single hyphen case: "-" (stops flag processing, no other effect)
-        if arg.len() == 1 {
-            flags.is_single_hyphen = true;
-            return Some(flags);
-        }
+    if bytes.first() == Some(&b'-') && arg!= "-" {
+        // we initialize our local variables to the "current" options so we dont override
+        // previous found flags
+        let mut escape = echo_options.escape;
+        let mut trailing_newline = echo_options.trailing_newline;
 
         // Process characters after the '-'
         for c in &bytes[1..] {
             match c {
-                b'e' => flags.escape = true,
-                b'E' => flags.escape = false,
-                b'n' => flags.disable_newline = true,
+                b'e' => escape = true,
+                b'E' => escape = false,
+                b'n' => trailing_newline = false,
                 // if there is any char in an argument starting with '-' that doesn't match e/E/n
                 // present means that this argument is not a flag
-                _ => return None,
+                _ => return false,
             }
         }
 
-        return Some(flags);
+        // we only override the options with flags being found once we parsed the whole argument
+        echo_options.escape = escape;
+        echo_options.trailing_newline = trailing_newline;
+        return true;
     }
 
-    // argument doesn't start with '-' - no flag
-    None
+    // argument doesn't start with '-' or is "-" => no flag
+    false
 }
 
 /// Processes command line arguments, separating flags from normal arguments
@@ -83,23 +75,17 @@ fn is_echo_flag(arg: &OsString) -> Option<EchoFlags> {
 /// - escape: whether to process escape sequences
 fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
     let mut result = Vec::new();
-    let mut trailing_newline = true;
-    let mut escape = false;
+    let mut echo_options = EchoOptions{
+        trailing_newline: true,
+        escape: false,
+    };
     let mut args_iter = args.into_iter();
 
     // Process arguments until first non-flag is found
     for arg in &mut args_iter {
-        if let Some(echo_flags) = is_echo_flag(&arg) {
-            // Single hyphen stops flag processing
-            if echo_flags.is_single_hyphen {
-                result.push(arg);
-                break;
-            }
-            if echo_flags.disable_newline {
-                trailing_newline = false;
-            }
-            escape = echo_flags.escape;
-        } else {
+        // we parse flags and store options found in "echo_option". First is_echo_flag
+        // call to return false will break the loop and we will collect the remaining argumetns
+        if !is_echo_flag(&arg, &mut echo_options) {
             // First non-flag argument stops flag processing
             result.push(arg);
             break;
@@ -109,7 +95,7 @@ fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
     for arg in args_iter {
         result.push(arg);
     }
-    (result, trailing_newline, escape)
+    (result, echo_options.trailing_newline, echo_options.escape)
 }
 
 #[uucore::main]

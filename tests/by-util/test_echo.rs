@@ -126,6 +126,17 @@ fn test_escape_override() {
         .args(&["-E", "-e", "\\na"])
         .succeeds()
         .stdout_only("\na\n");
+
+
+    new_ucmd!()
+        .args(&["-E", "-e", "-n", "\\na"])
+        .succeeds()
+        .stdout_only("\na");
+
+    new_ucmd!()
+        .args(&["-e", "-E", "-n", "\\na"])
+        .succeeds()
+        .stdout_only("\\na");
 }
 
 #[test]
