@@ -315,9 +315,6 @@ where
     Ok(total)
 }
 
-
-
-
 /// Iterate over bytes in the file, in reverse, until we find the
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.

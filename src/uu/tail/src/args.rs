@@ -11,9 +11,9 @@ use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 use std::ffi::OsString;
+use std::fs;
 use std::io::IsTerminal;
 use std::time::Duration;
-use std::fs;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::shortcut_value_parser::ShortcutValueParser;
@@ -287,9 +287,9 @@ impl Settings {
         }
 
         settings.inputs = matches
-        .get_many::<OsString>(options::ARG_FILES)
-        .map(|v| v.map(Input::from).collect())
-        .unwrap_or_else(|| vec![Input::default()]);
+            .get_many::<OsString>(options::ARG_FILES)
+            .map(|v| v.map(Input::from).collect())
+            .unwrap_or_else(|| vec![Input::default()]);
 
         settings.verbose =
             settings.inputs.len() > 1 && !matches.get_flag(options::verbosity::QUIET);
@@ -305,7 +305,7 @@ impl Settings {
         let metadata = fs::metadata("/dev/stdin");
         metadata.map(|m| m.is_file()).unwrap_or(false)
     }
-    
+
     pub fn has_stdin(&self) -> bool {
         self.inputs.iter().any(|input| input.is_stdin())
     }
