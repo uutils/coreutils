@@ -1,3 +1,5 @@
+# spell-checker:ignore (misc) direnv
+
 target/
 /src/*/gen_table
 /build/

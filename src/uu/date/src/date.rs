@@ -11,7 +11,7 @@ use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 use chrono::{Datelike, Timelike};
 use clap::{Arg, ArgAction, Command};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-use libc::{clock_settime, timespec, CLOCK_REALTIME};
+use libc::{CLOCK_REALTIME, clock_settime, timespec};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -318,6 +318,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(OPT_DATE)
                 .value_name("STRING")
+                .allow_hyphen_values(true)
                 .help("display time described by STRING, not 'now'"),
         )
         .arg(

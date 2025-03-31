@@ -6,7 +6,7 @@
 use crate::{
     error::set_exit_code,
     features::format::num_parser::{ParseError, ParsedNumber},
-    quoting_style::{escape_name, Quotes, QuotingStyle},
+    quoting_style::{Quotes, QuotingStyle, escape_name},
     show_error, show_warning,
 };
 use os_display::Quotable;

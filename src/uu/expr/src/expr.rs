@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use syntax_tree::{is_truthy, AstNode};
+use syntax_tree::{AstNode, is_truthy};
 use thiserror::Error;
 use uucore::{
     display::Quotable,

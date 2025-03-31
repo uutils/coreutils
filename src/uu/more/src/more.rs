@@ -5,13 +5,13 @@
 
 use std::{
     fs::File,
-    io::{stdin, stdout, BufReader, Read, Stdout, Write},
+    io::{BufReader, Read, Stdout, Write, stdin, stdout},
     panic::set_hook,
     path::Path,
     time::Duration,
 };
 
-use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use crossterm::event::KeyEventKind;
 use crossterm::{
     cursor::{MoveTo, MoveUp},

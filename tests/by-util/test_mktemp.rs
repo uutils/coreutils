@@ -4,13 +4,16 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) gpghome
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 use uucore::display::Quotable;
 
-use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::path::MAIN_SEPARATOR;
+use std::path::PathBuf;
 use tempfile::tempdir;
 
 #[cfg(unix)]

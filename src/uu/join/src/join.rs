@@ -7,50 +7,36 @@
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
-use memchr::{memchr_iter, memmem::Finder, Memchr3};
+use memchr::{Memchr3, memchr_iter, memmem::Finder};
 use std::cmp::Ordering;
-use std::error::Error;
 use std::ffi::OsString;
-use std::fmt::Display;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
+use std::io::{BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("join.md");
 const USAGE: &str = help_usage!("join.md");
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum JoinError {
-    IOError(std::io::Error),
+    #[error("io error: {0}")]
+    IOError(#[from] std::io::Error),
+
+    #[error("{0}")]
     UnorderedInput(String),
 }
 
+// If you still need the UError implementation for compatibility:
 impl UError for JoinError {
     fn code(&self) -> i32 {
         1
-    }
-}
-
-impl Error for JoinError {}
-
-impl Display for JoinError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::IOError(e) => write!(f, "io error: {e}"),
-            Self::UnorderedInput(e) => f.write_str(e),
-        }
-    }
-}
-
-impl From<std::io::Error> for JoinError {
-    fn from(error: std::io::Error) -> Self {
-        Self::IOError(error)
     }
 }
 

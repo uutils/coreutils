@@ -255,7 +255,7 @@ fn parse_exponent_part(s: &str) -> Result<(Option<i32>, &str), ParseNumberError>
 mod tests {
 
     use super::{parse_number, parse_precision};
-    use crate::{numberparse::ParseNumberError, ExtendedBigDecimal};
+    use crate::{ExtendedBigDecimal, numberparse::ParseNumberError};
     use bigdecimal::BigDecimal;
     use num_traits::ToPrimitive;
 

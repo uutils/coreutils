@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (path) eacces inacc rm-r4
 
-use clap::{builder::ValueParser, parser::ValueSource, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, builder::ValueParser, parser::ValueSource};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
 use std::ops::BitOr;
@@ -133,7 +133,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             return Err(USimpleError::new(
                                 1,
                                 format!("Invalid argument to interactive ({val})"),
-                            ))
+                            ));
                         }
                     }
                 } else {

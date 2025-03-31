@@ -6,7 +6,7 @@ use clap::{Arg, ArgAction, Command};
 use std::io::stdout;
 use std::ops::ControlFlow;
 use uucore::error::{UResult, UUsageError};
-use uucore::format::{parse_spec_and_escape, FormatArgument, FormatItem};
+use uucore::format::{FormatArgument, FormatItem, parse_spec_and_escape};
 use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
 const VERSION: &str = "version";

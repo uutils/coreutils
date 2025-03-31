@@ -5,14 +5,14 @@
 
 // spell-checker:ignore (ToDO) getpriority execvp setpriority nstr PRIO cstrs ENOENT
 
-use libc::{c_char, c_int, execvp, PRIO_PROCESS};
+use libc::{PRIO_PROCESS, c_char, c_int, execvp};
 use std::ffi::{CString, OsString};
 use std::io::{Error, Write};
 use std::ptr;
 
 use clap::{Arg, ArgAction, Command};
 use uucore::{
-    error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
+    error::{UClapError, UResult, USimpleError, UUsageError, set_exit_code},
     format_usage, help_about, help_usage, show_error,
 };
 
@@ -132,7 +132,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     return Err(USimpleError::new(
                         125,
                         format!("\"{nstr}\" is not a valid number: {e}"),
-                    ))
+                    ));
                 }
             }
         }

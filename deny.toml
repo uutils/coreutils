@@ -100,10 +100,6 @@ skip = [
   { name = "rand_core", version = "0.6.4" },
   # ppv-lite86, utmp-classic, utmp-classic-raw
   { name = "zerocopy", version = "0.7.35" },
-  # selinux-sys
-  { name = "bindgen", version = "0.70.1" },
-  # bindgen
-  { name = "rustc-hash", version = "1.1.0" },
   # crossterm, procfs, terminal_size
   { name = "rustix", version = "0.38.43" },
   # rustix

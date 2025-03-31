@@ -9,7 +9,7 @@ use clap::{Arg, ArgAction, Command};
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, UUsageError};
+use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::{format_usage, help_about, help_usage};
 
 // operating mode

@@ -33,14 +33,14 @@ use crate::inputdecoder::{InputDecoder, MemoryDecoder};
 use crate::inputoffset::{InputOffset, Radix};
 use crate::multifilereader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
-use crate::parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
-use crate::parse_inputs::{parse_inputs, CommandLineInputs};
+use crate::parse_formats::{ParsedFormatterItemInfo, parse_format_flags};
+use crate::parse_inputs::{CommandLineInputs, parse_inputs};
 use crate::parse_nrofbytes::parse_number_of_bytes;
 use crate::partialreader::PartialReader;
 use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
 use clap::ArgAction;
-use clap::{parser::ValueSource, Arg, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command, parser::ValueSource};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::parse_size::ParseSizeError;
@@ -89,7 +89,7 @@ impl OdOptions {
                     return Err(USimpleError::new(
                         1,
                         format!("Invalid argument --endian={s}"),
-                    ))
+                    ));
                 }
             }
         } else {
@@ -104,7 +104,7 @@ impl OdOptions {
                     return Err(USimpleError::new(
                         1,
                         format_error_message(&e, s, options::SKIP_BYTES),
-                    ))
+                    ));
                 }
             },
         };
@@ -135,7 +135,7 @@ impl OdOptions {
                             return Err(USimpleError::new(
                                 1,
                                 format_error_message(&e, s, options::WIDTH),
-                            ))
+                            ));
                         }
                     }
                 } else {
@@ -162,7 +162,7 @@ impl OdOptions {
                     return Err(USimpleError::new(
                         1,
                         format_error_message(&e, s, options::READ_BYTES),
-                    ))
+                    ));
                 }
             },
         };
@@ -585,7 +585,7 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 
         if first {
             print!("{prefix}"); // print offset
-                                // if printing in multiple formats offset is printed only once
+            // if printing in multiple formats offset is printed only once
             first = false;
         } else {
             // this takes the space of the file offset on subsequent

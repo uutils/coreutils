@@ -2,8 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
 use std::io::IsTerminal;
+#[cfg(target_family = "unix")]
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_more_no_arg() {
@@ -112,7 +116,7 @@ fn test_more_dir_arg() {
 #[test]
 #[cfg(target_family = "unix")]
 fn test_more_invalid_file_perms() {
-    use std::fs::{set_permissions, Permissions};
+    use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
 
     if std::io::stdout().is_terminal() {

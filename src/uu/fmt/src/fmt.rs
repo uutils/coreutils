@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, Read, Stdout, Write};
+use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
@@ -124,7 +124,10 @@ impl FmtOptions {
             }
             (None, None) => (DEFAULT_WIDTH, DEFAULT_GOAL),
         };
-        debug_assert!(width >= goal, "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}.");
+        debug_assert!(
+            width >= goal,
+            "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}."
+        );
 
         if width > MAX_WIDTH {
             return Err(USimpleError::new(

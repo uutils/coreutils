@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
-use std::fs::{metadata, File};
+use std::fs::{File, metadata};
 use std::io::{self, BufWriter, IsTerminal, Read, Write};
 /// Unix domain socket support
 #[cfg(unix)]
@@ -18,7 +18,7 @@ use std::os::unix::net::UnixStream;
 
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
-use nix::fcntl::{fcntl, FcntlArg};
+use nix::fcntl::{FcntlArg, fcntl};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -83,19 +83,11 @@ struct OutputOptions {
 
 impl OutputOptions {
     fn tab(&self) -> &'static str {
-        if self.show_tabs {
-            "^I"
-        } else {
-            "\t"
-        }
+        if self.show_tabs { "^I" } else { "\t" }
     }
 
     fn end_of_line(&self) -> &'static str {
-        if self.show_ends {
-            "$\n"
-        } else {
-            "\n"
-        }
+        if self.show_ends { "$\n" } else { "\n" }
     }
 
     /// We can write fast if we can simply copy the contents of the file to
@@ -694,7 +686,7 @@ fn write_end_of_line<W: Write>(
 
 #[cfg(test)]
 mod tests {
-    use std::io::{stdout, BufWriter};
+    use std::io::{BufWriter, stdout};
 
     #[test]
     fn test_write_nonprint_to_end_new_line() {

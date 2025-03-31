@@ -9,9 +9,9 @@
 
 #[cfg(unix)]
 use libc::{
-    mode_t, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP,
-    S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH,
-    S_IXUSR,
+    S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH,
+    S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
+    mode_t,
 };
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -24,7 +24,7 @@ use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
 #[cfg(unix)]
 use std::os::unix::{fs::MetadataExt, io::AsRawFd};
-use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
+use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
 
@@ -500,11 +500,7 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
     result.push(if has!(mode, S_IRUSR) { 'r' } else { '-' });
     result.push(if has!(mode, S_IWUSR) { 'w' } else { '-' });
     result.push(if has!(mode, S_ISUID as mode_t) {
-        if has!(mode, S_IXUSR) {
-            's'
-        } else {
-            'S'
-        }
+        if has!(mode, S_IXUSR) { 's' } else { 'S' }
     } else if has!(mode, S_IXUSR) {
         'x'
     } else {
@@ -514,11 +510,7 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
     result.push(if has!(mode, S_IRGRP) { 'r' } else { '-' });
     result.push(if has!(mode, S_IWGRP) { 'w' } else { '-' });
     result.push(if has!(mode, S_ISGID as mode_t) {
-        if has!(mode, S_IXGRP) {
-            's'
-        } else {
-            'S'
-        }
+        if has!(mode, S_IXGRP) { 's' } else { 'S' }
     } else if has!(mode, S_IXGRP) {
         'x'
     } else {
@@ -528,11 +520,7 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
     result.push(if has!(mode, S_IROTH) { 'r' } else { '-' });
     result.push(if has!(mode, S_IWOTH) { 'w' } else { '-' });
     result.push(if has!(mode, S_ISVTX as mode_t) {
-        if has!(mode, S_IXOTH) {
-            't'
-        } else {
-            'T'
-        }
+        if has!(mode, S_IXOTH) { 't' } else { 'T' }
     } else if has!(mode, S_IXOTH) {
         'x'
     } else {
@@ -819,7 +807,7 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix;
     #[cfg(unix)]
-    use tempfile::{tempdir, NamedTempFile};
+    use tempfile::{NamedTempFile, tempdir};
 
     struct NormalizePathTestCase<'a> {
         path: &'a str,

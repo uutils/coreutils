@@ -1,12 +1,12 @@
 name: Fuzzing
 
-# spell-checker:ignore fuzzer
+# spell-checker:ignore fuzzer dtolnay Swatinem
 
 on:
   pull_request:
   push:
     branches:
-      - main
+      - '*'
 
 permissions:
   contents: read # to fetch code (actions/checkout)

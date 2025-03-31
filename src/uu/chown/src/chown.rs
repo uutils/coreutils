@@ -7,7 +7,7 @@
 
 use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
-use uucore::perms::{chown_base, options, GidUidOwnerFilter, IfFrom};
+use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
 use uucore::{format_usage, help_about, help_usage};
 
 use uucore::error::{FromIo, UResult, USimpleError};

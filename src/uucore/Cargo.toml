@@ -12,7 +12,7 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uucore"
 # readme = "README.md"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2021"
+edition = "2024"
 
 [package.metadata.docs.rs]
 all-features = true

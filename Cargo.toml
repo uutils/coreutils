@@ -16,8 +16,8 @@ repository = "https://github.com/uutils/coreutils"
 readme = "README.md"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-rust-version = "1.82.0"
-edition = "2021"
+rust-version = "1.85.0"
+edition = "2024"
 
 build = "build.rs"
 
@@ -292,8 +292,7 @@ file_diff = "1.0.0"
 filetime = "0.2.23"
 fnv = "1.0.7"
 fs_extra = "1.3.0"
-# Remove the "=" once we moved to Rust edition 2024
-fts-sys = "=0.2.14"
+fts-sys = "0.2.16"
 fundu = "2.0.0"
 gcd = "2.3"
 glob = "0.3.1"
@@ -331,8 +330,8 @@ rust-ini = "0.21.0"
 same-file = "1.0.6"
 self_cell = "1.0.4"
 # Remove the "=" once we moved to Rust edition 2024
-selinux = "= 0.5.0"
-selinux-sys = "= 0.6.13"
+selinux = "= 0.5.1"
+selinux-sys = "= 0.6.14"
 signal-hook = "0.3.17"
 smallvec = { version = "1.13.2", features = ["union"] }
 tempfile = "3.15.0"
@@ -366,6 +365,7 @@ uucore = { version = "0.0.30", package = "uucore", path = "src/uucore" }
 uucore_procs = { version = "0.0.30", package = "uucore_procs", path = "src/uucore_procs" }
 uu_ls = { version = "0.0.30", path = "src/uu/ls" }
 uu_base32 = { version = "0.0.30", path = "src/uu/base32" }
+uutests = { version = "0.0.30", package = "uutests", path = "tests/uutests/" }
 
 [dependencies]
 clap = { workspace = true }
@@ -505,6 +505,7 @@ sha1 = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
 time = { workspace = true, features = ["local-offset"] }
 unindent = "0.2.3"
+uutests = { workspace = true }
 uucore = { workspace = true, features = [
   "mode",
   "entries",
@@ -513,8 +514,9 @@ uucore = { workspace = true, features = [
   "utmpx",
 ] }
 walkdir = { workspace = true }
-hex-literal = "0.4.1"
+hex-literal = "1.0.0"
 rstest = { workspace = true }
+ctor = "0.4.1"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
 procfs = { version = "0.17", default-features = false }

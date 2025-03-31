@@ -7,11 +7,15 @@
 
 #![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 
-use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use libc::mode_t;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(not(windows))]
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {

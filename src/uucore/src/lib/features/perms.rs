@@ -8,7 +8,7 @@
 // spell-checker:ignore (jargon) TOCTOU
 
 use crate::display::Quotable;
-use crate::error::{strip_errno, UResult, USimpleError};
+use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
 use crate::show_error;
 use clap::{Arg, ArgMatches, Command};
@@ -24,7 +24,7 @@ use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, MAIN_SEPARATOR};
+use std::path::{MAIN_SEPARATOR, Path};
 
 /// The various level of verbosity
 #[derive(PartialEq, Eq, Clone, Debug)]

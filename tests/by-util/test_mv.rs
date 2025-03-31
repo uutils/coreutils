@@ -4,10 +4,12 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore mydir
-use crate::common::util::TestScenario;
 use filetime::FileTime;
 use rstest::rstest;
 use std::io::Write;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::{at_and_ucmd, util_name};
 
 #[test]
 fn test_mv_invalid_arg() {
@@ -1377,13 +1379,15 @@ fn test_mv_errors() {
     // $ at.mkdir dir && at.touch file
     // $ mv dir file
     // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
-    assert!(!scene
-        .ucmd()
-        .arg(dir)
-        .arg(file_a)
-        .fails()
-        .stderr_str()
-        .is_empty());
+    assert!(
+        !scene
+            .ucmd()
+            .arg(dir)
+            .arg(file_a)
+            .fails()
+            .stderr_str()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1448,15 +1452,17 @@ fn test_mv_interactive_error() {
     // $ at.mkdir dir && at.touch file
     // $ mv -i dir file
     // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
-    assert!(!scene
-        .ucmd()
-        .arg("-i")
-        .arg(dir)
-        .arg(file_a)
-        .pipe_in("y")
-        .fails()
-        .stderr_str()
-        .is_empty());
+    assert!(
+        !scene
+            .ucmd()
+            .arg("-i")
+            .arg(dir)
+            .arg(file_a)
+            .pipe_in("y")
+            .fails()
+            .stderr_str()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1581,13 +1587,17 @@ fn test_mv_seen_file() {
     let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
 
     #[cfg(not(unix))]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c\\f' with 'b/f'")
+    );
     #[cfg(unix)]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c/f' with 'b/f'")
+    );
 
     // a/f has been moved into c/f
     assert!(at.plus("c").join("f").exists());
@@ -1611,13 +1621,17 @@ fn test_mv_seen_multiple_files_to_directory() {
 
     let result = ts.ucmd().arg("a/f").arg("b/f").arg("b/g").arg("c").fails();
     #[cfg(not(unix))]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c\\f' with 'b/f'")
+    );
     #[cfg(unix)]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c/f' with 'b/f'")
+    );
 
     assert!(!at.plus("a").join("f").exists());
     assert!(at.plus("b").join("f").exists());
@@ -1658,7 +1672,7 @@ fn test_mv_dir_into_path_slash() {
 fn test_acl() {
     use std::process::Command;
 
-    use crate::common::util::compare_xattrs;
+    use uutests::util::compare_xattrs;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1754,10 +1768,11 @@ fn test_move_should_not_fallback_to_copy() {
 
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
-    use crate::common::util::TestScenario;
     use std::fs::{read_to_string, set_permissions, write};
-    use std::os::unix::fs::{symlink, PermissionsExt};
+    use std::os::unix::fs::{PermissionsExt, symlink};
     use tempfile::TempDir;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
 
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[test]
@@ -1811,6 +1826,7 @@ mod inter_partition_copying {
     // that it would output the proper error message.
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
+        use uutests::util::TestScenario;
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
 
