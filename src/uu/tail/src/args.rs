@@ -12,12 +12,16 @@ use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 use std::ffi::OsString;
 use std::fs;
-use std::io::IsTerminal;
+use std::io::{self, IsTerminal};
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_usage, show_warning};
+
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
+
 
 const ABOUT: &str = help_about!("tail.md");
 const USAGE: &str = help_usage!("tail.md");
@@ -303,8 +307,25 @@ impl Settings {
     }
     // TODO: Consider calling fstat on stdin fd instead (#7583)
     pub fn stdin_is_regular_file(&self) -> bool {
-        let metadata = fs::metadata("/dev/stdin");
-        metadata.map(|m| m.is_file()).unwrap_or(false)
+        if io::stdin().is_terminal() {
+            return false;
+        }
+
+        #[cfg(unix)]
+        {
+            if let Ok(metadata) = fs::metadata("/proc/self/fd/0") {
+                return metadata.is_file();
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            if let Ok(metadata) = fs::metadata("CONIN$") {
+                return metadata.file_type() & 0x8000 != 0;
+            }
+        }
+
+        false
     }
 
     pub fn has_stdin(&self) -> bool {
