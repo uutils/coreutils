@@ -309,3 +309,13 @@ fn test_regex_before() {
         //          |--------||----||---|
         .stdout_is("+---+c+d-e+--++b+-+a+");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .pipe_in("hello")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("tac: failed to write to stdout: No space left on device (os error 28)\n");
+}
