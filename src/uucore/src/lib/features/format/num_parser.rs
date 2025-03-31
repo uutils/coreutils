@@ -287,7 +287,6 @@ fn make_error<'a>(overflow: bool, negative: bool) -> ExtendedParserError<'a, Ext
 }
 
 // Construct an ExtendedBigDecimal based on parsed data
-// TODO: Might be nice to implement a ExtendedBigDecimal copysign or negation function to move away some of this logic.
 fn construct_extended_big_decimal<'a>(
     digits: BigUint,
     negative: bool,
