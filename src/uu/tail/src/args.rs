@@ -300,7 +300,7 @@ impl Settings {
     pub fn has_only_stdin(&self) -> bool {
         self.inputs.iter().all(|input| input.is_stdin())
     }
-
+    // TODO: Consider calling fstat on stdin fd instead (#7583)
     pub fn stdin_is_regular_file(&self) -> bool {
         let metadata = fs::metadata("/dev/stdin");
         metadata.map(|m| m.is_file()).unwrap_or(false)
