@@ -22,7 +22,6 @@ use uucore::{format_usage, help_about, help_usage, show_warning};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 
-
 const ABOUT: &str = help_about!("tail.md");
 const USAGE: &str = help_usage!("tail.md");
 
