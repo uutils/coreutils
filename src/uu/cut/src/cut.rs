@@ -70,9 +70,9 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     }
 }
 
-fn cut_bytes<R: Read>(
+fn cut_bytes<R: Read, W: Write>(
     reader: R,
-    out: &mut dyn Write,
+    out: &mut W,
     ranges: &[Range],
     opts: &Options,
 ) -> UResult<()> {
@@ -108,9 +108,9 @@ fn cut_bytes<R: Read>(
 }
 
 // Output delimiter is explicitly specified
-fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
+fn cut_fields_explicit_out_delim<R: Read, W: Write, M: Matcher>(
     reader: R,
-    out: &mut dyn Write,
+    out: &mut W,
     matcher: &M,
     ranges: &[Range],
     only_delimited: bool,
@@ -193,9 +193,9 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
 }
 
 // Output delimiter is the same as input delimiter
-fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
+fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
     reader: R,
-    out: &mut dyn Write,
+    out: &mut W,
     matcher: &M,
     ranges: &[Range],
     only_delimited: bool,
@@ -264,9 +264,9 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
 }
 
 // The input delimiter is identical to `newline_char`
-fn cut_fields_newline_char_delim<R: Read>(
+fn cut_fields_newline_char_delim<R: Read, W: Write>(
     reader: R,
-    out: &mut dyn Write,
+    out: &mut W,
     ranges: &[Range],
     newline_char: u8,
     out_delim: &[u8],
@@ -295,9 +295,9 @@ fn cut_fields_newline_char_delim<R: Read>(
     Ok(())
 }
 
-fn cut_fields<R: Read>(
+fn cut_fields<R: Read, W: Write>(
     reader: R,
-    out: &mut dyn Write,
+    out: &mut W,
     ranges: &[Range],
     opts: &Options,
 ) -> UResult<()> {
