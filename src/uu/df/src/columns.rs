@@ -60,6 +60,7 @@ pub(crate) enum Column {
 /// An error while defining which columns to display in the output table.
 #[derive(Debug, Error)]
 pub(crate) enum ColumnError {
+    /// If a column appears more than once in the `--output` argument.
     #[error("{}", .0.quote())]
     MultipleColumns(String),
 }
