@@ -360,8 +360,8 @@ fn parse(
     input: &str,
     integral_only: bool,
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<'_, ExtendedBigDecimal>> {
-    // Parse the "'" prefix separately
-    if let Some(rest) = input.strip_prefix('\'') {
+    // Parse the " and ' prefixes separately
+    if let Some(rest) = input.strip_prefix(['\'', '"']) {
         let mut chars = rest.char_indices().fuse();
         let v = chars
             .next()
@@ -465,11 +465,11 @@ fn parse(
 
     // If nothing has been parsed, check if this is a special value, or declare the parsing unsuccessful
     if let Some((0, _)) = chars.peek() {
-        if integral_only {
-            return Err(ExtendedParserError::NotNumeric);
+        return if integral_only {
+            Err(ExtendedParserError::NotNumeric)
         } else {
-            return parse_special_value(unsigned, negative);
-        }
+            parse_special_value(unsigned, negative)
+        };
     }
 
     let ebd_result = construct_extended_big_decimal(digits, negative, base, scale, exponent);

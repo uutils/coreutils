@@ -83,6 +83,19 @@ fn escaped_unicode_eight_digit() {
 }
 
 #[test]
+fn escaped_unicode_null_byte() {
+    new_ucmd!()
+        .args(&["\\0001_"])
+        .succeeds()
+        .stdout_is_bytes([0u8, b'1', b'_']);
+
+    new_ucmd!()
+        .args(&["%b", "\\0001_"])
+        .succeeds()
+        .stdout_is_bytes([1u8, b'_']);
+}
+
+#[test]
 fn escaped_percent_sign() {
     new_ucmd!()
         .args(&["hello%% world"])
@@ -258,6 +271,16 @@ fn sub_num_int_char_const_in() {
 
     new_ucmd!()
         .args(&["emoji is %i", "'🙃"])
+        .succeeds()
+        .stdout_only("emoji is 128579");
+
+    new_ucmd!()
+        .args(&["ninety seven is %i", "\"a"])
+        .succeeds()
+        .stdout_only("ninety seven is 97");
+
+    new_ucmd!()
+        .args(&["emoji is %i", "\"🙃"])
         .succeeds()
         .stdout_only("emoji is 128579");
 }
@@ -542,6 +565,76 @@ fn sub_any_asterisk_negative_first_param() {
         .args(&["a(%*c)b", "-5", "x"])
         .succeeds()
         .stdout_only("a(x    )b"); // Would be 'a(    x)b' if -5 was 5
+}
+
+#[test]
+fn sub_any_asterisk_first_param_with_integer() {
+    new_ucmd!()
+        .args(&["|%*d|", "3", "0"])
+        .succeeds()
+        .stdout_only("|  0|");
+
+    new_ucmd!()
+        .args(&["|%*d|", "1", "0"])
+        .succeeds()
+        .stdout_only("|0|");
+
+    new_ucmd!()
+        .args(&["|%*d|", "0", "0"])
+        .succeeds()
+        .stdout_only("|0|");
+
+    new_ucmd!()
+        .args(&["|%*d|", "-1", "0"])
+        .succeeds()
+        .stdout_only("|0|");
+
+    // Negative widths are left-aligned
+    new_ucmd!()
+        .args(&["|%*d|", "-3", "0"])
+        .succeeds()
+        .stdout_only("|0  |");
+}
+
+#[test]
+fn sub_any_asterisk_second_param_with_integer() {
+    new_ucmd!()
+        .args(&["|%.*d|", "3", "10"])
+        .succeeds()
+        .stdout_only("|010|");
+
+    new_ucmd!()
+        .args(&["|%*.d|", "1", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", "0", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", "-1", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", "-2", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", &i64::MIN.to_string(), "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", &format!("-{}", u128::MAX), "10"])
+        .fails_with_code(1)
+        .stdout_is("|10|")
+        .stderr_is(
+            "printf: '-340282366920938463463374607431768211455': Numerical result out of range\n",
+        );
 }
 
 #[test]
@@ -897,6 +990,14 @@ fn negative_zero_padding_with_space_test() {
         .args(&["% 03d", "-1"])
         .succeeds()
         .stdout_only("-01");
+}
+
+#[test]
+fn spaces_before_numbers_are_ignored() {
+    new_ucmd!()
+        .args(&["%*.*d", "   5", "  3", " 6"])
+        .succeeds()
+        .stdout_only("  006");
 }
 
 #[test]

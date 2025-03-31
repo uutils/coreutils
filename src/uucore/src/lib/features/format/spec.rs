@@ -316,7 +316,7 @@ impl Spec {
         match self {
             Self::Char { width, align_left } => {
                 let (width, neg_width) =
-                    resolve_asterisk_maybe_negative(*width, &mut args).unwrap_or_default();
+                    resolve_asterisk_width(*width, &mut args).unwrap_or_default();
                 write_padded(writer, &[args.get_char()], width, *align_left || neg_width)
             }
             Self::String {
@@ -325,7 +325,7 @@ impl Spec {
                 precision,
             } => {
                 let (width, neg_width) =
-                    resolve_asterisk_maybe_negative(*width, &mut args).unwrap_or_default();
+                    resolve_asterisk_width(*width, &mut args).unwrap_or_default();
 
                 // GNU does do this truncation on a byte level, see for instance:
                 //     printf "%.1s" 🙃
@@ -333,7 +333,7 @@ impl Spec {
                 // For now, we let printf panic when we truncate within a code point.
                 // TODO: We need to not use Rust's formatting for aligning the output,
                 // so that we can just write bytes to stdout without panicking.
-                let precision = resolve_asterisk(*precision, &mut args);
+                let precision = resolve_asterisk_precision(*precision, &mut args);
                 let s = args.get_str();
                 let truncated = match precision {
                     Some(p) if p < s.len() => &s[..p],
@@ -349,7 +349,7 @@ impl Spec {
             Self::EscapedString => {
                 let s = args.get_str();
                 let mut parsed = Vec::new();
-                for c in parse_escape_only(s.as_bytes(), OctalParsing::default()) {
+                for c in parse_escape_only(s.as_bytes(), OctalParsing::ThreeDigits) {
                     match c.write(&mut parsed)? {
                         ControlFlow::Continue(()) => {}
                         ControlFlow::Break(()) => {
@@ -382,8 +382,10 @@ impl Spec {
                 positive_sign,
                 alignment,
             } => {
-                let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
-                let precision = resolve_asterisk(*precision, &mut args).unwrap_or(0);
+                let (width, neg_width) =
+                    resolve_asterisk_width(*width, &mut args).unwrap_or((0, false));
+                let precision =
+                    resolve_asterisk_precision(*precision, &mut args).unwrap_or_default();
                 let i = args.get_i64();
 
                 if precision as u64 > i32::MAX as u64 {
@@ -394,7 +396,11 @@ impl Spec {
                     width,
                     precision,
                     positive_sign: *positive_sign,
-                    alignment: *alignment,
+                    alignment: if neg_width {
+                        NumberAlignment::Left
+                    } else {
+                        *alignment
+                    },
                 }
                 .fmt(writer, i)
                 .map_err(FormatError::IoError)
@@ -405,8 +411,10 @@ impl Spec {
                 precision,
                 alignment,
             } => {
-                let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
-                let precision = resolve_asterisk(*precision, &mut args).unwrap_or(0);
+                let (width, neg_width) =
+                    resolve_asterisk_width(*width, &mut args).unwrap_or((0, false));
+                let precision =
+                    resolve_asterisk_precision(*precision, &mut args).unwrap_or_default();
                 let i = args.get_u64();
 
                 if precision as u64 > i32::MAX as u64 {
@@ -417,7 +425,11 @@ impl Spec {
                     variant: *variant,
                     precision,
                     width,
-                    alignment: *alignment,
+                    alignment: if neg_width {
+                        NumberAlignment::Left
+                    } else {
+                        *alignment
+                    },
                 }
                 .fmt(writer, i)
                 .map_err(FormatError::IoError)
@@ -431,8 +443,9 @@ impl Spec {
                 alignment,
                 precision,
             } => {
-                let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
-                let precision = resolve_asterisk(*precision, &mut args);
+                let (width, neg_width) =
+                    resolve_asterisk_width(*width, &mut args).unwrap_or((0, false));
+                let precision = resolve_asterisk_precision(*precision, &mut args);
                 let f: ExtendedBigDecimal = args.get_extended_big_decimal();
 
                 if precision.is_some_and(|p| p as u64 > i32::MAX as u64) {
@@ -448,7 +461,11 @@ impl Spec {
                     case: *case,
                     force_decimal: *force_decimal,
                     positive_sign: *positive_sign,
-                    alignment: *alignment,
+                    alignment: if neg_width {
+                        NumberAlignment::Left
+                    } else {
+                        *alignment
+                    },
                 }
                 .fmt(writer, &f)
                 .map_err(FormatError::IoError)
@@ -457,18 +474,7 @@ impl Spec {
     }
 }
 
-fn resolve_asterisk<'a>(
-    option: Option<CanAsterisk<usize>>,
-    mut args: impl ArgumentIter<'a>,
-) -> Option<usize> {
-    match option {
-        None => None,
-        Some(CanAsterisk::Asterisk) => Some(usize::try_from(args.get_u64()).ok().unwrap_or(0)),
-        Some(CanAsterisk::Fixed(w)) => Some(w),
-    }
-}
-
-fn resolve_asterisk_maybe_negative<'a>(
+fn resolve_asterisk_width<'a>(
     option: Option<CanAsterisk<usize>>,
     mut args: impl ArgumentIter<'a>,
 ) -> Option<(usize, bool)> {
@@ -483,6 +489,21 @@ fn resolve_asterisk_maybe_negative<'a>(
             }
         }
         Some(CanAsterisk::Fixed(w)) => Some((w, false)),
+    }
+}
+
+fn resolve_asterisk_precision<'a>(
+    option: Option<CanAsterisk<usize>>,
+    mut args: impl ArgumentIter<'a>,
+) -> Option<usize> {
+    match option {
+        None => None,
+        Some(CanAsterisk::Asterisk) => match args.get_i64() {
+            v if v >= 0 => usize::try_from(v).ok(),
+            v if v < 0 => Some(0usize),
+            _ => None,
+        },
+        Some(CanAsterisk::Fixed(w)) => Some(w),
     }
 }
 
