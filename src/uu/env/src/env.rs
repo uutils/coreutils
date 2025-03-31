@@ -6,7 +6,6 @@
 // spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction
 
 pub mod native_int_str;
-pub mod parse_error;
 pub mod split_iterator;
 pub mod string_expander;
 pub mod string_parser;
@@ -39,6 +38,42 @@ use uucore::line_ending::LineEnding;
 #[cfg(unix)]
 use uucore::signals::signal_by_name_or_value;
 use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
+
+use thiserror::Error;
+
+#[derive(Debug, Error, PartialEq)]
+pub enum EnvError {
+    #[error("no terminating quote in -S string")]
+    EnvMissingClosingQuote(usize, char),
+    #[error("invalid backslash at end of string in -S")]
+    EnvInvalidBackslashAtEndOfStringInMinusS(usize, String),
+    #[error("'\\c' must not appear in double-quoted -S string")]
+    EnvBackslashCNotAllowedInDoubleQuotes(usize),
+    #[error("invalid sequence '\\{}' in -S",.1)]
+    EnvInvalidSequenceBackslashXInMinusS(usize, char),
+    #[error("Missing closing brace")]
+    EnvParsingOfVariableMissingClosingBrace(usize),
+    #[error("Missing variable name")]
+    EnvParsingOfMissingVariable(usize),
+    #[error("Missing closing brace after default value at {}",.0)]
+    EnvParsingOfVariableMissingClosingBraceAfterValue(usize),
+    #[error("Unexpected character: '{}', expected variable name must not start with 0..9",.1)]
+    EnvParsingOfVariableUnexpectedNumber(usize, String),
+    #[error("Unexpected character: '{}', expected a closing brace ('}}') or colon (':')",.1)]
+    EnvParsingOfVariableExceptedBraceOrColon(usize, String),
+    #[error("")]
+    EnvReachedEnd,
+    #[error("")]
+    EnvContinueWithDelimiter,
+    #[error("{}{:?}",.0,.1)]
+    EnvInternalError(usize, string_parser::Error),
+}
+
+impl From<string_parser::Error> for EnvError {
+    fn from(value: string_parser::Error) -> Self {
+        EnvError::EnvInternalError(value.peek_position, value)
+    }
+}
 
 const ABOUT: &str = help_about!("env.md");
 const USAGE: &str = help_usage!("env.md");
@@ -273,20 +308,28 @@ pub fn uu_app() -> Command {
 
 pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>> {
     split_iterator::split(text).map_err(|e| match e {
-        parse_error::ParseError::BackslashCNotAllowedInDoubleQuotes { pos: _ } => {
-            USimpleError::new(125, "'\\c' must not appear in double-quoted -S string")
+        EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_) => USimpleError::new(125, e.to_string()),
+        EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _) => {
+            USimpleError::new(125, e.to_string())
         }
-        parse_error::ParseError::InvalidBackslashAtEndOfStringInMinusS { pos: _, quoting: _ } => {
-            USimpleError::new(125, "invalid backslash at end of string in -S")
+        EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
+            USimpleError::new(125, e.to_string())
         }
-        parse_error::ParseError::InvalidSequenceBackslashXInMinusS { pos: _, c } => {
-            USimpleError::new(125, format!("invalid sequence '\\{c}' in -S"))
+        EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
+        EnvError::EnvParsingOfVariableMissingClosingBrace(pos) => {
+            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
         }
-        parse_error::ParseError::MissingClosingQuote { pos: _, c: _ } => {
-            USimpleError::new(125, "no terminating quote in -S string")
+        EnvError::EnvParsingOfMissingVariable(pos) => {
+            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
         }
-        parse_error::ParseError::ParsingOfVariableNameFailed { pos, msg } => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {msg}",))
+        EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => {
+            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+        }
+        EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => {
+            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+        }
+        EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => {
+            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
         }
         _ => USimpleError::new(125, format!("Error: {e:?}")),
     })
@@ -770,5 +813,69 @@ mod tests {
             NCvt::convert(vec!["-i", "A=B ' C"]),
             parse_args_from_str(&NCvt::convert(r#"-i A='B \' C'"#)).unwrap()
         );
+    }
+
+    #[test]
+    fn test_error_cases() {
+        // Test EnvBackslashCNotAllowedInDoubleQuotes
+        let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \c""#));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "'\\c' must not appear in double-quoted -S string"
+        );
+
+        // Test EnvInvalidBackslashAtEndOfStringInMinusS
+        let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \"#));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "no terminating quote in -S string"
+        );
+
+        // Test EnvInvalidSequenceBackslashXInMinusS
+        let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \x""#));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid sequence '\\x' in -S")
+        );
+
+        // Test EnvMissingClosingQuote
+        let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo "#));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "no terminating quote in -S string"
+        );
+
+        // Test variable-related errors
+        let result = parse_args_from_str(&NCvt::convert(r#"echo ${FOO"#));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("variable name issue (at 10): Missing closing brace")
+        );
+
+        let result = parse_args_from_str(&NCvt::convert(r#"echo ${FOO:-value"#));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("variable name issue (at 17): Missing closing brace after default value")
+        );
+
+        let result = parse_args_from_str(&NCvt::convert(r#"echo ${1FOO}"#));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("variable name issue (at 7): Unexpected character: '1', expected variable name must not start with 0..9"));
+
+        let result = parse_args_from_str(&NCvt::convert(r#"echo ${FOO?}"#));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("variable name issue (at 10): Unexpected character: '?', expected a closing brace ('}') or colon (':')"));
     }
 }

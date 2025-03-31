@@ -9,28 +9,42 @@ mod unit_tests;
 
 use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, Settings, StatusLevel};
 use crate::conversion_tables::ConversionTable;
-use std::error::Error;
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::parse_size::{ParseSizeError, Parser as SizeParser};
 use uucore::show_warning;
 
 /// Parser Errors describe errors with parser input
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Error)]
 pub enum ParseError {
+    #[error("Unrecognized operand '{0}'")]
     UnrecognizedOperand(String),
+    #[error("Only one of conv=ascii conv=ebcdic or conv=ibm may be specified")]
     MultipleFmtTable,
+    #[error("Only one of conv=lcase or conv=ucase may be specified")]
     MultipleUCaseLCase,
+    #[error("Only one of conv=block or conv=unblock may be specified")]
     MultipleBlockUnblock,
+    #[error("Only one ov conv=excl or conv=nocreat may be specified")]
     MultipleExclNoCreate,
+    #[error("invalid input flag: ‘{}’\nTry '{} --help' for more information.", .0, uucore::execution_phrase())]
     FlagNoMatch(String),
+    #[error("Unrecognized conv=CONV -> {0}")]
     ConvFlagNoMatch(String),
+    #[error("invalid number: ‘{0}’")]
     MultiplierStringParseFailure(String),
+    #[error("Multiplier string would overflow on current system -> {0}")]
     MultiplierStringOverflow(String),
+    #[error("conv=block or conv=unblock specified without cbs=N")]
     BlockUnblockWithoutCBS,
+    #[error("status=LEVEL not recognized -> {0}")]
     StatusLevelNotRecognized(String),
+    #[error("feature not implemented on this system -> {0}")]
     Unimplemented(String),
+    #[error("{0}=N cannot fit into memory")]
     BsOutOfRange(String),
+    #[error("invalid number: ‘{0}’")]
     InvalidNumber(String),
 }
 
@@ -395,69 +409,6 @@ impl Parser {
         Ok(())
     }
 }
-
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnrecognizedOperand(arg) => {
-                write!(f, "Unrecognized operand '{arg}'")
-            }
-            Self::MultipleFmtTable => {
-                write!(
-                    f,
-                    "Only one of conv=ascii conv=ebcdic or conv=ibm may be specified"
-                )
-            }
-            Self::MultipleUCaseLCase => {
-                write!(f, "Only one of conv=lcase or conv=ucase may be specified")
-            }
-            Self::MultipleBlockUnblock => {
-                write!(f, "Only one of conv=block or conv=unblock may be specified")
-            }
-            Self::MultipleExclNoCreate => {
-                write!(f, "Only one ov conv=excl or conv=nocreat may be specified")
-            }
-            Self::FlagNoMatch(arg) => {
-                // Additional message about 'dd --help' is displayed only in this situation.
-                write!(
-                    f,
-                    "invalid input flag: ‘{}’\nTry '{} --help' for more information.",
-                    arg,
-                    uucore::execution_phrase()
-                )
-            }
-            Self::ConvFlagNoMatch(arg) => {
-                write!(f, "Unrecognized conv=CONV -> {arg}")
-            }
-            Self::MultiplierStringParseFailure(arg) => {
-                write!(f, "invalid number: ‘{arg}’")
-            }
-            Self::MultiplierStringOverflow(arg) => {
-                write!(
-                    f,
-                    "Multiplier string would overflow on current system -> {arg}"
-                )
-            }
-            Self::BlockUnblockWithoutCBS => {
-                write!(f, "conv=block or conv=unblock specified without cbs=N")
-            }
-            Self::StatusLevelNotRecognized(arg) => {
-                write!(f, "status=LEVEL not recognized -> {arg}")
-            }
-            Self::BsOutOfRange(arg) => {
-                write!(f, "{arg}=N cannot fit into memory")
-            }
-            Self::Unimplemented(arg) => {
-                write!(f, "feature not implemented on this system -> {arg}")
-            }
-            Self::InvalidNumber(arg) => {
-                write!(f, "invalid number: ‘{arg}’")
-            }
-        }
-    }
-}
-
-impl Error for ParseError {}
 
 impl UError for ParseError {
     fn code(&self) -> i32 {

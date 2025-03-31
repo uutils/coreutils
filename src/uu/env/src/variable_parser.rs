@@ -5,7 +5,8 @@
 
 use std::ops::Range;
 
-use crate::{native_int_str::NativeIntStr, parse_error::ParseError, string_parser::StringParser};
+use crate::EnvError;
+use crate::{native_int_str::NativeIntStr, string_parser::StringParser};
 
 pub struct VariableParser<'a, 'b> {
     pub parser: &'b mut StringParser<'a>,
@@ -16,28 +17,26 @@ impl<'a> VariableParser<'a, '_> {
         self.parser.peek().ok()
     }
 
-    fn check_variable_name_start(&self) -> Result<(), ParseError> {
+    fn check_variable_name_start(&self) -> Result<(), EnvError> {
         if let Some(c) = self.get_current_char() {
             if c.is_ascii_digit() {
-                return Err(ParseError::ParsingOfVariableNameFailed {
-                    pos: self.parser.get_peek_position(),
-                    msg: format!(
-                        "Unexpected character: '{c}', expected variable name must not start with 0..9"
-                    ),
-                });
+                return Err(EnvError::EnvParsingOfVariableUnexpectedNumber(
+                    self.parser.get_peek_position(),
+                    c.to_string(),
+                ));
             }
         }
         Ok(())
     }
 
-    fn skip_one(&mut self) -> Result<(), ParseError> {
+    fn skip_one(&mut self) -> Result<(), EnvError> {
         self.parser.consume_chunk()?;
         Ok(())
     }
 
     fn parse_braced_variable_name(
         &mut self,
-    ) -> Result<(&'a NativeIntStr, Option<&'a NativeIntStr>), ParseError> {
+    ) -> Result<(&'a NativeIntStr, Option<&'a NativeIntStr>), EnvError> {
         let pos_start = self.parser.get_peek_position();
 
         self.check_variable_name_start()?;
@@ -46,10 +45,9 @@ impl<'a> VariableParser<'a, '_> {
         loop {
             match self.get_current_char() {
                 None => {
-                    return Err(ParseError::ParsingOfVariableNameFailed {
-                        pos: self.parser.get_peek_position(),
-                        msg: "Missing closing brace".into(),
-                    });
+                    return Err(EnvError::EnvParsingOfVariableMissingClosingBrace(
+                        self.parser.get_peek_position(),
+                    ));
                 }
                 Some(c) if !c.is_ascii() || c.is_ascii_alphanumeric() || c == '_' => {
                     self.skip_one()?;
@@ -59,10 +57,11 @@ impl<'a> VariableParser<'a, '_> {
                     loop {
                         match self.get_current_char() {
                             None => {
-                                return Err(ParseError::ParsingOfVariableNameFailed {
-                                    pos: self.parser.get_peek_position(),
-                                    msg: "Missing closing brace after default value".into(),
-                                });
+                                return Err(
+                                    EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(
+                                        self.parser.get_peek_position(),
+                                    ),
+                                );
                             }
                             Some('}') => {
                                 default_end = Some(self.parser.get_peek_position());
@@ -83,12 +82,10 @@ impl<'a> VariableParser<'a, '_> {
                     break;
                 }
                 Some(c) => {
-                    return Err(ParseError::ParsingOfVariableNameFailed {
-                        pos: self.parser.get_peek_position(),
-                        msg: format!(
-                            "Unexpected character: '{c}', expected a closing brace ('}}') or colon (':')"
-                        ),
-                    });
+                    return Err(EnvError::EnvParsingOfVariableExceptedBraceOrColon(
+                        self.parser.get_peek_position(),
+                        c.to_string(),
+                    ));
                 }
             };
         }
@@ -110,7 +107,7 @@ impl<'a> VariableParser<'a, '_> {
         Ok((varname, default_opt))
     }
 
-    fn parse_unbraced_variable_name(&mut self) -> Result<&'a NativeIntStr, ParseError> {
+    fn parse_unbraced_variable_name(&mut self) -> Result<&'a NativeIntStr, EnvError> {
         let pos_start = self.parser.get_peek_position();
 
         self.check_variable_name_start()?;
@@ -128,10 +125,7 @@ impl<'a> VariableParser<'a, '_> {
         let pos_end = self.parser.get_peek_position();
 
         if pos_end == pos_start {
-            return Err(ParseError::ParsingOfVariableNameFailed {
-                pos: pos_start,
-                msg: "Missing variable name".into(),
-            });
+            return Err(EnvError::EnvParsingOfMissingVariable(pos_start));
         }
 
         let varname = self.parser.substring(&Range {
@@ -144,15 +138,14 @@ impl<'a> VariableParser<'a, '_> {
 
     pub fn parse_variable(
         &mut self,
-    ) -> Result<(&'a NativeIntStr, Option<&'a NativeIntStr>), ParseError> {
+    ) -> Result<(&'a NativeIntStr, Option<&'a NativeIntStr>), EnvError> {
         self.skip_one()?;
 
         let (name, default) = match self.get_current_char() {
             None => {
-                return Err(ParseError::ParsingOfVariableNameFailed {
-                    pos: self.parser.get_peek_position(),
-                    msg: "missing variable name".into(),
-                });
+                return Err(EnvError::EnvParsingOfMissingVariable(
+                    self.parser.get_peek_position(),
+                ));
             }
             Some('{') => {
                 self.skip_one()?;
