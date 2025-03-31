@@ -40,7 +40,7 @@ struct EchoOptions {
 /// Returns true if valid echo flag found
 fn is_echo_flag(arg: &OsString, echo_options: &mut EchoOptions) -> bool {
     let bytes = arg.as_encoded_bytes();
-    if bytes.first() == Some(&b'-') && arg!= "-" {
+    if bytes.first() == Some(&b'-') && arg != "-" {
         // we initialize our local variables to the "current" options so we dont override
         // previous found flags
         let mut escape = echo_options.escape;
@@ -75,7 +75,7 @@ fn is_echo_flag(arg: &OsString, echo_options: &mut EchoOptions) -> bool {
 /// - escape: whether to process escape sequences
 fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
     let mut result = Vec::new();
-    let mut echo_options = EchoOptions{
+    let mut echo_options = EchoOptions {
         trailing_newline: true,
         escape: false,
     };
