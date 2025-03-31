@@ -62,14 +62,6 @@ impl<'a> From<&'a OsString> for Delimiter<'a> {
     }
 }
 
-fn stdout_writer() -> Box<dyn Write> {
-    if std::io::stdout().is_terminal() {
-        Box::new(stdout())
-    } else {
-        Box::new(BufWriter::new(stdout())) as Box<dyn Write>
-    }
-}
-
 fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     if complement {
         Range::from_list(list).map(|r| uucore::ranges::complement(&r))
@@ -78,10 +70,14 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     }
 }
 
-fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
+fn cut_bytes<R: Read>(
+    reader: R,
+    out: &mut dyn Write,
+    ranges: &[Range],
+    opts: &Options,
+) -> UResult<()> {
     let newline_char = opts.line_ending.into();
     let mut buf_in = BufReader::new(reader);
-    let mut out = stdout_writer();
     let out_delim = opts.out_delimiter.unwrap_or(b"\t");
 
     let result = buf_in.for_byte_record(newline_char, |line| {
@@ -114,6 +110,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()
 // Output delimiter is explicitly specified
 fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
     reader: R,
+    out: &mut dyn Write,
     matcher: &M,
     ranges: &[Range],
     only_delimited: bool,
@@ -121,7 +118,6 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
     out_delim: &[u8],
 ) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
-    let mut out = stdout_writer();
 
     let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
         let mut fields_pos = 1;
@@ -199,13 +195,13 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
 // Output delimiter is the same as input delimiter
 fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
     reader: R,
+    out: &mut dyn Write,
     matcher: &M,
     ranges: &[Range],
     only_delimited: bool,
     newline_char: u8,
 ) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
-    let mut out = stdout_writer();
 
     let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
         let mut fields_pos = 1;
@@ -270,12 +266,12 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
 // The input delimiter is identical to `newline_char`
 fn cut_fields_newline_char_delim<R: Read>(
     reader: R,
+    out: &mut dyn Write,
     ranges: &[Range],
     newline_char: u8,
     out_delim: &[u8],
 ) -> UResult<()> {
     let buf_in = BufReader::new(reader);
-    let mut out = stdout_writer();
 
     let segments: Vec<_> = buf_in.split(newline_char).filter_map(|x| x.ok()).collect();
     let mut print_delim = false;
@@ -299,19 +295,25 @@ fn cut_fields_newline_char_delim<R: Read>(
     Ok(())
 }
 
-fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
+fn cut_fields<R: Read>(
+    reader: R,
+    out: &mut dyn Write,
+    ranges: &[Range],
+    opts: &Options,
+) -> UResult<()> {
     let newline_char = opts.line_ending.into();
     let field_opts = opts.field_opts.as_ref().unwrap(); // it is safe to unwrap() here - field_opts will always be Some() for cut_fields() call
     match field_opts.delimiter {
         Delimiter::Slice(delim) if delim == [newline_char] => {
             let out_delim = opts.out_delimiter.unwrap_or(delim);
-            cut_fields_newline_char_delim(reader, ranges, newline_char, out_delim)
+            cut_fields_newline_char_delim(reader, out, ranges, newline_char, out_delim)
         }
         Delimiter::Slice(delim) => {
             let matcher = ExactMatcher::new(delim);
             match opts.out_delimiter {
                 Some(out_delim) => cut_fields_explicit_out_delim(
                     reader,
+                    out,
                     &matcher,
                     ranges,
                     field_opts.only_delimited,
@@ -320,6 +322,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<(
                 ),
                 None => cut_fields_implicit_out_delim(
                     reader,
+                    out,
                     &matcher,
                     ranges,
                     field_opts.only_delimited,
@@ -331,6 +334,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<(
             let matcher = WhitespaceMatcher {};
             cut_fields_explicit_out_delim(
                 reader,
+                out,
                 &matcher,
                 ranges,
                 field_opts.only_delimited,
@@ -348,6 +352,12 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
         filenames.push("-".to_owned());
     }
 
+    let mut out: Box<dyn Write> = if std::io::stdout().is_terminal() {
+        Box::new(stdout())
+    } else {
+        Box::new(BufWriter::new(stdout())) as Box<dyn Write>
+    };
+
     for filename in &filenames {
         if filename == "-" {
             if stdin_read {
@@ -355,9 +365,9 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
             }
 
             show_if_err!(match mode {
-                Mode::Bytes(ranges, opts) => cut_bytes(stdin(), ranges, opts),
-                Mode::Characters(ranges, opts) => cut_bytes(stdin(), ranges, opts),
-                Mode::Fields(ranges, opts) => cut_fields(stdin(), ranges, opts),
+                Mode::Bytes(ranges, opts) => cut_bytes(stdin(), &mut out, ranges, opts),
+                Mode::Characters(ranges, opts) => cut_bytes(stdin(), &mut out, ranges, opts),
+                Mode::Fields(ranges, opts) => cut_fields(stdin(), &mut out, ranges, opts),
             });
 
             stdin_read = true;
@@ -376,14 +386,16 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
                     .and_then(|file| {
                         match &mode {
                             Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
-                                cut_bytes(file, ranges, opts)
+                                cut_bytes(file, &mut out, ranges, opts)
                             }
-                            Mode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
+                            Mode::Fields(ranges, opts) => cut_fields(file, &mut out, ranges, opts),
                         }
                     })
             );
         }
     }
+
+    show_if_err!(out.flush().map_err_context(|| "write error".into()));
 }
 
 // Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
