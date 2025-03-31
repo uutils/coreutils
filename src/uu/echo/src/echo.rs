@@ -41,7 +41,7 @@ struct EchoOptions {
 fn is_echo_flag(arg: &OsString, echo_options: &mut EchoOptions) -> bool {
     let bytes = arg.as_encoded_bytes();
     if bytes.first() == Some(&b'-') && arg != "-" {
-        // we initialize our local variables to the "current" options so we dont override
+        // we initialize our local variables to the "current" options so we don't override
         // previous found flags
         let mut escape = echo_options.escape;
         let mut trailing_newline = echo_options.trailing_newline;
@@ -84,7 +84,7 @@ fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
     // Process arguments until first non-flag is found
     for arg in &mut args_iter {
         // we parse flags and store options found in "echo_option". First is_echo_flag
-        // call to return false will break the loop and we will collect the remaining argumetns
+        // call to return false will break the loop and we will collect the remaining arguments
         if !is_echo_flag(&arg, &mut echo_options) {
             // First non-flag argument stops flag processing
             result.push(arg);
