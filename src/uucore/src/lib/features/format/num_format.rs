@@ -246,13 +246,7 @@ impl Formatter<&ExtendedBigDecimal> for Float {
          */
         let (abs, negative) = match e {
             ExtendedBigDecimal::BigDecimal(bd) => {
-                // Workaround printing bug in BigDecimal, force 0 to scale 0.
-                // TODO: Remove after https://github.com/akubera/bigdecimal-rs/issues/144 is fixed.
-                if bd.is_zero() {
-                    (ExtendedBigDecimal::zero(), false)
-                } else {
-                    (ExtendedBigDecimal::BigDecimal(bd.abs()), bd.is_negative())
-                }
+                (ExtendedBigDecimal::BigDecimal(bd.abs()), bd.is_negative())
             }
             ExtendedBigDecimal::MinusZero => (ExtendedBigDecimal::zero(), true),
             ExtendedBigDecimal::Infinity => (ExtendedBigDecimal::Infinity, false),
@@ -730,12 +724,8 @@ mod test {
     }
 
     #[test]
-    #[ignore = "Need https://github.com/akubera/bigdecimal-rs/issues/144 to be fixed"]
     fn decimal_float_zero() {
         use super::format_float_decimal;
-        // We've had issues with "0e10"/"0e-10" formatting.
-        // TODO: Enable after https://github.com/akubera/bigdecimal-rs/issues/144 is fixed,
-        // as our workaround is in .fmt.
         let f = |digits, scale| {
             format_float_decimal(&BigDecimal::from_bigint(digits, scale), 6, ForceDecimal::No)
         };
