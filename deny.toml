@@ -54,6 +54,8 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
+  # windows
+  { name = "windows-core", version = "0.52.0" },
   # various crates
   { name = "windows-sys", version = "0.48.0" },
   # mio, nu-ansi-term, socket2
