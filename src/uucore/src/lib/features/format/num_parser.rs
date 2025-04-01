@@ -5,12 +5,13 @@
 
 //! Utilities for parsing numbers in various formats
 
-// spell-checker:ignore powf copysign prec inity bigdecimal extendedbigdecimal biguint
+// spell-checker:ignore powf copysign prec inity infinit bigdecimal extendedbigdecimal biguint underflowed
 
 use bigdecimal::{
     BigDecimal,
     num_bigint::{BigInt, BigUint, Sign},
 };
+use num_traits::Signed;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 
@@ -59,21 +60,53 @@ pub enum ExtendedParserError<'a, T> {
     /// The beginning of the input made sense and has been parsed,
     /// while the remaining doesn't.
     PartialMatch(T, &'a str),
-    /// The integral part has overflowed the requested type, or
-    /// has overflowed the `u64` internal storage when parsing the
-    /// integral part of a floating point number.
-    Overflow,
+    /// The value has overflowed the type storage. The returned value
+    /// is saturated (e.g. positive or negative infinity, or min/max
+    /// value for the integer type).
+    Overflow(T),
+    // The value has underflowed the float storage (and is now 0.0 or -0.0).
+    // Does not apply to integer parsing.
+    Underflow(T),
 }
 
-impl<'a, T> ExtendedParserError<'a, T> {
+impl<'a, T> ExtendedParserError<'a, T>
+where
+    T: Zero,
+{
+    // Extract the value out of an error, if possible.
+    fn extract(self) -> T {
+        match self {
+            Self::NotNumeric => T::zero(),
+            Self::PartialMatch(v, _) => v,
+            Self::Overflow(v) => v,
+            Self::Underflow(v) => v,
+        }
+    }
+
+    // Map an error to another, using the provided conversion function.
+    // The error (self) takes precedence over errors happening during the
+    // conversion.
     fn map<U>(
         self,
-        f: impl FnOnce(T, &'a str) -> ExtendedParserError<'a, U>,
-    ) -> ExtendedParserError<'a, U> {
+        f: impl FnOnce(T) -> Result<U, ExtendedParserError<'a, U>>,
+    ) -> ExtendedParserError<'a, U>
+    where
+        U: Zero,
+    {
+        fn extract<U>(v: Result<U, ExtendedParserError<'_, U>>) -> U
+        where
+            U: Zero,
+        {
+            v.unwrap_or_else(|e| e.extract())
+        }
+
         match self {
-            Self::NotNumeric => ExtendedParserError::NotNumeric,
-            Self::Overflow => ExtendedParserError::Overflow,
-            Self::PartialMatch(v, s) => f(v, s),
+            ExtendedParserError::NotNumeric => ExtendedParserError::NotNumeric,
+            ExtendedParserError::PartialMatch(v, rest) => {
+                ExtendedParserError::PartialMatch(extract(f(v)), rest)
+            }
+            ExtendedParserError::Overflow(v) => ExtendedParserError::Overflow(extract(f(v))),
+            ExtendedParserError::Underflow(v) => ExtendedParserError::Underflow(extract(f(v))),
         }
     }
 }
@@ -92,28 +125,34 @@ pub trait ExtendedParser {
 impl ExtendedParser for i64 {
     /// Parse a number as i64. No fractional part is allowed.
     fn extended_parse(input: &str) -> Result<i64, ExtendedParserError<'_, i64>> {
-        fn into_i64(ebd: ExtendedBigDecimal) -> Option<i64> {
+        fn into_i64<'a>(ebd: ExtendedBigDecimal) -> Result<i64, ExtendedParserError<'a, i64>> {
             match ebd {
                 ExtendedBigDecimal::BigDecimal(bd) => {
                     let (digits, scale) = bd.into_bigint_and_scale();
                     if scale == 0 {
-                        i64::try_from(digits).ok()
+                        let negative = digits.sign() == Sign::Minus;
+                        match i64::try_from(digits) {
+                            Ok(i) => Ok(i),
+                            _ => Err(ExtendedParserError::Overflow(if negative {
+                                i64::MIN
+                            } else {
+                                i64::MAX
+                            })),
+                        }
                     } else {
-                        None
+                        // Should not happen.
+                        Err(ExtendedParserError::NotNumeric)
                     }
                 }
-                ExtendedBigDecimal::MinusZero => Some(0),
-                _ => None,
+                ExtendedBigDecimal::MinusZero => Ok(0),
+                // No other case should not happen.
+                _ => Err(ExtendedParserError::NotNumeric),
             }
         }
 
         match parse(input, true) {
-            Ok(v) => into_i64(v).ok_or(ExtendedParserError::Overflow),
-            Err(e) => Err(e.map(|v, rest| {
-                into_i64(v)
-                    .map(|v| ExtendedParserError::PartialMatch(v, rest))
-                    .unwrap_or(ExtendedParserError::Overflow)
-            })),
+            Ok(v) => into_i64(v),
+            Err(e) => Err(e.map(into_i64)),
         }
     }
 }
@@ -121,27 +160,35 @@ impl ExtendedParser for i64 {
 impl ExtendedParser for u64 {
     /// Parse a number as u64. No fractional part is allowed.
     fn extended_parse(input: &str) -> Result<u64, ExtendedParserError<'_, u64>> {
-        fn into_u64(ebd: ExtendedBigDecimal) -> Option<u64> {
+        fn into_u64<'a>(ebd: ExtendedBigDecimal) -> Result<u64, ExtendedParserError<'a, u64>> {
             match ebd {
                 ExtendedBigDecimal::BigDecimal(bd) => {
                     let (digits, scale) = bd.into_bigint_and_scale();
                     if scale == 0 {
-                        u64::try_from(digits).ok()
+                        let negative = digits.sign() == Sign::Minus;
+                        match u64::try_from(digits) {
+                            Ok(i) => Ok(i),
+                            _ => Err(ExtendedParserError::Overflow(if negative {
+                                // TODO: We should wrap around here #7488
+                                0
+                            } else {
+                                u64::MAX
+                            })),
+                        }
                     } else {
-                        None
+                        // Should not happen.
+                        Err(ExtendedParserError::NotNumeric)
                     }
                 }
-                _ => None,
+                // TODO: Handle -0 too #7488
+                // No other case should not happen.
+                _ => Err(ExtendedParserError::NotNumeric),
             }
         }
 
         match parse(input, true) {
-            Ok(v) => into_u64(v).ok_or(ExtendedParserError::Overflow),
-            Err(e) => Err(e.map(|v, rest| {
-                into_u64(v)
-                    .map(|v| ExtendedParserError::PartialMatch(v, rest))
-                    .unwrap_or(ExtendedParserError::Overflow)
-            })),
+            Ok(v) => into_u64(v),
+            Err(e) => Err(e.map(into_u64)),
         }
     }
 }
@@ -149,21 +196,31 @@ impl ExtendedParser for u64 {
 impl ExtendedParser for f64 {
     /// Parse a number as f64
     fn extended_parse(input: &str) -> Result<f64, ExtendedParserError<'_, f64>> {
-        // TODO: This is generic, so this should probably be implemented as an ExtendedBigDecimal trait (ToPrimitive).
-        fn into_f64(ebd: ExtendedBigDecimal) -> f64 {
-            match ebd {
-                ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
+        fn into_f64<'a>(ebd: ExtendedBigDecimal) -> Result<f64, ExtendedParserError<'a, f64>> {
+            // TODO: _Some_ of this is generic, so this should probably be implemented as an ExtendedBigDecimal trait (ToPrimitive).
+            let v = match ebd {
+                ExtendedBigDecimal::BigDecimal(bd) => {
+                    let f = bd.to_f64().unwrap();
+                    if f.is_infinite() {
+                        return Err(ExtendedParserError::Overflow(f));
+                    }
+                    if f.is_zero() && !bd.is_zero() {
+                        return Err(ExtendedParserError::Underflow(f));
+                    }
+                    f
+                }
                 ExtendedBigDecimal::MinusZero => -0.0,
                 ExtendedBigDecimal::Nan => f64::NAN,
                 ExtendedBigDecimal::MinusNan => -f64::NAN,
                 ExtendedBigDecimal::Infinity => f64::INFINITY,
                 ExtendedBigDecimal::MinusInfinity => -f64::INFINITY,
-            }
+            };
+            Ok(v)
         }
 
         match parse(input, false) {
-            Ok(v) => Ok(into_f64(v)),
-            Err(e) => Err(e.map(|v, rest| ExtendedParserError::PartialMatch(into_f64(v), rest))),
+            Ok(v) => into_f64(v),
+            Err(e) => Err(e.map(into_f64)),
         }
     }
 }
@@ -181,33 +238,113 @@ fn parse_special_value(
     input: &str,
     negative: bool,
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<'_, ExtendedBigDecimal>> {
-    let prefix = input
-        .chars()
-        .take(3)
-        .map(|c| c.to_ascii_lowercase())
-        .collect::<String>();
-    let special = match prefix.as_str() {
-        "inf" => {
+    let input_lc = input.to_ascii_lowercase();
+
+    // Array of ("String to match", return value when sign positive, when sign negative)
+    const MATCH_TABLE: &[(&str, ExtendedBigDecimal)] = &[
+        ("infinity", ExtendedBigDecimal::Infinity),
+        ("inf", ExtendedBigDecimal::Infinity),
+        ("nan", ExtendedBigDecimal::Nan),
+    ];
+
+    for (str, ebd) in MATCH_TABLE.iter() {
+        if input_lc.starts_with(str) {
+            let mut special = ebd.clone();
             if negative {
-                ExtendedBigDecimal::MinusInfinity
-            } else {
-                ExtendedBigDecimal::Infinity
+                special = -special;
             }
-        }
-        "nan" => {
-            if negative {
-                ExtendedBigDecimal::MinusNan
+            let match_len = str.len();
+            return if input.len() == match_len {
+                Ok(special)
             } else {
-                ExtendedBigDecimal::Nan
-            }
+                Err(ExtendedParserError::PartialMatch(
+                    special,
+                    &input[match_len..],
+                ))
+            };
         }
-        _ => return Err(ExtendedParserError::NotNumeric),
-    };
-    if input.len() == 3 {
-        Ok(special)
-    } else {
-        Err(ExtendedParserError::PartialMatch(special, &input[3..]))
     }
+
+    Err(ExtendedParserError::NotNumeric)
+}
+
+// Underflow/Overflow errors always contain 0 or infinity.
+// overflow: true for overflow, false for underflow.
+fn make_error<'a>(overflow: bool, negative: bool) -> ExtendedParserError<'a, ExtendedBigDecimal> {
+    let mut v = if overflow {
+        ExtendedBigDecimal::Infinity
+    } else {
+        ExtendedBigDecimal::zero()
+    };
+    if negative {
+        v = -v;
+    }
+    if overflow {
+        ExtendedParserError::Overflow(v)
+    } else {
+        ExtendedParserError::Underflow(v)
+    }
+}
+
+// Construct an ExtendedBigDecimal based on parsed data
+fn construct_extended_big_decimal<'a>(
+    digits: BigUint,
+    negative: bool,
+    base: Base,
+    scale: u64,
+    exponent: BigInt,
+) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
+    if digits == BigUint::zero() && negative {
+        return Ok(ExtendedBigDecimal::MinusZero);
+    }
+
+    let sign = if negative { Sign::Minus } else { Sign::Plus };
+    let signed_digits = BigInt::from_biguint(sign, digits);
+    let bd = if scale == 0 && exponent.is_zero() {
+        BigDecimal::from_bigint(signed_digits, 0)
+    } else if base == Base::Decimal {
+        let new_scale = BigInt::from(scale) - exponent;
+
+        // BigDecimal "only" supports i64 scale.
+        // Note that new_scale is a negative exponent: large value causes an underflow, small value an overflow.
+        if new_scale > i64::MAX.into() {
+            return Err(make_error(false, negative));
+        } else if new_scale < i64::MIN.into() {
+            return Err(make_error(true, negative));
+        }
+        BigDecimal::from_bigint(signed_digits, new_scale.to_i64().unwrap())
+    } else if base == Base::Hexadecimal {
+        // pow "only" supports u32 values, just error out if given more than 2**32 fractional digits.
+        if scale > u32::MAX.into() {
+            return Err(ExtendedParserError::NotNumeric);
+        }
+
+        // Base is 16, init at scale 0 then divide by base**scale.
+        let bd = BigDecimal::from_bigint(signed_digits, 0)
+            / BigDecimal::from_bigint(BigInt::from(16).pow(scale as u32), 0);
+
+        let abs_exponent = exponent.abs();
+        // Again, pow "only" supports u32 values. Just overflow/underflow if the value provided
+        // is > 2**32 or < 2**-32.
+        if abs_exponent > u32::MAX.into() {
+            return Err(make_error(exponent.is_positive(), negative));
+        }
+
+        // Confusingly, exponent is in base 2 for hex floating point numbers.
+        // Note: We cannot overflow/underflow BigDecimal here, as we will not be able to reach the
+        // maximum/minimum scale (i64 range).
+        let pow2 = BigDecimal::from_bigint(BigInt::from(2).pow(abs_exponent.to_u32().unwrap()), 0);
+
+        if !exponent.is_negative() {
+            bd * pow2
+        } else {
+            bd / pow2
+        }
+    } else {
+        // scale != 0, which means that integral_only is not set, so only base 10 and 16 are allowed.
+        unreachable!();
+    };
+    Ok(ExtendedBigDecimal::BigDecimal(bd))
 }
 
 // TODO: As highlighted by clippy, this function _is_ high cognitive complexity, jumps
@@ -269,7 +406,7 @@ fn parse(
     let mut chars = rest.chars().enumerate().fuse().peekable();
     let mut digits = BigUint::zero();
     let mut scale = 0u64;
-    let mut exponent = 0i64;
+    let mut exponent = BigInt::zero();
     while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
         chars.next();
         digits = digits * base as u8 + d;
@@ -294,7 +431,10 @@ fn parse(
         };
 
         // Parse the exponent part, only decimal numbers are allowed.
-        if chars.peek().is_some_and(|&(_, c)| c == exp_char) {
+        if chars
+            .peek()
+            .is_some_and(|&(_, c)| c.to_ascii_lowercase() == exp_char)
+        {
             chars.next();
             let exp_negative = match chars.peek() {
                 Some((_, '-')) => {
@@ -326,42 +466,17 @@ fn parse(
         }
     }
 
-    // TODO: Might be nice to implement a ExtendedBigDecimal copysign or negation function to move away some of this logic...
-    let ebd = if digits == BigUint::zero() && negative {
-        ExtendedBigDecimal::MinusZero
-    } else {
-        let sign = if negative { Sign::Minus } else { Sign::Plus };
-        let signed_digits = BigInt::from_biguint(sign, digits);
-        let bd = if scale == 0 && exponent == 0 {
-            BigDecimal::from_bigint(signed_digits, 0)
-        } else if base == Base::Decimal {
-            BigDecimal::from_bigint(signed_digits, scale as i64 - exponent)
-        } else if base == Base::Hexadecimal {
-            // Base is 16, init at scale 0 then divide by base**scale.
-            let bd = BigDecimal::from_bigint(signed_digits, 0)
-                / BigDecimal::from_bigint(BigInt::from(16).pow(scale as u32), 0);
-            // Confusingly, exponent is in base 2 for hex floating point numbers.
-            if exponent >= 0 {
-                bd * 2u64.pow(exponent as u32)
-            } else {
-                bd / 2u64.pow(-exponent as u32)
-            }
-        } else {
-            // scale != 0, which means that integral_only is not set, so only base 10 and 16 are allowed.
-            unreachable!();
-        };
-        ExtendedBigDecimal::BigDecimal(bd)
-    };
+    let ebd_result = construct_extended_big_decimal(digits, negative, base, scale, exponent);
 
     // Return what has been parsed so far. It there are extra characters, mark the
     // parsing as a partial match.
     if let Some((first_unparsed, _)) = chars.next() {
         Err(ExtendedParserError::PartialMatch(
-            ebd,
+            ebd_result.unwrap_or_else(|e| e.extract()),
             &rest[first_unparsed..],
         ))
     } else {
-        Ok(ebd)
+        ebd_result
     }
 }
 
@@ -379,9 +494,10 @@ mod tests {
     fn test_decimal_u64() {
         assert_eq!(Ok(123), u64::extended_parse("123"));
         assert_eq!(Ok(u64::MAX), u64::extended_parse(&format!("{}", u64::MAX)));
+        // TODO: We should wrap around here #7488
         assert!(matches!(
             u64::extended_parse("-123"),
-            Err(ExtendedParserError::Overflow)
+            Err(ExtendedParserError::Overflow(0))
         ));
         assert!(matches!(
             u64::extended_parse(""),
@@ -410,15 +526,23 @@ mod tests {
         assert_eq!(Ok(i64::MIN), i64::extended_parse(&format!("{}", i64::MIN)));
         assert!(matches!(
             i64::extended_parse(&format!("{}", u64::MAX)),
-            Err(ExtendedParserError::Overflow)
+            Err(ExtendedParserError::Overflow(i64::MAX))
         ));
         assert!(matches!(
             i64::extended_parse(&format!("{}", i64::MAX as u64 + 1)),
-            Err(ExtendedParserError::Overflow)
+            Err(ExtendedParserError::Overflow(i64::MAX))
         ));
         assert!(matches!(
             i64::extended_parse("-123e10"),
             Err(ExtendedParserError::PartialMatch(-123, "e10"))
+        ));
+        assert!(matches!(
+            i64::extended_parse(&format!("{}", -(u64::MAX as i128))),
+            Err(ExtendedParserError::Overflow(i64::MIN))
+        ));
+        assert!(matches!(
+            i64::extended_parse(&format!("{}", i64::MIN as i128 - 1)),
+            Err(ExtendedParserError::Overflow(i64::MIN))
         ));
     }
 
@@ -448,8 +572,8 @@ mod tests {
         assert_eq!(Ok(-123.15), f64::extended_parse("-0123.15"));
         assert_eq!(Ok(12315000.0), f64::extended_parse("123.15e5"));
         assert_eq!(Ok(-12315000.0), f64::extended_parse("-123.15e5"));
-        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15e+5"));
-        assert_eq!(Ok(0.0012315), f64::extended_parse("123.15e-5"));
+        assert_eq!(Ok(12315000.0), f64::extended_parse("123.15E+5"));
+        assert_eq!(Ok(0.0012315), f64::extended_parse("123.15E-5"));
         assert_eq!(
             Ok(0.15),
             f64::extended_parse(".150000000000000000000000000231313")
@@ -467,6 +591,9 @@ mod tests {
         assert_eq!(Ok(f64::INFINITY), f64::extended_parse("Inf"));
         assert_eq!(Ok(f64::INFINITY), f64::extended_parse("InF"));
         assert_eq!(Ok(f64::INFINITY), f64::extended_parse("INF"));
+        assert_eq!(Ok(f64::INFINITY), f64::extended_parse("infinity"));
+        assert_eq!(Ok(f64::INFINITY), f64::extended_parse("+infiNIty"));
+        assert_eq!(Ok(f64::NEG_INFINITY), f64::extended_parse("-INfinity"));
         assert!(f64::extended_parse("NaN").unwrap().is_nan());
         assert!(f64::extended_parse("NaN").unwrap().is_sign_positive());
         assert!(f64::extended_parse("+NaN").unwrap().is_nan());
@@ -477,10 +604,29 @@ mod tests {
         assert!(f64::extended_parse("nan").unwrap().is_sign_positive());
         assert!(f64::extended_parse("NAN").unwrap().is_nan());
         assert!(f64::extended_parse("NAN").unwrap().is_sign_positive());
-        assert!(matches!(f64::extended_parse("-infinity"),
-                         Err(ExtendedParserError::PartialMatch(f, "inity")) if f == f64::NEG_INFINITY));
+        assert!(matches!(f64::extended_parse("-infinit"),
+                         Err(ExtendedParserError::PartialMatch(f, "init")) if f == f64::NEG_INFINITY));
+        assert!(matches!(f64::extended_parse("-infinity00"),
+                         Err(ExtendedParserError::PartialMatch(f, "00")) if f == f64::NEG_INFINITY));
         assert!(f64::extended_parse(&format!("{}", u64::MAX)).is_ok());
         assert!(f64::extended_parse(&format!("{}", i64::MIN)).is_ok());
+
+        // f64 overflow/underflow
+        assert!(matches!(
+            f64::extended_parse("1.0e9000"),
+            Err(ExtendedParserError::Overflow(f64::INFINITY))
+        ));
+        assert!(matches!(
+            f64::extended_parse("-10.0e9000"),
+            Err(ExtendedParserError::Overflow(f64::NEG_INFINITY))
+        ));
+        assert!(matches!(
+            f64::extended_parse("1.0e-9000"),
+            Err(ExtendedParserError::Underflow(0.0))
+        ));
+        assert!(matches!(
+            f64::extended_parse("-1.0e-9000"),
+            Err(ExtendedParserError::Underflow(f)) if f == 0.0 && f.is_sign_negative()));
     }
 
     #[test]
@@ -511,7 +657,7 @@ mod tests {
                 12315.into(),
                 102
             ))),
-            ExtendedBigDecimal::extended_parse("123.15e-100")
+            ExtendedBigDecimal::extended_parse("123.15E-100")
         );
         // Very high precision that would not fit in a f64.
         assert_eq!(
@@ -544,6 +690,28 @@ mod tests {
             ExtendedBigDecimal::extended_parse("-0.0"),
             Ok(ExtendedBigDecimal::MinusZero)
         ));
+
+        // ExtendedBigDecimal overflow/underflow
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("1e{}", i64::MAX as u64 + 2)),
+            Err(ExtendedParserError::Overflow(ExtendedBigDecimal::Infinity))
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("-0.1e{}", i64::MAX as u64 + 3)),
+            Err(ExtendedParserError::Overflow(
+                ExtendedBigDecimal::MinusInfinity
+            ))
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("1e{}", i64::MIN)),
+            Err(ExtendedParserError::Underflow(ebd)) if ebd == ExtendedBigDecimal::zero()
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("-0.01e{}", i64::MIN + 2)),
+            Err(ExtendedParserError::Underflow(
+                ExtendedBigDecimal::MinusZero
+            ))
+        ));
     }
 
     #[test]
@@ -558,7 +726,7 @@ mod tests {
         assert_eq!(Ok(0.0625), f64::extended_parse("0x.1"));
         assert_eq!(Ok(15.007_812_5), f64::extended_parse("0xf.02"));
         assert_eq!(Ok(16.0), f64::extended_parse("0x0.8p5"));
-        assert_eq!(Ok(0.0625), f64::extended_parse("0x1p-4"));
+        assert_eq!(Ok(0.0625), f64::extended_parse("0x1P-4"));
 
         // We cannot really check that 'e' is not a valid exponent indicator for hex floats...
         // but we can check that the number still gets parsed properly: 0x0.8e5 is 0x8e5 / 16**3
@@ -578,6 +746,28 @@ mod tests {
             )),
             ExtendedBigDecimal::extended_parse("0xf.fffffffffffffffffffff")
         );
+
+        // ExtendedBigDecimal overflow/underflow
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", u32::MAX as u64 + 1)),
+            Err(ExtendedParserError::Overflow(ExtendedBigDecimal::Infinity))
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("-0x100P{}", u32::MAX as u64 + 1)),
+            Err(ExtendedParserError::Overflow(
+                ExtendedBigDecimal::MinusInfinity
+            ))
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("0x1p-{}", u32::MAX as u64 + 1)),
+            Err(ExtendedParserError::Underflow(ebd)) if ebd == ExtendedBigDecimal::zero()
+        ));
+        assert!(matches!(
+            ExtendedBigDecimal::extended_parse(&format!("-0x0.100p-{}", u32::MAX as u64 + 1)),
+            Err(ExtendedParserError::Underflow(
+                ExtendedBigDecimal::MinusZero
+            ))
+        ));
     }
 
     #[test]
