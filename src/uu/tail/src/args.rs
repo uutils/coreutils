@@ -11,7 +11,6 @@ use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 use std::ffi::OsString;
-use std::fs;
 use std::io::{self, IsTerminal};
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -19,8 +18,15 @@ use uucore::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_usage, show_warning};
 
+#[cfg(unix)]
+use std::os::unix::io::{AsRawFd, RawFd};
+#[cfg(unix)]
+use libc;
+
 #[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
+use std::os::windows::io::{AsRawHandle, RawHandle};
+#[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem;
 
 const ABOUT: &str = help_about!("tail.md");
 const USAGE: &str = help_usage!("tail.md");
@@ -312,15 +318,26 @@ impl Settings {
 
         #[cfg(unix)]
         {
-            if let Ok(metadata) = fs::metadata("/proc/self/fd/0") {
-                return metadata.is_file();
+            let stdin_fd: RawFd = io::stdin().as_raw_fd();
+            // SAFETY: We're calling fstat on a valid file descriptor obtained from stdin
+            // and writing the result to a zeroed stat struct of the appropriate size.
+            unsafe {
+                let mut stat: libc::stat = std::mem::zeroed();
+                if libc::fstat(stdin_fd, &mut stat) == 0 {
+                    return (stat.st_mode & libc::S_IFMT) == libc::S_IFREG;
+                }
             }
         }
 
         #[cfg(windows)]
         {
-            if let Ok(metadata) = fs::metadata("CONIN$") {
-                return metadata.file_type() & 0x8000 != 0;
+            let stdin_handle: RawHandle = io::stdin().as_raw_handle();
+            // SAFETY: We're calling GetFileType with a valid handle obtained from stdin.
+            // The function doesn't modify memory, just returns a type value.
+            unsafe {
+                let file_type =
+                    windows_sys::Win32::Storage::FileSystem::GetFileType(stdin_handle as _);
+                return file_type == windows_sys::Win32::Storage::FileSystem::FILE_TYPE_DISK;
             }
         }
 
