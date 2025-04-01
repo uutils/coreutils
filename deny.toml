@@ -56,7 +56,7 @@ highlight = "all"
 skip = [
   # windows
   { name = "windows-core", version = "0.52.0" },
-  # various crates
+  # dns-lookup
   { name = "windows-sys", version = "0.48.0" },
   # mio, nu-ansi-term, socket2
   { name = "windows-sys", version = "0.52.0" },
@@ -78,7 +78,7 @@ skip = [
   { name = "windows_x86_64_msvc", version = "0.48.0" },
   # kqueue-sys, onig
   { name = "bitflags", version = "1.3.2" },
-  # ansi-width, console, os_display
+  # ansi-width
   { name = "unicode-width", version = "0.1.13" },
   # filedescriptor, utmp-classic
   { name = "thiserror", version = "1.0.69" },
