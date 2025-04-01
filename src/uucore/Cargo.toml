@@ -89,7 +89,7 @@ default = []
 # * non-default features
 backup-control = []
 colors = []
-checksum = ["data-encoding", "thiserror", "regex", "sum"]
+checksum = ["data-encoding", "thiserror", "sum"]
 encoding = ["data-encoding", "data-encoding-macro", "z85"]
 entries = ["libc"]
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
