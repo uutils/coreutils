@@ -141,6 +141,12 @@ impl Zero for ExtendedBigDecimal {
     }
 }
 
+impl Default for ExtendedBigDecimal {
+    fn default() -> Self {
+        Self::zero()
+    }
+}
+
 impl Add for ExtendedBigDecimal {
     type Output = Self;
 
