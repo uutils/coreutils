@@ -6,6 +6,7 @@
 // spell-checker:ignore bincode serde utmp runlevel testusr testx
 #![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
+#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
