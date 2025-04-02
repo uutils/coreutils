@@ -301,6 +301,7 @@ hostname = "0.4"
 iana-time-zone = "0.1.57"
 indicatif = "0.17.8"
 itertools = "0.14.0"
+itoa = "1.0.15"
 libc = "0.2.153"
 linux-raw-sys = "0.9"
 lscolors = { version = "0.20.0", default-features = false, features = [
@@ -322,6 +323,7 @@ phf_codegen = "0.11.2"
 platform-info = "2.0.3"
 quick-error = "2.0.1"
 rand = { version = "0.9.0", features = ["small_rng"] }
+rand_chacha = { version = "0.9.0" }
 rand_core = "0.9.0"
 rayon = "1.10"
 regex = "1.10.4"
