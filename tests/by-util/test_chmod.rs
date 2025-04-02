@@ -1041,26 +1041,30 @@ fn test_chmod_traverse_argument_symlink_combo() {
         (
             vec!["-R"], // Should default to -H
             0o100_764,
+            0o40_764,
             get_expected_symlink_permissions(),
         ),
         (
             vec!["-R", "-H"],
             0o100_764,
+            0o40_764,
             get_expected_symlink_permissions(),
         ),
         (
             vec!["-R", "-L"],
             0o100_764,
+            0o40_764,
             get_expected_symlink_permissions(),
         ),
         (
             vec!["-R", "-P"],
             0o100_664,
+            0o40_664,
             get_expected_symlink_permissions(),
         ),
     ];
 
-    for (flags, expected_target_perms, expected_symlink_perms) in scenarios {
+    for (flags, expected_target_perms, expected_dir_perms, expected_symlink_perms) in scenarios {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
 
@@ -1074,6 +1078,7 @@ fn test_chmod_traverse_argument_symlink_combo() {
         at.symlink_file(directory, symlink);
 
         set_permissions(at.plus(&target_path), Permissions::from_mode(0o664)).unwrap();
+        set_permissions(at.plus(&directory), Permissions::from_mode(0o664)).unwrap();
 
         let mut ucmd = scene.ucmd();
         for f in &flags {
@@ -1083,7 +1088,15 @@ fn test_chmod_traverse_argument_symlink_combo() {
             .umask(0o022)
             .arg(symlink)
             .succeeds()
+            .no_stderr()
             .no_stderr();
+
+        let actual_folder = at.metadata(&directory).permissions().mode();
+        assert_eq!(
+            actual_folder, expected_dir_perms,
+            "For flags {:?}, expected directory perms = {:o}, got = {:o}",
+            flags, expected_dir_perms, actual_folder
+        );
 
         let actual_target = at.metadata(&target_path).permissions().mode();
         assert_eq!(
