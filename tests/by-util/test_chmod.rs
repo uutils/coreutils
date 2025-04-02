@@ -940,6 +940,11 @@ fn test_chmod_dangling_symlink_recursive_combos() {
 fn test_chmod_traverse_symlink_combo() {
     let scenarios = [
         (
+            vec!["-R"], // Should default to "-H"
+            0o100_664,
+            get_expected_symlink_permissions(),
+        ),
+        (
             vec!["-R", "-H"],
             0o100_664,
             get_expected_symlink_permissions(),
@@ -1002,6 +1007,11 @@ fn test_chmod_traverse_symlink_combo() {
 #[test]
 fn test_chmod_traverse_argument_symlink_combo() {
     let scenarios = [
+        (
+            vec!["-R"], // Should default to -H
+            0o100_764,
+            get_expected_symlink_permissions(),
+        ),
         (
             vec!["-R", "-H"],
             0o100_764,
