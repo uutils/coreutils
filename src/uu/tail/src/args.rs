@@ -11,22 +11,12 @@ use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 use std::ffi::OsString;
-use std::io::{self, IsTerminal};
+use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_usage, show_warning};
-
-#[cfg(unix)]
-use std::os::unix::io::{AsRawFd, RawFd};
-#[cfg(unix)]
-use libc;
-
-#[cfg(windows)]
-use std::os::windows::io::{AsRawHandle, RawHandle};
-#[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem;
 
 const ABOUT: &str = help_about!("tail.md");
 const USAGE: &str = help_usage!("tail.md");
@@ -310,38 +300,36 @@ impl Settings {
     pub fn has_only_stdin(&self) -> bool {
         self.inputs.iter().all(|input| input.is_stdin())
     }
+
     // TODO: Consider calling fstat on stdin fd instead (#7583)
     pub fn stdin_is_regular_file(&self) -> bool {
-        if io::stdin().is_terminal() {
-            return false;
-        }
-
         #[cfg(unix)]
         {
-            let stdin_fd: RawFd = io::stdin().as_raw_fd();
-            // SAFETY: We're calling fstat on a valid file descriptor obtained from stdin
-            // and writing the result to a zeroed stat struct of the appropriate size.
-            unsafe {
-                let mut stat: libc::stat = std::mem::zeroed();
-                if libc::fstat(stdin_fd, &mut stat) == 0 {
-                    return (stat.st_mode & libc::S_IFMT) == libc::S_IFREG;
-                }
-            }
+            use std::os::unix::io::{AsRawFd, FromRawFd};
+            let stdin_fd = std::io::stdin().as_raw_fd();
+            let file = unsafe { std::fs::File::from_raw_fd(stdin_fd) };
+            let metadata = file.metadata();
+            std::mem::forget(file);
+            metadata.map(|m| m.is_file()).unwrap_or(false)
         }
 
         #[cfg(windows)]
         {
-            let stdin_handle: RawHandle = io::stdin().as_raw_handle();
-            // SAFETY: We're calling GetFileType with a valid handle obtained from stdin.
-            // The function doesn't modify memory, just returns a type value.
-            unsafe {
-                let file_type =
-                    windows_sys::Win32::Storage::FileSystem::GetFileType(stdin_handle as _);
-                return file_type == windows_sys::Win32::Storage::FileSystem::FILE_TYPE_DISK;
-            }
-        }
+            use std::os::windows::fs::MetadataExt;
+            use std::os::windows::io::{AsRawHandle, FromRawHandle};
+            let stdin_handle = std::io::stdin().as_raw_handle();
+            let file = unsafe { std::fs::File::from_raw_handle(stdin_handle) };
+            let metadata = file.metadata();
+            std::mem::forget(file);
 
-        false
+            metadata
+                .map(|m| {
+                    let file_type = m.file_type();
+                    // FILE_ATTRIBUTE_DEVICE is 0x40
+                    (m.file_attributes() & 0x40) == 0 && !file_type.is_symlink()
+                })
+                .unwrap_or(false)
+        }
     }
 
     pub fn has_stdin(&self) -> bool {

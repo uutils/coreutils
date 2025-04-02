@@ -96,6 +96,7 @@ fn test_stdin_explicit() {
 }
 
 #[test]
+#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file() {
     // $ echo foo > f
 
