@@ -2672,6 +2672,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "tempfile",
+ "thiserror 2.0.12",
  "unicode-width 0.2.0",
  "uucore",
 ]

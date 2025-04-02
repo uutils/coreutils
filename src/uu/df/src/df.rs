@@ -19,10 +19,10 @@ use uucore::{format_usage, help_about, help_section, help_usage, show};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
-use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
 use std::path::Path;
+use thiserror::Error;
 
 use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
@@ -426,25 +426,16 @@ where
     Ok(result)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum DfError {
     /// A problem while parsing command-line options.
+    #[error("{}", .0)]
     OptionsError(OptionsError),
 }
-
-impl Error for DfError {}
 
 impl UError for DfError {
     fn usage(&self) -> bool {
         matches!(self, Self::OptionsError(OptionsError::ColumnError(_)))
-    }
-}
-
-impl fmt::Display for DfError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::OptionsError(e) => e.fmt(f),
-        }
     }
 }
 
