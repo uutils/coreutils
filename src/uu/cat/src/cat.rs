@@ -644,7 +644,7 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
             }
             None => {
                 writer.write_all(in_buf).unwrap();
-                return in_buf.len();
+                return in_buf.len() + count;
             }
         };
     }
@@ -687,6 +687,20 @@ fn write_end_of_line<W: Write>(
 #[cfg(test)]
 mod tests {
     use std::io::{BufWriter, stdout};
+
+    #[test]
+    fn test_write_tab_to_end_with_newline() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = b"a\tb\tc\n";
+        assert_eq!(super::write_tab_to_end(in_buf, &mut writer), 5);
+    }
+
+    #[test]
+    fn test_write_tab_to_end_no_newline() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = b"a\tb\tc";
+        assert_eq!(super::write_tab_to_end(in_buf, &mut writer), 5);
+    }
 
     #[test]
     fn test_write_nonprint_to_end_new_line() {
