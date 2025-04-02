@@ -7,7 +7,9 @@
 
 // spell-checker:ignore (vars) fperm srwx
 
-use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t, umask};
+#[cfg(not(target_os = "wasi"))]
+use libc::umask;
+use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
 
 pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
     let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
@@ -164,22 +166,30 @@ pub fn get_umask() -> u32 {
     // from /proc/self/status. But that's a lot of work.
     // SAFETY: umask always succeeds and doesn't operate on memory. Races are
     // possible but it can't violate Rust's guarantees.
+    #[cfg(not(target_os = "wasi"))]
     let mask = unsafe { umask(0) };
-    unsafe { umask(mask) };
+    #[cfg(not(target_os = "wasi"))]
+    unsafe {
+        umask(mask)
+    };
     #[cfg(all(
         not(target_os = "freebsd"),
         not(target_vendor = "apple"),
         not(target_os = "android"),
-        not(target_os = "redox")
+        not(target_os = "redox"),
+        not(target_os = "wasi")
     ))]
     return mask;
     #[cfg(any(
         target_os = "freebsd",
         target_vendor = "apple",
         target_os = "android",
-        target_os = "redox"
+        target_os = "redox",
     ))]
     return mask as u32;
+
+    #[cfg(target_os = "wasi")]
+    0
 }
 
 // Iterate 'args' and delete the first occurrence

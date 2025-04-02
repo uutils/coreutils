@@ -18,11 +18,12 @@
 use std::os::fd::{AsFd, OwnedFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsHandle, OwnedHandle};
+#[cfg(not(target_os = "wasi"))]
+use std::process::Stdio;
 use std::{
     fs::{File, OpenOptions},
     io,
     path::Path,
-    process::Stdio,
 };
 
 #[cfg(windows)]
@@ -73,6 +74,7 @@ impl OwnedFileDescriptorOrHandle {
     }
 
     /// instantiates a corresponding `Stdio`
+    #[cfg(not(target_os = "wasi"))]
     pub fn into_stdio(self) -> Stdio {
         Stdio::from(self.fx)
     }
@@ -91,6 +93,7 @@ impl OwnedFileDescriptorOrHandle {
 }
 
 /// instantiates a corresponding `Stdio`
+#[cfg(not(target_os = "wasi"))]
 impl From<OwnedFileDescriptorOrHandle> for Stdio {
     fn from(value: OwnedFileDescriptorOrHandle) -> Self {
         value.into_stdio()
