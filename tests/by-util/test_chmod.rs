@@ -878,6 +878,37 @@ fn test_chmod_symlink_target_no_dereference() {
 }
 
 #[test]
+fn test_chmod_symlink_recursive_final_traversal_flag() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dangling_target = "nonexistent_file";
+    let symlink = "symlink";
+
+    at.symlink_file(dangling_target, symlink);
+
+    scene
+        .ucmd()
+        .arg("755")
+        .arg("-R")
+        .arg("-H")
+        .arg("-L")
+        .arg("-H")
+        .arg("-L")
+        .arg("-P")
+        .arg(symlink)
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        at.symlink_metadata(symlink).permissions().mode(),
+        get_expected_symlink_permissions(),
+        "Expected symlink permissions: {:o}, but got: {:o}",
+        get_expected_symlink_permissions(),
+        at.symlink_metadata(symlink).permissions().mode()
+    );
+}
+
+#[test]
 fn test_chmod_symlink_to_dangling_recursive_no_traverse() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
