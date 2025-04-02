@@ -16,7 +16,7 @@ base = "../gnu/tests/"
 result_json = "result.json"
 try:
     urllib.request.urlretrieve(
-        "https://raw.githubusercontent.com/uutils/coreutils-tracking/main/gnu-full-result.json",
+        "https://raw.githubusercontent.com/uutils/coreutils-tracking/main/aggregated-result.json",
         result_json,
     )
 except Exception as e:
