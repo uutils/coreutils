@@ -259,11 +259,11 @@ impl Chmoder {
                         // Don't try to change the mode of the symlink itself
                         continue;
                     }
-                    if self.recursive {
-                        // With recursive, we should ignore dangling symlinks
+                    if self.recursive && self.traverse_symlinks == TraverseSymlinks::None {
                         continue;
                     }
-                    if !self.recursive && !self.quiet {
+
+                    if !self.quiet {
                         show!(USimpleError::new(
                             1,
                             format!("cannot operate on dangling symlink {}", filename.quote()),
