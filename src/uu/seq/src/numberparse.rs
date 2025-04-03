@@ -27,12 +27,9 @@ pub enum ParseNumberError {
 // need to be too careful.
 fn compute_num_digits(input: &str, ebd: ExtendedBigDecimal) -> PreciseNumber {
     let input = input.to_lowercase();
-    let mut input = input.trim_start();
 
     // Leading + is ignored for this.
-    if let Some(trimmed) = input.strip_prefix('+') {
-        input = trimmed;
-    }
+    let input = input.trim_start().strip_prefix('+').unwrap_or(&input);
 
     // Integral digits for any hex number is ill-defined (0 is fine as an output)
     // Fractional digits for an floating hex number is ill-defined, return None
