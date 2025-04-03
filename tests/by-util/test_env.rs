@@ -525,14 +525,20 @@ fn test_gnu_e20() {
     let scene = TestScenario::new(util_name!());
 
     let env_bin = String::from(uutests::util::get_tests_binary()) + " " + util_name!();
+    let input = [
+        String::from("-i"),
+        String::from(r#"-SA="B\_C=D" "#) + env_bin.escape_default().to_string().as_str() + "",
+    ];
 
-    let (input, output) = (
-        [
-            String::from("-i"),
-            String::from(r#"-SA="B\_C=D" "#) + env_bin.escape_default().to_string().as_str() + "",
-        ],
-        "A=B C=D\n",
-    );
+    let mut output = "A=B C=D\n".to_string();
+
+    // Workaround for the test to pass when coverage is being run.
+    // If enabled, the binary called by env_bin will most probably be
+    // instrumented for coverage, and thus will set the
+    // __LLVM_PROFILE_RT_INIT_ONCE
+    if env::var("__LLVM_PROFILE_RT_INIT_ONCE").is_ok() {
+        output.push_str("__LLVM_PROFILE_RT_INIT_ONCE=__LLVM_PROFILE_RT_INIT_ONCE\n");
+    }
 
     let out = scene.ucmd().args(&input).succeeds();
     assert_eq!(out.stdout_str(), output);
