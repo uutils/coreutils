@@ -5637,7 +5637,7 @@ mod link_deref {
                 let mut args = vec!["--link", "-P", src, DST];
                 if r {
                     args.push("-R");
-                };
+                }
                 scene.ucmd().args(&args).succeeds().no_stderr();
                 at.is_symlink(DST);
                 let src_ino = at.symlink_metadata(src).ino();
@@ -5658,7 +5658,7 @@ mod link_deref {
                 let mut args = vec!["--link", DANG_LINK, DST];
                 if r {
                     args.push("-R");
-                };
+                }
                 if !option.is_empty() {
                     args.push(option);
                 }

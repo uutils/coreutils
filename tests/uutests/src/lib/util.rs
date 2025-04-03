@@ -1374,9 +1374,9 @@ pub struct TerminalSimulation {
 
 /// A `UCommand` is a builder wrapping an individual Command that provides several additional features:
 /// 1. it has convenience functions that are more ergonomic to use for piping in stdin, spawning the command
-///       and asserting on the results.
+///    and asserting on the results.
 /// 2. it tracks arguments provided so that in test cases which may provide variations of an arg in loops
-///     the test failure can display the exact call which preceded an assertion failure.
+///    the test failure can display the exact call which preceded an assertion failure.
 /// 3. it provides convenience construction methods to set the Command uutils utility and temporary directory.
 ///
 /// Per default `UCommand` runs a command given as an argument in a shell, platform independently.
