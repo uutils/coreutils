@@ -415,6 +415,15 @@ fn test_stdin_nonprinting_and_tabs_repeated() {
 }
 
 #[test]
+fn test_stdin_tabs_no_newline() {
+    new_ucmd!()
+        .args(&["-T"])
+        .pipe_in("\ta")
+        .succeeds()
+        .stdout_only("^Ia");
+}
+
+#[test]
 fn test_stdin_squeeze_blank() {
     for same_param in ["-s", "--squeeze-blank", "--squeeze"] {
         new_ucmd!()
