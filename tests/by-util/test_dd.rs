@@ -7,7 +7,7 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "feat_selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
 #[cfg(all(not(windows), feature = "printf"))]
 use uutests::util::{UCommand, get_tests_binary};
