@@ -88,7 +88,8 @@ with the default implementation, at the expense of some added code complexity.
 
 Just from performance numbers, it is clear that GNU `seq` uses similar
 tricks, but we are more liberal on when we use our fast path (e.g. large
-increments are supported). Our fast path implementation gets within ~10%
-of `seq` performance.
+increments are supported, equal width is supported). Our fast path
+implementation gets within ~10% of `seq` performance when its fast
+path is activated.
 
 [0]: https://github.com/sharkdp/hyperfine
