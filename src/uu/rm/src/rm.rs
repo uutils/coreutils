@@ -431,6 +431,17 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
         }
     }
 
+    if let Err(additional_reason) = check_one_fs(path, options) {
+        if !additional_reason.is_empty() {
+            show_error!("{}", additional_reason);
+        }
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+        return true;
+    }
+
     // Base case 1: this is a file or a symbolic link.
     //
     // The symbolic link case is important because it could be a link to
@@ -525,10 +536,16 @@ fn mount_for_path<'a>(path: &Path, mounts: &'a [MountInfo]) -> Option<&'a MountI
     best.map(|(mi, _len)| mi)
 }
 
-/// Validates that a path is on the same file system as its parent.
+/// Check if a path is on the same file system when `--one-file-system` or `--preserve-root=all` options are enabled.
 /// Return `OK(())` if the path is on the same file system,
 /// or an additional error describing why it should be skipped.
-fn validate_single_filesystem(path: &Path) -> Result<(), String> {
+fn check_one_fs(path: &Path, options: &Options) -> Result<(), String> {
+    // If neither `--one-file-system` nor `--preserve-root=all` is active,
+    // always proceed
+    if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
+        return Ok(());
+    }
+
     // Read mount information
     let fs_list = read_fs_list().map_err(|err| format!("cannot read mount info: {err}"))?;
 
@@ -553,42 +570,20 @@ fn validate_single_filesystem(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Check if a path is on the same file system when `--one-file-system` or `--preserve-root=all` options are enabled.
-/// Return `true` if the path can be processed, `false` if it should be skipped.
-fn check_one_fs(path: &Path, options: &Options) -> bool {
-    // If neither `--one-file-system` nor `--preserve-root=all` is active,
-    // always proceed
-    if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
-        return true;
-    }
-
-    let result = validate_single_filesystem(path);
-    if result.is_ok() {
-        return true;
-    }
-
-    if let Err(additional_reason) = result {
-        if !additional_reason.is_empty() {
-            show_error!("{}", additional_reason);
-        }
-    }
-
-    show_error!(
-        "skipping {}, since it's on a different device",
-        path.quote()
-    );
-
-    if options.preserve_root == PreserveRoot::YesAll {
-        show_error!("and --preserve-root=all is in effect");
-    }
-
-    false
-}
-
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
 
-    if !check_one_fs(path, options) {
+    if let Err(additional_reason) = check_one_fs(path, options) {
+        if !additional_reason.is_empty() {
+            show_error!("{}", additional_reason);
+        }
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+        if options.preserve_root == PreserveRoot::YesAll {
+            show_error!("and --preserve-root=all is in effect");
+        }
         return true;
     }
 

@@ -207,7 +207,7 @@ sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 if test "$(grep -c 'rm: skipping '  tests/rm/one-file-system.sh)" -eq 1; then
      # Do it only once.
-     sed -i -e "s|rm: skipping 'a/b'|rm: skipping 'a'|g" -e "s/ >> exp/ > exp/g"  -e "s|rm: and --preserve-root=all is in effect|rm: skipping 'a/b', since it's on a different device\nrm: and --preserve-root=all is in effect|g" tests/rm/one-file-system.sh
+     sed -i -e "s/ >> exp/ > exp/g"  -e "s|rm: and --preserve-root=all is in effect|rm: skipping 'a/b', since it's on a different device\nrm: and --preserve-root=all is in effect|g" tests/rm/one-file-system.sh
 fi
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
