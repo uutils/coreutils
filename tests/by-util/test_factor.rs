@@ -185,7 +185,7 @@ fn test_random() {
                     factors.push(factor);
                 }
                 None => break,
-            };
+            }
         }
 
         factors.sort_unstable();
