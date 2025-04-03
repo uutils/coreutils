@@ -431,6 +431,17 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
         }
     }
 
+    // Base case 1: this is a file or a symbolic link.
+    //
+    // The symbolic link case is important because it could be a link to
+    // a directory and we don't want to recurse. In particular, this
+    // avoids an infinite recursion in the case of a link to the current
+    // directory, like `ln -s . link`.
+    if !path.is_dir() || path.is_symlink() {
+        return remove_file(path, options);
+    }
+
+    // Base case 2: check if a path is one the same file system
     if let Err(additional_reason) = check_one_fs(path, options) {
         if !additional_reason.is_empty() {
             show_error!("{}", additional_reason);
@@ -442,17 +453,7 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
         return true;
     }
 
-    // Base case 1: this is a file or a symbolic link.
-    //
-    // The symbolic link case is important because it could be a link to
-    // a directory and we don't want to recurse. In particular, this
-    // avoids an infinite recursion in the case of a link to the current
-    // directory, like `ln -s . link`.
-    if !path.is_dir() || path.is_symlink() {
-        return remove_file(path, options);
-    }
-
-    // Base case 2: this is a non-empty directory, but the user
+    // Base case 3: this is a non-empty directory, but the user
     // doesn't want to descend into it.
     if options.interactive == InteractiveMode::Always
         && !is_dir_empty(path)
