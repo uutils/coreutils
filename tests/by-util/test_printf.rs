@@ -70,6 +70,21 @@ fn escaped_octal_and_newline() {
 }
 
 #[test]
+fn variable_sized_octal() {
+    for x in ["|\\5|", "|\\05|", "|\\005|"] {
+        new_ucmd!()
+            .arg(x)
+            .succeeds()
+            .stdout_only_bytes([b'|', 5u8, b'|']);
+    }
+
+    new_ucmd!()
+        .arg("|\\0005|")
+        .succeeds()
+        .stdout_only_bytes([b'|', 0, b'5', b'|']);
+}
+
+#[test]
 fn escaped_unicode_four_digit() {
     new_ucmd!().args(&["\\u0125"]).succeeds().stdout_only("ĥ");
 }
@@ -146,6 +161,21 @@ fn sub_b_string_handle_escapes() {
         .args(&["hello %b", "\\tworld"])
         .succeeds()
         .stdout_only("hello \tworld");
+}
+
+#[test]
+fn sub_b_string_variable_size_unicode() {
+    for x in ["\\5|", "\\05|", "\\005|", "\\0005|"] {
+        new_ucmd!()
+            .args(&["|%b", x])
+            .succeeds()
+            .stdout_only_bytes([b'|', 5u8, b'|']);
+    }
+
+    new_ucmd!()
+        .args(&["|%b", "\\00005|"])
+        .succeeds()
+        .stdout_only_bytes([b'|', 0, b'5', b'|']);
 }
 
 #[test]
