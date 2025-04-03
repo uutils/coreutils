@@ -752,21 +752,23 @@ fn test_undefined() {
 
 #[test]
 fn test_invalid_float_point_fail_properly() {
+    // Note that we support arguments that are much bigger than what GNU coreutils supports.
+    // Tests below use exponents larger than we support (i64)
     new_ucmd!()
-        .args(&["66000e000000000000000000000000000000000000000000000000000009223372036854775807"])
+        .args(&["66000e0000000000000000000000000000000000000000000000000000092233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '66000e000000000000000000000000000000000000000000000000000009223372036854775807'");
+        .usage_error("invalid floating point argument: '66000e0000000000000000000000000000000000000000000000000000092233720368547758070'");
     new_ucmd!()
-        .args(&["-1.1e9223372036854775807"])
+        .args(&["-1.1e92233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '-1.1e9223372036854775807'");
+        .usage_error("invalid floating point argument: '-1.1e92233720368547758070'");
     new_ucmd!()
-        .args(&["-.1e9223372036854775807"])
+        .args(&["-.1e92233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '-.1e9223372036854775807'");
+        .usage_error("invalid floating point argument: '-.1e92233720368547758070'");
 }
 
 #[test]
@@ -909,6 +911,18 @@ fn test_parse_out_of_bounds_exponents() {
         .args(&["1e-9223372036854775808"])
         .succeeds()
         .stdout_only("");
+
+    // GNU seq supports arbitrarily small exponents (and treats the value as 0).
+    new_ucmd!()
+        .args(&["1e-922337203685477580800000000", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+
+    // Check we can also underflow to -0.0.
+    new_ucmd!()
+        .args(&["-1e-922337203685477580800000000", "1"])
+        .succeeds()
+        .stdout_only("-0\n1\n");
 }
 
 #[ignore]

@@ -34,7 +34,6 @@ fn parse_error_type(e: &ParseNumberError) -> &'static str {
     match e {
         ParseNumberError::Float => "floating point",
         ParseNumberError::Nan => "'not-a-number'",
-        ParseNumberError::Hex => "hexadecimal",
     }
 }
 
