@@ -151,13 +151,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let precision = select_precision(&first, &increment, &last);
-
     // If a format was passed on the command line, use that.
     // If not, use some default format based on parameters precision.
-    let format = match options.format {
-        Some(str) => Format::<num_format::Float, &ExtendedBigDecimal>::parse(str)?,
+    let (format, padding, fast_allowed) = match options.format {
+        Some(str) => (
+            Format::<num_format::Float, &ExtendedBigDecimal>::parse(str)?,
+            0,
+            false,
+        ),
         None => {
+            let precision = select_precision(&first, &increment, &last);
+
             let padding = if options.equal_width {
                 let precision_value = precision.unwrap_or(0);
                 first
@@ -188,12 +192,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     ..Default::default()
                 },
             };
-            Format::from_formatter(formatter)
+            // Allow fast printing if precision is 0 (integer inputs), `print_seq` will do further checks.
+            (
+                Format::from_formatter(formatter),
+                padding,
+                precision == Some(0),
+            )
         }
     };
-
-    // Allow fast printing, `print_seq` will do further checks.
-    let fast_allowed = options.format.is_none() && !options.equal_width && precision == Some(0);
 
     let result = print_seq(
         (first.number, increment.number, last.number),
@@ -201,6 +207,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         &options.terminator,
         &format,
         fast_allowed,
+        padding,
     );
 
     match result {
@@ -304,8 +311,6 @@ fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
 
 /// Integer print, default format, positive increment: fast code path
 /// that avoids reformating digit at all iterations.
-/// TODO: We could easily support equal_width (we do quite a bit of work
-/// _not_ supporting that and aligning the number to the left).
 fn fast_print_seq(
     mut stdout: impl Write,
     first: &BigUint,
@@ -313,6 +318,7 @@ fn fast_print_seq(
     last: &BigUint,
     separator: &str,
     terminator: &str,
+    padding: usize,
 ) -> std::io::Result<()> {
     // Nothing to do, just return.
     if last < first {
@@ -338,8 +344,9 @@ fn fast_print_seq(
     //
     // We keep track of start in this buffer, as the number grows.
     // When printing, we take a slice between start and end.
-    let size = separator.len() + last_length;
-    let mut buf = vec![0u8; size];
+    let size = last_length.max(padding) + separator.len();
+    // Fill with '0', this is needed for equal_width, and harmless otherwise.
+    let mut buf = vec![b'0'; size];
     let buf = buf.as_mut_slice();
 
     let num_end = buf.len() - separator.len();
@@ -348,6 +355,10 @@ fn fast_print_seq(
     // Initialize buf with first and separator.
     buf[start..num_end].copy_from_slice(first_str.as_bytes());
     buf[num_end..].copy_from_slice(separator.as_bytes());
+
+    // Normally, if padding is > 0, it should be equal to last_length,
+    // so start would be == 0, but there are corner cases.
+    start = start.min(num_end - padding);
 
     // Prepare the number to increment with as a string
     let inc_str = increment.to_string();
@@ -379,6 +390,7 @@ fn print_seq(
     terminator: &str,
     format: &Format<num_format::Float, &ExtendedBigDecimal>,
     fast_allowed: bool,
+    padding: usize, // Used by fast path only
 ) -> std::io::Result<()> {
     let stdout = stdout().lock();
     let mut stdout = BufWriter::new(stdout);
@@ -402,6 +414,7 @@ fn print_seq(
                 &last_bui,
                 separator,
                 terminator,
+                padding,
             );
         }
     }
