@@ -1102,3 +1102,26 @@ fn float_arg_with_whitespace() {
         .fails()
         .stderr_contains("expected a numeric value");
 }
+
+#[test]
+fn unsigned_negative_wraparound() {
+    new_ucmd!()
+        .args(&["%x", "-0b100"])
+        .succeeds()
+        .stdout_only("fffffffffffffffc");
+
+    new_ucmd!()
+        .args(&["%x", "-0100"])
+        .succeeds()
+        .stdout_only("ffffffffffffffc0");
+
+    new_ucmd!()
+        .args(&["%x", "-100"])
+        .succeeds()
+        .stdout_only("ffffffffffffff9c");
+
+    new_ucmd!()
+        .args(&["%x", "-0x100"])
+        .succeeds()
+        .stdout_only("ffffffffffffff00");
+}

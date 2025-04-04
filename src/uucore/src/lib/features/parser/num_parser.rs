@@ -166,22 +166,26 @@ impl ExtendedParser for u64 {
                     let (digits, scale) = bd.into_bigint_and_scale();
                     if scale == 0 {
                         let negative = digits.sign() == Sign::Minus;
-                        match u64::try_from(digits) {
+
+                        match u64::try_from(digits.clone()) {
                             Ok(i) => Ok(i),
-                            _ => Err(ExtendedParserError::Overflow(if negative {
-                                // TODO: We should wrap around here #7488
-                                0
-                            } else {
-                                u64::MAX
-                            })),
+                            _ => {
+                                if negative {
+                                    match i64::try_from(digits) {
+                                        Ok(i) => Ok(u64::from_ne_bytes(i.to_ne_bytes())),
+                                        _ => Err(ExtendedParserError::Overflow(0)),
+                                    }
+                                } else {
+                                    Err(ExtendedParserError::Overflow(u64::MAX))
+                                }
+                            }
                         }
                     } else {
                         // Should not happen.
                         Err(ExtendedParserError::NotNumeric)
                     }
                 }
-                // TODO: Handle -0 too #7488
-                // No other case should not happen.
+                ExtendedBigDecimal::MinusZero => Ok(0),
                 _ => Err(ExtendedParserError::NotNumeric),
             }
         }
@@ -500,10 +504,15 @@ mod tests {
     fn test_decimal_u64() {
         assert_eq!(Ok(123), u64::extended_parse("123"));
         assert_eq!(Ok(u64::MAX), u64::extended_parse(&format!("{}", u64::MAX)));
-        // TODO: We should wrap around here #7488
+        assert_eq!(Ok(0), u64::extended_parse("-0"));
+        assert_eq!(Ok(u64::MAX), u64::extended_parse("-1"));
+        assert_eq!(
+            Ok(u64::MAX / 2 + 1),
+            u64::extended_parse("-9223372036854775808")
+        );
         assert!(matches!(
-            u64::extended_parse("-123"),
-            Err(ExtendedParserError::Overflow(0))
+            u64::extended_parse("-9223372036854775809"),
+            Err(ExtendedParserError::Overflow(_))
         ));
         assert!(matches!(
             u64::extended_parse(""),
