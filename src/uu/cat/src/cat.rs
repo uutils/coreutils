@@ -17,6 +17,7 @@ use std::os::unix::fs::FileTypeExt;
 use std::os::unix::net::UnixStream;
 
 use clap::{Arg, ArgAction, Command};
+use memchr::memchr2;
 #[cfg(unix)]
 use nix::fcntl::{FcntlArg, fcntl};
 use thiserror::Error;
@@ -118,12 +119,12 @@ struct OutputState {
 }
 
 #[cfg(unix)]
-trait FdReadable: Read + AsFd + AsRawFd {}
+trait FdReadable: Read + AsFd {}
 #[cfg(not(unix))]
 trait FdReadable: Read {}
 
 #[cfg(unix)]
-impl<T> FdReadable for T where T: Read + AsFd + AsRawFd {}
+impl<T> FdReadable for T where T: Read + AsFd {}
 #[cfg(not(unix))]
 impl<T> FdReadable for T where T: Read {}
 
@@ -612,7 +613,8 @@ fn write_end<W: Write>(writer: &mut W, in_buf: &[u8], options: &OutputOptions) -
 // however, write_nonprint_to_end doesn't need to stop at \r because it will always write \r as ^M.
 // Return the number of written symbols
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
-    match in_buf.iter().position(|c| *c == b'\n' || *c == b'\r') {
+    // using memchr2 significantly improves performances
+    match memchr2(b'\n', b'\r', in_buf) {
         Some(p) => {
             writer.write_all(&in_buf[..p]).unwrap();
             p
