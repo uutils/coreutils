@@ -20,6 +20,14 @@ fn test_no_args() {
 }
 
 #[test]
+fn test_format_and_equal_width() {
+    new_ucmd!()
+        .args(&["-w", "-f", "%f", "1"])
+        .fails_with_code(1)
+        .stderr_contains("format string may not be specified");
+}
+
+#[test]
 fn test_hex_rejects_sign_after_identifier() {
     new_ucmd!()
         .args(&["0x-123ABC"])

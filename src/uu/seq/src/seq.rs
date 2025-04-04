@@ -114,6 +114,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
 
+    if options.equal_width && options.format.is_some() {
+        return Err(SeqError::FormatAndEqualWidth.into());
+    }
+
     let first = if numbers.len() > 1 {
         match numbers[0].parse() {
             Ok(num) => num,

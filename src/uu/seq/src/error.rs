@@ -28,6 +28,10 @@ pub enum SeqError {
     /// No arguments were passed to this function, 1 or more is required
     #[error("missing operand")]
     NoArguments,
+
+    /// Both a format and equal width where passed to seq
+    #[error("format string may not be specified when printing equal width strings")]
+    FormatAndEqualWidth,
 }
 
 fn parse_error_type(e: &ParseNumberError) -> &'static str {
