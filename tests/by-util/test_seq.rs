@@ -869,6 +869,8 @@ fn test_parse_valid_hexadecimal_float_two_args() {
         (["0xA.A9p-1", "6"], "5.33008\n"),
         (["0xa.a9p-1", "6"], "5.33008\n"),
         (["0xffffffffffp-30", "1024"], "1024\n"), // spell-checker:disable-line
+        (["  0XA.A9P-1", "6"], "5.33008\n"),
+        (["  0xee.", "  0xef."], "238\n239\n"),
     ];
 
     for (input_arguments, expected_output) in &test_cases {
