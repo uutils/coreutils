@@ -3,14 +3,21 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) NANOS numstr infinityh INFD nans nanh
+// spell-checker:ignore (vars) NANOS numstr infinityh INFD nans nanh bigdecimal extendedbigdecimal
 //! Parsing a duration from a string.
 //!
 //! Use the [`from_str`] function to parse a [`Duration`] from a string.
 
+use crate::{
+    display::Quotable,
+    extendedbigdecimal::ExtendedBigDecimal,
+    parser::num_parser::{ExtendedParser, ExtendedParserError},
+};
+use bigdecimal::BigDecimal;
+use num_traits::Signed;
+use num_traits::ToPrimitive;
+use num_traits::Zero;
 use std::time::Duration;
-
-use crate::display::Quotable;
 
 /// Parse a duration from a string.
 ///
@@ -26,9 +33,10 @@ use crate::display::Quotable;
 /// * "h" for hours,
 /// * "d" for days.
 ///
-/// This function uses [`Duration::saturating_mul`] to compute the
-/// number of seconds, so it does not overflow. If overflow would have
-/// occurred, [`Duration::MAX`] is returned instead.
+/// This function does not overflow if large values are provided. If
+/// overflow would have occurred, [`Duration::MAX`] is returned instead.
+///
+/// If the value is smaller than 1 nanosecond, we return 1 nanosecond.
 ///
 /// # Errors
 ///
@@ -45,6 +53,10 @@ use crate::display::Quotable;
 /// assert_eq!(from_str("2d"), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
 /// ```
 pub fn from_str(string: &str) -> Result<Duration, String> {
+    // TODO: Switch to Duration::NANOSECOND if that ever becomes stable
+    // https://github.com/rust-lang/rust/issues/57391
+    const NANOSECOND_DURATION: Duration = Duration::from_nanos(1);
+
     let len = string.len();
     if len == 0 {
         return Err("empty string".to_owned());
@@ -63,23 +75,38 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
             _ => return Err(format!("invalid time interval {}", string.quote())),
         },
     };
-    let num = numstr
-        .parse::<f64>()
-        .map_err(|e| format!("invalid time interval {}: {}", string.quote(), e))?;
+    let num = match ExtendedBigDecimal::extended_parse(numstr) {
+        Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
+        Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
+        _ => return Err(format!("invalid time interval {}", string.quote())),
+    };
 
-    if num < 0. || num.is_nan() {
-        return Err(format!("invalid time interval {}", string.quote()));
-    }
+    // Allow non-negative durations (-0 is fine), and infinity.
+    let num = match num {
+        ExtendedBigDecimal::BigDecimal(bd) if !bd.is_negative() => bd,
+        ExtendedBigDecimal::MinusZero => 0.into(),
+        ExtendedBigDecimal::Infinity => return Ok(Duration::MAX),
+        _ => return Err(format!("invalid time interval {}", string.quote())),
+    };
 
-    if num.is_infinite() {
-        return Ok(Duration::MAX);
+    // Pre-multiply times to avoid precision loss
+    let num: BigDecimal = num * times;
+
+    // Transform to nanoseconds (9 digits after decimal point)
+    let (nanos_bi, _) = num.with_scale(9).into_bigint_and_scale();
+
+    // If the value is smaller than a nanosecond, just return that.
+    if nanos_bi.is_zero() && !num.is_zero() {
+        return Ok(NANOSECOND_DURATION);
     }
 
     const NANOS_PER_SEC: u32 = 1_000_000_000;
-    let whole_secs = num.trunc();
-    let nanos = (num.fract() * (NANOS_PER_SEC as f64)).trunc();
-    let duration = Duration::new(whole_secs as u64, nanos as u32);
-    Ok(duration.saturating_mul(times))
+    let whole_secs: u64 = match (&nanos_bi / NANOS_PER_SEC).try_into() {
+        Ok(whole_secs) => whole_secs,
+        Err(_) => return Ok(Duration::MAX),
+    };
+    let nanos: u32 = (&nanos_bi % NANOS_PER_SEC).to_u32().unwrap();
+    Ok(Duration::new(whole_secs, nanos))
 }
 
 #[cfg(test)]
@@ -99,8 +126,49 @@ mod tests {
     }
 
     #[test]
-    fn test_saturating_mul() {
+    fn test_overflow() {
+        // u64 seconds overflow (in Duration)
         assert_eq!(from_str("9223372036854775808d"), Ok(Duration::MAX));
+        // ExtendedBigDecimal overflow
+        assert_eq!(from_str("1e92233720368547758080"), Ok(Duration::MAX));
+    }
+
+    #[test]
+    fn test_underflow() {
+        // TODO: Switch to Duration::NANOSECOND if that ever becomes stable
+        // https://github.com/rust-lang/rust/issues/57391
+        const NANOSECOND_DURATION: Duration = Duration::from_nanos(1);
+
+        // ExtendedBigDecimal underflow
+        assert_eq!(from_str("1e-92233720368547758080"), Ok(NANOSECOND_DURATION));
+        // nanoseconds underflow (in Duration)
+        assert_eq!(from_str("0.0000000001"), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("1e-10"), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("9e-10"), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("1e-9"), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("1.9e-9"), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("2e-9"), Ok(Duration::from_nanos(2)));
+    }
+
+    #[test]
+    fn test_zero() {
+        assert_eq!(from_str("0e-9"), Ok(Duration::ZERO));
+        assert_eq!(from_str("0e-100"), Ok(Duration::ZERO));
+        assert_eq!(from_str("0e-92233720368547758080"), Ok(Duration::ZERO));
+        assert_eq!(from_str("0.000000000000000000000"), Ok(Duration::ZERO));
+    }
+
+    #[test]
+    fn test_hex_float() {
+        assert_eq!(
+            from_str("0x1.1p-1"),
+            Ok(Duration::from_secs_f64(0.53125f64))
+        );
+        assert_eq!(
+            from_str("0x1.1p-1d"),
+            Ok(Duration::from_secs_f64(0.53125f64 * 3600.0 * 24.0))
+        );
+        assert_eq!(from_str("0xfh"), Ok(Duration::from_secs(15 * 3600)));
     }
 
     #[test]
