@@ -177,7 +177,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     variant: FloatVariant::Decimal,
                     width: padding,
                     alignment: num_format::NumberAlignment::RightZero,
-                    precision,
+                    precision: Some(precision),
                     ..Default::default()
                 },
                 // format without precision: hexadecimal floats

@@ -220,7 +220,10 @@ pub struct Float {
     pub width: usize,
     pub positive_sign: PositiveSign,
     pub alignment: NumberAlignment,
-    pub precision: usize,
+    // For float, the default precision depends on the format, usually 6,
+    // but something architecture-specific for %a. Set this to None to
+    // use the default.
+    pub precision: Option<usize>,
 }
 
 impl Default for Float {
@@ -232,7 +235,7 @@ impl Default for Float {
             width: 0,
             positive_sign: PositiveSign::None,
             alignment: NumberAlignment::Left,
-            precision: 6,
+            precision: None,
         }
     }
 }
@@ -309,8 +312,8 @@ impl Formatter<&ExtendedBigDecimal> for Float {
         };
 
         let precision = match precision {
-            Some(CanAsterisk::Fixed(x)) => x,
-            None => 6, // Default float precision (C standard)
+            Some(CanAsterisk::Fixed(x)) => Some(x),
+            None => None,
             Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
@@ -354,8 +357,13 @@ fn format_float_non_finite(e: &ExtendedBigDecimal, case: Case) -> String {
     s
 }
 
-fn format_float_decimal(bd: &BigDecimal, precision: usize, force_decimal: ForceDecimal) -> String {
+fn format_float_decimal(
+    bd: &BigDecimal,
+    precision: Option<usize>,
+    force_decimal: ForceDecimal,
+) -> String {
     debug_assert!(!bd.is_negative());
+    let precision = precision.unwrap_or(6); // Default %f precision (C standard)
     if precision == 0 {
         let (bi, scale) = bd.as_bigint_and_scale();
         if scale == 0 && force_decimal != ForceDecimal::Yes {
@@ -370,11 +378,12 @@ fn format_float_decimal(bd: &BigDecimal, precision: usize, force_decimal: ForceD
 
 fn format_float_scientific(
     bd: &BigDecimal,
-    precision: usize,
+    precision: Option<usize>,
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
     debug_assert!(!bd.is_negative());
+    let precision = precision.unwrap_or(6); // Default %e precision (C standard)
     let exp_char = match case {
         Case::Lowercase => 'e',
         Case::Uppercase => 'E',
@@ -415,11 +424,12 @@ fn format_float_scientific(
 
 fn format_float_shortest(
     bd: &BigDecimal,
-    precision: usize,
+    precision: Option<usize>,
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
     debug_assert!(!bd.is_negative());
+    let precision = precision.unwrap_or(6); // Default %g precision (C standard)
 
     // Note: Precision here is how many digits should be displayed in total,
     // instead of how many digits in the fractional part.
@@ -497,22 +507,39 @@ fn format_float_shortest(
 
 fn format_float_hexadecimal(
     bd: &BigDecimal,
-    precision: usize,
+    precision: Option<usize>,
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
     debug_assert!(!bd.is_negative());
+    // Default precision for %a is supposed to be sufficient to represent the
+    // exact value. This is platform specific, GNU coreutils uses a `long double`,
+    // which can be equivalent to a f64, f128, or an x86(-64) specific "f80".
+    // We have arbitrary precision in base 10, so we can't always represent
+    // the value exactly (e.g. 0.1 is c.ccccc...).
+    //
+    // Note that this is the maximum precision, trailing 0's are trimmed when
+    // printing.
+    //
+    // Emulate x86(-64) behavior, where 64 bits at _most_ are printed in total,
+    // that's 16 hex digits, including 1 before the decimal point (so 15 after).
+    //
+    // TODO: Make this configurable? e.g. arm64 value would be 28 (f128),
+    // arm value 13 (f64).
+    let max_precision = precision.unwrap_or(15);
 
-    let exp_char = match case {
-        Case::Lowercase => 'p',
-        Case::Uppercase => 'P',
+    let (prefix, exp_char) = match case {
+        Case::Lowercase => ("0x", 'p'),
+        Case::Uppercase => ("0X", 'P'),
     };
 
     if BigDecimal::zero().eq(bd) {
-        return if force_decimal == ForceDecimal::Yes && precision == 0 {
+        // To print 0, we don't ever need any digits after the decimal point, so default to
+        // that if precision is not specified.
+        return if force_decimal == ForceDecimal::Yes && precision.unwrap_or(0) == 0 {
             format!("0x0.{exp_char}+0")
         } else {
-            format!("0x{:.*}{exp_char}+0", precision, 0.0)
+            format!("0x{:.*}{exp_char}+0", precision.unwrap_or(0), 0.0)
         };
     }
 
@@ -547,7 +574,8 @@ fn format_float_hexadecimal(
         // Then, dividing by 5^-exp10 loses at most -exp10*3 binary digits
         // (since 5^-exp10 < 8^-exp10), so we add that, and another bit for
         // rounding.
-        let margin = ((precision + 1) as i64 * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
+        let margin =
+            ((max_precision + 1) as i64 * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
 
         // frac10 * 10^exp10 = frac10 * 2^margin * 10^exp10 * 2^-margin =
         // (frac10 * 2^margin * 5^exp10) * 2^exp10 * 2^-margin =
@@ -562,7 +590,7 @@ fn format_float_hexadecimal(
     // so the value will always be between 0x8 and 0xf.
     // TODO: Make this configurable? e.g. arm64 only displays 1 digit.
     const BEFORE_BITS: usize = 4;
-    let wanted_bits = (BEFORE_BITS + precision * 4) as u64;
+    let wanted_bits = (BEFORE_BITS + max_precision * 4) as u64;
     let bits = frac2.bits();
 
     exp2 += bits as i64 - wanted_bits as i64;
@@ -592,16 +620,37 @@ fn format_float_hexadecimal(
         digits.make_ascii_uppercase();
     }
     let (first_digit, remaining_digits) = digits.split_at(1);
-    let exponent = exp2 + (4 * precision) as i64;
+    let exponent = exp2 + (4 * max_precision) as i64;
 
-    let dot =
-        if !remaining_digits.is_empty() || (precision == 0 && ForceDecimal::Yes == force_decimal) {
-            "."
-        } else {
-            ""
-        };
+    let mut remaining_digits = remaining_digits.to_string();
+    if precision.is_none() {
+        // Trim trailing zeros
+        strip_fractional_zeroes(&mut remaining_digits);
+    }
 
-    format!("0x{first_digit}{dot}{remaining_digits}{exp_char}{exponent:+}")
+    let dot = if !remaining_digits.is_empty()
+        || (precision.unwrap_or(0) == 0 && ForceDecimal::Yes == force_decimal)
+    {
+        "."
+    } else {
+        ""
+    };
+
+    format!("{prefix}{first_digit}{dot}{remaining_digits}{exp_char}{exponent:+}")
+}
+
+fn strip_fractional_zeroes(s: &mut String) {
+    let mut trim_to = s.len();
+    for (pos, c) in s.char_indices().rev() {
+        if pos + c.len_utf8() == trim_to {
+            if c == '0' {
+                trim_to = pos;
+            } else {
+                break;
+            }
+        }
+    }
+    s.truncate(trim_to);
 }
 
 fn strip_fractional_zeroes_and_dot(s: &mut String) {
@@ -700,7 +749,8 @@ mod test {
     #[test]
     fn decimal_float() {
         use super::format_float_decimal;
-        let f = |x| format_float_decimal(&BigDecimal::from_f64(x).unwrap(), 6, ForceDecimal::No);
+        let f =
+            |x| format_float_decimal(&BigDecimal::from_f64(x).unwrap(), Some(6), ForceDecimal::No);
         assert_eq!(f(0.0), "0.000000");
         assert_eq!(f(1.0), "1.000000");
         assert_eq!(f(100.0), "100.000000");
@@ -711,11 +761,23 @@ mod test {
         assert_eq!(f(1.999_999_5), "1.999999");
         assert_eq!(f(1.999_999_6), "2.000000");
 
-        let f = |x| format_float_decimal(&BigDecimal::from_f64(x).unwrap(), 0, ForceDecimal::Yes);
+        let f = |x| {
+            format_float_decimal(
+                &BigDecimal::from_f64(x).unwrap(),
+                Some(0),
+                ForceDecimal::Yes,
+            )
+        };
         assert_eq!(f(100.0), "100.");
 
         // Test arbitrary precision: long inputs that would not fit in a f64, print 24 digits after decimal point.
-        let f = |x| format_float_decimal(&BigDecimal::from_str(x).unwrap(), 24, ForceDecimal::No);
+        let f = |x| {
+            format_float_decimal(
+                &BigDecimal::from_str(x).unwrap(),
+                Some(24),
+                ForceDecimal::No,
+            )
+        };
         assert_eq!(f("0.12345678901234567890"), "0.123456789012345678900000");
         assert_eq!(
             f("1234567890.12345678901234567890"),
@@ -727,7 +789,11 @@ mod test {
     fn decimal_float_zero() {
         use super::format_float_decimal;
         let f = |digits, scale| {
-            format_float_decimal(&BigDecimal::from_bigint(digits, scale), 6, ForceDecimal::No)
+            format_float_decimal(
+                &BigDecimal::from_bigint(digits, scale),
+                Some(6),
+                ForceDecimal::No,
+            )
         };
         assert_eq!(f(0.into(), 0), "0.000000");
         assert_eq!(f(0.into(), -10), "0.000000");
@@ -740,7 +806,7 @@ mod test {
         let f = |x| {
             format_float_scientific(
                 &BigDecimal::from_f64(x).unwrap(),
-                6,
+                None,
                 Case::Lowercase,
                 ForceDecimal::No,
             )
@@ -756,7 +822,7 @@ mod test {
         let f = |x| {
             format_float_scientific(
                 &BigDecimal::from_f64(x).unwrap(),
-                6,
+                Some(6),
                 Case::Uppercase,
                 ForceDecimal::No,
             )
@@ -768,7 +834,7 @@ mod test {
         let f = |digits, scale| {
             format_float_scientific(
                 &BigDecimal::from_bigint(digits, scale),
-                6,
+                Some(6),
                 Case::Lowercase,
                 ForceDecimal::No,
             )
@@ -785,7 +851,7 @@ mod test {
         let f = |x| {
             format_float_scientific(
                 &BigDecimal::from_f64(x).unwrap(),
-                0,
+                Some(0),
                 Case::Lowercase,
                 ForceDecimal::No,
             )
@@ -801,7 +867,7 @@ mod test {
         let f = |x| {
             format_float_scientific(
                 &BigDecimal::from_f64(x).unwrap(),
-                0,
+                Some(0),
                 Case::Lowercase,
                 ForceDecimal::Yes,
             )
@@ -821,7 +887,7 @@ mod test {
         let f = |x| {
             format_float_shortest(
                 &BigDecimal::from_f64(x).unwrap(),
-                6,
+                None,
                 Case::Lowercase,
                 ForceDecimal::No,
             )
@@ -843,7 +909,7 @@ mod test {
         let f = |x| {
             format_float_shortest(
                 &BigDecimal::from_f64(x).unwrap(),
-                6,
+                None,
                 Case::Lowercase,
                 ForceDecimal::Yes,
             )
@@ -865,7 +931,7 @@ mod test {
         let f = |x| {
             format_float_shortest(
                 &BigDecimal::from_f64(x).unwrap(),
-                0,
+                Some(0),
                 Case::Lowercase,
                 ForceDecimal::No,
             )
@@ -884,7 +950,7 @@ mod test {
         let f = |x| {
             format_float_shortest(
                 &BigDecimal::from_f64(x).unwrap(),
-                0,
+                Some(0),
                 Case::Lowercase,
                 ForceDecimal::Yes,
             )
@@ -910,7 +976,7 @@ mod test {
         let f = |x| {
             format_float_hexadecimal(
                 &BigDecimal::from_str(x).unwrap(),
-                6,
+                Some(6),
                 Case::Lowercase,
                 ForceDecimal::No,
             )
@@ -925,7 +991,7 @@ mod test {
         let f = |x| {
             format_float_hexadecimal(
                 &BigDecimal::from_str(x).unwrap(),
-                0,
+                Some(0),
                 Case::Lowercase,
                 ForceDecimal::No,
             )
@@ -937,7 +1003,7 @@ mod test {
         let f = |x| {
             format_float_hexadecimal(
                 &BigDecimal::from_str(x).unwrap(),
-                0,
+                Some(0),
                 Case::Lowercase,
                 ForceDecimal::Yes,
             )
@@ -946,22 +1012,53 @@ mod test {
         assert_eq!(f("0.125"), "0x8.p-6");
         assert_eq!(f("256.0"), "0x8.p+5");
 
+        // Default precision, maximum 13 digits (x86-64 behavior)
         let f = |x| {
             format_float_hexadecimal(
                 &BigDecimal::from_str(x).unwrap(),
-                6,
+                None,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
+        assert_eq!(f("0"), "0x0p+0");
+        assert_eq!(f("0.00001"), "0xa.7c5ac471b478423p-20");
+        assert_eq!(f("0.125"), "0x8p-6");
+        assert_eq!(f("4.25"), "0x8.8p-1");
+        assert_eq!(f("17.203125"), "0x8.9ap+1");
+        assert_eq!(f("256.0"), "0x8p+5");
+        assert_eq!(f("1000.01"), "0xf.a00a3d70a3d70a4p+6");
+        assert_eq!(f("65536.0"), "0x8p+13");
+
+        let f = |x| {
+            format_float_hexadecimal(
+                &BigDecimal::from_str(x).unwrap(),
+                None,
+                Case::Lowercase,
+                ForceDecimal::Yes,
+            )
+        };
+        assert_eq!(f("0"), "0x0.p+0");
+        assert_eq!(f("0.125"), "0x8.p-6");
+        assert_eq!(f("4.25"), "0x8.8p-1");
+        assert_eq!(f("256.0"), "0x8.p+5");
+
+        let f = |x| {
+            format_float_hexadecimal(
+                &BigDecimal::from_str(x).unwrap(),
+                Some(6),
                 Case::Uppercase,
                 ForceDecimal::No,
             )
         };
-        assert_eq!(f("0.00001"), "0xA.7C5AC4P-20");
-        assert_eq!(f("0.125"), "0x8.000000P-6");
+        assert_eq!(f("0.00001"), "0XA.7C5AC4P-20");
+        assert_eq!(f("0.125"), "0X8.000000P-6");
 
         // Test "0e10"/"0e-10". From cppreference.com: "If the value is ​0​, the exponent is also ​0​."
         let f = |digits, scale| {
             format_float_hexadecimal(
                 &BigDecimal::from_bigint(digits, scale),
-                6,
+                Some(6),
                 Case::Lowercase,
                 ForceDecimal::No,
             )
@@ -991,7 +1088,7 @@ mod test {
         let f = |x| {
             format_float_shortest(
                 &BigDecimal::from_f64(x).unwrap(),
-                6,
+                None,
                 Case::Lowercase,
                 ForceDecimal::No,
             )
@@ -1009,7 +1106,7 @@ mod test {
         let f = |x| {
             format_float_shortest(
                 &BigDecimal::from_f64(x).unwrap(),
-                6,
+                None,
                 Case::Lowercase,
                 ForceDecimal::No,
             )
@@ -1168,7 +1265,7 @@ mod test {
         assert_eq!(f("%e", &(-123.0).into()), "-1.230000e+02");
         assert_eq!(f("%#09.e", &(-100.0).into()), "-001.e+02");
         assert_eq!(f("%# 9.E", &100.0.into()), "   1.E+02");
-        assert_eq!(f("% 12.2A", &(-100.0).into()), "  -0xC.80P+3");
+        assert_eq!(f("% 12.2A", &(-100.0).into()), "  -0XC.80P+3");
     }
 
     #[test]

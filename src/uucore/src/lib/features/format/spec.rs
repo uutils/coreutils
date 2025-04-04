@@ -432,11 +432,13 @@ impl Spec {
                 precision,
             } => {
                 let width = resolve_asterisk(*width, &mut args).unwrap_or(0);
-                let precision = resolve_asterisk(*precision, &mut args).unwrap_or(6);
+                let precision = resolve_asterisk(*precision, &mut args);
                 let f: ExtendedBigDecimal = args.get_extended_big_decimal();
 
-                if precision as u64 > i32::MAX as u64 {
-                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                if precision.is_some_and(|p| p as u64 > i32::MAX as u64) {
+                    return Err(FormatError::InvalidPrecision(
+                        precision.unwrap().to_string(),
+                    ));
                 }
 
                 num_format::Float {
