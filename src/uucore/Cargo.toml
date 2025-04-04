@@ -29,7 +29,7 @@ number_prefix = { workspace = true }
 dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
 wild = "2.2.1"
-glob = { workspace = true }
+glob = { workspace = true, optional = true }
 iana-time-zone = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
@@ -113,7 +113,7 @@ proc-info = ["tty", "walkdir"]
 quoting-style = []
 ranges = []
 ringbuffer = []
-parser = ["extendedbigdecimal", "num-traits"]
+parser = ["extendedbigdecimal", "glob", "num-traits"]
 signals = []
 sum = [
   "digest",
