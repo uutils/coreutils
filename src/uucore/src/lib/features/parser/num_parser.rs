@@ -294,8 +294,14 @@ fn construct_extended_big_decimal<'a>(
     scale: u64,
     exponent: BigInt,
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
-    if digits == BigUint::zero() && negative {
-        return Ok(ExtendedBigDecimal::MinusZero);
+    if digits == BigUint::zero() {
+        // Return return 0 if the digits are zero. In particular, we do not ever
+        // return Overflow/Underflow errors in that case.
+        return Ok(if negative {
+            ExtendedBigDecimal::MinusZero
+        } else {
+            ExtendedBigDecimal::zero()
+        });
     }
 
     let sign = if negative { Sign::Minus } else { Sign::Plus };
@@ -712,6 +718,24 @@ mod tests {
                 ExtendedBigDecimal::MinusZero
             ))
         ));
+
+        // But no Overflow/Underflow if the digits are 0.
+        assert_eq!(
+            ExtendedBigDecimal::extended_parse(&format!("0e{}", i64::MAX as u64 + 2)),
+            Ok(ExtendedBigDecimal::zero()),
+        );
+        assert_eq!(
+            ExtendedBigDecimal::extended_parse(&format!("-0.0e{}", i64::MAX as u64 + 3)),
+            Ok(ExtendedBigDecimal::MinusZero)
+        );
+        assert_eq!(
+            ExtendedBigDecimal::extended_parse(&format!("0.0000e{}", i64::MIN)),
+            Ok(ExtendedBigDecimal::zero()),
+        );
+        assert_eq!(
+            ExtendedBigDecimal::extended_parse(&format!("-0e{}", i64::MIN + 2)),
+            Ok(ExtendedBigDecimal::MinusZero)
+        );
     }
 
     #[test]
