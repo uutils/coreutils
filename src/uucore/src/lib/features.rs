@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // features ~ feature-gated modules (core/bundler file)
+//
+// spell-checker:ignore (features) extendedbigdecimal
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
@@ -16,6 +18,8 @@ pub mod colors;
 pub mod custom_tz_fmt;
 #[cfg(feature = "encoding")]
 pub mod encoding;
+#[cfg(feature = "extendedbigdecimal")]
+pub mod extendedbigdecimal;
 #[cfg(feature = "format")]
 pub mod format;
 #[cfg(feature = "fs")]

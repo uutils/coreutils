@@ -1,4 +1,4 @@
-# spell-checker:ignore bigdecimal cfgs
+# spell-checker:ignore bigdecimal cfgs extendedbigdecimal
 [package]
 name = "uu_seq"
 version = "0.0.30"
@@ -23,7 +23,11 @@ clap = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["format", "quoting-style"] }
+uucore = { workspace = true, features = [
+  "extendedbigdecimal",
+  "format",
+  "quoting-style",
+] }
 
 [[bin]]
 name = "seq"

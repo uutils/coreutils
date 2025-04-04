@@ -12,7 +12,7 @@ use std::str::FromStr;
 use uucore::format::num_parser::{ExtendedParser, ExtendedParserError};
 
 use crate::number::PreciseNumber;
-use uucore::format::ExtendedBigDecimal;
+use uucore::extendedbigdecimal::ExtendedBigDecimal;
 
 /// An error returned when parsing a number fails.
 #[derive(Debug, PartialEq, Eq)]
@@ -126,7 +126,7 @@ impl FromStr for PreciseNumber {
 #[cfg(test)]
 mod tests {
     use bigdecimal::BigDecimal;
-    use uucore::format::ExtendedBigDecimal;
+    use uucore::extendedbigdecimal::ExtendedBigDecimal;
 
     use crate::number::PreciseNumber;
     use crate::numberparse::ParseNumberError;

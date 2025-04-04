@@ -235,7 +235,7 @@ mod tests {
     use bigdecimal::BigDecimal;
     use num_traits::Zero;
 
-    use crate::format::extendedbigdecimal::ExtendedBigDecimal;
+    use crate::extendedbigdecimal::ExtendedBigDecimal;
 
     #[test]
     fn test_addition_infinity() {

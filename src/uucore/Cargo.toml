@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal
 
 [package]
 name = "uucore"
@@ -92,11 +92,18 @@ colors = []
 checksum = ["data-encoding", "thiserror", "sum"]
 encoding = ["data-encoding", "data-encoding-macro", "z85"]
 entries = ["libc"]
+extendedbigdecimal = ["bigdecimal", "num-traits"]
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys"]
 fsxattr = ["xattr"]
 lines = []
-format = ["bigdecimal", "itertools", "num-traits", "quoting-style"]
+format = [
+  "bigdecimal",
+  "extendedbigdecimal",
+  "itertools",
+  "num-traits",
+  "quoting-style",
+]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []

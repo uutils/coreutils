@@ -33,14 +33,13 @@
 
 mod argument;
 mod escape;
-pub mod extendedbigdecimal;
 pub mod human;
 pub mod num_format;
 pub mod num_parser;
 mod spec;
 
+use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub use argument::*;
-pub use extendedbigdecimal::ExtendedBigDecimal;
 pub use spec::Spec;
 use std::{
     error::Error,

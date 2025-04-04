@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -50,6 +50,8 @@ pub use crate::features::colors;
 pub use crate::features::custom_tz_fmt;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
+#[cfg(feature = "extendedbigdecimal")]
+pub use crate::features::extendedbigdecimal;
 #[cfg(feature = "format")]
 pub use crate::features::format;
 #[cfg(feature = "fs")]
