@@ -259,10 +259,16 @@ pub fn uu_app() -> Command {
         )
 }
 
-// Fast code path increment function.
-// Add inc to the string val[start..end]. This operates on ASCII digits, assuming
-// val and inc are well formed.
-// Returns the new value for start.
+/// Fast code path increment function.
+///
+/// Add inc to the string val[start..end]. This operates on ASCII digits, assuming
+/// val and inc are well formed.
+///
+/// Returns the new value for start (can be less that the original value if we
+/// have a carry or if inc > start).
+///
+/// We also assume that there is enough space in val to expand if start needs
+/// to be updated.
 fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
     // To avoid a lot of casts to signed integers, we make sure to decrement pos
     // as late as possible, so that it does not ever go negative.
