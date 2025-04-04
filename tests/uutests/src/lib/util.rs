@@ -1762,6 +1762,11 @@ impl UCommand {
             }
         }
 
+        // Forward the LLVM_PROFILE_FILE variable to the call, for coverage purposes.
+        if let Some(ld_preload) = env::var_os("LLVM_PROFILE_FILE") {
+            command.env("LLVM_PROFILE_FILE", ld_preload);
+        }
+
         command
             .envs(DEFAULT_ENV)
             .envs(self.env_vars.iter().cloned());
