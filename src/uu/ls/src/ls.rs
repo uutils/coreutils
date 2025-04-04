@@ -33,7 +33,7 @@ use clap::{
 };
 use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
-use term_grid::{Direction, Filling, Grid, GridOptions};
+use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
 use uucore::error::USimpleError;
 use uucore::format::human::{SizeFormat, human_readable};
@@ -91,7 +91,7 @@ pub mod options {
         pub static LONG: &str = "long";
         pub static COLUMNS: &str = "C";
         pub static ACROSS: &str = "x";
-        pub static TAB_SIZE: &str = "tabsize"; // silently ignored (see #3624)
+        pub static TAB_SIZE: &str = "tabsize";
         pub static COMMAS: &str = "m";
         pub static LONG_NO_OWNER: &str = "g";
         pub static LONG_NO_GROUP: &str = "o";
@@ -385,6 +385,7 @@ pub struct Config {
     line_ending: LineEnding,
     dired: bool,
     hyperlink: bool,
+    tab_size: usize,
 }
 
 // Fields that can be removed or added to the long format
@@ -1087,6 +1088,15 @@ impl Config {
             Dereference::DirArgs
         };
 
+        let tab_size = match needs_color {
+            false => options
+                .get_one::<String>(options::format::TAB_SIZE)
+                .and_then(|size| size.parse::<usize>().ok())
+                .or_else(|| std::env::var("TABSIZE").ok().and_then(|s| s.parse().ok())),
+            _ => Some(0),
+        }
+        .unwrap_or(SPACES_IN_TAB);
+
         Ok(Self {
             format,
             files,
@@ -1124,6 +1134,7 @@ impl Config {
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
             hyperlink,
+            tab_size,
         })
     }
 }
@@ -1240,13 +1251,12 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // silently ignored (see #3624)
             Arg::new(options::format::TAB_SIZE)
                 .short('T')
                 .long(options::format::TAB_SIZE)
                 .env("TABSIZE")
                 .value_name("COLS")
-                .help("Assume tab stops at each COLS instead of 8 (unimplemented)"),
+                .help("Assume tab stops at each COLS instead of 8"),
         )
         .arg(
             Arg::new(options::format::COMMAS)
@@ -2557,10 +2567,24 @@ fn display_items(
 
         match config.format {
             Format::Columns => {
-                display_grid(names, config.width, Direction::TopToBottom, out, quoted)?;
+                display_grid(
+                    names,
+                    config.width,
+                    Direction::TopToBottom,
+                    out,
+                    quoted,
+                    config.tab_size,
+                )?;
             }
             Format::Across => {
-                display_grid(names, config.width, Direction::LeftToRight, out, quoted)?;
+                display_grid(
+                    names,
+                    config.width,
+                    Direction::LeftToRight,
+                    out,
+                    quoted,
+                    config.tab_size,
+                )?;
             }
             Format::Commas => {
                 let mut current_col = 0;
@@ -2628,6 +2652,7 @@ fn display_grid(
     direction: Direction,
     out: &mut BufWriter<Stdout>,
     quoted: bool,
+    tab_size: usize,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -2677,14 +2702,9 @@ fn display_grid(
             .map(|s| s.to_string_lossy().into_owned())
             .collect();
 
-        // Determine whether to use tabs for separation based on whether any entry ends with '/'.
-        // If any entry ends with '/', it indicates that the -F flag is likely used to classify directories.
-        let use_tabs = names.iter().any(|name| name.ends_with('/'));
-
-        let filling = if use_tabs {
-            Filling::Text("\t".to_string())
-        } else {
-            Filling::Spaces(2)
+        let filling = match tab_size {
+            0 => Filling::Spaces(DEFAULT_SEPARATOR_SIZE),
+            _ => Filling::Tabs(tab_size),
         };
 
         let grid = Grid::new(
