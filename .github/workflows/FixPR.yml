@@ -43,9 +43,11 @@ jobs:
     - name: Ensure updated 'Cargo.lock'
       shell: bash
       run: |
-        # Ensure updated 'Cargo.lock'
-        # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
-        cargo fetch --locked --quiet || cargo +${{ steps.vars.outputs.RUST_MIN_SRV }} update
+        # Ensure updated '*/Cargo.lock'
+        # * '*/Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
+        for dir in "." "fuzz"; do
+          ( cd "$dir" && (cargo fetch --locked --quiet || cargo +${{ steps.vars.outputs.RUST_MIN_SRV }} update) )
+        done
     - name: Info
       shell: bash
       run: |
@@ -71,8 +73,8 @@ jobs:
       with:
         new_branch: ${{ env.BRANCH_TARGET }}
         default_author: github_actions
-        message: "maint ~ refresh 'Cargo.lock'"
-        add: Cargo.lock
+        message: "maint ~ refresh 'Cargo.lock' 'fuzz/Cargo.lock'"
+        add: Cargo.lock fuzz/Cargo.lock
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
