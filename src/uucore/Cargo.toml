@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) zerocopy
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal
 
 [package]
 name = "uucore"
@@ -12,7 +12,7 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uucore"
 # readme = "README.md"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2021"
+edition = "2024"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -58,6 +58,8 @@ blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
 crc32fast = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
+bigdecimal = { workspace = true, optional = true }
+num-traits = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace = true, optional = true }
@@ -87,14 +89,22 @@ default = []
 # * non-default features
 backup-control = []
 colors = []
-checksum = ["data-encoding", "thiserror", "regex", "sum"]
+checksum = ["data-encoding", "thiserror", "sum"]
 encoding = ["data-encoding", "data-encoding-macro", "z85"]
 entries = ["libc"]
+extendedbigdecimal = ["bigdecimal", "num-traits"]
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys"]
 fsxattr = ["xattr"]
 lines = []
-format = ["itertools", "quoting-style"]
+format = [
+  "bigdecimal",
+  "extendedbigdecimal",
+  "itertools",
+  "parser",
+  "num-traits",
+  "quoting-style",
+]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
@@ -104,6 +114,7 @@ proc-info = ["tty", "walkdir"]
 quoting-style = []
 ranges = []
 ringbuffer = []
+parser = ["extendedbigdecimal", "num-traits"]
 signals = []
 sum = [
   "digest",
@@ -118,7 +129,7 @@ sum = [
   "sm3",
   "crc32fast",
 ]
-update-control = []
+update-control = ["parser"]
 utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []

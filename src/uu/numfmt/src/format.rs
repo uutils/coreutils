@@ -6,7 +6,7 @@
 use uucore::display::Quotable;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
-use crate::units::{DisplayableSuffix, RawSuffix, Result, Suffix, Unit, IEC_BASES, SI_BASES};
+use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
 
 /// Iterate over a line's fields, where each field is a contiguous sequence of
 /// non-whitespace, optionally prefixed with one or more characters of leading
@@ -156,11 +156,7 @@ fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
     remove_suffix(i, suffix, &opts.from).map(|n| {
         // GNU numfmt doesn't round values if no --from argument is provided by the user
         if opts.from == Unit::None {
-            if n == -0.0 {
-                0.0
-            } else {
-                n
-            }
+            if n == -0.0 { 0.0 } else { n }
         } else if n < 0.0 {
             -n.abs().ceil()
         } else {

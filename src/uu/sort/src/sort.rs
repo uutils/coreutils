@@ -19,21 +19,21 @@ mod tmp_dir;
 
 use chunks::LineData;
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
-use nix::libc::{getrlimit, rlimit, RLIMIT_NOFILE};
-use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
-use rand::{rng, Rng};
+use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
+use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
+use rand::{Rng, rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::Range;
 use std::path::Path;
@@ -43,10 +43,10 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::strip_errno;
-use uucore::error::{set_exit_code, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::line_ending::LineEnding;
-use uucore::parse_size::{ParseSizeError, Parser};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_size::{ParseSizeError, Parser};
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::version_cmp::version_cmp;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
@@ -460,6 +460,13 @@ impl<'a> Line<'a> {
         if settings.precomputed.needs_tokens {
             tokenize(line, settings.separator, token_buffer);
         }
+        if settings.mode == SortMode::Numeric {
+            // exclude inf, nan, scientific notation
+            let line_num_float = (!line.contains(char::is_alphabetic))
+                .then(|| line.parse::<f64>().ok())
+                .flatten();
+            line_data.line_num_floats.push(line_num_float);
+        }
         for (selector, selection) in settings
             .selectors
             .iter()
@@ -668,9 +675,9 @@ fn tokenize_default(line: &str, token_buffer: &mut Vec<Field>) {
 /// Split between separators. These separators are not included in fields.
 /// The result is stored into `token_buffer`.
 fn tokenize_with_separator(line: &str, separator: char, token_buffer: &mut Vec<Field>) {
-    let separator_indices =
-        line.char_indices()
-            .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
+    let separator_indices = line
+        .char_indices()
+        .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
     let mut start = 0;
     for sep_idx in separator_indices {
         token_buffer.push(start..sep_idx);
@@ -707,7 +714,7 @@ impl KeyPosition {
                     "failed to parse field index {} {}",
                     field.quote(),
                     e
-                ))
+                ));
             }
         };
         if field == 0 {
@@ -971,7 +978,9 @@ impl FieldSelector {
                 range
             }
             Resolution::TooLow | Resolution::EndOfChar(_) => {
-                unreachable!("This should only happen if the field start index is 0, but that should already have caused an error.")
+                unreachable!(
+                    "This should only happen if the field start index is 0, but that should already have caused an error."
+                )
             }
             // While for comparisons it's only important that this is an empty slice,
             // to produce accurate debug output we need to match an empty slice at the end of the line.
@@ -1111,7 +1120,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .get_one::<String>(options::PARALLEL)
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
-        env::set_var("RAYON_NUM_THREADS", &settings.threads);
+        unsafe {
+            env::set_var("RAYON_NUM_THREADS", &settings.threads);
+        }
     }
 
     settings.buffer_size =
@@ -1278,7 +1289,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
@@ -1559,6 +1570,24 @@ fn compare_by<'a>(
     let mut selection_index = 0;
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
+
+    if let (Some(Some(a_f64)), Some(Some(b_f64))) = (
+        a_line_data.line_num_floats.get(a.index),
+        b_line_data.line_num_floats.get(b.index),
+    ) {
+        // we don't use total_cmp() because it always sorts -0 before 0
+        if let Some(cmp) = a_f64.partial_cmp(b_f64) {
+            // don't trust `Ordering::Equal` if lines are not fully equal
+            if cmp != Ordering::Equal || a.line == b.line {
+                return if global_settings.reverse {
+                    cmp.reverse()
+                } else {
+                    cmp
+                };
+            }
+        }
+    }
+
     for selector in &global_settings.selectors {
         let (a_str, b_str) = if selector.needs_selection {
             let selections = (

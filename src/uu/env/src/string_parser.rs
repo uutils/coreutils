@@ -9,8 +9,8 @@
 use std::{borrow::Cow, ffi::OsStr};
 
 use crate::native_int_str::{
-    from_native_int_representation, get_char_from_native_int, get_single_native_int_value,
-    NativeCharInt, NativeIntStr,
+    NativeCharInt, NativeIntStr, from_native_int_representation, get_char_from_native_int,
+    get_single_native_int_value,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -19,7 +19,7 @@ function progressBar(totals) {
         var(--SKIP) ${skipPercentage}%`
 		)
         + (skipPercentage === 100 ? ")" : ", var(--FAIL) 0)");
-	
+
 	const progress = document.createElement("div");
 	progress.className = "progress"
 	progress.innerHTML = `
@@ -74,7 +74,7 @@ function parse_result(parent, obj) {
 	return totals;
 }
 
-fetch("https://raw.githubusercontent.com/uutils/coreutils-tracking/main/gnu-full-result.json")
+fetch("https://raw.githubusercontent.com/uutils/coreutils-tracking/main/aggregated-result.json")
 	.then((r) => r.json())
 	.then((obj) => {
 		let parent = document.getElementById("test-cov");

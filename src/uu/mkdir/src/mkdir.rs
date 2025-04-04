@@ -7,7 +7,7 @@
 
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
@@ -99,7 +99,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -178,7 +178,7 @@ pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<
 
 #[cfg(any(unix, target_os = "redox"))]
 fn chmod(path: &Path, mode: u32) -> UResult<()> {
-    use std::fs::{set_permissions, Permissions};
+    use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
     let mode = Permissions::from_mode(mode);
     set_permissions(path, mode)

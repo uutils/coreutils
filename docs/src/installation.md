@@ -16,11 +16,11 @@ You can also [build uutils from source](build.md).
 
 ```shell
 # Linux
-cargo install coreutils --features unix
+cargo install coreutils --features unix --locked
 # MacOs
-cargo install coreutils --features macos
+cargo install coreutils --features macos --locked
 # Windows
-cargo install coreutils --features windows
+cargo install coreutils --features windows --locked
 ```
 
 ## Linux
@@ -51,6 +51,16 @@ pacman -S uutils-coreutils
 apt install rust-coreutils
 # To use it:
 export PATH=/usr/lib/cargo/bin/coreutils:$PATH
+```
+
+### Fedora
+
+[![Fedora package](https://repology.org/badge/version-for-repo/fedora_rawhide/uutils-coreutils.svg)](https://packages.fedoraproject.org/pkgs/rust-coreutils/uutils-coreutils)
+
+```shell
+dnf install uutils-coreutils
+# To use it:
+export PATH=/usr/libexec/uutils-coreutils:$PATH
 ```
 
 ### Gentoo
@@ -89,9 +99,22 @@ nix-env -iA nixos.uutils-coreutils
 dnf install uutils-coreutils
 ```
 
+### RHEL/AlmaLinux/CENTOS Stream/Rocky Linux/EPEL 9
+
+[![epel 9 package](https://repology.org/badge/version-for-repo/epel_9/uutils-coreutils.svg)](https://packages.fedoraproject.org/pkgs/rust-coreutils/uutils-coreutils/epel-9.html)
+
+```shell
+# Install EPEL 9 - Specific For RHEL please check codeready-builder-for-rhel-9 First then install epel
+dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm -y
+# Install Core Utils
+dnf install uutils-coreutils
+# To use it:
+export PATH=/usr/libexec/uutils-coreutils:$PATH
+```
+
 ### Ubuntu
 
-[![Ubuntu package](https://repology.org/badge/version-for-repo/ubuntu_23_04/uutils-coreutils.svg)](https://packages.ubuntu.com/source/lunar/rust-coreutils)
+[![Ubuntu package](https://repology.org/badge/version-for-repo/ubuntu_25_04/uutils-coreutils.svg)](https://packages.ubuntu.com/source/plucky/rust-coreutils)
 
 ```shell
 apt install rust-coreutils
@@ -164,10 +187,8 @@ then build your usual yocto image.
 
 ## Non-standard packages
 
-### `coreutils-hybrid` (AUR)
+### `coreutils-uutils` (AUR)
 
-[![AUR package](https://repology.org/badge/version-for-repo/aur/coreutils-hybrid.svg)](https://aur.archlinux.org/packages/coreutils-hybrid)
+[AUR package](https://aur.archlinux.org/packages/coreutils-uutils)
 
-A GNU coreutils / uutils coreutils hybrid package. Uses stable uutils
-programs mixed with GNU counterparts if uutils counterpart is
-unfinished or buggy.
+Cross-platform Rust rewrite of the GNU coreutils being used as actual system coreutils.

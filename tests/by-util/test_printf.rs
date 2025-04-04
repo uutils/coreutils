@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn basic_literal() {
@@ -673,6 +675,19 @@ fn test_overflow() {
     new_ucmd!()
         .args(&["%d", "36893488147419103232"])
         .fails_with_code(1)
+        .stdout_is("9223372036854775807")
+        .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
+
+    new_ucmd!()
+        .args(&["%d", "-36893488147419103232"])
+        .fails_with_code(1)
+        .stdout_is("-9223372036854775808")
+        .stderr_is("printf: '-36893488147419103232': Numerical result out of range\n");
+
+    new_ucmd!()
+        .args(&["%u", "36893488147419103232"])
+        .fails_with_code(1)
+        .stdout_is("18446744073709551615")
         .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
 }
 
@@ -991,6 +1006,33 @@ fn float_flag_position_space_padding() {
 }
 
 #[test]
+fn float_large_precision() {
+    // Note: This does not match GNU coreutils output (0.100000000000000000001355252716 on x86),
+    // as we parse and format using ExtendedBigDecimal, which provides arbitrary precision.
+    new_ucmd!()
+        .args(&["%.30f", "0.1"])
+        .succeeds()
+        .stdout_only("0.100000000000000000000000000000");
+}
+
+#[test]
+fn float_non_finite_space_padding() {
+    new_ucmd!()
+        .args(&["% 5.2f|% 5.2f|% 5.2f|% 5.2f", "inf", "-inf", "nan", "-nan"])
+        .succeeds()
+        .stdout_only("  inf| -inf|  nan| -nan");
+}
+
+#[test]
+fn float_non_finite_zero_padding() {
+    // Zero-padding pads non-finite numbers with spaces.
+    new_ucmd!()
+        .args(&["%05.2f|%05.2f|%05.2f|%05.2f", "inf", "-inf", "nan", "-nan"])
+        .succeeds()
+        .stdout_only("  inf| -inf|  nan| -nan");
+}
+
+#[test]
 fn float_abs_value_less_than_one() {
     new_ucmd!()
         .args(&["%g", "0.1171875"])
@@ -1035,4 +1077,30 @@ fn float_switch_switch_decimal_scientific() {
         .args(&["%g", "0.00001"])
         .succeeds()
         .stdout_only("1e-05");
+}
+
+#[test]
+fn float_arg_with_whitespace() {
+    new_ucmd!()
+        .args(&["%f", " \u{0020}\u{000d}\t\n0.000001"])
+        .succeeds()
+        .stdout_only("0.000001");
+
+    new_ucmd!()
+        .args(&["%f", "0.1 "])
+        .fails()
+        .stderr_contains("value not completely converted");
+
+    // Unicode whitespace should not be allowed in a number
+    new_ucmd!()
+        .args(&["%f", "\u{2029}0.1"])
+        .fails()
+        .stderr_contains("expected a numeric value");
+
+    // A input string with a whitespace special character that has
+    // not already been expanded should fail.
+    new_ucmd!()
+        .args(&["%f", "\\t0.1"])
+        .fails()
+        .stderr_contains("expected a numeric value");
 }

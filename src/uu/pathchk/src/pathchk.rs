@@ -5,11 +5,11 @@
 #![allow(unused_must_use)] // because we of writeln!
 
 // spell-checker:ignore (ToDO) lstat
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, UUsageError};
+use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::{format_usage, help_about, help_usage};
 
 // operating mode
@@ -79,7 +79,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

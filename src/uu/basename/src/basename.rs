@@ -5,8 +5,8 @@
 
 // spell-checker:ignore (ToDO) fullname
 
-use clap::{crate_version, Arg, ArgAction, Command};
-use std::path::{is_separator, PathBuf};
+use clap::{Arg, ArgAction, Command};
+use std::path::{PathBuf, is_separator};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
 use uucore::line_ending::LineEnding;
@@ -76,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

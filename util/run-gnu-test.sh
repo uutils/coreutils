@@ -43,7 +43,27 @@ cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
 export RUST_BACKTRACE=1
 
-if test "$1" != "run-root"; then
+# Determine if we have SELinux tests
+has_selinux_tests=false
+if test $# -ge 1; then
+    for t in "$@"; do
+        if [[ "$t" == *"selinux"* ]]; then
+                has_selinux_tests=true
+                break
+        fi
+    done
+fi
+
+if [[ "$1" == "run-root" && "$has_selinux_tests" == true ]]; then
+    # Handle SELinux root tests separately
+    shift
+    if test -n "$CI"; then
+        echo "Running SELinux tests as root"
+        # Don't use check-root here as the upstream root tests is hardcoded
+        sudo "${MAKE}" -j "$("${NPROC}")" check TESTS="$*" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+    fi
+    exit 0
+elif test "$1" != "run-root"; then
     if test $# -ge 1; then
         # if set, run only the tests passed
         SPECIFIC_TESTS=""
@@ -82,8 +102,13 @@ else
     # in case we would like to run tests requiring root
     if test -z "$1" -o "$1" == "run-root"; then
         if test -n "$CI"; then
-            echo "Running check-root to run only root tests"
-            sudo "${MAKE}" -j "$("${NPROC}")" check-root SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+            if test $# -ge 2; then
+                echo "Running check-root to run only root tests"
+                sudo "${MAKE}" -j "$("${NPROC}")" check-root TESTS="$2" SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+            else
+                echo "Running check-root to run only root tests"
+                sudo "${MAKE}" -j "$("${NPROC}")" check-root SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+            fi
         fi
     fi
 fi

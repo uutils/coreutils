@@ -49,9 +49,10 @@
 use clap::ArgMatches;
 
 /// Available update mode
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub enum UpdateMode {
     /// --update=`all`, ``
+    #[default]
     ReplaceAll,
     /// --update=`none`
     ReplaceNone,
@@ -64,7 +65,7 @@ pub enum UpdateMode {
 
 pub mod arguments {
     //! Pre-defined arguments for update functionality.
-    use crate::shortcut_value_parser::ShortcutValueParser;
+    use crate::parser::shortcut_value_parser::ShortcutValueParser;
     use clap::ArgAction;
 
     /// `--update` argument

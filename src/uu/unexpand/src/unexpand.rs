@@ -5,14 +5,13 @@
 
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
-use clap::{crate_version, Arg, ArgAction, Command};
-use std::error::Error;
-use std::fmt;
+use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
+use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
@@ -23,29 +22,19 @@ const ABOUT: &str = help_about!("unexpand.md");
 
 const DEFAULT_TABSTOP: usize = 8;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum ParseError {
+    #[error("tab size contains invalid character(s): {}", _0.quote())]
     InvalidCharacter(String),
+    #[error("tab size cannot be 0")]
     TabSizeCannotBeZero,
+    #[error("tab stop value is too large")]
     TabSizeTooLarge,
+    #[error("tab sizes must be ascending")]
     TabSizesMustBeAscending,
 }
 
-impl Error for ParseError {}
 impl UError for ParseError {}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidCharacter(s) => {
-                write!(f, "tab size contains invalid character(s): {}", s.quote())
-            }
-            Self::TabSizeCannotBeZero => write!(f, "tab size cannot be 0"),
-            Self::TabSizeTooLarge => write!(f, "tab stop value is too large"),
-            Self::TabSizesMustBeAscending => write!(f, "tab sizes must be ascending"),
-        }
-    }
-}
 
 fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
     let words = s.split(',');
@@ -60,7 +49,7 @@ fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
                 _ => {
                     return Err(ParseError::InvalidCharacter(
                         word.trim_start_matches(char::is_numeric).to_string(),
-                    ))
+                    ));
                 }
             },
         }
@@ -167,7 +156,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)

@@ -5,18 +5,18 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, ExitCode, UResult, USimpleError, UUsageError};
+use uucore::error::{ExitCode, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::perms::{configure_symlink_and_recursion, TraverseSymlinks};
+use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
 const ABOUT: &str = help_about!("chmod.md");
@@ -107,7 +107,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(USimpleError::new(
                     1,
                     format!("cannot stat attributes of {}: {}", fref.quote(), err),
-                ))
+                ));
             }
         },
         None => None,
@@ -157,7 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .args_override_self(true)
@@ -298,7 +298,7 @@ impl Chmoder {
                     format!(
                         "it is dangerous to operate recursively on {}\nchmod: use --no-preserve-root to override this failsafe",
                         filename.quote()
-                    )
+                    ),
                 ));
             }
             if self.recursive {

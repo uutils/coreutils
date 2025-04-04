@@ -14,7 +14,7 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.82.0-brightgreen)
+![MSRV](https://img.shields.io/badge/MSRV-1.85.0-brightgreen)
 
 </div>
 
@@ -45,7 +45,7 @@ uutils aims to be a drop-in replacement for the GNU utils. Differences with GNU
 are treated as bugs.
 
 uutils aims to work on as many platforms as possible, to be able to use the same
-utils on Linux, Mac, Windows and other platforms. This ensures, for example,
+utils on Linux, macOS, Windows and other platforms. This ensures, for example,
 that scripts can be easily transferred between platforms.
 
 <div class="oranda-hide">
@@ -70,7 +70,7 @@ the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and
-nightly. The current Minimum Supported Rust Version (MSRV) is `1.82.0`.
+nightly. The current Minimum Supported Rust Version (MSRV) is `1.85.0`.
 
 ## Building
 

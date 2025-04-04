@@ -6,7 +6,6 @@
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 // spell-checker:ignore (words) seekable
 
-use crate::common::util::TestScenario;
 #[cfg(all(
     not(target_os = "windows"),
     not(target_os = "macos"),
@@ -15,7 +14,9 @@ use crate::common::util::TestScenario;
     not(target_os = "openbsd")
 ))]
 use std::io::Read;
-
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 static INPUT: &str = "lorem_ipsum.txt";
 
 #[test]

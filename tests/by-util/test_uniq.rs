@@ -4,8 +4,11 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore nabcd badoption schar
-use crate::common::util::TestScenario;
 use uucore::posix::OBSOLETE;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 static INPUT: &str = "sorted.txt";
 static OUTPUT: &str = "sorted-output.txt";

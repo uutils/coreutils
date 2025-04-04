@@ -10,9 +10,6 @@
     clippy::cast_possible_truncation
 )]
 
-#[cfg(any(unix, feature = "feat_selinux"))]
-use crate::common::util::expected_result;
-use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
 use regex::Regex;
@@ -29,6 +26,13 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
+use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::unwrap_or_return;
+use uutests::util::TestScenario;
+#[cfg(any(unix, feature = "feat_selinux"))]
+use uutests::util::expected_result;
+use uutests::{at_and_ucmd, util_name};
 
 const LONG_ARGS: &[&str] = &[
     "-l",
@@ -1033,9 +1037,10 @@ fn test_ls_zero() {
             );
 
         let result = scene.ucmd().args(&["--zero", "--color=always"]).succeeds();
-        assert_eq!(result.stdout_str(),
-                "\u{1b}[0m\u{1b}[01;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00",
-            );
+        assert_eq!(
+            result.stdout_str(),
+            "\u{1b}[0m\u{1b}[01;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00",
+        );
 
         scene
             .ucmd()
@@ -2231,6 +2236,7 @@ fn test_ls_recursive_1() {
 #[cfg(unix)]
 mod quoting {
     use super::TestScenario;
+    use uutests::util_name;
 
     /// Create a directory with "dirname", then for each check, assert that the
     /// output is correct.
@@ -5029,15 +5035,19 @@ fn test_ls_hyperlink() {
 
     let result = scene.ucmd().arg("--hyperlink").succeeds();
     assert!(result.stdout_str().contains("\x1b]8;;file://"));
-    assert!(result
-        .stdout_str()
-        .contains(&format!("{path}{separator}{file}\x07{file}\x1b]8;;\x07")));
+    assert!(
+        result
+            .stdout_str()
+            .contains(&format!("{path}{separator}{file}\x07{file}\x1b]8;;\x07"))
+    );
 
     let result = scene.ucmd().arg("--hyperlink=always").succeeds();
     assert!(result.stdout_str().contains("\x1b]8;;file://"));
-    assert!(result
-        .stdout_str()
-        .contains(&format!("{path}{separator}{file}\x07{file}\x1b]8;;\x07")));
+    assert!(
+        result
+            .stdout_str()
+            .contains(&format!("{path}{separator}{file}\x07{file}\x1b]8;;\x07"))
+    );
 
     for argument in [
         "--hyperlink=never",
@@ -5069,19 +5079,27 @@ fn test_ls_hyperlink_encode_link() {
     let result = ucmd.arg("--hyperlink").succeeds();
     #[cfg(not(target_os = "windows"))]
     {
-        assert!(result
-            .stdout_str()
-            .contains("back%5cslash\x07back\\slash\x1b]8;;\x07"));
-        assert!(result
-            .stdout_str()
-            .contains("ques%3ftion\x07ques?tion\x1b]8;;\x07"));
+        assert!(
+            result
+                .stdout_str()
+                .contains("back%5cslash\x07back\\slash\x1b]8;;\x07")
+        );
+        assert!(
+            result
+                .stdout_str()
+                .contains("ques%3ftion\x07ques?tion\x1b]8;;\x07")
+        );
     }
-    assert!(result
-        .stdout_str()
-        .contains("encoded%253Fquestion\x07encoded%3Fquestion\x1b]8;;\x07"));
-    assert!(result
-        .stdout_str()
-        .contains("sp%20ace\x07sp ace\x1b]8;;\x07"));
+    assert!(
+        result
+            .stdout_str()
+            .contains("encoded%253Fquestion\x07encoded%3Fquestion\x1b]8;;\x07")
+    );
+    assert!(
+        result
+            .stdout_str()
+            .contains("sp%20ace\x07sp ace\x1b]8;;\x07")
+    );
 }
 // spell-checker: enable
 
@@ -5106,19 +5124,23 @@ fn test_ls_hyperlink_dirs() {
         .succeeds();
 
     assert!(result.stdout_str().contains("\x1b]8;;file://"));
-    assert!(result
-        .stdout_str()
-        .lines()
-        .next()
-        .unwrap()
-        .contains(&format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:")));
+    assert!(
+        result
+            .stdout_str()
+            .lines()
+            .next()
+            .unwrap()
+            .contains(&format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:"))
+    );
     assert_eq!(result.stdout_str().lines().nth(1).unwrap(), "");
-    assert!(result
-        .stdout_str()
-        .lines()
-        .nth(2)
-        .unwrap()
-        .contains(&format!("{path}{separator}{dir_b}\x07{dir_b}\x1b]8;;\x07:")));
+    assert!(
+        result
+            .stdout_str()
+            .lines()
+            .nth(2)
+            .unwrap()
+            .contains(&format!("{path}{separator}{dir_b}\x07{dir_b}\x1b]8;;\x07:"))
+    );
 }
 
 #[test]

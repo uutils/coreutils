@@ -10,7 +10,7 @@ homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/date"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2021"
+edition = "2024"
 
 readme.workspace = true
 
@@ -20,7 +20,7 @@ path = "src/date.rs"
 [dependencies]
 chrono = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["custom-tz-fmt"] }
+uucore = { workspace = true, features = ["custom-tz-fmt", "parser"] }
 parse_datetime = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

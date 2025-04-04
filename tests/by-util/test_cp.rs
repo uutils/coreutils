@@ -4,7 +4,12 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG getfattr
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::path_concat;
+use uutests::util::TestScenario;
+use uutests::util_name;
+
 #[cfg(not(windows))]
 use std::fs::set_permissions;
 
@@ -34,7 +39,7 @@ use std::time::Duration;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(feature = "truncate")]
-use crate::common::util::PATH;
+use uutests::util::PATH;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
@@ -60,7 +65,7 @@ static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
     unix,
     not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
 ))]
-use crate::common::util::compare_xattrs;
+use uutests::util::compare_xattrs;
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
 #[cfg(all(not(windows), not(target_os = "freebsd")))]
@@ -349,11 +354,38 @@ fn test_cp_arg_no_target_directory_with_recursive() {
     at.touch("dir/a");
     at.touch("dir/b");
 
-    ucmd.arg("-rT").arg("dir").arg("dir2").succeeds();
+    ucmd.arg("-rT")
+        .arg("dir")
+        .arg("dir2")
+        .succeeds()
+        .no_output();
 
     assert!(at.plus("dir2").join("a").exists());
     assert!(at.plus("dir2").join("b").exists());
     assert!(!at.plus("dir2").join("dir").exists());
+}
+
+#[test]
+#[ignore = "disabled until https://github.com/uutils/coreutils/issues/7455 is fixed"]
+fn test_cp_arg_no_target_directory_with_recursive_target_does_not_exists() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.touch("dir/a");
+    at.touch("dir/b");
+
+    let target = "create_me";
+    assert!(!at.plus(target).exists());
+
+    ucmd.arg("-rT")
+        .arg("dir")
+        .arg(target)
+        .succeeds()
+        .no_output();
+
+    assert!(at.plus(target).join("a").exists());
+    assert!(at.plus(target).join("b").exists());
+    assert!(!at.plus(target).join("dir").exists());
 }
 
 #[test]
@@ -1310,13 +1342,15 @@ fn test_cp_deref() {
         .join(TEST_COPY_TO_FOLDER)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
     // unlike -P/--no-deref, we expect a file, not a link
-    assert!(at.file_exists(
-        path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.file_exists(
+            path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
@@ -1347,13 +1381,15 @@ fn test_cp_no_deref() {
         .subdir
         .join(TEST_COPY_TO_FOLDER)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    assert!(at.is_symlink(
-        &path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.is_symlink(
+            &path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
@@ -1394,14 +1430,16 @@ fn test_cp_no_deref_link_onto_link() {
         .succeeds();
 
     // Ensure that the target of the destination was not modified.
-    assert!(!at
-        .symlink_metadata(TEST_HELLO_WORLD_DEST)
-        .file_type()
-        .is_symlink());
-    assert!(at
-        .symlink_metadata(TEST_HELLO_WORLD_DEST_SYMLINK)
-        .file_type()
-        .is_symlink());
+    assert!(
+        !at.symlink_metadata(TEST_HELLO_WORLD_DEST)
+            .file_type()
+            .is_symlink()
+    );
+    assert!(
+        at.symlink_metadata(TEST_HELLO_WORLD_DEST_SYMLINK)
+            .file_type()
+            .is_symlink()
+    );
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST_SYMLINK), "Hello, World!\n");
 }
 
@@ -2033,13 +2071,15 @@ fn test_cp_deref_folder_to_folder() {
         .subdir
         .join(TEST_COPY_TO_FOLDER_NEW)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    assert!(at.file_exists(
-        path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.file_exists(
+            path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
 
     let path_to_new = at.subdir.join(TEST_COPY_TO_FOLDER_NEW_FILE);
 
@@ -2129,13 +2169,15 @@ fn test_cp_no_deref_folder_to_folder() {
         .subdir
         .join(TEST_COPY_TO_FOLDER_NEW)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    assert!(at.is_symlink(
-        &path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.is_symlink(
+            &path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
 
     let path_to_new = at.subdir.join(TEST_COPY_TO_FOLDER_NEW_FILE);
 
@@ -2227,18 +2269,22 @@ fn test_cp_archive_recursive() {
     assert!(at.file_exists(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("1")));
     assert!(at.file_exists(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("2")));
 
-    assert!(at.is_symlink(
-        &at.subdir
-            .join(TEST_COPY_TO_FOLDER_NEW)
-            .join("1.link")
-            .to_string_lossy()
-    ));
-    assert!(at.is_symlink(
-        &at.subdir
-            .join(TEST_COPY_TO_FOLDER_NEW)
-            .join("2.link")
-            .to_string_lossy()
-    ));
+    assert!(
+        at.is_symlink(
+            &at.subdir
+                .join(TEST_COPY_TO_FOLDER_NEW)
+                .join("1.link")
+                .to_string_lossy()
+        )
+    );
+    assert!(
+        at.is_symlink(
+            &at.subdir
+                .join(TEST_COPY_TO_FOLDER_NEW)
+                .join("2.link")
+                .to_string_lossy()
+        )
+    );
 }
 
 #[test]
@@ -2331,7 +2377,7 @@ fn test_cp_target_file_dev_null() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 fn test_cp_one_file_system() {
-    use crate::common::util::AtPath;
+    use uutests::util::AtPath;
     use walkdir::WalkDir;
 
     let mut scene = TestScenario::new(util_name!());
@@ -3947,13 +3993,17 @@ fn test_cp_seen_file() {
 
     let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
     #[cfg(not(unix))]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c\\f' with 'b/f'")
+    );
     #[cfg(unix)]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c/f' with 'b/f'")
+    );
 
     assert!(at.plus("c").join("f").exists());
 
@@ -4624,7 +4674,8 @@ fn test_cp_no_dereference_attributes_only_with_symlink() {
 /// contains the test for cp when the source and destination points to the same file
 mod same_file {
 
-    use crate::common::util::TestScenario;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
 
     const FILE_NAME: &str = "foo";
     const SYMLINK_NAME: &str = "symlink";
@@ -5549,8 +5600,9 @@ mod same_file {
 #[cfg(all(unix, not(target_os = "android")))]
 mod link_deref {
 
-    use crate::common::util::{AtPath, TestScenario};
     use std::os::unix::fs::MetadataExt;
+    use uutests::util::{AtPath, TestScenario};
+    use uutests::util_name;
 
     const FILE: &str = "file";
     const FILE_LINK: &str = "file_link";
@@ -5585,7 +5637,7 @@ mod link_deref {
                 let mut args = vec!["--link", "-P", src, DST];
                 if r {
                     args.push("-R");
-                };
+                }
                 scene.ucmd().args(&args).succeeds().no_stderr();
                 at.is_symlink(DST);
                 let src_ino = at.symlink_metadata(src).ino();
@@ -5606,7 +5658,7 @@ mod link_deref {
                 let mut args = vec!["--link", DANG_LINK, DST];
                 if r {
                     args.push("-R");
-                };
+                }
                 if !option.is_empty() {
                     args.push(option);
                 }
@@ -5992,8 +6044,8 @@ fn test_cp_no_file() {
     not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
 ))]
 fn test_cp_preserve_xattr_readonly_source() {
-    use crate::common::util::compare_xattrs;
     use std::process::Command;
+    use uutests::util::compare_xattrs;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -6046,11 +6098,13 @@ fn test_cp_preserve_xattr_readonly_source() {
     );
 
     at.set_readonly(source_file);
-    assert!(scene
-        .fixtures
-        .metadata(source_file)
-        .permissions()
-        .readonly());
+    assert!(
+        scene
+            .fixtures
+            .metadata(source_file)
+            .permissions()
+            .readonly()
+    );
 
     scene
         .ucmd()

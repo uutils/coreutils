@@ -5,13 +5,13 @@
 
 // cSpell:ignore POLLERR POLLRDBAND pfds revents
 
-use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, builder::PossibleValue};
 use std::fs::OpenOptions;
-use std::io::{copy, stdin, stdout, Error, ErrorKind, Read, Result, Write};
+use std::io::{Error, ErrorKind, Read, Result, Write, copy, stdin, stdout};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 // spell-checker:ignore nopipe
@@ -99,7 +99,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
@@ -391,7 +391,7 @@ impl Read for NamedReader {
 pub fn ensure_stdout_not_broken() -> Result<bool> {
     use nix::{
         poll::{PollFd, PollFlags, PollTimeout},
-        sys::stat::{fstat, SFlag},
+        sys::stat::{SFlag, fstat},
     };
     use std::os::fd::{AsFd, AsRawFd};
 

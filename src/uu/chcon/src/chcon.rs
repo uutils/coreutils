@@ -3,13 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (vars) RFILE
+#![cfg(target_os = "linux")]
 #![allow(clippy::upper_case_acronyms)]
 
 use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{display::Quotable, format_usage, help_about, help_usage, show_error, show_warning};
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -149,7 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

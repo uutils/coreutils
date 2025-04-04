@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
@@ -29,19 +29,19 @@ use quick_error::ResultExt;
 
 use platform::copy_on_write;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
+use uucore::error::{UClapError, UError, UResult, UUsageError, set_exit_code};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop, normalize_path,
-    path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
-    ResolveMode,
+    FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
+    get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
+    paths_refer_to_same_file,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enum.
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
-    format_usage, help_about, help_section, help_usage, prompt_yes,
-    shortcut_value_parser::ShortcutValueParser, show_error, show_warning,
+    format_usage, help_about, help_section, help_usage,
+    parser::shortcut_value_parser::ShortcutValueParser, prompt_yes, show_error, show_warning,
 };
 
 use crate::copydir::copy_directory;
@@ -110,15 +110,16 @@ impl UError for Error {
 pub type CopyResult<T> = Result<T, Error>;
 
 /// Specifies how to overwrite files.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 pub enum ClobberMode {
     Force,
     RemoveDestination,
+    #[default]
     Standard,
 }
 
 /// Specifies whether files should be overwritten.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum OverwriteMode {
     /// [Default] Always overwrite existing files
     Clobber(ClobberMode),
@@ -128,18 +129,39 @@ pub enum OverwriteMode {
     NoClobber,
 }
 
+impl Default for OverwriteMode {
+    fn default() -> Self {
+        Self::Clobber(ClobberMode::default())
+    }
+}
+
 /// Possible arguments for `--reflink`.
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ReflinkMode {
     Always,
     Auto,
     Never,
 }
 
+impl Default for ReflinkMode {
+    #[allow(clippy::derivable_impls)]
+    fn default() -> Self {
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+        {
+            ReflinkMode::Auto
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
+        {
+            ReflinkMode::Never
+        }
+    }
+}
+
 /// Possible arguments for `--sparse`.
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum SparseMode {
     Always,
+    #[default]
     Auto,
     Never,
 }
@@ -152,10 +174,11 @@ pub enum TargetType {
 }
 
 /// Copy action to perform
-#[derive(PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 pub enum CopyMode {
     Link,
     SymLink,
+    #[default]
     Copy,
     Update,
     AttrOnly,
@@ -174,7 +197,7 @@ pub enum CopyMode {
 /// For full compatibility with GNU, these options should also combine. We
 /// currently only do a best effort imitation of that behavior, because it is
 /// difficult to achieve in clap, especially with `--no-preserve`.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Attributes {
     #[cfg(unix)]
     pub ownership: Preserve,
@@ -183,6 +206,12 @@ pub struct Attributes {
     pub context: Preserve,
     pub links: Preserve,
     pub xattr: Preserve,
+}
+
+impl Default for Attributes {
+    fn default() -> Self {
+        Self::NONE
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -224,6 +253,7 @@ impl Ord for Preserve {
 ///
 /// The fields are documented with the arguments that determine their value.
 #[allow(dead_code)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Options {
     /// `--attributes-only`
     pub attributes_only: bool,
@@ -285,6 +315,34 @@ pub struct Options {
     pub verbose: bool,
     /// `-g`, `--progress`
     pub progress_bar: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            attributes_only: false,
+            backup: BackupMode::default(),
+            copy_contents: false,
+            cli_dereference: false,
+            copy_mode: CopyMode::default(),
+            dereference: false,
+            no_target_dir: false,
+            one_file_system: false,
+            overwrite: OverwriteMode::default(),
+            parents: false,
+            sparse_mode: SparseMode::default(),
+            strip_trailing_slashes: false,
+            reflink_mode: ReflinkMode::default(),
+            attributes: Attributes::default(),
+            recursive: false,
+            backup_suffix: backup_control::DEFAULT_BACKUP_SUFFIX.to_owned(),
+            target_dir: None,
+            update: UpdateMode::default(),
+            debug: false,
+            verbose: false,
+            progress_bar: false,
+        }
+    }
 }
 
 /// Enum representing if a file has been skipped.
@@ -431,7 +489,7 @@ pub fn uu_app() -> Command {
         options::COPY_CONTENTS,
     ];
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(format!(
@@ -1091,18 +1149,7 @@ impl Options {
                         }
                     }
                 } else {
-                    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
-                    {
-                        ReflinkMode::Auto
-                    }
-                    #[cfg(not(any(
-                        target_os = "linux",
-                        target_os = "android",
-                        target_os = "macos"
-                    )))]
-                    {
-                        ReflinkMode::Never
-                    }
+                    ReflinkMode::default()
                 }
             },
             sparse_mode: {
@@ -1451,7 +1498,7 @@ fn file_mode_for_interactive_overwrite(
     {
         #[cfg(unix)]
         {
-            use libc::{mode_t, S_IWUSR};
+            use libc::{S_IWUSR, mode_t};
             use std::os::unix::prelude::MetadataExt;
 
             match path.metadata() {
@@ -1584,9 +1631,9 @@ pub(crate) fn copy_attributes(
     #[cfg(unix)]
     handle_preserve(&attributes.ownership, || -> CopyResult<()> {
         use std::os::unix::prelude::MetadataExt;
-        use uucore::perms::wrap_chown;
         use uucore::perms::Verbosity;
         use uucore::perms::VerbosityLevel;
+        use uucore::perms::wrap_chown;
 
         let dest_uid = source_metadata.uid();
         let dest_gid = source_metadata.gid();
@@ -2580,7 +2627,7 @@ fn disk_usage_directory(p: &Path) -> io::Result<u64> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{aligned_ancestors, localize_to_target, Attributes, Preserve};
+    use crate::{Attributes, Preserve, aligned_ancestors, localize_to_target};
     use std::path::Path;
 
     #[test]

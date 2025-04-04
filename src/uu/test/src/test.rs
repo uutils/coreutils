@@ -8,9 +8,9 @@
 pub(crate) mod error;
 mod parser;
 
-use clap::{crate_version, Command};
+use clap::Command;
 use error::{ParseError, ParseResult};
-use parser::{parse, Operator, Symbol, UnaryOperator};
+use parser::{Operator, Symbol, UnaryOperator, parse};
 use std::ffi::{OsStr, OsString};
 use std::fs;
 #[cfg(unix)]
@@ -42,7 +42,7 @@ pub fn uu_app() -> Command {
     // Disable printing of -h and -v as valid alternatives for --help and --version,
     // since we don't recognize -h and -v as help/version flags.
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
@@ -69,11 +69,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
     let result = parse(args).map(|mut stack| eval(&mut stack))??;
 
-    if result {
-        Ok(())
-    } else {
-        Err(1.into())
-    }
+    if result { Ok(()) } else { Err(1.into()) }
 }
 
 /// Evaluate a stack of Symbols, returning the result of the evaluation or

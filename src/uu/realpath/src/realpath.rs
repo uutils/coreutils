@@ -5,19 +5,17 @@
 
 // spell-checker:ignore (ToDO) retcode
 
-use clap::{
-    builder::NonEmptyStringValueParser, crate_version, Arg, ArgAction, ArgMatches, Command,
-};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::NonEmptyStringValueParser};
 use std::{
-    io::{stdout, Write},
+    io::{Write, stdout},
     path::{Path, PathBuf},
 };
 use uucore::fs::make_path_relative_to;
 use uucore::{
-    display::{print_verbatim, Quotable},
+    display::{Quotable, print_verbatim},
     error::{FromIo, UClapError, UResult},
     format_usage,
-    fs::{canonicalize, MissingHandling, ResolveMode},
+    fs::{MissingHandling, ResolveMode, canonicalize},
     help_about, help_usage,
     line_ending::LineEnding,
     show_if_err,
@@ -90,7 +88,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

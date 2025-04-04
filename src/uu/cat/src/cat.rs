@@ -4,8 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
-use std::fs::{metadata, File};
-use std::io::{self, IsTerminal, Read, Write};
+use std::fs::{File, metadata};
+use std::io::{self, BufWriter, IsTerminal, Read, Write};
 /// Unix domain socket support
 #[cfg(unix)]
 use std::net::Shutdown;
@@ -16,9 +16,9 @@ use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
-use nix::fcntl::{fcntl, FcntlArg};
+use nix::fcntl::{FcntlArg, fcntl};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -83,19 +83,11 @@ struct OutputOptions {
 
 impl OutputOptions {
     fn tab(&self) -> &'static str {
-        if self.show_tabs {
-            "^I"
-        } else {
-            "\t"
-        }
+        if self.show_tabs { "^I" } else { "\t" }
     }
 
     fn end_of_line(&self) -> &'static str {
-        if self.show_ends {
-            "$\n"
-        } else {
-            "\n"
-        }
+        if self.show_ends { "$\n" } else { "\n" }
     }
 
     /// We can write fast if we can simply copy the contents of the file to
@@ -229,7 +221,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)
@@ -511,7 +503,9 @@ fn write_lines<R: FdReadable>(
 ) -> CatResult<()> {
     let mut in_buf = [0; 1024 * 31];
     let stdout = io::stdout();
-    let mut writer = stdout.lock();
+    let stdout = stdout.lock();
+    // Add a 32K buffer for stdout - this greatly improves performance.
+    let mut writer = BufWriter::with_capacity(32 * 1024, stdout);
 
     while let Ok(n) = handle.reader.read(&mut in_buf) {
         if n == 0 {
@@ -560,6 +554,14 @@ fn write_lines<R: FdReadable>(
             }
             pos += offset + 1;
         }
+        // We need to flush the buffer each time around the loop in order to pass GNU tests.
+        // When we are reading the input from a pipe, the `handle.reader.read` call at the top
+        // of this loop will block (indefinitely) whist waiting for more data. The expectation
+        // however is that anything that's ready for output should show up in the meantime,
+        // and not be buffered internally to the `cat` process.
+        // Hence it's necessary to flush our buffer before every time we could potentially block
+        // on a `std::io::Read::read` call.
+        writer.flush()?;
     }
 
     Ok(())
@@ -642,7 +644,7 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
             }
             None => {
                 writer.write_all(in_buf).unwrap();
-                return in_buf.len();
+                return in_buf.len() + count;
             }
         };
     }
@@ -684,7 +686,21 @@ fn write_end_of_line<W: Write>(
 
 #[cfg(test)]
 mod tests {
-    use std::io::{stdout, BufWriter};
+    use std::io::{BufWriter, stdout};
+
+    #[test]
+    fn test_write_tab_to_end_with_newline() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = b"a\tb\tc\n";
+        assert_eq!(super::write_tab_to_end(in_buf, &mut writer), 5);
+    }
+
+    #[test]
+    fn test_write_tab_to_end_no_newline() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = b"a\tb\tc";
+        assert_eq!(super::write_tab_to_end(in_buf, &mut writer), 5);
+    }
 
     #[test]
     fn test_write_nonprint_to_end_new_line() {
