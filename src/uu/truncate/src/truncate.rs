@@ -12,7 +12,7 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 #[derive(Debug, Eq, PartialEq)]

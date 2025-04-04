@@ -23,7 +23,7 @@ use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 // Options
 const DATE: &str = "date";

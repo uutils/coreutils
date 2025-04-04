@@ -19,7 +19,7 @@ path = "src/shred.rs"
 [dependencies]
 clap = { workspace = true }
 rand = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
 libc = { workspace = true }
 
 [[bin]]

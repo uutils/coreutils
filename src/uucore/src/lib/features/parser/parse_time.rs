@@ -40,7 +40,7 @@ use crate::display::Quotable;
 ///
 /// ```rust
 /// use std::time::Duration;
-/// use uucore::parse_time::from_str;
+/// use uucore::parser::parse_time::from_str;
 /// assert_eq!(from_str("123"), Ok(Duration::from_secs(123)));
 /// assert_eq!(from_str("2d"), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
 /// ```
@@ -84,7 +84,7 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
 #[cfg(test)]
 mod tests {
 
-    use crate::parse_time::from_str;
+    use crate::parser::parse_time::from_str;
     use std::time::Duration;
 
     #[test]

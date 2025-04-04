@@ -5,7 +5,7 @@
 
 use crate::{
     error::set_exit_code,
-    features::format::num_parser::{ExtendedParser, ExtendedParserError},
+    parser::num_parser::{ExtendedParser, ExtendedParserError},
     quoting_style::{Quotes, QuotingStyle, escape_name},
     show_error, show_warning,
 };

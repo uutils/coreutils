@@ -27,9 +27,9 @@ use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::line_ending::LineEnding;
-use uucore::parse_glob;
-use uucore::parse_size::{ParseSizeError, parse_size_u64};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_glob;
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;

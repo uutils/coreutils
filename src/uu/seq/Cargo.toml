@@ -26,6 +26,7 @@ thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "extendedbigdecimal",
   "format",
+  "parser",
   "quoting-style",
 ] }
 

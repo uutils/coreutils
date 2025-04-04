@@ -28,6 +28,8 @@ pub mod fs;
 pub mod fsext;
 #[cfg(feature = "lines")]
 pub mod lines;
+#[cfg(feature = "parser")]
+pub mod parser;
 #[cfg(feature = "quoting-style")]
 pub mod quoting_style;
 #[cfg(feature = "ranges")]

@@ -22,7 +22,7 @@ use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::parse_size::parse_size_u64;
+use uucore::parser::parse_size::parse_size_u64;
 
 use uucore::uio_error;
 use uucore::{format_usage, help_about, help_section, help_usage};

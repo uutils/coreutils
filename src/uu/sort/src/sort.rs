@@ -45,8 +45,8 @@ use uucore::display::Quotable;
 use uucore::error::strip_errno;
 use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::line_ending::LineEnding;
-use uucore::parse_size::{ParseSizeError, Parser};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_size::{ParseSizeError, Parser};
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::version_cmp::version_cmp;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 

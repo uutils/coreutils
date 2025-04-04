@@ -101,6 +101,7 @@ format = [
   "bigdecimal",
   "extendedbigdecimal",
   "itertools",
+  "parser",
   "num-traits",
   "quoting-style",
 ]
@@ -113,6 +114,7 @@ proc-info = ["tty", "walkdir"]
 quoting-style = []
 ranges = []
 ringbuffer = []
+parser = ["extendedbigdecimal", "num-traits"]
 signals = []
 sum = [
   "digest",
@@ -127,7 +129,7 @@ sum = [
   "sm3",
   "crc32fast",
 ]
-update-control = []
+update-control = ["parser"]
 utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []

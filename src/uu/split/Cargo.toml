@@ -19,7 +19,7 @@ path = "src/split.rs"
 [dependencies]
 clap = { workspace = true }
 memchr = { workspace = true }
-uucore = { workspace = true, features = ["fs"] }
+uucore = { workspace = true, features = ["fs", "parser"] }
 thiserror = { workspace = true }
 
 [[bin]]

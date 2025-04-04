@@ -30,7 +30,7 @@ self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
-uucore = { workspace = true, features = ["fs", "version-cmp"] }
+uucore = { workspace = true, features = ["fs", "parser", "version-cmp"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = { workspace = true }

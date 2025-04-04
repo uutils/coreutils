@@ -14,7 +14,7 @@ use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{MountInfo, read_fs_list};
-use uucore::parse_size::ParseSizeError;
+use uucore::parser::parse_size::ParseSizeError;
 use uucore::{format_usage, help_about, help_section, help_usage, show};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};

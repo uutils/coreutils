@@ -10,7 +10,7 @@ use clap::{ArgMatches, parser::ValueSource};
 use thiserror::Error;
 use uucore::{
     display::Quotable,
-    parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
+    parser::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
 };
 
 /// Sub-strategy of the [`Strategy::Number`]
