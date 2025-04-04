@@ -33,6 +33,7 @@ uucore = { workspace = true, features = [
   "entries",
   "fs",
   "fsxattr",
+  "parser",
   "perms",
   "mode",
   "update-control",

@@ -5,7 +5,7 @@
 // spell-checker:ignore extendedbigdecimal
 use num_traits::Zero;
 
-use uucore::format::ExtendedBigDecimal;
+use uucore::extendedbigdecimal::ExtendedBigDecimal;
 
 /// A number with a specified number of integer and fractional digits.
 ///

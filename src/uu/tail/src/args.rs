@@ -14,8 +14,8 @@ use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::parse_size::{ParseSizeError, parse_size_u64};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_usage, show_warning};
 
 const ABOUT: &str = help_about!("tail.md");

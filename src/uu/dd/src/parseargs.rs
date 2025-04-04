@@ -12,7 +12,7 @@ use crate::conversion_tables::ConversionTable;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
-use uucore::parse_size::{ParseSizeError, Parser as SizeParser};
+use uucore::parser::parse_size::{ParseSizeError, Parser as SizeParser};
 use uucore::show_warning;
 
 /// Parser Errors describe errors with parser input

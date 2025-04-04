@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use std::ffi::OsString;
-use uucore::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum ParseError {

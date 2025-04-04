@@ -10,8 +10,9 @@ use clap::{Arg, ArgAction, Command};
 use num_traits::Zero;
 
 use uucore::error::{FromIo, UResult};
+use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
-use uucore::format::{ExtendedBigDecimal, Format, num_format};
+use uucore::format::{Format, num_format};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;

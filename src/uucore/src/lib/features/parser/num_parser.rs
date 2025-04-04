@@ -15,7 +15,7 @@ use num_traits::Signed;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 
-use crate::format::extendedbigdecimal::ExtendedBigDecimal;
+use crate::extendedbigdecimal::ExtendedBigDecimal;
 
 /// Base for number parsing
 #[derive(Clone, Copy, PartialEq)]
@@ -486,7 +486,7 @@ mod tests {
 
     use bigdecimal::BigDecimal;
 
-    use crate::format::ExtendedBigDecimal;
+    use crate::extendedbigdecimal::ExtendedBigDecimal;
 
     use super::{ExtendedParser, ExtendedParserError};
 

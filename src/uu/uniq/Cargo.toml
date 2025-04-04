@@ -18,7 +18,7 @@ path = "src/uniq.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
 
 [[bin]]
 name = "uniq"

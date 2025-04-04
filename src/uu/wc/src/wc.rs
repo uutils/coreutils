@@ -28,8 +28,8 @@ use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::{
     error::{FromIo, UError, UResult},
     format_usage, help_about, help_usage,
+    parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
-    shortcut_value_parser::ShortcutValueParser,
     show,
 };
 

@@ -136,7 +136,7 @@ impl<'parser> Parser<'parser> {
     /// # Examples
     ///
     /// ```rust
-    /// use uucore::parse_size::Parser;
+    /// use uucore::parser::parse_size::Parser;
     /// let parser = Parser {
     ///     default_unit: Some("M"),
     ///     ..Default::default()
@@ -346,7 +346,7 @@ impl<'parser> Parser<'parser> {
 /// # Examples
 ///
 /// ```rust
-/// use uucore::parse_size::parse_size_u128;
+/// use uucore::parser::parse_size::parse_size_u128;
 /// assert_eq!(Ok(123), parse_size_u128("123"));
 /// assert_eq!(Ok(9 * 1000), parse_size_u128("9kB")); // kB is 1000
 /// assert_eq!(Ok(2 * 1024), parse_size_u128("2K")); // K is 1024

@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -18,7 +18,6 @@ pub extern crate windows_sys;
 mod features; // feature-gated code modules
 mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
-mod parser; // string parsing modules
 
 pub use uucore_procs::*;
 
@@ -30,12 +29,6 @@ pub use crate::mods::line_ending;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::posix;
-
-// * string parsing modules
-pub use crate::parser::parse_glob;
-pub use crate::parser::parse_size;
-pub use crate::parser::parse_time;
-pub use crate::parser::shortcut_value_parser;
 
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
@@ -50,12 +43,16 @@ pub use crate::features::colors;
 pub use crate::features::custom_tz_fmt;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
+#[cfg(feature = "extendedbigdecimal")]
+pub use crate::features::extendedbigdecimal;
 #[cfg(feature = "format")]
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
+#[cfg(feature = "parser")]
+pub use crate::features::parser;
 #[cfg(feature = "quoting-style")]
 pub use crate::features::quoting_style;
 #[cfg(feature = "ranges")]

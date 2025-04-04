@@ -11,7 +11,7 @@ use std::io::{Error, ErrorKind, Read, Result, Write, copy, stdin, stdout};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 // spell-checker:ignore nopipe
