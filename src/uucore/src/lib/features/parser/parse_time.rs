@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) NANOS numstr
+// spell-checker:ignore (vars) NANOS numstr infinityh INFD nans nanh
 //! Parsing a duration from a string.
 //!
 //! Use the [`from_str`] function to parse a [`Duration`] from a string.
@@ -58,20 +58,21 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
         'h' => (slice, 60 * 60),
         'd' => (slice, 60 * 60 * 24),
         val if !val.is_alphabetic() => (string, 1),
-        _ => {
-            if string == "inf" || string == "infinity" {
-                ("inf", 1)
-            } else {
-                return Err(format!("invalid time interval {}", string.quote()));
-            }
-        }
+        _ => match string.to_ascii_lowercase().as_str() {
+            "inf" | "infinity" => ("inf", 1),
+            _ => return Err(format!("invalid time interval {}", string.quote())),
+        },
     };
     let num = numstr
         .parse::<f64>()
         .map_err(|e| format!("invalid time interval {}: {}", string.quote(), e))?;
 
-    if num < 0. {
+    if num < 0. || num.is_nan() {
         return Err(format!("invalid time interval {}", string.quote()));
+    }
+
+    if num.is_infinite() {
+        return Ok(Duration::MAX);
     }
 
     const NANOS_PER_SEC: u32 = 1_000_000_000;
@@ -127,6 +128,24 @@ mod tests {
         assert!(from_str("-1").is_err());
     }
 
+    #[test]
+    fn test_infinity() {
+        assert_eq!(from_str("inf"), Ok(Duration::MAX));
+        assert_eq!(from_str("infinity"), Ok(Duration::MAX));
+        assert_eq!(from_str("infinityh"), Ok(Duration::MAX));
+        assert_eq!(from_str("INF"), Ok(Duration::MAX));
+        assert_eq!(from_str("INFs"), Ok(Duration::MAX));
+    }
+
+    #[test]
+    fn test_nan() {
+        assert!(from_str("nan").is_err());
+        assert!(from_str("nans").is_err());
+        assert!(from_str("-nanh").is_err());
+        assert!(from_str("NAN").is_err());
+        assert!(from_str("-NAN").is_err());
+    }
+
     /// Test that capital letters are not allowed in suffixes.
     #[test]
     fn test_no_capital_letters() {
@@ -134,5 +153,6 @@ mod tests {
         assert!(from_str("1M").is_err());
         assert!(from_str("1H").is_err());
         assert!(from_str("1D").is_err());
+        assert!(from_str("INFD").is_err());
     }
 }
