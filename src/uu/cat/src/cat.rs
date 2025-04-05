@@ -33,6 +33,64 @@ mod splice;
 const USAGE: &str = help_usage!("cat.md");
 const ABOUT: &str = help_about!("cat.md");
 
+struct LineNumber {
+    buf: Vec<u8>,
+}
+
+// Logic to store a string for the line number. Manually incrementing the value
+// represented in a buffer like this is significantly faster than storing
+// a `usize` and using the standard Rust formatting macros to format a `usize`
+// to a string each time it's needed.
+// String is initialized to "     1\t" and incremented each time `increment` is
+// called. When the value overflows the range storable in the buffer, a b'1' is
+// prepended and the counting continues.
+impl LineNumber {
+    fn new() -> Self {
+        LineNumber {
+            // Initialize buf to b"     1\t"
+            buf: Vec::from(b"     1\t"),
+        }
+    }
+
+    fn increment(&mut self) {
+        // skip(1) to avoid the \t in the last byte.
+        for ascii_digit in self.buf.iter_mut().rev().skip(1) {
+            // Working from the least-significant digit, increment the number in the buffer.
+            // If we hit anything other than a b'9' we can break since the next digit is
+            // unaffected.
+            // Also note that if we hit a b' ', we can think of that as a 0 and increment to b'1'.
+            // If/else here is faster than match (as measured with some benchmarking Apr-2025),
+            // probably since we can prioritize most likely digits first.
+            if (b'0'..=b'8').contains(ascii_digit) {
+                *ascii_digit += 1;
+                break;
+            } else if b'9' == *ascii_digit {
+                *ascii_digit = b'0';
+            } else {
+                assert_eq!(*ascii_digit, b' ');
+                *ascii_digit = b'1';
+                break;
+            }
+        }
+        if self.buf[0] == b'0' {
+            // This implies we've overflowed. In this case the buffer will be
+            // [b'0', b'0', ..., b'0', b'\t'].
+            // For debugging, the following logic would assert that to be the case.
+            // assert_eq!(*self.buf.last().unwrap(), b'\t');
+            // for ascii_digit in self.buf.iter_mut().rev().skip(1) {
+            //     assert_eq!(*ascii_digit, b'0');
+            // }
+
+            // All we need to do is prepend a b'1' and we're good.
+            self.buf.insert(0, b'1');
+        }
+    }
+
+    fn write(&self, writer: &mut impl Write) -> std::io::Result<()> {
+        writer.write_all(&self.buf)
+    }
+}
+
 #[derive(Error, Debug)]
 enum CatError {
     /// Wrapper around `io::Error`
@@ -106,7 +164,7 @@ impl OutputOptions {
 /// when we can't write fast.
 struct OutputState {
     /// The current line number
-    line_number: usize,
+    line_number: LineNumber,
 
     /// Whether the output cursor is at the beginning of a new line
     at_line_start: bool,
@@ -390,7 +448,7 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
     let out_info = FileInformation::from_file(&std::io::stdout()).ok();
 
     let mut state = OutputState {
-        line_number: 1,
+        line_number: LineNumber::new(),
         at_line_start: true,
         skipped_carriage_return: false,
         one_blank_kept: false,
@@ -529,8 +587,8 @@ fn write_lines<R: FdReadable>(
             }
             state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
-                write!(writer, "{0:6}\t", state.line_number)?;
-                state.line_number += 1;
+                state.line_number.write(&mut writer)?;
+                state.line_number.increment();
             }
 
             // print to end of line or end of buffer
@@ -589,8 +647,8 @@ fn write_new_line<W: Write>(
     if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
         state.one_blank_kept = true;
         if state.at_line_start && options.number == NumberingMode::All {
-            write!(writer, "{0:6}\t", state.line_number)?;
-            state.line_number += 1;
+            state.line_number.write(writer)?;
+            state.line_number.increment();
         }
         write_end_of_line(writer, options.end_of_line().as_bytes(), is_interactive)?;
     }
@@ -742,5 +800,26 @@ mod tests {
             super::write_nonprint_to_end(in_buf, &mut writer, tab);
             assert_eq!(writer.buffer(), [b'^', byte + 64]);
         }
+    }
+
+    #[test]
+    fn test_incrementing_string() {
+        let mut incrementing_string = super::LineNumber::new();
+        assert_eq!(b"     1\t", incrementing_string.buf.as_slice());
+        incrementing_string.increment();
+        assert_eq!(b"     2\t", incrementing_string.buf.as_slice());
+        // Run through to 100
+        for _ in 3..=100 {
+            incrementing_string.increment();
+        }
+        assert_eq!(b"   100\t", incrementing_string.buf.as_slice());
+        // Run through until we overflow the original size.
+        for _ in 101..=1000000 {
+            incrementing_string.increment();
+        }
+        // Confirm that the buffer expands when we overflow the original size.
+        assert_eq!(b"1000000\t", incrementing_string.buf.as_slice());
+        incrementing_string.increment();
+        assert_eq!(b"1000001\t", incrementing_string.buf.as_slice());
     }
 }
