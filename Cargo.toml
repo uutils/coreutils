@@ -284,7 +284,7 @@ clap_complete = "4.4"
 clap_mangen = "0.2"
 compare = "0.1.0"
 coz = { version = "0.1.3" }
-crossterm = "0.28.1"
+crossterm = "0.29.0"
 ctrlc = { version = "3.4.4", features = ["termination"] }
 dns-lookup = { version = "2.0.4" }
 exacl = "0.12.0"
