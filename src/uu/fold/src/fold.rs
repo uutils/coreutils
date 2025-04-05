@@ -3,11 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDOs) ncount routput
+// spell-checker:ignore (ToDOs) ncount routput rposition
 
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin};
+use std::io::{self, BufRead, BufReader, Read, Write, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -139,32 +139,39 @@ fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResul
 ///
 ///  If `spaces` is `true`, attempt to break lines at whitespace boundaries.
 fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> UResult<()> {
-    let mut line = String::new();
+    let mut buf: Vec<u8> = Vec::with_capacity(128);
+
+    let stdout_handle = io::stdout();
+    let mut stdout_lock = stdout_handle.lock();
 
     loop {
+        buf.clear();
         if file
-            .read_line(&mut line)
+            .read_until(b'\n', &mut buf)
             .map_err_context(|| "failed to read line".to_string())?
             == 0
         {
             break;
         }
 
-        if line == "\n" {
+        if buf == b"\n" {
             println!();
-            line.truncate(0);
             continue;
         }
 
-        let len = line.len();
+        let len = buf.len();
         let mut i = 0;
 
         while i < len {
             let width = if len - i >= width { width } else { len - i };
             let slice = {
-                let slice = &line[i..i + width];
+                let slice = &buf[i..i + width];
+
                 if spaces && i + width < len {
-                    match slice.rfind(|c: char| c.is_whitespace() && c != '\r') {
+                    match slice
+                        .iter()
+                        .rposition(|&b| b.is_ascii_whitespace() && b != b'\r')
+                    {
                         Some(m) => &slice[..=m],
                         None => slice,
                     }
@@ -176,7 +183,7 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             // Don't duplicate trailing newlines: if the slice is "\n", the
             // previous iteration folded just before the end of the line and
             // has already printed this newline.
-            if slice == "\n" {
+            if slice == b"\n" {
                 break;
             }
 
@@ -185,13 +192,12 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             let at_eol = i >= len;
 
             if at_eol {
-                print!("{slice}");
+                stdout_lock.write_all(slice)?;
             } else {
-                println!("{slice}");
+                stdout_lock.write_all(slice)?;
+                stdout_lock.write_all(b"\n")?;
             }
         }
-
-        line.truncate(0);
     }
 
     Ok(())
