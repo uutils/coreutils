@@ -20,7 +20,6 @@ use uucore::{format_usage, help_about, help_section, help_usage, show};
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::ffi::OsString;
-use std::fmt;
 use std::path::Path;
 use thiserror::Error;
 
@@ -114,50 +113,21 @@ impl Default for Options {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum OptionsError {
+    #[error("--block-size argument '{0}' too large")]
     BlockSizeTooLarge(String),
+    #[error("invalid --block-size argument {0}")]
     InvalidBlockSize(String),
+    #[error("invalid suffix in --block-size argument {0}")]
     InvalidSuffix(String),
 
     /// An error getting the columns to display in the output table.
+    #[error("option --output: field {0} used more than once")]
     ColumnError(ColumnError),
 
+    #[error("{}", .0.iter().map(|t| format!("file system type {} both selected and excluded", t.quote())).collect::<Vec<String>>().join(format!("\n{}: ", uucore::util_name()).as_str()))]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
-}
-
-impl fmt::Display for OptionsError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            // TODO This needs to vary based on whether `--block-size`
-            // or `-B` were provided.
-            Self::BlockSizeTooLarge(s) => {
-                write!(f, "--block-size argument {} too large", s.quote())
-            }
-            // TODO This needs to vary based on whether `--block-size`
-            // or `-B` were provided.
-            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {s}"),
-            // TODO This needs to vary based on whether `--block-size`
-            // or `-B` were provided.
-            Self::InvalidSuffix(s) => write!(f, "invalid suffix in --block-size argument {s}"),
-            Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
-                f,
-                "option --output: field {} used more than once",
-                s.quote()
-            ),
-            #[allow(clippy::print_in_format_impl)]
-            Self::FilesystemTypeBothSelectedAndExcluded(types) => {
-                for t in types {
-                    eprintln!(
-                        "{}: file system type {} both selected and excluded",
-                        uucore::util_name(),
-                        t.quote()
-                    );
-                }
-                Ok(())
-            }
-        }
-    }
 }
 
 impl Options {
