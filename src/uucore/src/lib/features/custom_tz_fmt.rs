@@ -3,11 +3,27 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (misc) WARST zoneinfo
+// spell-checker:ignore (misc) tzfile WARST zoneinfo
 
 use chrono::Local;
-use chrono_tz::Tz;
 use iana_time_zone::get_timezone;
+
+// TODO: Is there any other case where we'd be interested in using
+// chrono_tz instead of system timezone database?
+#[cfg(windows)]
+use chrono_tz::{ParseError, Tz};
+#[cfg(not(windows))]
+use tzfile::Tz;
+
+#[cfg(windows)]
+fn str_to_timezone(str: &str) -> Result<Tz, ParseError> {
+    str.parse()
+}
+
+#[cfg(not(windows))]
+fn str_to_timezone(str: &str) -> Result<Tz, std::io::Error> {
+    Tz::named(str)
+}
 
 /// Get the alphabetic abbreviation of the current timezone.
 ///
@@ -23,19 +39,23 @@ use iana_time_zone::get_timezone;
 // - If our custom logic fails, but chrono obtained a non-UTC local timezone
 //   from the system, we should not just return UTC.
 fn timezone_abbreviation() -> String {
+    let utc = str_to_timezone("Etc/UTC").unwrap();
     // We need this logic as `iana_time_zone::get_timezone` does not look
     // at TZ variable: https://github.com/strawlab/iana-time-zone/issues/118.
     let tz = match std::env::var("TZ") {
         // TODO: This is not fully exhaustive, we should understand how to handle
         // invalid TZ values and more complex POSIX-specified values:
         // https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
-        Ok(s) if s == "UTC0" || s.is_empty() => Tz::Etc__UTC,
-        Ok(s) => s.parse().unwrap_or(Tz::Etc__UTC),
+        Ok(s) if s == "UTC0" || s.is_empty() => utc,
+        Ok(s) => str_to_timezone(&s).unwrap_or(utc),
         _ => match get_timezone() {
-            Ok(tz_str) => tz_str.parse().unwrap_or(Tz::Etc__UTC),
-            Err(_) => Tz::Etc__UTC,
+            Ok(tz_str) => str_to_timezone(&tz_str).unwrap_or(utc),
+            Err(_) => utc,
         },
     };
+
+    #[cfg(not(windows))]
+    let tz = &tz;
 
     // TODO: It looks a bit absurd to use `%Z` here and manually expand it
     // in `custom_time_format`, instead of directly modifying the date to be

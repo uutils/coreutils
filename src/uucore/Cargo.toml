@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzfile
 
 [package]
 name = "uucore"
@@ -59,6 +59,7 @@ regex = { workspace = true, optional = true }
 bigdecimal = { workspace = true, optional = true }
 num-traits = { workspace = true, optional = true }
 selinux = { workspace = true, optional = true }
+tzfile = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace = true, optional = true }
@@ -134,6 +135,6 @@ utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []
 wide = []
-custom-tz-fmt = ["chrono", "chrono-tz", "iana-time-zone"]
+custom-tz-fmt = ["chrono", "chrono-tz", "tzfile", "iana-time-zone"]
 tty = []
 uptime = ["chrono", "libc", "windows-sys", "utmpx", "utmp-classic", "thiserror"]

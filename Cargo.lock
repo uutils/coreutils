@@ -2458,6 +2458,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 
 [[package]]
+name = "tzfile"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f59c22c42a2537e4c7ad21a4007273bbc5bebed7f36bc93730a5780e22a4592e"
+dependencies = [
+ "byteorder",
+ "chrono",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3591,6 +3601,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.12",
  "time",
+ "tzfile",
  "utmp-classic",
  "uucore_procs",
  "walkdir",
