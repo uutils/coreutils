@@ -878,7 +878,7 @@ fn test_chmod_symlink_target_no_dereference() {
 }
 
 #[test]
-fn test_chmod_symlink_to_dangling_recursive() {
+fn test_chmod_symlink_recursive_final_traversal_flag() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -891,9 +891,14 @@ fn test_chmod_symlink_to_dangling_recursive() {
         .ucmd()
         .arg("755")
         .arg("-R")
+        .arg("-H")
+        .arg("-L")
+        .arg("-H")
+        .arg("-L")
+        .arg("-P")
         .arg(symlink)
-        .fails()
-        .stderr_is("chmod: cannot operate on dangling symlink 'symlink'\n");
+        .succeeds()
+        .no_output();
     assert_eq!(
         at.symlink_metadata(symlink).permissions().mode(),
         get_expected_symlink_permissions(),
@@ -904,8 +909,72 @@ fn test_chmod_symlink_to_dangling_recursive() {
 }
 
 #[test]
+fn test_chmod_symlink_to_dangling_recursive_no_traverse() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dangling_target = "nonexistent_file";
+    let symlink = "symlink";
+
+    at.symlink_file(dangling_target, symlink);
+
+    scene
+        .ucmd()
+        .arg("755")
+        .arg("-R")
+        .arg("-P")
+        .arg(symlink)
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        at.symlink_metadata(symlink).permissions().mode(),
+        get_expected_symlink_permissions(),
+        "Expected symlink permissions: {:o}, but got: {:o}",
+        get_expected_symlink_permissions(),
+        at.symlink_metadata(symlink).permissions().mode()
+    );
+}
+
+#[test]
+fn test_chmod_dangling_symlink_recursive_combos() {
+    let error_scenarios = [vec!["-R"], vec!["-R", "-H"], vec!["-R", "-L"]];
+
+    for flags in error_scenarios {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let dangling_target = "nonexistent_file";
+        let symlink = "symlink";
+
+        at.symlink_file(dangling_target, symlink);
+
+        let mut ucmd = scene.ucmd();
+        for f in &flags {
+            ucmd.arg(f);
+        }
+        ucmd.arg("u+x")
+            .umask(0o022)
+            .arg(symlink)
+            .fails()
+            .stderr_is("chmod: cannot operate on dangling symlink 'symlink'\n");
+        assert_eq!(
+            at.symlink_metadata(symlink).permissions().mode(),
+            get_expected_symlink_permissions(),
+            "Expected symlink permissions: {:o}, but got: {:o}",
+            get_expected_symlink_permissions(),
+            at.symlink_metadata(symlink).permissions().mode()
+        );
+    }
+}
+
+#[test]
 fn test_chmod_traverse_symlink_combo() {
     let scenarios = [
+        (
+            vec!["-R"], // Should default to "-H"
+            0o100_664,
+            get_expected_symlink_permissions(),
+        ),
         (
             vec!["-R", "-H"],
             0o100_664,
