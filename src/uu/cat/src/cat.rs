@@ -24,7 +24,7 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::fs::FileInformation;
-use uucore::{format_usage, help_about, help_usage};
+use uucore::{fast_inc::fast_inc_one, format_usage, help_about, help_usage};
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -35,59 +35,45 @@ const ABOUT: &str = help_about!("cat.md");
 
 struct LineNumber {
     buf: Vec<u8>,
+    print_start: usize,
+    num_start: usize,
+    num_end: usize,
 }
 
 // Logic to store a string for the line number. Manually incrementing the value
 // represented in a buffer like this is significantly faster than storing
 // a `usize` and using the standard Rust formatting macros to format a `usize`
 // to a string each time it's needed.
-// String is initialized to "     1\t" and incremented each time `increment` is
-// called. When the value overflows the range storable in the buffer, a b'1' is
-// prepended and the counting continues.
+// Buffer is initialized to "     1\t" and incremented each time `increment` is
+// called, using uucore's fast_inc function that operates on strings.
 impl LineNumber {
     fn new() -> Self {
+        // 1024-digit long line number should be enough to run `cat` for the lifetime of the universe.
+        let size = 1024;
+        let mut buf = vec![b'0'; size];
+
+        let init_str = "     1\t";
+        let print_start = buf.len() - init_str.len();
+        let num_start = buf.len() - 2;
+        let num_end = buf.len() - 1;
+
+        buf[print_start..].copy_from_slice(init_str.as_bytes());
+
         LineNumber {
-            // Initialize buf to b"     1\t"
-            buf: Vec::from(b"     1\t"),
+            buf,
+            print_start,
+            num_start,
+            num_end,
         }
     }
 
     fn increment(&mut self) {
-        // skip(1) to avoid the \t in the last byte.
-        for ascii_digit in self.buf.iter_mut().rev().skip(1) {
-            // Working from the least-significant digit, increment the number in the buffer.
-            // If we hit anything other than a b'9' we can break since the next digit is
-            // unaffected.
-            // Also note that if we hit a b' ', we can think of that as a 0 and increment to b'1'.
-            // If/else here is faster than match (as measured with some benchmarking Apr-2025),
-            // probably since we can prioritize most likely digits first.
-            if (b'0'..=b'8').contains(ascii_digit) {
-                *ascii_digit += 1;
-                break;
-            } else if b'9' == *ascii_digit {
-                *ascii_digit = b'0';
-            } else {
-                assert_eq!(*ascii_digit, b' ');
-                *ascii_digit = b'1';
-                break;
-            }
-        }
-        if self.buf[0] == b'0' {
-            // This implies we've overflowed. In this case the buffer will be
-            // [b'0', b'0', ..., b'0', b'\t'].
-            // For debugging, the following logic would assert that to be the case.
-            // assert_eq!(*self.buf.last().unwrap(), b'\t');
-            // for ascii_digit in self.buf.iter_mut().rev().skip(1) {
-            //     assert_eq!(*ascii_digit, b'0');
-            // }
-
-            // All we need to do is prepend a b'1' and we're good.
-            self.buf.insert(0, b'1');
-        }
+        self.num_start = fast_inc_one(self.buf.as_mut_slice(), self.num_start, self.num_end);
+        self.print_start = self.print_start.min(self.num_start);
     }
 
     fn write(&self, writer: &mut impl Write) -> io::Result<()> {
-        writer.write_all(&self.buf)
+        writer.write_all(&self.buf[self.print_start..])
     }
 }
 
@@ -804,21 +790,36 @@ mod tests {
     #[test]
     fn test_incrementing_string() {
         let mut incrementing_string = super::LineNumber::new();
-        assert_eq!(b"     1\t", incrementing_string.buf.as_slice());
+        assert_eq!(
+            b"     1\t",
+            &incrementing_string.buf[incrementing_string.print_start..]
+        );
         incrementing_string.increment();
-        assert_eq!(b"     2\t", incrementing_string.buf.as_slice());
+        assert_eq!(
+            b"     2\t",
+            &incrementing_string.buf[incrementing_string.print_start..]
+        );
         // Run through to 100
         for _ in 3..=100 {
             incrementing_string.increment();
         }
-        assert_eq!(b"   100\t", incrementing_string.buf.as_slice());
+        assert_eq!(
+            b"   100\t",
+            &incrementing_string.buf[incrementing_string.print_start..]
+        );
         // Run through until we overflow the original size.
         for _ in 101..=1_000_000 {
             incrementing_string.increment();
         }
-        // Confirm that the buffer expands when we overflow the original size.
-        assert_eq!(b"1000000\t", incrementing_string.buf.as_slice());
+        // Confirm that the start position moves when we overflow the original size.
+        assert_eq!(
+            b"1000000\t",
+            &incrementing_string.buf[incrementing_string.print_start..]
+        );
         incrementing_string.increment();
-        assert_eq!(b"1000001\t", incrementing_string.buf.as_slice());
+        assert_eq!(
+            b"1000001\t",
+            &incrementing_string.buf[incrementing_string.print_start..]
+        );
     }
 }
