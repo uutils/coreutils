@@ -8,6 +8,7 @@
 use clap::{Arg, ArgAction, Command, builder::ValueParser, parser::ValueSource};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
+use std::io::{stdin, IsTerminal};
 use std::ops::BitOr;
 #[cfg(not(windows))]
 use std::os::unix::ffi::OsStrExt;
@@ -68,6 +69,25 @@ pub struct Options {
     pub dir: bool,
     /// `-v`, `--verbose`
     pub verbose: bool,
+    #[doc(hidden)]
+    /// `---presume-input-tty`
+    /// Always use `None`; GNU flag for testing use only
+    pub __presume_input_tty: Option<bool>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            force: false,
+            interactive: InteractiveMode::PromptProtected,
+            one_fs: false,
+            preserve_root: true,
+            recursive: false,
+            dir: false,
+            verbose: false,
+            __presume_input_tty: None,
+        }
+    }
 }
 
 const ABOUT: &str = help_about!("rm.md");
@@ -145,6 +165,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             recursive: matches.get_flag(OPT_RECURSIVE),
             dir: matches.get_flag(OPT_DIR),
             verbose: matches.get_flag(OPT_VERBOSE),
+            __presume_input_tty: if matches.get_flag(PRESUME_INPUT_TTY) {
+                Some(true)
+            } else {
+                None
+            },
         };
         if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
             let msg: String = format!(
@@ -161,7 +186,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     "?"
                 }
             );
-            if !prompt_yes!("{}", msg) {
+            let stdin_ok = stdin().is_terminal() || options.__presume_input_tty.unwrap_or(false);
+            if stdin_ok && !prompt_yes!("{}", msg) {
                 return Ok(());
             }
         }
@@ -576,6 +602,11 @@ fn prompt_dir(path: &Path, options: &Options) -> bool {
     if options.interactive == InteractiveMode::Never {
         return true;
     }
+    // Silently proceed if stdin is not interactive terminal and not explicitly requested Always
+    let stdin_ok = stdin().is_terminal() || options.__presume_input_tty.unwrap_or(false);
+    if !stdin_ok && options.interactive != InteractiveMode::Always {
+        return true;
+    }
 
     // We can't use metadata.permissions.readonly for directories because it only works on files
     // So we have to handle whether a directory is writable manually
@@ -589,6 +620,11 @@ fn prompt_dir(path: &Path, options: &Options) -> bool {
 fn prompt_file(path: &Path, options: &Options) -> bool {
     // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {
+        return true;
+    }
+    // Silently proceed if stdin is not interactive terminal and not explicitly requested Always
+    let stdin_ok = stdin().is_terminal() || options.__presume_input_tty.unwrap_or(false);
+    if !stdin_ok && options.interactive != InteractiveMode::Always {
         return true;
     }
     // If interactive is Always we want to check if the file is symlink to prompt the right message
