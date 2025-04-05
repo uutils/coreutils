@@ -375,3 +375,15 @@ fn test_output_delimiter_with_adjacent_ranges() {
         .succeeds()
         .stdout_only("ab:cd\n");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .arg("-d=")
+        .arg("-f1")
+        .pipe_in("key=value")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("cut: write error: No space left on device\n");
+}

@@ -1545,3 +1545,14 @@ fn test_non_digit_repeat() {
         .fails()
         .stderr_only("tr: invalid repeat count 'c' in [c*n] construct\n");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .pipe_in("hello")
+        .args(&["e", "a"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("tr: write error: No space left on device\n");
+}

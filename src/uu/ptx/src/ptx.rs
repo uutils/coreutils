@@ -633,7 +633,8 @@ fn write_traditional_output(
     let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(if output_filename == "-" {
         Box::new(stdout())
     } else {
-        let file = File::create(output_filename).map_err_context(String::new)?;
+        let file = File::create(output_filename)
+            .map_err_context(|| output_filename.maybe_quote().to_string())?;
         Box::new(file)
     });
 
@@ -673,8 +674,11 @@ fn write_traditional_output(
                 return Err(PtxError::DumbFormat.into());
             }
         };
-        writeln!(writer, "{output_line}").map_err_context(String::new)?;
+        writeln!(writer, "{output_line}").map_err_context(|| "write failed".into())?;
     }
+
+    writer.flush().map_err_context(|| "write failed".into())?;
+
     Ok(())
 }
 

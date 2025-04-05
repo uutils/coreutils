@@ -25,7 +25,7 @@ use std::{
 };
 
 use compare::Compare;
-use uucore::error::UResult;
+use uucore::error::{FromIo, UResult};
 
 use crate::{
     GlobalSettings, Output, SortError,
@@ -278,12 +278,19 @@ impl FileMerger<'_> {
     }
 
     fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
-        while self.write_next(settings, out) {}
+        while self
+            .write_next(settings, out)
+            .map_err_context(|| "write failed".into())?
+        {}
         drop(self.request_sender);
         self.reader_join_handle.join().unwrap()
     }
 
-    fn write_next(&mut self, settings: &GlobalSettings, out: &mut impl Write) -> bool {
+    fn write_next(
+        &mut self,
+        settings: &GlobalSettings,
+        out: &mut impl Write,
+    ) -> std::io::Result<bool> {
         if let Some(file) = self.heap.peek() {
             let prev = self.prev.replace(PreviousLine {
                 chunk: file.current_chunk.clone(),
@@ -303,12 +310,12 @@ impl FileMerger<'_> {
                             file.current_chunk.line_data(),
                         );
                         if cmp == Ordering::Equal {
-                            return;
+                            return Ok(());
                         }
                     }
                 }
-                current_line.print(out, settings);
-            });
+                current_line.print(out, settings)
+            })?;
 
             let was_last_line_for_file = file.current_chunk.lines().len() == file.line_idx + 1;
 
@@ -335,7 +342,7 @@ impl FileMerger<'_> {
                 }
             }
         }
-        !self.heap.is_empty()
+        Ok(!self.heap.is_empty())
     }
 }
 
