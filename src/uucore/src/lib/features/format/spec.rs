@@ -474,6 +474,8 @@ impl Spec {
     }
 }
 
+/// Determine the width, potentially getting a value from args
+/// Returns the non-negative width and whether the value should be left-aligned.
 fn resolve_asterisk_width<'a>(
     option: Option<CanAsterisk<usize>>,
     mut args: impl ArgumentIter<'a>,
@@ -492,6 +494,8 @@ fn resolve_asterisk_width<'a>(
     }
 }
 
+/// Determines the precision, which should (if defined)
+/// be a non-negative number.
 fn resolve_asterisk_precision<'a>(
     option: Option<CanAsterisk<usize>>,
     mut args: impl ArgumentIter<'a>,
@@ -545,6 +549,113 @@ fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
                 .unwrap();
             *index += i;
             Some(parsed)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod resolve_asterisk_width {
+        use super::*;
+        use crate::format::FormatArgument;
+
+        #[test]
+        fn no_width() {
+            assert_eq!(None, resolve_asterisk_width(None, Vec::new().iter()));
+        }
+
+        #[test]
+        fn fixed_width() {
+            assert_eq!(
+                Some((42, false)),
+                resolve_asterisk_width(Some(CanAsterisk::Fixed(42)), Vec::new().iter())
+            );
+        }
+
+        #[test]
+        fn asterisks_with_numbers() {
+            assert_eq!(
+                Some((42, false)),
+                resolve_asterisk_width(
+                    Some(CanAsterisk::Asterisk),
+                    vec![FormatArgument::SignedInt(42)].iter()
+                )
+            );
+            assert_eq!(
+                Some((42, false)),
+                resolve_asterisk_width(
+                    Some(CanAsterisk::Asterisk),
+                    vec![FormatArgument::Unparsed("42".to_string())].iter()
+                )
+            );
+
+            assert_eq!(
+                Some((42, true)),
+                resolve_asterisk_width(
+                    Some(CanAsterisk::Asterisk),
+                    vec![FormatArgument::SignedInt(-42)].iter()
+                )
+            );
+            assert_eq!(
+                Some((42, true)),
+                resolve_asterisk_width(
+                    Some(CanAsterisk::Asterisk),
+                    vec![FormatArgument::Unparsed("-42".to_string())].iter()
+                )
+            );
+        }
+    }
+
+    mod resolve_asterisk_precision {
+        use super::*;
+        use crate::format::FormatArgument;
+
+        #[test]
+        fn no_width() {
+            assert_eq!(None, resolve_asterisk_precision(None, Vec::new().iter()));
+        }
+
+        #[test]
+        fn fixed_width() {
+            assert_eq!(
+                Some(42),
+                resolve_asterisk_precision(Some(CanAsterisk::Fixed(42)), Vec::new().iter())
+            );
+        }
+
+        #[test]
+        fn asterisks_with_numbers() {
+            assert_eq!(
+                Some(42),
+                resolve_asterisk_precision(
+                    Some(CanAsterisk::Asterisk),
+                    vec![FormatArgument::SignedInt(42)].iter()
+                )
+            );
+            assert_eq!(
+                Some(42),
+                resolve_asterisk_precision(
+                    Some(CanAsterisk::Asterisk),
+                    vec![FormatArgument::Unparsed("42".to_string())].iter()
+                )
+            );
+
+            assert_eq!(
+                Some(0),
+                resolve_asterisk_precision(
+                    Some(CanAsterisk::Asterisk),
+                    vec![FormatArgument::SignedInt(-42)].iter()
+                )
+            );
+            assert_eq!(
+                Some(0),
+                resolve_asterisk_precision(
+                    Some(CanAsterisk::Asterisk),
+                    vec![FormatArgument::Unparsed("-42".to_string())].iter()
+                )
+            );
         }
     }
 }
