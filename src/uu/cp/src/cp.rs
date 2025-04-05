@@ -1458,6 +1458,23 @@ fn copy_source(
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
+        // If --update is active, and destination is newer, skip copying
+        if options.copy_mode == CopyMode::Update {
+            if let (Ok(src_meta), Ok(dst_meta)) = (fs::metadata(source_path), fs::metadata(&dest)) {
+                let src_mtime = FileTime::from_last_modification_time(&src_meta);
+                let dst_mtime = FileTime::from_last_modification_time(&dst_meta);
+                if dst_mtime >= src_mtime {
+                    if options.debug {
+                        println!(
+                            "'{}' -> '{}', skipped (destination newer)",
+                            source_path.display(),
+                            dest.display()
+                        );
+                    }
+                    return Ok(());
+                }
+            }
+        }
         let res = copy_file(
             progress_bar,
             source_path,
