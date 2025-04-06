@@ -4055,11 +4055,11 @@ fn test_acl_preserve() {
     at.mkdir(path2);
     at.touch(file);
 
-    let path = at.plus_as_string(file);
+    let path1 = at.plus_as_string(path1);
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     match Command::new("setfacl")
-        .args(["-m", "group::rwx", path1])
+        .args(["-m", "group::rwx", &path1])
         .status()
         .map(|status| status.code())
     {
@@ -4074,6 +4074,7 @@ fn test_acl_preserve() {
         }
     }
 
+    let path = at.plus_as_string(file);
     scene.ucmd().args(&["-p", &path, path2]).succeeds();
 
     assert!(compare_xattrs(&file, &file_target));
