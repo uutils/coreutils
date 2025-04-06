@@ -11,7 +11,7 @@
 use crate::{
     display::Quotable,
     extendedbigdecimal::ExtendedBigDecimal,
-    parser::num_parser::{self, ExtendedParser, ExtendedParserError},
+    parser::num_parser::{ExtendedParser, ExtendedParserError},
 };
 use bigdecimal::BigDecimal;
 use num_traits::Signed;
