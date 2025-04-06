@@ -1436,8 +1436,12 @@ fn copy_source(
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
-    let source_path = Path::new(&source);
-    if source_path.is_dir() {
+    let source_metadata = if options.dereference(true) {
+        fs::metadata(source)
+    } else {
+        fs::symlink_metadata(source)
+    };
+    if source_metadata.is_ok_and(|m| m.is_dir()) {
         // Copy as directory
         copy_directory(
             progress_bar,
@@ -1447,14 +1451,13 @@ fn copy_source(
             symlinked_files,
             copied_destinations,
             copied_files,
-            true,
         )
     } else {
         // Copy as file
-        let dest = construct_dest_path(source_path, target, target_type, options)?;
+        let dest = construct_dest_path(source, target, target_type, options)?;
         let res = copy_file(
             progress_bar,
-            source_path,
+            source,
             dest.as_path(),
             options,
             symlinked_files,
