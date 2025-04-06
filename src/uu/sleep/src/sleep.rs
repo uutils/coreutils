@@ -64,7 +64,7 @@ fn sleep(args: &[&str]) -> UResult<()> {
 
     let sleep_dur = args
         .iter()
-        .filter_map(|input| match parse_time::from_str(input.trim()) {
+        .filter_map(|input| match parse_time::from_str(input) {
             Ok(duration) => Some(duration),
             Err(error) => {
                 arg_error = true;

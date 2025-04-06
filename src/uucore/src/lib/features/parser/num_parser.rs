@@ -356,7 +356,7 @@ fn construct_extended_big_decimal<'a>(
 // TODO: As highlighted by clippy, this function _is_ high cognitive complexity, jumps
 // around between integer and float parsing, and should be split in multiple parts.
 #[allow(clippy::cognitive_complexity)]
-fn parse(
+pub(crate) fn parse(
     input: &str,
     integral_only: bool,
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<'_, ExtendedBigDecimal>> {

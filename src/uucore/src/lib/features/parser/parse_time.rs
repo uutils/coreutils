@@ -11,7 +11,7 @@
 use crate::{
     display::Quotable,
     extendedbigdecimal::ExtendedBigDecimal,
-    parser::num_parser::{ExtendedParser, ExtendedParserError},
+    parser::num_parser::{self, ExtendedParser, ExtendedParserError},
 };
 use bigdecimal::BigDecimal;
 use num_traits::Signed;
@@ -57,28 +57,42 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
     // https://github.com/rust-lang/rust/issues/57391
     const NANOSECOND_DURATION: Duration = Duration::from_nanos(1);
 
-    let len = string.len();
+    let trimmed = string.trim();
+    let len = trimmed.len();
     if len == 0 {
-        return Err("empty string".to_owned());
+        return Err(format!("invalid time interval {}", string.quote()));
     }
-    let Some(slice) = string.get(..len - 1) else {
+    let Some(slice) = trimmed.get(..len - 1) else {
         return Err(format!("invalid time interval {}", string.quote()));
     };
-    let (numstr, times) = match string.chars().next_back().unwrap() {
-        's' => (slice, 1),
-        'm' => (slice, 60),
-        'h' => (slice, 60 * 60),
-        'd' => (slice, 60 * 60 * 24),
-        val if !val.is_alphabetic() => (string, 1),
-        _ => match string.to_ascii_lowercase().as_str() {
+    let base = match trimmed.get(0..2) {
+        Some("0x") => 16,
+        _ => 10,
+    };
+    let (numstr, times) = match (trimmed.chars().next_back().unwrap(), base) {
+        ('s', _) => (slice, 1),
+        ('m', _) => (slice, 60),
+        ('h', _) => (slice, 60 * 60),
+        ('d', 10) => (slice, 60 * 60 * 24),
+        ('d', 16) => (trimmed, 1),
+        (val, _) if !val.is_alphabetic() => (trimmed, 1),
+        _ => match trimmed.to_ascii_lowercase().as_str() {
             "inf" | "infinity" => ("inf", 1),
             _ => return Err(format!("invalid time interval {}", string.quote())),
         },
     };
-    let num = match ExtendedBigDecimal::extended_parse(numstr) {
-        Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
-        Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
-        _ => return Err(format!("invalid time interval {}", string.quote())),
+    let num = if base == 10 {
+        match ExtendedBigDecimal::extended_parse(numstr) {
+            Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
+            Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
+            _ => return Err(format!("invalid time interval {}", string.quote())),
+        }
+    } else {
+        match num_parser::parse(numstr, false) {
+            Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
+            Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
+            _ => return Err(format!("invalid time interval {}", string.quote())),
+        }
     };
 
     // Allow non-negative durations (-0 is fine), and infinity.

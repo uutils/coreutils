@@ -247,14 +247,19 @@ fn test_sleep_when_input_has_only_whitespace_then_error(#[case] input: &str) {
         .arg(input)
         .timeout(Duration::from_secs(10))
         .fails()
-        .usage_error("empty string");
+        .usage_error(match input {
+            " " => "invalid time interval ' '",
+            "\t" => "invalid time interval $'\\t'",
+            "\n" => "invalid time interval $'\\n'",
+            _ => "",
+        });
 }
 
 #[test]
 fn test_sleep_when_multiple_input_some_with_error_then_shows_all_errors() {
     let expected = "invalid time interval 'abc'\n\
                     sleep: invalid time interval '1years'\n\
-                    sleep: empty string";
+                    sleep: invalid time interval ' '";
 
     // Even if one of the arguments is valid, but the rest isn't, we should still fail and exit early.
     // So, the timeout of 10 seconds ensures we haven't executed `thread::sleep` with the only valid
