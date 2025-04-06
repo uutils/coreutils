@@ -82,12 +82,7 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
             _ => return Err(format!("invalid time interval {}", string.quote())),
         },
     };
-    let numres = if base == 10 {
-        ExtendedBigDecimal::extended_parse(numstr)
-    } else {
-        num_parser::parse(numstr, false)
-    };
-    let num = match numres {
+    let num = match ExtendedBigDecimal::extended_parse(numstr) {
         Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
         Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
         _ => return Err(format!("invalid time interval {}", string.quote())),
