@@ -74,25 +74,23 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
         ('m', _) => (slice, 60),
         ('h', _) => (slice, 60 * 60),
         ('d', 10) => (slice, 60 * 60 * 24),
-        ('d', 16) => (trimmed, 1),
+        ('d', 16) if slice.contains('p') => (slice, 60 * 60 * 24),
+        ('d', 16) if !slice.contains('p') => (trimmed, 1),
         (val, _) if !val.is_alphabetic() => (trimmed, 1),
         _ => match trimmed.to_ascii_lowercase().as_str() {
             "inf" | "infinity" => ("inf", 1),
             _ => return Err(format!("invalid time interval {}", string.quote())),
         },
     };
-    let num = if base == 10 {
-        match ExtendedBigDecimal::extended_parse(numstr) {
-            Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
-            Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
-            _ => return Err(format!("invalid time interval {}", string.quote())),
-        }
+    let numres = if base == 10 {
+        ExtendedBigDecimal::extended_parse(numstr)
     } else {
-        match num_parser::parse(numstr, false) {
-            Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
-            Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
-            _ => return Err(format!("invalid time interval {}", string.quote())),
-        }
+        num_parser::parse(numstr, false)
+    };
+    let num = match numres {
+        Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
+        Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
+        _ => return Err(format!("invalid time interval {}", string.quote())),
     };
 
     // Allow non-negative durations (-0 is fine), and infinity.
