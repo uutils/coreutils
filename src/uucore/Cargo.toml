@@ -34,9 +34,9 @@ iana-time-zone = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 thiserror = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
-    "formatting",
-    "local-offset",
-    "macros",
+  "formatting",
+  "local-offset",
+  "macros",
 ] }
 # * "problem" dependencies (pinned)
 data-encoding = { version = "2.6", optional = true }
@@ -71,12 +71,12 @@ tempfile = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi-util = { workspace = true, optional = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
-    "Wdk_System_SystemInformation",
-    "Win32_Storage_FileSystem",
-    "Win32_Foundation",
-    "Win32_System_RemoteDesktop",
-    "Win32_System_SystemInformation",
-    "Win32_System_WindowsProgramming",
+  "Wdk_System_SystemInformation",
+  "Win32_Storage_FileSystem",
+  "Win32_Foundation",
+  "Win32_System_RemoteDesktop",
+  "Win32_System_SystemInformation",
+  "Win32_System_WindowsProgramming",
 ] }
 
 [target.'cfg(target_os = "openbsd")'.dependencies]
@@ -96,12 +96,12 @@ fsext = ["libc", "windows-sys"]
 fsxattr = ["xattr"]
 lines = []
 format = [
-    "bigdecimal",
-    "extendedbigdecimal",
-    "itertools",
-    "parser",
-    "num-traits",
-    "quoting-style",
+  "bigdecimal",
+  "extendedbigdecimal",
+  "itertools",
+  "parser",
+  "num-traits",
+  "quoting-style",
 ]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
@@ -115,17 +115,17 @@ ringbuffer = []
 parser = ["extendedbigdecimal", "glob", "num-traits"]
 signals = []
 sum = [
-    "digest",
-    "hex",
-    "memchr",
-    "md-5",
-    "sha1",
-    "sha2",
-    "sha3",
-    "blake2b_simd",
-    "blake3",
-    "sm3",
-    "crc32fast",
+  "digest",
+  "hex",
+  "memchr",
+  "md-5",
+  "sha1",
+  "sha2",
+  "sha3",
+  "blake2b_simd",
+  "blake3",
+  "sm3",
+  "crc32fast",
 ]
 update-control = ["parser"]
 utf8 = []
