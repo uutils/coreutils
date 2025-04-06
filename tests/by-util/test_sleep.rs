@@ -238,21 +238,36 @@ fn test_sleep_when_input_has_whitespace_then_no_error(#[case] input: &str) {
         .no_output();
 }
 
+#[cfg(not(windows))]
 #[rstest]
-#[case::only_space(" ")]
-#[case::only_tab("\t")]
-#[case::only_newline("\n")]
-fn test_sleep_when_input_has_only_whitespace_then_error(#[case] input: &str) {
+#[case::only_space(" ", "' '")]
+#[case::only_tab("\t", "$'\\t'")]
+#[case::only_newline("\n", "$'\\n'")]
+fn test_sleep_when_input_has_only_whitespace_then_error(
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
     new_ucmd!()
         .arg(input)
         .timeout(Duration::from_secs(10))
         .fails()
-        .usage_error(match input {
-            " " => "invalid time interval ' '",
-            "\t" => "invalid time interval $'\\t'",
-            "\n" => "invalid time interval $'\\n'",
-            _ => "",
-        });
+        .usage_error(format!("invalid time interval {expected}"));
+}
+
+#[cfg(windows)]
+#[rstest]
+#[case::only_space(" ", "' '")]
+#[case::only_tab("\t", "\"`t\"")]
+#[case::only_newline("\n", "\"`n\"")]
+fn test_sleep_when_input_has_only_whitespace_then_error(
+    #[case] input: &str,
+    #[case] expected: &str,
+) {
+    new_ucmd!()
+        .arg(input)
+        .timeout(Duration::from_secs(10))
+        .fails()
+        .usage_error(format!("invalid time interval {expected}"));
 }
 
 #[test]
