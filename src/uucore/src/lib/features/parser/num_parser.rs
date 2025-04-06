@@ -150,7 +150,7 @@ impl ExtendedParser for i64 {
             }
         }
 
-        match parse(input, true) {
+        match parse(input, ParseTarget::Integral, &[]) {
             Ok(v) => into_i64(v),
             Err(e) => Err(e.map(into_i64)),
         }
@@ -186,7 +186,7 @@ impl ExtendedParser for u64 {
             }
         }
 
-        match parse(input, true) {
+        match parse(input, ParseTarget::Integral, &[]) {
             Ok(v) => into_u64(v),
             Err(e) => Err(e.map(into_u64)),
         }
@@ -218,7 +218,7 @@ impl ExtendedParser for f64 {
             Ok(v)
         }
 
-        match parse(input, false) {
+        match parse(input, ParseTarget::Decimal, &[]) {
             Ok(v) => into_f64(v),
             Err(e) => Err(e.map(into_f64)),
         }
@@ -230,14 +230,15 @@ impl ExtendedParser for ExtendedBigDecimal {
     fn extended_parse(
         input: &str,
     ) -> Result<ExtendedBigDecimal, ExtendedParserError<'_, ExtendedBigDecimal>> {
-        parse(input, false)
+        parse(input, ParseTarget::Decimal, &[])
     }
 }
 
-fn parse_special_value(
-    input: &str,
+fn parse_special_value<'a>(
+    input: &'a str,
     negative: bool,
-) -> Result<ExtendedBigDecimal, ExtendedParserError<'_, ExtendedBigDecimal>> {
+    allowed_suffixes: &'a [(char, u32)],
+) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
     let input_lc = input.to_ascii_lowercase();
 
     // Array of ("String to match", return value when sign positive, when sign negative)
@@ -248,12 +249,19 @@ fn parse_special_value(
     ];
 
     for (str, ebd) in MATCH_TABLE.iter() {
-        if input_lc.starts_with(str) {
+        if let Some(input_lc) = input_lc.strip_prefix(str) {
             let mut special = ebd.clone();
             if negative {
                 special = -special;
             }
-            let match_len = str.len();
+            let mut match_len = str.len();
+            if let Some(ch) = input_lc.chars().next() {
+                if allowed_suffixes.iter().any(|(c, _)| ch == *c) {
+                    // multiplying is unnecessary for these special values, but we have to note that
+                    // we processed the character to avoid a partial match error
+                    match_len += 1;
+                }
+            }
             return if input.len() == match_len {
                 Ok(special)
             } else {
@@ -353,24 +361,34 @@ fn construct_extended_big_decimal<'a>(
     Ok(ExtendedBigDecimal::BigDecimal(bd))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ParseTarget {
+    Decimal,
+    Integral,
+    Duration,
+}
+
 // TODO: As highlighted by clippy, this function _is_ high cognitive complexity, jumps
 // around between integer and float parsing, and should be split in multiple parts.
 #[allow(clippy::cognitive_complexity)]
-pub(crate) fn parse(
-    input: &str,
-    integral_only: bool,
-) -> Result<ExtendedBigDecimal, ExtendedParserError<'_, ExtendedBigDecimal>> {
+pub(crate) fn parse<'a>(
+    input: &'a str,
+    target: ParseTarget,
+    allowed_suffixes: &'a [(char, u32)],
+) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
     // Parse the " and ' prefixes separately
-    if let Some(rest) = input.strip_prefix(['\'', '"']) {
-        let mut chars = rest.char_indices().fuse();
-        let v = chars
-            .next()
-            .map(|(_, c)| ExtendedBigDecimal::BigDecimal(u32::from(c).into()));
-        return match (v, chars.next()) {
-            (Some(v), None) => Ok(v),
-            (Some(v), Some((i, _))) => Err(ExtendedParserError::PartialMatch(v, &rest[i..])),
-            (None, _) => Err(ExtendedParserError::NotNumeric),
-        };
+    if target != ParseTarget::Duration {
+        if let Some(rest) = input.strip_prefix(['\'', '"']) {
+            let mut chars = rest.char_indices().fuse();
+            let v = chars
+                .next()
+                .map(|(_, c)| ExtendedBigDecimal::BigDecimal(u32::from(c).into()));
+            return match (v, chars.next()) {
+                (Some(v), None) => Ok(v),
+                (Some(v), Some((i, _))) => Err(ExtendedParserError::PartialMatch(v, &rest[i..])),
+                (None, _) => Err(ExtendedParserError::NotNumeric),
+            };
+        }
     }
 
     let trimmed_input = input.trim_ascii_start();
@@ -391,7 +409,7 @@ pub(crate) fn parse(
     let (base, rest) = if let Some(rest) = unsigned.strip_prefix('0') {
         if let Some(rest) = rest.strip_prefix(['x', 'X']) {
             (Base::Hexadecimal, rest)
-        } else if integral_only {
+        } else if target == ParseTarget::Integral {
             // Binary/Octal only allowed for integer parsing.
             if let Some(rest) = rest.strip_prefix(['b', 'B']) {
                 (Base::Binary, rest)
@@ -419,7 +437,7 @@ pub(crate) fn parse(
     }
 
     // Parse fractional/exponent part of the number for supported bases.
-    if matches!(base, Base::Decimal | Base::Hexadecimal) && !integral_only {
+    if matches!(base, Base::Decimal | Base::Hexadecimal) && target != ParseTarget::Integral {
         // Parse the fractional part of the number if there can be one and the input contains
         // a '.' decimal separator.
         if matches!(chars.peek(), Some(&(_, '.'))) {
@@ -465,11 +483,22 @@ pub(crate) fn parse(
 
     // If nothing has been parsed, check if this is a special value, or declare the parsing unsuccessful
     if let Some((0, _)) = chars.peek() {
-        return if integral_only {
+        return if target == ParseTarget::Integral {
             Err(ExtendedParserError::NotNumeric)
         } else {
-            parse_special_value(unsigned, negative)
+            parse_special_value(unsigned, negative, allowed_suffixes)
         };
+    }
+
+    if let Some((_, ch)) = chars.peek() {
+        if let Some(times) = allowed_suffixes
+            .iter()
+            .find(|(c, _)| ch == c)
+            .map(|&(_, t)| t)
+        {
+            chars.next();
+            digits *= times;
+        }
     }
 
     let ebd_result = construct_extended_big_decimal(digits, negative, base, scale, exponent);

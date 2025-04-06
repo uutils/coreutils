@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 use rstest::rstest;
 
+use uucore::display::Quotable;
 // spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -228,9 +229,7 @@ fn test_sleep_when_multiple_inputs_exceed_max_duration_then_no_error() {
 #[rstest]
 #[case::whitespace_prefix(" 0.1s")]
 #[case::multiple_whitespace_prefix("   0.1s")]
-#[case::whitespace_suffix("0.1s ")]
-#[case::mixed_newlines_spaces_tabs("\n\t0.1s \n ")]
-fn test_sleep_when_input_has_whitespace_then_no_error(#[case] input: &str) {
+fn test_sleep_when_input_has_leading_whitespace_then_no_error(#[case] input: &str) {
     new_ucmd!()
         .arg(input)
         .timeout(Duration::from_secs(10))
@@ -238,36 +237,27 @@ fn test_sleep_when_input_has_whitespace_then_no_error(#[case] input: &str) {
         .no_output();
 }
 
-#[cfg(not(windows))]
 #[rstest]
-#[case::only_space(" ", "' '")]
-#[case::only_tab("\t", "$'\\t'")]
-#[case::only_newline("\n", "$'\\n'")]
-fn test_sleep_when_input_has_only_whitespace_then_error(
-    #[case] input: &str,
-    #[case] expected: &str,
-) {
+#[case::whitespace_suffix("0.1s ")]
+#[case::mixed_newlines_spaces_tabs("\n\t0.1s \n ")]
+fn test_sleep_when_input_has_trailing_whitespace_then_no_error(#[case] input: &str) {
     new_ucmd!()
         .arg(input)
         .timeout(Duration::from_secs(10))
         .fails()
-        .usage_error(format!("invalid time interval {expected}"));
+        .usage_error(format!("invalid time interval {}", input.quote()));
 }
 
-#[cfg(windows)]
 #[rstest]
-#[case::only_space(" ", "' '")]
-#[case::only_tab("\t", "\"`t\"")]
-#[case::only_newline("\n", "\"`n\"")]
-fn test_sleep_when_input_has_only_whitespace_then_error(
-    #[case] input: &str,
-    #[case] expected: &str,
-) {
+#[case::only_space(" ")]
+#[case::only_tab("\t")]
+#[case::only_newline("\n")]
+fn test_sleep_when_input_has_only_whitespace_then_error(#[case] input: &str) {
     new_ucmd!()
         .arg(input)
         .timeout(Duration::from_secs(10))
         .fails()
-        .usage_error(format!("invalid time interval {expected}"));
+        .usage_error(format!("invalid time interval {}", input.quote()));
 }
 
 #[test]
@@ -296,10 +286,27 @@ fn test_negative_interval() {
 
 #[rstest]
 #[case::int("0x0")]
+#[case::negative_zero("-0x0")]
+#[case::int_suffix("0x0s")]
+#[case::int_suffix("0x0h")]
 #[case::frac("0x0.1")]
+#[case::frac_suffix("0x0.1s")]
+#[case::frac_suffix("0x0.001h")]
 #[case::scientific("0x1.0p-3")]
-fn test_hex_duration(#[case] input: &str) {
-    new_ucmd!().arg(input).succeeds().no_output();
+#[case::scientific_suffix("0x1.0p-4s")]
+fn test_valid_hex_duration(#[case] input: &str) {
+    new_ucmd!().args(&["--", input]).succeeds().no_output();
+}
+
+#[rstest]
+#[case::negative("-0x1")]
+#[case::negative_suffix("-0x1s")]
+#[case::negative_frac_suffix("-0x0.1s")]
+fn test_invalid_hex_duration(#[case] input: &str) {
+    new_ucmd!()
+        .args(&["--", input])
+        .fails()
+        .usage_error(format!("invalid time interval {}", input.quote()));
 }
 
 #[cfg(unix)]

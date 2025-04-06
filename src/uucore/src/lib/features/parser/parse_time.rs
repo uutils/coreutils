@@ -11,9 +11,8 @@
 use crate::{
     display::Quotable,
     extendedbigdecimal::ExtendedBigDecimal,
-    parser::num_parser::{ExtendedParser, ExtendedParserError},
+    parser::num_parser::{self, ExtendedParserError, ParseTarget},
 };
-use bigdecimal::BigDecimal;
 use num_traits::Signed;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
@@ -57,35 +56,20 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
     // https://github.com/rust-lang/rust/issues/57391
     const NANOSECOND_DURATION: Duration = Duration::from_nanos(1);
 
-    let trimmed = string.trim();
-    let len = trimmed.len();
+    let len = string.len();
     if len == 0 {
         return Err(format!("invalid time interval {}", string.quote()));
     }
-    let Some(slice) = trimmed.get(..len - 1) else {
-        return Err(format!("invalid time interval {}", string.quote()));
-    };
-    let base = match trimmed.get(0..2) {
-        Some("0x") => 16,
-        _ => 10,
-    };
-    let (numstr, times) = match (trimmed.chars().next_back().unwrap(), base) {
-        ('s', _) => (slice, 1),
-        ('m', _) => (slice, 60),
-        ('h', _) => (slice, 60 * 60),
-        ('d', 10) => (slice, 60 * 60 * 24),
-        ('d', 16) if slice.contains('p') => (slice, 60 * 60 * 24),
-        ('d', 16) if !slice.contains('p') => (trimmed, 1),
-        (val, _) if !val.is_alphabetic() => (trimmed, 1),
-        _ => match trimmed.to_ascii_lowercase().as_str() {
-            "inf" | "infinity" => ("inf", 1),
-            _ => return Err(format!("invalid time interval {}", string.quote())),
-        },
-    };
-    let num = match ExtendedBigDecimal::extended_parse(numstr) {
+    let num = match num_parser::parse(
+        string,
+        ParseTarget::Duration,
+        &[('s', 1), ('m', 60), ('h', 60 * 60), ('d', 60 * 60 * 24)],
+    ) {
         Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
         Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
-        _ => return Err(format!("invalid time interval {}", string.quote())),
+        _ => {
+            return Err(format!("invalid time interval {}", string.quote()));
+        }
     };
 
     // Allow non-negative durations (-0 is fine), and infinity.
@@ -95,9 +79,6 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
         ExtendedBigDecimal::Infinity => return Ok(Duration::MAX),
         _ => return Err(format!("invalid time interval {}", string.quote())),
     };
-
-    // Pre-multiply times to avoid precision loss
-    let num: BigDecimal = num * times;
 
     // Transform to nanoseconds (9 digits after decimal point)
     let (nanos_bi, _) = num.with_scale(9).into_bigint_and_scale();
