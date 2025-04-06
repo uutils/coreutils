@@ -249,13 +249,13 @@ fn parse_special_value<'a>(
     ];
 
     for (str, ebd) in MATCH_TABLE.iter() {
-        if let Some(input_lc) = input_lc.strip_prefix(str) {
+        if input_lc.starts_with(str) {
             let mut special = ebd.clone();
             if negative {
                 special = -special;
             }
             let mut match_len = str.len();
-            if let Some(ch) = input_lc.chars().next() {
+            if let Some(ch) = input.chars().nth(str.chars().count()) {
                 if allowed_suffixes.iter().any(|(c, _)| ch == *c) {
                     // multiplying is unnecessary for these special values, but we have to note that
                     // we processed the character to avoid a partial match error
