@@ -19,11 +19,11 @@ fn test_invalid_time_interval() {
     new_ucmd!()
         .arg("xyz")
         .fails()
-        .usage_error("invalid time interval 'xyz': Invalid input: xyz");
+        .usage_error("invalid time interval 'xyz'");
     new_ucmd!()
         .args(&["--", "-1"])
         .fails()
-        .usage_error("invalid time interval '-1': Number was negative");
+        .usage_error("invalid time interval '-1'");
 }
 
 #[test]
@@ -247,16 +247,14 @@ fn test_sleep_when_input_has_only_whitespace_then_error(#[case] input: &str) {
         .arg(input)
         .timeout(Duration::from_secs(10))
         .fails()
-        .usage_error(format!(
-            "invalid time interval '{input}': Found only whitespace in input"
-        ));
+        .usage_error("empty string");
 }
 
 #[test]
 fn test_sleep_when_multiple_input_some_with_error_then_shows_all_errors() {
-    let expected = "invalid time interval 'abc': Invalid input: abc\n\
-                    sleep: invalid time interval '1years': Invalid time unit: 'years' at position 2\n\
-                    sleep: invalid time interval ' ': Found only whitespace in input";
+    let expected = "invalid time interval 'abc'\n\
+                    sleep: invalid time interval '1years'\n\
+                    sleep: empty string";
 
     // Even if one of the arguments is valid, but the rest isn't, we should still fail and exit early.
     // So, the timeout of 10 seconds ensures we haven't executed `thread::sleep` with the only valid
@@ -273,7 +271,15 @@ fn test_negative_interval() {
     new_ucmd!()
         .args(&["--", "-1"])
         .fails()
-        .usage_error("invalid time interval '-1': Number was negative");
+        .usage_error("invalid time interval '-1'");
+}
+
+#[rstest]
+#[case::int("0x0")]
+#[case::frac("0x0.1")]
+#[case::scientific("0x1.0p-3")]
+fn test_hex_duration(#[case] input: &str) {
+    new_ucmd!().arg(input).succeeds().no_output();
 }
 
 #[cfg(unix)]

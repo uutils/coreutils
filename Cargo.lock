@@ -1168,6 +1168,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bcaaec4551594c969335c98c903c1397853d4198408ea609190f420500f6be71"
 
 [[package]]
+name = "hexfloat2"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "befe65164a090041cdf6e0d21a0ec3198d856fbfe2b76e324a073e790bb49f8c"
+
+[[package]]
 name = "hostname"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3575,6 +3581,7 @@ dependencies = [
  "dunce",
  "glob",
  "hex",
+ "hexfloat2",
  "iana-time-zone",
  "itertools 0.14.0",
  "libc",
