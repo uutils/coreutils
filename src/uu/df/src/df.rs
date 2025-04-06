@@ -115,10 +115,16 @@ impl Default for Options {
 
 #[derive(Debug, Error)]
 enum OptionsError {
+    // TODO This needs to vary based on whether `--block-size`
+    // or `-B` were provided.
     #[error("--block-size argument '{0}' too large")]
     BlockSizeTooLarge(String),
+    // TODO This needs to vary based on whether `--block-size`
+    // or `-B` were provided.,
     #[error("invalid --block-size argument {0}")]
     InvalidBlockSize(String),
+    // TODO This needs to vary based on whether `--block-size`
+    // or `-B` were provided.
     #[error("invalid suffix in --block-size argument {0}")]
     InvalidSuffix(String),
 
@@ -126,7 +132,10 @@ enum OptionsError {
     #[error("option --output: field {0} used more than once")]
     ColumnError(ColumnError),
 
-    #[error("{}", .0.iter().map(|t| format!("file system type {} both selected and excluded", t.quote())).collect::<Vec<String>>().join(format!("\n{}: ", uucore::util_name()).as_str()))]
+    #[error("{}", .0.iter()
+            .map(|t| format!("file system type {} both selected and excluded", t.quote()))
+            .collect::<Vec<_>>()
+            .join(format!("\n{}: ", uucore::util_name()).as_str()))]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
 
