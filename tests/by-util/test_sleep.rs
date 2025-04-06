@@ -240,7 +240,7 @@ fn test_sleep_when_input_has_leading_whitespace_then_no_error(#[case] input: &st
 #[rstest]
 #[case::whitespace_suffix("0.1s ")]
 #[case::mixed_newlines_spaces_tabs("\n\t0.1s \n ")]
-fn test_sleep_when_input_has_trailing_whitespace_then_no_error(#[case] input: &str) {
+fn test_sleep_when_input_has_trailing_whitespace_then_error(#[case] input: &str) {
     new_ucmd!()
         .arg(input)
         .timeout(Duration::from_secs(10))
