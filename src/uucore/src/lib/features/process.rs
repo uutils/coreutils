@@ -23,6 +23,12 @@ pub fn geteuid() -> uid_t {
     unsafe { libc::geteuid() }
 }
 
+/// `getpgrp()` returns the process group ID of the calling process.
+/// It is a trivial wrapper over libc::getpgrp to "hide" the unsafe
+pub fn getpgrp() -> pid_t {
+    unsafe { libc::getpgrp() }
+}
+
 /// `getegid()` returns the effective group ID of the calling process.
 pub fn getegid() -> gid_t {
     unsafe { libc::getegid() }
