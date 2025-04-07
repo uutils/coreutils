@@ -138,7 +138,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
-    let (recursive, dereference, traverse_symlinks) = configure_symlink_and_recursion(&matches)?;
+    let (recursive, dereference, traverse_symlinks) =
+        configure_symlink_and_recursion(&matches, TraverseSymlinks::First)?;
 
     let chmoder = Chmoder {
         changes,
@@ -259,6 +260,10 @@ impl Chmoder {
                         // Don't try to change the mode of the symlink itself
                         continue;
                     }
+                    if self.recursive && self.traverse_symlinks == TraverseSymlinks::None {
+                        continue;
+                    }
+
                     if !self.quiet {
                         show!(USimpleError::new(
                             1,
