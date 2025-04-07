@@ -1458,23 +1458,6 @@ fn copy_source(
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
-        // If --update is active, and destination is newer, skip copying
-        if options.copy_mode == CopyMode::Update {
-            if let (Ok(src_meta), Ok(dst_meta)) = (fs::metadata(source_path), fs::metadata(&dest)) {
-                let src_mtime = FileTime::from_last_modification_time(&src_meta);
-                let dst_mtime = FileTime::from_last_modification_time(&dst_meta);
-                if dst_mtime >= src_mtime {
-                    if options.debug {
-                        println!(
-                            "'{}' -> '{}', skipped (destination newer)",
-                            source_path.display(),
-                            dest.display()
-                        );
-                    }
-                    return Ok(());
-                }
-            }
-        }
         let res = copy_file(
             progress_bar,
             source_path,
@@ -1848,6 +1831,15 @@ fn handle_existing_dest(
     // `--backup` are both specified.
     if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
+    }
+
+    if options.update == UpdateMode::ReplaceNone {
+        if dest.exists() {
+            if options.debug {
+                println!("skipped {}", dest.quote());
+            }
+            return Err(Error::Skipped(false));
+        }
     }
 
     if options.update != UpdateMode::ReplaceIfOlder {
