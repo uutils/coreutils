@@ -8,7 +8,8 @@ use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Error, Write};
+use std::result::Result as StdResult;
 use std::str::FromStr;
 
 use units::{IEC_BASES, SI_BASES};
@@ -38,10 +39,29 @@ fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
 where
     R: BufRead,
 {
-    for (idx, line_result) in input.lines().by_ref().enumerate() {
+    if options.zero_terminated {
+        handle_buffer_iterator(
+            input
+                .split(0)
+                // FIXME: This panics on UTF8 decoding, but this util in general doesn't handle
+                // invalid UTF8
+                .map(|bytes| Ok(String::from_utf8(bytes?).unwrap())),
+            options,
+        )
+    } else {
+        handle_buffer_iterator(input.lines(), options)
+    }
+}
+
+fn handle_buffer_iterator(
+    iter: impl Iterator<Item = StdResult<String, Error>>,
+    options: &NumfmtOptions,
+) -> UResult<()> {
+    let eol = if options.zero_terminated { '\0' } else { '\n' };
+    for (idx, line_result) in iter.enumerate() {
         match line_result {
             Ok(line) if idx < options.header => {
-                println!("{line}");
+                print!("{line}{eol}");
                 Ok(())
             }
             Ok(line) => format_and_handle_validation(line.as_ref(), options),
@@ -217,6 +237,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     let invalid =
         InvalidModes::from_str(args.get_one::<String>(options::INVALID).unwrap()).unwrap();
 
+    let zero_terminated = args.get_flag(options::ZERO_TERMINATED);
+
     Ok(NumfmtOptions {
         transform,
         padding,
@@ -227,6 +249,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         suffix,
         format,
         invalid,
+        zero_terminated,
     })
 }
 
@@ -367,6 +390,13 @@ pub fn uu_app() -> Command {
                 .value_name("INVALID"),
         )
         .arg(
+            Arg::new(options::ZERO_TERMINATED)
+                .long(options::ZERO_TERMINATED)
+                .short('z')
+                .help("line delimiter is NUL, not newline")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(options::NUMBER)
                 .hide(true)
                 .action(ArgAction::Append),
@@ -406,6 +436,7 @@ mod tests {
             suffix: None,
             format: FormatOptions::default(),
             invalid: InvalidModes::Abort,
+            zero_terminated: false,
         }
     }
 
