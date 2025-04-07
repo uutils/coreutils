@@ -1109,7 +1109,7 @@ jobs:
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
 
     - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         file: ${{ steps.run_test_cov.outputs.report }}
