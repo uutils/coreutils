@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains gsed -->
+<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Cinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains gsed -->
 
 # Setting up your local development environment
 
@@ -253,13 +253,11 @@ pkg install coreutils gsed
 
 Code coverage report can be generated using [grcov](https://github.com/mozilla/grcov).
 
-### Using Nightly Rust
-
 To generate [gcov-based](https://github.com/mozilla/grcov#example-how-to-generate-gcda-files-for-a-rust-project) coverage report
 
 ```shell
 export CARGO_INCREMENTAL=0
-export RUSTFLAGS="-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+export RUSTFLAGS="-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
 export RUSTDOCFLAGS="-Cpanic=abort"
 cargo build <options...> # e.g., --features feat_os_unix
 cargo test <options...> # e.g., --features feat_os_unix test_pathchk
@@ -268,11 +266,6 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 ```
 
 if changes are not reflected in the report then run `cargo clean` and run the above commands.
-
-### Using Stable Rust
-
-If you are using stable version of Rust that doesn't enable code coverage instrumentation by default
-then add `-Z-Zinstrument-coverage` flag to `RUSTFLAGS` env variable specified above.
 
 ## Tips for setting up on Mac
 
