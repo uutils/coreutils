@@ -269,6 +269,7 @@ pub fn uu_app() -> Command {
 ///
 /// We also assume that there is enough space in val to expand if start needs
 /// to be updated.
+#[inline]
 fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
     // To avoid a lot of casts to signed integers, we make sure to decrement pos
     // as late as possible, so that it does not ever go negative.
@@ -297,6 +298,14 @@ fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
     if carry == 0 {
         return start.min(pos);
     }
+
+    return fast_inc_one(val, start, pos);
+}
+
+#[inline]
+fn fast_inc_one(val: &mut [u8], start: usize, end: usize) -> usize {
+    let mut pos = end;
+
     while pos > start {
         pos -= 1;
 
