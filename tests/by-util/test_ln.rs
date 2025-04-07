@@ -549,7 +549,11 @@ fn test_symlink_no_deref_dir() {
     scene.ucmd().args(&["-sn", dir1, link]).fails();
 
     // Try with the no-deref
-    scene.ucmd().args(&["-sfn", dir1, link]).succeeds();
+    scene
+        .ucmd()
+        .args(&["-sfn", dir1, link])
+        .succeeds()
+        .no_stderr();
     assert!(at.dir_exists(dir1));
     assert!(at.dir_exists(dir2));
     assert!(at.is_symlink(link));
