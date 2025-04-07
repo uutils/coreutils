@@ -23,6 +23,7 @@ uucore = { workspace = true }
 crossterm = { workspace = true }
 unicode-width = { workspace = true }
 unicode-segmentation = { workspace = true }
+tempfile.workspace = true
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 nix = { workspace = true }
