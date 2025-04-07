@@ -338,6 +338,16 @@ fn sub_num_int_char_const_in() {
 }
 
 #[test]
+fn sub_num_thousands() {
+    // For "C" locale, the thousands separator is ignored but should
+    // not result in an error
+    new_ucmd!()
+        .args(&["%'i", "123456"])
+        .succeeds()
+        .stdout_only("123456");
+}
+
+#[test]
 fn sub_num_uint() {
     new_ucmd!()
         .args(&["twenty is %u", "20"])

@@ -95,6 +95,7 @@ struct Flags {
     space: bool,
     hash: bool,
     zero: bool,
+    quote: bool,
 }
 
 impl Flags {
@@ -108,6 +109,11 @@ impl Flags {
                 b' ' => flags.space = true,
                 b'#' => flags.hash = true,
                 b'0' => flags.zero = true,
+                b'\'' => {
+                    // the thousands separator is printed with numbers using the ' flag, but
+                    // this is a no-op in the "C" locale. We only save this flag for reporting errors
+                    flags.quote = true;
+                }
                 _ => break,
             }
             *index += 1;
@@ -181,7 +187,7 @@ impl Spec {
                 }
             }
             b's' => {
-                if flags.zero || flags.hash {
+                if flags.zero || flags.hash || flags.quote {
                     return Err(&start[..index]);
                 }
                 Self::String {
