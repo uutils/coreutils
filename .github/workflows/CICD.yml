@@ -1029,7 +1029,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
 
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.6
+      uses: mozilla-actions/sccache-action@v0.0.9
 
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
