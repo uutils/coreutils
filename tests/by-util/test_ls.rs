@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
 // spell-checker:ignore (words) fakeroot setcap
 #![allow(
     clippy::similar_names,
@@ -4380,20 +4380,20 @@ fn test_tabsize_formatting() {
 
     scene
         .ucmd()
-        .args(&["-x", "-w20", "-T4"])
+        .args(&["-x", "-w18", "-T4"])
         .succeeds()
         .stdout_is("aaaaaaaa  bbbb\ncccc\t  dddddddd\n");
 
     scene
         .ucmd()
-        .args(&["-x", "-w20", "-T2"])
+        .args(&["-x", "-w18", "-T2"])
         .succeeds()
         .stdout_is("aaaaaaaa\tbbbb\ncccc\t\t\tdddddddd\n");
 
     // use spaces
     scene
         .ucmd()
-        .args(&["-x", "-w20", "-T0"])
+        .args(&["-x", "-w18", "-T0"])
         .succeeds()
         .stdout_is("aaaaaaaa  bbbb\ncccc      dddddddd\n");
 }
