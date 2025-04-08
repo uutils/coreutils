@@ -3585,6 +3585,7 @@ dependencies = [
  "number_prefix",
  "os_display",
  "regex",
+ "selinux",
  "sha1",
  "sha2",
  "sha3",
