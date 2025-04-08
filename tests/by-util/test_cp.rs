@@ -6174,7 +6174,7 @@ fn test_cp_update_older_interactive_prompt_no() {
 }
 
 #[test]
-fn test_cp_update_none_interactive_promp_no() {
+fn test_cp_update_none_interactive_prompt_no() {
     let (at, mut ucmd) = at_and_ucmd!();
     let old_file = "old";
     let new_file = "new";
