@@ -54,19 +54,20 @@ struct Options {
 /// The `spec` must be of the form `[USER][:[GROUP]]`, otherwise an
 /// error is returned.
 fn parse_userspec(spec: &str) -> UResult<UserSpec> {
-    match &spec.splitn(2, ':').collect::<Vec<&str>>()[..] {
+    let mut parts = spec.splitn(2, ':');
+    match (parts.next(), parts.next()) {
         // ""
-        [""] => Ok(UserSpec::NeitherGroupNorUser),
+        (Some(""), None) => Ok(UserSpec::NeitherGroupNorUser),
         // "usr"
-        [usr] => Ok(UserSpec::UserOnly(usr.to_string())),
+        (Some(usr), None) => Ok(UserSpec::UserOnly(usr.to_string())),
         // ":"
-        ["", ""] => Ok(UserSpec::NeitherGroupNorUser),
+        (Some(""), Some("")) => Ok(UserSpec::NeitherGroupNorUser),
         // ":grp"
-        ["", grp] => Ok(UserSpec::GroupOnly(grp.to_string())),
+        (Some(""), Some(grp)) => Ok(UserSpec::GroupOnly(grp.to_string())),
         // "usr:"
-        [usr, ""] => Ok(UserSpec::UserOnly(usr.to_string())),
+        (Some(usr), Some("")) => Ok(UserSpec::UserOnly(usr.to_string())),
         // "usr:grp"
-        [usr, grp] => Ok(UserSpec::UserAndGroup(usr.to_string(), grp.to_string())),
+        (Some(usr), Some(grp)) => Ok(UserSpec::UserAndGroup(usr.to_string(), grp.to_string())),
         // everything else
         _ => Err(ChrootError::InvalidUserspec(spec.to_string()).into()),
     }
