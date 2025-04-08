@@ -21,13 +21,14 @@ chrono = { workspace = true }
 # For the --exclude & --exclude-from options
 glob = { workspace = true }
 clap = { workspace = true }
+regex = { workspace = true }
 uucore = { workspace = true, features = ["format", "parser"] }
 thiserror = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [
-  "Win32_Storage_FileSystem",
-  "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_Foundation",
 ] }
 
 [[bin]]

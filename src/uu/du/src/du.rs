@@ -6,6 +6,8 @@
 use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
+use regex::Regex;
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::env;
 #[cfg(not(windows))]
@@ -20,7 +22,7 @@ use std::os::windows::fs::MetadataExt;
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::mpsc;
+use std::sync::{LazyLock, mpsc};
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use thiserror::Error;
@@ -73,6 +75,13 @@ mod options {
 const ABOUT: &str = help_about!("du.md");
 const AFTER_HELP: &str = help_section!("after help", "du.md");
 const USAGE: &str = help_usage!("du.md");
+
+static TIME_STYLE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?<before>(?:^|[^%])(?:%%)*)%(?<after>[^YCyqmbBhdeaAwuUWGgVjDxFvHkIlPpMSfRTXrZzc+stn%.369:]|[-_0][^YCyqmdewuUWGgVjHkIlMSfs%]|\.(?:[^369f]|$)|\.[369](?:[^f]|$)|[369](?:[^f]|$)|:{1,2}(?:[^z:]|$)|:{3}[^z]|$)", // cspell:disable-line
+    )
+    .unwrap()
+});
 
 struct TraversalOptions {
     all: bool,
@@ -806,8 +815,8 @@ fn get_time_secs(time: Time, stat: &Stat) -> Result<u64, DuError> {
     }
 }
 
-fn parse_time_style(s: Option<&str>) -> UResult<&str> {
-    match s {
+fn parse_time_style(s: Option<&str>) -> UResult<Cow<'_, str>> {
+    let s = match s {
         Some(s) => match s {
             "full-iso" => Ok("%Y-%m-%d %H:%M:%S.%f %z"),
             "long-iso" => Ok("%Y-%m-%d %H:%M"),
@@ -818,6 +827,26 @@ fn parse_time_style(s: Option<&str>) -> UResult<&str> {
             },
         },
         None => Ok("%Y-%m-%d %H:%M"),
+    };
+    match s {
+        Ok(s) => {
+            let mut s = s.to_owned();
+            let mut start = 0;
+            while start < s.len() {
+                // FIXME: this should use let chains once they're stabilized
+                // See https://github.com/rust-lang/rust/issues/53667
+                if let Some(cap) = TIME_STYLE_REGEX.captures(&s[start..]) {
+                    let mat = cap.name("before").unwrap();
+                    let percent_idx = mat.end();
+                    s.replace_range(percent_idx + start..percent_idx + start + 1, "%%");
+                    start = percent_idx + 2;
+                } else {
+                    break;
+                }
+            }
+            Ok(Cow::Owned(s))
+        }
+        Err(e) => Err(e),
     }
 }
 

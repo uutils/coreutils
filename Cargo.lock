@@ -2757,6 +2757,7 @@ dependencies = [
  "chrono",
  "clap",
  "glob",
+ "regex",
  "thiserror 2.0.12",
  "uucore",
  "windows-sys 0.59.0",
