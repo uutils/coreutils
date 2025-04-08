@@ -708,7 +708,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let time_format = if time.is_some() {
-        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
+        parse_time_style(
+            matches
+                .get_one::<String>(options::TIME_STYLE)
+                .map(|s| s.as_str()),
+        )?
+        .to_string()
     } else {
         "%Y-%m-%d %H:%M".to_string()
     };
@@ -807,7 +812,10 @@ fn parse_time_style(s: Option<&str>) -> UResult<&str> {
             "full-iso" => Ok("%Y-%m-%d %H:%M:%S.%f %z"),
             "long-iso" => Ok("%Y-%m-%d %H:%M"),
             "iso" => Ok("%Y-%m-%d"),
-            _ => Err(DuError::InvalidTimeStyleArg(s.into()).into()),
+            _ => match s.strip_prefix('+') {
+                Some(s) => Ok(s),
+                _ => Err(DuError::InvalidTimeStyleArg(s.into()).into()),
+            },
         },
         None => Ok("%Y-%m-%d %H:%M"),
     }
