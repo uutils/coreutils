@@ -1946,7 +1946,7 @@ mod tests {
     #[test]
     fn test_tokenize_fields() {
         let line = "foo bar b    x";
-        assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14,],);
+        assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14,]);
     }
 
     #[test]

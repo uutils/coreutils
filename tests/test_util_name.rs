@@ -41,7 +41,7 @@ fn execution_phrase_double() {
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
-            .contains(&format!("Usage: {} ls", scenario.bin_path.display(),))
+            .contains(&format!("Usage: {} ls", scenario.bin_path.display()))
     );
 }
 

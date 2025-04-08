@@ -174,12 +174,12 @@ mod tests {
         );
 
         // Shortened names
-        assert_eq!(version_cmp("world", "wo"), Ordering::Greater,);
+        assert_eq!(version_cmp("world", "wo"), Ordering::Greater);
 
-        assert_eq!(version_cmp("hello10wo", "hello10world"), Ordering::Less,);
+        assert_eq!(version_cmp("hello10wo", "hello10world"), Ordering::Less);
 
         // Simple names
-        assert_eq!(version_cmp("world", "hello"), Ordering::Greater,);
+        assert_eq!(version_cmp("world", "hello"), Ordering::Greater);
 
         assert_eq!(version_cmp("hello", "world"), Ordering::Less);
 

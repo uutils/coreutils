@@ -197,7 +197,7 @@ fn check_default(path: &[String]) -> bool {
         // but some non-POSIX hosts do (as an alias for "."),
         // so allow "" if `symlink_metadata` (corresponds to `lstat`) does.
         if fs::symlink_metadata(&joined_path).is_err() {
-            writeln!(std::io::stderr(), "pathchk: '': No such file or directory",);
+            writeln!(std::io::stderr(), "pathchk: '': No such file or directory");
             return false;
         }
     }
