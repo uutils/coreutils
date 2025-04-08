@@ -456,12 +456,12 @@ pub(crate) fn parse<'a>(
 
     // Parse the integral part of the number
     let mut chars = rest.chars().enumerate().fuse().peekable();
-    let mut digits = BigUint::zero();
+    let mut digits: Option<BigUint> = None;
     let mut scale = 0u64;
     let mut exponent = BigInt::zero();
     while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
         chars.next();
-        digits = digits * base as u8 + d;
+        digits = Some(digits.unwrap_or_default() * base as u8 + d);
     }
 
     // Parse fractional/exponent part of the number for supported bases.
@@ -472,7 +472,7 @@ pub(crate) fn parse<'a>(
             chars.next();
             while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
                 chars.next();
-                (digits, scale) = (digits * base as u8 + d, scale + 1);
+                (digits, scale) = (Some(digits.unwrap_or_default() * base as u8 + d), scale + 1);
             }
         }
 
@@ -509,14 +509,16 @@ pub(crate) fn parse<'a>(
         }
     }
 
-    // If nothing has been parsed, check if this is a special value, or declare the parsing unsuccessful
-    if let Some((0, _)) = chars.peek() {
+    // If no digit has been parsed, check if this is a special value, or declare the parsing unsuccessful
+    if digits.is_none() {
         return if target == ParseTarget::Integral {
             Err(ExtendedParserError::NotNumeric)
         } else {
             parse_special_value(unsigned, negative, allowed_suffixes)
         };
     }
+
+    let mut digits = digits.unwrap();
 
     if let Some((_, ch)) = chars.peek() {
         if let Some(times) = allowed_suffixes
@@ -529,7 +531,8 @@ pub(crate) fn parse<'a>(
         }
     }
 
-    let ebd_result = construct_extended_big_decimal(digits, negative, base, scale, exponent);
+    let ebd_result =
+        construct_extended_big_decimal(digits, negative, base, scale, exponent);
 
     // Return what has been parsed so far. If there are extra characters, mark the
     // parsing as a partial match.
@@ -624,6 +627,15 @@ mod tests {
         assert!(matches!(
             i64::extended_parse(&format!("{}", i64::MIN as i128 - 1)),
             Err(ExtendedParserError::Overflow(i64::MIN))
+        ));
+
+        assert!(matches!(
+            i64::extended_parse(""),
+            Err(ExtendedParserError::NotNumeric)
+        ));
+        assert!(matches!(
+            i64::extended_parse("."),
+            Err(ExtendedParserError::NotNumeric)
         ));
     }
 
@@ -811,6 +823,16 @@ mod tests {
             ExtendedBigDecimal::extended_parse(&format!("-0e{}", i64::MIN + 2)),
             Ok(ExtendedBigDecimal::MinusZero)
         );
+
+        /* Invalid numbers */
+        assert_eq!(
+            Err(ExtendedParserError::NotNumeric),
+            ExtendedBigDecimal::extended_parse("")
+        );
+        assert_eq!(
+            Err(ExtendedParserError::NotNumeric),
+            ExtendedBigDecimal::extended_parse(".")
+        );
     }
 
     #[test]
@@ -887,6 +909,16 @@ mod tests {
                 ExtendedBigDecimal::MinusZero
             ))
         ));
+
+        // TODO: GNU coreutils treats these 2 as partial match.
+        assert_eq!(
+            Err(ExtendedParserError::NotNumeric),
+            ExtendedBigDecimal::extended_parse("0x")
+        );
+        assert_eq!(
+            Err(ExtendedParserError::NotNumeric),
+            ExtendedBigDecimal::extended_parse("0x.")
+        );
     }
 
     #[test]
@@ -935,6 +967,20 @@ mod tests {
                 ebd == ExtendedBigDecimal::zero(),
             _ => false,
         });
+
+        assert!(match ExtendedBigDecimal::extended_parse("0b") {
+            Err(ExtendedParserError::PartialMatch(ebd, "b")) => ebd == ExtendedBigDecimal::zero(),
+            _ => false,
+        });
+        assert!(match ExtendedBigDecimal::extended_parse("0b.") {
+            Err(ExtendedParserError::PartialMatch(ebd, "b.")) => ebd == ExtendedBigDecimal::zero(),
+            _ => false,
+        });
+        // TODO: GNU coreutils treats this as partial match.
+        assert_eq!(
+            Err(ExtendedParserError::NotNumeric),
+            u64::extended_parse("0b")
+        );
     }
 
     #[test]
