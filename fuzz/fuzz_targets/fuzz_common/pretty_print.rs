@@ -9,11 +9,11 @@ use console::{style, Style};
 use similar::TextDiff;
 
 pub fn print_section<S: fmt::Display>(s: S) {
-    println!("{}", style(format!("=== {}", s)).bold());
+    println!("{}", style(format!("=== {s}")).bold());
 }
 
 pub fn print_subsection<S: fmt::Display>(s: S) {
-    println!("{}", style(format!("--- {}", s)).bright());
+    println!("{}", style(format!("--- {s}")).bright());
 }
 
 pub fn print_test_begin<S: fmt::Display>(msg: S) {
@@ -33,9 +33,8 @@ pub fn print_end_with_status<S: fmt::Display>(msg: S, ok: bool) {
     };
 
     println!(
-        "{} {} {}",
+        "{} {ok} {}",
         style("===").bold(), // Kind of gray
-        ok,
         style(msg).bold()
     );
 }

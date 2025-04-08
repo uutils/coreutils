@@ -40,10 +40,9 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
 
     assert!(
         perms == test.before,
-        "{}: expected: {:o} got: {:o}",
+        "{}: expected: {:o} got: {perms:o}",
         "setting permissions on test files before actual test run failed",
         test.after,
-        perms
     );
 
     for arg in &test.args {
@@ -61,10 +60,8 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     let perms = at.metadata(TEST_FILE).permissions().mode();
     assert!(
         perms == test.after,
-        "{}: expected: {:o} got: {:o}",
-        ucmd,
+        "{ucmd}: expected: {:o} got: {perms:o}",
         test.after,
-        perms
     );
 }
 
@@ -243,8 +240,7 @@ fn test_chmod_umask_expected() {
     let current_umask = uucore::mode::get_umask();
     assert_eq!(
         current_umask, 0o022,
-        "Unexpected umask value: expected 022 (octal), but got {:03o}. Please adjust the test environment.",
-        current_umask
+        "Unexpected umask value: expected 022 (octal), but got {current_umask:03o}. Please adjust the test environment.",
     );
 }
 
@@ -847,7 +843,7 @@ fn test_chmod_symlink_to_dangling_target_dereference() {
         .arg("u+x")
         .arg(symlink)
         .fails()
-        .stderr_contains(format!("cannot operate on dangling symlink '{}'", symlink));
+        .stderr_contains(format!("cannot operate on dangling symlink '{symlink}'"));
 }
 
 #[test]
@@ -1019,8 +1015,7 @@ fn test_chmod_traverse_symlink_combo() {
         let actual_target = at.metadata(target).permissions().mode();
         assert_eq!(
             actual_target, expected_target_perms,
-            "For flags {:?}, expected target perms = {:o}, got = {:o}",
-            flags, expected_target_perms, actual_target
+            "For flags {flags:?}, expected target perms = {expected_target_perms:o}, got = {actual_target:o}",
         );
 
         let actual_symlink = at
@@ -1029,8 +1024,7 @@ fn test_chmod_traverse_symlink_combo() {
             .mode();
         assert_eq!(
             actual_symlink, expected_symlink_perms,
-            "For flags {:?}, expected symlink perms = {:o}, got = {:o}",
-            flags, expected_symlink_perms, actual_symlink
+            "For flags {flags:?}, expected symlink perms = {expected_symlink_perms:o}, got = {actual_symlink:o}",
         );
     }
 }

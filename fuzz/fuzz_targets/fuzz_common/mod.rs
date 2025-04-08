@@ -43,7 +43,7 @@ pub fn is_gnu_cmd(cmd_path: &str) -> Result<(), std::io::Error> {
     CHECK_GNU.call_once(|| {
         let version_output = Command::new(cmd_path).arg("--version").output().unwrap();
 
-        println!("version_output {:#?}", version_output);
+        println!("version_output {version_output:#?}");
 
         let version_str = String::from_utf8_lossy(&version_output.stdout).to_string();
         if version_str.contains("GNU coreutils") {
@@ -112,7 +112,7 @@ where
     let original_stdin_fd = if let Some(input_str) = pipe_input {
         // we have pipe input
         let mut input_file = tempfile::tempfile().unwrap();
-        write!(input_file, "{}", input_str).unwrap();
+        write!(input_file, "{input_str}").unwrap();
         input_file.seek(SeekFrom::Start(0)).unwrap();
 
         // Redirect stdin to read from the in-memory file
@@ -320,10 +320,10 @@ pub fn compare_result(
     gnu_result: &CommandResult,
     fail_on_stderr_diff: bool,
 ) {
-    print_section(format!("Compare result for: {} {}", test_type, input));
+    print_section(format!("Compare result for: {test_type} {input}"));
 
     if let Some(pipe) = pipe_input {
-        println!("Pipe: {}", pipe);
+        println!("Pipe: {pipe}");
     }
 
     let mut discrepancies = Vec::new();
@@ -369,16 +369,13 @@ pub fn compare_result(
         );
         if should_panic {
             print_end_with_status(
-                format!("Test failed and will panic for: {} {}", test_type, input),
+                format!("Test failed and will panic for: {test_type} {input}"),
                 false,
             );
-            panic!("Test failed for: {} {}", test_type, input);
+            panic!("Test failed for: {test_type} {input}");
         } else {
             print_end_with_status(
-                format!(
-                    "Test completed with discrepancies for: {} {}",
-                    test_type, input
-                ),
+                format!("Test completed with discrepancies for: {test_type} {input}"),
                 false,
             );
         }

@@ -824,8 +824,7 @@ fn test_touch_permission_denied_error_msg() {
 
     let full_path = at.plus_as_string(path_str);
     ucmd.arg(&full_path).fails().stderr_only(format!(
-        "touch: cannot touch '{}': Permission denied\n",
-        &full_path
+        "touch: cannot touch '{full_path}': Permission denied\n",
     ));
 }
 

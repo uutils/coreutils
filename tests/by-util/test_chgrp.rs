@@ -101,8 +101,7 @@ fn test_preserve_root() {
         "./../../../../../../../../../../../../../../",
     ] {
         let expected_error = format!(
-            "chgrp: it is dangerous to operate recursively on '{}' (same as '/')\nchgrp: use --no-preserve-root to override this failsafe\n",
-            d,
+            "chgrp: it is dangerous to operate recursively on '{d}' (same as '/')\nchgrp: use --no-preserve-root to override this failsafe\n",
         );
         new_ucmd!()
             .arg("--preserve-root")

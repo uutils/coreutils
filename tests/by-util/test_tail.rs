@@ -1801,12 +1801,12 @@ fn test_follow_name_remove() {
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
     let expected_stderr = [
         format!(
-            "{}: {}: No such file or directory\n{0}: no files remaining\n",
-            ts.util_name, source_copy
+            "{}: {source_copy}: No such file or directory\n{0}: no files remaining\n",
+            ts.util_name,
         ),
         format!(
-            "{}: {}: No such file or directory\n",
-            ts.util_name, source_copy
+            "{}: {source_copy}: No such file or directory\n",
+            ts.util_name,
         ),
     ];
 
@@ -1862,7 +1862,7 @@ fn test_follow_name_truncate1() {
     let backup = "backup";
 
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
-    let expected_stderr = format!("{}: {}: file truncated\n", ts.util_name, source);
+    let expected_stderr = format!("{}: {source}: file truncated\n", ts.util_name);
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
@@ -1904,7 +1904,7 @@ fn test_follow_name_truncate2() {
     at.touch(source);
 
     let expected_stdout = "x\nx\nx\nx\n";
-    let expected_stderr = format!("{}: {}: file truncated\n", ts.util_name, source);
+    let expected_stderr = format!("{}: {source}: file truncated\n", ts.util_name);
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
@@ -2071,8 +2071,8 @@ fn test_follow_name_move_create1() {
 
     #[cfg(target_os = "linux")]
     let expected_stderr = format!(
-        "{}: {}: No such file or directory\n{0}: '{1}' has appeared;  following new file\n",
-        ts.util_name, source
+        "{}: {source}: No such file or directory\n{0}: '{source}' has appeared;  following new file\n",
+        ts.util_name,
     );
 
     // NOTE: We are less strict if not on Linux (inotify backend).
@@ -2081,7 +2081,7 @@ fn test_follow_name_move_create1() {
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
 
     #[cfg(not(target_os = "linux"))]
-    let expected_stderr = format!("{}: {}: No such file or directory\n", ts.util_name, source);
+    let expected_stderr = format!("{}: {source}: No such file or directory\n", ts.util_name);
 
     let delay = 500;
     let args = ["--follow=name", source];
@@ -2205,10 +2205,10 @@ fn test_follow_name_move1() {
 
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
     let expected_stderr = [
-        format!("{}: {}: No such file or directory\n", ts.util_name, source),
+        format!("{}: {source}: No such file or directory\n", ts.util_name),
         format!(
-            "{}: {}: No such file or directory\n{0}: no files remaining\n",
-            ts.util_name, source
+            "{}: {source}: No such file or directory\n{0}: no files remaining\n",
+            ts.util_name,
         ),
     ];
 
@@ -3558,15 +3558,11 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     let expected_stderr =
         format!("tail: cannot open '{socket}' for reading: No such device or address\n");
     #[cfg(target_os = "freebsd")]
-    let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: Operation not supported\n",
-        socket
-    );
+    let expected_stderr =
+        format!("tail: cannot open '{socket}' for reading: Operation not supported\n",);
     #[cfg(target_os = "macos")]
-    let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: Operation not supported on socket\n",
-        socket
-    );
+    let expected_stderr =
+        format!("tail: cannot open '{socket}' for reading: Operation not supported on socket\n",);
 
     ts.ucmd()
         .arg(socket)

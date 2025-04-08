@@ -39,7 +39,7 @@ fn generate_expr(max_depth: u32) -> String {
             // 90% chance to add an operator followed by a number
             if rng.random_bool(0.9) {
                 let op = *ops.choose(&mut rng).unwrap();
-                expr.push_str(&format!(" {} ", op));
+                expr.push_str(&format!(" {op} "));
                 last_was_operator = true;
             }
             // 10% chance to add a random string (potentially invalid syntax)
