@@ -8,7 +8,6 @@
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use selinux::SecurityContext;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
@@ -73,58 +72,6 @@ fn strip_minus_from_mode(_args: &mut [String]) -> bool {
 #[cfg(not(windows))]
 fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
     mode::strip_minus_from_mode(args)
-}
-
-// Add a new function to handle setting the SELinux security context
-#[cfg(target_os = "linux")]
-fn set_selinux_security_context(path: &Path, context: Option<&String>) -> Result<(), String> {
-    // Get SELinux kernel support
-    let support = selinux::kernel_support();
-
-    // If SELinux is not enabled, return early
-    if support == selinux::KernelSupport::Unsupported {
-        return Err("SELinux is not enabled on this system".to_string());
-    }
-
-    // If a specific context was provided, use it
-    if let Some(ctx_str) = context {
-        // Use the provided context
-        match SecurityContext::of_path(path, false, false) {
-            Ok(_) => {
-                // Create a CString from the context string
-                let c_context = std::ffi::CString::new(ctx_str.as_str())
-                    .map_err(|_| "Invalid context string (contains null bytes)".to_string())?;
-
-                // Create a security context from the string
-                let security_context = match selinux::OpaqueSecurityContext::from_c_str(&c_context)
-                {
-                    Ok(ctx) => ctx,
-                    Err(e) => return Err(format!("Failed to create security context: {}", e)),
-                };
-
-                // Convert back to string for the API
-                let context_str = match security_context.to_c_string() {
-                    Ok(ctx) => ctx,
-                    Err(e) => return Err(format!("Failed to convert context to string: {}", e)),
-                };
-
-                // Set the context on the file
-                let sc = SecurityContext::from_c_str(&context_str, false);
-
-                match sc.set_for_path(path, false, false) {
-                    Ok(_) => Ok(()),
-                    Err(e) => Err(format!("Failed to set context: {}", e)),
-                }
-            }
-            Err(e) => Err(format!("Failed to get current context: {}", e)),
-        }
-    } else {
-        // If no context was specified, use the default context for the path
-        match SecurityContext::set_default_for_path(path) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(format!("Failed to set default context: {}", e)),
-        }
-    }
 }
 
 #[uucore::main]
@@ -373,7 +320,9 @@ fn create_dir(
             // Apply SELinux context if requested
             #[cfg(target_os = "linux")]
             if set_selinux_context {
-                if let Err(e) = set_selinux_security_context(path, context) {
+                if let Err(e) = uucore::selinux_support::set_selinux_security_context(path, context)
+                {
+                    let _ = std::fs::remove_dir(path);
                     return Err(USimpleError::new(
                         1,
                         format!("failed to set SELinux security context: {}", e),

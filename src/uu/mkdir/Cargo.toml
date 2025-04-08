@@ -19,9 +19,10 @@ path = "src/mkdir.rs"
 
 [dependencies]
 clap = { workspace = true }
-selinux = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
 
+[features]
+selinux = ["uucore/selinux"]
 
 [[bin]]
 name = "mkdir"
