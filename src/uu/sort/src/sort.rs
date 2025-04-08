@@ -1951,7 +1951,7 @@ mod tests {
     #[test]
     fn test_tokenize_fields() {
         let line = "foo bar b    x";
-        assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14,]);
+        assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14]);
     }
 
     #[test]
@@ -1959,7 +1959,7 @@ mod tests {
         let line = "    foo bar b    x";
         assert_eq!(
             tokenize_helper(line, None),
-            vec![0..7, 7..11, 11..13, 13..18,]
+            vec![0..7, 7..11, 11..13, 13..18]
         );
     }
 
@@ -1968,7 +1968,7 @@ mod tests {
         let line = "aaa foo bar b    x";
         assert_eq!(
             tokenize_helper(line, Some('a')),
-            vec![0..0, 1..1, 2..2, 3..9, 10..18,]
+            vec![0..0, 1..1, 2..2, 3..9, 10..18]
         );
     }
 

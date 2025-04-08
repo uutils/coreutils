@@ -133,7 +133,7 @@ mod tests {
         let buf = [0u8, 1u8, 2u8, 3u8];
         let res = block(&buf, 4, false, &mut rs);
 
-        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8],]);
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8]]);
     }
 
     #[test]
@@ -144,7 +144,7 @@ mod tests {
 
         assert_eq!(
             res,
-            vec![vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],]
+            vec![vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE]]
         );
     }
 
@@ -155,7 +155,7 @@ mod tests {
         let res = block(&buf, 4, false, &mut rs);
 
         // Commented section(s) should be truncated and appear for reference only.
-        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8 /*, 4u8*/],]);
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8 /*, 4u8*/]]);
         assert_eq!(rs.records_truncated, 1);
     }
 
@@ -238,7 +238,7 @@ mod tests {
         let buf = [0u8, 1u8, 2u8, 3u8, NEWLINE];
         let res = block(&buf, 4, false, &mut rs);
 
-        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8],]);
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8]]);
     }
 
     #[test]
@@ -258,7 +258,7 @@ mod tests {
 
         assert_eq!(
             res,
-            vec![vec![0u8, 1u8, 2u8, SPACE], vec![SPACE, SPACE, SPACE, SPACE],]
+            vec![vec![0u8, 1u8, 2u8, SPACE], vec![SPACE, SPACE, SPACE, SPACE]]
         );
     }
 
@@ -270,7 +270,7 @@ mod tests {
 
         assert_eq!(
             res,
-            vec![vec![SPACE, SPACE, SPACE, SPACE], vec![0u8, 1u8, 2u8, 3u8],]
+            vec![vec![SPACE, SPACE, SPACE, SPACE], vec![0u8, 1u8, 2u8, 3u8]]
         );
     }
 
