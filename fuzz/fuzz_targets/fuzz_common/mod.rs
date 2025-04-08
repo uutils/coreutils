@@ -5,12 +5,12 @@
 
 use console::Style;
 use libc::STDIN_FILENO;
-use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
+use libc::{STDERR_FILENO, STDOUT_FILENO, close, dup, dup2, pipe};
 use pretty_print::{
     print_diff, print_end_with_status, print_or_empty, print_section, print_with_style,
 };
-use rand::prelude::IndexedRandom;
 use rand::Rng;
+use rand::prelude::IndexedRandom;
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::File;
@@ -18,7 +18,7 @@ use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicBool, Once};
+use std::sync::{Once, atomic::AtomicBool};
 use std::{io, thread};
 
 pub mod pretty_print;
