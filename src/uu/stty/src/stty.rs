@@ -40,6 +40,7 @@ const SUMMARY: &str = help_about!("stty.md");
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
     name: &'static str,
+    #[expect(clippy::struct_field_names)]
     flag: T,
     show: bool,
     sane: bool,
