@@ -734,10 +734,7 @@ fn parse_separator(value_os: &OsString) -> UResult<SepSetting> {
     match chars.next() {
         None => Ok(SepSetting::Char(value.into())),
         Some('0') if c == '\\' => Ok(SepSetting::Byte(0)),
-        _ => Err(USimpleError::new(
-            1,
-            format!("multi-character tab {}", value),
-        )),
+        _ => Err(USimpleError::new(1, format!("multi-character tab {value}"))),
     }
 }
 

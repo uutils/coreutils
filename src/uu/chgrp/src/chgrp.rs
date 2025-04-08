@@ -24,7 +24,7 @@ fn parse_gid_from_str(group: &str) -> Result<u32, String> {
         // Handle :gid format
         gid_str
             .parse::<u32>()
-            .map_err(|_| format!("invalid group id: '{}'", gid_str))
+            .map_err(|_| format!("invalid group id: '{gid_str}'"))
     } else {
         // Try as group name first
         match entries::grp2gid(group) {
@@ -32,7 +32,7 @@ fn parse_gid_from_str(group: &str) -> Result<u32, String> {
             // If group name lookup fails, try parsing as raw number
             Err(_) => group
                 .parse::<u32>()
-                .map_err(|_| format!("invalid group: '{}'", group)),
+                .map_err(|_| format!("invalid group: '{group}'")),
         }
     }
 }
@@ -75,7 +75,7 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
             Err(_) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("invalid user: '{}'", from_group),
+                    format!("invalid user: '{from_group}'"),
                 ));
             }
         }

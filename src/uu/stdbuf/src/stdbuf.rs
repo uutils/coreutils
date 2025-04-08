@@ -170,7 +170,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     127,
                     format!("{EXEC_ERROR} No such file or directory"),
                 )),
-                _ => Err(USimpleError::new(1, format!("{EXEC_ERROR} {}", e))),
+                _ => Err(USimpleError::new(1, format!("{EXEC_ERROR} {e}"))),
             };
         }
     };

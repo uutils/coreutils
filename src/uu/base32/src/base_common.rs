@@ -839,8 +839,7 @@ mod tests {
             assert_eq!(
                 has_padding(&mut cursor).unwrap(),
                 expected,
-                "Failed for input: '{}'",
-                input
+                "Failed for input: '{input}'"
             );
         }
     }

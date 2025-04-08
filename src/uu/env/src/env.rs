@@ -317,19 +317,19 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
         }
         EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
         EnvError::EnvParsingOfVariableMissingClosingBrace(pos) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
         }
         EnvError::EnvParsingOfMissingVariable(pos) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
         }
         EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
         }
         EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
         }
         EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
         }
         _ => USimpleError::new(125, format!("Error: {e:?}")),
     })
