@@ -308,7 +308,7 @@ pub fn format_nusers(nusers: usize) -> String {
     match nusers {
         0 => "0 user".to_string(),
         1 => "1 user".to_string(),
-        _ => format!("{} users", nusers),
+        _ => format!("{nusers} users"),
     }
 }
 

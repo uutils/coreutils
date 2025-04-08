@@ -6093,9 +6093,7 @@ fn test_cp_preserve_xattr_readonly_source() {
     let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
     assert!(
         stdout.contains(xattr_key),
-        "Expected '{}' not found in getfattr output:\n{}",
-        xattr_key,
-        stdout
+        "Expected '{xattr_key}' not found in getfattr output:\n{stdout}"
     );
 
     at.set_readonly(source_file);

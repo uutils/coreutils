@@ -20,7 +20,7 @@ fn init() {
         std::env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
     }
     // Print for debugging
-    eprintln!("Setting UUTESTS_BINARY_PATH={}", TESTS_BINARY);
+    eprintln!("Setting UUTESTS_BINARY_PATH={TESTS_BINARY}");
 }
 
 #[test]
