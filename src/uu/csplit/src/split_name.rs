@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (regex) diuox
 
-use uucore::format::{num_format::UnsignedInt, Format, FormatError};
+use uucore::format::{Format, FormatError, num_format::UnsignedInt};
 
 use crate::csplit_error::CsplitError;
 
@@ -12,7 +12,7 @@ use crate::csplit_error::CsplitError;
 /// format.
 pub struct SplitName {
     prefix: Vec<u8>,
-    format: Format<UnsignedInt>,
+    format: Format<UnsignedInt, u64>,
 }
 
 impl SplitName {
@@ -52,7 +52,7 @@ impl SplitName {
             None => format!("%0{n_digits}u"),
         };
 
-        let format = match Format::<UnsignedInt>::parse(format_string) {
+        let format = match Format::<UnsignedInt, u64>::parse(format_string) {
             Ok(format) => Ok(format),
             Err(FormatError::TooManySpecs(_)) => Err(CsplitError::SuffixFormatTooManyPercents),
             Err(_) => Err(CsplitError::SuffixFormatIncorrect),

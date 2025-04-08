@@ -9,7 +9,7 @@ homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stdbuf"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2021"
+edition = "2024"
 
 readme.workspace = true
 
@@ -19,7 +19,7 @@ path = "src/stdbuf.rs"
 [dependencies]
 clap = { workspace = true }
 tempfile = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
 
 [build-dependencies]
 libstdbuf = { version = "0.0.30", package = "uu_stdbuf_libstdbuf", path = "src/libstdbuf" }

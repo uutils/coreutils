@@ -6,17 +6,16 @@
 // spell-checker:ignore (ToDO) kqueue Signum fundu
 
 use crate::paths::Input;
-use crate::{parse, platform, Quotable};
-use clap::{crate_version, value_parser};
-use clap::{Arg, ArgAction, ArgMatches, Command};
+use crate::{Quotable, parse, platform};
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::parse_size::{parse_size_u64, ParseSizeError};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_usage, show_warning};
 
 const ABOUT: &str = help_about!("tail.md");
@@ -81,7 +80,7 @@ impl FilterMode {
                     return Err(USimpleError::new(
                         1,
                         format!("invalid number of bytes: '{e}'"),
-                    ))
+                    ));
                 }
             }
         } else if let Some(arg) = matches.get_one::<String>(options::LINES) {
@@ -94,7 +93,7 @@ impl FilterMode {
                     return Err(USimpleError::new(
                         1,
                         format!("invalid number of lines: {e}"),
-                    ))
+                    ));
                 }
             }
         } else if zero_term {
@@ -242,7 +241,7 @@ impl Settings {
                     return Err(UUsageError::new(
                         1,
                         format!("invalid number of seconds: '{source}'"),
-                    ))
+                    ));
                 }
             }
         }
@@ -476,7 +475,7 @@ pub fn uu_app() -> Command {
     const POLLING_HELP: &str = "Disable 'ReadDirectoryChanges' support and use polling instead";
 
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

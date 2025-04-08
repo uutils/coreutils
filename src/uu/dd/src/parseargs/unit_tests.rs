@@ -6,11 +6,11 @@
 
 use super::*;
 
+use crate::StatusLevel;
 use crate::conversion_tables::{
     ASCII_TO_EBCDIC_UCASE_TO_LCASE, ASCII_TO_IBM, EBCDIC_TO_ASCII_LCASE_TO_UCASE,
 };
 use crate::parseargs::Parser;
-use crate::StatusLevel;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 #[allow(clippy::useless_vec)]
@@ -157,7 +157,7 @@ fn test_all_top_level_args_no_leading_dashes() {
     );
 
     // no conv flags apply to output
-    assert_eq!(settings.oconv, OConvFlags::default(),);
+    assert_eq!(settings.oconv, OConvFlags::default());
 
     // iconv=count_bytes,skip_bytes
     assert_eq!(
@@ -341,7 +341,9 @@ fn parse_icf_tokens_elu() {
 
 #[test]
 fn parse_icf_tokens_remaining() {
-    let args = &["conv=ascii,ucase,block,sparse,swab,sync,noerror,excl,nocreat,notrunc,noerror,fdatasync,fsync"];
+    let args = &[
+        "conv=ascii,ucase,block,sparse,swab,sync,noerror,excl,nocreat,notrunc,noerror,fdatasync,fsync",
+    ];
     assert_eq!(
         Parser::new().read(args),
         Ok(Parser {

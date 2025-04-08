@@ -8,10 +8,10 @@
 use uucore::display::Quotable;
 pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::perms::{chown_base, options, GidUidOwnerFilter, IfFrom};
+use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
 use uucore::{format_usage, help_about, help_usage};
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -24,7 +24,7 @@ fn parse_gid_from_str(group: &str) -> Result<u32, String> {
         // Handle :gid format
         gid_str
             .parse::<u32>()
-            .map_err(|_| format!("invalid group id: '{}'", gid_str))
+            .map_err(|_| format!("invalid group id: '{gid_str}'"))
     } else {
         // Try as group name first
         match entries::grp2gid(group) {
@@ -32,7 +32,7 @@ fn parse_gid_from_str(group: &str) -> Result<u32, String> {
             // If group name lookup fails, try parsing as raw number
             Err(_) => group
                 .parse::<u32>()
-                .map_err(|_| format!("invalid group: '{}'", group)),
+                .map_err(|_| format!("invalid group: '{group}'")),
         }
     }
 }
@@ -75,8 +75,8 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
             Err(_) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("invalid user: '{}'", from_group),
-                ))
+                    format!("invalid user: '{from_group}'"),
+                ));
             }
         }
     } else {
@@ -98,7 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

@@ -9,12 +9,12 @@ mod operation;
 mod unicode_table;
 
 use crate::operation::DeleteOperation;
-use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use operation::{
-    translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
+    Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
 };
 use std::ffi::OsString;
-use std::io::{stdin, stdout, BufWriter};
+use std::io::{BufWriter, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
@@ -85,7 +85,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     "{start} {op}\nOnly one string may be given when deleting without squeezing repeats.",
                 )
             } else {
-                format!("{start} {op}",)
+                format!("{start} {op}")
             };
             return Err(UUsageError::new(1, msg));
         }
@@ -160,7 +160,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

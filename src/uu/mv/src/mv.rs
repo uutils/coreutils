@@ -8,7 +8,7 @@
 mod error;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
@@ -19,13 +19,13 @@ use std::io;
 use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
-use std::path::{absolute, Path, PathBuf};
+use std::path::{Path, PathBuf, absolute};
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::{
-    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file, canonicalize,
-    path_ends_with_terminator, MissingHandling, ResolveMode,
+    MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
+    are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
@@ -37,8 +37,8 @@ pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
 use fs_extra::dir::{
-    get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
-    TransitProcess, TransitProcessResult,
+    CopyOptions as DirCopyOptions, TransitProcess, TransitProcessResult, get_size as dir_get_size,
+    move_dir, move_dir_with_progress,
 };
 
 use crate::error::MvError;
@@ -88,14 +88,32 @@ pub struct Options {
     pub debug: bool,
 }
 
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            overwrite: OverwriteMode::default(),
+            backup: BackupMode::default(),
+            suffix: backup_control::DEFAULT_BACKUP_SUFFIX.to_owned(),
+            update: UpdateMode::default(),
+            target_dir: None,
+            no_target_dir: false,
+            verbose: false,
+            strip_slashes: false,
+            progress_bar: false,
+            debug: false,
+        }
+    }
+}
+
 /// specifies behavior of the overwrite flag
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub enum OverwriteMode {
     /// '-n' '--no-clobber'   do not overwrite
     NoClobber,
     /// '-i' '--interactive'  prompt before overwrite
     Interactive,
     ///'-f' '--force'         overwrite without prompt
+    #[default]
     Force,
 }
 
@@ -180,7 +198,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(format!(

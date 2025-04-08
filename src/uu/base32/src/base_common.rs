@@ -5,14 +5,14 @@
 
 // spell-checker:ignore hexupper lsbf msbf unpadded nopad aGVsbG8sIHdvcmxkIQ
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::encoding::{
-    for_base_common::{BASE32, BASE32HEX, BASE64, BASE64URL, BASE64_NOPAD, HEXUPPER_PERMISSIVE},
-    Format, Z85Wrapper, BASE2LSBF, BASE2MSBF,
+    BASE2LSBF, BASE2MSBF, Format, Z85Wrapper,
+    for_base_common::{BASE32, BASE32HEX, BASE64, BASE64_NOPAD, BASE64URL, HEXUPPER_PERMISSIVE},
 };
 use uucore::encoding::{EncodingWrapper, SupportsFastDecodeAndEncode};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
@@ -50,7 +50,7 @@ impl Config {
                 if let Some(extra_op) = values.next() {
                     return Err(UUsageError::new(
                         BASE_CMD_PARSE_ERROR,
-                        format!("extra operand {}", extra_op.quote(),),
+                        format!("extra operand {}", extra_op.quote()),
                     ));
                 }
 
@@ -104,7 +104,7 @@ pub fn parse_base_cmd_args(
 
 pub fn base_app(about: &'static str, usage: &str) -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(about)
         .override_usage(format_usage(usage))
         .infer_long_args(true)
@@ -112,6 +112,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
         .arg(
             Arg::new(options::DECODE)
                 .short('d')
+                .visible_short_alias('D')
                 .long(options::DECODE)
                 .help("decode data")
                 .action(ArgAction::SetTrue)
@@ -290,7 +291,7 @@ pub fn get_supports_fast_decode_and_encode(
 }
 
 pub mod fast_encode {
-    use crate::base_common::{format_read_error, WRAP_DEFAULT};
+    use crate::base_common::{WRAP_DEFAULT, format_read_error};
     use std::{
         collections::VecDeque,
         io::{self, ErrorKind, Read, Write},
@@ -838,8 +839,7 @@ mod tests {
             assert_eq!(
                 has_padding(&mut cursor).unwrap(),
                 expected,
-                "Failed for input: '{}'",
-                input
+                "Failed for input: '{input}'"
             );
         }
     }

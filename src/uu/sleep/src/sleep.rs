@@ -11,7 +11,7 @@ use uucore::{
     format_usage, help_about, help_section, help_usage, show_error,
 };
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use fundu::{DurationParser, ParseError, SaturatingInto};
 
 static ABOUT: &str = help_about!("sleep.md");
@@ -45,7 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))

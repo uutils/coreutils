@@ -6,7 +6,10 @@
 
 use std::process::Stdio;
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -775,6 +778,64 @@ fn test_non_utf8() {
 
     ucmd.arg(file).succeeds();
     assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_uchild_when_run_no_wait_with_a_blocking_command() {
+    let ts = TestScenario::new("rm");
+    let at = &ts.fixtures;
+
+    at.mkdir("a");
+    at.touch("a/empty");
+
+    #[cfg(target_vendor = "apple")]
+    let delay: u64 = 2000;
+    #[cfg(not(target_vendor = "apple"))]
+    let delay: u64 = 1000;
+
+    let yes = if cfg!(windows) { "y\r\n" } else { "y\n" };
+
+    let mut child = ts
+        .ucmd()
+        .set_stdin(Stdio::piped())
+        .stderr_to_stdout()
+        .args(&["-riv", "a"])
+        .run_no_wait();
+    child
+        .make_assertion_with_delay(delay)
+        .is_alive()
+        .with_current_output()
+        .stdout_is("rm: descend into directory 'a'? ");
+
+    #[cfg(windows)]
+    let expected = "rm: descend into directory 'a'? \
+                    rm: remove regular empty file 'a\\empty'? ";
+    #[cfg(unix)]
+    let expected = "rm: descend into directory 'a'? \
+                    rm: remove regular empty file 'a/empty'? ";
+    child.write_in(yes);
+    child
+        .make_assertion_with_delay(delay)
+        .is_alive()
+        .with_all_output()
+        .stdout_is(expected);
+
+    #[cfg(windows)]
+    let expected = "removed 'a\\empty'\nrm: remove directory 'a'? ";
+    #[cfg(unix)]
+    let expected = "removed 'a/empty'\nrm: remove directory 'a'? ";
+
+    child
+        .write_in(yes)
+        .make_assertion_with_delay(delay)
+        .is_alive()
+        .with_exact_output(44, 0)
+        .stdout_only(expected);
+
+    let expected = "removed directory 'a'\n";
+
+    child.write_in(yes);
+    child.wait().unwrap().stdout_only(expected).success();
 }
 
 #[test]

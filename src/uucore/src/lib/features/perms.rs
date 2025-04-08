@@ -8,7 +8,7 @@
 // spell-checker:ignore (jargon) TOCTOU
 
 use crate::display::Quotable;
-use crate::error::{strip_errno, UResult, USimpleError};
+use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
 use crate::show_error;
 use clap::{Arg, ArgMatches, Command};
@@ -24,7 +24,7 @@ use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, MAIN_SEPARATOR};
+use std::path::{MAIN_SEPARATOR, Path};
 
 /// The various level of verbosity
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -507,6 +507,7 @@ type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 /// Returns the updated `dereference` and `traverse_symlinks` values.
 pub fn configure_symlink_and_recursion(
     matches: &ArgMatches,
+    default_traverse_symlinks: TraverseSymlinks,
 ) -> Result<(bool, bool, TraverseSymlinks), Box<dyn crate::error::UError>> {
     let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
         Some(true) // Follow symlinks
@@ -516,12 +517,13 @@ pub fn configure_symlink_and_recursion(
         None // Default behavior
     };
 
-    let mut traverse_symlinks = if matches.get_flag("L") {
-        TraverseSymlinks::All
+    let mut traverse_symlinks = default_traverse_symlinks;
+    if matches.get_flag("L") {
+        traverse_symlinks = TraverseSymlinks::All
     } else if matches.get_flag("H") {
-        TraverseSymlinks::First
-    } else {
-        TraverseSymlinks::None
+        traverse_symlinks = TraverseSymlinks::First
+    } else if matches.get_flag("P") {
+        traverse_symlinks = TraverseSymlinks::None
     };
 
     let recursive = matches.get_flag(options::RECURSIVE);
@@ -597,7 +599,8 @@ pub fn chown_base(
         .unwrap_or_default();
 
     let preserve_root = matches.get_flag(options::preserve_root::PRESERVE);
-    let (recursive, dereference, traverse_symlinks) = configure_symlink_and_recursion(&matches)?;
+    let (recursive, dereference, traverse_symlinks) =
+        configure_symlink_and_recursion(&matches, TraverseSymlinks::None)?;
 
     let verbosity_level = if matches.get_flag(options::verbosity::CHANGES) {
         VerbosityLevel::Changes

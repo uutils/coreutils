@@ -7,13 +7,13 @@
 
 use std::collections::BTreeMap;
 use std::io::BufRead;
-use std::io::{self, stdin, stdout, Write};
+use std::io::{self, Write, stdin, stdout};
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::{format_usage, help_about, help_usage, show_error, show_warning};
 
 const ABOUT: &str = help_about!("factor.md");
@@ -121,7 +121,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

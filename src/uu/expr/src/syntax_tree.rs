@@ -87,11 +87,7 @@ impl RelationOp {
                 Self::Geq => a >= b,
             }
         };
-        if b {
-            Ok(1.into())
-        } else {
-            Ok(0.into())
-        }
+        if b { Ok(1.into()) } else { Ok(0.into()) }
     }
 }
 
@@ -697,8 +693,8 @@ mod test {
     use crate::ExprError::InvalidBracketContent;
 
     use super::{
-        check_posix_regex_errors, get_next_id, AstNode, AstNodeInner, BinOp, NumericOp, RelationOp,
-        StringOp,
+        AstNode, AstNodeInner, BinOp, NumericOp, RelationOp, StringOp, check_posix_regex_errors,
+        get_next_id,
     };
 
     impl PartialEq for AstNode {
@@ -788,7 +784,7 @@ mod test {
             AstNode::parse(&["index", "1", "2"]),
             Ok(op(BinOp::String(StringOp::Index), "1", "2")),
         );
-        assert_eq!(AstNode::parse(&["length", "1"]), Ok(length("1")),);
+        assert_eq!(AstNode::parse(&["length", "1"]), Ok(length("1")));
         assert_eq!(
             AstNode::parse(&["substr", "1", "2", "3"]),
             Ok(substr("1", "2", "3")),

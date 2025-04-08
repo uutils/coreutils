@@ -13,18 +13,18 @@ use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
-use uucore::fsext::{read_fs_list, MountInfo};
-use uucore::parse_size::ParseSizeError;
+use uucore::fsext::{MountInfo, read_fs_list};
+use uucore::parser::parse_size::ParseSizeError;
 use uucore::{format_usage, help_about, help_section, help_usage, show};
 
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
-use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
 use std::path::Path;
+use thiserror::Error;
 
-use crate::blocks::{read_block_size, BlockSize};
+use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
@@ -426,25 +426,16 @@ where
     Ok(result)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum DfError {
     /// A problem while parsing command-line options.
+    #[error("{}", .0)]
     OptionsError(OptionsError),
 }
-
-impl Error for DfError {}
 
 impl UError for DfError {
     fn usage(&self) -> bool {
         matches!(self, Self::OptionsError(OptionsError::ColumnError(_)))
-    }
-}
-
-impl fmt::Display for DfError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::OptionsError(e) => e.fmt(f),
-        }
     }
 }
 
@@ -499,7 +490,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
@@ -749,7 +740,7 @@ mod tests {
 
     mod is_included {
 
-        use crate::{is_included, Options};
+        use crate::{Options, is_included};
         use uucore::fsext::MountInfo;
 
         /// Instantiate a [`MountInfo`] with the given fields.
@@ -886,7 +877,7 @@ mod tests {
 
     mod filter_mount_list {
 
-        use crate::{filter_mount_list, Options};
+        use crate::{Options, filter_mount_list};
 
         #[test]
         fn test_empty() {

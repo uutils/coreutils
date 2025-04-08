@@ -1,11 +1,15 @@
+use chrono::{DateTime, Duration, Utc};
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use uucore::process::geteuid;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -266,9 +270,11 @@ fn test_date_set_mac_unavailable() {
         .arg("2020-03-11 21:45:00+08:00")
         .fails();
     result.no_stdout();
-    assert!(result
-        .stderr_str()
-        .starts_with("date: setting the date is not supported by macOS"));
+    assert!(
+        result
+            .stderr_str()
+            .starts_with("date: setting the date is not supported by macOS")
+    );
 }
 
 #[test]
@@ -407,6 +413,31 @@ fn test_date_string_human() {
             .arg("+%Y-%m-%d %S:%M")
             .succeeds()
             .stdout_matches(&re);
+    }
+}
+
+#[test]
+fn test_negative_offset() {
+    let data_formats = vec![
+        ("-1 hour", Duration::hours(1)),
+        ("-1 hours", Duration::hours(1)),
+        ("-1 day", Duration::days(1)),
+        ("-2 weeks", Duration::weeks(2)),
+    ];
+    for (date_format, offset) in data_formats {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_format)
+            .arg("--rfc-3339=seconds")
+            .succeeds()
+            .stdout_str_check(|out| {
+                let date = DateTime::parse_from_rfc3339(out.trim()).unwrap();
+
+                // Is the resulting date roughly what is expected?
+                let expected_date = Utc::now() - offset;
+                date > expected_date - Duration::minutes(10)
+                    && date < expected_date + Duration::minutes(10)
+            });
     }
 }
 

@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore extendedbigdecimal
 
 //! `printf`-style formatting
 //!
@@ -34,15 +35,16 @@ mod argument;
 mod escape;
 pub mod human;
 pub mod num_format;
-pub mod num_parser;
 mod spec;
 
+use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub use argument::*;
 pub use spec::Spec;
 use std::{
     error::Error,
     fmt::Display,
-    io::{stdout, Write},
+    io::{Write, stdout},
+    marker::PhantomData,
     ops::ControlFlow,
 };
 
@@ -51,7 +53,7 @@ use os_display::Quotable;
 use crate::error::UError;
 
 pub use self::{
-    escape::{parse_escape_code, EscapedChar, OctalParsing},
+    escape::{EscapedChar, OctalParsing, parse_escape_code},
     num_format::Formatter,
 };
 
@@ -306,20 +308,30 @@ pub fn sprintf<'a>(
     Ok(writer)
 }
 
-/// A parsed format for a single float value
+/// A format for a single numerical value of type T
 ///
-/// This is used by `seq`. It can be constructed with [`Format::parse`]
-/// and can write a value with [`Format::fmt`].
+/// This is used by `seq` and `csplit`. It can be constructed with [`Format::from_formatter`]
+/// or [`Format::parse`] and can write a value with [`Format::fmt`].
 ///
-/// It can only accept a single specification without any asterisk parameters.
+/// [`Format::parse`] can only accept a single specification without any asterisk parameters.
 /// If it does get more specifications, it will return an error.
-pub struct Format<F: Formatter> {
+pub struct Format<F: Formatter<T>, T> {
     prefix: Vec<u8>,
     suffix: Vec<u8>,
     formatter: F,
+    _marker: PhantomData<T>,
 }
 
-impl<F: Formatter> Format<F> {
+impl<F: Formatter<T>, T> Format<F, T> {
+    pub fn from_formatter(formatter: F) -> Self {
+        Self {
+            prefix: Vec::<u8>::new(),
+            suffix: Vec::<u8>::new(),
+            formatter,
+            _marker: PhantomData,
+        }
+    }
+
     pub fn parse(format_string: impl AsRef<[u8]>) -> Result<Self, FormatError> {
         let mut iter = parse_spec_only(format_string.as_ref());
 
@@ -360,10 +372,11 @@ impl<F: Formatter> Format<F> {
             prefix,
             suffix,
             formatter,
+            _marker: PhantomData,
         })
     }
 
-    pub fn fmt(&self, mut w: impl Write, f: F::Input) -> std::io::Result<()> {
+    pub fn fmt(&self, mut w: impl Write, f: T) -> std::io::Result<()> {
         w.write_all(&self.prefix)?;
         self.formatter.fmt(&mut w, f)?;
         w.write_all(&self.suffix)?;

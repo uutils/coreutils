@@ -7,9 +7,14 @@
 #[cfg(not(windows))]
 use regex::Regex;
 
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
 #[cfg(not(target_os = "windows"))]
-use crate::common::util::expected_result;
-use crate::common::util::TestScenario;
+use uutests::unwrap_or_return;
+use uutests::util::TestScenario;
+#[cfg(not(target_os = "windows"))]
+use uutests::util::expected_result;
+use uutests::util_name;
 
 #[cfg(not(target_os = "openbsd"))]
 const SUB_DIR: &str = "subdir/deeper";
@@ -63,7 +68,7 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows"),))]
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn du_basics(s: &str) {
     let answer = concat!(
         "8\t./subdir/deeper/deeper_dir\n",

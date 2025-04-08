@@ -2,16 +2,16 @@ name: CICD
 
 # spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl taiki
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
-# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers
-# spell-checker:ignore (people) Peltoche rivy dtolnay
-# spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt utmpdump xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
+# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
+# spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
+# spell-checker:ignore (shell/tools) binutils choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.82.0"
+  RUST_MIN_SRV: "1.85.0"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -21,7 +21,7 @@ on:
     tags:
       - '*'
     branches:
-      - main
+      - '*'
 
 permissions:
   contents: read # to fetch code (actions/checkout)
@@ -118,7 +118,7 @@ jobs:
         components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -178,7 +178,7 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -190,12 +190,14 @@ jobs:
         unset CARGO_FEATURES_OPTION
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
-    - name: Confirm MinSRV compatible 'Cargo.lock'
+    - name: Confirm MinSRV compatible '*/Cargo.lock'
       shell: bash
       run: |
-        ## Confirm MinSRV compatible 'Cargo.lock'
-        # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
-        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible (or out-of-date) 'Cargo.lock' file; update using \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
+        ## Confirm MinSRV compatible '*/Cargo.lock'
+        # * '*/Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
+        for dir in "." "fuzz"; do
+          ( cd "$dir" && cargo fetch --locked --quiet ) || { echo "::error file=$dir/Cargo.lock::Incompatible (or out-of-date) '$dir/Cargo.lock' file; update using \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
+        done
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -246,7 +248,9 @@ jobs:
       run: |
         ## `cargo update` testing
         # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::'Cargo.lock' file requires update (use \`cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
+        for dir in "." "fuzz"; do
+          ( cd "$dir" && cargo fetch --locked --quiet ) || { echo "::error file=$dir/Cargo.lock::'$dir/Cargo.lock' file requires update (use \`cd '$dir' && cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
+        done
 
   build_makefile:
     name: Build/Makefile
@@ -267,8 +271,12 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: "`make build`"
       shell: bash
       run: |
@@ -342,7 +350,7 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -371,7 +379,7 @@ jobs:
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Test
       run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
@@ -396,13 +404,13 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install dependencies
       shell: bash
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install jq
+        sudo apt-get install jq libselinux1-dev
     - name: "`make install`"
       shell: bash
       run: |
@@ -513,11 +521,11 @@ jobs:
           - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix"         , use-cross: no, workspace-tests: true }
+          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
-          - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos } # M1 CPU
-          - { os: macos-13       , target: x86_64-apple-darwin         , features: feat_os_macos }
+          - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos, workspace-tests: true } # M1 CPU
+          - { os: macos-13       , target: x86_64-apple-darwin         , features: feat_os_macos, workspace-tests: true }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
@@ -534,7 +542,7 @@ jobs:
       with:
         key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -843,10 +851,11 @@ jobs:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Install/setup prerequisites
       shell: bash
       run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
         ## Install/setup prerequisites
         make prepare-busytest
     - name: Run BusyBox test suite
@@ -929,17 +938,20 @@ jobs:
         components: rustfmt
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.8
+      uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
     - name: Build coreutils as multiple binaries
       shell: bash
       run: |
         ## Build individual uutil binaries
         set -v
         make
-    - name: Install/setup prerequisites
+    - name: Run toybox src
       shell: bash
       run: |
-        ## Install/setup prerequisites
         make toybox-src
     - name: Run Toybox test suite
       id: summary
@@ -988,6 +1000,123 @@ jobs:
       with:
         name: toybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
+
+  coverage:
+    name: Code Coverage
+    runs-on: ${{ matrix.job.os }}
+    timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest  , features: unix, toolchain: nightly }
+          # FIXME: Re-enable macos code coverage
+          # - { os: macos-latest   , features: macos, toolchain: nightly }
+          # FIXME: Re-enable Code Coverage on windows, which currently fails due to "profiler_builtins". See #6686.
+          # - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.job.toolchain }}
+        components: rustfmt
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: nextest,grcov@0.8.24
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.9
+
+    # - name: Reattach HEAD ## may be needed for accurate code coverage info
+    #   run: git checkout ${{ github.head_ref }}
+
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+
+        # toolchain
+        TOOLCHAIN="nightly" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
+
+        # * specify gnu-type TOOLCHAIN for windows; `grcov` requires gnu-style code coverage data files
+        case ${{ matrix.job.os }} in windows-*) TOOLCHAIN="$TOOLCHAIN-x86_64-pc-windows-gnu" ;; esac;
+
+        # * use requested TOOLCHAIN if specified
+        if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
+        outputs TOOLCHAIN
+
+        # target-specific options
+
+        # * CARGO_FEATURES_OPTION
+        CARGO_FEATURES_OPTION='--all-features' ;  ## default to '--all-features' for code coverage
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
+        outputs CARGO_FEATURES_OPTION
+
+        # * CODECOV_FLAGS
+        CODECOV_FLAGS=$( echo "${{ matrix.job.os }}" | sed 's/[^[:alnum:]]/_/g' )
+        outputs CODECOV_FLAGS
+
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
+
+        case '${{ matrix.job.os }}' in
+          ubuntu-latest)
+            # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
+            # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands. The account also has empty gecos fields.
+            # To work around this for pinky tests, we create a fake login entry for the GH runner account...
+            FAKE_UTMP='[7] [999999] [tty2] [runner] [tty2] [] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
+            # ... by dumping the login records, adding our fake line, then reverse dumping ...
+            (utmpdump /var/run/utmp ; echo $FAKE_UTMP) | sudo utmpdump -r -o /var/run/utmp
+            # ... and add a full name to each account with a gecos field but no full name.
+            sudo sed -i 's/:,/:runner name,/' /etc/passwd
+            # We also create a couple optional files pinky looks for
+            touch /home/runner/.project
+            echo "foo" > /home/runner/.plan
+            ;;
+        esac
+
+        case '${{ matrix.job.os }}' in
+          # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
+          windows-latest) C:/msys64/usr/bin/pacman.exe -Sy --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
+        esac
+
+        ## Install the llvm-tools component to get access to `llvm-profdata`
+        rustup component add llvm-tools
+
+    - name: Run test and coverage
+      id: run_test_cov
+      run: |
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+
+        # Run the coverage script
+        ./util/build-run-test-coverage-linux.sh
+
+        outputs REPORT_FILE
+      env:
+        COVERAGE_DIR: ${{ github.workspace }}/coverage
+        FEATURES_OPTION: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
+
+    - name: Upload coverage results (to Codecov.io)
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        file: ${{ steps.run_test_cov.outputs.report }}
+        ## flags: IntegrationTests, UnitTests, ${{ steps.vars.outputs.CODECOV_FLAGS }}
+        flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
+        name: codecov-umbrella
+        fail_ci_if_error: false
 
   test_separately:
     name: Separate Builds

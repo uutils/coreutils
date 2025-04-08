@@ -5,7 +5,7 @@
 
 // cSpell:ignore strs
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
@@ -42,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .arg(
@@ -157,7 +157,7 @@ mod tests {
         ];
 
         for (line, final_len) in tests {
-            let mut v = std::iter::repeat(b'a').take(line).collect::<Vec<_>>();
+            let mut v = std::iter::repeat_n(b'a', line).collect::<Vec<_>>();
             prepare_buffer(&mut v);
             assert_eq!(v.len(), final_len);
         }

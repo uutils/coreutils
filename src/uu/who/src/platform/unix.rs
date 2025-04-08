@@ -10,8 +10,8 @@ use crate::uu_app;
 
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
-use uucore::utmpx::{self, time, Utmpx};
+use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
+use uucore::utmpx::{self, Utmpx, time};
 
 use std::borrow::Cow;
 use std::ffi::CStr;

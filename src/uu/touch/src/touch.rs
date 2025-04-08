@@ -13,8 +13,8 @@ use chrono::{
     TimeZone, Timelike,
 };
 use clap::builder::{PossibleValue, ValueParser};
-use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{set_file_times, set_symlink_file_times, FileTime};
+use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
+use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fs::{self, File};
@@ -22,7 +22,7 @@ use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_usage, show};
 
 use crate::error::TouchError;
@@ -257,7 +257,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -681,7 +681,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
             return Err(USimpleError::new(
                 1,
                 format!("invalid date format {}", s.quote()),
-            ))
+            ));
         }
     };
 
@@ -736,11 +736,11 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     {
         use std::os::windows::prelude::AsRawHandle;
         use windows_sys::Win32::Foundation::{
-            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, GetLastError,
             HANDLE, MAX_PATH,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            GetFinalPathNameByHandleW, FILE_NAME_OPENED,
+            FILE_NAME_OPENED, GetFinalPathNameByHandleW,
         };
 
         let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
@@ -767,7 +767,7 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
             ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
                 return Err(TouchError::WindowsStdoutPathError(format!(
                     "GetFinalPathNameByHandleW failed with code {ret}"
-                )))
+                )));
             }
             0 => {
                 return Err(TouchError::WindowsStdoutPathError(format!(
@@ -791,8 +791,8 @@ mod tests {
     use filetime::FileTime;
 
     use crate::{
-        determine_atime_mtime_change, error::TouchError, touch, uu_app, ChangeTimes, Options,
-        Source,
+        ChangeTimes, Options, Source, determine_atime_mtime_change, error::TouchError, touch,
+        uu_app,
     };
 
     #[cfg(windows)]
@@ -800,10 +800,12 @@ mod tests {
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
         // We can trigger an error by not setting stdout to anything (will
         // fail with code 1)
-        assert!(super::pathbuf_from_stdout()
-            .expect_err("pathbuf_from_stdout should have failed")
-            .to_string()
-            .contains("GetFinalPathNameByHandleW failed with code 1"));
+        assert!(
+            super::pathbuf_from_stdout()
+                .expect_err("pathbuf_from_stdout should have failed")
+                .to_string()
+                .contains("GetFinalPathNameByHandleW failed with code 1")
+        );
     }
 
     #[test]

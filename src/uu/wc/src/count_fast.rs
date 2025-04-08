@@ -13,7 +13,7 @@ use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
-use libc::{sysconf, S_IFREG, _SC_PAGESIZE};
+use libc::{_SC_PAGESIZE, S_IFREG, sysconf};
 #[cfg(unix)]
 use nix::sys::stat;
 #[cfg(unix)]
@@ -212,11 +212,6 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
 >(
     handle: &mut R,
 ) -> (WordCount, Option<io::Error>) {
-    /// Mask of the value bits of a continuation byte
-    const CONT_MASK: u8 = 0b0011_1111u8;
-    /// Value of the tag bits (tag mask is !CONT_MASK) of a continuation byte
-    const TAG_CONT_U8: u8 = 0b1000_0000u8;
-
     let mut total = WordCount::default();
     let mut buf = [0; BUF_SIZE];
     loop {
@@ -227,10 +222,7 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                     total.bytes += n;
                 }
                 if COUNT_CHARS {
-                    total.chars += buf[..n]
-                        .iter()
-                        .filter(|&&byte| (byte & !CONT_MASK) != TAG_CONT_U8)
-                        .count();
+                    total.chars += bytecount::num_chars(&buf[..n]);
                 }
                 if COUNT_LINES {
                     total.lines += bytecount::count(&buf[..n], b'\n');

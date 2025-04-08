@@ -13,4 +13,4 @@ With --reference, change the mode of each FILE to that of RFILE.
 
 ## After Help
 
-Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
+Each MODE is of the form `[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+`.

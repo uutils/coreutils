@@ -1,4 +1,4 @@
-# spell-checker:ignore bigdecimal cfgs
+# spell-checker:ignore bigdecimal cfgs extendedbigdecimal
 [package]
 name = "uu_seq"
 version = "0.0.30"
@@ -10,7 +10,7 @@ homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/seq"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2021"
+edition = "2024"
 
 readme.workspace = true
 
@@ -23,7 +23,12 @@ clap = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["format", "quoting-style"] }
+uucore = { workspace = true, features = [
+  "extendedbigdecimal",
+  "format",
+  "parser",
+  "quoting-style",
+] }
 
 [[bin]]
 name = "seq"

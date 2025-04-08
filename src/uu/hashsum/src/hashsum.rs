@@ -5,27 +5,26 @@
 
 // spell-checker:ignore (ToDO) algo, algoname, regexes, nread, nonames
 
-use clap::builder::ValueParser;
-use clap::crate_version;
-use clap::value_parser;
 use clap::ArgAction;
+use clap::builder::ValueParser;
+use clap::value_parser;
 use clap::{Arg, ArgMatches, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{stdin, BufReader, Read};
+use std::io::{BufReader, Read, stdin};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::checksum::ChecksumError;
+use uucore::checksum::ChecksumOptions;
+use uucore::checksum::ChecksumVerbose;
+use uucore::checksum::HashAlgorithm;
 use uucore::checksum::calculate_blake2b_length;
 use uucore::checksum::create_sha3;
 use uucore::checksum::detect_algo;
 use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
-use uucore::checksum::ChecksumError;
-use uucore::checksum::ChecksumOptions;
-use uucore::checksum::ChecksumVerbose;
-use uucore::checksum::HashAlgorithm;
 use uucore::error::{FromIo, UResult};
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use uucore::{format_usage, help_about, help_usage};
@@ -318,7 +317,7 @@ pub fn uu_app_common() -> Command {
     #[cfg(not(windows))]
     const TEXT_HELP: &str = "read in text mode (default)";
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

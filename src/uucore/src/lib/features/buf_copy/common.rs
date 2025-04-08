@@ -15,8 +15,8 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::WriteError(msg) => write!(f, "splice() write error: {}", msg),
-            Error::Io(err) => write!(f, "I/O error: {}", err),
+            Error::WriteError(msg) => write!(f, "splice() write error: {msg}"),
+            Error::Io(err) => write!(f, "I/O error: {err}"),
         }
     }
 }

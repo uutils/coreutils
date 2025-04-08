@@ -4,9 +4,11 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) reallylongexecutable nbaz
 
-use crate::common::util::TestScenario;
 #[cfg(any(unix, target_os = "redox"))]
 use std::ffi::OsStr;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_help() {
@@ -22,12 +24,14 @@ fn test_help() {
 #[test]
 fn test_version() {
     for version_flg in ["-V", "--version"] {
-        assert!(new_ucmd!()
-            .arg(version_flg)
-            .succeeds()
-            .no_stderr()
-            .stdout_str()
-            .starts_with("basename"));
+        assert!(
+            new_ucmd!()
+                .arg(version_flg)
+                .succeeds()
+                .no_stderr()
+                .stdout_str()
+                .starts_with("basename")
+        );
     }
 }
 
@@ -97,12 +101,14 @@ fn test_zero_param() {
 }
 
 fn expect_error(input: &[&str]) {
-    assert!(!new_ucmd!()
-        .args(input)
-        .fails()
-        .no_stdout()
-        .stderr_str()
-        .is_empty());
+    assert!(
+        !new_ucmd!()
+            .args(input)
+            .fails()
+            .no_stdout()
+            .stderr_str()
+            .is_empty()
+    );
 }
 
 #[test]

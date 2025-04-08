@@ -3,7 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore dont
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -120,6 +122,24 @@ fn test_dont_overflow() {
     new_ucmd!()
         .args(&["-k", "9223372036854775808d", "10", "sleep", "0"])
         .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_dont_underflow() {
+    new_ucmd!()
+        .args(&[".0000000001", "sleep", "1"])
+        .fails_with_code(124)
+        .no_output();
+    new_ucmd!()
+        .args(&["1e-100", "sleep", "1"])
+        .fails_with_code(124)
+        .no_output();
+    // Unlike GNU coreutils, we underflow to 1ns for very short timeouts.
+    // https://debbugs.gnu.org/cgi/bugreport.cgi?bug=77535
+    new_ucmd!()
+        .args(&["1e-18172487393827593258", "sleep", "1"])
+        .fails_with_code(124)
         .no_output();
 }
 

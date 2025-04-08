@@ -7,15 +7,15 @@
 mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::ffi::CString;
 use std::io::Error;
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process;
-use uucore::entries::{grp2gid, usr2uid, Locate, Passwd};
-use uucore::error::{set_exit_code, UClapError, UResult, UUsageError};
-use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
+use uucore::error::{UClapError, UResult, UUsageError, set_exit_code};
+use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{format_usage, help_about, help_usage, show};
 
@@ -224,7 +224,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 ChrootError::CommandFailed(command[0].to_string(), e)
             }
-            .into())
+            .into());
         }
     };
 
@@ -239,7 +239,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

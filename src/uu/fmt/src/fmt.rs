@@ -5,9 +5,9 @@
 
 // spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, Read, Stdout, Write};
+use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
@@ -124,7 +124,10 @@ impl FmtOptions {
             }
             (None, None) => (DEFAULT_WIDTH, DEFAULT_GOAL),
         };
-        debug_assert!(width >= goal, "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}.");
+        debug_assert!(
+            width >= goal,
+            "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}."
+        );
 
         if width > MAX_WIDTH {
             return Err(USimpleError::new(
@@ -329,7 +332,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

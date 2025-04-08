@@ -4,7 +4,9 @@
 // file that was distributed with this source code.
 //
 
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_encode() {
@@ -52,7 +54,7 @@ fn test_base32_encode_file() {
 
 #[test]
 fn test_decode() {
-    for decode_param in ["-d", "--decode", "--dec"] {
+    for decode_param in ["-d", "--decode", "--dec", "-D"] {
         let input = "JBSWY3DPFQQFO33SNRSCC===\n"; // spell-checker:disable-line
         new_ucmd!()
             .arg(decode_param)

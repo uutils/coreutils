@@ -19,10 +19,10 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::prelude::*;
 use std::{borrow::Cow, ffi::OsStr};
 
-#[cfg(target_os = "windows")]
-use u16 as NativeIntCharU;
 #[cfg(not(target_os = "windows"))]
 use u8 as NativeIntCharU;
+#[cfg(target_os = "windows")]
+use u16 as NativeIntCharU;
 
 pub type NativeCharInt = NativeIntCharU;
 pub type NativeIntStr = [NativeCharInt];
@@ -178,22 +178,14 @@ pub fn get_single_native_int_value(c: &char) -> Option<NativeCharInt> {
     {
         let mut buf = [0u16, 0];
         let s = c.encode_utf16(&mut buf);
-        if s.len() == 1 {
-            Some(buf[0])
-        } else {
-            None
-        }
+        if s.len() == 1 { Some(buf[0]) } else { None }
     }
 
     #[cfg(not(target_os = "windows"))]
     {
         let mut buf = [0u8, 0, 0, 0];
         let s = c.encode_utf8(&mut buf);
-        if s.len() == 1 {
-            Some(buf[0])
-        } else {
-            None
-        }
+        if s.len() == 1 { Some(buf[0]) } else { None }
     }
 }
 

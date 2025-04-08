@@ -7,15 +7,15 @@ use crate::errors::*;
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 use std::io::{BufRead, Write};
 use std::str::FromStr;
 
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
-use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
 pub mod errors;
@@ -256,7 +256,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
@@ -378,8 +378,8 @@ mod tests {
     use uucore::error::get_exit_code;
 
     use super::{
-        handle_args, handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions,
-        InvalidModes, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit,
+        FormatOptions, InvalidModes, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit,
+        handle_args, handle_buffer, parse_unit_size, parse_unit_size_suffix,
     };
     use std::io::{BufReader, Error, ErrorKind, Read};
     struct MockBuffer {}

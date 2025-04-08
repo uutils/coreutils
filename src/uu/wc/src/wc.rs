@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
@@ -28,8 +28,8 @@ use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::{
     error::{FromIo, UError, UResult},
     format_usage, help_about, help_usage,
+    parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
-    shortcut_value_parser::ShortcutValueParser,
     show,
 };
 
@@ -396,7 +396,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

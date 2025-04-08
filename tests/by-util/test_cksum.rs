@@ -4,7 +4,10 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 const ALGOS: [&str; 11] = [
     "sysv", "bsd", "crc", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "sm3",
@@ -966,29 +969,41 @@ fn test_cksum_check_failed() {
         .arg("CHECKSUM")
         .fails();
 
-    assert!(result
-        .stderr_str()
-        .contains("input: No such file or directory"));
-    assert!(result
-        .stderr_str()
-        .contains("2 lines are improperly formatted\n"));
-    assert!(result
-        .stderr_str()
-        .contains("1 listed file could not be read\n"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("input: No such file or directory")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("2 lines are improperly formatted\n")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("1 listed file could not be read\n")
+    );
     assert!(result.stdout_str().contains("f: OK\n"));
 
     // without strict
     let result = scene.ucmd().arg("--check").arg("CHECKSUM").fails();
 
-    assert!(result
-        .stderr_str()
-        .contains("input: No such file or directory"));
-    assert!(result
-        .stderr_str()
-        .contains("2 lines are improperly formatted\n"));
-    assert!(result
-        .stderr_str()
-        .contains("1 listed file could not be read\n"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("input: No such file or directory")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("2 lines are improperly formatted\n")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("1 listed file could not be read\n")
+    );
     assert!(result.stdout_str().contains("f: OK\n"));
 
     // tests with two files
@@ -1010,15 +1025,21 @@ fn test_cksum_check_failed() {
         .fails();
     println!("result.stderr_str() {}", result.stderr_str());
     println!("result.stdout_str() {}", result.stdout_str());
-    assert!(result
-        .stderr_str()
-        .contains("input2: No such file or directory"));
-    assert!(result
-        .stderr_str()
-        .contains("4 lines are improperly formatted\n"));
-    assert!(result
-        .stderr_str()
-        .contains("2 listed files could not be read\n"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("input2: No such file or directory")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("4 lines are improperly formatted\n")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("2 listed files could not be read\n")
+    );
     assert!(result.stdout_str().contains("f: OK\n"));
     assert!(result.stdout_str().contains("2: OK\n"));
 }
@@ -1088,9 +1109,11 @@ fn test_cksum_mixed() {
     println!("result.stderr_str() {}", result.stderr_str());
     println!("result.stdout_str() {}", result.stdout_str());
     assert!(result.stdout_str().contains("f: OK"));
-    assert!(result
-        .stderr_str()
-        .contains("3 lines are improperly formatted"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("3 lines are improperly formatted")
+    );
 }
 
 #[test]
@@ -1221,9 +1244,7 @@ fn test_check_directory_error() {
 
 #[test]
 fn test_check_base64_hashes() {
-    let hashes =
-        "MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\nSHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\nBLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n"
-    ;
+    let hashes = "MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\nSHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\nBLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n";
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1663,7 +1684,7 @@ fn test_check_incorrectly_formatted_checksum_keeps_processing_hex() {
 /// This module reimplements the cksum-base64.pl GNU test.
 mod gnu_cksum_base64 {
     use super::*;
-    use crate::common::util::log_info;
+    use uutests::util::log_info;
 
     const PAIRS: [(&str, &str); 12] = [
         ("sysv", "0 0 f"),
@@ -1680,11 +1701,11 @@ mod gnu_cksum_base64 {
         ),
         (
             "sha512",
-            "z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg=="
+            "z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==",
         ),
         (
             "blake2b",
-            "eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg=="
+            "eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==",
         ),
         ("sm3", "GrIdg1XPoX+OYRlIMegajyK+yMco/vt0ftA161CCqis="),
     ];
