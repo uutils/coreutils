@@ -587,8 +587,7 @@ fn id_print(state: &State, groups: &[u32]) {
     }
     if !state.user_specified && (egid != gid) {
         print!(
-            " egid={}({})",
-            euid,
+            " egid={egid}({})",
             entries::gid2grp(egid).unwrap_or_else(|_| {
                 show_error!("cannot find name for group ID {}", egid);
                 set_exit_code(1);
