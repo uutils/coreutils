@@ -20,8 +20,8 @@ use crate::{
     error::{FromIo, UError, UResult, USimpleError},
     os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
     sum::{
-        BSD, Blake2b, Blake3, CRC, CRC32B, Digest, DigestWriter, Md5, SYSV, Sha1, Sha3_224,
-        Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3,
+        Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestWriter, Md5, Sha1, Sha3_224, Sha3_256,
+        Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
     },
     util_name,
 };
@@ -364,17 +364,17 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
     match algo {
         ALGORITHM_OPTIONS_SYSV => Ok(HashAlgorithm {
             name: ALGORITHM_OPTIONS_SYSV,
-            create_fn: Box::new(|| Box::new(SYSV::new())),
+            create_fn: Box::new(|| Box::new(SysV::new())),
             bits: 512,
         }),
         ALGORITHM_OPTIONS_BSD => Ok(HashAlgorithm {
             name: ALGORITHM_OPTIONS_BSD,
-            create_fn: Box::new(|| Box::new(BSD::new())),
+            create_fn: Box::new(|| Box::new(Bsd::new())),
             bits: 1024,
         }),
         ALGORITHM_OPTIONS_CRC => Ok(HashAlgorithm {
             name: ALGORITHM_OPTIONS_CRC,
-            create_fn: Box::new(|| Box::new(CRC::new())),
+            create_fn: Box::new(|| Box::new(Crc::new())),
             bits: 256,
         }),
         ALGORITHM_OPTIONS_CRC32B => Ok(HashAlgorithm {
