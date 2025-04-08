@@ -14,9 +14,9 @@ use operation::{
     Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
 };
 use std::ffi::OsString;
-use std::io::{BufWriter, stdin, stdout};
+use std::io::{BufWriter, Write, stdin, stdout};
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
 use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show};
 
@@ -110,9 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let stdin = stdin();
     let mut locked_stdin = stdin.lock();
-    let stdout = stdout();
-    let locked_stdout = stdout.lock();
-    let mut buffered_stdout = BufWriter::new(locked_stdout);
+    let mut buffered_stdout = BufWriter::new(stdout().lock());
 
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
@@ -155,6 +153,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let op = TranslateOperation::new(set1, set2)?;
         translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
     }
+
+    buffered_stdout
+        .flush()
+        .map_err_context(|| "write error".into())?;
+
     Ok(())
 }
 

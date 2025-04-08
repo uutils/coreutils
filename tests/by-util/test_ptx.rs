@@ -163,3 +163,14 @@ fn test_format() {
         .succeeds()
         .stdout_only("\\xx {}{}{a}{}{}\n");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .arg("-G")
+        .pipe_in("hello")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("ptx: write failed: No space left on device\n");
+}

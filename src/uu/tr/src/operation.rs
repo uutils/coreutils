@@ -23,7 +23,7 @@ use std::{
     io::{BufRead, Write},
     ops::Not,
 };
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::show_warning;
 
 #[derive(Debug, Clone)]
@@ -669,12 +669,9 @@ where
         let filtered = buf.iter().filter_map(|&c| translator.translate(c));
         output_buf.extend(filtered);
 
-        if let Err(e) = output.write_all(&output_buf) {
-            return Err(USimpleError::new(
-                1,
-                format!("{}: write error: {}", uucore::util_name(), e),
-            ));
-        }
+        output
+            .write_all(&output_buf)
+            .map_err_context(|| "write error".into())?;
 
         buf.clear();
         output_buf.clear();

@@ -42,7 +42,7 @@ use std::str::Utf8Error;
 use thiserror::Error;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
-use uucore::error::strip_errno;
+use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::line_ending::LineEnding;
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -488,13 +488,14 @@ impl<'a> Line<'a> {
         Self { line, index }
     }
 
-    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) {
+    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
-            self.print_debug(settings, writer).unwrap();
+            self.print_debug(settings, writer)?;
         } else {
-            writer.write_all(self.line.as_bytes()).unwrap();
-            writer.write_all(&[settings.line_ending.into()]).unwrap();
+            writer.write_all(self.line.as_bytes())?;
+            writer.write_all(&[settings.line_ending.into()])?;
         }
+        Ok(())
     }
 
     /// Writes indicators for the selections this line matched. The original line content is NOT expected
@@ -1852,11 +1853,19 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     iter: T,
     settings: &GlobalSettings,
     output: Output,
-) {
+) -> UResult<()> {
+    let output_name = output
+        .as_output_name()
+        .unwrap_or("standard output")
+        .to_owned();
+    let ctx = || format!("write failed: {}", output_name.maybe_quote());
+
     let mut writer = output.into_write();
     for line in iter {
-        line.print(&mut writer, settings);
+        line.print(&mut writer, settings).map_err_context(ctx)?;
     }
+    writer.flush().map_err_context(ctx)?;
+    Ok(())
 }
 
 fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {

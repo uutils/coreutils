@@ -410,8 +410,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
 }
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
-    let stdout = stdout();
-    let mut writer = BufWriter::new(stdout.lock());
+    let mut writer = BufWriter::new(stdout().lock());
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
@@ -470,6 +469,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         _ => {}
     }
+    writer.flush()?;
     Ok(())
 }
 

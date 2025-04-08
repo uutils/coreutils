@@ -1335,3 +1335,13 @@ fn test_human_blocks_r_and_q() {
 fn test_args_check_conflict() {
     new_ucmd!().arg("-c").arg("-C").fails();
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .pipe_in("hello")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("sort: write failed: 'standard output': No space left on device\n");
+}
