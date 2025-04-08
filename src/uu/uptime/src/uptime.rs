@@ -236,7 +236,7 @@ fn default_uptime(matches: &ArgMatches) -> UResult<()> {
 fn print_loadavg() {
     match get_formatted_loadavg() {
         Err(_) => {}
-        Ok(s) => println!("{}", s),
+        Ok(s) => println!("{s}"),
     }
 }
 

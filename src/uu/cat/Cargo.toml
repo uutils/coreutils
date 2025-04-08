@@ -18,6 +18,7 @@ path = "src/cat.rs"
 
 [dependencies]
 clap = { workspace = true }
+memchr = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["fs", "pipes"] }
 

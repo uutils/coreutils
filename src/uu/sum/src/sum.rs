@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{Read, stdin};
+use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -16,42 +16,46 @@ use uucore::{format_usage, help_about, help_usage, show};
 const USAGE: &str = help_usage!("sum.md");
 const ABOUT: &str = help_about!("sum.md");
 
-fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
+fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
     let mut buf = [0; 4096];
     let mut bytes_read = 0;
     let mut checksum: u16 = 0;
     loop {
         match reader.read(&mut buf) {
-            Ok(n) if n != 0 => {
+            Ok(0) => break,
+            Ok(n) => {
                 bytes_read += n;
-                for &byte in &buf[..n] {
-                    checksum = checksum.rotate_right(1);
-                    checksum = checksum.wrapping_add(u16::from(byte));
-                }
+                checksum = buf[..n].iter().fold(checksum, |acc, &byte| {
+                    let rotated = acc.rotate_right(1);
+                    rotated.wrapping_add(u16::from(byte))
+                });
             }
-            _ => break,
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
         }
     }
 
     // Report blocks read in terms of 1024-byte blocks.
     let blocks_read = bytes_read.div_ceil(1024);
-    (blocks_read, checksum)
+    Ok((blocks_read, checksum))
 }
 
-fn sysv_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
+fn sysv_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
     let mut buf = [0; 4096];
     let mut bytes_read = 0;
     let mut ret = 0u32;
 
     loop {
         match reader.read(&mut buf) {
-            Ok(n) if n != 0 => {
+            Ok(0) => break,
+            Ok(n) => {
                 bytes_read += n;
-                for &byte in &buf[..n] {
-                    ret = ret.wrapping_add(u32::from(byte));
-                }
+                ret = buf[..n]
+                    .iter()
+                    .fold(ret, |acc, &byte| acc.wrapping_add(u32::from(byte)));
             }
-            _ => break,
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
         }
     }
 
@@ -60,7 +64,7 @@ fn sysv_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
 
     // Report blocks read in terms of 512-byte blocks.
     let blocks_read = bytes_read.div_ceil(512);
-    (blocks_read, ret as u16)
+    Ok((blocks_read, ret as u16))
 }
 
 fn open(name: &str) -> UResult<Box<dyn Read>> {
@@ -119,12 +123,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             sysv_sum(reader)
         } else {
             bsd_sum(reader)
-        };
+        }?;
 
+        let mut stdout = stdout().lock();
         if print_names {
-            println!("{sum:0width$} {blocks:width$} {file}");
+            writeln!(stdout, "{sum:0width$} {blocks:width$} {file}")?;
         } else {
-            println!("{sum:0width$} {blocks:width$}");
+            writeln!(stdout, "{sum:0width$} {blocks:width$}")?;
         }
     }
     Ok(())

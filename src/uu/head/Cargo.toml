@@ -20,7 +20,12 @@ path = "src/head.rs"
 clap = { workspace = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["ringbuffer", "lines", "fs"] }
+uucore = { workspace = true, features = [
+  "parser",
+  "ringbuffer",
+  "lines",
+  "fs",
+] }
 
 [[bin]]
 name = "head"

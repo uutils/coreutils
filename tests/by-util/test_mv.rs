@@ -4,10 +4,12 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore mydir
-use crate::common::util::TestScenario;
 use filetime::FileTime;
 use rstest::rstest;
 use std::io::Write;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::{at_and_ucmd, util_name};
 
 #[test]
 fn test_mv_invalid_arg() {
@@ -419,7 +421,7 @@ fn test_mv_same_file() {
     ucmd.arg(file_a)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_a}' and '{file_a}' are the same file\n",));
+        .stderr_is(format!("mv: '{file_a}' and '{file_a}' are the same file\n"));
 }
 
 #[test]
@@ -436,7 +438,7 @@ fn test_mv_same_hardlink() {
     ucmd.arg(file_a)
         .arg(file_b)
         .fails()
-        .stderr_is(format!("mv: '{file_a}' and '{file_b}' are the same file\n",));
+        .stderr_is(format!("mv: '{file_a}' and '{file_b}' are the same file\n"));
 }
 
 #[test]
@@ -454,7 +456,7 @@ fn test_mv_same_symlink() {
     ucmd.arg(file_b)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_b}' and '{file_a}' are the same file\n",));
+        .stderr_is(format!("mv: '{file_b}' and '{file_a}' are the same file\n"));
 
     let (at2, mut ucmd2) = at_and_ucmd!();
     at2.touch(file_a);
@@ -1670,7 +1672,7 @@ fn test_mv_dir_into_path_slash() {
 fn test_acl() {
     use std::process::Command;
 
-    use crate::common::util::compare_xattrs;
+    use uutests::util::compare_xattrs;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1766,10 +1768,11 @@ fn test_move_should_not_fallback_to_copy() {
 
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
-    use crate::common::util::TestScenario;
     use std::fs::{read_to_string, set_permissions, write};
     use std::os::unix::fs::{PermissionsExt, symlink};
     use tempfile::TempDir;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
 
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[test]
@@ -1808,7 +1811,7 @@ mod inter_partition_copying {
 
         // make sure that file contents in other_fs_file didn't change.
         assert_eq!(
-            read_to_string(&other_fs_file_path,).expect("Unable to read other_fs_file"),
+            read_to_string(&other_fs_file_path).expect("Unable to read other_fs_file"),
             "other fs file contents"
         );
 
@@ -1823,6 +1826,7 @@ mod inter_partition_copying {
     // that it would output the proper error message.
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink_error_message() {
+        use uutests::util::TestScenario;
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
 

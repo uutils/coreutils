@@ -85,7 +85,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     "{start} {op}\nOnly one string may be given when deleting without squeezing repeats.",
                 )
             } else {
-                format!("{start} {op}",)
+                format!("{start} {op}")
             };
             return Err(UUsageError::new(1, msg));
         }

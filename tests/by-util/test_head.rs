@@ -6,7 +6,6 @@
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 // spell-checker:ignore (words) seekable
 
-use crate::common::util::TestScenario;
 #[cfg(all(
     not(target_os = "windows"),
     not(target_os = "macos"),
@@ -15,7 +14,9 @@ use crate::common::util::TestScenario;
     not(target_os = "openbsd")
 ))]
 use std::io::Read;
-
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 static INPUT: &str = "lorem_ipsum.txt";
 
 #[test]
@@ -434,7 +435,7 @@ fn test_all_but_last_bytes_large_file_piped() {
         .len();
     scene
         .ucmd()
-        .args(&["-c", &format!("-{}", seq_19001_20000_file_length)])
+        .args(&["-c", &format!("-{seq_19001_20000_file_length}")])
         .pipe_in_fixture(seq_20000_file_name)
         .succeeds()
         .stdout_only_fixture(seq_19000_file_name);
@@ -694,7 +695,7 @@ fn test_validate_stdin_offset_bytes() {
         .len();
     scene
         .ucmd()
-        .args(&["-c", &format!("-{}", seq_19001_20000_file_length)])
+        .args(&["-c", &format!("-{seq_19001_20000_file_length}")])
         .set_stdin(file)
         .succeeds()
         .stdout_only_fixture(seq_19000_file_name);

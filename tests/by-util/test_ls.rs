@@ -10,9 +10,6 @@
     clippy::cast_possible_truncation
 )]
 
-use crate::common::util::TestScenario;
-#[cfg(any(unix, feature = "feat_selinux"))]
-use crate::common::util::expected_result;
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
 use regex::Regex;
@@ -29,6 +26,13 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
+use uutests::new_ucmd;
+#[cfg(unix)]
+use uutests::unwrap_or_return;
+use uutests::util::TestScenario;
+#[cfg(any(unix, feature = "feat_selinux"))]
+use uutests::util::expected_result;
+use uutests::{at_and_ucmd, util_name};
 
 const LONG_ARGS: &[&str] = &[
     "-l",
@@ -2232,6 +2236,7 @@ fn test_ls_recursive_1() {
 #[cfg(unix)]
 mod quoting {
     use super::TestScenario;
+    use uutests::util_name;
 
     /// Create a directory with "dirname", then for each check, assert that the
     /// output is correct.
@@ -4150,7 +4155,7 @@ fn test_ls_dangling_symlinks() {
 fn test_ls_context1() {
     use selinux::{self, KernelSupport};
     if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
 
@@ -4166,7 +4171,7 @@ fn test_ls_context1() {
 fn test_ls_context2() {
     use selinux::{self, KernelSupport};
     if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
     let ts = TestScenario::new(util_name!());
@@ -4183,7 +4188,7 @@ fn test_ls_context2() {
 fn test_ls_context_format() {
     use selinux::{self, KernelSupport};
     if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
     let ts = TestScenario::new(util_name!());

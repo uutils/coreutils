@@ -116,7 +116,7 @@ impl std::str::FromStr for QuotingStyle {
             "shell" => Ok(QuotingStyle::Shell),
             "shell-escape-always" => Ok(QuotingStyle::ShellEscapeAlways),
             // The others aren't exposed to the user
-            _ => Err(format!("Invalid quoting style: {}", s)),
+            _ => Err(format!("Invalid quoting style: {s}")),
         }
     }
 }
@@ -335,9 +335,9 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
     match quoting_style {
         QuotingStyle::Locale | QuotingStyle::Shell => {
             let escaped = file_name.replace('\'', r"\'");
-            format!("'{}'", escaped)
+            format!("'{escaped}'")
         }
-        QuotingStyle::ShellEscapeAlways => format!("\"{}\"", file_name),
+        QuotingStyle::ShellEscapeAlways => format!("\"{file_name}\""),
         QuotingStyle::Quote => file_name.to_string(),
     }
 }
@@ -450,7 +450,7 @@ fn print_integer(
     let extended = match precision {
         Precision::NotSpecified => format!("{prefix}{arg}"),
         Precision::NoNumber => format!("{prefix}{arg}"),
-        Precision::Number(p) => format!("{prefix}{arg:0>precision$}", precision = p),
+        Precision::Number(p) => format!("{prefix}{arg:0>p$}"),
     };
     pad_and_print(&extended, flags.left, width, padding_char);
 }
@@ -532,7 +532,7 @@ fn print_unsigned(
     let s = match precision {
         Precision::NotSpecified => s,
         Precision::NoNumber => s,
-        Precision::Number(p) => format!("{s:0>precision$}", precision = p).into(),
+        Precision::Number(p) => format!("{s:0>p$}").into(),
     };
     pad_and_print(&s, flags.left, width, padding_char);
 }
@@ -557,7 +557,7 @@ fn print_unsigned_oct(
     let s = match precision {
         Precision::NotSpecified => format!("{prefix}{num:o}"),
         Precision::NoNumber => format!("{prefix}{num:o}"),
-        Precision::Number(p) => format!("{prefix}{num:0>precision$o}", precision = p),
+        Precision::Number(p) => format!("{prefix}{num:0>p$o}"),
     };
     pad_and_print(&s, flags.left, width, padding_char);
 }
@@ -582,7 +582,7 @@ fn print_unsigned_hex(
     let s = match precision {
         Precision::NotSpecified => format!("{prefix}{num:x}"),
         Precision::NoNumber => format!("{prefix}{num:x}"),
-        Precision::Number(p) => format!("{prefix}{num:0>precision$x}", precision = p),
+        Precision::Number(p) => format!("{prefix}{num:0>p$x}"),
     };
     pad_and_print(&s, flags.left, width, padding_char);
 }
@@ -994,7 +994,7 @@ impl Stater {
                     'R' => {
                         let major = meta.rdev() >> 8;
                         let minor = meta.rdev() & 0xff;
-                        OutputType::Str(format!("{},{}", major, minor))
+                        OutputType::Str(format!("{major},{minor}"))
                     }
                     'r' => OutputType::Unsigned(meta.rdev()),
                     'H' => OutputType::Unsigned(meta.rdev() >> 8), // Major in decimal

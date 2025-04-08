@@ -65,7 +65,7 @@ pub enum UpdateMode {
 
 pub mod arguments {
     //! Pre-defined arguments for update functionality.
-    use crate::shortcut_value_parser::ShortcutValueParser;
+    use crate::parser::shortcut_value_parser::ShortcutValueParser;
     use clap::ArgAction;
 
     /// `--update` argument

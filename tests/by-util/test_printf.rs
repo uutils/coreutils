@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn basic_literal() {
@@ -68,6 +70,21 @@ fn escaped_octal_and_newline() {
 }
 
 #[test]
+fn variable_sized_octal() {
+    for x in ["|\\5|", "|\\05|", "|\\005|"] {
+        new_ucmd!()
+            .arg(x)
+            .succeeds()
+            .stdout_only_bytes([b'|', 5u8, b'|']);
+    }
+
+    new_ucmd!()
+        .arg("|\\0005|")
+        .succeeds()
+        .stdout_only_bytes([b'|', 0, b'5', b'|']);
+}
+
+#[test]
 fn escaped_unicode_four_digit() {
     new_ucmd!().args(&["\\u0125"]).succeeds().stdout_only("ĥ");
 }
@@ -78,6 +95,19 @@ fn escaped_unicode_eight_digit() {
         .args(&["\\U00000125"])
         .succeeds()
         .stdout_only("ĥ");
+}
+
+#[test]
+fn escaped_unicode_null_byte() {
+    new_ucmd!()
+        .args(&["\\0001_"])
+        .succeeds()
+        .stdout_is_bytes([0u8, b'1', b'_']);
+
+    new_ucmd!()
+        .args(&["%b", "\\0001_"])
+        .succeeds()
+        .stdout_is_bytes([1u8, b'_']);
 }
 
 #[test]
@@ -131,6 +161,21 @@ fn sub_b_string_handle_escapes() {
         .args(&["hello %b", "\\tworld"])
         .succeeds()
         .stdout_only("hello \tworld");
+}
+
+#[test]
+fn sub_b_string_variable_size_unicode() {
+    for x in ["\\5|", "\\05|", "\\005|", "\\0005|"] {
+        new_ucmd!()
+            .args(&["|%b", x])
+            .succeeds()
+            .stdout_only_bytes([b'|', 5u8, b'|']);
+    }
+
+    new_ucmd!()
+        .args(&["|%b", "\\00005|"])
+        .succeeds()
+        .stdout_only_bytes([b'|', 0, b'5', b'|']);
 }
 
 #[test]
@@ -256,6 +301,16 @@ fn sub_num_int_char_const_in() {
 
     new_ucmd!()
         .args(&["emoji is %i", "'🙃"])
+        .succeeds()
+        .stdout_only("emoji is 128579");
+
+    new_ucmd!()
+        .args(&["ninety seven is %i", "\"a"])
+        .succeeds()
+        .stdout_only("ninety seven is 97");
+
+    new_ucmd!()
+        .args(&["emoji is %i", "\"🙃"])
         .succeeds()
         .stdout_only("emoji is 128579");
 }
@@ -388,7 +443,6 @@ fn sub_num_sci_negative() {
         .stdout_only("-1234 is -1.234000e+03");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn sub_num_hex_float_lower() {
     new_ucmd!()
@@ -397,7 +451,6 @@ fn sub_num_hex_float_lower() {
         .stdout_only("0xep-4");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn sub_num_hex_float_upper() {
     new_ucmd!()
@@ -545,6 +598,76 @@ fn sub_any_asterisk_negative_first_param() {
 }
 
 #[test]
+fn sub_any_asterisk_first_param_with_integer() {
+    new_ucmd!()
+        .args(&["|%*d|", "3", "0"])
+        .succeeds()
+        .stdout_only("|  0|");
+
+    new_ucmd!()
+        .args(&["|%*d|", "1", "0"])
+        .succeeds()
+        .stdout_only("|0|");
+
+    new_ucmd!()
+        .args(&["|%*d|", "0", "0"])
+        .succeeds()
+        .stdout_only("|0|");
+
+    new_ucmd!()
+        .args(&["|%*d|", "-1", "0"])
+        .succeeds()
+        .stdout_only("|0|");
+
+    // Negative widths are left-aligned
+    new_ucmd!()
+        .args(&["|%*d|", "-3", "0"])
+        .succeeds()
+        .stdout_only("|0  |");
+}
+
+#[test]
+fn sub_any_asterisk_second_param_with_integer() {
+    new_ucmd!()
+        .args(&["|%.*d|", "3", "10"])
+        .succeeds()
+        .stdout_only("|010|");
+
+    new_ucmd!()
+        .args(&["|%*.d|", "1", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", "0", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", "-1", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", "-2", "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", &i64::MIN.to_string(), "10"])
+        .succeeds()
+        .stdout_only("|10|");
+
+    new_ucmd!()
+        .args(&["|%.*d|", &format!("-{}", u128::MAX), "10"])
+        .fails_with_code(1)
+        .stdout_is("|10|")
+        .stderr_is(
+            "printf: '-340282366920938463463374607431768211455': Numerical result out of range\n",
+        );
+}
+
+#[test]
 fn sub_any_specifiers_no_params() {
     new_ucmd!()
         .args(&["%ztlhLji", "3"]) //spell-checker:disable-line
@@ -673,6 +796,19 @@ fn test_overflow() {
     new_ucmd!()
         .args(&["%d", "36893488147419103232"])
         .fails_with_code(1)
+        .stdout_is("9223372036854775807")
+        .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
+
+    new_ucmd!()
+        .args(&["%d", "-36893488147419103232"])
+        .fails_with_code(1)
+        .stdout_is("-9223372036854775808")
+        .stderr_is("printf: '-36893488147419103232': Numerical result out of range\n");
+
+    new_ucmd!()
+        .args(&["%u", "36893488147419103232"])
+        .fails_with_code(1)
+        .stdout_is("18446744073709551615")
         .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
 }
 
@@ -887,6 +1023,14 @@ fn negative_zero_padding_with_space_test() {
 }
 
 #[test]
+fn spaces_before_numbers_are_ignored() {
+    new_ucmd!()
+        .args(&["%*.*d", "   5", "  3", " 6"])
+        .succeeds()
+        .stdout_only("  006");
+}
+
+#[test]
 fn float_with_zero_precision_should_pad() {
     new_ucmd!()
         .args(&["%03.0f", "-1"])
@@ -988,6 +1132,16 @@ fn float_flag_position_space_padding() {
         .args(&["% +5.1f", "1"])
         .succeeds()
         .stdout_only(" +1.0");
+}
+
+#[test]
+fn float_large_precision() {
+    // Note: This does not match GNU coreutils output (0.100000000000000000001355252716 on x86),
+    // as we parse and format using ExtendedBigDecimal, which provides arbitrary precision.
+    new_ucmd!()
+        .args(&["%.30f", "0.1"])
+        .succeeds()
+        .stdout_only("0.100000000000000000000000000000");
 }
 
 #[test]

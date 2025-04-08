@@ -279,7 +279,7 @@ pub const BAUD_RATES: &[(&str, BaudRate)] = &[
     ("500000", BaudRate::B500000),
     #[cfg(any(target_os = "android", target_os = "linux"))]
     ("576000", BaudRate::B576000),
-    #[cfg(any(target_os = "android", target_os = "linux",))]
+    #[cfg(any(target_os = "android", target_os = "linux"))]
     ("921600", BaudRate::B921600),
     #[cfg(any(target_os = "android", target_os = "linux"))]
     ("1000000", BaudRate::B1000000),

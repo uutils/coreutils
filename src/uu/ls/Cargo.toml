@@ -34,6 +34,7 @@ uucore = { workspace = true, features = [
   "format",
   "fs",
   "fsxattr",
+  "parser",
   "quoting-style",
   "version-cmp",
 ] }

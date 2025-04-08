@@ -9,7 +9,7 @@ use std::{env, fmt};
 
 use uucore::{
     display::Quotable,
-    parse_size::{ParseSizeError, parse_size_u64},
+    parser::parse_size::{ParseSizeError, parse_size_u64},
 };
 
 /// The first ten powers of 1024.

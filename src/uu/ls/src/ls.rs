@@ -63,11 +63,13 @@ use uucore::{
     format_usage,
     fs::display_permissions,
     os_str_as_bytes_lossy,
-    parse_size::parse_size_u64,
-    shortcut_value_parser::ShortcutValueParser,
+    parser::parse_size::parse_size_u64,
+    parser::shortcut_value_parser::ShortcutValueParser,
     version_cmp::version_cmp,
 };
-use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
+use uucore::{
+    help_about, help_section, help_usage, parser::parse_glob, show, show_error, show_warning,
+};
 
 mod dired;
 use dired::{DiredOutput, is_dired_arg_present};

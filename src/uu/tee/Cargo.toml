@@ -19,7 +19,7 @@ path = "src/tee.rs"
 [dependencies]
 clap = { workspace = true }
 nix = { workspace = true, features = ["poll", "fs"] }
-uucore = { workspace = true, features = ["libc", "signals"] }
+uucore = { workspace = true, features = ["libc", "parser", "signals"] }
 
 [[bin]]
 name = "tee"

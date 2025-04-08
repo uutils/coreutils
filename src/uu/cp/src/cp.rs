@@ -40,8 +40,8 @@ use uucore::{backup_control, update_control};
 // requires these enum.
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
-    format_usage, help_about, help_section, help_usage, prompt_yes,
-    shortcut_value_parser::ShortcutValueParser, show_error, show_warning,
+    format_usage, help_about, help_section, help_usage,
+    parser::shortcut_value_parser::ShortcutValueParser, prompt_yes, show_error, show_warning,
 };
 
 use crate::copydir::copy_directory;

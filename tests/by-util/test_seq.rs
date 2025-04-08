@@ -3,7 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -15,6 +17,14 @@ fn test_no_args() {
     new_ucmd!()
         .fails_with_code(1)
         .stderr_contains("missing operand");
+}
+
+#[test]
+fn test_format_and_equal_width() {
+    new_ucmd!()
+        .args(&["-w", "-f", "%f", "1"])
+        .fails_with_code(1)
+        .stderr_contains("format string may not be specified");
 }
 
 #[test]
@@ -750,21 +760,23 @@ fn test_undefined() {
 
 #[test]
 fn test_invalid_float_point_fail_properly() {
+    // Note that we support arguments that are much bigger than what GNU coreutils supports.
+    // Tests below use exponents larger than we support (i64)
     new_ucmd!()
-        .args(&["66000e000000000000000000000000000000000000000000000000000009223372036854775807"])
+        .args(&["66000e0000000000000000000000000000000000000000000000000000092233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '66000e000000000000000000000000000000000000000000000000000009223372036854775807'");
+        .usage_error("invalid floating point argument: '66000e0000000000000000000000000000000000000000000000000000092233720368547758070'");
     new_ucmd!()
-        .args(&["-1.1e9223372036854775807"])
+        .args(&["-1.1e92233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '-1.1e9223372036854775807'");
+        .usage_error("invalid floating point argument: '-1.1e92233720368547758070'");
     new_ucmd!()
-        .args(&["-.1e9223372036854775807"])
+        .args(&["-.1e92233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '-.1e9223372036854775807'");
+        .usage_error("invalid floating point argument: '-.1e92233720368547758070'");
 }
 
 #[test]
@@ -857,6 +869,8 @@ fn test_parse_valid_hexadecimal_float_two_args() {
         (["0xA.A9p-1", "6"], "5.33008\n"),
         (["0xa.a9p-1", "6"], "5.33008\n"),
         (["0xffffffffffp-30", "1024"], "1024\n"), // spell-checker:disable-line
+        (["  0XA.A9P-1", "6"], "5.33008\n"),
+        (["  0xee.", "  0xef."], "238\n239\n"),
     ];
 
     for (input_arguments, expected_output) in &test_cases {
@@ -907,6 +921,18 @@ fn test_parse_out_of_bounds_exponents() {
         .args(&["1e-9223372036854775808"])
         .succeeds()
         .stdout_only("");
+
+    // GNU seq supports arbitrarily small exponents (and treats the value as 0).
+    new_ucmd!()
+        .args(&["1e-922337203685477580800000000", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+
+    // Check we can also underflow to -0.0.
+    new_ucmd!()
+        .args(&["-1e-922337203685477580800000000", "1"])
+        .succeeds()
+        .stdout_only("-0\n1\n");
 }
 
 #[ignore]

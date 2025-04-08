@@ -21,8 +21,8 @@
 //! assert_eq!(summand1 + summand2, ExtendedBigDecimal::Infinity);
 //! ```
 use std::cmp::Ordering;
-use std::fmt::Display;
 use std::ops::Add;
+use std::ops::Neg;
 
 use bigdecimal::BigDecimal;
 use num_traits::FromPrimitive;
@@ -109,25 +109,6 @@ impl ExtendedBigDecimal {
     }
 }
 
-impl Display for ExtendedBigDecimal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::BigDecimal(x) => {
-                let (n, p) = x.as_bigint_and_exponent();
-                match p {
-                    0 => Self::BigDecimal(BigDecimal::new(n * 10, 1)).fmt(f),
-                    _ => x.fmt(f),
-                }
-            }
-            Self::Infinity => f32::INFINITY.fmt(f),
-            Self::MinusInfinity => f32::NEG_INFINITY.fmt(f),
-            Self::MinusZero => (-0.0f32).fmt(f),
-            Self::Nan => "nan".fmt(f),
-            Self::MinusNan => "-nan".fmt(f),
-        }
-    }
-}
-
 impl Zero for ExtendedBigDecimal {
     fn zero() -> Self {
         Self::BigDecimal(BigDecimal::zero())
@@ -138,6 +119,12 @@ impl Zero for ExtendedBigDecimal {
             Self::MinusZero => true,
             _ => false,
         }
+    }
+}
+
+impl Default for ExtendedBigDecimal {
+    fn default() -> Self {
+        Self::zero()
     }
 }
 
@@ -221,13 +208,34 @@ impl PartialOrd for ExtendedBigDecimal {
     }
 }
 
+impl Neg for ExtendedBigDecimal {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Self::BigDecimal(bd) => {
+                if bd.is_zero() {
+                    Self::MinusZero
+                } else {
+                    Self::BigDecimal(bd.neg())
+                }
+            }
+            Self::MinusZero => Self::BigDecimal(BigDecimal::zero()),
+            Self::Infinity => Self::MinusInfinity,
+            Self::MinusInfinity => Self::Infinity,
+            Self::Nan => Self::MinusNan,
+            Self::MinusNan => Self::Nan,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
     use bigdecimal::BigDecimal;
     use num_traits::Zero;
 
-    use crate::format::extendedbigdecimal::ExtendedBigDecimal;
+    use crate::extendedbigdecimal::ExtendedBigDecimal;
 
     #[test]
     fn test_addition_infinity() {
@@ -252,17 +260,5 @@ mod tests {
             ExtendedBigDecimal::Nan => (),
             _ => unreachable!(),
         }
-    }
-
-    #[test]
-    fn test_display() {
-        assert_eq!(
-            format!("{}", ExtendedBigDecimal::BigDecimal(BigDecimal::zero())),
-            "0.0"
-        );
-        assert_eq!(format!("{}", ExtendedBigDecimal::Infinity), "inf");
-        assert_eq!(format!("{}", ExtendedBigDecimal::MinusInfinity), "-inf");
-        assert_eq!(format!("{}", ExtendedBigDecimal::Nan), "nan");
-        assert_eq!(format!("{}", ExtendedBigDecimal::MinusZero), "-0");
     }
 }

@@ -16,8 +16,8 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::parse_size::parse_size_u64;
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_size::parse_size_u64;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
 
 const ABOUT: &str = help_about!("shred.md");

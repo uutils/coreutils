@@ -14,7 +14,7 @@ use std::process;
 use tempfile::TempDir;
 use tempfile::tempdir;
 use uucore::error::{FromIo, UClapError, UResult, USimpleError, UUsageError};
-use uucore::parse_size::parse_size_u64;
+use uucore::parser::parse_size::parse_size_u64;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("stdbuf.md");
@@ -170,7 +170,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     127,
                     format!("{EXEC_ERROR} No such file or directory"),
                 )),
-                _ => Err(USimpleError::new(1, format!("{EXEC_ERROR} {}", e))),
+                _ => Err(USimpleError::new(1, format!("{EXEC_ERROR} {e}"))),
             };
         }
     };

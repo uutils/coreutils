@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch Uncategorized filehandle Signum
+// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch
+// spell-checker:ignore (ToDO) Uncategorized filehandle Signum memrchr
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (acronyms)
 // spell-checker:ignore (env/flags)
@@ -24,11 +25,12 @@ pub use args::uu_app;
 use args::{FilterMode, Settings, Signum, parse_args};
 use chunks::ReverseChunks;
 use follow::Observer;
+use memchr::{memchr_iter, memrchr_iter};
 use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, get_exit_code, set_exit_code};
@@ -285,34 +287,42 @@ fn tail_stdin(
 /// let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
 /// assert_eq!(i, 2);
 /// ```
-fn forwards_thru_file<R>(
-    reader: &mut R,
+fn forwards_thru_file(
+    reader: &mut impl Read,
     num_delimiters: u64,
     delimiter: u8,
-) -> std::io::Result<usize>
-where
-    R: Read,
-{
-    let mut reader = BufReader::new(reader);
-
-    let mut buf = vec![];
+) -> std::io::Result<usize> {
+    // If num_delimiters == 0, always return 0.
+    if num_delimiters == 0 {
+        return Ok(0);
+    }
+    // Use a 32K buffer.
+    let mut buf = [0; 32 * 1024];
     let mut total = 0;
-    for _ in 0..num_delimiters {
-        match reader.read_until(delimiter, &mut buf) {
-            Ok(0) => {
-                return Ok(total);
-            }
+    let mut count = 0;
+    // Iterate through the input, using `count` to record the number of times `delimiter`
+    // is seen. Once we find `num_delimiters` instances, return the offset of the byte
+    // immediately following that delimiter.
+    loop {
+        match reader.read(&mut buf) {
+            // Ok(0) => EoF before we found `num_delimiters` instance of `delimiter`.
+            // Return the total number of bytes read in that case.
+            Ok(0) => return Ok(total),
             Ok(n) => {
+                // Use memchr_iter since it greatly improves search performance.
+                for offset in memchr_iter(delimiter, &buf[..n]) {
+                    count += 1;
+                    if count == num_delimiters {
+                        // Return offset of the byte after the `delimiter` instance.
+                        return Ok(total + offset + 1);
+                    }
+                }
                 total += n;
-                buf.clear();
-                continue;
             }
-            Err(e) => {
-                return Err(e);
-            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
         }
     }
-    Ok(total)
 }
 
 /// Iterate over bytes in the file, in reverse, until we find the
@@ -322,35 +332,36 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
-
-    for (block_idx, slice) in ReverseChunks::new(file).enumerate() {
+    let mut first_slice = true;
+    for slice in ReverseChunks::new(file) {
         // Iterate over each byte in the slice in reverse order.
-        let mut iter = slice.iter().enumerate().rev();
+        let mut iter = memrchr_iter(delimiter, &slice);
 
         // Ignore a trailing newline in the last block, if there is one.
-        if block_idx == 0 {
+        if first_slice {
             if let Some(c) = slice.last() {
                 if *c == delimiter {
                     iter.next();
                 }
             }
+            first_slice = false;
         }
 
         // For each byte, increment the count of the number of
         // delimiters found. If we have found more than the specified
         // number of delimiters, terminate the search and seek to the
         // appropriate location in the file.
-        for (i, ch) in iter {
-            if *ch == delimiter {
-                counter += 1;
-                if counter >= num_delimiters {
-                    // After each iteration of the outer loop, the
-                    // cursor in the file is at the *beginning* of the
-                    // block, so seeking forward by `i + 1` bytes puts
-                    // us right after the found delimiter.
-                    file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
-                    return;
-                }
+        for i in iter {
+            counter += 1;
+            if counter >= num_delimiters {
+                // We should never over-count - assert that.
+                assert_eq!(counter, num_delimiters);
+                // After each iteration of the outer loop, the
+                // cursor in the file is at the *beginning* of the
+                // block, so seeking forward by `i + 1` bytes puts
+                // us right after the found delimiter.
+                file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
+                return;
             }
         }
     }

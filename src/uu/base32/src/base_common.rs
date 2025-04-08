@@ -50,7 +50,7 @@ impl Config {
                 if let Some(extra_op) = values.next() {
                     return Err(UUsageError::new(
                         BASE_CMD_PARSE_ERROR,
-                        format!("extra operand {}", extra_op.quote(),),
+                        format!("extra operand {}", extra_op.quote()),
                     ));
                 }
 
@@ -839,8 +839,7 @@ mod tests {
             assert_eq!(
                 has_padding(&mut cursor).unwrap(),
                 expected,
-                "Failed for input: '{}'",
-                input
+                "Failed for input: '{input}'"
             );
         }
     }

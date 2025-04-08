@@ -22,7 +22,7 @@ clap = { workspace = true }
 libc = { workspace = true }
 memchr = { workspace = true }
 notify = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
 same-file = { workspace = true }
 fundu = { workspace = true }
 

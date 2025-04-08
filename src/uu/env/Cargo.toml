@@ -19,6 +19,7 @@ path = "src/env.rs"
 [dependencies]
 clap = { workspace = true }
 rust-ini = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = ["signals"] }
 
 [target.'cfg(unix)'.dependencies]

@@ -17,6 +17,7 @@ readme.workspace = true
 path = "src/unexpand.rs"
 
 [dependencies]
+thiserror = { workspace = true }
 clap = { workspace = true }
 unicode-width = { workspace = true }
 uucore = { workspace = true }

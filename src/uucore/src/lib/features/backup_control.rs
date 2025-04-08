@@ -433,7 +433,7 @@ fn numbered_backup_path(path: &Path) -> PathBuf {
     let file_name = path.file_name().unwrap_or_default();
     for i in 1_u64.. {
         let mut numbered_file_name = file_name.to_os_string();
-        numbered_file_name.push(format!(".~{}~", i));
+        numbered_file_name.push(format!(".~{i}~"));
         let path = path.with_file_name(numbered_file_name);
         if !path.exists() {
             return path;

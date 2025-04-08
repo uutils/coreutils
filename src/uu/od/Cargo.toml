@@ -20,7 +20,7 @@ path = "src/od.rs"
 byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
 
 [[bin]]
 name = "od"

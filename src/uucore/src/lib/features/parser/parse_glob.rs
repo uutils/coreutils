@@ -48,7 +48,7 @@ fn fix_negation(glob: &str) -> String {
 ///
 /// ```rust
 /// use std::time::Duration;
-/// use uucore::parse_glob::from_str;
+/// use uucore::parser::parse_glob::from_str;
 /// assert!(!from_str("[^abc]").unwrap().matches("a"));
 /// assert!(from_str("[^abc]").unwrap().matches("x"));
 /// ```

@@ -247,7 +247,7 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        format!("error writing 'standard output': {}", err),
+        format!("error writing 'standard output': {err}"),
     )
 }
 

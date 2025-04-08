@@ -43,8 +43,8 @@ use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::parse_size::ParseSizeError;
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_size::ParseSizeError;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_warning};
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
