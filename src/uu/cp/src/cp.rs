@@ -1833,13 +1833,11 @@ fn handle_existing_dest(
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
-    if options.update == UpdateMode::ReplaceNone {
-        if dest.exists() {
-            if options.debug {
-                println!("skipped {}", dest.quote());
-            }
-            return Err(Error::Skipped(false));
+    if options.update == UpdateMode::ReplaceNone && dest.exists() {
+        if options.debug {
+            println!("skipped {}", dest.quote());
         }
+        return Err(Error::Skipped(false));
     }
 
     if options.update != UpdateMode::ReplaceIfOlder {
