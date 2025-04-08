@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
+// spell-checker:ignore (ToDO) somegroup nlink dired subdired dtype colorterm stringly
 
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
@@ -2701,7 +2701,10 @@ fn display_grid(
 
         let filling = match tab_size {
             0 => Filling::Spaces(DEFAULT_SEPARATOR_SIZE),
-            _ => Filling::Tabs(tab_size),
+            _ => Filling::Tabs {
+                spaces: DEFAULT_SEPARATOR_SIZE,
+                tab_size,
+            },
         };
 
         let grid = Grid::new(
