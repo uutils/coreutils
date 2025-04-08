@@ -535,7 +535,7 @@ impl LineFormat {
 
             let mut parts = checksum.splitn(2, |&b| b == b'=');
             let main = parts.next().unwrap(); // Always exists since checksum isn't empty
-            let padding = parts.next().unwrap_or(&b""[..]); // Empty if no '='
+            let padding = parts.next().unwrap_or_default(); // Empty if no '='
 
             main.iter()
                 .all(|&b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/')

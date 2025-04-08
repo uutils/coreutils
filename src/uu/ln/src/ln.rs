@@ -59,7 +59,7 @@ enum LnError {
     #[error("missing destination file operand after {}", _0.quote())]
     MissingDestination(PathBuf),
 
-    #[error("extra operand {}\nTry '{} --help' for more information.", 
+    #[error("extra operand {}\nTry '{} --help' for more information.",
     format!("{_0:?}").trim_matches('"'), _1)]
     ExtraOperand(OsString, String),
 }
