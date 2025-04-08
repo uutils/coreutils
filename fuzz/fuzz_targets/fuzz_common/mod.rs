@@ -331,9 +331,9 @@ pub fn compare_result(
 
     if rust_result.stdout.trim() != gnu_result.stdout.trim() {
         discrepancies.push("stdout differs");
-        println!("Rust stdout:",);
+        println!("Rust stdout:");
         print_or_empty(rust_result.stdout.as_str());
-        println!("GNU stdout:",);
+        println!("GNU stdout:");
         print_or_empty(gnu_result.stdout.as_ref());
         print_diff(&rust_result.stdout, &gnu_result.stdout);
         should_panic = true;
@@ -341,9 +341,9 @@ pub fn compare_result(
 
     if rust_result.stderr.trim() != gnu_result.stderr.trim() {
         discrepancies.push("stderr differs");
-        println!("Rust stderr:",);
+        println!("Rust stderr:");
         print_or_empty(rust_result.stderr.as_str());
-        println!("GNU stderr:",);
+        println!("GNU stderr:");
         print_or_empty(gnu_result.stderr.as_str());
         print_diff(&rust_result.stderr, &gnu_result.stderr);
         if fail_on_stderr_diff {

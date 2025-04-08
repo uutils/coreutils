@@ -57,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             _ => {
                 return Err(UUsageError::new(
                     1,
-                    format!("extra operand {}", name_args[2].quote(),),
+                    format!("extra operand {}", name_args[2].quote()),
                 ));
             }
         }

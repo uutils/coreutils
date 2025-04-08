@@ -4699,7 +4699,7 @@ mod same_file {
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4714,9 +4714,9 @@ mod same_file {
             .args(&["--rem", FILE_NAME, SYMLINK_NAME])
             .succeeds();
         assert!(at.file_exists(SYMLINK_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -4734,9 +4734,9 @@ mod same_file {
             assert!(at.symlink_exists(backup));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
             assert!(at.file_exists(SYMLINK_NAME));
-            assert_eq!(at.read(SYMLINK_NAME), CONTENTS,);
+            assert_eq!(at.read(SYMLINK_NAME), CONTENTS);
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4755,7 +4755,7 @@ mod same_file {
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4772,7 +4772,7 @@ mod same_file {
                 .succeeds();
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(SYMLINK_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4792,7 +4792,7 @@ mod same_file {
             assert!(at.file_exists(SYMLINK_NAME));
             assert!(at.symlink_exists(backup));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4810,7 +4810,7 @@ mod same_file {
         assert!(at.file_exists(FILE_NAME));
         assert!(at.symlink_exists(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -4826,7 +4826,7 @@ mod same_file {
         assert!(at.file_exists(FILE_NAME));
         assert!(at.symlink_exists(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
     // the following tests tries to copy a symlink to the file that symlink points to with
     // various options
@@ -4845,7 +4845,7 @@ mod same_file {
             assert!(at.file_exists(FILE_NAME));
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4864,7 +4864,7 @@ mod same_file {
             assert!(at.file_exists(FILE_NAME));
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
     #[test]
@@ -4884,7 +4884,7 @@ mod same_file {
             // this doesn't makes sense but this is how gnu does it
             assert_eq!(FILE_NAME, at.resolve_link(FILE_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-            assert_eq!(at.read(backup), CONTENTS,);
+            assert_eq!(at.read(backup), CONTENTS);
         }
     }
 
@@ -4902,7 +4902,7 @@ mod same_file {
             assert!(at.file_exists(FILE_NAME));
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4921,7 +4921,7 @@ mod same_file {
             assert!(at.file_exists(FILE_NAME));
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4938,7 +4938,7 @@ mod same_file {
                 .fails()
                 .stderr_contains("'foo' and 'foo' are the same file");
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
     #[test]
@@ -4953,7 +4953,7 @@ mod same_file {
                 .fails()
                 .stderr_contains("'foo' and 'foo' are the same file");
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4970,8 +4970,8 @@ mod same_file {
                 .succeeds();
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
-            assert_eq!(at.read(backup), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
+            assert_eq!(at.read(backup), CONTENTS);
         }
     }
 
@@ -4988,7 +4988,7 @@ mod same_file {
                 .succeeds();
             assert!(at.file_exists(FILE_NAME));
             assert!(!at.file_exists(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5005,8 +5005,8 @@ mod same_file {
                 .succeeds();
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
-            assert_eq!(at.read(backup), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
+            assert_eq!(at.read(backup), CONTENTS);
         }
     }
 
@@ -5022,7 +5022,7 @@ mod same_file {
                 .fails()
                 .stderr_contains("'foo' and 'foo' are the same file");
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5040,7 +5040,7 @@ mod same_file {
             at.symlink_file(FILE_NAME, symlink2);
             scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(symlink1));
             assert_eq!(FILE_NAME, at.resolve_link(symlink2));
         }
@@ -5061,7 +5061,7 @@ mod same_file {
             .fails()
             .stderr_contains("'sl1' and 'sl2' are the same file");
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert_eq!(FILE_NAME, at.resolve_link(symlink2));
     }
@@ -5077,10 +5077,10 @@ mod same_file {
         at.symlink_file(FILE_NAME, symlink2);
         scene.ucmd().args(&["--rem", symlink1, symlink2]).succeeds();
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert!(at.file_exists(symlink2));
-        assert_eq!(at.read(symlink2), CONTENTS,);
+        assert_eq!(at.read(symlink2), CONTENTS);
     }
 
     #[test]
@@ -5096,10 +5096,10 @@ mod same_file {
             at.symlink_file(FILE_NAME, symlink2);
             scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(symlink1));
             assert!(at.file_exists(symlink2));
-            assert_eq!(at.read(symlink2), CONTENTS,);
+            assert_eq!(at.read(symlink2), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(backup));
         }
     }
@@ -5117,7 +5117,7 @@ mod same_file {
             at.symlink_file(FILE_NAME, symlink2);
             scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(symlink1));
             assert_eq!(FILE_NAME, at.resolve_link(symlink2));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
@@ -5138,7 +5138,7 @@ mod same_file {
             .fails()
             .stderr_contains("cannot create hard link 'sl2' to 'sl1'");
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert_eq!(FILE_NAME, at.resolve_link(symlink2));
     }
@@ -5154,10 +5154,10 @@ mod same_file {
         at.symlink_file(FILE_NAME, symlink2);
         scene.ucmd().args(&["-fl", symlink1, symlink2]).succeeds();
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert!(at.file_exists(symlink2));
-        assert_eq!(at.read(symlink2), CONTENTS,);
+        assert_eq!(at.read(symlink2), CONTENTS);
     }
 
     #[test]
@@ -5173,10 +5173,10 @@ mod same_file {
             at.symlink_file(FILE_NAME, symlink2);
             scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(symlink1));
             assert!(at.file_exists(symlink2));
-            assert_eq!(at.read(symlink2), CONTENTS,);
+            assert_eq!(at.read(symlink2), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(backup));
         }
     }
@@ -5196,7 +5196,7 @@ mod same_file {
             .fails()
             .stderr_contains("cannot create symlink 'sl2' to 'sl1'");
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert_eq!(FILE_NAME, at.resolve_link(symlink2));
     }
@@ -5212,7 +5212,7 @@ mod same_file {
         at.symlink_file(FILE_NAME, symlink2);
         scene.ucmd().args(&["-sf", symlink1, symlink2]).succeeds();
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert_eq!(symlink1, at.resolve_link(symlink2));
     }
@@ -5235,7 +5235,7 @@ mod same_file {
                 .stderr_contains("'foo' and 'hardlink' are the same file");
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(hardlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5252,7 +5252,7 @@ mod same_file {
             .succeeds();
         assert!(at.file_exists(FILE_NAME));
         assert!(at.file_exists(hardlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5268,7 +5268,7 @@ mod same_file {
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(hardlink));
             assert!(at.file_exists(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5283,7 +5283,7 @@ mod same_file {
             scene.ucmd().args(&[option, FILE_NAME, hardlink]).succeeds();
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(hardlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5302,7 +5302,7 @@ mod same_file {
                 .stderr_contains("'foo' and 'hardlink' are the same file");
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(hardlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5326,7 +5326,7 @@ mod same_file {
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5347,7 +5347,7 @@ mod same_file {
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5368,7 +5368,7 @@ mod same_file {
             assert!(at.symlink_exists(hardlink_to_symlink));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5389,8 +5389,8 @@ mod same_file {
         assert!(!at.symlink_exists(SYMLINK_NAME));
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
-        assert_eq!(at.read(SYMLINK_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
+        assert_eq!(at.read(SYMLINK_NAME), CONTENTS);
     }
 
     #[test]
@@ -5414,8 +5414,8 @@ mod same_file {
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
             assert!(at.symlink_exists(backup));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
-            assert_eq!(at.read(SYMLINK_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
+            assert_eq!(at.read(SYMLINK_NAME), CONTENTS);
         }
     }
 
@@ -5440,7 +5440,7 @@ mod same_file {
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
             assert!(at.symlink_exists(backup));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5462,7 +5462,7 @@ mod same_file {
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5483,7 +5483,7 @@ mod same_file {
             assert!(at.symlink_exists(hardlink_to_symlink));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5504,7 +5504,7 @@ mod same_file {
         assert!(!at.symlink_exists(SYMLINK_NAME));
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5528,7 +5528,7 @@ mod same_file {
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
             assert!(at.symlink_exists(backup));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5550,7 +5550,7 @@ mod same_file {
             assert!(at.symlink_exists(hardlink_to_symlink));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5572,7 +5572,7 @@ mod same_file {
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5592,7 +5592,7 @@ mod same_file {
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(hardlink_to_symlink, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 }
 

@@ -157,7 +157,7 @@ fn test_all_top_level_args_no_leading_dashes() {
     );
 
     // no conv flags apply to output
-    assert_eq!(settings.oconv, OConvFlags::default(),);
+    assert_eq!(settings.oconv, OConvFlags::default());
 
     // iconv=count_bytes,skip_bytes
     assert_eq!(
