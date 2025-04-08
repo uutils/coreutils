@@ -136,7 +136,7 @@ fn tail_file(
                 msg
             );
         }
-        if !(observer.follow_name_retry()) {
+        if !observer.follow_name_retry() {
             // skip directory if not retry
             return Ok(());
         }

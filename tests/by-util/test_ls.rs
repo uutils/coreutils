@@ -1733,7 +1733,9 @@ fn test_ls_group_directories_first() {
         .succeeds();
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
-        (dirnames.into_iter().rev())
+        dirnames
+            .into_iter()
+            .rev()
             .chain(dots.into_iter().rev())
             .chain(filenames.into_iter().rev())
             .chain([""].into_iter())
