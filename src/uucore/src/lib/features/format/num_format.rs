@@ -1123,7 +1123,7 @@ mod test {
         U: Formatter<T>,
     {
         let mut v = Vec::<u8>::new();
-        format.fmt(&mut v, n as T).unwrap();
+        format.fmt(&mut v, n).unwrap();
         String::from_utf8_lossy(&v).to_string()
     }
 

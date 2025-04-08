@@ -47,10 +47,7 @@ impl SplitName {
             .transpose()?
             .unwrap_or(2);
 
-        let format_string = match format_opt {
-            Some(f) => f,
-            None => format!("%0{n_digits}u"),
-        };
+        let format_string = format_opt.unwrap_or_else(|| format!("%0{n_digits}u"));
 
         let format = match Format::<UnsignedInt, u64>::parse(format_string) {
             Ok(format) => Ok(format),

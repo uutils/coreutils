@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use half::f16;
-use std::f32;
-use std::f64;
 use std::num::FpCategory;
 
 use crate::formatteriteminfo::{FormatWriter, FormatterItemInfo};

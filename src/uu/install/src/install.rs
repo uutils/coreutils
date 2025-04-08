@@ -124,10 +124,7 @@ pub enum MainFunction {
 impl Behavior {
     /// Determine the mode for chmod after copy.
     pub fn mode(&self) -> u32 {
-        match self.specified_mode {
-            Some(x) => x,
-            None => DEFAULT_MODE,
-        }
+        self.specified_mode.unwrap_or(DEFAULT_MODE)
     }
 }
 
