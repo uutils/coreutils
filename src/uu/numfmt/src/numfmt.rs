@@ -481,8 +481,9 @@ mod tests {
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Fail;
         handle_buffer(BufReader::new(&input_value[..]), &options).unwrap();
-        assert!(
-            get_exit_code() == 2,
+        assert_eq!(
+            get_exit_code(),
+            2,
             "should set exit code 2 for formatting errors"
         );
     }
@@ -502,8 +503,9 @@ mod tests {
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Fail;
         handle_args(input_value, &options).unwrap();
-        assert!(
-            get_exit_code() == 2,
+        assert_eq!(
+            get_exit_code(),
+            2,
             "should set exit code 2 for formatting errors"
         );
     }

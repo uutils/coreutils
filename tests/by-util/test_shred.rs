@@ -39,7 +39,7 @@ fn test_shred() {
     // File exists
     assert!(at.file_exists(file));
     // File is obfuscated
-    assert!(at.read_bytes(file) != file_original_content.as_bytes());
+    assert_ne!(at.read_bytes(file), file_original_content.as_bytes());
 }
 
 #[test]
