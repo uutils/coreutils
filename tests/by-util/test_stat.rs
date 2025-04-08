@@ -248,10 +248,7 @@ fn test_timestamp_format() {
         assert_eq!(
             result,
             format!("{expected}\n"),
-            "Format '{}' failed.\nExpected: '{}'\nGot: '{}'",
-            format_str,
-            expected,
-            result,
+            "Format '{format_str}' failed.\nExpected: '{expected}'\nGot: '{result}'",
         );
     }
 }

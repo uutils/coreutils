@@ -130,10 +130,10 @@ fuzz_target!(|_data: &[u8]| {
         if let Ok(checksum_file_path) =
             generate_checksum_file(algo, &file_path, &selected_digest_opts)
         {
-            print_test_begin(format!("cksum {:?}", args));
+            print_test_begin(format!("cksum {args:?}"));
 
             if let Ok(content) = fs::read_to_string(&checksum_file_path) {
-                println!("File content ({})", checksum_file_path);
+                println!("File content ({checksum_file_path})");
                 print_or_empty(&content);
             } else {
                 eprintln!("Error reading the checksum file.");

@@ -105,8 +105,7 @@ fn test_invalid_buffer_size() {
                 .arg("ext_sort.txt")
                 .fails_with_code(2)
                 .stderr_only(format!(
-                    "sort: --buffer-size argument '{}' too large\n",
-                    buffer_size
+                    "sort: --buffer-size argument '{buffer_size}' too large\n"
                 ));
         }
     }

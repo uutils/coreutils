@@ -51,7 +51,7 @@ macro_rules! fixture_path {
 macro_rules! assert_fixture_exists {
     ($fname:expr) => {{
         let fpath = fixture_path!($fname);
-        assert!(fpath.exists(), "Fixture missing: {:?}", fpath);
+        assert!(fpath.exists(), "Fixture missing: {fpath:?}");
     }};
 }
 
@@ -59,7 +59,7 @@ macro_rules! assert_fixture_exists {
 macro_rules! assert_fixture_not_exists {
     ($fname:expr) => {{
         let fpath = PathBuf::from(format!("./fixtures/dd/{}", $fname));
-        assert!(!fpath.exists(), "Fixture present: {:?}", fpath);
+        assert!(!fpath.exists(), "Fixture present: {fpath:?}");
     }};
 }
 
@@ -400,7 +400,7 @@ fn test_null_fullblock() {
 #[test]
 fn test_fullblock() {
     let tname = "fullblock-from-urand";
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
     let exp_stats = vec![
         "1+0 records in\n",
         "1+0 records out\n",
@@ -458,11 +458,11 @@ fn test_zeros_to_stdout() {
 fn test_oversized_bs_32_bit() {
     for bs_param in ["bs", "ibs", "obs", "cbs"] {
         new_ucmd!()
-            .args(&[format!("{}=5GB", bs_param)])
+            .args(&[format!("{bs_param}=5GB")])
             .fails()
             .no_stdout()
             .code_is(1)
-            .stderr_is(format!("dd: {}=N cannot fit into memory\n", bs_param));
+            .stderr_is(format!("dd: {bs_param}=N cannot fit into memory\n"));
     }
 }
 
@@ -493,7 +493,7 @@ fn test_ascii_10k_to_stdout() {
 fn test_zeros_to_file() {
     let tname = "zero-256k";
     let test_fn = format!("{tname}.txt");
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
@@ -511,7 +511,7 @@ fn test_zeros_to_file() {
 fn test_to_file_with_ibs_obs() {
     let tname = "zero-256k";
     let test_fn = format!("{tname}.txt");
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
@@ -535,7 +535,7 @@ fn test_to_file_with_ibs_obs() {
 fn test_ascii_521k_to_file() {
     let tname = "ascii-521k";
     let input = build_ascii_block(512 * 1024);
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", &of!(tmp_fn)])
@@ -560,7 +560,7 @@ fn test_ascii_521k_to_file() {
 #[test]
 fn test_ascii_5_gibi_to_file() {
     let tname = "ascii-5G";
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&[
@@ -597,7 +597,7 @@ fn test_self_transfer() {
 fn test_unicode_filenames() {
     let tname = "😎💚🦊";
     let test_fn = format!("{tname}.txt");
-    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let tmp_fn = format!("TESTFILE-{tname}.tmp");
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();

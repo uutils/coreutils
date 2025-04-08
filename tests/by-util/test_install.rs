@@ -1670,7 +1670,7 @@ fn test_target_file_ends_with_slash() {
     let source = "source_file";
     let target_dir = "dir";
     let target_file = "dir/target_file";
-    let target_file_slash = format!("{}/", target_file);
+    let target_file_slash = format!("{target_file}/");
 
     at.touch(source);
     at.mkdir(target_dir);

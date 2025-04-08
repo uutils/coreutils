@@ -216,8 +216,8 @@ impl CmdResult {
         assert!(
             predicate(&self.stdout),
             "Predicate for stdout as `bytes` evaluated to false.\nstdout='{:?}'\nstderr='{:?}'\n",
-            &self.stdout,
-            &self.stderr
+            self.stdout,
+            self.stderr
         );
         self
     }
@@ -246,8 +246,8 @@ impl CmdResult {
         assert!(
             predicate(&self.stderr),
             "Predicate for stderr as `bytes` evaluated to false.\nstdout='{:?}'\nstderr='{:?}'\n",
-            &self.stdout,
-            &self.stderr
+            self.stdout,
+            self.stderr
         );
         self
     }
@@ -306,8 +306,7 @@ impl CmdResult {
     pub fn signal_is(&self, value: i32) -> &Self {
         let actual = self.signal().unwrap_or_else(|| {
             panic!(
-                "Expected process to be terminated by the '{}' signal, but exit status is: '{}'",
-                value,
+                "Expected process to be terminated by the '{value}' signal, but exit status is: '{}'",
                 self.try_exit_status()
                     .map_or("Not available".to_string(), |e| e.to_string())
             )
@@ -337,8 +336,7 @@ impl CmdResult {
 
         let actual = self.signal().unwrap_or_else(|| {
             panic!(
-                "Expected process to be terminated by the '{}' signal, but exit status is: '{}'",
-                name,
+                "Expected process to be terminated by the '{name}' signal, but exit status is: '{}'",
                 self.try_exit_status()
                     .map_or("Not available".to_string(), |e| e.to_string())
             )
@@ -527,9 +525,8 @@ impl CmdResult {
     pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: &[T]) -> &Self {
         assert!(
             expected.iter().any(|msg| self.stdout_str() == msg.as_ref()),
-            "stdout was {}\nExpected any of {:#?}",
+            "stdout was {}\nExpected any of {expected:#?}",
             self.stdout_str(),
-            expected
         );
         self
     }
@@ -1059,7 +1056,7 @@ impl AtPath {
     pub fn make_file(&self, name: &str) -> File {
         match File::create(self.plus(name)) {
             Ok(f) => f,
-            Err(e) => panic!("{}", e),
+            Err(e) => panic!("{e}"),
         }
     }
 
@@ -1121,7 +1118,7 @@ impl AtPath {
         let original = original.replace('/', MAIN_SEPARATOR_STR);
         log_info(
             "symlink",
-            format!("{},{}", &original, &self.plus_as_string(link)),
+            format!("{original},{}", self.plus_as_string(link)),
         );
         symlink_file(original, self.plus(link)).unwrap();
     }
@@ -1143,7 +1140,7 @@ impl AtPath {
         let original = original.replace('/', MAIN_SEPARATOR_STR);
         log_info(
             "symlink",
-            format!("{},{}", &original, &self.plus_as_string(link)),
+            format!("{original},{}", self.plus_as_string(link)),
         );
         symlink_dir(original, self.plus(link)).unwrap();
     }
@@ -1176,14 +1173,14 @@ impl AtPath {
     pub fn symlink_metadata(&self, path: &str) -> fs::Metadata {
         match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m,
-            Err(e) => panic!("{}", e),
+            Err(e) => panic!("{e}"),
         }
     }
 
     pub fn metadata(&self, path: &str) -> fs::Metadata {
         match fs::metadata(self.plus(path)) {
             Ok(m) => m,
-            Err(e) => panic!("{}", e),
+            Err(e) => panic!("{e}"),
         }
     }
 
@@ -1522,8 +1519,7 @@ impl UCommand {
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut Self {
         assert!(
             self.bytes_into_stdin.is_none(),
-            "{}",
-            MULTIPLE_STDIN_MEANINGLESS
+            "{MULTIPLE_STDIN_MEANINGLESS}",
         );
         self.set_stdin(Stdio::piped());
         self.bytes_into_stdin = Some(input.into());
@@ -1894,7 +1890,7 @@ impl UCommand {
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> UChild {
-        assert!(!self.has_run, "{}", ALREADY_RUN);
+        assert!(!self.has_run, "{ALREADY_RUN}");
         self.has_run = true;
 
         let (mut command, captured_stdout, captured_stderr, stdin_pty) = self.build();
@@ -2162,9 +2158,8 @@ impl<'a> UChildAssertion<'a> {
     pub fn is_alive(&mut self) -> &mut Self {
         match self.uchild.raw.try_wait() {
             Ok(Some(status)) => panic!(
-                "Assertion failed. Expected '{}' to be running but exited with status={}.\nstdout: {}\nstderr: {}",
+                "Assertion failed. Expected '{}' to be running but exited with status={status}.\nstdout: {}\nstderr: {}",
                 uucore::util_name(),
-                status,
                 self.uchild.stdout_all(),
                 self.uchild.stderr_all()
             ),

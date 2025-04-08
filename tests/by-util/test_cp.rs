@@ -2040,31 +2040,31 @@ fn test_cp_deref_folder_to_folder() {
         // No action as this test is disabled but kept in case we want to
         // try to make it work in the future.
         let a = Command::new("cmd").args(&["/C", "dir"]).output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", &at.as_string()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_FROM_FOLDER);
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_TO_FOLDER_NEW);
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
     }
 
     let path_to_new_symlink = at
@@ -2138,31 +2138,31 @@ fn test_cp_no_deref_folder_to_folder() {
         // No action as this test is disabled but kept in case we want to
         // try to make it work in the future.
         let a = Command::new("cmd").args(&["/C", "dir"]).output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", &at.as_string()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_FROM_FOLDER);
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_TO_FOLDER_NEW);
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
     }
 
     let path_to_new_symlink = at
@@ -2552,7 +2552,7 @@ fn test_closes_file_descriptors() {
     // For debugging purposes:
     for f in me.fd().unwrap() {
         let fd = f.unwrap();
-        println!("{:?} {:?}", fd, fd.mode());
+        println!("{fd:?} {:?}", fd.mode());
     }
 
     new_ucmd!()
