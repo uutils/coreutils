@@ -353,7 +353,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
         Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
-            show_error!("Invalid mode string: {}", err);
+            show_error!("Invalid mode string: {err}");
             1
         })?)
     } else {
@@ -753,9 +753,8 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     if let Err(e) = fs::remove_file(to) {
         if e.kind() != std::io::ErrorKind::NotFound {
             show_error!(
-                "Failed to remove existing file {}. Error: {:?}",
+                "Failed to remove existing file {}. Error: {e:?}",
                 to.display(),
-                e
             );
         }
     }
@@ -871,7 +870,7 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     match set_file_times(to, accessed_time, modified_time) {
         Ok(_) => Ok(()),
         Err(e) => {
-            show_error!("{}", e);
+            show_error!("{e}");
             Ok(())
         }
     }

@@ -123,7 +123,7 @@ fn tail_file(
         header_printer.print_input(input);
         let err_msg = "Is a directory".to_string();
 
-        show_error!("error reading '{}': {}", input.display_name, err_msg);
+        show_error!("error reading '{}': {err_msg}", input.display_name);
         if settings.follow.is_some() {
             let msg = if settings.retry {
                 ""
@@ -131,9 +131,8 @@ fn tail_file(
                 "; giving up on this name"
             };
             show_error!(
-                "{}: cannot follow end of this type of file{}",
+                "{}: cannot follow end of this type of file{msg}",
                 input.display_name,
-                msg
             );
         }
         if !observer.follow_name_retry() {

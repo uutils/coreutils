@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(inp_width) => inp_width.parse::<usize>().map_err(|e| {
             USimpleError::new(
                 1,
-                format!("illegal width value ({}): {}", inp_width.quote(), e),
+                format!("illegal width value ({}): {e}", inp_width.quote()),
             )
         })?,
         None => 80,

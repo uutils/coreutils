@@ -650,7 +650,7 @@ impl<'a> State<'a> {
                 if input.check_order == CheckOrder::Enabled {
                     return Err(JoinError::UnorderedInput(err_msg));
                 }
-                eprintln!("{}: {}", uucore::execution_phrase(), err_msg);
+                eprintln!("{}: {err_msg}", uucore::execution_phrase());
                 self.has_failed = true;
             }
 

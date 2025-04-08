@@ -161,7 +161,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     "?"
                 }
             );
-            if !prompt_yes!("{}", msg) {
+            if !prompt_yes!("{msg}") {
                 return Ok(());
             }
         }
@@ -500,10 +500,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
     } else if options.recursive {
-        show_error!(
-            "it is dangerous to operate recursively on '{}'",
-            MAIN_SEPARATOR
-        );
+        show_error!("it is dangerous to operate recursively on '{MAIN_SEPARATOR}'");
         show_error!("use --no-preserve-root to override this failsafe");
         had_err = true;
     } else {
@@ -561,7 +558,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                     // GNU compatibility (rm/fail-eacces.sh)
                     show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
                 } else {
-                    show_error!("cannot remove {}: {}", path.quote(), e);
+                    show_error!("cannot remove {}: {e}", path.quote());
                 }
                 return true;
             }

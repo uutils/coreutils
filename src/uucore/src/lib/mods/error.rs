@@ -595,9 +595,9 @@ impl From<nix::Error> for Box<dyn UError> {
 /// let other_uio_err = uio_error!(io_err, "Error code: {}", 2);
 ///
 /// // prints "fix me please!: Permission denied"
-/// println!("{}", uio_err);
+/// println!("{uio_err}");
 /// // prints "Error code: 2: Permission denied"
-/// println!("{}", other_uio_err);
+/// println!("{other_uio_err}");
 /// ```
 ///
 /// The [`std::fmt::Display`] impl of [`UIoError`] will then ensure that an
@@ -619,7 +619,7 @@ impl From<nix::Error> for Box<dyn UError> {
 /// let other_uio_err = uio_error!(io_err, "");
 ///
 /// // prints: ": Permission denied"
-/// println!("{}", other_uio_err);
+/// println!("{other_uio_err}");
 /// ```
 //#[macro_use]
 #[macro_export]

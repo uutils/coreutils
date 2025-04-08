@@ -68,7 +68,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
 
     for path in name_args {
-        print!("{}{}", basename(path, &suffix), line_ending);
+        print!("{}{line_ending}", basename(path, &suffix));
     }
 
     Ok(())

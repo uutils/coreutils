@@ -196,7 +196,7 @@ fn unblock_sigchld() {
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     if verbose {
         let s = signal_name_by_value(signal).unwrap();
-        show_error!("sending signal {} to command {}", s, cmd.quote());
+        show_error!("sending signal {s} to command {}", cmd.quote());
     }
 }
 

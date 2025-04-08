@@ -466,7 +466,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let mut exclude_patterns = Vec::new();
     for f in excludes_iterator.chain(exclude_from_iterator) {
         if matches.get_flag(options::VERBOSE) {
-            println!("adding {:?} to the exclude list ", &f);
+            println!("adding {f:?} to the exclude list ");
         }
         match parse_glob::from_str(&f) {
             Ok(glob) => exclude_patterns.push(glob),
@@ -559,7 +559,7 @@ impl StatPrinter {
             let secs = get_time_secs(time, stat)?;
             let tm = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs));
             let time_str = tm.format(&self.time_format).to_string();
-            print!("{}\t{}\t", self.convert_size(size), time_str);
+            print!("{}\t{time_str}\t", self.convert_size(size));
         } else {
             print!("{}\t", self.convert_size(size));
         }
@@ -1095,12 +1095,12 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{} argument {}", option, s.quote())
+            format!("invalid suffix in --{option} argument {}", s.quote())
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{} argument {}", option, s.quote())
+            format!("invalid --{option} argument {}", s.quote())
         }
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
     }
 }
 

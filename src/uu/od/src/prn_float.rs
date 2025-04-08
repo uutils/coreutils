@@ -79,11 +79,11 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
     }
 
     if l >= 0 && l <= (precision as i32 - 1) {
-        format!("{:width$.dec$}", f, dec = (precision - 1) - l as usize)
+        format!("{f:width$.dec$}", dec = (precision - 1) - l as usize)
     } else if l == -1 {
         format!("{f:width$.precision$}")
     } else {
-        format!("{:width$.dec$e}", f, dec = precision - 1)
+        format!("{f:width$.dec$e}", dec = precision - 1)
     }
 }
 

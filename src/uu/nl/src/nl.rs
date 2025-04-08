@@ -372,12 +372,11 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                     return Err(USimpleError::new(1, "line number overflow"));
                 };
                 println!(
-                    "{}{}{}",
+                    "{}{}{line}",
                     settings
                         .number_format
                         .format(line_number, settings.number_width),
                     settings.number_separator,
-                    line
                 );
                 // update line number for the potential next line
                 match line_number.checked_add(settings.line_increment) {

@@ -675,8 +675,8 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         // If we don't add "19" or "20", we have insufficient information to parse
         13 => (YYYYMMDDHHMM_DOT_SS, prepend_century(s)?),
         10 => (YYYYMMDDHHMM, prepend_century(s)?),
-        11 => (YYYYMMDDHHMM_DOT_SS, format!("{}{}", current_year(), s)),
-        8 => (YYYYMMDDHHMM, format!("{}{}", current_year(), s)),
+        11 => (YYYYMMDDHHMM_DOT_SS, format!("{}{s}", current_year())),
+        8 => (YYYYMMDDHHMM, format!("{}{s}", current_year())),
         _ => {
             return Err(USimpleError::new(
                 1,

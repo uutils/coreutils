@@ -591,9 +591,8 @@ impl<'a> Pager<'a> {
 
         write!(
             stdout,
-            "\r{}{}{}",
+            "\r{}{banner}{}",
             Attribute::Reverse,
-            banner,
             Attribute::Reset
         )
         .unwrap();

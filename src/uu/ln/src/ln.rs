@@ -93,8 +93,7 @@ static ARG_FILES: &str = "files";
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = format!(
-        "{}\n\n{}",
-        AFTER_HELP,
+        "{AFTER_HELP}\n\n{}",
         backup_control::BACKUP_CONTROL_LONG_HELP
     );
 
@@ -299,7 +298,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             // We need to clean the target
             if target_dir.is_file() {
                 if let Err(e) = fs::remove_file(target_dir) {
-                    show_error!("Could not update {}: {}", target_dir.quote(), e);
+                    show_error!("Could not update {}: {e}", target_dir.quote());
                 };
             }
             if target_dir.is_dir() {
@@ -307,7 +306,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 // considered as a dir
                 // See test_ln::test_symlink_no_deref_dir
                 if let Err(e) = fs::remove_dir(target_dir) {
-                    show_error!("Could not update {}: {}", target_dir.quote(), e);
+                    show_error!("Could not update {}: {e}", target_dir.quote());
                 };
             }
             target_dir.to_path_buf()
@@ -340,7 +339,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             );
             all_successful = false;
         } else if let Err(e) = link(srcpath, &targetpath, settings) {
-            show_error!("{}", e);
+            show_error!("{e}");
             all_successful = false;
         }
 

@@ -63,7 +63,7 @@ fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UR
                 show!(NumfmtError::FormattingError(error_message));
             }
             InvalidModes::Warn => {
-                show_error!("{}", error_message);
+                show_error!("{error_message}");
             }
             InvalidModes::Ignore => {}
         };

@@ -1053,11 +1053,10 @@ fn process_checksum_file(
                         Cow::Borrowed("Unknown algorithm")
                     };
                     eprintln!(
-                        "{}: {}: {}: improperly formatted {} checksum line",
+                        "{}: {}: {}: improperly formatted {algo} checksum line",
                         util_name(),
-                        &filename_input.maybe_quote(),
+                        filename_input.maybe_quote(),
                         i + 1,
-                        algo
                     );
                 }
             }

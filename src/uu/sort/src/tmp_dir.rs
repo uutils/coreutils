@@ -58,7 +58,7 @@ impl TmpDirWrapper {
             // and the program doesn't terminate before the handler has finished
             let _lock = lock.lock().unwrap();
             if let Err(e) = remove_tmp_dir(&path) {
-                show_error!("failed to delete temporary directory: {}", e);
+                show_error!("failed to delete temporary directory: {e}");
             }
             std::process::exit(2)
         })

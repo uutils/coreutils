@@ -674,7 +674,7 @@ impl Stater {
             if let Some(&next_char) = chars.get(*i + 1) {
                 if (chars[*i] == 'H' || chars[*i] == 'L') && (next_char == 'd' || next_char == 'r')
                 {
-                    let specifier = format!("{}{}", chars[*i], next_char);
+                    let specifier = format!("{}{next_char}", chars[*i]);
                     *i += 1;
                     return Ok(Token::Directive {
                         flag,
@@ -747,7 +747,7 @@ impl Stater {
                 }
             }
             other => {
-                show_warning!("unrecognized escape '\\{}'", other);
+                show_warning!("unrecognized escape '\\{other}'");
                 Token::Byte(other as u8)
             }
         }
@@ -1039,9 +1039,8 @@ impl Stater {
                 }
                 Err(e) => {
                     show_error!(
-                        "cannot read file system information for {}: {}",
+                        "cannot read file system information for {}: {e}",
                         display_name.quote(),
-                        e
                     );
                     return 1;
                 }
@@ -1077,7 +1076,7 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_error!("cannot stat {}: {}", display_name.quote(), e);
+                    show_error!("cannot stat {}: {e}", display_name.quote());
                     return 1;
                 }
             }

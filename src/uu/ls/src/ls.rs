@@ -665,9 +665,8 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
             match match_quoting_style_name(style.as_str(), show_control) {
                 Some(qs) => return qs,
                 None => eprintln!(
-                    "{}: Ignoring invalid value of environment variable QUOTING_STYLE: '{}'",
+                    "{}: Ignoring invalid value of environment variable QUOTING_STYLE: '{style}'",
                     std::env::args().next().unwrap_or_else(|| "ls".to_string()),
-                    style
                 ),
             }
         }

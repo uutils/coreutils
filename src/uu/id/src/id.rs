@@ -181,7 +181,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             #[cfg(all(any(target_os = "linux", target_os = "android"), feature = "selinux"))]
             if let Ok(context) = selinux::SecurityContext::current(false) {
                 let bytes = context.as_bytes();
-                print!("{}{}", String::from_utf8_lossy(bytes), line_ending);
+                print!("{}{line_ending}", String::from_utf8_lossy(bytes));
             } else {
                 // print error because `cflag` was explicitly requested
                 return Err(USimpleError::new(1, "can't get process context"));
@@ -246,7 +246,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 "{}",
                 if state.nflag {
                     entries::gid2grp(gid).unwrap_or_else(|_| {
-                        show_error!("cannot find name for group ID {}", gid);
+                        show_error!("cannot find name for group ID {gid}");
                         set_exit_code(1);
                         gid.to_string()
                     })
@@ -261,7 +261,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 "{}",
                 if state.nflag {
                     entries::uid2usr(uid).unwrap_or_else(|_| {
-                        show_error!("cannot find name for user ID {}", uid);
+                        show_error!("cannot find name for user ID {uid}");
                         set_exit_code(1);
                         uid.to_string()
                     })
@@ -286,7 +286,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .map(|&id| {
                         if state.nflag {
                             entries::gid2grp(id).unwrap_or_else(|_| {
-                                show_error!("cannot find name for group ID {}", id);
+                                show_error!("cannot find name for group ID {id}");
                                 set_exit_code(1);
                                 id.to_string()
                             })
@@ -557,39 +557,37 @@ fn id_print(state: &State, groups: &[u32]) {
     let egid = state.ids.as_ref().unwrap().egid;
 
     print!(
-        "uid={}({})",
-        uid,
+        "uid={uid}({})",
         entries::uid2usr(uid).unwrap_or_else(|_| {
-            show_error!("cannot find name for user ID {}", uid);
+            show_error!("cannot find name for user ID {uid}");
             set_exit_code(1);
             uid.to_string()
         })
     );
     print!(
-        " gid={}({})",
-        gid,
+        " gid={gid}({})",
         entries::gid2grp(gid).unwrap_or_else(|_| {
-            show_error!("cannot find name for group ID {}", gid);
+            show_error!("cannot find name for group ID {gid}");
             set_exit_code(1);
             gid.to_string()
         })
     );
     if !state.user_specified && (euid != uid) {
         print!(
-            " euid={}({})",
-            euid,
+            " euid={euid}({})",
             entries::uid2usr(euid).unwrap_or_else(|_| {
-                show_error!("cannot find name for user ID {}", euid);
+                show_error!("cannot find name for user ID {euid}");
                 set_exit_code(1);
                 euid.to_string()
             })
         );
     }
     if !state.user_specified && (egid != gid) {
+        // BUG?  printing egid={euid} ?
         print!(
             " egid={egid}({})",
             entries::gid2grp(egid).unwrap_or_else(|_| {
-                show_error!("cannot find name for group ID {}", egid);
+                show_error!("cannot find name for group ID {egid}");
                 set_exit_code(1);
                 egid.to_string()
             })
@@ -600,10 +598,9 @@ fn id_print(state: &State, groups: &[u32]) {
         groups
             .iter()
             .map(|&gr| format!(
-                "{}({})",
-                gr,
+                "{gr}({})",
                 entries::gid2grp(gr).unwrap_or_else(|_| {
-                    show_error!("cannot find name for group ID {}", gr);
+                    show_error!("cannot find name for group ID {gr}");
                     set_exit_code(1);
                     gr.to_string()
                 })

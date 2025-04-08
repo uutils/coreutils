@@ -154,7 +154,7 @@ macro_rules! bin {
             let code = $util::uumain(uucore::args_os());
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             if let Err(e) = std::io::stdout().flush() {
-                eprintln!("Error flushing stdout: {}", e);
+                eprintln!("Error flushing stdout: {e}");
             }
 
             std::process::exit(code);
@@ -383,7 +383,7 @@ pub fn read_os_string_lines<R: std::io::Read>(
 /// ```
 /// use uucore::prompt_yes;
 /// let file = "foo.rs";
-/// prompt_yes!("Do you want to delete '{}'?", file);
+/// prompt_yes!("Do you want to delete '{file}'?");
 /// ```
 /// will print something like below to `stderr` (with `util_name` substituted by the actual
 /// util name) and will wait for user input.

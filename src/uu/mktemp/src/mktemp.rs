@@ -473,7 +473,7 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
             Ok(path)
         }
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
             let s = path.display().to_string();
             Err(MkTempError::NotFound("directory".to_string(), s).into())
@@ -503,7 +503,7 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
             Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
         },
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
             let s = path.display().to_string();
             Err(MkTempError::NotFound("file".to_string(), s).into())
