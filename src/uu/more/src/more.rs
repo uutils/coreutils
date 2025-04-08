@@ -720,6 +720,7 @@ mod tests {
             self
         }
 
+        #[allow(clippy::wrong_self_convention)]
         fn from_line(mut self, from_line: usize) -> Self {
             self.options.from_line = from_line;
             self
