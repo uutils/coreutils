@@ -1440,8 +1440,8 @@ mod tests {
     fn bsize_test_primes() {
         let (n, m) = (7901, 7919);
         let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
+        assert_eq!(res % n, 0);
+        assert_eq!(res % m, 0);
 
         assert_eq!(res, n * m);
     }
@@ -1450,8 +1450,8 @@ mod tests {
     fn bsize_test_rel_prime_obs_greater() {
         let (n, m) = (7 * 5119, 13 * 5119);
         let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
+        assert_eq!(res % n, 0);
+        assert_eq!(res % m, 0);
 
         assert_eq!(res, 7 * 13 * 5119);
     }
@@ -1460,8 +1460,8 @@ mod tests {
     fn bsize_test_rel_prime_ibs_greater() {
         let (n, m) = (13 * 5119, 7 * 5119);
         let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
+        assert_eq!(res % n, 0);
+        assert_eq!(res % m, 0);
 
         assert_eq!(res, 7 * 13 * 5119);
     }
@@ -1470,8 +1470,8 @@ mod tests {
     fn bsize_test_3fac_rel_prime() {
         let (n, m) = (11 * 13 * 5119, 7 * 11 * 5119);
         let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
+        assert_eq!(res % n, 0);
+        assert_eq!(res % m, 0);
 
         assert_eq!(res, 7 * 11 * 13 * 5119);
     }
@@ -1480,8 +1480,8 @@ mod tests {
     fn bsize_test_ibs_greater() {
         let (n, m) = (512 * 1024, 256 * 1024);
         let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
+        assert_eq!(res % n, 0);
+        assert_eq!(res % m, 0);
 
         assert_eq!(res, n);
     }
@@ -1490,8 +1490,8 @@ mod tests {
     fn bsize_test_obs_greater() {
         let (n, m) = (256 * 1024, 512 * 1024);
         let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
+        assert_eq!(res % n, 0);
+        assert_eq!(res % m, 0);
 
         assert_eq!(res, m);
     }
@@ -1500,8 +1500,8 @@ mod tests {
     fn bsize_test_bs_eq() {
         let (n, m) = (1024, 1024);
         let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
+        assert_eq!(res % n, 0);
+        assert_eq!(res % m, 0);
 
         assert_eq!(res, m);
     }

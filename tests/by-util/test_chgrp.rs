@@ -389,8 +389,14 @@ fn test_traverse_symlinks() {
             .arg("dir3/file")
             .succeeds();
 
-        assert!(at.plus("dir2/file").metadata().unwrap().gid() == first_group.as_raw());
-        assert!(at.plus("dir3/file").metadata().unwrap().gid() == first_group.as_raw());
+        assert_eq!(
+            at.plus("dir2/file").metadata().unwrap().gid(),
+            first_group.as_raw()
+        );
+        assert_eq!(
+            at.plus("dir3/file").metadata().unwrap().gid(),
+            first_group.as_raw()
+        );
 
         ucmd.arg("-R")
             .args(args)

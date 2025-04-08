@@ -599,7 +599,7 @@ mod tests {
     #[test]
     fn test_gnu_compatibility() {
         let args = options("-n 1 -c 1 -n 5 -c kiB -vqvqv").unwrap(); // spell-checker:disable-line
-        assert!(args.mode == Mode::FirstBytes(1024));
+        assert_eq!(args.mode, Mode::FirstBytes(1024));
         assert!(args.verbose);
         assert_eq!(options("-5").unwrap().mode, Mode::FirstLines(5));
         assert_eq!(options("-2b").unwrap().mode, Mode::FirstBytes(1024));

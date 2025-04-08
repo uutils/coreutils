@@ -79,7 +79,7 @@ mod tests {
         });
         let result = copy_stream(&mut pipe_read, &mut dest_file).unwrap();
         thread.join().unwrap();
-        assert!(result == data.len() as u64);
+        assert_eq!(result, data.len() as u64);
 
         // We would have been at the end already, so seek again to the start.
         dest_file.seek(SeekFrom::Start(0)).unwrap();

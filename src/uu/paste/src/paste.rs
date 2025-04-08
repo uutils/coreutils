@@ -254,7 +254,7 @@ fn parse_delimiters(delimiters: &str) -> UResult<Box<[Box<[u8]>]>> {
 fn remove_trailing_line_ending_byte(line_ending_byte: u8, output: &mut Vec<u8>) {
     if let Some(&byte) = output.last() {
         if byte == line_ending_byte {
-            assert!(output.pop() == Some(line_ending_byte));
+            assert_eq!(output.pop(), Some(line_ending_byte));
         }
     }
 }
@@ -326,7 +326,7 @@ impl<'a> DelimiterState<'a> {
             } else {
                 // This branch is NOT unreachable, must be skipped
                 // `output` should be empty in this case
-                assert!(output_len == 0);
+                assert_eq!(output_len, 0);
             }
         }
     }

@@ -1045,8 +1045,9 @@ mod tests_split_iterator {
                     );
                 }
                 Ok(actual) => {
-                    assert!(
-                        expected == actual.as_slice(),
+                    assert_eq!(
+                        expected,
+                        actual.as_slice(),
                         "[{i}] After split({input:?}).unwrap()\nexpected: {expected:?}\n  actual: {actual:?}\n"
                     );
                 }

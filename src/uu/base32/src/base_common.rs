@@ -322,7 +322,7 @@ pub mod fast_encode {
             leftover_buffer.extend(stolen_bytes);
 
             // After appending the stolen bytes to `leftover_buffer`, it should be the right size
-            assert!(leftover_buffer.len() == encode_in_chunks_of_size);
+            assert_eq!(leftover_buffer.len(), encode_in_chunks_of_size);
 
             // Encode the old unencoded data and the stolen bytes, and add the result to
             // `encoded_buffer`
@@ -343,7 +343,7 @@ pub mod fast_encode {
         let remainder = chunks_exact.remainder();
 
         for sl in chunks_exact {
-            assert!(sl.len() == encode_in_chunks_of_size);
+            assert_eq!(sl.len(), encode_in_chunks_of_size);
 
             supports_fast_decode_and_encode.encode_to_vec_deque(sl, encoded_buffer)?;
         }
@@ -622,7 +622,7 @@ pub mod fast_decode {
             leftover_buffer.extend(stolen_bytes);
 
             // After appending the stolen bytes to `leftover_buffer`, it should be the right size
-            assert!(leftover_buffer.len() == decode_in_chunks_of_size);
+            assert_eq!(leftover_buffer.len(), decode_in_chunks_of_size);
 
             // Decode the old un-decoded data and the stolen bytes, and add the result to
             // `decoded_buffer`
@@ -642,7 +642,7 @@ pub mod fast_decode {
         let remainder = chunks_exact.remainder();
 
         for sl in chunks_exact {
-            assert!(sl.len() == decode_in_chunks_of_size);
+            assert_eq!(sl.len(), decode_in_chunks_of_size);
 
             supports_fast_decode_and_encode.decode_into_vec(sl, decoded_buffer)?;
         }

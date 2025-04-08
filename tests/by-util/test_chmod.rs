@@ -38,11 +38,10 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     make_file(&at.plus_as_string(TEST_FILE), test.before);
     let perms = at.metadata(TEST_FILE).permissions().mode();
 
-    assert!(
-        perms == test.before,
+    assert_eq!(
+        perms, test.before,
         "{}: expected: {:o} got: {perms:o}",
-        "setting permissions on test files before actual test run failed",
-        test.after,
+        "setting permissions on test files before actual test run failed", test.after
     );
 
     for arg in &test.args {
@@ -58,10 +57,10 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     }
 
     let perms = at.metadata(TEST_FILE).permissions().mode();
-    assert!(
-        perms == test.after,
+    assert_eq!(
+        perms, test.after,
         "{ucmd}: expected: {:o} got: {perms:o}",
-        test.after,
+        test.after
     );
 }
 
