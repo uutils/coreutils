@@ -5,7 +5,7 @@
 use rstest::rstest;
 
 use uucore::display::Quotable;
-// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus
+// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus infd
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -302,6 +302,9 @@ fn test_valid_hex_duration(#[case] input: &str) {
 #[case::negative("-0x1")]
 #[case::negative_suffix("-0x1s")]
 #[case::negative_frac_suffix("-0x0.1s")]
+#[case::wrong_capitalization("infD")]
+#[case::wrong_capitalization("INFD")]
+#[case::wrong_capitalization("iNfD")]
 fn test_invalid_hex_duration(#[case] input: &str) {
     new_ucmd!()
         .args(&["--", input])
