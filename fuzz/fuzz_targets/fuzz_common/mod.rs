@@ -132,6 +132,8 @@ where
     let (uumain_exit_status, captured_stdout, captured_stderr) = thread::scope(|s| {
         let out = s.spawn(|| read_from_fd(pipe_stdout_fds[0]));
         let err = s.spawn(|| read_from_fd(pipe_stderr_fds[0]));
+        #[allow(clippy::unnecessary_to_owned)]
+        // TODO: clippy wants us to use args.iter().cloned() ?
         let status = uumain_function(args.to_owned().into_iter());
         // Reset the exit code global variable in case we run another test after this one
         // See https://github.com/uutils/coreutils/issues/5777
@@ -409,6 +411,7 @@ pub fn generate_random_string(max_length: usize) -> String {
     result
 }
 
+#[allow(dead_code)]
 pub fn generate_random_file() -> Result<String, std::io::Error> {
     let mut rng = rand::rng();
     let file_name: String = (0..10)
@@ -429,6 +432,7 @@ pub fn generate_random_file() -> Result<String, std::io::Error> {
     Ok(file_path.to_str().unwrap().to_string())
 }
 
+#[allow(dead_code)]
 pub fn replace_fuzz_binary_name(cmd: &str, result: &mut CommandResult) {
     let fuzz_bin_name = format!("fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_{cmd}");
 
