@@ -450,9 +450,6 @@ pub(crate) fn parse<'a>(
     } else {
         (Base::Decimal, unsigned)
     };
-    if rest.is_empty() {
-        return Err(ExtendedParserError::NotNumeric);
-    }
 
     // Parse the integral part of the number
     let mut chars = rest.chars().enumerate().fuse().peekable();
@@ -518,6 +515,16 @@ pub(crate) fn parse<'a>(
 
     // If no digit has been parsed, check if this is a special value, or declare the parsing unsuccessful
     if digits.is_none() {
+        // If we trimmed an initial `0x`/`0b`, return a partial match.
+        if rest != unsigned {
+            let ebd = if negative {
+                ExtendedBigDecimal::MinusZero
+            } else {
+                ExtendedBigDecimal::zero()
+            };
+            return Err(ExtendedParserError::PartialMatch(ebd, &unsigned[1..]));
+        }
+
         return if target == ParseTarget::Integral {
             Err(ExtendedParserError::NotNumeric)
         } else {
@@ -968,23 +975,41 @@ mod tests {
             ))
         ));
 
-        // TODO: GNU coreutils treats these as partial matches.
-        assert_eq!(
-            Err(ExtendedParserError::NotNumeric),
-            ExtendedBigDecimal::extended_parse("0x")
-        );
-        assert_eq!(
-            Err(ExtendedParserError::NotNumeric),
-            ExtendedBigDecimal::extended_parse("0x.")
-        );
-        assert_eq!(
-            Err(ExtendedParserError::NotNumeric),
-            ExtendedBigDecimal::extended_parse("0xp")
-        );
-        assert_eq!(
-            Err(ExtendedParserError::NotNumeric),
-            ExtendedBigDecimal::extended_parse("0xp-2")
-        );
+        // Not actually hex numbers, but the prefixes look like it.
+        assert!(matches!(f64::extended_parse("0x"),
+            Err(ExtendedParserError::PartialMatch(f, "x")) if f == 0.0));
+        assert!(matches!(f64::extended_parse("0x."),
+            Err(ExtendedParserError::PartialMatch(f, "x.")) if f == 0.0));
+        assert!(matches!(f64::extended_parse("0xp"),
+            Err(ExtendedParserError::PartialMatch(f, "xp")) if f == 0.0));
+        assert!(matches!(f64::extended_parse("0xp-2"),
+            Err(ExtendedParserError::PartialMatch(f, "xp-2")) if f == 0.0));
+        assert!(matches!(f64::extended_parse("0x.p-2"),
+            Err(ExtendedParserError::PartialMatch(f, "x.p-2")) if f == 0.0));
+        assert!(matches!(f64::extended_parse("0X"),
+            Err(ExtendedParserError::PartialMatch(f, "X")) if f == 0.0));
+        assert!(matches!(f64::extended_parse("-0x"),
+            Err(ExtendedParserError::PartialMatch(f, "x")) if f == -0.0));
+        assert!(matches!(f64::extended_parse("+0x"),
+            Err(ExtendedParserError::PartialMatch(f, "x")) if f == 0.0));
+        assert!(matches!(f64::extended_parse("-0x."),
+            Err(ExtendedParserError::PartialMatch(f, "x.")) if f == -0.0));
+        assert!(matches!(
+            u64::extended_parse("0x"),
+            Err(ExtendedParserError::PartialMatch(0, "x"))
+        ));
+        assert!(matches!(
+            u64::extended_parse("-0x"),
+            Err(ExtendedParserError::PartialMatch(0, "x"))
+        ));
+        assert!(matches!(
+            i64::extended_parse("0x"),
+            Err(ExtendedParserError::PartialMatch(0, "x"))
+        ));
+        assert!(matches!(
+            i64::extended_parse("-0x"),
+            Err(ExtendedParserError::PartialMatch(0, "x"))
+        ));
     }
 
     #[test]
@@ -1018,6 +1043,27 @@ mod tests {
         assert_eq!(Ok(0b1011), u64::extended_parse("+0b1011"));
         assert_eq!(Ok(-0b1011), i64::extended_parse("-0b1011"));
 
+        assert!(matches!(
+            u64::extended_parse("0b"),
+            Err(ExtendedParserError::PartialMatch(0, "b"))
+        ));
+        assert!(matches!(
+            u64::extended_parse("0b."),
+            Err(ExtendedParserError::PartialMatch(0, "b."))
+        ));
+        assert!(matches!(
+            u64::extended_parse("-0b"),
+            Err(ExtendedParserError::PartialMatch(0, "b"))
+        ));
+        assert!(matches!(
+            i64::extended_parse("0b"),
+            Err(ExtendedParserError::PartialMatch(0, "b"))
+        ));
+        assert!(matches!(
+            i64::extended_parse("-0b"),
+            Err(ExtendedParserError::PartialMatch(0, "b"))
+        ));
+
         // Binary not allowed for floats
         assert!(matches!(
             f64::extended_parse("0b100"),
@@ -1042,11 +1088,6 @@ mod tests {
             Err(ExtendedParserError::PartialMatch(ebd, "b.")) => ebd == ExtendedBigDecimal::zero(),
             _ => false,
         });
-        // TODO: GNU coreutils treats this as partial match.
-        assert_eq!(
-            Err(ExtendedParserError::NotNumeric),
-            u64::extended_parse("0b")
-        );
     }
 
     #[test]
