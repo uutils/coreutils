@@ -54,7 +54,6 @@ struct Options {
 ///
 /// * `options` - CLI options for the assigning checksum algorithm
 /// * `files` - A iterator of OsStr which is a bunch of files that are using for calculating checksum
-#[allow(clippy::cognitive_complexity)]
 fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,

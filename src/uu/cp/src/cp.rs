@@ -136,25 +136,19 @@ impl Default for OverwriteMode {
 }
 
 /// Possible arguments for `--reflink`.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub enum ReflinkMode {
     Always,
+    #[cfg_attr(
+        any(target_os = "linux", target_os = "android", target_os = "macos"),
+        default
+    )]
     Auto,
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "android", target_os = "macos")),
+        default
+    )]
     Never,
-}
-
-impl Default for ReflinkMode {
-    #[allow(clippy::derivable_impls)]
-    fn default() -> Self {
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
-        {
-            ReflinkMode::Auto
-        }
-        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
-        {
-            ReflinkMode::Never
-        }
-    }
 }
 
 /// Possible arguments for `--sparse`.
@@ -252,7 +246,6 @@ impl Ord for Preserve {
 /// reason.
 ///
 /// The fields are documented with the arguments that determine their value.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Options {
     /// `--attributes-only`
@@ -354,7 +347,6 @@ enum PerformedAction {
 
 /// Enum representing various debug states of the offload and reflink actions.
 #[derive(Debug)]
-#[allow(dead_code)] // All of them are used on Linux
 enum OffloadReflinkDebug {
     Unknown,
     No,
@@ -970,7 +962,6 @@ impl Attributes {
 }
 
 impl Options {
-    #[allow(clippy::cognitive_complexity)]
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
@@ -1259,9 +1250,6 @@ fn parse_path_args(
     };
 
     if options.strip_trailing_slashes {
-        // clippy::assigning_clones added with Rust 1.78
-        // Rust version = 1.76 on OpenBSD stable/7.5
-        #[cfg_attr(not(target_os = "openbsd"), allow(clippy::assigning_clones))]
         for source in &mut paths {
             *source = source.components().as_path().to_owned();
         }
@@ -2165,12 +2153,10 @@ fn handle_copy_mode(
 /// * `Ok(Permissions)` - The calculated permissions for the destination file.
 /// * `Err(CopyError)` - An error occurred while getting the metadata of the destination file.
 ///
-// Allow unused variables for Windows (on options)
-#[allow(unused_variables)]
 fn calculate_dest_permissions(
     dest: &Path,
     source_metadata: &Metadata,
-    options: &Options,
+    #[cfg_attr(not(unix), expect(unused_variables))] options: &Options,
     context: &str,
 ) -> CopyResult<Permissions> {
     if dest.exists() {

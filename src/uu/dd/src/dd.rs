@@ -453,20 +453,19 @@ impl Input<'_> {
     /// the input file is no longer needed. If not possible, then this
     /// function prints an error message to stderr and sets the exit
     /// status code to 1.
-    #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
+    #[cfg(target_os = "linux")]
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
-        #[cfg(target_os = "linux")]
-        {
-            show_if_err!(self
-                .src
+        show_if_err!(
+            self.src
                 .discard_cache(offset, len)
-                .map_err_context(|| "failed to discard cache for: 'standard input'".to_string()));
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            // TODO Is there a way to discard filesystem cache on
-            // these other operating systems?
-        }
+                .map_err_context(|| "failed to discard cache for: 'standard input'".to_string())
+        );
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn discard_cache(&self, _offset: libc::off_t, _len: libc::off_t) {
+        // TODO Is there a way to discard filesystem cache on
+        // these other operating systems?
     }
 
     /// Fills a given buffer.
@@ -828,19 +827,19 @@ impl<'a> Output<'a> {
     /// the output file is no longer needed. If not possible, then
     /// this function prints an error message to stderr and sets the
     /// exit status code to 1.
-    #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
+    #[cfg(target_os = "linux")]
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
-        #[cfg(target_os = "linux")]
-        {
-            show_if_err!(self.dst.discard_cache(offset, len).map_err_context(|| {
+        show_if_err!(
+            self.dst.discard_cache(offset, len).map_err_context(|| {
                 "failed to discard cache for: 'standard output'".to_string()
-            }));
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            // TODO Is there a way to discard filesystem cache on
-            // these other operating systems?
-        }
+            })
+        );
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn discard_cache(&self, _offset: libc::off_t, _len: libc::off_t) {
+        // TODO Is there a way to discard filesystem cache on
+        // these other operating systems?
     }
 
     /// writes a block of data. optionally retries when first try didn't complete
@@ -1207,7 +1206,6 @@ fn finalize<T>(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[allow(clippy::cognitive_complexity)]
 fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 

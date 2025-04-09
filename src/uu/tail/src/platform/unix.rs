@@ -20,7 +20,6 @@ impl ProcessChecker {
     }
 
     // Borrowing mutably to be aligned with Windows implementation
-    #[allow(clippy::wrong_self_convention)]
     pub fn is_dead(&mut self) -> bool {
         unsafe { libc::kill(self.pid, 0) != 0 && get_errno() != libc::EPERM }
     }

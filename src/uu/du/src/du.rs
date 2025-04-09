@@ -301,7 +301,6 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
-#[allow(clippy::cognitive_complexity)]
 fn du(
     mut my_stat: Stat,
     options: &TraversalOptions,
@@ -616,7 +615,6 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
 }
 
 #[uucore::main]
-#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 

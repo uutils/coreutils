@@ -5,9 +5,6 @@
 
 //! Utilities for reading files as chunks.
 
-#![allow(dead_code)]
-// Ignores non-used warning for `borrow_buffer` in `Chunk`
-
 use std::{
     io::{ErrorKind, Read},
     sync::mpsc::SyncSender,

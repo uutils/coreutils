@@ -222,7 +222,6 @@ where
     path.as_ref().display().to_string().ends_with("/.")
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
     progress_bar: Option<&ProgressBar>,
@@ -542,12 +541,10 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
 ///   potentially change. (See `test_dir_perm_race_with_preserve_mode_and_ownership``)
 /// - The `recursive` flag determines whether parent directories should be created
 ///   if they do not already exist.
-// we need to allow unused_variable since `options` might be unused in non unix systems
-#[allow(unused_variables)]
 fn build_dir(
     path: &PathBuf,
     recursive: bool,
-    options: &Options,
+    #[cfg_attr(not(unix), expect(unused_variables))] options: &Options,
     copy_attributes_from: Option<&Path>,
 ) -> CopyResult<()> {
     let mut builder = fs::DirBuilder::new();

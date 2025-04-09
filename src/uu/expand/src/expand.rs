@@ -349,7 +349,6 @@ enum CharType {
     Other,
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn expand_line(
     buf: &mut Vec<u8>,
     output: &mut BufWriter<std::io::Stdout>,

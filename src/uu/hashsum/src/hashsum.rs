@@ -60,7 +60,6 @@ struct Options {
 /// Returns a UResult of a tuple containing the algorithm name, the hasher instance, and
 /// the output length in bits or an Err if multiple hash algorithms are specified or if a
 /// required flag is missing.
-#[allow(clippy::cognitive_complexity)]
 fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
     let mut alg: Option<HashAlgorithm> = None;
 
@@ -514,7 +513,6 @@ fn uu_app(binary_name: &str) -> (Command, bool) {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn hashsum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,

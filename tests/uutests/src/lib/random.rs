@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-#![allow(clippy::naive_bytecount)]
 
 use rand::distr::{Distribution, Uniform};
 use rand::{Rng, rng};

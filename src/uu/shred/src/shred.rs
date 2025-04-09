@@ -382,7 +382,6 @@ fn pass_name(pass_type: &PassType) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::cognitive_complexity)]
 fn wipe_file(
     path_str: &str,
     n_passes: usize,
@@ -414,7 +413,7 @@ fn wipe_file(
     if force {
         let mut perms = metadata.permissions();
         #[cfg(unix)]
-        #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
+        #[allow(clippy::unnecessary_cast)]
         {
             // NOTE: set_readonly(false) makes the file world-writable on Unix.
             // NOTE: S_IWUSR type is u16 on macOS, i32 on Redox.

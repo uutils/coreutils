@@ -408,29 +408,27 @@ pub struct DigestWriter<'a> {
     binary: bool,
 
     /// Whether the previous
-    #[allow(dead_code)]
+    #[cfg(windows)]
     was_last_character_carriage_return: bool,
-    // TODO These are dead code only on non-Windows operating systems.
-    // It might be better to use a `#[cfg(windows)]` guard here.
 }
 
 impl<'a> DigestWriter<'a> {
     pub fn new(digest: &'a mut Box<dyn Digest>, binary: bool) -> Self {
-        let was_last_character_carriage_return = false;
         DigestWriter {
             digest,
             binary,
-            was_last_character_carriage_return,
+            #[cfg(windows)]
+            was_last_character_carriage_return: false,
         }
     }
 
     pub fn finalize(&mut self) -> bool {
+        #[cfg(windows)]
         if self.was_last_character_carriage_return {
             self.digest.hash_update(b"\r");
             true
-        } else {
-            false
         }
+        false
     }
 }
 

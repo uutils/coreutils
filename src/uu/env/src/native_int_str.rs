@@ -144,7 +144,6 @@ pub fn to_native_int_representation(input: &OsStr) -> Cow<'_, NativeIntStr> {
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // needed on windows
 pub fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Cow<'_, OsStr> {
     #[cfg(target_os = "windows")]
     {
@@ -160,7 +159,6 @@ pub fn from_native_int_representation(input: Cow<'_, NativeIntStr>) -> Cow<'_, O
     }
 }
 
-#[allow(clippy::needless_pass_by_value)] // needed on windows
 pub fn from_native_int_representation_owned(input: NativeIntString) -> OsString {
     #[cfg(target_os = "windows")]
     {

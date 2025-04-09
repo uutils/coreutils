@@ -545,7 +545,6 @@ fn test_gnu_e20() {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
 fn test_env_parsing_errors() {
     let ts = TestScenario::new(util_name!());
 

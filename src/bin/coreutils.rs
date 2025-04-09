@@ -50,7 +50,6 @@ fn name(binary_path: &Path) -> Option<&str> {
     binary_path.file_stem()?.to_str()
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn main() {
     uucore::panic::mute_sigpipe_panic();
 
