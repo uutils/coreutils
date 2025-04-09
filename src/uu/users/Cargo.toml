@@ -1,16 +1,14 @@
 [package]
 name = "uu_users"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "users ~ (uutils) display names of currently logged-in users"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/users"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
 
 [lints]

@@ -1,17 +1,15 @@
 # spell-checker:ignore bigdecimal cfgs extendedbigdecimal
 [package]
 name = "uu_seq"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "seq ~ (uutils) display a sequence of numbers"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/seq"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
 
 [lib]
