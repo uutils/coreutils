@@ -375,7 +375,7 @@ fn get_quoted_file_name(
     }
 }
 
-fn process_token_filesystem(t: &Token, meta: StatFs, display_name: &str) {
+fn process_token_filesystem(t: &Token, meta: &StatFs, display_name: &str) {
     match *t {
         Token::Byte(byte) => write_raw_byte(byte),
         Token::Char(c) => print!("{c}"),
@@ -504,7 +504,7 @@ fn print_float(num: f64, flags: &Flags, width: usize, precision: Precision, padd
     };
     let num_str = precision_trunc(num, precision);
     let extended = format!("{prefix}{num_str}");
-    pad_and_print(&extended, flags.left, width, padding_char)
+    pad_and_print(&extended, flags.left, width, padding_char);
 }
 
 /// Prints an unsigned integer value based on the provided flags, width, and precision.
@@ -1033,7 +1033,7 @@ impl Stater {
 
                     // Usage
                     for t in tokens {
-                        process_token_filesystem(t, meta, &display_name);
+                        process_token_filesystem(t, &meta, &display_name);
                     }
                 }
                 Err(e) => {

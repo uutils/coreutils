@@ -320,9 +320,8 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::metadata;
 
-    let stat = match metadata(path) {
-        Ok(s) => s,
-        _ => return false,
+    let Ok(stat) = metadata(path) else {
+        return false;
     };
 
     match condition {

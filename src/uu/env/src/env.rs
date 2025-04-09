@@ -25,7 +25,6 @@ use std::borrow::Cow;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
-use std::ops::Deref;
 
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -159,11 +158,11 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
         .collect();
 
     let mut sig_vec = Vec::with_capacity(signals.len());
-    signals.into_iter().for_each(|sig| {
+    for sig in signals {
         if !sig.is_empty() {
             sig_vec.push(sig);
         }
-    });
+    }
     for sig in sig_vec {
         let Some(sig_str) = sig.to_str() else {
             return Err(USimpleError::new(
@@ -584,7 +583,7 @@ impl EnvAppData {
             Err(ref err) => {
                 return match err.kind() {
                     io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => {
-                        Err(self.make_error_no_such_file_or_dir(prog.deref()))
+                        Err(self.make_error_no_such_file_or_dir(&prog))
                     }
                     io::ErrorKind::PermissionDenied => {
                         uucore::show_error!("{}: Permission denied", prog.quote());
@@ -804,16 +803,16 @@ mod tests {
         );
         assert_eq!(
             NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
-            parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#)).unwrap()
+            parse_args_from_str(&NCvt::convert(r"A=B FOO=AR  sh -c 'echo $A$FOO'")).unwrap()
         );
         assert_eq!(
             NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
-            parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#)).unwrap()
+            parse_args_from_str(&NCvt::convert(r"A=B FOO=AR  sh -c 'echo $A$FOO'")).unwrap()
         );
 
         assert_eq!(
             NCvt::convert(vec!["-i", "A=B ' C"]),
-            parse_args_from_str(&NCvt::convert(r#"-i A='B \' C'"#)).unwrap()
+            parse_args_from_str(&NCvt::convert(r"-i A='B \' C'")).unwrap()
         );
     }
 
@@ -854,7 +853,7 @@ mod tests {
         );
 
         // Test variable-related errors
-        let result = parse_args_from_str(&NCvt::convert(r#"echo ${FOO"#));
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO"));
         assert!(result.is_err());
         assert!(
             result
@@ -863,7 +862,7 @@ mod tests {
                 .contains("variable name issue (at 10): Missing closing brace")
         );
 
-        let result = parse_args_from_str(&NCvt::convert(r#"echo ${FOO:-value"#));
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO:-value"));
         assert!(result.is_err());
         assert!(
             result
@@ -872,11 +871,11 @@ mod tests {
                 .contains("variable name issue (at 17): Missing closing brace after default value")
         );
 
-        let result = parse_args_from_str(&NCvt::convert(r#"echo ${1FOO}"#));
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${1FOO}"));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("variable name issue (at 7): Unexpected character: '1', expected variable name must not start with 0..9"));
 
-        let result = parse_args_from_str(&NCvt::convert(r#"echo ${FOO?}"#));
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO?}"));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("variable name issue (at 10): Unexpected character: '?', expected a closing brace ('}') or colon (':')"));
     }

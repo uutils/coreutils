@@ -42,8 +42,9 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
         .components()
         .next()
         .and_then(|comp| comp.as_os_str().to_str())
-        .map(|p_str| p_str.starts_with(VERBATIM_PREFIX) || p_str.starts_with(DEVICE_NS_PREFIX))
-        .unwrap_or_default();
+        .is_some_and(|p_str| {
+            p_str.starts_with(VERBATIM_PREFIX) || p_str.starts_with(DEVICE_NS_PREFIX)
+        });
 
     if has_prefix {
         p.into()

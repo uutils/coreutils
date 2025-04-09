@@ -908,7 +908,7 @@ mod test {
         assert_eq!(
             check_posix_regex_errors("ab\\{\\}"),
             Err(InvalidBracketContent)
-        )
+        );
     }
 
     #[test]

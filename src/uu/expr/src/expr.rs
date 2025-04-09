@@ -102,7 +102,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if args.len() == 1 && args[0] == "--help" {
         let _ = uu_app().print_help();
     } else if args.len() == 1 && args[0] == "--version" {
-        println!("{} {}", uucore::util_name(), uucore::crate_version!())
+        println!("{} {}", uucore::util_name(), uucore::crate_version!());
     } else {
         // The first argument may be "--" and should be be ignored.
         let args = if !args.is_empty() && args[0] == "--" {

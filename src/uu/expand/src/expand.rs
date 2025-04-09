@@ -356,7 +356,7 @@ fn expand_line(
     tabstops: &[usize],
     options: &Options,
 ) -> std::io::Result<()> {
-    use self::CharType::*;
+    use self::CharType::{Backspace, Other, Tab};
 
     let mut col = 0;
     let mut byte = 0;

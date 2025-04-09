@@ -6,7 +6,6 @@
 use std::{
     ffi::{OsStr, OsString},
     mem,
-    ops::Deref,
 };
 
 use crate::{
@@ -79,7 +78,7 @@ impl<'a> StringExpander<'a> {
 
     pub fn put_string<S: AsRef<OsStr>>(&mut self, os_str: S) {
         let native = to_native_int_representation(os_str.as_ref());
-        self.output.extend(native.deref());
+        self.output.extend(&*native);
     }
 
     pub fn put_native_string(&mut self, n_str: &NativeIntStr) {
