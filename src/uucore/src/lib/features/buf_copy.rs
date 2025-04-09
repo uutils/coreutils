@@ -49,6 +49,7 @@ mod tests {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(temp_dir.path().join("file.txt"))
             .unwrap()
     }
