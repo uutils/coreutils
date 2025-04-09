@@ -838,7 +838,7 @@ fn parse_time_style(s: Option<&str>) -> UResult<Cow<'_, str>> {
                 if let Some(cap) = TIME_STYLE_REGEX.captures(&s[start..]) {
                     let mat = cap.name("before").unwrap();
                     let percent_idx = mat.end();
-                    s.replace_range(percent_idx + start..percent_idx + start + 1, "%%");
+                    s.replace_range(percent_idx + start..=percent_idx + start, "%%");
                     start = percent_idx + 2;
                 } else {
                     break;
