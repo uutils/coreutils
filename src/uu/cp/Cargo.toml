@@ -17,6 +17,9 @@ edition = "2024"
 
 readme.workspace = true
 
+[lints]
+workspace = true
+
 [lib]
 path = "src/cp.rs"
 

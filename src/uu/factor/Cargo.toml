@@ -13,6 +13,9 @@ edition = "2024"
 
 readme.workspace = true
 
+[lints]
+workspace = true
+
 [build-dependencies]
 num-traits = { workspace = true } # used in src/numerics.rs, which is included by build.rs
 
