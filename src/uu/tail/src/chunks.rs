@@ -289,7 +289,7 @@ impl BytesChunkBuffer {
         let mut chunk = Box::new(BytesChunk::new());
 
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
-        while (chunk.fill(reader)?).is_some() {
+        while chunk.fill(reader)?.is_some() {
             self.bytes += chunk.bytes as u64;
             self.chunks.push_back(chunk);
 
@@ -565,7 +565,7 @@ impl LinesChunkBuffer {
     pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
         let mut chunk = Box::new(LinesChunk::new(self.delimiter));
 
-        while (chunk.fill(reader)?).is_some() {
+        while chunk.fill(reader)?.is_some() {
             self.lines += chunk.lines as u64;
             self.chunks.push_back(chunk);
 

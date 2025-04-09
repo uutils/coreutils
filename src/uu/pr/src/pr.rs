@@ -655,8 +655,7 @@ fn build_options(
 
     let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
-    let display_header_and_trailer =
-        !(page_length_le_ht) && !matches.get_flag(options::OMIT_HEADER);
+    let display_header_and_trailer = !page_length_le_ht && !matches.get_flag(options::OMIT_HEADER);
 
     let content_lines_per_page = if page_length_le_ht {
         page_length

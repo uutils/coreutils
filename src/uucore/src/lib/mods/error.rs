@@ -474,7 +474,7 @@ pub trait FromIo<T> {
 impl FromIo<Box<UIoError>> for std::io::Error {
     fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
         Box::new(UIoError {
-            context: Some((context)()),
+            context: Some(context()),
             inner: self,
         })
     }
@@ -489,7 +489,7 @@ impl<T> FromIo<UResult<T>> for std::io::Result<T> {
 impl FromIo<Box<UIoError>> for std::io::ErrorKind {
     fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
         Box::new(UIoError {
-            context: Some((context)()),
+            context: Some(context()),
             inner: std::io::Error::new(self, ""),
         })
     }
@@ -530,7 +530,7 @@ impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
         self.map_err(|e| {
             Box::new(UIoError {
-                context: Some((context)()),
+                context: Some(context()),
                 inner: std::io::Error::from_raw_os_error(e as i32),
             }) as Box<dyn UError>
         })
@@ -541,7 +541,7 @@ impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
 impl<T> FromIo<UResult<T>> for nix::Error {
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
         Err(Box::new(UIoError {
-            context: Some((context)()),
+            context: Some(context()),
             inner: std::io::Error::from_raw_os_error(self as i32),
         }) as Box<dyn UError>)
     }

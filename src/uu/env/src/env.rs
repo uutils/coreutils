@@ -160,7 +160,7 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
 
     let mut sig_vec = Vec::with_capacity(signals.len());
     signals.into_iter().for_each(|sig| {
-        if !(sig.is_empty()) {
+        if !sig.is_empty() {
             sig_vec.push(sig);
         }
     });

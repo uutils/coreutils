@@ -2392,11 +2392,9 @@ fn display_dir_entry_size(
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.get_metadata(out) {
         let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
-            SizeOrDeviceId::Device(major, minor) => (
-                (major.len() + minor.len() + 2usize),
-                major.len(),
-                minor.len(),
-            ),
+            SizeOrDeviceId::Device(major, minor) => {
+                (major.len() + minor.len() + 2usize, major.len(), minor.len())
+            }
             SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
         };
         (

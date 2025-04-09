@@ -323,7 +323,7 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
                     continue;
                 }
                 let mut word = line[beg..end].to_owned();
-                if filter.only_specified && !(filter.only_set.contains(&word)) {
+                if filter.only_specified && !filter.only_set.contains(&word) {
                     continue;
                 }
                 if filter.ignore_specified && filter.ignore_set.contains(&word) {

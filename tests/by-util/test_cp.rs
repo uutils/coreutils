@@ -5787,11 +5787,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         } else {
             libc::S_IRWXG | libc::S_IRWXO
         } as u32;
-        assert_eq!(
-            (mode & mask),
-            0,
-            "unwanted permissions are present - {attr}"
-        );
+        assert_eq!(mode & mask, 0, "unwanted permissions are present - {attr}");
         at.write(FIFO, "done");
         child.wait().unwrap().succeeded();
     }
