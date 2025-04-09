@@ -243,6 +243,11 @@ fn sub_q_string_special_non_printable() {
 }
 
 #[test]
+fn sub_q_string_empty() {
+    new_ucmd!().args(&["%q", ""]).succeeds().stdout_only("''");
+}
+
+#[test]
 fn sub_char() {
     new_ucmd!()
         .args(&["the letter %c", "A"])
