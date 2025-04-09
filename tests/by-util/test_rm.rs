@@ -787,11 +787,7 @@ fn test_uchild_when_run_no_wait_with_a_blocking_command() {
     at.mkdir("a");
     at.touch("a/empty");
 
-    #[cfg(target_vendor = "apple")]
     let delay: u64 = 2000;
-    #[cfg(not(target_vendor = "apple"))]
-    let delay: u64 = 1000;
-
     let yes = if cfg!(windows) { "y\r\n" } else { "y\n" };
 
     let mut child = ts
@@ -957,4 +953,142 @@ fn test_inaccessible_dir_recursive() {
     ucmd.args(&["-r", "-f", "a"]).succeeds().no_output();
     assert!(!at.dir_exists("a/unreadable"));
     assert!(!at.dir_exists("a"));
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_rm_one_file_system() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        println!("Skipping test_rm_one_file_system: must be run as root");
+        return;
+    }
+
+    // Define paths for temporary files and directories
+    let img_path = "fs.img";
+    let mount_point = "fs";
+    let remove_dir = "a";
+    let bind_mount_point = "a/b";
+
+    at.touch(img_path);
+
+    // Create filesystem image
+    scene
+        .cmd("dd")
+        .args(&[
+            "if=/dev/zero",
+            &format!("of={}", img_path),
+            "bs=1M",
+            "count=50",
+        ])
+        .succeeds();
+
+    // Create ext4 filesystem
+    scene.cmd("/sbin/mkfs.ext4").arg(img_path).succeeds();
+
+    // Prepare directory structure
+    at.mkdir_all(mount_point);
+    at.mkdir_all(bind_mount_point);
+
+    // Mount as loop device
+    scene
+        .cmd("mount")
+        .args(&["-o", "loop", img_path, mount_point])
+        .succeeds();
+
+    // Create test directory
+    at.mkdir_all(&format!("{}/x", mount_point));
+
+    // Create bind mount
+    scene
+        .cmd("mount")
+        .args(&["--bind", mount_point, bind_mount_point])
+        .succeeds();
+
+    // Run the test
+    scene
+        .ucmd()
+        .args(&["--one-file-system", "-rf", remove_dir])
+        .fails()
+        .stderr_contains(format!("rm: skipping '{}'", bind_mount_point));
+
+    // Cleanup
+    let _ = scene.cmd("umount").arg(bind_mount_point).run();
+    let _ = scene.cmd("umount").arg(mount_point).run();
+    let _ = scene
+        .cmd("rm")
+        .args(&["-rf", mount_point, bind_mount_point])
+        .run();
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_rm_preserve_root() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        println!("Skipping test_rm_one_file_system: must be run as root");
+        return;
+    }
+
+    // Define paths for temporary files and directories
+    let img_path = "fs.img";
+    let mount_point = "fs";
+    let bind_mount_point = "a/b";
+
+    at.touch(img_path);
+
+    // Create filesystem image
+    scene
+        .cmd("dd")
+        .args(&[
+            "if=/dev/zero",
+            &format!("of={}", img_path),
+            "bs=1M",
+            "count=50",
+        ])
+        .succeeds();
+
+    // Create ext4 filesystem
+    scene.cmd("/sbin/mkfs.ext4").arg(img_path).succeeds();
+
+    // Prepare directory structure
+    at.mkdir_all(mount_point);
+    at.mkdir_all(bind_mount_point);
+
+    // Mount as loop device
+    scene
+        .cmd("mount")
+        .args(&["-o", "loop", img_path, mount_point])
+        .succeeds();
+
+    // Create test directory
+    at.mkdir_all(&format!("{}/x", mount_point));
+
+    // Create bind mount
+    scene
+        .cmd("mount")
+        .args(&["--bind", mount_point, bind_mount_point])
+        .succeeds();
+
+    // Run the test
+    scene
+        .ucmd()
+        .args(&["--preserve-root=all", "-rf", bind_mount_point])
+        .fails()
+        .stderr_contains(format!("rm: skipping '{}'", bind_mount_point))
+        .stderr_contains("rm: and --preserve-root=all is in effect");
+
+    // Cleanup
+    let _ = scene.cmd("umount").arg(bind_mount_point).run();
+    let _ = scene.cmd("umount").arg(mount_point).run();
+    let _ = scene
+        .cmd("rm")
+        .args(&["-rf", mount_point, bind_mount_point])
+        .run();
 }
