@@ -21,7 +21,7 @@ fn generate_echo() -> String {
     // Randomly decide whether to include options
     let include_n = rng.random_bool(0.1); // 10% chance
     let include_e = rng.random_bool(0.1); // 10% chance
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let include_E = rng.random_bool(0.1); // 10% chance
 
     if include_n {

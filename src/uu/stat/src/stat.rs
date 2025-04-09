@@ -1209,7 +1209,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_group_num() {
         assert_eq!("12,379,821,234", group_num("12379821234"));
         assert_eq!("21,234", group_num("21234"));

@@ -72,7 +72,7 @@ fn run_tests(tests: Vec<TestCase>) {
 }
 
 #[test]
-#[allow(clippy::unreadable_literal)]
+#[expect(clippy::unreadable_literal)]
 fn test_chmod_octal() {
     let tests = vec![
         TestCase {
@@ -134,8 +134,8 @@ fn test_chmod_octal() {
 }
 
 #[test]
-#[allow(clippy::unreadable_literal)]
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::unreadable_literal)]
+#[expect(clippy::too_many_lines)]
 // spell-checker:disable-next-line
 fn test_chmod_ugoa() {
     let tests = vec![
@@ -276,7 +276,7 @@ fn test_chmod_error_permissions() {
 }
 
 #[test]
-#[allow(clippy::unreadable_literal)]
+#[expect(clippy::unreadable_literal)]
 fn test_chmod_ugo_copy() {
     let tests = vec![
         TestCase {
@@ -314,7 +314,7 @@ fn test_chmod_ugo_copy() {
 }
 
 #[test]
-#[allow(clippy::unreadable_literal)]
+#[expect(clippy::unreadable_literal)]
 fn test_chmod_many_options() {
     let tests = vec![TestCase {
         args: vec!["-r,a+w", TEST_FILE],
@@ -326,7 +326,7 @@ fn test_chmod_many_options() {
 }
 
 #[test]
-#[allow(clippy::unreadable_literal)]
+#[expect(clippy::unreadable_literal)]
 fn test_chmod_reference_file() {
     let tests = [
         TestCase {
@@ -368,7 +368,7 @@ fn test_permission_denied() {
 }
 
 #[test]
-#[allow(clippy::unreadable_literal)]
+#[expect(clippy::unreadable_literal)]
 fn test_chmod_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
@@ -406,7 +406,7 @@ fn test_chmod_recursive() {
 }
 
 #[test]
-#[allow(clippy::unreadable_literal)]
+#[expect(clippy::unreadable_literal)]
 fn test_chmod_recursive_read_permission() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");

@@ -213,7 +213,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_parse_inputs_with_offset() {
         // offset is found without filename, so stdin will be used.
         assert_eq!(
@@ -356,7 +356,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_parse_offset_operand() {
         assert_eq!(8, parse_offset_operand_str("10").unwrap()); // default octal
         assert_eq!(0, parse_offset_operand_str("0").unwrap());

@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (vars) RFILE
 #![cfg(target_os = "linux")]
-#![allow(clippy::upper_case_acronyms)]
+#![expect(clippy::upper_case_acronyms)]
 
 use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -469,7 +469,7 @@ impl From<fs::Metadata> for DeviceAndINode {
 impl TryFrom<&libc::stat> for DeviceAndINode {
     type Error = Error;
 
-    #[allow(clippy::useless_conversion)]
+    #[expect(clippy::useless_conversion)]
     fn try_from(st: &libc::stat) -> Result<Self> {
         let device_id = u64::try_from(st.st_dev).map_err(|_r| Error::OutOfRange)?;
         let inode = u64::try_from(st.st_ino).map_err(|_r| Error::OutOfRange)?;

@@ -977,7 +977,7 @@ fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
     // TODO Better error handling for overflowing `len`.
     if i.settings.iflags.nocache {
         let offset = 0;
-        #[allow(clippy::useless_conversion)]
+        #[expect(clippy::useless_conversion)]
         let len = i.src.len()?.try_into().unwrap();
         i.discard_cache(offset, len);
     }
@@ -986,7 +986,7 @@ fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
     // TODO Better error handling for overflowing `len`.
     if i.settings.oflags.nocache {
         let offset = 0;
-        #[allow(clippy::useless_conversion)]
+        #[expect(clippy::useless_conversion)]
         let len = o.dst.len()?.try_into().unwrap();
         o.discard_cache(offset, len);
     }

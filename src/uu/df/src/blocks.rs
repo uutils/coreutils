@@ -235,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_to_magnitude_and_suffix_not_powers_of_1024() {
         assert_eq!(to_magnitude_and_suffix(1, SuffixType::Si), "1B");
         assert_eq!(to_magnitude_and_suffix(999, SuffixType::Si), "999B");

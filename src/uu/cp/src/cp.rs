@@ -365,7 +365,7 @@ enum OffloadReflinkDebug {
 
 /// Enum representing various debug states of the sparse detection.
 #[derive(Debug)]
-#[allow(dead_code)] // silent for now until we use them
+#[expect(dead_code)] // silent for now until we use them
 enum SparseDebug {
     Unknown,
     No,
@@ -1431,7 +1431,7 @@ fn construct_dest_path(
         TargetType::File => target.to_path_buf(),
     })
 }
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn copy_source(
     progress_bar: Option<&ProgressBar>,
     source: &Path,
@@ -1492,7 +1492,7 @@ fn copy_source(
 // Should this metadata be read once and then reused throughout the execution?
 // https://github.com/uutils/coreutils/issues/6658
 fn file_mode_for_interactive_overwrite(
-    #[cfg_attr(not(unix), allow(unused_variables))] path: &Path,
+    #[cfg_attr(not(unix), expect(unused_variables))] path: &Path,
 ) -> Option<(String, String)> {
     // Retain outer braces to ensure only one branch is included
     {
@@ -1596,7 +1596,7 @@ fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
 
     // Temporarily grant user write if it was read-only.
     if was_readonly {
-        #[allow(clippy::permissions_set_readonly_false)]
+        #[expect(clippy::permissions_set_readonly_false)]
         perms.set_readonly(false);
         fs::set_permissions(dest, perms)?;
     }
@@ -2019,7 +2019,7 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
 ///
 /// * `Ok(())` - The file was copied successfully.
 /// * `Err(CopyError)` - An error occurred while copying the file.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn handle_copy_mode(
     source: &Path,
     dest: &Path,
@@ -2205,7 +2205,7 @@ fn calculate_dest_permissions(
 ///
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
-#[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn copy_file(
     progress_bar: Option<&ProgressBar>,
     source: &Path,
@@ -2481,7 +2481,7 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn copy_helper(
     source: &Path,
     dest: &Path,

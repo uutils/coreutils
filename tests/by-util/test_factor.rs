@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (methods) hexdigest funcs nprimes
-#![allow(
+#![expect(
     clippy::similar_names,
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss

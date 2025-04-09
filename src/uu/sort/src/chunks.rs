@@ -139,7 +139,7 @@ impl RecycledChunk {
 /// * `next_files`: What `file` should be updated to next.
 /// * `separator`: The line separator.
 /// * `settings`: The global settings.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub fn read<T: Read>(
     sender: &SyncSender<Chunk>,
     recycled_chunk: RecycledChunk,

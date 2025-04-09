@@ -299,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_number_type_from_error() {
         assert_eq!(
             NumberType::from("xyz").unwrap_err(),

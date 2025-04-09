@@ -5,8 +5,8 @@
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
 //spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs
 
-#![allow(dead_code)]
-#![allow(
+#![expect(dead_code)]
+#![expect(
     clippy::too_many_lines,
     clippy::should_panic_without_expect,
     clippy::missing_errors_doc

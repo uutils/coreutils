@@ -151,7 +151,7 @@ impl Iterator for FilenameIter {
 /// or randomness
 // The lint warns about a large difference because StdRng is big, but the buffers are much
 // larger anyway, so it's fine.
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 enum BytesWriter {
     Random {
         rng: StdRng,
@@ -381,7 +381,7 @@ fn pass_name(pass_type: &PassType) -> String {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
     path_str: &str,
@@ -414,7 +414,8 @@ fn wipe_file(
     if force {
         let mut perms = metadata.permissions();
         #[cfg(unix)]
-        #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
+        #[allow(clippy::useless_conversion)]
+        #[expect(clippy::unnecessary_cast)]
         {
             // NOTE: set_readonly(false) makes the file world-writable on Unix.
             // NOTE: S_IWUSR type is u16 on macOS, i32 on Redox.
@@ -424,7 +425,7 @@ fn wipe_file(
         }
         #[cfg(not(unix))]
         // TODO: Remove the following once https://github.com/rust-lang/rust-clippy/issues/10477 is resolved.
-        #[allow(clippy::permissions_set_readonly_false)]
+        #[expect(clippy::permissions_set_readonly_false)]
         perms.set_readonly(false);
         fs::set_permissions(path, perms).map_err_context(String::new)?;
     }

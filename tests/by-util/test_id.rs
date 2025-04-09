@@ -19,7 +19,7 @@ fn test_invalid_arg() {
 
 #[test]
 #[cfg(unix)]
-#[allow(unused_mut)]
+#[expect(unused_mut)]
 fn test_id_no_specified_user() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().run();

@@ -5802,7 +5802,8 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
             sleep(Duration::from_millis(100));
         }
         let mode = at.metadata(&format!("{DEST_DIR}/{SRC_DIR}")).mode();
-        #[allow(clippy::unnecessary_cast, clippy::cast_lossless)]
+        #[allow(clippy::cast_lossless)]
+        #[expect(clippy::unnecessary_cast)]
         let mask = if attr == "mode" {
             libc::S_IWGRP | libc::S_IWOTH
         } else {

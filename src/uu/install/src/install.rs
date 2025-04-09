@@ -35,7 +35,7 @@ use std::os::unix::prelude::OsStrExt;
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub struct Behavior {
     main_function: MainFunction,
     specified_mode: Option<u32>,
@@ -510,7 +510,7 @@ fn is_potential_directory_path(path: &Path) -> bool {
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
-#[allow(clippy::cognitive_complexity)]
+#[expect(clippy::cognitive_complexity)]
 fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
     // first check that paths contains at least one element
     if paths.is_empty() {
@@ -837,7 +837,7 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
 ///
 fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
     // Silent the warning as we want to the error message
-    #[allow(clippy::question_mark)]
+    #[expect(clippy::question_mark)]
     if mode::chmod(to, b.mode()).is_err() {
         return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }

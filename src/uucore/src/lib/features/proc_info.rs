@@ -27,7 +27,7 @@
 // (https://github.com/uutils/procps/blob/main/src/uu/pgrep/src/process.rs)
 // but was eventually moved here.
 // See https://github.com/uutils/coreutils/pull/6932 for discussion.
-#![allow(dead_code)]
+#![expect(dead_code)]
 
 use crate::features::tty::Teletype;
 use std::hash::Hash;

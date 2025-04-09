@@ -513,7 +513,7 @@ mod test_split_seps {
 
 #[cfg(test)]
 // Since the computed value is a bool, it is more readable to write the expected value out:
-#[allow(clippy::bool_assert_comparison)]
+#[expect(clippy::bool_assert_comparison)]
 mod test_number_set_decision {
     use super::number_set_should_list_remaining;
 

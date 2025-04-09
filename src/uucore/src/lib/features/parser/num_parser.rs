@@ -382,8 +382,8 @@ fn construct_extended_big_decimal<'a>(
 }
 
 // TODO: As highlighted by clippy, this function _is_ high cognitive complexity, jumps
-// around between integer and float parsing, and should be split in multiple parts.
-#[allow(clippy::cognitive_complexity)]
+//       around between integer and float parsing, and should be split in multiple parts.
+#[allow(clippy::cognitive_complexity)] // `expect` not working on freebsd
 fn parse(
     input: &str,
     integral_only: bool,

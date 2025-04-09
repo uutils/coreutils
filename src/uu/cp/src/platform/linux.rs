@@ -62,7 +62,7 @@ where
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     // Using .try_into().unwrap() is required as glibc, musl & android all have different type for ioctl()
-    #[allow(clippy::unnecessary_fallible_conversions)]
+    #[expect(clippy::unnecessary_fallible_conversions)]
     let result = unsafe {
         libc::ioctl(
             dst_fd,

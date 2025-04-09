@@ -404,7 +404,7 @@ pub struct DigestWriter<'a> {
     ///
     /// If this is `false`, then instances of "\r\n" are replaced with
     /// "\n" before passing input bytes to the [`digest`].
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     binary: bool,
 
     /// Whether the previous
