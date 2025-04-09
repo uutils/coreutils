@@ -145,7 +145,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     // Debian Linux on ARM (aarch64-unknown-linux-gnu),
                     // 32bit i686 targets, etc.
                     // While on the others they are of the same type.
-                    #[allow(clippy::unnecessary_cast)]
+                    #[expect(clippy::unnecessary_cast)]
                     let offset =
                         stat.st_size as i64 - stat.st_size as i64 % (stat.st_blksize as i64 + 1);
 

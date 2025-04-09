@@ -7,7 +7,7 @@
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 // spell-checker:ignore (cmd) taskkill
-#![allow(
+#![expect(
     clippy::unicode_not_nfc,
     clippy::cast_lossless,
     clippy::cast_possible_truncation
@@ -1813,7 +1813,7 @@ fn test_follow_name_remove() {
     let mut args = vec!["--follow=name", source_copy, "--use-polling"];
 
     let mut delay = 1500;
-    #[allow(clippy::needless_range_loop)]
+    #[expect(clippy::needless_range_loop)]
     for i in 0..2 {
         at.copy(source, source_copy);
 
@@ -2215,7 +2215,7 @@ fn test_follow_name_move1() {
     let mut args = vec!["--follow=name", source];
 
     let mut delay = 500;
-    #[allow(clippy::needless_range_loop)]
+    #[expect(clippy::needless_range_loop)]
     for i in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 

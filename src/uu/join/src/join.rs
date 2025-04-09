@@ -770,7 +770,7 @@ fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<
 ///
 /// This function takes the matches from the command-line arguments, processes them,
 /// and returns a `Settings` struct that encapsulates the configuration for the program.
-#[allow(clippy::field_reassign_with_default)]
+#[expect(clippy::field_reassign_with_default)]
 fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
     let keys = get_and_parse_field_number(matches, "j")?;
     let key1 = get_and_parse_field_number(matches, "1")?;

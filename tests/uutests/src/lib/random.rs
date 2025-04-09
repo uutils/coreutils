@@ -210,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
+    #[expect(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
     fn test_random_string_generate_with_delimiter_should_end_with_delimiter() {
         let random_string = RandomizedString::generate_with_delimiter(Alphanumeric, 0, 1, true, 1);
         assert_eq!(1, random_string.len());
@@ -254,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
+    #[expect(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
     fn test_random_string_generate_with_delimiter_should_not_end_with_delimiter() {
         let random_string = RandomizedString::generate_with_delimiter(Alphanumeric, 0, 0, false, 1);
         assert_eq!(1, random_string.len());

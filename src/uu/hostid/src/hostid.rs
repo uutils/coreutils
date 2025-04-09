@@ -39,7 +39,7 @@ fn hostid() {
         result = gethostid();
     }
 
-    #[allow(overflowing_literals)]
+    #[expect(overflowing_literals)]
     let mask = 0xffff_ffff;
 
     result &= mask;

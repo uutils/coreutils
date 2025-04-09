@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
 // spell-checker:ignore (words) fakeroot setcap
-#![allow(
+#![expect(
     clippy::similar_names,
     clippy::too_many_lines,
     clippy::cast_possible_truncation
@@ -630,7 +630,7 @@ fn test_ls_walk_glob() {
             .unwrap(),
     );
 
-    #[allow(clippy::trivial_regex)]
+    #[expect(clippy::trivial_regex)]
     let re_pwd = Regex::new(r"^\.\n").unwrap();
 
     scene
@@ -659,7 +659,7 @@ fn test_ls_a() {
             .unwrap(),
     );
 
-    #[allow(clippy::trivial_regex)]
+    #[expect(clippy::trivial_regex)]
     let re_pwd = Regex::new(r"^\.\n").unwrap();
 
     // Using the present working directory
@@ -1170,7 +1170,7 @@ fn test_ls_long_padding_of_size_column_with_multiple_files() {
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
 #[test]
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
-#[allow(clippy::items_after_statements)]
+#[expect(clippy::items_after_statements)]
 fn test_ls_long_symlink_color() {
     // If you break this test after breaking mkdir, touch, or ln, do not be alarmed!
     // This test is made for ls, but it attempts to run those utils in the process.
@@ -1303,7 +1303,7 @@ fn test_ls_long_symlink_color() {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn assert_names_and_colors_are_equal(
         name_color: &str,
         expected_name_color: Option<&str>,
@@ -4215,7 +4215,7 @@ fn test_ls_context_format() {
 }
 
 #[test]
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn test_ls_a_A() {
     let scene = TestScenario::new(util_name!());
 
@@ -4237,7 +4237,7 @@ fn test_ls_a_A() {
 }
 
 #[test]
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn test_ls_multiple_a_A() {
     let scene = TestScenario::new(util_name!());
 

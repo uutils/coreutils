@@ -479,7 +479,7 @@ fn test_file_is_not_executable() {
 
         // The conversion is useless on some platforms and casts from u16 to
         // u32 on others
-        #[allow(clippy::useless_conversion)]
+        #[expect(clippy::useless_conversion)]
         permissions.set_mode(permissions.mode() & !u32::from(libc::S_IXUSR));
         std::fs::set_permissions(at.plus("regular_file"), permissions).unwrap();
     }
@@ -918,7 +918,7 @@ fn test_bracket_syntax_version() {
 }
 
 #[test]
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[cfg(unix)]
 fn test_file_N() {
     use std::{fs::FileTimes, time::Duration};
