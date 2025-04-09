@@ -31,7 +31,6 @@ mod options {
     pub const OUTPUT_ERROR: &str = "output-error";
 }
 
-#[allow(dead_code)]
 struct Options {
     append: bool,
     ignore_interrupts: bool,

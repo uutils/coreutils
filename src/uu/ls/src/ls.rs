@@ -372,8 +372,8 @@ pub struct Config {
     long: LongFormat,
     alloc_size: bool,
     file_size_block_size: u64,
-    #[allow(dead_code)]
-    block_size: u64, // is never read on Windows
+    #[cfg(unix)]
+    block_size: u64,
     width: u16,
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
@@ -928,7 +928,6 @@ impl Config {
         };
         let width = parse_width(options.get_one::<String>(options::WIDTH))?;
 
-        #[allow(clippy::needless_bool)]
         let mut show_control = if options.get_flag(options::HIDE_CONTROL_CHARS) {
             false
         } else if options.get_flag(options::SHOW_CONTROL_CHARS) {
@@ -1104,6 +1103,7 @@ impl Config {
             long,
             alloc_size: options.get_flag(options::size::ALLOCATION_SIZE),
             file_size_block_size,
+            #[cfg(unix)]
             block_size,
             width,
             quoting_style,
@@ -2036,7 +2036,6 @@ fn show_dir_name(
     write!(out, ":")
 }
 
-#[allow(clippy::cognitive_complexity)]
 pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
@@ -2477,7 +2476,6 @@ fn display_additional_leading_info(
     Ok(result)
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn display_items(
     items: &[PathData],
     config: &Config,
@@ -2598,28 +2596,26 @@ fn display_items(
     Ok(())
 }
 
-#[allow(unused_variables)]
+#[cfg(unix)]
 fn get_block_size(md: &Metadata, config: &Config) -> u64 {
     /* GNU ls will display sizes in terms of block size
        md.len() will differ from this value when the file has some holes
     */
-    #[cfg(unix)]
-    {
-        let raw_blocks = if md.file_type().is_char_device() || md.file_type().is_block_device() {
-            0u64
-        } else {
-            md.blocks() * 512
-        };
-        match config.size_format {
-            SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
-            SizeFormat::Bytes => raw_blocks / config.block_size,
-        }
+    let raw_blocks = if md.file_type().is_char_device() || md.file_type().is_block_device() {
+        0u64
+    } else {
+        md.blocks() * 512
+    };
+    match config.size_format {
+        SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
+        SizeFormat::Bytes => raw_blocks / config.block_size,
     }
-    #[cfg(not(unix))]
-    {
-        // no way to get block size for windows, fall-back to file size
-        md.len()
-    }
+}
+
+#[cfg(not(unix))]
+fn get_block_size(md: &Metadata, _config: &Config) -> u64 {
+    // no way to get block size for windows, fall-back to file size
+    md.len()
 }
 
 fn display_grid(
@@ -2727,8 +2723,6 @@ fn display_grid(
 ///    longest_size_len: usize,
 /// ```
 /// that decide the maximum possible character count of each field.
-#[allow(clippy::write_literal)]
-#[allow(clippy::cognitive_complexity)]
 fn display_item_long(
     item: &PathData,
     padding: &PaddingCollection,
@@ -3085,7 +3079,6 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
     }
 }
 
-#[allow(dead_code)]
 enum SizeOrDeviceId {
     Size(String),
     Device(String, String),
@@ -3180,7 +3173,6 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
-#[allow(clippy::cognitive_complexity)]
 fn display_item_name(
     path: &PathData,
     config: &Config,
