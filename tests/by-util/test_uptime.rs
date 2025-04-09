@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore bincode serde utmp runlevel testusr testx
-#![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
+#![expect(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
 #[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 use uutests::at_and_ucmd;
@@ -107,7 +107,7 @@ fn test_uptime_with_non_existent_file() {
     all(target_arch = "aarch64", target_os = "linux"),
     ignore = "Issue #7159 - Test not supported on ARM64 Linux"
 )]
-#[allow(clippy::too_many_lines, clippy::items_after_statements)]
+#[expect(clippy::too_many_lines, clippy::items_after_statements)]
 fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
     // This test will pass for freebsd but we currently don't support changing the utmpx file for
     // freebsd.

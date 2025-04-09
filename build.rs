@@ -30,7 +30,7 @@ pub fn main() {
         if val == "1" && key.starts_with(ENV_FEATURE_PREFIX) {
             let krate = key[ENV_FEATURE_PREFIX.len()..].to_lowercase();
             // Allow this as we have a bunch of info in the comments
-            #[allow(clippy::match_same_arms)]
+            #[expect(clippy::match_same_arms)]
             match krate.as_ref() {
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" => continue, // common/standard feature names
                 "nightly" | "test_unimplemented" | "expensive_tests" | "test_risky_names" => {
@@ -51,8 +51,8 @@ pub fn main() {
     mf.write_all(
         "type UtilityMap<T> = phf::OrderedMap<&'static str, (fn(T) -> i32, fn() -> Command)>;\n\
          \n\
-         #[allow(clippy::too_many_lines)]
-         #[allow(clippy::unreadable_literal)]
+         #[expect(clippy::too_many_lines)]
+         #[expect(clippy::unreadable_literal)]
          fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n"
             .as_bytes(),
     )

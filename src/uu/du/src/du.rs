@@ -1106,7 +1106,7 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
 
 #[cfg(test)]
 mod test_du {
-    #[allow(unused_imports)]
+    #[expect(unused_imports)]
     use super::*;
 
     #[test]

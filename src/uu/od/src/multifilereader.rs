@@ -13,7 +13,7 @@ use uucore::show_error;
 pub enum InputSource<'a> {
     FileName(&'a str),
     Stdin,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     Stream(Box<dyn io::Read>),
 }
 

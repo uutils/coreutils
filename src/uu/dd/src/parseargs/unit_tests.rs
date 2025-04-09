@@ -13,7 +13,7 @@ use crate::conversion_tables::{
 use crate::parseargs::Parser;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-#[allow(clippy::useless_vec)]
+#[expect(clippy::useless_vec)]
 #[test]
 fn unimplemented_flags_should_error_non_linux() {
     let mut succeeded = Vec::new();
@@ -56,7 +56,7 @@ fn unimplemented_flags_should_error_non_linux() {
 }
 
 #[test]
-#[allow(clippy::useless_vec)]
+#[expect(clippy::useless_vec)]
 fn unimplemented_flags_should_error() {
     let mut succeeded = Vec::new();
 
@@ -105,7 +105,7 @@ fn test_status_level_none() {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)]
+#[expect(clippy::cognitive_complexity)]
 fn test_all_top_level_args_no_leading_dashes() {
     let args = &[
         "if=foo.file",
@@ -451,7 +451,7 @@ fn parse_oflag_tokens_linux() {
 macro_rules! test_byte_parser (
     ( $test_name:ident, $bs_str:expr, $bs:expr ) =>
     {
-        #[allow(non_snake_case)]
+        #[expect(non_snake_case)]
         #[test]
         fn $test_name()
         {

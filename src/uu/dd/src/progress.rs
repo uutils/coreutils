@@ -290,7 +290,7 @@ pub(crate) struct ReadStat {
 
 impl ReadStat {
     /// Create a new instance.
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     fn new(complete: u64, partial: u64, truncated: u32, bytes_total: u64) -> Self {
         Self {
             reads_complete: complete,
@@ -353,7 +353,7 @@ pub(crate) struct WriteStat {
 
 impl WriteStat {
     /// Create a new instance.
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     fn new(complete: u64, partial: u64, bytes_total: u128) -> Self {
         Self {
             writes_complete: complete,

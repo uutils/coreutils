@@ -26,7 +26,7 @@ fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("Options:");
     println!("      --list    lists all defined functions, one per row\n");
     println!("Currently defined functions:\n");
-    #[allow(clippy::map_clone)]
+    #[expect(clippy::map_clone)]
     let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
     utils.sort_unstable();
     let display_list = utils.join(", ");

@@ -186,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_peek_read_with_smaller_buffer() {
         let mut sut = PeekReader::new(Cursor::new(&b"abcdefghij"[..]));
 

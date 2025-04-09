@@ -43,7 +43,7 @@ use windows_sys::Win32::{
 };
 
 #[cfg(windows)]
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn LPWSTR2String(buf: &[u16]) -> String {
     let len = buf.iter().position(|&n| n == 0).unwrap();
     String::from_utf16(&buf[..len]).unwrap()

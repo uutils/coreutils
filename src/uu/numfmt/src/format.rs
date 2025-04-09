@@ -419,7 +419,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_round_with_precision() {
         let rm = RoundMethod::FromZero;
         assert_eq!(1.0, round_with_precision(0.12345, rm, 0));
