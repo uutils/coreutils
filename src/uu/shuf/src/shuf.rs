@@ -87,7 +87,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         head_count: matches
             .get_many::<usize>(options::HEAD_COUNT)
             .unwrap_or_default()
-            .cloned()
+            .copied()
             .min()
             .unwrap_or(usize::MAX),
         output: matches.get_one(options::OUTPUT).cloned(),

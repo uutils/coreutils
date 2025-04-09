@@ -938,16 +938,14 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
     // Attempt to retrieve metadata for the source file.
     // If this fails, assume the file needs to be copied.
-    let from_meta = match metadata(from) {
-        Ok(meta) => meta,
-        Err(_) => return Ok(true),
+    let Ok(from_meta) = metadata(from) else {
+        return Ok(true);
     };
 
     // Attempt to retrieve metadata for the destination file.
     // If this fails, assume the file needs to be copied.
-    let to_meta = match metadata(to) {
-        Ok(meta) => meta,
-        Err(_) => return Ok(true),
+    let Ok(to_meta) = metadata(to) else {
+        return Ok(true);
     };
 
     // Define special file mode bits (setuid, setgid, sticky).

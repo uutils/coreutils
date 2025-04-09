@@ -107,7 +107,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let exit_code = match file_type {
                     FileType::Block => _mknod(file_name, S_IFBLK | mode, dev),
                     FileType::Character => _mknod(file_name, S_IFCHR | mode, dev),
-                    _ => unreachable!("file_type was validated to be only block or character"),
+                    FileType::Fifo => {
+                        unreachable!("file_type was validated to be only block or character")
+                    }
                 };
                 set_exit_code(exit_code);
                 Ok(())

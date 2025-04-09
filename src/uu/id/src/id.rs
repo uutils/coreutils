@@ -448,7 +448,7 @@ fn pretty(possible_pw: Option<Passwd>) {
                 .join(" ")
         );
     } else {
-        let login = cstr2cow!(getlogin() as *const _);
+        let login = cstr2cow!(getlogin().cast_const());
         let rid = getuid();
         if let Ok(p) = Passwd::locate(rid) {
             if login == p.name {
@@ -647,6 +647,7 @@ mod audit {
     pub type au_tid_addr_t = au_tid_addr;
 
     #[repr(C)]
+    #[expect(clippy::struct_field_names)]
     pub struct c_auditinfo_addr {
         pub ai_auid: au_id_t,         // Audit user ID
         pub ai_mask: au_mask_t,       // Audit masks.

@@ -56,9 +56,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     if users.is_empty() {
-        let gids = match get_groups_gnu(None) {
-            Ok(v) => v,
-            Err(_) => return Err(GroupsError::GetGroupsFailed.into()),
+        let Ok(gids) = get_groups_gnu(None) else {
+            return Err(GroupsError::GetGroupsFailed.into());
         };
         let groups: Vec<String> = gids.iter().map(infallible_gid2grp).collect();
         println!("{}", groups.join(" "));

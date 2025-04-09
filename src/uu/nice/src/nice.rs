@@ -71,8 +71,7 @@ fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
             saw_n = false;
         } else if s.to_str() == Some("-n")
             || s.to_str()
-                .map(|s| is_prefix_of(s, "--adjustment", "--a".len()))
-                .unwrap_or_default()
+                .is_some_and(|s| is_prefix_of(s, "--adjustment", "--a".len()))
         {
             saw_n = true;
         } else if let Ok(s) = s.clone().into_string() {

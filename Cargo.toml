@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde bincode fundu gethostid kqueue libselinux mangen memmap procfs uuhelp
+# spell-checker:ignore (libs) bigdecimal datetime serde bincode fundu gethostid kqueue libselinux mangen memmap procfs uuhelp startswith constness expl
 
 [package]
 name = "coreutils"
@@ -599,13 +599,74 @@ pedantic = { level = "deny", priority = -1 }
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
-all = { level = "deny", priority = -1 }
-#cargo = { level = "warn", priority = -1 }
-cognitive_complexity = "warn"
-default_trait_access = "warn"
-implicit_clone = "warn"
-manual_string_new = "warn"
-match_bool = "warn"
-range-plus-one = "warn"
-redundant-clone = "warn"
-ref_option = "warn"
+# The counts were generated with this command:
+#   cargo clippy --all-targets --workspace --message-format=json --quiet \
+#     | jq -r '.message.code.code | select(. != null and startswith("clippy::"))' \
+#     | sort | uniq -c | sort -h -r
+#
+# TODO:
+#  remove large_stack_arrays when https://github.com/rust-lang/rust-clippy/issues/13774 is fixed
+#
+all = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+cargo_common_metadata = "allow"              # 3240
+multiple_crate_versions = "allow"            # 2314
+missing_errors_doc = "allow"                 # 1504
+missing_panics_doc = "allow"                 # 946
+must_use_candidate = "allow"                 # 322
+doc_markdown = "allow"                       # 267
+match_same_arms = "allow"                    # 212
+unnecessary_semicolon = "allow"              # 156
+redundant_closure_for_method_calls = "allow" # 133
+cast_possible_truncation = "allow"           # 118
+too_many_lines = "allow"                     # 81
+cast_possible_wrap = "allow"                 # 76
+trivially_copy_pass_by_ref = "allow"         # 74
+cast_sign_loss = "allow"                     # 70
+struct_excessive_bools = "allow"             # 68
+single_match_else = "allow"                  # 66
+redundant_else = "allow"                     # 58
+map_unwrap_or = "allow"                      # 54
+cast_precision_loss = "allow"                # 52
+unnested_or_patterns = "allow"               # 40
+inefficient_to_string = "allow"              # 38
+unnecessary_wraps = "allow"                  # 37
+cast_lossless = "allow"                      # 33
+ignored_unit_patterns = "allow"              # 29
+needless_continue = "allow"                  # 28
+items_after_statements = "allow"             # 22
+similar_names = "allow"                      # 20
+wildcard_imports = "allow"                   # 18
+used_underscore_binding = "allow"            # 16
+large_stack_arrays = "allow"                 # 14
+float_cmp = "allow"                          # 12
+# semicolon_if_nothing_returned = "allow"  # 9
+used_underscore_items = "allow"    # 8
+return_self_not_must_use = "allow" # 8
+needless_pass_by_value = "allow"   # 8
+# manual_let_else = "allow"  # 8
+# needless_raw_string_hashes = "allow"  # 7
+match_on_vec_items = "allow" # 6
+inline_always = "allow"      # 6
+# format_push_string = "allow"  # 6
+fn_params_excessive_bools = "allow" # 6
+# single_char_pattern = "allow"  # 4
+# ptr_cast_constness = "allow"  # 4
+# match_wildcard_for_single_variants = "allow"  # 4
+# manual_is_variant_and = "allow"  # 4
+# explicit_deref_methods = "allow"  # 4
+# enum_glob_use = "allow"  # 3
+# unnecessary_literal_bound = "allow"  # 2
+# stable_sort_primitive = "allow"  # 2
+should_panic_without_expect = "allow" # 2
+# ptr_as_ptr = "allow"  # 2
+# needless_for_each = "allow"  # 2
+if_not_else = "allow"             # 2
+expl_impl_clone_on_copy = "allow" # 2
+# cloned_instead_of_copied = "allow"  # 2
+# borrow_as_ptr = "allow"  # 2
+bool_to_int_with_if = "allow" # 2
+# ref_as_ptr = "allow"  # 2
+# unreadable_literal = "allow"  # 1
+uninlined_format_args = "allow" # ?

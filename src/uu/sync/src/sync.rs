@@ -45,8 +45,8 @@ mod platform {
         libc::syscall(libc::SYS_sync);
         unsafe {
             #[cfg(not(target_os = "android"))]
-            libc::sync()
-        };
+            libc::sync();
+        }
         Ok(())
     }
 
@@ -177,8 +177,8 @@ mod platform {
                         .as_os_str()
                         .to_str()
                         .unwrap(),
-                )?
-            };
+                )?;
+            }
         }
         Ok(())
     }
