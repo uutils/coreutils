@@ -34,6 +34,11 @@ uucore = { workspace = true, features = [
 name = "seq"
 path = "src/main.rs"
 
+# FIXME: this is the only crate that has a separate lints configuration,
+#        which for now means a full copy of all clippy and rust lints here.
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+
 # Allow "fuzzing" as a "cfg" condition name
 # https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
 [lints.rust]

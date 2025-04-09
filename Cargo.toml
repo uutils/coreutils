@@ -584,3 +584,13 @@ manual_let_else = "warn"
 all = { level = "deny", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
+
+# This is the linting configuration for all crates.
+# Eventually the clippy settings from the `[lints]` section should be moved here.
+# In order to use these, all crates have `[lints] workspace = true` section.
+[workspace.lints.rust]
+# unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+#cargo = { level = "warn", priority = -1 }
