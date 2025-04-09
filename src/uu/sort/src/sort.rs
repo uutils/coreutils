@@ -1152,7 +1152,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 settings.merge_batch_size = parsed_value;
             }
             Err(e) => {
-                let error_message = if *e.kind() == std::num::IntErrorKind::PosOverflow {
+                let error_message = if *e.kind() == IntErrorKind::PosOverflow {
                     #[cfg(target_os = "linux")]
                     {
                         show_error!("--batch-size argument {} too large", n_merge.quote());
@@ -1987,7 +1987,7 @@ mod tests {
     fn test_line_size() {
         // We should make sure to not regress the size of the Line struct because
         // it is unconditional overhead for every line we sort.
-        assert_eq!(std::mem::size_of::<Line>(), 24);
+        assert_eq!(size_of::<Line>(), 24);
     }
 
     #[test]

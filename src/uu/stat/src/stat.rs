@@ -972,8 +972,7 @@ impl Stater {
                     'Y' => {
                         let sec = meta.mtime();
                         let nsec = meta.mtime_nsec();
-                        let tm =
-                            chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
+                        let tm = DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
                         let tm: DateTime<Local> = tm.into();
                         match tm.timestamp_nanos_opt() {
                             None => {
@@ -1186,7 +1185,7 @@ const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f %z";
 
 fn pretty_time(sec: i64, nsec: i64) -> String {
     // Return the date in UTC
-    let tm = chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
+    let tm = DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
     let tm: DateTime<Local> = tm.into();
 
     tm.format(PRETTY_DATETIME_FORMAT).to_string()

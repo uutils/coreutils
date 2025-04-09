@@ -654,7 +654,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             files.collect()
         } else {
             // Deduplicate while preserving order
-            let mut seen = std::collections::HashSet::new();
+            let mut seen = HashSet::new();
             files
                 .filter(|path| seen.insert(path.clone()))
                 .collect::<Vec<_>>()

@@ -345,7 +345,7 @@ fn debug_print_args(args: &[OsString]) {
 fn check_and_handle_string_args(
     arg: &OsString,
     prefix_to_test: &str,
-    all_args: &mut Vec<std::ffi::OsString>,
+    all_args: &mut Vec<OsString>,
     do_debug_print_args: Option<&Vec<OsString>>,
 ) -> UResult<bool> {
     let native_arg = NCvt::convert(arg);
@@ -386,8 +386,8 @@ impl EnvAppData {
     fn process_all_string_arguments(
         &mut self,
         original_args: &Vec<OsString>,
-    ) -> UResult<Vec<std::ffi::OsString>> {
-        let mut all_args: Vec<std::ffi::OsString> = Vec::new();
+    ) -> UResult<Vec<OsString>> {
+        let mut all_args: Vec<OsString> = Vec::new();
         for arg in original_args {
             match arg {
                 b if check_and_handle_string_args(b, "--split-string", &mut all_args, None)? => {
@@ -454,7 +454,7 @@ impl EnvAppData {
                             uucore::show_error!("{s}");
                         }
                         uucore::show_error!("{ERROR_MSG_S_SHEBANG}");
-                        uucore::error::ExitCode::new(125)
+                        ExitCode::new(125)
                     }
                 }
             })?;
@@ -751,7 +751,7 @@ fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
     for &sig_value in &opts.ignore_signal {
         let sig: Signal = (sig_value as i32)
             .try_into()
-            .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         ignore_signal(sig)?;
     }
@@ -786,7 +786,7 @@ mod tests {
 
     #[test]
     fn test_split_string_environment_vars_test() {
-        unsafe { std::env::set_var("FOO", "BAR") };
+        unsafe { env::set_var("FOO", "BAR") };
         assert_eq!(
             NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
             parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))

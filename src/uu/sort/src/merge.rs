@@ -50,7 +50,7 @@ fn replace_output_file_in_input_files(
                         *file = copy.clone().into_os_string();
                     } else {
                         let (_file, copy_path) = tmp_dir.next_file()?;
-                        std::fs::copy(file_path, &copy_path)
+                        fs::copy(file_path, &copy_path)
                             .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                         *file = copy_path.clone().into_os_string();
                         copy = Some(copy_path);

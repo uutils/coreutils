@@ -16,9 +16,9 @@ use crate::os_str_to_c_string;
 
 #[derive(Debug)]
 pub(crate) struct FTS {
-    fts: ptr::NonNull<fts_sys::FTS>,
+    fts: NonNull<fts_sys::FTS>,
 
-    entry: Option<ptr::NonNull<fts_sys::FTSENT>>,
+    entry: Option<NonNull<fts_sys::FTSENT>>,
     _phantom_data: PhantomData<fts_sys::FTSENT>,
 }
 
@@ -52,7 +52,7 @@ impl FTS {
         // - `compar` is None.
         let fts = unsafe { fts_sys::fts_open(path_argv.as_ptr().cast(), options, None) };
 
-        let fts = ptr::NonNull::new(fts)
+        let fts = NonNull::new(fts)
             .ok_or_else(|| Error::from_io("fts_open()", io::Error::last_os_error()))?;
 
         Ok(Self {
@@ -110,14 +110,14 @@ impl Drop for FTS {
 
 #[derive(Debug)]
 pub(crate) struct EntryRef<'fts> {
-    pub(crate) pointer: ptr::NonNull<fts_sys::FTSENT>,
+    pub(crate) pointer: NonNull<fts_sys::FTSENT>,
 
     _fts: PhantomData<&'fts FTS>,
     _phantom_data: PhantomData<fts_sys::FTSENT>,
 }
 
 impl<'fts> EntryRef<'fts> {
-    fn new(_fts: &'fts FTS, entry: ptr::NonNull<fts_sys::FTSENT>) -> Self {
+    fn new(_fts: &'fts FTS, entry: NonNull<fts_sys::FTSENT>) -> Self {
         Self {
             pointer: entry,
             _fts: PhantomData,
@@ -174,7 +174,7 @@ impl<'fts> EntryRef<'fts> {
     }
 
     pub(crate) fn access_path(&self) -> Option<&Path> {
-        ptr::NonNull::new(self.as_ref().fts_accpath)
+        NonNull::new(self.as_ref().fts_accpath)
             .map(|path_ptr| {
                 // SAFETY: `entry.fts_accpath` is a non-null pointer that is assumed to be valid.
                 unsafe { CStr::from_ptr(path_ptr.as_ptr()) }
@@ -184,7 +184,7 @@ impl<'fts> EntryRef<'fts> {
     }
 
     pub(crate) fn stat(&self) -> Option<&libc::stat> {
-        ptr::NonNull::new(self.as_ref().fts_statp).map(|stat_ptr| {
+        NonNull::new(self.as_ref().fts_statp).map(|stat_ptr| {
             // SAFETY: `entry.fts_statp` is a non-null pointer that is assumed to be valid.
             unsafe { stat_ptr.as_ref() }
         })

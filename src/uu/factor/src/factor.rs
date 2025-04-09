@@ -27,10 +27,10 @@ mod options {
 
 fn print_factors_str(
     num_str: &str,
-    w: &mut io::BufWriter<impl io::Write>,
+    w: &mut io::BufWriter<impl Write>,
     print_exponents: bool,
 ) -> UResult<()> {
-    let rx = num_str.trim().parse::<num_bigint::BigUint>();
+    let rx = num_str.trim().parse::<BigUint>();
     let Ok(x) = rx else {
         // return Ok(). it's non-fatal and we should try the next number.
         show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());

@@ -139,7 +139,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
         .arg(
             Arg::new(options::FILE)
                 .index(1)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

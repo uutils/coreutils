@@ -675,7 +675,7 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
         return Ok(());
     };
 
-    let meta = match fs::metadata(path) {
+    let meta = match metadata(path) {
         Ok(meta) => meta,
         Err(e) => return Err(InstallError::MetadataFailed(e).into()),
     };
@@ -859,7 +859,7 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
-    let meta = match fs::metadata(from) {
+    let meta = match metadata(from) {
         Ok(meta) => meta,
         Err(e) => return Err(InstallError::MetadataFailed(e).into()),
     };
@@ -940,14 +940,14 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
     // Attempt to retrieve metadata for the source file.
     // If this fails, assume the file needs to be copied.
-    let from_meta = match fs::metadata(from) {
+    let from_meta = match metadata(from) {
         Ok(meta) => meta,
         Err(_) => return Ok(true),
     };
 
     // Attempt to retrieve metadata for the destination file.
     // If this fails, assume the file needs to be copied.
-    let to_meta = match fs::metadata(to) {
+    let to_meta = match metadata(to) {
         Ok(meta) => meta,
         Err(_) => return Ok(true),
     };

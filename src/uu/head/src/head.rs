@@ -7,7 +7,6 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-#[cfg(unix)]
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
@@ -224,7 +223,7 @@ struct HeadOptions {
 
 impl HeadOptions {
     ///Construct options from matches
-    pub fn get_from(matches: &clap::ArgMatches) -> Result<Self, String> {
+    pub fn get_from(matches: &ArgMatches) -> Result<Self, String> {
         let mut options = Self::default();
 
         options.quiet = matches.get_flag(options::QUIET_NAME);
@@ -251,12 +250,12 @@ fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     )
 }
 
-fn read_n_bytes(input: impl Read, n: u64) -> std::io::Result<u64> {
+fn read_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
     // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
 
     // Write those bytes to `stdout`.
-    let stdout = std::io::stdout();
+    let stdout = io::stdout();
     let mut stdout = stdout.lock();
 
     let bytes_written = io::copy(&mut reader, &mut stdout).map_err(wrap_in_stdout_error)?;
@@ -269,12 +268,12 @@ fn read_n_bytes(input: impl Read, n: u64) -> std::io::Result<u64> {
     Ok(bytes_written)
 }
 
-fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std::io::Result<u64> {
+fn read_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Result<u64> {
     // Read the first `n` lines from the `input` reader.
     let mut reader = take_lines(input, n, separator);
 
     // Write those bytes to `stdout`.
-    let stdout = std::io::stdout();
+    let stdout = io::stdout();
     let stdout = stdout.lock();
     let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
 
@@ -298,10 +297,10 @@ fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> 
     }
 }
 
-fn read_but_last_n_bytes(mut input: impl Read, n: u64) -> std::io::Result<u64> {
+fn read_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
     let mut bytes_written: u64 = 0;
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
-        let stdout = std::io::stdout();
+        let stdout = io::stdout();
         let mut stdout = stdout.lock();
 
         bytes_written = copy_all_but_n_bytes(&mut input, &mut stdout, n)
@@ -317,8 +316,8 @@ fn read_but_last_n_bytes(mut input: impl Read, n: u64) -> std::io::Result<u64> {
     Ok(bytes_written)
 }
 
-fn read_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> std::io::Result<u64> {
-    let stdout = std::io::stdout();
+fn read_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Result<u64> {
+    let stdout = io::stdout();
     let mut stdout = stdout.lock();
     if n == 0 {
         return io::copy(&mut input, &mut stdout).map_err(wrap_in_stdout_error);
@@ -370,7 +369,7 @@ fn read_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> std::io
 /// assert_eq!(find_nth_line_from_end(&mut input, 4, false).unwrap(), 0);
 /// assert_eq!(find_nth_line_from_end(&mut input, 1000, false).unwrap(), 0);
 /// ```
-fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> std::io::Result<u64>
+fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> io::Result<u64>
 where
     R: Read + Seek,
 {
@@ -408,14 +407,14 @@ where
     }
 }
 
-fn is_seekable(input: &mut std::fs::File) -> bool {
+fn is_seekable(input: &mut File) -> bool {
     let current_pos = input.stream_position();
     current_pos.is_ok()
         && input.seek(SeekFrom::End(0)).is_ok()
         && input.seek(SeekFrom::Start(current_pos.unwrap())).is_ok()
 }
 
-fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<u64> {
+fn head_backwards_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     let st = input.metadata()?;
     let seekable = is_seekable(input);
     let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
@@ -426,10 +425,7 @@ fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std:
     }
 }
 
-fn head_backwards_without_seek_file(
-    input: &mut std::fs::File,
-    options: &HeadOptions,
-) -> std::io::Result<u64> {
+fn head_backwards_without_seek_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     match options.mode {
         Mode::AllButLastBytes(n) => read_but_last_n_bytes(input, n),
         Mode::AllButLastLines(n) => read_but_last_n_lines(input, n, options.line_ending.into()),
@@ -437,10 +433,7 @@ fn head_backwards_without_seek_file(
     }
 }
 
-fn head_backwards_on_seekable_file(
-    input: &mut std::fs::File,
-    options: &HeadOptions,
-) -> std::io::Result<u64> {
+fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     match options.mode {
         Mode::AllButLastBytes(n) => {
             let size = input.metadata()?.len();
@@ -458,11 +451,11 @@ fn head_backwards_on_seekable_file(
     }
 }
 
-fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<u64> {
+fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     match options.mode {
         Mode::FirstBytes(n) => read_n_bytes(input, n),
         Mode::FirstLines(n) => read_n_lines(
-            &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
+            &mut io::BufReader::with_capacity(BUF_SIZE, input),
             n,
             options.line_ending.into(),
         ),
@@ -482,7 +475,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     }
                     println!("==> standard input <==");
                 }
-                let stdin = std::io::stdin();
+                let stdin = io::stdin();
 
                 #[cfg(unix)]
                 {
@@ -520,7 +513,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 Ok(())
             }
             (name, false) => {
-                let mut file = match std::fs::File::open(name) {
+                let mut file = match File::open(name) {
                     Ok(f) => f,
                     Err(err) => {
                         show!(err.map_err_context(|| format!(
@@ -575,8 +568,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 #[cfg(test)]
 mod tests {
+    use io::Cursor;
     use std::ffi::OsString;
-    use std::io::Cursor;
 
     use super::*;
 
@@ -691,7 +684,7 @@ mod tests {
 
     #[test]
     fn read_early_exit() {
-        let mut empty = std::io::BufReader::new(std::io::Cursor::new(Vec::new()));
+        let mut empty = io::BufReader::new(Cursor::new(Vec::new()));
         assert!(read_n_bytes(&mut empty, 0).is_ok());
         assert!(read_n_lines(&mut empty, 0, b'\n').is_ok());
     }

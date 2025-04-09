@@ -74,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 let sig = (sig as i32)
                     .try_into()
-                    .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+                    .map_err(|e| Error::from_raw_os_error(e as i32))?;
                 Some(sig)
             };
 

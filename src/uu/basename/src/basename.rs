@@ -90,7 +90,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::NAME)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
                 .hide(true)
                 .trailing_var_arg(true),

@@ -48,7 +48,7 @@ impl MultifileReader<'_> {
             }
             match self.ni.remove(0) {
                 InputSource::Stdin => {
-                    self.curr_file = Some(Box::new(BufReader::new(std::io::stdin())));
+                    self.curr_file = Some(Box::new(BufReader::new(io::stdin())));
                     break;
                 }
                 InputSource::FileName(fname) => {

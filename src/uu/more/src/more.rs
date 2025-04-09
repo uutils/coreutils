@@ -266,7 +266,7 @@ pub fn uu_app() -> Command {
 }
 
 #[cfg(not(target_os = "fuchsia"))]
-fn setup_term() -> std::io::Stdout {
+fn setup_term() -> Stdout {
     let stdout = stdout();
     terminal::enable_raw_mode().unwrap();
     stdout
@@ -279,10 +279,10 @@ fn setup_term() -> usize {
 }
 
 #[cfg(not(target_os = "fuchsia"))]
-fn reset_term(stdout: &mut std::io::Stdout) {
+fn reset_term(stdout: &mut Stdout) {
     terminal::disable_raw_mode().unwrap();
     // Clear the prompt
-    queue!(stdout, terminal::Clear(ClearType::CurrentLine)).unwrap();
+    queue!(stdout, Clear(ClearType::CurrentLine)).unwrap();
     // Move cursor to the beginning without printing new line
     print!("\r");
     stdout.flush().unwrap();
@@ -313,7 +313,7 @@ fn more(
         match search_pattern_in_file(&pager.lines, pat) {
             Some(number) => pager.upper_mark = number,
             None => {
-                execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+                execute!(stdout, Clear(ClearType::CurrentLine))?;
                 stdout.write_all("\rPattern not found\n".as_bytes())?;
                 pager.content_rows -= 1;
             }
@@ -321,7 +321,7 @@ fn more(
     }
 
     if multiple_file {
-        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+        execute!(stdout, Clear(ClearType::CurrentLine)).unwrap();
         stdout.write_all(
             MULTI_FILE_TOP_PROMPT
                 .replace("{}", file.unwrap_or_default())
@@ -516,7 +516,7 @@ impl<'a> Pager<'a> {
         };
     }
 
-    fn draw(&mut self, stdout: &mut std::io::Stdout, wrong_key: Option<char>) {
+    fn draw(&mut self, stdout: &mut Stdout, wrong_key: Option<char>) {
         self.draw_lines(stdout);
         let lower_mark = self
             .line_count
@@ -525,8 +525,8 @@ impl<'a> Pager<'a> {
         stdout.flush().unwrap();
     }
 
-    fn draw_lines(&mut self, stdout: &mut std::io::Stdout) {
-        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+    fn draw_lines(&mut self, stdout: &mut Stdout) {
+        execute!(stdout, Clear(ClearType::CurrentLine)).unwrap();
 
         self.line_squeezed = 0;
         let mut previous_line_blank = false;
@@ -611,7 +611,7 @@ fn search_pattern_in_file(lines: &[&str], pattern: &str) -> Option<usize> {
     None
 }
 
-fn paging_add_back_message(options: &Options, stdout: &mut std::io::Stdout) -> UResult<()> {
+fn paging_add_back_message(options: &Options, stdout: &mut Stdout) -> UResult<()> {
     if options.lines.is_some() {
         execute!(stdout, MoveUp(1))?;
         stdout.write_all("\n\r...back 1 page\n".as_bytes())?;

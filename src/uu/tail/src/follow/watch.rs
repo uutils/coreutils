@@ -229,7 +229,7 @@ impl Observer {
             watcher = Box::new(notify::PollWatcher::new(tx, watcher_config).unwrap());
         } else {
             let tx_clone = tx.clone();
-            match notify::RecommendedWatcher::new(tx, notify::Config::default()) {
+            match RecommendedWatcher::new(tx, notify::Config::default()) {
                 Ok(w) => watcher = Box::new(w),
                 Err(e) if e.to_string().starts_with("Too many open files") => {
                     /*

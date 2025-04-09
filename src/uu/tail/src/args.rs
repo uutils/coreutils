@@ -181,7 +181,7 @@ impl Settings {
         settings
     }
 
-    pub fn from(matches: &clap::ArgMatches) -> UResult<Self> {
+    pub fn from(matches: &ArgMatches) -> UResult<Self> {
         // We're parsing --follow, -F and --retry under the following conditions:
         // * -F sets --retry and --follow=name
         // * plain --follow or short -f is the same like specifying --follow=descriptor
@@ -236,7 +236,7 @@ impl Settings {
             // * not applied here but it supports customizable time units and provides better error
             //   messages
             settings.sleep_sec = match DurationParser::without_time_units().parse(source) {
-                Ok(duration) => SaturatingInto::<std::time::Duration>::saturating_into(duration),
+                Ok(duration) => SaturatingInto::<Duration>::saturating_into(duration),
                 Err(_) => {
                     return Err(UUsageError::new(
                         1,
