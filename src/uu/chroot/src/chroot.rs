@@ -54,23 +54,23 @@ struct Options {
 /// The `spec` must be of the form `[USER][:[GROUP]]`, otherwise an
 /// error is returned.
 fn parse_userspec(spec: &str) -> UResult<UserSpec> {
-    let mut parts = spec.splitn(2, ':');
-    match (parts.next(), parts.next()) {
+    Ok(match spec.split_once(':') {
         // ""
-        (Some(""), None) => Ok(UserSpec::NeitherGroupNorUser),
+        None if spec == "" => UserSpec::NeitherGroupNorUser,
         // "usr"
-        (Some(usr), None) => Ok(UserSpec::UserOnly(usr.to_string())),
+        None => UserSpec::UserOnly(spec.to_string()),
         // ":"
-        (Some(""), Some("")) => Ok(UserSpec::NeitherGroupNorUser),
+        Some(("", "")) => UserSpec::NeitherGroupNorUser,
         // ":grp"
-        (Some(""), Some(grp)) => Ok(UserSpec::GroupOnly(grp.to_string())),
+        Some(("", grp)) => UserSpec::GroupOnly(grp.to_string()),
         // "usr:"
-        (Some(usr), Some("")) => Ok(UserSpec::UserOnly(usr.to_string())),
+        Some((usr, "")) => UserSpec::UserOnly(usr.to_string()),
         // "usr:grp"
-        (Some(usr), Some(grp)) => Ok(UserSpec::UserAndGroup(usr.to_string(), grp.to_string())),
+        Some((usr, grp)) => UserSpec::UserAndGroup(usr.to_string(), grp.to_string()),
+        // BUG: this would never be reached. Should we check for another ':', or some invalid characters?
         // everything else
-        _ => Err(ChrootError::InvalidUserspec(spec.to_string()).into()),
-    }
+        // _ => Err(ChrootError::InvalidUserspec(spec.to_string()).into()),
+    })
 }
 
 // Pre-condition: `list_str` is non-empty.
