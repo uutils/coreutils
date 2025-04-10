@@ -71,6 +71,9 @@ pub enum FormatError {
     EndsWithPercent(Vec<u8>),
     /// The escape sequence `\x` appears without a literal hexadecimal value.
     MissingHex,
+    /// The hexadecimal characters represent a code point that cannot represent a
+    /// Unicode character (e.g., a surrogate code point)
+    InvalidCharacter(char, Vec<u8>),
 }
 
 impl Error for FormatError {}
@@ -110,6 +113,12 @@ impl Display for FormatError {
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
             Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
+            Self::InvalidCharacter(escape_char, digits) => write!(
+                f,
+                "invalid universal character name \\{}{}",
+                escape_char,
+                String::from_utf8_lossy(digits)
+            ),
         }
     }
 }
@@ -186,12 +195,7 @@ pub fn parse_spec_and_escape(
         }
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(
-                match parse_escape_code(&mut current, OctalParsing::default()) {
-                    Ok(c) => Ok(FormatItem::Char(c)),
-                    Err(_) => Err(FormatError::MissingHex),
-                },
-            )
+            Some(parse_escape_code(&mut current, OctalParsing::default()).map(FormatItem::Char))
         }
         [c, rest @ ..] => {
             current = rest;
