@@ -2861,12 +2861,13 @@ fn display_item_long(
         };
 
         if config.dired {
-            let (start, end) = dired::calculate_dired(
+            let (start, end, end_filename) = dired::calculate_dired(
                 &dired.dired_positions,
                 output_display.len(),
                 displayed_item.len(),
+                item.display_name.len(),
             );
-            dired::update_positions(dired, start, end);
+            dired::update_positions(dired, start, end, end_filename);
         }
         write_os_str(&mut output_display, &displayed_item)?;
         write!(output_display, "{}", config.line_ending)?;
@@ -2966,6 +2967,7 @@ fn display_item_long(
                 dired,
                 output_display.len(),
                 displayed_item.to_string_lossy().trim().len(),
+                item.display_name.len(),
             );
         }
         write_os_str(&mut output_display, &displayed_item)?;
