@@ -6167,3 +6167,20 @@ fn test_cp_update_older_interactive_prompt_no() {
         .fails()
         .stdout_is("cp: overwrite 'old'? ");
 }
+
+#[test]
+fn test_cp_update_none_interactive_prompt_no() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let old_file = "old";
+    let new_file = "new";
+
+    at.write(old_file, "old content");
+    at.write(new_file, "new content");
+
+    ucmd.args(&["-i", "--update=none", new_file, old_file])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read(old_file), "old content");
+    assert_eq!(at.read(new_file), "new content");
+}
