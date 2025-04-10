@@ -234,7 +234,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let invalid = InvalidModes::from_str(args.get_one::<String>(INVALID).unwrap()).unwrap();
 
-    let zero_terminated = args.get_flag(options::ZERO_TERMINATED);
+    let zero_terminated = args.get_flag(ZERO_TERMINATED);
 
     Ok(NumfmtOptions {
         transform,
@@ -387,8 +387,8 @@ pub fn uu_app() -> Command {
                 .value_name("INVALID"),
         )
         .arg(
-            Arg::new(options::ZERO_TERMINATED)
-                .long(options::ZERO_TERMINATED)
+            Arg::new(ZERO_TERMINATED)
+                .long(ZERO_TERMINATED)
                 .short('z')
                 .help("line delimiter is NUL, not newline")
                 .action(ArgAction::SetTrue),

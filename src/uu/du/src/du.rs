@@ -227,7 +227,7 @@ fn get_size_on_disk(path: &Path) -> u64 {
 
     // bind file so it stays in scope until end of function
     // if it goes out of scope the handle below becomes invalid
-    let file = match fs::File::open(path) {
+    let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => return size_on_disk, // opening directories will fail
     };
@@ -240,7 +240,7 @@ fn get_size_on_disk(path: &Path) -> u64 {
             file.as_raw_handle() as HANDLE,
             FileStandardInfo,
             file_info_ptr as _,
-            std::mem::size_of::<FILE_STANDARD_INFO>() as u32,
+            size_of::<FILE_STANDARD_INFO>() as u32,
         );
 
         if success != 0 {
@@ -255,7 +255,7 @@ fn get_size_on_disk(path: &Path) -> u64 {
 fn get_file_info(path: &Path) -> Option<FileInfo> {
     let mut result = None;
 
-    let file = match fs::File::open(path) {
+    let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => return result,
     };
@@ -268,7 +268,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
             file.as_raw_handle() as HANDLE,
             FileIdInfo,
             file_info_ptr as _,
-            std::mem::size_of::<FILE_ID_INFO>() as u32,
+            size_of::<FILE_ID_INFO>() as u32,
         );
 
         if success != 0 {

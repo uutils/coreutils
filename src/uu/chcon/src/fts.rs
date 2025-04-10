@@ -8,7 +8,6 @@ use std::ffi::{CStr, CString, OsStr};
 use std::marker::PhantomData;
 use std::os::raw::{c_int, c_long, c_short};
 use std::path::Path;
-use std::ptr::NonNull;
 use std::{io, iter, ptr, slice};
 
 use crate::errors::{Error, Result};
@@ -16,9 +15,9 @@ use crate::os_str_to_c_string;
 
 #[derive(Debug)]
 pub(crate) struct FTS {
-    fts: NonNull<fts_sys::FTS>,
+    fts: ptr::NonNull<fts_sys::FTS>,
 
-    entry: Option<NonNull<fts_sys::FTSENT>>,
+    entry: Option<ptr::NonNull<fts_sys::FTSENT>>,
     _phantom_data: PhantomData<fts_sys::FTSENT>,
 }
 
@@ -52,7 +51,7 @@ impl FTS {
         // - `compar` is None.
         let fts = unsafe { fts_sys::fts_open(path_argv.as_ptr().cast(), options, None) };
 
-        let fts = NonNull::new(fts)
+        let fts = ptr::NonNull::new(fts)
             .ok_or_else(|| Error::from_io("fts_open()", io::Error::last_os_error()))?;
 
         Ok(Self {
@@ -71,7 +70,7 @@ impl FTS {
         // pointer assumed to be valid.
         let new_entry = unsafe { fts_sys::fts_read(self.fts.as_ptr()) };
 
-        self.entry = NonNull::new(new_entry);
+        self.entry = ptr::NonNull::new(new_entry);
         if self.entry.is_none() {
             let r = io::Error::last_os_error();
             if let Some(0) = r.raw_os_error() {
@@ -110,14 +109,14 @@ impl Drop for FTS {
 
 #[derive(Debug)]
 pub(crate) struct EntryRef<'fts> {
-    pub(crate) pointer: NonNull<fts_sys::FTSENT>,
+    pub(crate) pointer: ptr::NonNull<fts_sys::FTSENT>,
 
     _fts: PhantomData<&'fts FTS>,
     _phantom_data: PhantomData<fts_sys::FTSENT>,
 }
 
 impl<'fts> EntryRef<'fts> {
-    fn new(_fts: &'fts FTS, entry: NonNull<fts_sys::FTSENT>) -> Self {
+    fn new(_fts: &'fts FTS, entry: ptr::NonNull<fts_sys::FTSENT>) -> Self {
         Self {
             pointer: entry,
             _fts: PhantomData,
@@ -161,7 +160,7 @@ impl<'fts> EntryRef<'fts> {
             return None;
         }
 
-        NonNull::new(entry.fts_path)
+        ptr::NonNull::new(entry.fts_path)
             .map(|path_ptr| {
                 let path_size = usize::from(entry.fts_pathlen).saturating_add(1);
 
@@ -174,7 +173,7 @@ impl<'fts> EntryRef<'fts> {
     }
 
     pub(crate) fn access_path(&self) -> Option<&Path> {
-        NonNull::new(self.as_ref().fts_accpath)
+        ptr::NonNull::new(self.as_ref().fts_accpath)
             .map(|path_ptr| {
                 // SAFETY: `entry.fts_accpath` is a non-null pointer that is assumed to be valid.
                 unsafe { CStr::from_ptr(path_ptr.as_ptr()) }
@@ -184,7 +183,7 @@ impl<'fts> EntryRef<'fts> {
     }
 
     pub(crate) fn stat(&self) -> Option<&libc::stat> {
-        NonNull::new(self.as_ref().fts_statp).map(|stat_ptr| {
+        ptr::NonNull::new(self.as_ref().fts_statp).map(|stat_ptr| {
             // SAFETY: `entry.fts_statp` is a non-null pointer that is assumed to be valid.
             unsafe { stat_ptr.as_ref() }
         })
