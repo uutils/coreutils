@@ -1,15 +1,14 @@
 [package]
 name = "uu_runcon"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "runcon ~ (uutils) run command with specified security context"
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/runcon"
 keywords = ["coreutils", "uutils", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+version.workspace = true
 readme.workspace = true
 
 [lints]

@@ -1,15 +1,14 @@
 [package]
 name = "uu_chcon"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "chcon ~ (uutils) change file security context"
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/chcon"
 keywords = ["coreutils", "uutils", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2024"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
 
 [lints]
