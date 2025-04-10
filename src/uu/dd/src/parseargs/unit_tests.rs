@@ -29,22 +29,14 @@ fn unimplemented_flags_should_error_non_linux() {
         "noctty",
         "nofollow",
     ] {
-        let args = vec![format!("iflag={flag}")];
-
-        if Parser::new()
-            .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
-            .is_ok()
-        {
-            succeeded.push(format!("iflag={flag}"));
+        let arg = format!("iflag={flag}");
+        if Parser::new().parse([&arg]).is_ok() {
+            succeeded.push(arg);
         }
 
-        let args = vec![format!("oflag={flag}")];
-
-        if Parser::new()
-            .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
-            .is_ok()
-        {
-            succeeded.push(format!("iflag={flag}"));
+        let arg = format!("oflag={flag}");
+        if Parser::new().parse([&arg]).is_ok() {
+            succeeded.push(arg);
         }
     }
 
@@ -61,22 +53,14 @@ fn unimplemented_flags_should_error() {
 
     // The following flags are not implemented
     for flag in ["cio", "nolinks", "text", "binary"] {
-        let args = vec![format!("iflag={flag}")];
-
-        if Parser::new()
-            .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
-            .is_ok()
-        {
-            succeeded.push(format!("iflag={flag}"));
+        let arg = format!("iflag={flag}");
+        if Parser::new().parse([&arg]).is_ok() {
+            succeeded.push(arg);
         }
 
-        let args = vec![format!("oflag={flag}")];
-
-        if Parser::new()
-            .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
-            .is_ok()
-        {
-            succeeded.push(format!("iflag={flag}"));
+        let arg = format!("oflag={flag}");
+        if Parser::new().parse([&arg]).is_ok() {
+            succeeded.push(arg);
         }
     }
 
@@ -88,14 +72,14 @@ fn unimplemented_flags_should_error() {
 
 #[test]
 fn test_status_level_absent() {
-    let args = &["if=foo.file", "of=bar.file"];
+    let args = ["if=foo.file", "of=bar.file"];
 
     assert_eq!(Parser::new().parse(args).unwrap().status, None);
 }
 
 #[test]
 fn test_status_level_none() {
-    let args = &["status=none", "if=foo.file", "of=bar.file"];
+    let args = ["status=none", "if=foo.file", "of=bar.file"];
 
     assert_eq!(
         Parser::new().parse(args).unwrap().status,
@@ -106,7 +90,7 @@ fn test_status_level_none() {
 #[test]
 #[allow(clippy::cognitive_complexity)]
 fn test_all_top_level_args_no_leading_dashes() {
-    let args = &[
+    let args = [
         "if=foo.file",
         "of=bar.file",
         "ibs=10",
@@ -181,7 +165,7 @@ fn test_all_top_level_args_no_leading_dashes() {
 
 #[test]
 fn test_status_level_progress() {
-    let args = &["if=foo.file", "of=bar.file", "status=progress"];
+    let args = ["if=foo.file", "of=bar.file", "status=progress"];
 
     let settings = Parser::new().parse(args).unwrap();
 
@@ -190,7 +174,7 @@ fn test_status_level_progress() {
 
 #[test]
 fn test_status_level_noxfer() {
-    let args = &["if=foo.file", "status=noxfer", "of=bar.file"];
+    let args = ["if=foo.file", "status=noxfer", "of=bar.file"];
 
     let settings = Parser::new().parse(args).unwrap();
 
@@ -199,7 +183,7 @@ fn test_status_level_noxfer() {
 
 #[test]
 fn test_multiple_flags_options() {
-    let args = &[
+    let args = [
         "iflag=fullblock,count_bytes",
         "iflag=skip_bytes",
         "oflag=append",
@@ -246,7 +230,7 @@ fn test_multiple_flags_options() {
 
 #[test]
 fn test_override_multiple_options() {
-    let args = &[
+    let args = [
         "if=foo.file",
         "if=correct.file",
         "of=bar.file",
@@ -288,31 +272,31 @@ fn test_override_multiple_options() {
 
 #[test]
 fn icf_ctable_error() {
-    let args = &["conv=ascii,ebcdic,ibm"];
+    let args = ["conv=ascii,ebcdic,ibm"];
     assert!(Parser::new().parse(args).is_err());
 }
 
 #[test]
 fn icf_case_error() {
-    let args = &["conv=ucase,lcase"];
+    let args = ["conv=ucase,lcase"];
     assert!(Parser::new().parse(args).is_err());
 }
 
 #[test]
 fn icf_block_error() {
-    let args = &["conv=block,unblock"];
+    let args = ["conv=block,unblock"];
     assert!(Parser::new().parse(args).is_err());
 }
 
 #[test]
 fn icf_creat_error() {
-    let args = &["conv=excl,nocreat"];
+    let args = ["conv=excl,nocreat"];
     assert!(Parser::new().parse(args).is_err());
 }
 
 #[test]
 fn parse_icf_token_ibm() {
-    let args = &["conv=ibm"];
+    let args = ["conv=ibm"];
     let settings = Parser::new().parse(args).unwrap();
 
     assert_eq!(
@@ -326,7 +310,7 @@ fn parse_icf_token_ibm() {
 
 #[test]
 fn parse_icf_tokens_elu() {
-    let args = &["conv=ebcdic,lcase"];
+    let args = ["conv=ebcdic,lcase"];
     let settings = Parser::new().parse(args).unwrap();
 
     assert_eq!(
@@ -340,7 +324,7 @@ fn parse_icf_tokens_elu() {
 
 #[test]
 fn parse_icf_tokens_remaining() {
-    let args = &[
+    let args = [
         "conv=ascii,ucase,block,sparse,swab,sync,noerror,excl,nocreat,notrunc,noerror,fdatasync,fsync",
     ];
     assert_eq!(
@@ -369,7 +353,7 @@ fn parse_icf_tokens_remaining() {
 
 #[test]
 fn parse_iflag_tokens() {
-    let args = &["iflag=fullblock,count_bytes,skip_bytes"];
+    let args = ["iflag=fullblock,count_bytes,skip_bytes"];
     assert_eq!(
         Parser::new().read(args),
         Ok(Parser {
@@ -386,7 +370,7 @@ fn parse_iflag_tokens() {
 
 #[test]
 fn parse_oflag_tokens() {
-    let args = &["oflag=append,seek_bytes"];
+    let args = ["oflag=append,seek_bytes"];
     assert_eq!(
         Parser::new().read(args),
         Ok(Parser {
@@ -403,7 +387,7 @@ fn parse_oflag_tokens() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn parse_iflag_tokens_linux() {
-    let args = &["iflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"];
+    let args = ["iflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"];
     assert_eq!(
         Parser::new().read(args),
         Ok(Parser {
@@ -426,7 +410,7 @@ fn parse_iflag_tokens_linux() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn parse_oflag_tokens_linux() {
-    let args = &["oflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"];
+    let args = ["oflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"];
     assert_eq!(
         Parser::new().read(args),
         Ok(Parser {
