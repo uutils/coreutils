@@ -8,6 +8,7 @@
 use clap::{Arg, ArgAction, Command, builder::ValueParser, parser::ValueSource};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
+use std::io::{IsTerminal, stdin};
 use std::ops::BitOr;
 #[cfg(not(windows))]
 use std::os::unix::ffi::OsStrExt;
@@ -68,6 +69,25 @@ pub struct Options {
     pub dir: bool,
     /// `-v`, `--verbose`
     pub verbose: bool,
+    #[doc(hidden)]
+    /// `---presume-input-tty`
+    /// Always use `None`; GNU flag for testing use only
+    pub __presume_input_tty: Option<bool>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            force: false,
+            interactive: InteractiveMode::PromptProtected,
+            one_fs: false,
+            preserve_root: true,
+            recursive: false,
+            dir: false,
+            verbose: false,
+            __presume_input_tty: None,
+        }
+    }
 }
 
 const ABOUT: &str = help_about!("rm.md");
@@ -145,6 +165,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             recursive: matches.get_flag(OPT_RECURSIVE),
             dir: matches.get_flag(OPT_DIR),
             verbose: matches.get_flag(OPT_VERBOSE),
+            __presume_input_tty: if matches.get_flag(PRESUME_INPUT_TTY) {
+                Some(true)
+            } else {
+                None
+            },
         };
         if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
             let msg: String = format!(
@@ -608,13 +633,15 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
             prompt_yes!("remove file {}?", path.quote())
         };
     }
-    prompt_file_permission_readonly(path)
+    prompt_file_permission_readonly(path, options)
 }
 
-fn prompt_file_permission_readonly(path: &Path) -> bool {
-    match fs::metadata(path) {
-        Ok(_) if is_writable(path) => true,
-        Ok(metadata) if metadata.len() == 0 => prompt_yes!(
+fn prompt_file_permission_readonly(path: &Path, options: &Options) -> bool {
+    let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
+    match (stdin_ok, fs::metadata(path), options.interactive) {
+        (false, _, InteractiveMode::PromptProtected) => true,
+        (_, Ok(_), _) if is_writable(path) => true,
+        (_, Ok(metadata), _) if metadata.len() == 0 => prompt_yes!(
             "remove write-protected regular empty file {}?",
             path.quote()
         ),
@@ -622,26 +649,29 @@ fn prompt_file_permission_readonly(path: &Path) -> bool {
     }
 }
 
-// For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to to check mode bits. But other os don't have something similar afaik
+// For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to check mode bits. But other os don't have something similar afaik
 // Most cases are covered by keep eye out for edge cases
 #[cfg(unix)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
+    let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
     match (
+        stdin_ok,
         is_readable_metadata(metadata),
         is_writable_metadata(metadata),
         options.interactive,
     ) {
-        (false, false, _) => prompt_yes!(
+        (false, _, _, InteractiveMode::PromptProtected) => true,
+        (_, false, false, _) => prompt_yes!(
             "attempt removal of inaccessible directory {}?",
             path.quote()
         ),
-        (false, true, InteractiveMode::Always) => prompt_yes!(
+        (_, false, true, InteractiveMode::Always) => prompt_yes!(
             "attempt removal of inaccessible directory {}?",
             path.quote()
         ),
-        (true, false, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
-        (_, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
-        (_, _, _) => true,
+        (_, true, false, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
+        (_, _, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
+        (_, _, _, _) => true,
     }
 }
 
@@ -666,12 +696,12 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     use std::os::windows::prelude::MetadataExt;
     use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
     let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
-    if not_user_writable {
-        prompt_yes!("remove write-protected directory {}?", path.quote())
-    } else if options.interactive == InteractiveMode::Always {
-        prompt_yes!("remove directory {}?", path.quote())
-    } else {
-        true
+    let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
+    match (stdin_ok, not_user_writable, options.interactive) {
+        (false, _, InteractiveMode::PromptProtected) => true,
+        (_, true, _) => prompt_yes!("remove write-protected directory {}?", path.quote()),
+        (_, _, InteractiveMode::Always) => prompt_yes!("remove directory {}?", path.quote()),
+        (_, _, _) => true,
     }
 }
 
