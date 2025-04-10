@@ -5,12 +5,12 @@
 
 use console::Style;
 use libc::STDIN_FILENO;
-use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
+use libc::{STDERR_FILENO, STDOUT_FILENO, close, dup, dup2, pipe};
 use pretty_print::{
     print_diff, print_end_with_status, print_or_empty, print_section, print_with_style,
 };
-use rand::prelude::IndexedRandom;
 use rand::Rng;
+use rand::prelude::IndexedRandom;
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::File;
@@ -18,7 +18,7 @@ use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicBool, Once};
+use std::sync::{Once, atomic::AtomicBool};
 use std::{io, thread};
 
 pub mod pretty_print;
@@ -132,6 +132,8 @@ where
     let (uumain_exit_status, captured_stdout, captured_stderr) = thread::scope(|s| {
         let out = s.spawn(|| read_from_fd(pipe_stdout_fds[0]));
         let err = s.spawn(|| read_from_fd(pipe_stderr_fds[0]));
+        #[allow(clippy::unnecessary_to_owned)]
+        // TODO: clippy wants us to use args.iter().cloned() ?
         let status = uumain_function(args.to_owned().into_iter());
         // Reset the exit code global variable in case we run another test after this one
         // See https://github.com/uutils/coreutils/issues/5777
@@ -406,6 +408,7 @@ pub fn generate_random_string(max_length: usize) -> String {
     result
 }
 
+#[allow(dead_code)]
 pub fn generate_random_file() -> Result<String, std::io::Error> {
     let mut rng = rand::rng();
     let file_name: String = (0..10)
@@ -426,6 +429,7 @@ pub fn generate_random_file() -> Result<String, std::io::Error> {
     Ok(file_path.to_str().unwrap().to_string())
 }
 
+#[allow(dead_code)]
 pub fn replace_fuzz_binary_name(cmd: &str, result: &mut CommandResult) {
     let fuzz_bin_name = format!("fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_{cmd}");
 

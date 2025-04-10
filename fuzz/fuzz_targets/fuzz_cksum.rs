@@ -10,9 +10,10 @@ use std::ffi::OsString;
 use uu_cksum::uumain;
 mod fuzz_common;
 use crate::fuzz_common::{
-    compare_result, generate_and_run_uumain, generate_random_file, generate_random_string,
+    CommandResult, compare_result, generate_and_run_uumain, generate_random_file,
+    generate_random_string,
     pretty_print::{print_or_empty, print_test_begin},
-    replace_fuzz_binary_name, run_gnu_cmd, CommandResult,
+    replace_fuzz_binary_name, run_gnu_cmd,
 };
 use rand::Rng;
 use std::env::temp_dir;
