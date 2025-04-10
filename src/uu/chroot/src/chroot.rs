@@ -56,7 +56,7 @@ struct Options {
 fn parse_userspec(spec: &str) -> UResult<UserSpec> {
     Ok(match spec.split_once(':') {
         // ""
-        None if spec == "" => UserSpec::NeitherGroupNorUser,
+        None if spec.is_empty() => UserSpec::NeitherGroupNorUser,
         // "usr"
         None => UserSpec::UserOnly(spec.to_string()),
         // ":"
