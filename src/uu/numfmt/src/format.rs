@@ -380,12 +380,20 @@ fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
 
             print!("{}", format_string(field, options, implicit_padding)?);
         } else {
+            // the -z option converts an initial \n into a space
+            let prefix = if options.zero_terminated && prefix.starts_with('\n') {
+                print!(" ");
+                &prefix[1..]
+            } else {
+                prefix
+            };
             // print unselected field without conversion
             print!("{prefix}{field}");
         }
     }
 
-    println!();
+    let eol = if options.zero_terminated { '\0' } else { '\n' };
+    print!("{}", eol);
 
     Ok(())
 }
