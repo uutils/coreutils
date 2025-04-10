@@ -8,8 +8,8 @@
 use libfuzzer_sys::fuzz_target;
 use uu_expr::uumain;
 
-use rand::prelude::IndexedRandom;
 use rand::Rng;
+use rand::prelude::IndexedRandom;
 use std::{env, ffi::OsString};
 
 mod fuzz_common;
