@@ -7,7 +7,6 @@
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
-    clippy::cast_possible_truncation
 )]
 
 #[cfg(all(unix, feature = "chmod"))]

@@ -479,7 +479,6 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         .map(from_parse_error_to_pr_error)
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
     paths: &[&str],
@@ -1013,7 +1012,6 @@ fn print_page(
     Ok(lines_written)
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,

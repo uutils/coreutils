@@ -55,11 +55,11 @@ use uutests::util_name;
 const FOOBAR_TXT: &str = "foobar.txt";
 const FOOBAR_2_TXT: &str = "foobar2.txt";
 const FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
-#[allow(dead_code)]
+#[cfg(target_os = "linux")]
 const FOLLOW_NAME_TXT: &str = "follow_name.txt";
-#[allow(dead_code)]
+#[cfg(target_os = "linux")]
 const FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
-#[allow(dead_code)]
+#[cfg(target_os = "linux")]
 const FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
 const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1000;

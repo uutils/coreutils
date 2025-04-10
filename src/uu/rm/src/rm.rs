@@ -57,7 +57,6 @@ pub struct Options {
     /// If no other option sets this mode, [`InteractiveMode::PromptProtected`]
     /// is used
     pub interactive: InteractiveMode,
-    #[allow(dead_code)]
     /// `--one-file-system`
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`

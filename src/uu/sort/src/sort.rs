@@ -1014,7 +1014,6 @@ fn get_rlimit() -> UResult<usize> {
 }
 
 #[uucore::main]
-#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings::default();
 
@@ -1679,7 +1678,6 @@ fn compare_by<'a>(
 // In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and
 // scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
-#[allow(clippy::cognitive_complexity)]
 fn get_leading_gen(input: &str) -> Range<usize> {
     let trimmed = input.trim_start();
     let leading_whitespace_len = input.len() - trimmed.len();

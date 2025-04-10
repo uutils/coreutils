@@ -191,14 +191,13 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     Ok(())
 }
 
-// Return true if the directory at `path` has been created by this call.
-// `is_parent` argument is not used on windows
-#[allow(unused_variables)]
+/// Return true if the directory at `path` has been created by this call.
+#[cfg_attr(windows, expect(unused_variables))]
 fn create_dir(
     path: &Path,
     recursive: bool,
     verbose: bool,
-    is_parent: bool,
+    is_parent: bool, // `is_parent` is not used on windows
     mode: u32,
 ) -> UResult<()> {
     let path_exists = path.exists();
