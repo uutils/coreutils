@@ -4380,22 +4380,22 @@ fn test_tabsize_formatting() {
 
     scene
         .ucmd()
-        .args(&["-x", "-w18", "-T4"])
+        .args(&["-C", "-w18", "-T4"])
         .succeeds()
-        .stdout_is("aaaaaaaa  bbbb\ncccc\t  dddddddd\n");
+        .stdout_is("aaaaaaaa  cccc\nbbbb\t  dddddddd\n");
 
     scene
         .ucmd()
-        .args(&["-x", "-w18", "-T2"])
+        .args(&["-C", "-w18", "-T2"])
         .succeeds()
-        .stdout_is("aaaaaaaa\tbbbb\ncccc\t\t\tdddddddd\n");
+        .stdout_is("aaaaaaaa\tcccc\nbbbb\t\t\tdddddddd\n");
 
     // use spaces
     scene
         .ucmd()
-        .args(&["-x", "-w18", "-T0"])
+        .args(&["-C", "-w18", "-T0"])
         .succeeds()
-        .stdout_is("aaaaaaaa  bbbb\ncccc      dddddddd\n");
+        .stdout_is("aaaaaaaa  cccc\nbbbb      dddddddd\n");
 }
 
 #[cfg(any(
