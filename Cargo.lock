@@ -3642,9 +3642,9 @@ dependencies = [
 
 [[package]]
 name = "uutils_term_grid"
-version = "0.7.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcba141ce511bad08e80b43f02976571072e1ff4286f7d628943efbd277c6361"
+checksum = "f89defb4adb4ba5703a57abc879f96ddd6263a444cacc446db90bf2617f141fb"
 dependencies = [
  "ansi-width",
 ]
