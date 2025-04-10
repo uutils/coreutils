@@ -2700,6 +2700,7 @@ fn display_grid(
             .map(|s| s.to_string_lossy().into_owned())
             .collect();
 
+        // Since tab_size=0 means no \t, use Spaces separator for optimization.
         let filling = match tab_size {
             0 => Filling::Spaces(DEFAULT_SEPARATOR_SIZE),
             _ => Filling::Tabs {
