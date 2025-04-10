@@ -443,7 +443,7 @@ fn touch_file(
     };
 
     if let Err(e) = metadata_result {
-        if e.kind() != std::io::ErrorKind::NotFound {
+        if e.kind() != ErrorKind::NotFound {
             return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
         }
 
@@ -687,7 +687,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 
     let local = NaiveDateTime::parse_from_str(&ts, format)
         .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
-    let LocalResult::Single(mut local) = chrono::Local.from_local_datetime(&local) else {
+    let LocalResult::Single(mut local) = Local.from_local_datetime(&local) else {
         return Err(USimpleError::new(
             1,
             format!("invalid date ts format {}", ts.quote()),

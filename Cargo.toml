@@ -594,7 +594,7 @@ pedantic = { level = "deny", priority = -1 }
 # Eventually the clippy settings from the `[lints]` section should be moved here.
 # In order to use these, all crates have `[lints] workspace = true` section.
 [workspace.lints.rust]
-# unused_qualifications = "warn"
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }

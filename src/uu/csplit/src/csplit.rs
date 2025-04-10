@@ -43,7 +43,7 @@ mod options {
 
 /// Command line options for csplit.
 pub struct CsplitOptions {
-    split_name: crate::SplitName,
+    split_name: SplitName,
     keep_files: bool,
     quiet: bool,
     elide_empty_files: bool,
@@ -661,7 +661,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::PATTERN)
                 .hide(true)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .required(true),
         )
         .after_help(AFTER_HELP)

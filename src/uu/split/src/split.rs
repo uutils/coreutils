@@ -546,7 +546,7 @@ impl Settings {
 /// When using `--filter` option, writing to child command process stdin
 /// could fail with BrokenPipe error
 /// It can be safely ignored
-fn ignorable_io_error(error: &std::io::Error, settings: &Settings) -> bool {
+fn ignorable_io_error(error: &io::Error, settings: &Settings) -> bool {
     error.kind() == ErrorKind::BrokenPipe && settings.filter.is_some()
 }
 
@@ -555,11 +555,7 @@ fn ignorable_io_error(error: &std::io::Error, settings: &Settings) -> bool {
 /// If ignorable io error occurs, return number of bytes as if all bytes written
 /// Should not be used for Kth chunk number sub-strategies
 /// as those do not work with `--filter` option
-fn custom_write<T: Write>(
-    bytes: &[u8],
-    writer: &mut T,
-    settings: &Settings,
-) -> std::io::Result<usize> {
+fn custom_write<T: Write>(bytes: &[u8], writer: &mut T, settings: &Settings) -> io::Result<usize> {
     match writer.write(bytes) {
         Ok(n) => Ok(n),
         Err(e) if ignorable_io_error(&e, settings) => Ok(bytes.len()),
@@ -576,7 +572,7 @@ fn custom_write_all<T: Write>(
     bytes: &[u8],
     writer: &mut T,
     settings: &Settings,
-) -> std::io::Result<bool> {
+) -> io::Result<bool> {
     match writer.write_all(bytes) {
         Ok(()) => Ok(true),
         Err(e) if ignorable_io_error(&e, settings) => Ok(false),
@@ -610,7 +606,7 @@ fn get_input_size<R>(
     reader: &mut R,
     buf: &mut Vec<u8>,
     io_blksize: &Option<u64>,
-) -> std::io::Result<u64>
+) -> io::Result<u64>
 where
     R: BufRead,
 {
@@ -734,7 +730,7 @@ impl<'a> ByteChunkWriter<'a> {
 
 impl Write for ByteChunkWriter<'_> {
     /// Implements `--bytes=SIZE`
-    fn write(&mut self, mut buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, mut buf: &[u8]) -> io::Result<usize> {
         // If the length of `buf` exceeds the number of bytes remaining
         // in the current chunk, we will need to write to multiple
         // different underlying writers. In that case, each iteration of
@@ -753,7 +749,7 @@ impl Write for ByteChunkWriter<'_> {
 
                 // Allocate the new file, since at this point we know there are bytes to be written to it.
                 let filename = self.filename_iterator.next().ok_or_else(|| {
-                    std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
+                    io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
                 })?;
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
@@ -794,7 +790,7 @@ impl Write for ByteChunkWriter<'_> {
             }
         }
     }
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
     }
 }
@@ -858,7 +854,7 @@ impl<'a> LineChunkWriter<'a> {
 
 impl Write for LineChunkWriter<'_> {
     /// Implements `--lines=NUMBER`
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         // If the number of lines in `buf` exceeds the number of lines
         // remaining in the current chunk, we will need to write to
         // multiple different underlying writers. In that case, each
@@ -874,7 +870,7 @@ impl Write for LineChunkWriter<'_> {
             if self.num_lines_remaining_in_current_chunk == 0 {
                 self.num_chunks_written += 1;
                 let filename = self.filename_iterator.next().ok_or_else(|| {
-                    std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
+                    io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
                 })?;
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
@@ -898,7 +894,7 @@ impl Write for LineChunkWriter<'_> {
         Ok(total_bytes_written)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
     }
 }
@@ -1121,7 +1117,7 @@ where
     }
 
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
-    let mut stdout_writer = std::io::stdout().lock();
+    let mut stdout_writer = io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
     let mut out_files: OutFiles = OutFiles::new();
 
@@ -1247,7 +1243,7 @@ where
     }
 
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
-    let mut stdout_writer = std::io::stdout().lock();
+    let mut stdout_writer = io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
     let mut out_files: OutFiles = OutFiles::new();
 
@@ -1367,7 +1363,7 @@ where
     R: BufRead,
 {
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
-    let mut stdout_writer = std::io::stdout().lock();
+    let mut stdout_writer = io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
     let mut out_files: OutFiles = OutFiles::new();
 
@@ -1414,7 +1410,7 @@ where
     Ok(())
 }
 
-/// Like `std::io::Lines`, but includes the line ending character.
+/// Like `io::Lines`, but includes the line ending character.
 ///
 /// This struct is generally created by calling `lines_with_sep` on a
 /// reader.
@@ -1427,7 +1423,7 @@ impl<R> Iterator for LinesWithSep<R>
 where
     R: BufRead,
 {
-    type Item = std::io::Result<Vec<u8>>;
+    type Item = io::Result<Vec<u8>>;
 
     /// Read bytes from a buffer up to the requested number of lines.
     fn next(&mut self) -> Option<Self::Item> {
@@ -1464,8 +1460,7 @@ where
     // to be overwritten for sure at the beginning of the loop below
     // because we start with `remaining == 0`, indicating that a new
     // chunk should start.
-    let mut writer: BufWriter<Box<dyn Write>> =
-        BufWriter::new(Box::new(std::io::Cursor::new(vec![])));
+    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(Box::new(io::Cursor::new(vec![])));
 
     let mut remaining = 0;
     for line in lines_with_sep(reader, settings.separator) {
@@ -1560,11 +1555,11 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            match std::io::copy(&mut reader, &mut writer) {
+            match io::copy(&mut reader, &mut writer) {
                 Ok(_) => Ok(()),
                 Err(e) => match e.kind() {
                     // TODO Since the writer object controls the creation of
-                    // new files, we need to rely on the `std::io::Result`
+                    // new files, we need to rely on the `io::Result`
                     // returned by its `write()` method to communicate any
                     // errors to this calling scope. If a new file cannot be
                     // created because we have exceeded the number of
@@ -1578,11 +1573,11 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
-            match std::io::copy(&mut reader, &mut writer) {
+            match io::copy(&mut reader, &mut writer) {
                 Ok(_) => Ok(()),
                 Err(e) => match e.kind() {
                     // TODO Since the writer object controls the creation of
-                    // new files, we need to rely on the `std::io::Result`
+                    // new files, we need to rely on the `io::Result`
                     // returned by its `write()` method to communicate any
                     // errors to this calling scope. If a new file cannot be
                     // created because we have exceeded the number of

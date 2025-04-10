@@ -66,7 +66,7 @@ impl Config {
                     Some(signal_value) => signal_value,
                 }
             }
-            _ => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
+            _ => signal_by_name_or_value("TERM").unwrap(),
         };
 
         let kill_after = match options.get_one::<String>(options::KILL_AFTER) {

@@ -439,7 +439,7 @@ fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) 
         (Format::Commas, Some(options::format::COMMAS))
     } else if options.get_flag(options::format::COLUMNS) {
         (Format::Columns, Some(options::format::COLUMNS))
-    } else if std::io::stdout().is_terminal() {
+    } else if stdout().is_terminal() {
         (Format::Columns, None)
     } else {
         (Format::OneLine, None)
@@ -559,7 +559,7 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
         None => options.contains_id(options::COLOR),
         Some(val) => match val.as_str() {
             "" | "always" | "yes" | "force" => true,
-            "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
+            "auto" | "tty" | "if-tty" => stdout().is_terminal(),
             /* "never" | "no" | "none" | */ _ => false,
         },
     }
@@ -578,7 +578,7 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
 
     match hyperlink {
         "always" | "yes" | "force" => true,
-        "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
+        "auto" | "tty" | "if-tty" => stdout().is_terminal(),
         "never" | "no" | "none" => false,
         _ => unreachable!("should be handled by clap"),
     }
@@ -673,7 +673,7 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
 
         // By default, `ls` uses Shell escape quoting style when writing to a terminal file
         // descriptor and Literal otherwise.
-        if std::io::stdout().is_terminal() {
+        if stdout().is_terminal() {
             QuotingStyle::Shell {
                 escape: true,
                 always_quote: false,
@@ -704,7 +704,7 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
             "never" | "no" | "none" => IndicatorStyle::None,
             "always" | "yes" | "force" => IndicatorStyle::Classify,
             "auto" | "tty" | "if-tty" => {
-                if std::io::stdout().is_terminal() {
+                if stdout().is_terminal() {
                     IndicatorStyle::Classify
                 } else {
                     IndicatorStyle::None
@@ -933,7 +933,7 @@ impl Config {
         } else if options.get_flag(options::SHOW_CONTROL_CHARS) {
             true
         } else {
-            !std::io::stdout().is_terminal()
+            !stdout().is_terminal()
         };
 
         let mut quoting_style = extract_quoting_style(options, show_control);
@@ -2386,7 +2386,7 @@ fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Resu
 fn display_dir_entry_size(
     entry: &PathData,
     config: &Config,
-    out: &mut BufWriter<std::io::Stdout>,
+    out: &mut BufWriter<Stdout>,
 ) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.get_metadata(out) {
@@ -3070,7 +3070,7 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     }
 }
 
-fn get_time(md: &Metadata, config: &Config) -> Option<chrono::DateTime<chrono::Local>> {
+fn get_time(md: &Metadata, config: &Config) -> Option<DateTime<Local>> {
     let time = get_system_time(md, config)?;
     Some(time.into())
 }

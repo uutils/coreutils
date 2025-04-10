@@ -737,7 +737,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::PROGRESS_BAR)
                 .long(options::PROGRESS_BAR)
                 .short('g')
-                .action(clap::ArgAction::SetTrue)
+                .action(ArgAction::SetTrue)
                 .help(
                     "Display a progress bar. \n\
                 Note: this feature is not supported by GNU coreutils.",
@@ -2081,7 +2081,7 @@ fn handle_copy_mode(
         CopyMode::Update => {
             if dest.exists() {
                 match options.update {
-                    update_control::UpdateMode::ReplaceAll => {
+                    UpdateMode::ReplaceAll => {
                         copy_helper(
                             source,
                             dest,
@@ -2094,17 +2094,17 @@ fn handle_copy_mode(
                             source_is_stream,
                         )?;
                     }
-                    update_control::UpdateMode::ReplaceNone => {
+                    UpdateMode::ReplaceNone => {
                         if options.debug {
                             println!("skipped {}", dest.quote());
                         }
 
                         return Ok(PerformedAction::Skipped);
                     }
-                    update_control::UpdateMode::ReplaceNoneFail => {
+                    UpdateMode::ReplaceNoneFail => {
                         return Err(Error::Error(format!("not replacing '{}'", dest.display())));
                     }
-                    update_control::UpdateMode::ReplaceIfOlder => {
+                    UpdateMode::ReplaceIfOlder => {
                         let dest_metadata = fs::symlink_metadata(dest)?;
 
                         let src_time = source_metadata.modified()?;
@@ -2335,7 +2335,7 @@ fn copy_file(
             &FileInformation::from_path(source, options.dereference(source_in_command_line))
                 .context(format!("cannot stat {}", source.quote()))?,
         ) {
-            std::fs::hard_link(new_source, dest)?;
+            fs::hard_link(new_source, dest)?;
 
             if options.verbose {
                 print_verbose_output(options.parents, progress_bar, source, dest);

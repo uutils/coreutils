@@ -333,7 +333,7 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
 /// `path` must be a directory. If there is an error reading the
 /// contents of the directory, this returns `false`.
 fn is_dir_empty(path: &Path) -> bool {
-    match std::fs::read_dir(path) {
+    match fs::read_dir(path) {
         Err(_) => false,
         Ok(iter) => iter.count() == 0,
     }
@@ -348,7 +348,7 @@ fn is_readable_metadata(metadata: &Metadata) -> bool {
 /// Whether the given file or directory is readable.
 #[cfg(unix)]
 fn is_readable(path: &Path) -> bool {
-    match std::fs::metadata(path) {
+    match fs::metadata(path) {
         Err(_) => false,
         Ok(metadata) => is_readable_metadata(&metadata),
     }
@@ -369,7 +369,7 @@ fn is_writable_metadata(metadata: &Metadata) -> bool {
 /// Whether the given file or directory is writable.
 #[cfg(unix)]
 fn is_writable(path: &Path) -> bool {
-    match std::fs::metadata(path) {
+    match fs::metadata(path) {
         Err(_) => false,
         Ok(metadata) => is_writable_metadata(&metadata),
     }
@@ -391,7 +391,7 @@ fn is_writable(_path: &Path) -> bool {
 fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
     // Special case: if we cannot access the metadata because the
     // filename is too long, fall back to try
-    // `std::fs::remove_dir_all()`.
+    // `fs::remove_dir_all()`.
     //
     // TODO This is a temporary bandage; we shouldn't need to do this
     // at all. Instead of using the full path like "x/y/z", which
@@ -400,7 +400,7 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
     // path, "z", and know that it is relative to the parent, "x/y".
     if let Some(s) = path.to_str() {
         if s.len() > 1000 {
-            match std::fs::remove_dir_all(path) {
+            match fs::remove_dir_all(path) {
                 Ok(_) => return false,
                 Err(e) => {
                     let e = e.map_err_context(|| format!("cannot remove {}", path.quote()));
@@ -432,7 +432,7 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
 
     // Recursive case: this is a directory.
     let mut error = false;
-    match std::fs::read_dir(path) {
+    match fs::read_dir(path) {
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
             // This is not considered an error.
         }
@@ -456,7 +456,7 @@ fn remove_dir_recursive(path: &Path, options: &Options) -> bool {
     }
 
     // Try removing the directory itself.
-    match std::fs::remove_dir(path) {
+    match fs::remove_dir(path) {
         Err(_) if !error && !is_readable(path) => {
             // For compatibility with GNU test case
             // `tests/rm/unread2.sh`, show "Permission denied" in this

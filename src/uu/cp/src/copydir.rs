@@ -101,7 +101,7 @@ struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    fn new(root: &'a Path, target: &'a Path) -> std::io::Result<Self> {
+    fn new(root: &'a Path, target: &'a Path) -> io::Result<Self> {
         let current_dir = env::current_dir()?;
         let root_path = current_dir.join(root);
         let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
@@ -181,7 +181,7 @@ impl Entry {
         if no_target_dir {
             let source_is_dir = source.is_dir();
             if path_ends_with_terminator(context.target) && source_is_dir {
-                if let Err(e) = std::fs::create_dir_all(context.target) {
+                if let Err(e) = fs::create_dir_all(context.target) {
                     eprintln!("Failed to create directory: {e}");
                 }
             } else {
@@ -305,9 +305,7 @@ fn copy_direntry(
                 false,
             ) {
                 Ok(_) => {}
-                Err(Error::IoErrContext(e, _))
-                    if e.kind() == std::io::ErrorKind::PermissionDenied =>
-                {
+                Err(Error::IoErrContext(e, _)) if e.kind() == io::ErrorKind::PermissionDenied => {
                     show!(uio_error!(
                         e,
                         "cannot open {} for reading",
@@ -580,14 +578,13 @@ fn build_dir(
         // we need to allow trivial casts here because some systems like linux have u32 constants in
         // in libc while others don't.
         #[allow(clippy::unnecessary_cast)]
-        let mut excluded_perms =
-            if matches!(options.attributes.ownership, crate::Preserve::Yes { .. }) {
-                libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
-            } else if matches!(options.attributes.mode, crate::Preserve::Yes { .. }) {
-                libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
-            } else {
-                0
-            } as u32;
+        let mut excluded_perms = if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
+            libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
+        } else if matches!(options.attributes.mode, Preserve::Yes { .. }) {
+            libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
+        } else {
+            0
+        } as u32;
 
         let umask = if copy_attributes_from.is_some()
             && matches!(options.attributes.mode, Preserve::Yes { .. })

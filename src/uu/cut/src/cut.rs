@@ -352,7 +352,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
         filenames.push("-".to_owned());
     }
 
-    let mut out: Box<dyn Write> = if std::io::stdout().is_terminal() {
+    let mut out: Box<dyn Write> = if stdout().is_terminal() {
         Box::new(stdout())
     } else {
         Box::new(BufWriter::new(stdout())) as Box<dyn Write>

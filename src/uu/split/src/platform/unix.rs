@@ -133,7 +133,7 @@ pub fn instantiate_current_writer(
                     .write(true)
                     .create(true)
                     .truncate(true)
-                    .open(std::path::Path::new(&filename))
+                    .open(Path::new(&filename))
                     .map_err(|_| {
                         Error::new(
                             ErrorKind::Other,
@@ -144,7 +144,7 @@ pub fn instantiate_current_writer(
                 // re-open file that we previously created to append to it
                 std::fs::OpenOptions::new()
                     .append(true)
-                    .open(std::path::Path::new(&filename))
+                    .open(Path::new(&filename))
                     .map_err(|_| {
                         Error::new(
                             ErrorKind::Other,

@@ -152,7 +152,7 @@ pub fn uu_app() -> Command {
                 .short('e')
                 .long(options::ECHO)
                 .help("treat each ARG as an input line")
-                .action(clap::ArgAction::SetTrue)
+                .action(ArgAction::SetTrue)
                 .overrides_with(options::ECHO)
                 .conflicts_with(options::INPUT_RANGE),
         )
@@ -170,7 +170,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::HEAD_COUNT)
                 .value_name("COUNT")
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .help("output at most COUNT lines")
                 .value_parser(usize::from_str),
         )
@@ -209,7 +209,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::FILE_OR_ARGS)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )

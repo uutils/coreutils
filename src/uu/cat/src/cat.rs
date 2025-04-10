@@ -86,7 +86,7 @@ impl LineNumber {
         }
     }
 
-    fn write(&self, writer: &mut impl Write) -> std::io::Result<()> {
+    fn write(&self, writer: &mut impl Write) -> io::Result<()> {
         writer.write_all(&self.buf)
     }
 }
@@ -288,7 +288,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -377,7 +377,7 @@ fn cat_handle<R: FdReadable>(
 /// Whether this process is appending to stdout.
 #[cfg(unix)]
 fn is_appending() -> bool {
-    let stdout = std::io::stdout();
+    let stdout = io::stdout();
     let flags = match fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL) {
         Ok(flags) => flags,
         Err(_) => return false,
@@ -404,7 +404,7 @@ fn cat_path(
             let in_info = FileInformation::from_file(&stdin)?;
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: std::io::stdin().is_terminal(),
+                is_interactive: io::stdin().is_terminal(),
             };
             if let Some(out_info) = out_info {
                 if in_info == *out_info && is_appending() {
@@ -445,7 +445,7 @@ fn cat_path(
 }
 
 fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
-    let out_info = FileInformation::from_file(&std::io::stdout()).ok();
+    let out_info = FileInformation::from_file(&io::stdout()).ok();
 
     let mut state = OutputState {
         line_number: LineNumber::new(),

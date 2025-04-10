@@ -222,7 +222,7 @@ impl Source {
     /// The length of the data source in number of bytes.
     ///
     /// If it cannot be determined, then this function returns 0.
-    fn len(&self) -> std::io::Result<i64> {
+    fn len(&self) -> io::Result<i64> {
         match self {
             Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
             _ => Ok(0),
@@ -260,7 +260,7 @@ impl Source {
                     Err(e) => Err(e),
                 }
             }
-            Self::File(f) => f.seek(io::SeekFrom::Current(n.try_into().unwrap())),
+            Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
             Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
         }
@@ -470,7 +470,7 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
-    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> std::io::Result<ReadStat> {
+    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
@@ -501,7 +501,7 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
-    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> std::io::Result<ReadStat> {
+    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
@@ -612,7 +612,7 @@ impl Dest {
                         return Ok(len);
                     }
                 }
-                f.seek(io::SeekFrom::Current(n.try_into().unwrap()))
+                f.seek(SeekFrom::Current(n.try_into().unwrap()))
             }
             #[cfg(unix)]
             Self::Fifo(f) => {
@@ -655,7 +655,7 @@ impl Dest {
     /// The length of the data destination in number of bytes.
     ///
     /// If it cannot be determined, then this function returns 0.
-    fn len(&self) -> std::io::Result<i64> {
+    fn len(&self) -> io::Result<i64> {
         match self {
             Self::File(f, _) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
             _ => Ok(0),
@@ -676,7 +676,7 @@ impl Write for Dest {
                     .len()
                     .try_into()
                     .expect("Internal dd Error: Seek amount greater than signed 64-bit integer");
-                f.seek(io::SeekFrom::Current(seek_amt))?;
+                f.seek(SeekFrom::Current(seek_amt))?;
                 Ok(buf.len())
             }
             Self::File(f, _) => f.write(buf),
@@ -893,7 +893,7 @@ impl<'a> Output<'a> {
     }
 
     /// Flush the output to disk, if configured to do so.
-    fn sync(&mut self) -> std::io::Result<()> {
+    fn sync(&mut self) -> io::Result<()> {
         if self.settings.oconv.fsync {
             self.dst.fsync()
         } else if self.settings.oconv.fdatasync {
@@ -905,7 +905,7 @@ impl<'a> Output<'a> {
     }
 
     /// Truncate the underlying file to the current stream position, if possible.
-    fn truncate(&mut self) -> std::io::Result<()> {
+    fn truncate(&mut self) -> io::Result<()> {
         self.dst.truncate()
     }
 }
@@ -959,7 +959,7 @@ impl BlockWriter<'_> {
         };
     }
 
-    fn write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
+    fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
         match self {
             Self::Unbuffered(o) => o.write_blocks(buf),
             Self::Buffered(o) => o.write_blocks(buf),
@@ -969,7 +969,7 @@ impl BlockWriter<'_> {
 
 /// depending on the command line arguments, this function
 /// informs the OS to flush/discard the caches for input and/or output file.
-fn flush_caches_full_length(i: &Input, o: &Output) -> std::io::Result<()> {
+fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
     // TODO Better error handling for overflowing `len`.
     if i.settings.iflags.nocache {
         let offset = 0;
@@ -1001,7 +1001,7 @@ fn flush_caches_full_length(i: &Input, o: &Output) -> std::io::Result<()> {
 ///
 /// If there is a problem reading from the input or writing to
 /// this output.
-fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
+fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // The read and write statistics.
     //
     // These objects are counters, initialized to zero. After each
@@ -1177,7 +1177,7 @@ fn finalize<T>(
     prog_tx: &mpsc::Sender<ProgUpdate>,
     output_thread: thread::JoinHandle<T>,
     truncate: bool,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     // Flush the output in case a partial write has been buffered but
     // not yet written.
     let wstat_update = output.flush()?;
@@ -1245,7 +1245,7 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
 /// `conv=swab` or `conv=block` command-line arguments. This function
 /// mutates the `buf` argument in-place. The returned [`ReadStat`]
 /// indicates how many blocks were read.
-fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> std::io::Result<ReadStat> {
+fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<ReadStat> {
     // Local Helper Fns -------------------------------------------------
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
