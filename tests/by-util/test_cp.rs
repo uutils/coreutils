@@ -6184,8 +6184,7 @@ fn test_cp_update_none_interactive_prompt_no() {
 
     ucmd.args(&["-i", "--update=none", new_file, old_file])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(old_file), "old content");
     assert_eq!(at.read(new_file), "new content");
