@@ -83,7 +83,7 @@ pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> Strin
     if quotient < 10.0 {
         format!("{quotient:.1} {suffix}")
     } else {
-        format!("{} {}", quotient.round(), suffix)
+        format!("{} {suffix}", quotient.round())
     }
 }
 

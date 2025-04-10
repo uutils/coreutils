@@ -105,7 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 Err(e) => {
                     set_exit_code(1);
-                    show_error!("error reading input: {}", e);
+                    show_error!("error reading input: {e}");
                     return Ok(());
                 }
             }
@@ -113,7 +113,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if let Err(e) = w.flush() {
-        show_error!("{}", e);
+        show_error!("{e}");
     }
 
     Ok(())

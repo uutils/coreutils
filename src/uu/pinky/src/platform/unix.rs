@@ -194,7 +194,7 @@ impl Pinky {
             }
         }
 
-        print!(" {}{:<8.*}", mesg, utmpx::UT_LINESIZE, ut.tty_device());
+        print!(" {mesg}{:<8.*}", utmpx::UT_LINESIZE, ut.tty_device());
 
         if self.include_idle {
             if last_change == 0 {

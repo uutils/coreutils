@@ -485,7 +485,7 @@ pub(crate) fn copy_directory(
             }
 
             // Print an error message, but continue traversing the directory.
-            Err(e) => show_error!("{}", e),
+            Err(e) => show_error!("{e}"),
         }
     }
 

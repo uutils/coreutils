@@ -139,9 +139,7 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
             "missing 'i' suffix in input: '{i}{raw_suffix:?}' (e.g Ki/Mi/Gi)"
         )),
         (Some((raw_suffix, with_i)), &Unit::None) => Err(format!(
-            "rejecting suffix in input: '{}{:?}{}' (consider using --from)",
-            i,
-            raw_suffix,
+            "rejecting suffix in input: '{i}{raw_suffix:?}{}' (consider using --from)",
             if with_i { "i" } else { "" }
         )),
         (None, _) => Ok(i),
@@ -267,19 +265,13 @@ fn transform_to(
             format!(
                 "{:.precision$}",
                 round_with_precision(i2, round_method, precision),
-                precision = precision
             )
         }
         Some(s) if precision > 0 => {
-            format!(
-                "{:.precision$}{}",
-                i2,
-                DisplayableSuffix(s, opts.to),
-                precision = precision
-            )
+            format!("{i2:.precision$}{}", DisplayableSuffix(s, opts.to),)
         }
-        Some(s) if i2.abs() < 10.0 => format!("{:.1}{}", i2, DisplayableSuffix(s, opts.to)),
-        Some(s) => format!("{:.0}{}", i2, DisplayableSuffix(s, opts.to)),
+        Some(s) if i2.abs() < 10.0 => format!("{i2:.1}{}", DisplayableSuffix(s, opts.to)),
+        Some(s) => format!("{i2:.0}{}", DisplayableSuffix(s, opts.to)),
     })
 }
 
@@ -323,25 +315,21 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = format!("{:0>padding$}", number_with_suffix, padding = p as usize);
+            let zero_padded = format!("{number_with_suffix:0>padding$}", padding = p as usize);
 
             match implicit_padding.unwrap_or(options.padding) {
                 0 => zero_padded,
-                p if p > 0 => format!("{:>padding$}", zero_padded, padding = p as usize),
-                p => format!("{:<padding$}", zero_padded, padding = p.unsigned_abs()),
+                p if p > 0 => format!("{zero_padded:>padding$}", padding = p as usize),
+                p => format!("{zero_padded:<padding$}", padding = p.unsigned_abs()),
             }
         }
-        p if p > 0 => format!("{:>padding$}", number_with_suffix, padding = p as usize),
-        p => format!(
-            "{:<padding$}",
-            number_with_suffix,
-            padding = p.unsigned_abs()
-        ),
+        p if p > 0 => format!("{number_with_suffix:>padding$}", padding = p as usize),
+        p => format!("{number_with_suffix:<padding$}", padding = p.unsigned_abs()),
     };
 
     Ok(format!(
-        "{}{}{}",
-        options.format.prefix, padded_number, options.format.suffix
+        "{}{padded_number}{}",
+        options.format.prefix, options.format.suffix
     ))
 }
 

@@ -258,7 +258,7 @@ impl ProcessInformation {
 
     fn get_uid_or_gid_field(&mut self, field: UidGid, index: usize) -> Result<u32, io::Error> {
         self.status()
-            .get(&format!("{:?}", field))
+            .get(&format!("{field:?}"))
             .ok_or(io::ErrorKind::InvalidData)?
             .split_whitespace()
             .nth(index)
@@ -451,11 +451,11 @@ mod tests {
         let current_pid = current_pid();
 
         let pid_entry = ProcessInformation::try_new(
-            PathBuf::from_str(&format!("/proc/{}", current_pid)).unwrap(),
+            PathBuf::from_str(&format!("/proc/{current_pid}")).unwrap(),
         )
         .unwrap();
 
-        let result = WalkDir::new(format!("/proc/{}/fd", current_pid))
+        let result = WalkDir::new(format!("/proc/{current_pid}/fd"))
             .into_iter()
             .flatten()
             .map(DirEntry::into_path)

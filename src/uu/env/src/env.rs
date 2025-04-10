@@ -193,7 +193,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
         };
 
         let conf =
-            conf.map_err(|e| USimpleError::new(1, format!("{}: {}", file.maybe_quote(), e)))?;
+            conf.map_err(|e| USimpleError::new(1, format!("{}: {e}", file.maybe_quote())))?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
@@ -338,7 +338,7 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
 fn debug_print_args(args: &[OsString]) {
     eprintln!("input args:");
     for (i, arg) in args.iter().enumerate() {
-        eprintln!("arg[{}]: {}", i, arg.quote());
+        eprintln!("arg[{i}]: {}", arg.quote());
     }
 }
 
@@ -378,7 +378,7 @@ impl EnvAppData {
     fn make_error_no_such_file_or_dir(&self, prog: &OsStr) -> Box<dyn UError> {
         uucore::show_error!("{}: No such file or directory", prog.quote());
         if !self.had_string_argument {
-            uucore::show_error!("{}", ERROR_MSG_S_SHEBANG);
+            uucore::show_error!("{ERROR_MSG_S_SHEBANG}");
         }
         ExitCode::new(127)
     }
@@ -451,9 +451,9 @@ impl EnvAppData {
                         let s = format!("{e}");
                         if !s.is_empty() {
                             let s = s.trim_end();
-                            uucore::show_error!("{}", s);
+                            uucore::show_error!("{s}");
                         }
-                        uucore::show_error!("{}", ERROR_MSG_S_SHEBANG);
+                        uucore::show_error!("{ERROR_MSG_S_SHEBANG}");
                         uucore::error::ExitCode::new(125)
                     }
                 }
@@ -545,9 +545,9 @@ impl EnvAppData {
         if do_debug_printing {
             eprintln!("executing: {}", prog.maybe_quote());
             let arg_prefix = "   arg";
-            eprintln!("{}[{}]= {}", arg_prefix, 0, arg0.quote());
+            eprintln!("{arg_prefix}[{}]= {}", 0, arg0.quote());
             for (i, arg) in args.iter().enumerate() {
-                eprintln!("{}[{}]= {}", arg_prefix, i + 1, arg.quote());
+                eprintln!("{arg_prefix}[{}]= {}", i + 1, arg.quote());
             }
         }
 
@@ -590,7 +590,7 @@ impl EnvAppData {
                     return Err(126.into());
                 }
                 _ => {
-                    uucore::show_error!("unknown error: {:?}", err);
+                    uucore::show_error!("unknown error: {err:?}");
                     return Err(126.into());
                 }
             },

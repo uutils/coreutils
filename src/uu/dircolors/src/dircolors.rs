@@ -114,13 +114,7 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
             }
             let (prefix, suffix) = get_colors_format_strings(fmt);
             let ls_colors = parts.join(sep);
-            format!(
-                "{}{}:{}:{}",
-                prefix,
-                generate_type_output(fmt),
-                ls_colors,
-                suffix
-            )
+            format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt),)
         }
     }
 }
@@ -233,10 +227,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 );
             }
             Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("{}: {}", path.maybe_quote(), e),
-                ));
+                return Err(USimpleError::new(1, format!("{}: {e}", path.maybe_quote())));
             }
         }
     }
@@ -388,9 +379,8 @@ where
         if val.is_empty() {
             return Err(format!(
                 // The double space is what GNU is doing
-                "{}:{}: invalid line;  missing second token",
+                "{}:{num}: invalid line;  missing second token",
                 fp.maybe_quote(),
-                num
             ));
         }
 

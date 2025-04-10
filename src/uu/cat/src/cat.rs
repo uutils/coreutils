@@ -101,7 +101,7 @@ enum CatError {
     #[error("{0}")]
     Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
-    #[error("unknown filetype: {}", ft_debug)]
+    #[error("unknown filetype: {ft_debug}")]
     UnknownFiletype {
         /// A debug print of the file type
         ft_debug: String,
@@ -457,7 +457,7 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
 
     for path in files {
         if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
-            error_messages.push(format!("{}: {}", path.maybe_quote(), err));
+            error_messages.push(format!("{}: {err}", path.maybe_quote()));
         }
     }
     if state.skipped_carriage_return {

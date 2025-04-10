@@ -140,9 +140,7 @@ fn check_basic(path: &[String]) -> bool {
         if component_len > POSIX_NAME_MAX {
             writeln!(
                 std::io::stderr(),
-                "limit {} exceeded by length {} of file name component {}",
-                POSIX_NAME_MAX,
-                component_len,
+                "limit {POSIX_NAME_MAX} exceeded by length {component_len} of file name component {}",
                 p.quote()
             );
             return false;
@@ -184,9 +182,8 @@ fn check_default(path: &[String]) -> bool {
     if total_len > libc::PATH_MAX as usize {
         writeln!(
             std::io::stderr(),
-            "limit {} exceeded by length {} of file name {}",
+            "limit {} exceeded by length {total_len} of file name {}",
             libc::PATH_MAX,
-            total_len,
             joined_path.quote()
         );
         return false;
@@ -208,9 +205,8 @@ fn check_default(path: &[String]) -> bool {
         if component_len > libc::FILENAME_MAX as usize {
             writeln!(
                 std::io::stderr(),
-                "limit {} exceeded by length {} of file name component {}",
+                "limit {} exceeded by length {component_len} of file name component {}",
                 libc::FILENAME_MAX,
-                component_len,
                 p.quote()
             );
             return false;
@@ -244,8 +240,7 @@ fn check_portable_chars(path_segment: &str) -> bool {
             let invalid = path_segment[i..].chars().next().unwrap();
             writeln!(
                 std::io::stderr(),
-                "nonportable character '{}' in file name component {}",
-                invalid,
+                "nonportable character '{invalid}' in file name component {}",
                 path_segment.quote()
             );
             return false;

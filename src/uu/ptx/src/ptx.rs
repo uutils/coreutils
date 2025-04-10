@@ -519,9 +519,9 @@ fn get_output_chunks(
 
     // put left context truncation string if needed
     if before_beg != 0 && head_beg == head_end {
-        before = format!("{}{}", config.trunc_str, before);
+        before = format!("{}{before}", config.trunc_str);
     } else if before_beg != 0 && head_beg != 0 {
-        head = format!("{}{}", config.trunc_str, head);
+        head = format!("{}{head}", config.trunc_str);
     }
 
     (tail, before, after, head)

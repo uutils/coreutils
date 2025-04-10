@@ -30,9 +30,9 @@ impl std::fmt::Display for Pattern {
         match self {
             Self::UpToLine(n, _) => write!(f, "{n}"),
             Self::UpToMatch(regex, 0, _) => write!(f, "/{}/", regex.as_str()),
-            Self::UpToMatch(regex, offset, _) => write!(f, "/{}/{:+}", regex.as_str(), offset),
+            Self::UpToMatch(regex, offset, _) => write!(f, "/{}/{offset:+}", regex.as_str()),
             Self::SkipToMatch(regex, 0, _) => write!(f, "%{}%", regex.as_str()),
-            Self::SkipToMatch(regex, offset, _) => write!(f, "%{}%{:+}", regex.as_str(), offset),
+            Self::SkipToMatch(regex, offset, _) => write!(f, "%{}%{offset:+}", regex.as_str()),
         }
     }
 }
@@ -168,7 +168,7 @@ fn validate_line_numbers(patterns: &[Pattern]) -> Result<(), CsplitError> {
             (_, 0) => Err(CsplitError::LineNumberIsZero),
             // two consecutive numbers should not be equal
             (n, m) if n == m => {
-                show_warning!("line number '{}' is the same as preceding line number", n);
+                show_warning!("line number '{n}' is the same as preceding line number");
                 Ok(n)
             }
             // a number cannot be greater than the one that follows

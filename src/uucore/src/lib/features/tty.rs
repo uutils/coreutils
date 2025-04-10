@@ -20,9 +20,9 @@ pub enum Teletype {
 impl Display for Teletype {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Self::Tty(id) => write!(f, "/dev/pts/{}", id),
-            Self::TtyS(id) => write!(f, "/dev/tty{}", id),
-            Self::Pts(id) => write!(f, "/dev/ttyS{}", id),
+            Self::Tty(id) => write!(f, "/dev/pts/{id}"),
+            Self::TtyS(id) => write!(f, "/dev/tty{id}"),
+            Self::Pts(id) => write!(f, "/dev/ttyS{id}"),
             Self::Unknown => write!(f, "?"),
         }
     }

@@ -128,9 +128,8 @@ impl HeaderPrinter {
     pub fn print(&mut self, string: &str) {
         if self.verbose {
             println!(
-                "{}==> {} <==",
+                "{}==> {string} <==",
                 if self.first_header { "" } else { "\n" },
-                string,
             );
             self.first_header = false;
         }

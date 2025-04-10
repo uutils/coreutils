@@ -241,11 +241,7 @@ fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
                 IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
                 _ => Err(USimpleError::new(
                     1,
-                    format!(
-                        "Invalid argument for {}: {}",
-                        opt_name,
-                        arg_str.maybe_quote()
-                    ),
+                    format!("Invalid argument for {opt_name}: {}", arg_str.maybe_quote()),
                 )),
             },
         },

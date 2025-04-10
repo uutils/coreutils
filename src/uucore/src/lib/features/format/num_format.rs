@@ -83,7 +83,7 @@ impl Formatter<i64> for SignedInt {
         // -i64::MIN is actually 1 larger than i64::MAX, so we need to cast to i128 first.
         let abs = (x as i128).abs();
         let s = if self.precision > 0 {
-            format!("{:0>width$}", abs, width = self.precision)
+            format!("{abs:0>width$}", width = self.precision)
         } else {
             abs.to_string()
         };

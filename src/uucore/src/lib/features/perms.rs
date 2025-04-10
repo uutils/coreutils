@@ -80,21 +80,19 @@ pub fn wrap_chown<P: AsRef<Path>>(
             VerbosityLevel::Silent => (),
             level => {
                 out = format!(
-                    "changing {} of {}: {}",
+                    "changing {} of {}: {e}",
                     if verbosity.groups_only {
                         "group"
                     } else {
                         "ownership"
                     },
                     path.quote(),
-                    e
                 );
                 if level == VerbosityLevel::Verbose {
                     out = if verbosity.groups_only {
                         let gid = meta.gid();
                         format!(
-                            "{}\nfailed to change group of {} from {} to {}",
-                            out,
+                            "{out}\nfailed to change group of {} from {} to {}",
                             path.quote(),
                             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
                             entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
@@ -103,8 +101,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                         let uid = meta.uid();
                         let gid = meta.gid();
                         format!(
-                            "{}\nfailed to change ownership of {} from {}:{} to {}:{}",
-                            out,
+                            "{out}\nfailed to change ownership of {} from {}:{} to {}:{}",
                             path.quote(),
                             entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
                             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
@@ -303,13 +300,13 @@ impl ChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{}", n);
+                        show_error!("{n}");
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("{}", e);
+                        show_error!("{e}");
                     }
                     1
                 }
@@ -360,7 +357,7 @@ impl ChownExecutor {
                             }
                         );
                     } else {
-                        show_error!("{}", e);
+                        show_error!("{e}");
                     }
                     continue;
                 }
@@ -403,13 +400,13 @@ impl ChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{}", n);
+                        show_error!("{n}");
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("{}", e);
+                        show_error!("{e}");
                     }
                     1
                 }
@@ -458,9 +455,9 @@ impl ChownExecutor {
                 _ => entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
             };
             if self.verbosity.groups_only {
-                println!("group of {} retained as {}", path.quote(), ownership);
+                println!("group of {} retained as {ownership}", path.quote());
             } else {
-                println!("ownership of {} retained as {}", path.quote(), ownership);
+                println!("ownership of {} retained as {ownership}", path.quote());
             }
         }
     }

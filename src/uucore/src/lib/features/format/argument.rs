@@ -121,8 +121,7 @@ fn extract_value<T: Default>(p: Result<T, ExtendedParserError<'_, T>>, input: &s
                     let bytes = input.as_encoded_bytes();
                     if !bytes.is_empty() && (bytes[0] == b'\'' || bytes[0] == b'"') {
                         show_warning!(
-                            "{}: character(s) following character constant have been ignored",
-                            &rest,
+                            "{rest}: character(s) following character constant have been ignored"
                         );
                     } else {
                         show_error!("{}: value not completely converted", input.quote());

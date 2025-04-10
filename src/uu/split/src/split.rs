@@ -1165,7 +1165,7 @@ where
                 Err(error) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("{}: cannot read from input : {}", settings.input, error),
+                        format!("{}: cannot read from input : {error}", settings.input),
                     ));
                 }
             }

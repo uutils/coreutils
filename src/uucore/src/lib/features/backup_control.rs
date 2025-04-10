@@ -53,8 +53,7 @@
 //!         .arg(backup_control::arguments::suffix())
 //!         .override_usage(usage)
 //!         .after_help(format!(
-//!             "{}\n{}",
-//!             long_usage,
+//!             "{long_usage}\n{}",
 //!             backup_control::BACKUP_CONTROL_LONG_HELP
 //!         ))
 //!         .get_matches_from(vec![
@@ -176,17 +175,13 @@ impl Display for BackupError {
         match self {
             Self::InvalidArgument(arg, origin) => write!(
                 f,
-                "invalid argument {} for '{}'\n{}",
+                "invalid argument {} for '{origin}'\n{VALID_ARGS_HELP}",
                 arg.quote(),
-                origin,
-                VALID_ARGS_HELP
             ),
             Self::AmbiguousArgument(arg, origin) => write!(
                 f,
-                "ambiguous argument {} for '{}'\n{}",
+                "ambiguous argument {} for '{origin}'\n{VALID_ARGS_HELP}",
                 arg.quote(),
-                origin,
-                VALID_ARGS_HELP
             ),
             Self::BackupImpossible() => write!(f, "cannot create backup"),
             // Placeholder for later

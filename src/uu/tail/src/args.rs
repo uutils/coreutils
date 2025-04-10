@@ -279,7 +279,7 @@ impl Settings {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("invalid PID: {}: {}", pid_str.quote(), e),
+                        format!("invalid PID: {}: {e}", pid_str.quote()),
                     ));
                 }
             }

@@ -60,9 +60,9 @@ impl MultifileReader<'_> {
                         Err(e) => {
                             // If any file can't be opened,
                             // print an error at the time that the file is needed,
-                            // then move on the the next file.
+                            // then move to the next file.
                             // This matches the behavior of the original `od`
-                            show_error!("{}: {}", fname.maybe_quote(), e);
+                            show_error!("{}: {e}", fname.maybe_quote());
                             self.any_err = true;
                         }
                     }
@@ -95,7 +95,7 @@ impl io::Read for MultifileReader<'_> {
                             Ok(0) => break,
                             Ok(n) => n,
                             Err(e) => {
-                                show_error!("I/O: {}", e);
+                                show_error!("I/O: {e}");
                                 self.any_err = true;
                                 break;
                             }

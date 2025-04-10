@@ -171,7 +171,7 @@ fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: 
     if *silent {
         String::new()
     } else {
-        format!("{}:{}: disorder: {}", file.maybe_quote(), line_number, line)
+        format!("{}:{}: disorder: {line}", file.maybe_quote(), line_number)
     }
 }
 
@@ -711,11 +711,7 @@ impl KeyPosition {
             Ok(f) => f,
             Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
             Err(e) => {
-                return Err(format!(
-                    "failed to parse field index {} {}",
-                    field.quote(),
-                    e
-                ));
+                return Err(format!("failed to parse field index {} {e}", field.quote(),));
             }
         };
         if field == 0 {
@@ -724,7 +720,7 @@ impl KeyPosition {
 
         let char = char.map_or(Ok(default_char_index), |char| {
             char.parse()
-                .map_err(|e| format!("failed to parse character index {}: {}", char.quote(), e))
+                .map_err(|e| format!("failed to parse character index {}: {e}", char.quote()))
         })?;
 
         Ok(Self {
@@ -1150,7 +1146,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match n_merge.parse::<usize>() {
             Ok(parsed_value) => {
                 if parsed_value < 2 {
-                    show_error!("invalid --batch-size argument '{}'", n_merge);
+                    show_error!("invalid --batch-size argument '{n_merge}'");
                     return Err(UUsageError::new(2, "minimum --batch-size argument is '2'"));
                 }
                 settings.merge_batch_size = parsed_value;
@@ -1889,15 +1885,15 @@ fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
 
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
-    // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
+    // GNU's sort echos affected flag, -S or --buffer-size, depending on user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{} argument {}", option, s.quote())
+            format!("invalid suffix in --{option} argument {}", s.quote())
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{} argument {}", option, s.quote())
+            format!("invalid --{option} argument {}", s.quote())
         }
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
     }
 }
 
