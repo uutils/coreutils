@@ -343,7 +343,7 @@ unicode-segmentation = "1.11.0"
 unicode-width = "0.2.0"
 utf-8 = "0.7.6"
 utmp-classic = "0.1.6"
-uutils_term_grid = "0.6"
+uutils_term_grid = "0.7"
 walkdir = "2.5"
 winapi-util = "0.1.8"
 windows-sys = { version = "0.59.0", default-features = false }
