@@ -435,8 +435,7 @@ fn test_negative_offset() {
 
                 // Is the resulting date roughly what is expected?
                 let expected_date = Utc::now() - offset;
-                date > expected_date - Duration::minutes(10)
-                    && date < expected_date + Duration::minutes(10)
+                (date.to_utc() - expected_date).abs() < Duration::minutes(10)
             });
     }
 }
