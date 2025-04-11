@@ -1697,7 +1697,7 @@ fn get_leading_gen(input: &str) -> Range<usize> {
 
     let first = char_indices.peek();
 
-    if matches!(first, Some((_, NEGATIVE) | (_, POSITIVE))) {
+    if matches!(first, Some((_, NEGATIVE | POSITIVE))) {
         char_indices.next();
     }
 

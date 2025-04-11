@@ -318,12 +318,10 @@ impl Observer {
         let display_name = self.files.get(event_path).display_name.clone();
 
         match event.kind {
-            EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime))
-
-                // | EventKind::Access(AccessKind::Close(AccessMode::Write))
-                | EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any)
-                | EventKind::Modify(ModifyKind::Data(DataChange::Any))
-                | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+            EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any |
+MetadataKind::WriteTime) | ModifyKind::Data(DataChange::Any) |
+ModifyKind::Name(RenameMode::To)) |
+EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any) => {
                     if let Ok(new_md) = event_path.metadata() {
 
                         let is_tailable = new_md.is_tailable();

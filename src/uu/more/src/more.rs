@@ -347,33 +347,25 @@ fn more(
                     kind: KeyEventKind::Release,
                     ..
                 }) => continue,
-                Event::Key(KeyEvent {
-                    code: KeyCode::Char('q'),
-                    modifiers: KeyModifiers::NONE,
-                    kind: KeyEventKind::Press,
-                    ..
-                })
-                | Event::Key(KeyEvent {
-                    code: KeyCode::Char('c'),
-                    modifiers: KeyModifiers::CONTROL,
-                    kind: KeyEventKind::Press,
-                    ..
-                }) => {
+                Event::Key(
+                    KeyEvent {
+                        code: KeyCode::Char('q'),
+                        modifiers: KeyModifiers::NONE,
+                        kind: KeyEventKind::Press,
+                        ..
+                    }
+                    | KeyEvent {
+                        code: KeyCode::Char('c'),
+                        modifiers: KeyModifiers::CONTROL,
+                        kind: KeyEventKind::Press,
+                        ..
+                    },
+                ) => {
                     reset_term(stdout);
                     std::process::exit(0);
                 }
                 Event::Key(KeyEvent {
-                    code: KeyCode::Down,
-                    modifiers: KeyModifiers::NONE,
-                    ..
-                })
-                | Event::Key(KeyEvent {
-                    code: KeyCode::PageDown,
-                    modifiers: KeyModifiers::NONE,
-                    ..
-                })
-                | Event::Key(KeyEvent {
-                    code: KeyCode::Char(' '),
+                    code: KeyCode::Down | KeyCode::PageDown | KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
@@ -384,12 +376,7 @@ fn more(
                     }
                 }
                 Event::Key(KeyEvent {
-                    code: KeyCode::Up,
-                    modifiers: KeyModifiers::NONE,
-                    ..
-                })
-                | Event::Key(KeyEvent {
-                    code: KeyCode::PageUp,
+                    code: KeyCode::Up | KeyCode::PageUp,
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
