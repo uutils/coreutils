@@ -350,3 +350,5 @@ sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
 # /nix/store/xxxxxxxxxxxx...xxxx/bin/tr
 # We just replace the references to `/usr/bin/tr` with the result of `$(which tr)`
 sed -i  's/\/usr\/bin\/tr/$(which tr)/' tests/init.sh
+
+sed -i -e 's/python -m pyinotify/python3 -m pyinotify/' -e 's|/usr/bin/env python|/usr/bin/env python3|g'  tests/du/move-dir-while-traversing.sh
