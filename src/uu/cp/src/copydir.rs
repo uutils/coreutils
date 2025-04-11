@@ -251,15 +251,15 @@ fn copy_direntry(
         && !ends_with_slash_dot(&source_absolute)
         && !local_to_target.exists()
     {
-        if target_is_file {
-            return Err("cannot overwrite non-directory with directory".into());
+        return if target_is_file {
+            Err("cannot overwrite non-directory with directory".into())
         } else {
             build_dir(&local_to_target, false, options, Some(&source_absolute))?;
             if options.verbose {
                 println!("{}", context_for(&source_relative, &local_to_target));
             }
-            return Ok(());
-        }
+            Ok(())
+        };
     }
 
     // If the source is not a directory, then we need to copy the file.

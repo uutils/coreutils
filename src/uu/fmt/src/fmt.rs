@@ -270,14 +270,14 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
 fn extract_width(matches: &ArgMatches) -> UResult<Option<usize>> {
     let width_opt = matches.get_one::<String>(options::WIDTH);
     if let Some(width_str) = width_opt {
-        if let Ok(width) = width_str.parse::<usize>() {
-            return Ok(Some(width));
+        return if let Ok(width) = width_str.parse::<usize>() {
+            Ok(Some(width))
         } else {
-            return Err(USimpleError::new(
+            Err(USimpleError::new(
                 1,
                 format!("invalid width: {}", width_str.quote()),
-            ));
-        }
+            ))
+        };
     }
 
     if let Some(1) = matches.index_of(options::FILES_OR_WIDTH) {

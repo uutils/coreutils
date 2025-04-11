@@ -44,14 +44,14 @@ fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
     for word in words {
         match word.parse::<usize>() {
             Ok(num) => nums.push(num),
-            Err(e) => match e.kind() {
-                IntErrorKind::PosOverflow => return Err(ParseError::TabSizeTooLarge),
-                _ => {
-                    return Err(ParseError::InvalidCharacter(
+            Err(e) => {
+                return match e.kind() {
+                    IntErrorKind::PosOverflow => Err(ParseError::TabSizeTooLarge),
+                    _ => Err(ParseError::InvalidCharacter(
                         word.trim_start_matches(char::is_numeric).to_string(),
-                    ));
-                }
-            },
+                    )),
+                };
+            }
         }
     }
 

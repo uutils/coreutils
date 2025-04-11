@@ -145,14 +145,14 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                             }
 
                             let s = s.trim_start_matches(char::is_numeric);
-                            if s.starts_with('/') || s.starts_with('+') {
-                                return Err(ParseError::SpecifierNotAtStartOfNumber(
+                            return if s.starts_with('/') || s.starts_with('+') {
+                                Err(ParseError::SpecifierNotAtStartOfNumber(
                                     s[0..1].to_string(),
                                     s.to_string(),
-                                ));
+                                ))
                             } else {
-                                return Err(ParseError::InvalidCharacter(s.to_string()));
-                            }
+                                Err(ParseError::InvalidCharacter(s.to_string()))
+                            };
                         }
                     }
                 }

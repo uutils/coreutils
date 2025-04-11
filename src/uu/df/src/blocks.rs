@@ -184,11 +184,7 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
 fn block_size_from_env() -> Option<u64> {
     for env_var in ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
         if let Ok(env_size) = env::var(env_var) {
-            if let Ok(size) = parse_size_u64(&env_size) {
-                return Some(size);
-            } else {
-                return None;
-            }
+            return parse_size_u64(&env_size).ok();
         }
     }
 

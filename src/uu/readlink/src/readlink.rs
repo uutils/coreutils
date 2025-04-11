@@ -84,15 +84,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 show(&path, line_ending).map_err_context(String::new)?;
             }
             Err(err) => {
-                if verbose {
-                    return Err(USimpleError::new(
+                return if verbose {
+                    Err(USimpleError::new(
                         1,
                         err.map_err_context(move || f.maybe_quote().to_string())
                             .to_string(),
-                    ));
+                    ))
                 } else {
-                    return Err(1.into());
-                }
+                    Err(1.into())
+                };
             }
         }
     }
