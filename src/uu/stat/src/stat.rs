@@ -908,11 +908,11 @@ impl Stater {
                     // device number in hex
                     'D' => OutputType::UnsignedHex(meta.dev()),
                     // raw mode in hex
-                    'f' => OutputType::UnsignedHex(meta.mode() as u64),
+                    'f' => OutputType::UnsignedHex(u64::from(meta.mode())),
                     // file type
                     'F' => OutputType::Str(pretty_filetype(meta.mode() as mode_t, meta.len())),
                     // group ID of owner
-                    'g' => OutputType::Unsigned(meta.gid() as u64),
+                    'g' => OutputType::Unsigned(u64::from(meta.gid())),
                     // group name of owner
                     'G' => {
                         let group_name =
@@ -944,7 +944,7 @@ impl Stater {
                     // files
                     'T' => OutputType::UnsignedHex(meta.rdev() & 0xff),
                     // user ID of owner
-                    'u' => OutputType::Unsigned(meta.uid() as u64),
+                    'u' => OutputType::Unsigned(u64::from(meta.uid())),
                     // user name of owner
                     'U' => {
                         let user_name =
@@ -955,7 +955,7 @@ impl Stater {
                     // time of file birth, human-readable; - if unknown
                     'w' => OutputType::Str(
                         meta.birth()
-                            .map(|(sec, nsec)| pretty_time(sec as i64, nsec as i64))
+                            .map(|(sec, nsec)| pretty_time(sec as i64, i64::from(nsec)))
                             .unwrap_or(String::from("-")),
                     ),
 

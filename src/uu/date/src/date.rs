@@ -446,7 +446,7 @@ fn set_system_datetime(_date: DateTime<Utc>) -> UResult<()> {
 fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
     let timespec = timespec {
         tv_sec: date.timestamp() as _,
-        tv_nsec: date.timestamp_subsec_nanos() as _,
+        tv_nsec: date.timestamp_subsec_nanos().into(),
     };
 
     let result = unsafe { clock_settime(CLOCK_REALTIME, &timespec) };
