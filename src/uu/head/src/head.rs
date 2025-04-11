@@ -191,16 +191,10 @@ fn arg_iterate<'a>(
         if let Some(s) = second.to_str() {
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(HeadError::ParseError(format!(
-                        "bad argument format: {}",
-                        s.quote()
-                    ))),
-                    parse::ParseError::Overflow => Err(HeadError::ParseError(format!(
-                        "invalid argument: {} Value too large for defined datatype",
-                        s.quote()
-                    ))),
-                },
+                Some(Err(parse::ParseError)) => Err(HeadError::ParseError(format!(
+                    "bad argument format: {}",
+                    s.quote()
+                ))),
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
@@ -668,7 +662,7 @@ mod tests {
         //test that bad obsoletes are an error
         assert!(arg_outputs("head -123FooBar").is_err());
         //test overflow
-        assert!(arg_outputs("head -100000000000000000000000000000000000000000").is_err());
+        assert!(arg_outputs("head -100000000000000000000000000000000000000000").is_ok());
         //test that empty args remain unchanged
         assert_eq!(arg_outputs("head"), Ok("head".to_owned()));
     }
