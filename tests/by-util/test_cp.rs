@@ -5218,6 +5218,31 @@ mod same_file {
         assert_eq!(symlink1, at.resolve_link(symlink2));
     }
 
+    #[test]
+    fn test_same_symlink_to_itself_no_dereference() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        scene
+            .ucmd()
+            .args(&["-P", SYMLINK_NAME, SYMLINK_NAME])
+            .fails()
+            .stderr_contains("are the same file");
+    }
+
+    #[test]
+    fn test_same_dangling_symlink_to_itself_no_dereference() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.symlink_file("nonexistent_file", SYMLINK_NAME);
+        scene
+            .ucmd()
+            .args(&["-P", SYMLINK_NAME, SYMLINK_NAME])
+            .fails()
+            .stderr_contains("are the same file");
+    }
+
     // the following tests tries to copy file to a hardlink of the same file with
     // various options
     #[test]
