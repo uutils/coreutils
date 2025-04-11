@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore bindgen
+// spell-checker:ignore bindgen getfattr testtest
 
 #![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 
@@ -357,4 +357,61 @@ fn test_empty_argument() {
         .arg("")
         .fails()
         .stderr_only("mkdir: cannot create directory '': No such file or directory\n");
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dest = "test_dir_a";
+    let args = ["-Z", "--context=unconfined_u:object_r:user_tmp_t:s0"];
+    for arg in args {
+        new_ucmd!()
+            .arg(arg)
+            .arg("-v")
+            .arg(at.plus_as_string(dest))
+            .succeeds()
+            .stdout_contains("created directory");
+
+        let getfattr_output = Command::new("getfattr")
+            .arg(at.plus_as_string(dest))
+            .arg("-n")
+            .arg("security.selinux")
+            .output()
+            .expect("Failed to run `getfattr` on the destination file");
+
+        assert!(
+            getfattr_output.status.success(),
+            "getfattr did not run successfully: {}",
+            String::from_utf8_lossy(&getfattr_output.stderr)
+        );
+
+        let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
+        assert!(
+            stdout.contains("unconfined_u"),
+            "Expected '{}' not found in getfattr output:\n{}",
+            "unconfined_u",
+            stdout
+        );
+        at.rmdir(dest);
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux_invalid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dest = "test_dir_a";
+    new_ucmd!()
+        .arg("--context=testtest")
+        .arg(at.plus_as_string(dest))
+        .fails()
+        .no_stdout()
+        .stderr_contains("failed to set SELinux security context:");
+    // invalid context, so, no directory
+    assert!(!at.dir_exists(dest));
 }

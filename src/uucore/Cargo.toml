@@ -58,6 +58,7 @@ crc32fast = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 bigdecimal = { workspace = true, optional = true }
 num-traits = { workspace = true, optional = true }
+selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace = true, optional = true }
@@ -105,13 +106,14 @@ format = [
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
+parser = ["extendedbigdecimal", "glob", "num-traits"]
 pipes = []
 process = ["libc"]
 proc-info = ["tty", "walkdir"]
 quoting-style = []
 ranges = []
 ringbuffer = []
-parser = ["extendedbigdecimal", "glob", "num-traits"]
+selinux = ["dep:selinux"]
 signals = []
 sum = [
   "digest",
