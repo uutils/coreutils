@@ -1,12 +1,11 @@
 [package]
 name = "uu_stdbuf_libstdbuf"
+description = "stdbuf/libstdbuf ~ (uutils); dynamic library required for stdbuf"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stdbuf"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
-
 homepage.workspace = true
-description = "stdbuf/libstdbuf ~ (uutils); dynamic library required for stdbuf"
-repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stdbuf"
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
