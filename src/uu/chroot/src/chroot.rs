@@ -54,22 +54,23 @@ struct Options {
 /// The `spec` must be of the form `[USER][:[GROUP]]`, otherwise an
 /// error is returned.
 fn parse_userspec(spec: &str) -> UResult<UserSpec> {
-    match &spec.splitn(2, ':').collect::<Vec<&str>>()[..] {
+    Ok(match spec.split_once(':') {
         // ""
-        [""] => Ok(UserSpec::NeitherGroupNorUser),
+        None if spec.is_empty() => UserSpec::NeitherGroupNorUser,
         // "usr"
-        [usr] => Ok(UserSpec::UserOnly(usr.to_string())),
+        None => UserSpec::UserOnly(spec.to_string()),
         // ":"
-        ["", ""] => Ok(UserSpec::NeitherGroupNorUser),
+        Some(("", "")) => UserSpec::NeitherGroupNorUser,
         // ":grp"
-        ["", grp] => Ok(UserSpec::GroupOnly(grp.to_string())),
+        Some(("", grp)) => UserSpec::GroupOnly(grp.to_string()),
         // "usr:"
-        [usr, ""] => Ok(UserSpec::UserOnly(usr.to_string())),
+        Some((usr, "")) => UserSpec::UserOnly(usr.to_string()),
         // "usr:grp"
-        [usr, grp] => Ok(UserSpec::UserAndGroup(usr.to_string(), grp.to_string())),
+        Some((usr, grp)) => UserSpec::UserAndGroup(usr.to_string(), grp.to_string()),
+        // BUG: this would never be reached. Should we check for another ':', or some invalid characters?
         // everything else
-        _ => Err(ChrootError::InvalidUserspec(spec.to_string()).into()),
-    }
+        // _ => Err(ChrootError::InvalidUserspec(spec.to_string()).into()),
+    })
 }
 
 // Pre-condition: `list_str` is non-empty.
