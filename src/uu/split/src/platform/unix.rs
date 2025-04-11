@@ -121,7 +121,7 @@ impl Drop for FilterWriter {
 
 /// Instantiate either a file writer or a "write to shell process's stdin" writer
 pub fn instantiate_current_writer(
-    filter: &Option<String>,
+    filter: Option<&str>,
     filename: &str,
     is_new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {

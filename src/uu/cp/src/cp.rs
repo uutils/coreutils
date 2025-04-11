@@ -1366,7 +1366,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             }
 
             if let Err(error) = copy_source(
-                &progress_bar,
+                progress_bar.as_ref(),
                 source,
                 target,
                 target_type,
@@ -1433,7 +1433,7 @@ fn construct_dest_path(
 }
 #[allow(clippy::too_many_arguments)]
 fn copy_source(
-    progress_bar: &Option<ProgressBar>,
+    progress_bar: Option<&ProgressBar>,
     source: &Path,
     target: &Path,
     target_type: TargetType,
@@ -1979,7 +1979,7 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
 
 fn print_verbose_output(
     parents: bool,
-    progress_bar: &Option<ProgressBar>,
+    progress_bar: Option<&ProgressBar>,
     source: &Path,
     dest: &Path,
 ) {
@@ -2207,7 +2207,7 @@ fn calculate_dest_permissions(
 /// after a successful copy.
 #[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
 fn copy_file(
-    progress_bar: &Option<ProgressBar>,
+    progress_bar: Option<&ProgressBar>,
     source: &Path,
     dest: &Path,
     options: &Options,
