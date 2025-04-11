@@ -1333,7 +1333,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -3641,9 +3641,9 @@ dependencies = [
 
 [[package]]
 name = "uutils_term_grid"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f89defb4adb4ba5703a57abc879f96ddd6263a444cacc446db90bf2617f141fb"
+checksum = "fcba141ce511bad08e80b43f02976571072e1ff4286f7d628943efbd277c6361"
 dependencies = [
  "ansi-width",
 ]
