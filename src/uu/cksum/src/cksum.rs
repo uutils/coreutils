@@ -350,7 +350,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )

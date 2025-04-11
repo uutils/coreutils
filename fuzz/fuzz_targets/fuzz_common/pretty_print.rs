@@ -5,17 +5,18 @@
 
 use std::fmt;
 
-use console::{style, Style};
+use console::{Style, style};
 use similar::TextDiff;
 
 pub fn print_section<S: fmt::Display>(s: S) {
-    println!("{}", style(format!("=== {}", s)).bold());
+    println!("{}", style(format!("=== {s}")).bold());
 }
 
 pub fn print_subsection<S: fmt::Display>(s: S) {
-    println!("{}", style(format!("--- {}", s)).bright());
+    println!("{}", style(format!("--- {s}")).bright());
 }
 
+#[allow(dead_code)]
 pub fn print_test_begin<S: fmt::Display>(msg: S) {
     println!(
         "{} {} {}",
@@ -33,9 +34,8 @@ pub fn print_end_with_status<S: fmt::Display>(msg: S, ok: bool) {
     };
 
     println!(
-        "{} {} {}",
+        "{} {ok} {}",
         style("===").bold(), // Kind of gray
-        ok,
         style(msg).bold()
     );
 }
@@ -50,7 +50,7 @@ pub fn print_with_style<S: fmt::Display>(msg: S, style: Style) {
     println!("{}", style.apply_to(msg));
 }
 
-pub fn print_diff<'a, 'b>(got: &'a str, expected: &'b str) {
+pub fn print_diff(got: &str, expected: &str) {
     let diff = TextDiff::from_lines(got, expected);
 
     print_subsection("START diff");

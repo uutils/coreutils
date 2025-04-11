@@ -442,7 +442,7 @@ fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
 /// 512. You can also use standard block size suffixes like `'k'` for
 /// 1024.
 ///
-/// If the number would be too large, return [`std::u64::MAX`] instead.
+/// If the number would be too large, return [`u64::MAX`] instead.
 ///
 /// # Errors
 ///

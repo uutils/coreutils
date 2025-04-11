@@ -74,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 let sig = (sig as i32)
                     .try_into()
-                    .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+                    .map_err(|e| Error::from_raw_os_error(e as i32))?;
                 Some(sig)
             };
 
@@ -230,7 +230,7 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
     pids.iter()
         .map(|x| {
             x.parse::<i32>().map_err(|e| {
-                USimpleError::new(1, format!("failed to parse argument {}: {}", x.quote(), e))
+                USimpleError::new(1, format!("failed to parse argument {}: {e}", x.quote()))
             })
         })
         .collect()

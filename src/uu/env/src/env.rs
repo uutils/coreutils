@@ -160,7 +160,7 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
 
     let mut sig_vec = Vec::with_capacity(signals.len());
     signals.into_iter().for_each(|sig| {
-        if !(sig.is_empty()) {
+        if !sig.is_empty() {
             sig_vec.push(sig);
         }
     });
@@ -193,7 +193,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
         };
 
         let conf =
-            conf.map_err(|e| USimpleError::new(1, format!("{}: {}", file.maybe_quote(), e)))?;
+            conf.map_err(|e| USimpleError::new(1, format!("{}: {e}", file.maybe_quote())))?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
@@ -317,19 +317,19 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
         }
         EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
         EnvError::EnvParsingOfVariableMissingClosingBrace(pos) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
         }
         EnvError::EnvParsingOfMissingVariable(pos) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
         }
         EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
         }
         EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
         }
         EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {}", e))
+            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
         }
         _ => USimpleError::new(125, format!("Error: {e:?}")),
     })
@@ -338,14 +338,14 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
 fn debug_print_args(args: &[OsString]) {
     eprintln!("input args:");
     for (i, arg) in args.iter().enumerate() {
-        eprintln!("arg[{}]: {}", i, arg.quote());
+        eprintln!("arg[{i}]: {}", arg.quote());
     }
 }
 
 fn check_and_handle_string_args(
     arg: &OsString,
     prefix_to_test: &str,
-    all_args: &mut Vec<std::ffi::OsString>,
+    all_args: &mut Vec<OsString>,
     do_debug_print_args: Option<&Vec<OsString>>,
 ) -> UResult<bool> {
     let native_arg = NCvt::convert(arg);
@@ -378,7 +378,7 @@ impl EnvAppData {
     fn make_error_no_such_file_or_dir(&self, prog: &OsStr) -> Box<dyn UError> {
         uucore::show_error!("{}: No such file or directory", prog.quote());
         if !self.had_string_argument {
-            uucore::show_error!("{}", ERROR_MSG_S_SHEBANG);
+            uucore::show_error!("{ERROR_MSG_S_SHEBANG}");
         }
         ExitCode::new(127)
     }
@@ -386,8 +386,8 @@ impl EnvAppData {
     fn process_all_string_arguments(
         &mut self,
         original_args: &Vec<OsString>,
-    ) -> UResult<Vec<std::ffi::OsString>> {
-        let mut all_args: Vec<std::ffi::OsString> = Vec::new();
+    ) -> UResult<Vec<OsString>> {
+        let mut all_args: Vec<OsString> = Vec::new();
         for arg in original_args {
             match arg {
                 b if check_and_handle_string_args(b, "--split-string", &mut all_args, None)? => {
@@ -451,10 +451,10 @@ impl EnvAppData {
                         let s = format!("{e}");
                         if !s.is_empty() {
                             let s = s.trim_end();
-                            uucore::show_error!("{}", s);
+                            uucore::show_error!("{s}");
                         }
-                        uucore::show_error!("{}", ERROR_MSG_S_SHEBANG);
-                        uucore::error::ExitCode::new(125)
+                        uucore::show_error!("{ERROR_MSG_S_SHEBANG}");
+                        ExitCode::new(125)
                     }
                 }
             })?;
@@ -545,9 +545,9 @@ impl EnvAppData {
         if do_debug_printing {
             eprintln!("executing: {}", prog.maybe_quote());
             let arg_prefix = "   arg";
-            eprintln!("{}[{}]= {}", arg_prefix, 0, arg0.quote());
+            eprintln!("{arg_prefix}[{}]= {}", 0, arg0.quote());
             for (i, arg) in args.iter().enumerate() {
-                eprintln!("{}[{}]= {}", arg_prefix, i + 1, arg.quote());
+                eprintln!("{arg_prefix}[{}]= {}", i + 1, arg.quote());
             }
         }
 
@@ -590,7 +590,7 @@ impl EnvAppData {
                     return Err(126.into());
                 }
                 _ => {
-                    uucore::show_error!("unknown error: {:?}", err);
+                    uucore::show_error!("unknown error: {err:?}");
                     return Err(126.into());
                 }
             },
@@ -751,7 +751,7 @@ fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
     for &sig_value in &opts.ignore_signal {
         let sig: Signal = (sig_value as i32)
             .try_into()
-            .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
         ignore_signal(sig)?;
     }
@@ -786,7 +786,7 @@ mod tests {
 
     #[test]
     fn test_split_string_environment_vars_test() {
-        unsafe { std::env::set_var("FOO", "BAR") };
+        unsafe { env::set_var("FOO", "BAR") };
         assert_eq!(
             NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
             parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))

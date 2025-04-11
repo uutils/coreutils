@@ -274,8 +274,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
     while let Some(type_char) = ch {
         let type_char = format_type(type_char).ok_or_else(|| {
             format!(
-                "unexpected char '{}' in format specification {}",
-                type_char,
+                "unexpected char '{type_char}' in format specification {}",
                 params.quote()
             )
         })?;
@@ -309,8 +308,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 
         let ft = od_format_type(type_char, byte_size).ok_or_else(|| {
             format!(
-                "invalid size '{}' in format specification {}",
-                byte_size,
+                "invalid size '{byte_size}' in format specification {}",
                 params.quote()
             )
         })?;

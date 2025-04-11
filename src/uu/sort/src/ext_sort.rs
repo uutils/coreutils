@@ -115,9 +115,9 @@ fn reader_writer<
                     }),
                     settings,
                     output,
-                );
+                )?;
             } else {
-                print_sorted(chunk.lines().iter(), settings, output);
+                print_sorted(chunk.lines().iter(), settings, output)?;
             }
         }
         ReadResult::SortedTwoChunks([a, b]) => {
@@ -138,9 +138,9 @@ fn reader_writer<
                         .map(|(line, _)| line),
                     settings,
                     output,
-                );
+                )?;
             } else {
-                print_sorted(merged_iter.map(|(line, _)| line), settings, output);
+                print_sorted(merged_iter.map(|(line, _)| line), settings, output)?;
             }
         }
         ReadResult::EmptyInput => {

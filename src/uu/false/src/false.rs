@@ -36,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Try to display this error.
         if let Err(print_fail) = error {
             // Completely ignore any error here, no more failover and we will fail in any case.
-            let _ = writeln!(std::io::stderr(), "{}: {}", uucore::util_name(), print_fail);
+            let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
         }
     }
 

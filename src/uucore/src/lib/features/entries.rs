@@ -294,7 +294,7 @@ macro_rules! f {
                         // The same applies for the two cases below.
                         Err(IOError::new(
                             ErrorKind::NotFound,
-                            format!("No such id: {}", k),
+                            format!("No such id: {k}"),
                         ))
                     }
                 }
@@ -313,7 +313,7 @@ macro_rules! f {
                         } else {
                             Err(IOError::new(
                                 ErrorKind::NotFound,
-                                format!("No such id: {}", id),
+                                format!("No such id: {id}"),
                             ))
                         }
                     }
@@ -325,10 +325,7 @@ macro_rules! f {
                         if !data.is_null() {
                             Ok($st::from_raw(ptr::read(data as *const _)))
                         } else {
-                            Err(IOError::new(
-                                ErrorKind::NotFound,
-                                format!("Not found: {}", k),
-                            ))
+                            Err(IOError::new(ErrorKind::NotFound, format!("Not found: {k}")))
                         }
                     }
                 }

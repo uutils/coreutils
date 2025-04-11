@@ -33,9 +33,9 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
             match result {
                 Ok(()) => uucore::error::get_exit_code(),
                 Err(e) => {
-                    let s = format!("{}", e);
+                    let s = format!("{e}");
                     if s != "" {
-                        uucore::show_error!("{}", s);
+                        uucore::show_error!("{s}");
                     }
                     if e.usage() {
                         eprintln!("Try '{} --help' for more information.", uucore::execution_phrase());

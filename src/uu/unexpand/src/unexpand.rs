@@ -311,7 +311,7 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
 #[allow(clippy::cognitive_complexity)]
 fn unexpand_line(
     buf: &mut Vec<u8>,
-    output: &mut BufWriter<std::io::Stdout>,
+    output: &mut BufWriter<Stdout>,
     options: &Options,
     lastcol: usize,
     ts: &[usize],

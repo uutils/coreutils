@@ -64,7 +64,7 @@ fn main() -> io::Result<()> {
         for platform in ["unix", "macos", "windows", "unix_android"] {
             let platform_utils: Vec<String> = String::from_utf8(
                 std::process::Command::new("./util/show-utils.sh")
-                    .arg(format!("--features=feat_os_{}", platform))
+                    .arg(format!("--features=feat_os_{platform}"))
                     .output()?
                     .stdout,
             )
@@ -138,7 +138,7 @@ fn main() -> io::Result<()> {
         if name == "[" {
             continue;
         }
-        let p = format!("docs/src/utils/{}.md", name);
+        let p = format!("docs/src/utils/{name}.md");
 
         let markdown = File::open(format!("src/uu/{name}/{name}.md"))
             .and_then(|mut f: File| {
@@ -158,11 +158,11 @@ fn main() -> io::Result<()> {
                 markdown,
             }
             .markdown()?;
-            println!("Wrote to '{}'", p);
+            println!("Wrote to '{p}'");
         } else {
-            println!("Error writing to {}", p);
+            println!("Error writing to {p}");
         }
-        writeln!(summary, "* [{0}](utils/{0}.md)", name)?;
+        writeln!(summary, "* [{name}](utils/{name}.md)")?;
     }
     Ok(())
 }
@@ -214,7 +214,7 @@ impl MDWriter<'_, '_> {
                     .iter()
                     .any(|u| u == self.name)
             {
-                writeln!(self.w, "<i class=\"fa fa-brands fa-{}\"></i>", icon)?;
+                writeln!(self.w, "<i class=\"fa fa-brands fa-{icon}\"></i>")?;
             }
         }
         writeln!(self.w, "</div>")?;
@@ -242,7 +242,7 @@ impl MDWriter<'_, '_> {
             let usage = usage.replace("{}", self.name);
 
             writeln!(self.w, "\n```")?;
-            writeln!(self.w, "{}", usage)?;
+            writeln!(self.w, "{usage}")?;
             writeln!(self.w, "```")
         } else {
             Ok(())
@@ -293,14 +293,14 @@ impl MDWriter<'_, '_> {
             writeln!(self.w)?;
             for line in content.lines().skip_while(|l| !l.starts_with('-')) {
                 if let Some(l) = line.strip_prefix("- ") {
-                    writeln!(self.w, "{}", l)?;
+                    writeln!(self.w, "{l}")?;
                 } else if line.starts_with('`') {
                     writeln!(self.w, "```shell\n{}\n```", line.trim_matches('`'))?;
                 } else if line.is_empty() {
                     writeln!(self.w)?;
                 } else {
                     println!("Not sure what to do with this line:");
-                    println!("{}", line);
+                    println!("{line}");
                 }
             }
             writeln!(self.w)?;
@@ -332,14 +332,14 @@ impl MDWriter<'_, '_> {
                     write!(self.w, ", ")?;
                 }
                 write!(self.w, "<code>")?;
-                write!(self.w, "--{}", l)?;
+                write!(self.w, "--{l}")?;
                 if let Some(names) = arg.get_value_names() {
                     write!(
                         self.w,
                         "={}",
                         names
                             .iter()
-                            .map(|x| format!("&lt;{}&gt;", x))
+                            .map(|x| format!("&lt;{x}&gt;"))
                             .collect::<Vec<_>>()
                             .join(" ")
                     )?;
@@ -353,14 +353,14 @@ impl MDWriter<'_, '_> {
                     write!(self.w, ", ")?;
                 }
                 write!(self.w, "<code>")?;
-                write!(self.w, "-{}", s)?;
+                write!(self.w, "-{s}")?;
                 if let Some(names) = arg.get_value_names() {
                     write!(
                         self.w,
                         " {}",
                         names
                             .iter()
-                            .map(|x| format!("&lt;{}&gt;", x))
+                            .map(|x| format!("&lt;{x}&gt;"))
                             .collect::<Vec<_>>()
                             .join(" ")
                     )?;

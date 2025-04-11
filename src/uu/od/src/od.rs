@@ -148,7 +148,7 @@ impl OdOptions {
             cmp::max(max, next.formatter_item_info.byte_size)
         });
         if line_bytes == 0 || line_bytes % min_bytes != 0 {
-            show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
+            show_warning!("invalid width {line_bytes}; using {min_bytes} instead");
             line_bytes = min_bytes;
         }
 
@@ -522,7 +522,7 @@ where
                 input_offset.increase_position(length as u64);
             }
             Err(e) => {
-                show_error!("{}", e);
+                show_error!("{e}");
                 input_offset.print_final_offset();
                 return Err(1.into());
             }
@@ -575,10 +575,9 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
                 .saturating_sub(output_text.chars().count());
             write!(
                 output_text,
-                "{:>width$}  {}",
+                "{:>missing_spacing$}  {}",
                 "",
                 format_ascii_dump(input_decoder.get_buffer(0)),
-                width = missing_spacing
             )
             .unwrap();
         }
@@ -624,11 +623,11 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
     // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{} argument {}", option, s.quote())
+            format!("invalid suffix in --{option} argument {}", s.quote())
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{} argument {}", option, s.quote())
+            format!("invalid --{option} argument {}", s.quote())
         }
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
     }
 }

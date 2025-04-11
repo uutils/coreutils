@@ -1181,3 +1181,14 @@ fn test_stdin_w1_multibyte() {
         .succeeds()
         .stdout_is("à\ná\n");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .pipe_in("hello")
+        .args(&["-z"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("uniq: write error: No space left on device\n");
+}

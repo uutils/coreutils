@@ -1,10 +1,9 @@
 # spell-checker:ignore uuhelp
 [package]
 name = "uuhelp_parser"
-version = "0.0.30"
-edition = "2024"
-license = "MIT"
 description = "A collection of functions to parse the markdown code of help files"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uuhelp_parser"
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+version.workspace = true

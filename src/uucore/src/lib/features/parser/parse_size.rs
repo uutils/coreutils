@@ -512,23 +512,23 @@ mod tests {
 
         for &(c, exp) in &suffixes {
             let s = format!("2{c}B"); // KB
-            assert_eq!(Ok(2 * (1000_u128).pow(exp)), parse_size_u128(&s));
+            assert_eq!(Ok(2 * 1000_u128.pow(exp)), parse_size_u128(&s));
             let s = format!("2{c}"); // K
-            assert_eq!(Ok(2 * (1024_u128).pow(exp)), parse_size_u128(&s));
+            assert_eq!(Ok(2 * 1024_u128.pow(exp)), parse_size_u128(&s));
             let s = format!("2{c}iB"); // KiB
-            assert_eq!(Ok(2 * (1024_u128).pow(exp)), parse_size_u128(&s));
+            assert_eq!(Ok(2 * 1024_u128.pow(exp)), parse_size_u128(&s));
             let s = format!("2{}iB", c.to_lowercase()); // kiB
-            assert_eq!(Ok(2 * (1024_u128).pow(exp)), parse_size_u128(&s));
+            assert_eq!(Ok(2 * 1024_u128.pow(exp)), parse_size_u128(&s));
 
             // suffix only
             let s = format!("{c}B"); // KB
-            assert_eq!(Ok((1000_u128).pow(exp)), parse_size_u128(&s));
+            assert_eq!(Ok(1000_u128.pow(exp)), parse_size_u128(&s));
             let s = format!("{c}"); // K
-            assert_eq!(Ok((1024_u128).pow(exp)), parse_size_u128(&s));
+            assert_eq!(Ok(1024_u128.pow(exp)), parse_size_u128(&s));
             let s = format!("{c}iB"); // KiB
-            assert_eq!(Ok((1024_u128).pow(exp)), parse_size_u128(&s));
+            assert_eq!(Ok(1024_u128.pow(exp)), parse_size_u128(&s));
             let s = format!("{}iB", c.to_lowercase()); // kiB
-            assert_eq!(Ok((1024_u128).pow(exp)), parse_size_u128(&s));
+            assert_eq!(Ok(1024_u128.pow(exp)), parse_size_u128(&s));
         }
     }
 

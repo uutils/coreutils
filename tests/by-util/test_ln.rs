@@ -429,7 +429,7 @@ fn test_symlink_implicit_target_dir() {
 fn test_symlink_to_dir_2args() {
     let (at, mut ucmd) = at_and_ucmd!();
     let filename = "test_symlink_to_dir_2args_file";
-    let from_file = &format!("{}/{}", at.as_string(), filename);
+    let from_file = &format!("{}/{filename}", at.as_string());
     let to_dir = "test_symlink_to_dir_2args_to_dir";
     let to_file = &format!("{to_dir}/{filename}");
 
@@ -493,7 +493,7 @@ fn test_symlink_relative_path() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-s", "-v", &p.to_string_lossy(), link])
         .succeeds()
-        .stdout_only(format!("'{}' -> '{}'\n", link, &p.to_string_lossy()));
+        .stdout_only(format!("'{link}' -> '{}'\n", p.to_string_lossy()));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), p.to_string_lossy());
 }

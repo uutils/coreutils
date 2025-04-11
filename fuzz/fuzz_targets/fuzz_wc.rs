@@ -13,7 +13,7 @@ use std::ffi::OsString;
 
 mod fuzz_common;
 use crate::fuzz_common::{
-    compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd, CommandResult,
+    CommandResult, compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd,
 };
 static CMD_PATH: &str = "wc";
 

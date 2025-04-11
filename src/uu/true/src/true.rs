@@ -29,7 +29,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         if let Err(print_fail) = error {
             // Try to display this error.
-            let _ = writeln!(std::io::stderr(), "{}: {}", uucore::util_name(), print_fail);
+            let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
             // Mirror GNU options. When failing to print warnings or version flags, then we exit
             // with FAIL. This avoids allocation some error information which may result in yet
             // other types of failure.

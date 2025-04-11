@@ -163,7 +163,7 @@ struct Opts {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new(util_name())
         .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))

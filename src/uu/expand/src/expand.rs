@@ -448,7 +448,7 @@ fn expand(options: &Options) -> UResult<()> {
 
     for file in &options.files {
         if Path::new(file).is_dir() {
-            show_error!("{}: Is a directory", file);
+            show_error!("{file}: Is a directory");
             set_exit_code(1);
             continue;
         }
@@ -463,7 +463,7 @@ fn expand(options: &Options) -> UResult<()> {
                 }
             }
             Err(e) => {
-                show_error!("{}", e);
+                show_error!("{e}");
                 set_exit_code(1);
                 continue;
             }

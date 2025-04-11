@@ -84,7 +84,7 @@ impl Range {
 
         for item in list.split(&[',', ' ']) {
             let range_item = FromStr::from_str(item)
-                .map_err(|e| format!("range {} was invalid: {}", item.quote(), e))?;
+                .map_err(|e| format!("range {} was invalid: {e}", item.quote()))?;
             ranges.push(range_item);
         }
 

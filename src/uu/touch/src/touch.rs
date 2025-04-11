@@ -443,7 +443,7 @@ fn touch_file(
     };
 
     if let Err(e) = metadata_result {
-        if e.kind() != std::io::ErrorKind::NotFound {
+        if e.kind() != ErrorKind::NotFound {
             return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
         }
 
@@ -675,8 +675,8 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         // If we don't add "19" or "20", we have insufficient information to parse
         13 => (YYYYMMDDHHMM_DOT_SS, prepend_century(s)?),
         10 => (YYYYMMDDHHMM, prepend_century(s)?),
-        11 => (YYYYMMDDHHMM_DOT_SS, format!("{}{}", current_year(), s)),
-        8 => (YYYYMMDDHHMM, format!("{}{}", current_year(), s)),
+        11 => (YYYYMMDDHHMM_DOT_SS, format!("{}{s}", current_year())),
+        8 => (YYYYMMDDHHMM, format!("{}{s}", current_year())),
         _ => {
             return Err(USimpleError::new(
                 1,
@@ -687,7 +687,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 
     let local = NaiveDateTime::parse_from_str(&ts, format)
         .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
-    let LocalResult::Single(mut local) = chrono::Local.from_local_datetime(&local) else {
+    let LocalResult::Single(mut local) = Local.from_local_datetime(&local) else {
         return Err(USimpleError::new(
             1,
             format!("invalid date ts format {}", ts.quote()),

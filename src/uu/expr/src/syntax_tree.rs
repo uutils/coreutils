@@ -784,7 +784,7 @@ mod test {
             AstNode::parse(&["index", "1", "2"]),
             Ok(op(BinOp::String(StringOp::Index), "1", "2")),
         );
-        assert_eq!(AstNode::parse(&["length", "1"]), Ok(length("1")),);
+        assert_eq!(AstNode::parse(&["length", "1"]), Ok(length("1")));
         assert_eq!(
             AstNode::parse(&["substr", "1", "2", "3"]),
             Ok(substr("1", "2", "3")),

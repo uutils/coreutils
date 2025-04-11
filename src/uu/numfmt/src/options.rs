@@ -26,6 +26,7 @@ pub const TO: &str = "to";
 pub const TO_DEFAULT: &str = "none";
 pub const TO_UNIT: &str = "to-unit";
 pub const TO_UNIT_DEFAULT: &str = "1";
+pub const ZERO_TERMINATED: &str = "zero-terminated";
 
 pub struct TransformOptions {
     pub from: Unit,
@@ -52,6 +53,7 @@ pub struct NumfmtOptions {
     pub suffix: Option<String>,
     pub format: FormatOptions,
     pub invalid: InvalidModes,
+    pub zero_terminated: bool,
 }
 
 #[derive(Clone, Copy)]

@@ -36,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Err(e) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("{} is not a valid number: {}", numstr.quote(), e),
+                    format!("{} is not a valid number: {e}", numstr.quote()),
                 ));
             }
         },

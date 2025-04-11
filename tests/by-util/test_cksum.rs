@@ -1722,7 +1722,7 @@ mod gnu_cksum_base64 {
         if ["sysv", "bsd", "crc", "crc32b"].contains(&algo) {
             digest.to_string()
         } else {
-            format!("{} (f) = {}", algo.to_uppercase(), digest).replace("BLAKE2B", "BLAKE2b")
+            format!("{} (f) = {digest}", algo.to_uppercase()).replace("BLAKE2B", "BLAKE2b")
         }
     }
 

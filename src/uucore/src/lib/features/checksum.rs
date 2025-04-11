@@ -535,7 +535,7 @@ impl LineFormat {
 
             let mut parts = checksum.splitn(2, |&b| b == b'=');
             let main = parts.next().unwrap(); // Always exists since checksum isn't empty
-            let padding = parts.next().unwrap_or(&b""[..]); // Empty if no '='
+            let padding = parts.next().unwrap_or_default(); // Empty if no '='
 
             main.iter()
                 .all(|&b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/')
@@ -1053,11 +1053,10 @@ fn process_checksum_file(
                         Cow::Borrowed("Unknown algorithm")
                     };
                     eprintln!(
-                        "{}: {}: {}: improperly formatted {} checksum line",
+                        "{}: {}: {}: improperly formatted {algo} checksum line",
                         util_name(),
-                        &filename_input.maybe_quote(),
+                        filename_input.maybe_quote(),
                         i + 1,
-                        algo
                     );
                 }
             }

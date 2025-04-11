@@ -435,7 +435,7 @@ fn test_all_but_last_bytes_large_file_piped() {
         .len();
     scene
         .ucmd()
-        .args(&["-c", &format!("-{}", seq_19001_20000_file_length)])
+        .args(&["-c", &format!("-{seq_19001_20000_file_length}")])
         .pipe_in_fixture(seq_20000_file_name)
         .succeeds()
         .stdout_only_fixture(seq_19000_file_name);
@@ -695,7 +695,7 @@ fn test_validate_stdin_offset_bytes() {
         .len();
     scene
         .ucmd()
-        .args(&["-c", &format!("-{}", seq_19001_20000_file_length)])
+        .args(&["-c", &format!("-{seq_19001_20000_file_length}")])
         .set_stdin(file)
         .succeeds()
         .stdout_only_fixture(seq_19000_file_name);

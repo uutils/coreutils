@@ -104,11 +104,11 @@ impl<'a> StyleManager<'a> {
         ret
     }
 
-    pub(crate) fn is_current_style(&mut self, new_style: &Style) -> bool {
-        matches!(&self.current_style,Some(style) if style == new_style )
+    pub(crate) fn is_current_style(&self, new_style: &Style) -> bool {
+        matches!(&self.current_style, Some(style) if style == new_style)
     }
 
-    pub(crate) fn is_reset(&mut self) -> bool {
+    pub(crate) fn is_reset(&self) -> bool {
         self.current_style.is_none()
     }
 

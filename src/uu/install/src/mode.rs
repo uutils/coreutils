@@ -25,7 +25,7 @@ pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
     use std::os::unix::fs::PermissionsExt;
     use uucore::{display::Quotable, show_error};
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).map_err(|err| {
-        show_error!("{}: chmod failed with error {}", path.maybe_quote(), err);
+        show_error!("{}: chmod failed with error {err}", path.maybe_quote());
     })
 }
 

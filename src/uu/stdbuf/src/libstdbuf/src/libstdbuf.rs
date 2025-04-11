@@ -54,11 +54,9 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         res = libc::setvbuf(stream, buffer, mode, size);
     }
     if res != 0 {
-        eprintln!(
-            "could not set buffering of {} to mode {}",
-            unsafe { fileno(stream) },
-            mode
-        );
+        eprintln!("could not set buffering of {} to mode {mode}", unsafe {
+            fileno(stream)
+        },);
     }
 }
 

@@ -53,11 +53,11 @@ quick_error! {
     #[derive(Debug)]
     pub enum Error {
         /// Simple io::Error wrapper
-        IoErr(err: io::Error) { from() source(err) display("{}", err)}
+        IoErr(err: io::Error) { from() source(err) display("{err}")}
 
         /// Wrapper for io::Error with path context
         IoErrContext(err: io::Error, path: String) {
-            display("{}: {}", path, err)
+            display("{path}: {err}")
             context(path: &'a str, err: io::Error) -> (err, path.to_owned())
             context(context: String, err: io::Error) -> (err, context)
             source(err)
@@ -65,7 +65,7 @@ quick_error! {
 
         /// General copy error
         Error(err: String) {
-            display("{}", err)
+            display("{err}")
             from(err: String) -> (err)
             from(err: &'static str) -> (err.to_string())
         }
@@ -75,7 +75,7 @@ quick_error! {
         NotAllFilesCopied {}
 
         /// Simple walkdir::Error wrapper
-        WalkDirErr(err: walkdir::Error) { from() display("{}", err) source(err) }
+        WalkDirErr(err: walkdir::Error) { from() display("{err}") source(err) }
 
         /// Simple std::path::StripPrefixError wrapper
         StripPrefixError(err: StripPrefixError) { from() }
@@ -87,15 +87,15 @@ quick_error! {
         Skipped(exit_with_error:bool) { }
 
         /// Result of a skipped file
-        InvalidArgument(description: String) { display("{}", description) }
+        InvalidArgument(description: String) { display("{description}") }
 
         /// All standard options are included as an an implementation
         /// path, but those that are not implemented yet should return
         /// a NotImplemented error.
-        NotImplemented(opt: String) { display("Option '{}' not yet implemented.", opt) }
+        NotImplemented(opt: String) { display("Option '{opt}' not yet implemented.") }
 
         /// Invalid arguments to backup
-        Backup(description: String) { display("{}\nTry '{} --help' for more information.", description, uucore::execution_phrase()) }
+        Backup(description: String) { display("{description}\nTry '{} --help' for more information.", uucore::execution_phrase()) }
 
         NotADirectory(path: PathBuf) { display("'{}' is not a directory", path.display()) }
     }
@@ -737,7 +737,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::PROGRESS_BAR)
                 .long(options::PROGRESS_BAR)
                 .short('g')
-                .action(clap::ArgAction::SetTrue)
+                .action(ArgAction::SetTrue)
                 .help(
                     "Display a progress bar. \n\
                 Note: this feature is not supported by GNU coreutils.",
@@ -791,7 +791,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // code should still be EXIT_ERR as does GNU cp
                 Error::NotAllFilesCopied => {}
                 // Else we caught a fatal bubbled-up error, log it to stderr
-                _ => show_error!("{}", error),
+                _ => show_error!("{error}"),
             };
             set_exit_code(EXIT_ERR);
         }
@@ -1283,7 +1283,7 @@ fn show_error_if_needed(error: &Error) {
             // should return an error from GNU 9.2
         }
         _ => {
-            show_error!("{}", error);
+            show_error!("{error}");
         }
     }
 }
@@ -1686,18 +1686,13 @@ pub(crate) fn copy_attributes(
     handle_preserve(&attributes.context, || -> CopyResult<()> {
         let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
             format!(
-                "failed to get security context of {}: {}",
+                "failed to get security context of {}: {e}",
                 source.display(),
-                e
             )
         })?;
         if let Some(context) = context {
             context.set_for_path(dest, false, false).map_err(|e| {
-                format!(
-                    "failed to set security context for {}: {}",
-                    dest.display(),
-                    e
-                )
+                format!("failed to set security context for {}: {e}", dest.display(),)
             })?;
         }
 
@@ -1831,6 +1826,13 @@ fn handle_existing_dest(
     // `--backup` are both specified.
     if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
+    }
+
+    if options.update == UpdateMode::ReplaceNone {
+        if options.debug {
+            println!("skipped {}", dest.quote());
+        }
+        return Err(Error::Skipped(false));
     }
 
     if options.update != UpdateMode::ReplaceIfOlder {
@@ -2079,7 +2081,7 @@ fn handle_copy_mode(
         CopyMode::Update => {
             if dest.exists() {
                 match options.update {
-                    update_control::UpdateMode::ReplaceAll => {
+                    UpdateMode::ReplaceAll => {
                         copy_helper(
                             source,
                             dest,
@@ -2092,17 +2094,17 @@ fn handle_copy_mode(
                             source_is_stream,
                         )?;
                     }
-                    update_control::UpdateMode::ReplaceNone => {
+                    UpdateMode::ReplaceNone => {
                         if options.debug {
                             println!("skipped {}", dest.quote());
                         }
 
                         return Ok(PerformedAction::Skipped);
                     }
-                    update_control::UpdateMode::ReplaceNoneFail => {
+                    UpdateMode::ReplaceNoneFail => {
                         return Err(Error::Error(format!("not replacing '{}'", dest.display())));
                     }
-                    update_control::UpdateMode::ReplaceIfOlder => {
+                    UpdateMode::ReplaceIfOlder => {
                         let dest_metadata = fs::symlink_metadata(dest)?;
 
                         let src_time = source_metadata.modified()?;
@@ -2333,7 +2335,7 @@ fn copy_file(
             &FileInformation::from_path(source, options.dereference(source_in_command_line))
                 .context(format!("cannot stat {}", source.quote()))?,
         ) {
-            std::fs::hard_link(new_source, dest)?;
+            fs::hard_link(new_source, dest)?;
 
             if options.verbose {
                 print_verbose_output(options.parents, progress_bar, source, dest);

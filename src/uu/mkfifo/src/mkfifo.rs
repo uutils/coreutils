@@ -64,7 +64,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode as u32)) {
             return Err(USimpleError::new(
                 1,
-                format!("cannot set permissions on {}: {}", f.quote(), e),
+                format!("cannot set permissions on {}: {e}", f.quote()),
             ));
         }
     }

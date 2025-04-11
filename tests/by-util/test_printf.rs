@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore fffffffffffffffc
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -789,6 +791,41 @@ fn partial_integer() {
         .fails_with_code(1)
         .stdout_is("42 is a lot")
         .stderr_is("printf: '42x23': value not completely converted\n");
+}
+
+#[test]
+fn unsigned_hex_negative_wraparound() {
+    new_ucmd!()
+        .args(&["%x", "-0b100"])
+        .succeeds()
+        .stdout_only("fffffffffffffffc");
+
+    new_ucmd!()
+        .args(&["%x", "-0100"])
+        .succeeds()
+        .stdout_only("ffffffffffffffc0");
+
+    new_ucmd!()
+        .args(&["%x", "-100"])
+        .succeeds()
+        .stdout_only("ffffffffffffff9c");
+
+    new_ucmd!()
+        .args(&["%x", "-0x100"])
+        .succeeds()
+        .stdout_only("ffffffffffffff00");
+
+    new_ucmd!()
+        .args(&["%x", "-92233720368547758150"])
+        .fails_with_code(1)
+        .stdout_is("ffffffffffffffff")
+        .stderr_is("printf: '-92233720368547758150': Numerical result out of range\n");
+
+    new_ucmd!()
+        .args(&["%u", "-1002233720368547758150"])
+        .fails_with_code(1)
+        .stdout_is("18446744073709551615")
+        .stderr_is("printf: '-1002233720368547758150': Numerical result out of range\n");
 }
 
 #[test]

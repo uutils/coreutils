@@ -460,14 +460,14 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
             unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
         if INVALID_HANDLE_VALUE == find_handle {
             let os_err = IOError::last_os_error();
-            let msg = format!("FindFirstVolumeW failed: {}", os_err);
+            let msg = format!("FindFirstVolumeW failed: {os_err}");
             return Err(USimpleError::new(EXIT_ERR, msg));
         }
         let mut mounts = Vec::<MountInfo>::new();
         loop {
             let volume_name = LPWSTR2String(&volume_name_buf);
             if !volume_name.starts_with("\\\\?\\") || !volume_name.ends_with('\\') {
-                show_warning!("A bad path was skipped: {}", volume_name);
+                show_warning!("A bad path was skipped: {volume_name}");
                 continue;
             }
             if let Some(m) = MountInfo::new(volume_name) {

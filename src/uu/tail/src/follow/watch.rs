@@ -229,7 +229,7 @@ impl Observer {
             watcher = Box::new(notify::PollWatcher::new(tx, watcher_config).unwrap());
         } else {
             let tx_clone = tx.clone();
-            match notify::RecommendedWatcher::new(tx, notify::Config::default()) {
+            match RecommendedWatcher::new(tx, notify::Config::default()) {
                 Ok(w) => watcher = Box::new(w),
                 Err(e) if e.to_string().starts_with("Too many open files") => {
                     /*
@@ -345,7 +345,7 @@ impl Observer {
                                     show_error!( "{} has been replaced;  following new file", display_name.quote());
                                     self.files.update_reader(event_path)?;
                                 } else if old_md.got_truncated(&new_md)? {
-                                    show_error!("{}: file truncated", display_name);
+                                    show_error!("{display_name}: file truncated");
                                     self.files.update_reader(event_path)?;
                                 }
                                 paths.push(event_path.clone());
@@ -410,7 +410,7 @@ impl Observer {
                                 let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                             }
                         } else {
-                            show_error!("{}: {}", display_name, text::NO_SUCH_FILE);
+                            show_error!("{display_name}: {}", text::NO_SUCH_FILE);
                             if !self.files.files_remaining() && self.use_polling {
                                 // NOTE: GNU's tail exits here for `---disable-inotify`
                                 return Err(USimpleError::new(1, text::NO_FILES_REMAINING));

@@ -805,7 +805,7 @@ fn files0_iter<'a>(
             }),
     );
     // Loop until there is an error; yield that error and then nothing else.
-    std::iter::from_fn(move || {
+    iter::from_fn(move || {
         let next = i.as_mut().and_then(Iterator::next);
         if matches!(next, Some(Err(_)) | None) {
             i = None;

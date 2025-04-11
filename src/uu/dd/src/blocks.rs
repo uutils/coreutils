@@ -315,7 +315,7 @@ mod tests {
         let buf = [0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8];
         let res = unblock(&buf, 8);
 
-        assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, NEWLINE],);
+        assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, NEWLINE]);
     }
 
     #[test]
@@ -323,7 +323,7 @@ mod tests {
         let buf = [SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE];
         let res = unblock(&buf, 8);
 
-        assert_eq!(res, vec![NEWLINE],);
+        assert_eq!(res, vec![NEWLINE]);
     }
 
     #[test]
@@ -342,7 +342,7 @@ mod tests {
         let buf = [0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE];
         let res = unblock(&buf, 8);
 
-        assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, NEWLINE],);
+        assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, NEWLINE]);
     }
 
     #[test]

@@ -580,14 +580,14 @@ mod tests {
                 Some((42, false)),
                 resolve_asterisk_width(
                     Some(CanAsterisk::Asterisk),
-                    vec![FormatArgument::SignedInt(42)].iter()
+                    [FormatArgument::SignedInt(42)].iter()
                 )
             );
             assert_eq!(
                 Some((42, false)),
                 resolve_asterisk_width(
                     Some(CanAsterisk::Asterisk),
-                    vec![FormatArgument::Unparsed("42".to_string())].iter()
+                    [FormatArgument::Unparsed("42".to_string())].iter()
                 )
             );
 
@@ -595,14 +595,14 @@ mod tests {
                 Some((42, true)),
                 resolve_asterisk_width(
                     Some(CanAsterisk::Asterisk),
-                    vec![FormatArgument::SignedInt(-42)].iter()
+                    [FormatArgument::SignedInt(-42)].iter()
                 )
             );
             assert_eq!(
                 Some((42, true)),
                 resolve_asterisk_width(
                     Some(CanAsterisk::Asterisk),
-                    vec![FormatArgument::Unparsed("-42".to_string())].iter()
+                    [FormatArgument::Unparsed("-42".to_string())].iter()
                 )
             );
         }
@@ -631,14 +631,14 @@ mod tests {
                 Some(42),
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk),
-                    vec![FormatArgument::SignedInt(42)].iter()
+                    [FormatArgument::SignedInt(42)].iter()
                 )
             );
             assert_eq!(
                 Some(42),
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk),
-                    vec![FormatArgument::Unparsed("42".to_string())].iter()
+                    [FormatArgument::Unparsed("42".to_string())].iter()
                 )
             );
 
@@ -646,14 +646,14 @@ mod tests {
                 Some(0),
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk),
-                    vec![FormatArgument::SignedInt(-42)].iter()
+                    [FormatArgument::SignedInt(-42)].iter()
                 )
             );
             assert_eq!(
                 Some(0),
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk),
-                    vec![FormatArgument::Unparsed("-42".to_string())].iter()
+                    [FormatArgument::Unparsed("-42".to_string())].iter()
                 )
             );
         }

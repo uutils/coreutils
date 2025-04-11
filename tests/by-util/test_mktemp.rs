@@ -57,9 +57,8 @@ macro_rules! assert_suffix_matches_template {
         let suffix = &$s[n - m..n];
         assert!(
             matches_template($template, suffix),
-            "\"{}\" does not end with \"{}\"",
+            "\"{}\" does not end with \"{suffix}\"",
             $template,
-            suffix
         );
     }};
 }
@@ -780,13 +779,11 @@ fn test_nonexistent_tmpdir_env_var() {
         let stderr = result.stderr_str();
         assert!(
             stderr.starts_with("mktemp: failed to create file via template"),
-            "{}",
-            stderr
+            "{stderr}",
         );
         assert!(
             stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
-            "{}",
-            stderr
+            "{stderr}",
         );
     }
 
@@ -799,13 +796,11 @@ fn test_nonexistent_tmpdir_env_var() {
         let stderr = result.stderr_str();
         assert!(
             stderr.starts_with("mktemp: failed to create directory via template"),
-            "{}",
-            stderr
+            "{stderr}",
         );
         assert!(
             stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
-            "{}",
-            stderr
+            "{stderr}",
         );
     }
 }
@@ -823,13 +818,11 @@ fn test_nonexistent_dir_prefix() {
         let stderr = result.stderr_str();
         assert!(
             stderr.starts_with("mktemp: failed to create file via template"),
-            "{}",
-            stderr
+            "{stderr}",
         );
         assert!(
             stderr.ends_with("d\\XXX': No such file or directory\n"),
-            "{}",
-            stderr
+            "{stderr}",
         );
     }
 
@@ -844,13 +837,11 @@ fn test_nonexistent_dir_prefix() {
         let stderr = result.stderr_str();
         assert!(
             stderr.starts_with("mktemp: failed to create directory via template"),
-            "{}",
-            stderr
+            "{stderr}",
         );
         assert!(
             stderr.ends_with("d\\XXX': No such file or directory\n"),
-            "{}",
-            stderr
+            "{stderr}",
         );
     }
 }

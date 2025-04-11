@@ -42,7 +42,7 @@ use std::str::Utf8Error;
 use thiserror::Error;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
-use uucore::error::strip_errno;
+use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::line_ending::LineEnding;
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -171,7 +171,7 @@ fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: 
     if *silent {
         String::new()
     } else {
-        format!("{}:{}: disorder: {}", file.maybe_quote(), line_number, line)
+        format!("{}:{}: disorder: {line}", file.maybe_quote(), line_number)
     }
 }
 
@@ -488,13 +488,14 @@ impl<'a> Line<'a> {
         Self { line, index }
     }
 
-    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) {
+    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
-            self.print_debug(settings, writer).unwrap();
+            self.print_debug(settings, writer)?;
         } else {
-            writer.write_all(self.line.as_bytes()).unwrap();
-            writer.write_all(&[settings.line_ending.into()]).unwrap();
+            writer.write_all(self.line.as_bytes())?;
+            writer.write_all(&[settings.line_ending.into()])?;
         }
+        Ok(())
     }
 
     /// Writes indicators for the selections this line matched. The original line content is NOT expected
@@ -710,11 +711,7 @@ impl KeyPosition {
             Ok(f) => f,
             Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
             Err(e) => {
-                return Err(format!(
-                    "failed to parse field index {} {}",
-                    field.quote(),
-                    e
-                ));
+                return Err(format!("failed to parse field index {} {e}", field.quote(),));
             }
         };
         if field == 0 {
@@ -723,7 +720,7 @@ impl KeyPosition {
 
         let char = char.map_or(Ok(default_char_index), |char| {
             char.parse()
-                .map_err(|e| format!("failed to parse character index {}: {}", char.quote(), e))
+                .map_err(|e| format!("failed to parse character index {}: {e}", char.quote()))
         })?;
 
         Ok(Self {
@@ -1149,13 +1146,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match n_merge.parse::<usize>() {
             Ok(parsed_value) => {
                 if parsed_value < 2 {
-                    show_error!("invalid --batch-size argument '{}'", n_merge);
+                    show_error!("invalid --batch-size argument '{n_merge}'");
                     return Err(UUsageError::new(2, "minimum --batch-size argument is '2'"));
                 }
                 settings.merge_batch_size = parsed_value;
             }
             Err(e) => {
-                let error_message = if *e.kind() == std::num::IntErrorKind::PosOverflow {
+                let error_message = if *e.kind() == IntErrorKind::PosOverflow {
                     #[cfg(target_os = "linux")]
                     {
                         show_error!("--batch-size argument {} too large", n_merge.quote());
@@ -1852,11 +1849,19 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     iter: T,
     settings: &GlobalSettings,
     output: Output,
-) {
+) -> UResult<()> {
+    let output_name = output
+        .as_output_name()
+        .unwrap_or("standard output")
+        .to_owned();
+    let ctx = || format!("write failed: {}", output_name.maybe_quote());
+
     let mut writer = output.into_write();
     for line in iter {
-        line.print(&mut writer, settings);
+        line.print(&mut writer, settings).map_err_context(ctx)?;
     }
+    writer.flush().map_err_context(ctx)?;
+    Ok(())
 }
 
 fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
@@ -1880,15 +1885,15 @@ fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
 
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
-    // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
+    // GNU's sort echos affected flag, -S or --buffer-size, depending on user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{} argument {}", option, s.quote())
+            format!("invalid suffix in --{option} argument {}", s.quote())
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{} argument {}", option, s.quote())
+            format!("invalid --{option} argument {}", s.quote())
         }
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
     }
 }
 
@@ -1946,7 +1951,7 @@ mod tests {
     #[test]
     fn test_tokenize_fields() {
         let line = "foo bar b    x";
-        assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14,],);
+        assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14,]);
     }
 
     #[test]
@@ -1982,7 +1987,7 @@ mod tests {
     fn test_line_size() {
         // We should make sure to not regress the size of the Line struct because
         // it is unconditional overhead for every line we sort.
-        assert_eq!(std::mem::size_of::<Line>(), 24);
+        assert_eq!(size_of::<Line>(), 24);
     }
 
     #[test]

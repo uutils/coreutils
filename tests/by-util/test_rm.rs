@@ -333,8 +333,7 @@ fn test_rm_verbose_slash() {
     at.touch(file_a);
 
     let file_a_normalized = &format!(
-        "{}{}test_rm_verbose_slash_file_a",
-        dir,
+        "{dir}{}test_rm_verbose_slash_file_a",
         std::path::MAIN_SEPARATOR
     );
 

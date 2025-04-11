@@ -21,8 +21,8 @@ use std::fmt::{self, Display, Formatter};
 #[derive(Debug)]
 pub struct Overflow;
 
-impl fmt::Display for Overflow {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Display for Overflow {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "Overflow")
     }
 }

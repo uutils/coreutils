@@ -10,9 +10,10 @@ use std::ffi::OsString;
 use uu_cksum::uumain;
 mod fuzz_common;
 use crate::fuzz_common::{
-    compare_result, generate_and_run_uumain, generate_random_file, generate_random_string,
+    CommandResult, compare_result, generate_and_run_uumain, generate_random_file,
+    generate_random_string,
     pretty_print::{print_or_empty, print_test_begin},
-    replace_fuzz_binary_name, run_gnu_cmd, CommandResult,
+    replace_fuzz_binary_name, run_gnu_cmd,
 };
 use rand::Rng;
 use std::env::temp_dir;
@@ -130,10 +131,10 @@ fuzz_target!(|_data: &[u8]| {
         if let Ok(checksum_file_path) =
             generate_checksum_file(algo, &file_path, &selected_digest_opts)
         {
-            print_test_begin(format!("cksum {:?}", args));
+            print_test_begin(format!("cksum {args:?}"));
 
             if let Ok(content) = fs::read_to_string(&checksum_file_path) {
-                println!("File content ({})", checksum_file_path);
+                println!("File content ({checksum_file_path})");
                 print_or_empty(&content);
             } else {
                 eprintln!("Error reading the checksum file.");

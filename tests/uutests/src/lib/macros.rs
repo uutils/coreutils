@@ -85,7 +85,7 @@ macro_rules! unwrap_or_return {
         match $e {
             Ok(x) => x,
             Err(e) => {
-                println!("test skipped: {}", e);
+                println!("test skipped: {e}");
                 return;
             }
         }

@@ -233,7 +233,7 @@ fn open(
             name: name.to_owned(),
         })),
         Err(f) => {
-            show_error!("{}: {}", name.maybe_quote(), f);
+            show_error!("{}: {f}", name.maybe_quote());
             match output_error {
                 Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
                 _ => None,
@@ -270,26 +270,26 @@ fn process_error(
 ) -> Result<()> {
     match mode {
         Some(OutputErrorMode::Warn) => {
-            show_error!("{}: {}", writer.name.maybe_quote(), f);
+            show_error!("{}: {f}", writer.name.maybe_quote());
             *ignored_errors += 1;
             Ok(())
         }
         Some(OutputErrorMode::WarnNoPipe) | None => {
             if f.kind() != ErrorKind::BrokenPipe {
-                show_error!("{}: {}", writer.name.maybe_quote(), f);
+                show_error!("{}: {f}", writer.name.maybe_quote());
                 *ignored_errors += 1;
             }
             Ok(())
         }
         Some(OutputErrorMode::Exit) => {
-            show_error!("{}: {}", writer.name.maybe_quote(), f);
+            show_error!("{}: {f}", writer.name.maybe_quote());
             Err(f)
         }
         Some(OutputErrorMode::ExitNoPipe) => {
             if f.kind() == ErrorKind::BrokenPipe {
                 Ok(())
             } else {
-                show_error!("{}: {}", writer.name.maybe_quote(), f);
+                show_error!("{}: {f}", writer.name.maybe_quote());
                 Err(f)
             }
         }
@@ -378,7 +378,7 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                show_error!("stdin: {}", f);
+                show_error!("stdin: {f}");
                 Err(f)
             }
             okay => okay,

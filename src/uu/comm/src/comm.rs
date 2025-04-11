@@ -118,8 +118,8 @@ impl OrderChecker {
 // Check if two files are identical by comparing their contents
 pub fn are_files_identical(path1: &str, path2: &str) -> io::Result<bool> {
     // First compare file sizes
-    let metadata1 = std::fs::metadata(path1)?;
-    let metadata2 = std::fs::metadata(path2)?;
+    let metadata1 = metadata(path1)?;
+    let metadata2 = metadata(path2)?;
 
     if metadata1.len() != metadata2.len() {
         return Ok(false);

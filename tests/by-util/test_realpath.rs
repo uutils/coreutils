@@ -385,44 +385,44 @@ fn test_realpath_trailing_slash() {
         .ucmd()
         .arg("link_file")
         .succeeds()
-        .stdout_contains(format!("{}file\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}file\n"));
     scene.ucmd().arg("link_file/").fails_with_code(1);
     scene
         .ucmd()
         .arg("link_dir")
         .succeeds()
-        .stdout_contains(format!("{}dir\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
     scene
         .ucmd()
         .arg("link_dir/")
         .succeeds()
-        .stdout_contains(format!("{}dir\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
     scene
         .ucmd()
         .arg("link_no_dir")
         .succeeds()
-        .stdout_contains(format!("{}no_dir\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}no_dir\n"));
     scene
         .ucmd()
         .arg("link_no_dir/")
         .succeeds()
-        .stdout_contains(format!("{}no_dir\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}no_dir\n"));
     scene
         .ucmd()
         .args(&["-e", "link_file"])
         .succeeds()
-        .stdout_contains(format!("{}file\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}file\n"));
     scene.ucmd().args(&["-e", "link_file/"]).fails_with_code(1);
     scene
         .ucmd()
         .args(&["-e", "link_dir"])
         .succeeds()
-        .stdout_contains(format!("{}dir\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
     scene
         .ucmd()
         .args(&["-e", "link_dir/"])
         .succeeds()
-        .stdout_contains(format!("{}dir\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
     scene.ucmd().args(&["-e", "link_no_dir"]).fails_with_code(1);
     scene
         .ucmd()
@@ -432,32 +432,32 @@ fn test_realpath_trailing_slash() {
         .ucmd()
         .args(&["-m", "link_file"])
         .succeeds()
-        .stdout_contains(format!("{}file\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}file\n"));
     scene
         .ucmd()
         .args(&["-m", "link_file/"])
         .succeeds()
-        .stdout_contains(format!("{}file\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}file\n"));
     scene
         .ucmd()
         .args(&["-m", "link_dir"])
         .succeeds()
-        .stdout_contains(format!("{}dir\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
     scene
         .ucmd()
         .args(&["-m", "link_dir/"])
         .succeeds()
-        .stdout_contains(format!("{}dir\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
     scene
         .ucmd()
         .args(&["-m", "link_no_dir"])
         .succeeds()
-        .stdout_contains(format!("{}no_dir\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}no_dir\n"));
     scene
         .ucmd()
         .args(&["-m", "link_no_dir/"])
         .succeeds()
-        .stdout_contains(format!("{}no_dir\n", std::path::MAIN_SEPARATOR));
+        .stdout_contains(format!("{MAIN_SEPARATOR}no_dir\n"));
 }
 
 #[test]

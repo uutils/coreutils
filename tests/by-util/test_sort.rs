@@ -105,8 +105,7 @@ fn test_invalid_buffer_size() {
                 .arg("ext_sort.txt")
                 .fails_with_code(2)
                 .stderr_only(format!(
-                    "sort: --buffer-size argument '{}' too large\n",
-                    buffer_size
+                    "sort: --buffer-size argument '{buffer_size}' too large\n"
                 ));
         }
     }
@@ -1335,4 +1334,14 @@ fn test_human_blocks_r_and_q() {
 #[test]
 fn test_args_check_conflict() {
     new_ucmd!().arg("-c").arg("-C").fails();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .pipe_in("hello")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("sort: write failed: 'standard output': No space left on device\n");
 }

@@ -336,7 +336,10 @@ fn test_filter_with_env_var_set() {
 
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.collate(), at.read_bytes(name));
-    assert!(env::var("FILE").unwrap_or_else(|_| "var was unset".to_owned()) == env_var_value);
+    assert_eq!(
+        env::var("FILE").unwrap_or_else(|_| "var was unset".to_owned()),
+        env_var_value
+    );
 }
 
 #[test]

@@ -84,7 +84,7 @@ jobs:
       shell: bash
       continue-on-error: ${{ !matrix.test-target.name.should_pass }}
       run: |
-        cargo +nightly fuzz run ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+        cargo +nightly fuzz run ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0
     - name: Save Corpus Cache
       uses: actions/cache/save@v4
       with:

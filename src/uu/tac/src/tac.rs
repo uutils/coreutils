@@ -164,6 +164,7 @@ fn buffer_tac_regex(
     // After the loop terminates, write whatever bytes are remaining at
     // the beginning of the buffer.
     out.write_all(&data[0..following_line_start])?;
+    out.flush()?;
     Ok(())
 }
 
@@ -215,6 +216,7 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     // After the loop terminates, write whatever bytes are remaining at
     // the beginning of the buffer.
     out.write_all(&data[0..following_line_start])?;
+    out.flush()?;
     Ok(())
 }
 

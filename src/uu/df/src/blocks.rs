@@ -98,9 +98,9 @@ pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> Strin
         if rem % (bases[i] / 10) == 0 {
             format!("{quot}.{tenths_place}{suffix}")
         } else if tenths_place + 1 == 10 || quot >= 10 {
-            format!("{}{}", quot + 1, suffix)
+            format!("{}{suffix}", quot + 1)
         } else {
-            format!("{}.{}{}", quot, tenths_place + 1, suffix)
+            format!("{quot}.{}{suffix}", tenths_place + 1)
         }
     }
 }

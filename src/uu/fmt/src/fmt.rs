@@ -143,7 +143,7 @@ impl FmtOptions {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("Invalid TABWIDTH specification: {}: {}", s.quote(), e),
+                        format!("Invalid TABWIDTH specification: {}: {e}", s.quote()),
                     ));
                 }
             };

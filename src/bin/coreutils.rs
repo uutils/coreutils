@@ -65,7 +65,7 @@ fn main() {
 
     // binary name equals util name?
     if let Some(&(uumain, _)) = utils.get(binary_as_util) {
-        process::exit(uumain((vec![binary.into()].into_iter()).chain(args)));
+        process::exit(uumain(vec![binary.into()].into_iter().chain(args)));
     }
 
     // binary name equals prefixed util name?
@@ -111,7 +111,7 @@ fn main() {
 
         match utils.get(util) {
             Some(&(uumain, _)) => {
-                process::exit(uumain((vec![util_os].into_iter()).chain(args)));
+                process::exit(uumain(vec![util_os].into_iter().chain(args)));
             }
             None => {
                 if util == "--help" || util == "-h" {
@@ -124,7 +124,8 @@ fn main() {
                         match utils.get(util) {
                             Some(&(uumain, _)) => {
                                 let code = uumain(
-                                    (vec![util_os, OsString::from("--help")].into_iter())
+                                    vec![util_os, OsString::from("--help")]
+                                        .into_iter()
                                         .chain(args),
                                 );
                                 io::stdout().flush().expect("could not flush stdout");

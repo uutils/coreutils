@@ -5,21 +5,19 @@
 
 [package]
 name = "coreutils"
-version = "0.0.30"
-authors = ["uutils developers"]
-license = "MIT"
 description = "coreutils ~ GNU coreutils (updated); implemented as universal (cross-platform) utils, written in Rust"
 default-run = "coreutils"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils"
 readme = "README.md"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
 rust-version = "1.85.0"
-edition = "2024"
-
 build = "build.rs"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
@@ -264,7 +262,14 @@ feat_os_windows_legacy = [
 test = ["uu_test"]
 
 [workspace.package]
+authors = ["uutils developers"]
+categories = ["command-line-utilities"]
+edition = "2024"
+homepage = "https://github.com/uutils/coreutils"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+license = "MIT"
 readme = "README.package.md"
+version = "0.0.30"
 
 [workspace.dependencies]
 ansi-width = "0.1.0"
@@ -343,7 +348,7 @@ unicode-segmentation = "1.11.0"
 unicode-width = "0.2.0"
 utf-8 = "0.7.6"
 utmp-classic = "0.1.6"
-uutils_term_grid = "0.6"
+uutils_term_grid = "0.7"
 walkdir = "2.5"
 winapi-util = "0.1.8"
 windows-sys = { version = "0.59.0", default-features = false }
@@ -584,3 +589,13 @@ manual_let_else = "warn"
 all = { level = "deny", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
+
+# This is the linting configuration for all crates.
+# Eventually the clippy settings from the `[lints]` section should be moved here.
+# In order to use these, all crates have `[lints] workspace = true` section.
+[workspace.lints.rust]
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+#cargo = { level = "warn", priority = -1 }

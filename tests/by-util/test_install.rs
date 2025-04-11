@@ -592,7 +592,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
     file2_meta = at.metadata(file2);
     let after_install_sticky = FileTime::from_last_modification_time(&file2_meta);
 
-    assert!(before != after_install_sticky);
+    assert_ne!(before, after_install_sticky);
 
     sleep(std::time::Duration::from_millis(100));
 
@@ -608,7 +608,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
     file2_meta = at.metadata(file2);
     let after_install_sticky_again = FileTime::from_last_modification_time(&file2_meta);
 
-    assert!(after_install_sticky != after_install_sticky_again);
+    assert_ne!(after_install_sticky, after_install_sticky_again);
 }
 
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
@@ -1670,7 +1670,7 @@ fn test_target_file_ends_with_slash() {
     let source = "source_file";
     let target_dir = "dir";
     let target_file = "dir/target_file";
-    let target_file_slash = format!("{}/", target_file);
+    let target_file_slash = format!("{target_file}/");
 
     at.touch(source);
     at.mkdir(target_dir);

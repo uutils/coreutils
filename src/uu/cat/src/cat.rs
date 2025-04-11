@@ -86,7 +86,7 @@ impl LineNumber {
         }
     }
 
-    fn write(&self, writer: &mut impl Write) -> std::io::Result<()> {
+    fn write(&self, writer: &mut impl Write) -> io::Result<()> {
         writer.write_all(&self.buf)
     }
 }
@@ -101,7 +101,7 @@ enum CatError {
     #[error("{0}")]
     Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
-    #[error("unknown filetype: {}", ft_debug)]
+    #[error("unknown filetype: {ft_debug}")]
     UnknownFiletype {
         /// A debug print of the file type
         ft_debug: String,
@@ -288,7 +288,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -377,7 +377,7 @@ fn cat_handle<R: FdReadable>(
 /// Whether this process is appending to stdout.
 #[cfg(unix)]
 fn is_appending() -> bool {
-    let stdout = std::io::stdout();
+    let stdout = io::stdout();
     let flags = match fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL) {
         Ok(flags) => flags,
         Err(_) => return false,
@@ -404,7 +404,7 @@ fn cat_path(
             let in_info = FileInformation::from_file(&stdin)?;
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: std::io::stdin().is_terminal(),
+                is_interactive: io::stdin().is_terminal(),
             };
             if let Some(out_info) = out_info {
                 if in_info == *out_info && is_appending() {
@@ -445,7 +445,7 @@ fn cat_path(
 }
 
 fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
-    let out_info = FileInformation::from_file(&std::io::stdout()).ok();
+    let out_info = FileInformation::from_file(&io::stdout()).ok();
 
     let mut state = OutputState {
         line_number: LineNumber::new(),
@@ -457,7 +457,7 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
 
     for path in files {
         if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
-            error_messages.push(format!("{}: {}", path.maybe_quote(), err));
+            error_messages.push(format!("{}: {err}", path.maybe_quote()));
         }
     }
     if state.skipped_carriage_return {
