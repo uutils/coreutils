@@ -256,7 +256,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
 
     if opts.all {
         let mut size = TermSize::default();
-        unsafe { tiocgwinsz(opts.file.as_raw_fd(), &mut size as *mut _)? };
+        unsafe { tiocgwinsz(opts.file.as_raw_fd(), &raw mut size)? };
         print!("rows {}; columns {}; ", size.rows, size.columns);
     }
 

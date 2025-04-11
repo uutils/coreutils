@@ -7,6 +7,7 @@
 
 use std::borrow::Borrow;
 use std::env;
+use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -506,7 +507,7 @@ pub fn generate_dircolors_config() -> String {
     );
     config.push_str("COLORTERM ?*\n");
     for term in TERMS {
-        config.push_str(&format!("TERM {term}\n"));
+        let _ = writeln!(config, "TERM {term}");
     }
 
     config.push_str(
@@ -527,14 +528,14 @@ pub fn generate_dircolors_config() -> String {
     );
 
     for (name, _, code) in FILE_TYPES {
-        config.push_str(&format!("{name} {code}\n"));
+        let _ = writeln!(config, "{name} {code}");
     }
 
     config.push_str("# List any file extensions like '.gz' or '.tar' that you would like ls\n");
     config.push_str("# to color below. Put the extension, a space, and the color init string.\n");
 
     for (ext, color) in FILE_COLORS {
-        config.push_str(&format!("{ext} {color}\n"));
+        let _ = writeln!(config, "{ext} {color}");
     }
     config.push_str("# Subsequent TERM or COLORTERM entries, can be used to add / override\n");
     config.push_str("# config specific to those matching environment variables.");

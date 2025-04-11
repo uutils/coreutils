@@ -223,6 +223,7 @@ impl Source {
     ///
     /// If it cannot be determined, then this function returns 0.
     fn len(&self) -> io::Result<i64> {
+        #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
             _ => Ok(0),
@@ -274,6 +275,7 @@ impl Source {
     /// then this function returns an error.
     #[cfg(target_os = "linux")]
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+        #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f) => {
                 let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
@@ -451,7 +453,7 @@ impl Input<'_> {
     /// the input file is no longer needed. If not possible, then this
     /// function prints an error message to stderr and sets the exit
     /// status code to 1.
-    #[allow(unused_variables)]
+    #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
@@ -626,6 +628,7 @@ impl Dest {
 
     /// Truncate the underlying file to the current stream position, if possible.
     fn truncate(&mut self) -> io::Result<()> {
+        #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f, _) => {
                 let pos = f.stream_position()?;
@@ -656,6 +659,7 @@ impl Dest {
     ///
     /// If it cannot be determined, then this function returns 0.
     fn len(&self) -> io::Result<i64> {
+        #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f, _) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
             _ => Ok(0),
@@ -824,7 +828,7 @@ impl<'a> Output<'a> {
     /// the output file is no longer needed. If not possible, then
     /// this function prints an error message to stderr and sets the
     /// exit status code to 1.
-    #[allow(unused_variables)]
+    #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
@@ -832,7 +836,7 @@ impl<'a> Output<'a> {
                 "failed to discard cache for: 'standard output'".to_string()
             }));
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(not(target_os = "linux"))]
         {
             // TODO Is there a way to discard filesystem cache on
             // these other operating systems?

@@ -74,7 +74,7 @@ fn parse_userspec(spec: &str) -> UResult<UserSpec> {
 
 // Pre-condition: `list_str` is non-empty.
 fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
-    let split: Vec<&str> = list_str.split(",").collect();
+    let split: Vec<&str> = list_str.split(',').collect();
     if split.len() == 1 {
         let name = split[0].trim();
         if name.is_empty() {
@@ -444,7 +444,8 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
             CString::new(root.as_os_str().as_bytes().to_vec())
                 .unwrap()
                 .as_bytes_with_nul()
-                .as_ptr() as *const libc::c_char,
+                .as_ptr()
+                .cast::<libc::c_char>(),
         )
     };
 

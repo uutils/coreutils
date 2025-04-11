@@ -49,8 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // leading to an infinite loop. Thus, we exit early.
     if !format_seen {
         if let Some(arg) = args.next() {
-            use FormatArgument::*;
-            let Unparsed(arg_str) = arg else {
+            let FormatArgument::Unparsed(arg_str) = arg else {
                 unreachable!("All args are transformed to Unparsed")
             };
             show_warning!("ignoring excess arguments, starting with '{arg_str}'");

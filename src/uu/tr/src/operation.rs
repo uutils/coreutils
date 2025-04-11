@@ -271,7 +271,7 @@ impl Sequence {
 
         // Calculate the set of unique characters in set2
         let mut set2_uniques = set2_solved.clone();
-        set2_uniques.sort();
+        set2_uniques.sort_unstable();
         set2_uniques.dedup();
 
         // If the complement flag is used in translate mode, only one unique

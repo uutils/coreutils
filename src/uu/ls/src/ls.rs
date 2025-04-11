@@ -3066,7 +3066,7 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
         Time::Modification => md.modified().ok(),
         Time::Access => md.accessed().ok(),
         Time::Birth => md.created().ok(),
-        _ => None,
+        Time::Change => None,
     }
 }
 
@@ -3151,7 +3151,7 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
             } else if file_type.is_file()
                 // Safe unwrapping if the file was removed between listing and display
                 // See https://github.com/uutils/coreutils/issues/5371
-                && path.get_metadata(out).map(file_is_executable).unwrap_or_default()
+                && path.get_metadata(out).is_some_and(file_is_executable)
             {
                 Some('*')
             } else {

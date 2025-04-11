@@ -438,7 +438,7 @@ fn assert_not_same_file(
             let mut path = target
                 .display()
                 .to_string()
-                .trim_end_matches("/")
+                .trim_end_matches('/')
                 .to_owned();
 
             path.push('/');

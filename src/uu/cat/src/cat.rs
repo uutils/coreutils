@@ -378,9 +378,8 @@ fn cat_handle<R: FdReadable>(
 #[cfg(unix)]
 fn is_appending() -> bool {
     let stdout = io::stdout();
-    let flags = match fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL) {
-        Ok(flags) => flags,
-        Err(_) => return false,
+    let Ok(flags) = fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL) else {
+        return false;
     };
     // TODO Replace `1 << 10` with `nix::fcntl::Oflag::O_APPEND`.
     let o_append = 1 << 10;
@@ -814,7 +813,7 @@ mod tests {
         }
         assert_eq!(b"   100\t", incrementing_string.buf.as_slice());
         // Run through until we overflow the original size.
-        for _ in 101..=1000000 {
+        for _ in 101..=1_000_000 {
             incrementing_string.increment();
         }
         // Confirm that the buffer expands when we overflow the original size.
