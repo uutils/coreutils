@@ -196,9 +196,9 @@ impl fmt::Display for BlockSize {
         match self {
             Self::Bytes(n) => {
                 let s = if n % 1024 == 0 && n % 1000 != 0 {
-                    to_magnitude_and_suffix(*n as u128, SuffixType::Iec)
+                    to_magnitude_and_suffix(u128::from(*n), SuffixType::Iec)
                 } else {
-                    to_magnitude_and_suffix(*n as u128, SuffixType::Si)
+                    to_magnitude_and_suffix(u128::from(*n), SuffixType::Si)
                 };
 
                 write!(f, "{s}")

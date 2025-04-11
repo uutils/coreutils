@@ -363,7 +363,7 @@ impl Sequence {
                 if result.is_none() {
                     let origin_octal: &str = std::str::from_utf8(input).unwrap();
                     let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
-                    let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
+                    let outstand_char: char = char::from_u32(u32::from(input[2])).unwrap();
                     show_warning!("the ambiguous octal escape \\{origin_octal} is being\n        interpreted as the 2-byte sequence \\0{actual_octal_tail}, {outstand_char}");
                 }
                 result

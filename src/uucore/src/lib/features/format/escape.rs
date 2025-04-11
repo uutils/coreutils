@@ -94,15 +94,15 @@ fn parse_code(input: &mut &[u8], base: Base) -> Option<u8> {
 // TODO: If the character cannot be converted to u32, the input should be printed.
 fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
     let (c, rest) = input.split_first()?;
-    let mut ret = Base::Hex.convert_digit(*c)? as u32;
+    let mut ret = u32::from(Base::Hex.convert_digit(*c)?);
     *input = rest;
 
     for _ in 1..digits {
         let (c, rest) = input.split_first()?;
         let n = Base::Hex.convert_digit(*c)?;
         ret = ret
-            .wrapping_mul(Base::Hex.as_base() as u32)
-            .wrapping_add(n as u32);
+            .wrapping_mul(u32::from(Base::Hex.as_base()))
+            .wrapping_add(u32::from(n));
         *input = rest;
     }
 

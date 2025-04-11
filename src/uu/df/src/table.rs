@@ -178,9 +178,9 @@ impl From<Filesystem> for Row {
             } else {
                 Some(bavail as f64 / ((bused + bavail) as f64))
             },
-            inodes: files as u128,
-            inodes_used: fused as u128,
-            inodes_free: ffree as u128,
+            inodes: u128::from(files),
+            inodes_used: u128::from(fused),
+            inodes_free: u128::from(ffree),
             inodes_usage: if files == 0 {
                 None
             } else {
@@ -915,7 +915,7 @@ mod tests {
 
     #[test]
     fn test_row_accumulation_u64_overflow() {
-        let total = u64::MAX as u128;
+        let total = u128::from(u64::MAX);
         let used1 = 3000u128;
         let used2 = 50000u128;
 
