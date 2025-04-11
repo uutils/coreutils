@@ -376,12 +376,12 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
 
     if dst.is_symlink() || dst.exists() {
         backup_path = match settings.backup {
-            BackupMode::NoBackup => None,
-            BackupMode::SimpleBackup => Some(simple_backup_path(dst, &settings.suffix)),
-            BackupMode::NumberedBackup => Some(numbered_backup_path(dst)),
-            BackupMode::ExistingBackup => Some(existing_backup_path(dst, &settings.suffix)),
+            BackupMode::None => None,
+            BackupMode::Simple => Some(simple_backup_path(dst, &settings.suffix)),
+            BackupMode::Numbered => Some(numbered_backup_path(dst)),
+            BackupMode::Existing => Some(existing_backup_path(dst, &settings.suffix)),
         };
-        if settings.backup == BackupMode::ExistingBackup && !settings.symbolic {
+        if settings.backup == BackupMode::Existing && !settings.symbolic {
             // when ln --backup f f, it should detect that it is the same file
             if paths_refer_to_same_file(src, dst, true) {
                 return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
