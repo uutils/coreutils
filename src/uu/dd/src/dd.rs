@@ -1397,11 +1397,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     let settings: Settings = Parser::new().parse(
-        &matches
+        matches
             .get_many::<String>(options::OPERANDS)
-            .unwrap_or_default()
-            .map(|s| s.as_ref())
-            .collect::<Vec<_>>()[..],
+            .unwrap_or_default(),
     )?;
 
     let i = match settings.infile {
