@@ -110,9 +110,12 @@ impl FmtOptions {
                 }
                 (w, g)
             }
-            (Some(w), None) => {
+            (Some(0), None) => {
                 // Only allow a goal of zero if the width is set to be zero
-                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(if w == 0 { 0 } else { 1 });
+                (0, 0)
+            }
+            (Some(w), None) => {
+                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(1);
                 (w, g)
             }
             (None, Some(g)) => {
