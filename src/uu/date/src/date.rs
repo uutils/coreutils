@@ -446,6 +446,7 @@ fn set_system_datetime(_date: DateTime<Utc>) -> UResult<()> {
 fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
     let timespec = timespec {
         tv_sec: date.timestamp() as _,
+        #[allow(clippy::cast_lossless)] // This may be u32->i32 or u32->i64 cast
         tv_nsec: date.timestamp_subsec_nanos() as _,
     };
 

@@ -618,11 +618,11 @@ mod tests {
             Err(ExtendedParserError::PartialMatch(-123, "e10"))
         ));
         assert!(matches!(
-            i64::extended_parse(&format!("{}", -(u64::MAX as i128))),
+            i64::extended_parse(&format!("{}", -i128::from(u64::MAX))),
             Err(ExtendedParserError::Overflow(i64::MIN))
         ));
         assert!(matches!(
-            i64::extended_parse(&format!("{}", i64::MIN as i128 - 1)),
+            i64::extended_parse(&format!("{}", i128::from(i64::MIN) - 1)),
             Err(ExtendedParserError::Overflow(i64::MIN))
         ));
     }
@@ -868,21 +868,21 @@ mod tests {
 
         // ExtendedBigDecimal overflow/underflow
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", u64::from(u32::MAX) + 1)),
             Err(ExtendedParserError::Overflow(ExtendedBigDecimal::Infinity))
         ));
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("-0x100P{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("-0x100P{}", u64::from(u32::MAX) + 1)),
             Err(ExtendedParserError::Overflow(
                 ExtendedBigDecimal::MinusInfinity
             ))
         ));
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("0x1p-{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("0x1p-{}", u64::from(u32::MAX) + 1)),
             Err(ExtendedParserError::Underflow(ebd)) if ebd == ExtendedBigDecimal::zero()
         ));
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("-0x0.100p-{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("-0x0.100p-{}", u64::from(u32::MAX) + 1)),
             Err(ExtendedParserError::Underflow(
                 ExtendedBigDecimal::MinusZero
             ))

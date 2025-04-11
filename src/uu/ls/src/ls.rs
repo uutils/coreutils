@@ -3124,14 +3124,14 @@ fn display_size(size: u64, config: &Config) -> String {
 }
 
 #[cfg(unix)]
+#[allow(clippy::useless_conversion)]
 fn file_is_executable(md: &Metadata) -> bool {
     // Mode always returns u32, but the flags might not be, based on the platform
     // e.g. linux has u32, mac has u16.
     // S_IXUSR -> user has execute permission
     // S_IXGRP -> group has execute permission
     // S_IXOTH -> other users have execute permission
-    #[allow(clippy::unnecessary_cast)]
-    return md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0;
+    (md.mode() & u32::from(S_IXUSR | S_IXGRP | S_IXOTH)) != 0
 }
 
 fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {

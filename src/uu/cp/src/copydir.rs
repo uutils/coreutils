@@ -561,16 +561,18 @@ fn build_dir(
         use crate::Preserve;
         use std::os::unix::fs::PermissionsExt;
 
-        // we need to allow trivial casts here because some systems like linux have u32 constants in
+        // we need to allow trivial casts here because some systems like linux have u32 constants
         // in libc while others don't.
-        #[allow(clippy::unnecessary_cast)]
-        let mut excluded_perms = if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
-            libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
-        } else if matches!(options.attributes.mode, Preserve::Yes { .. }) {
-            libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
-        } else {
-            0
-        } as u32;
+        #[allow(clippy::useless_conversion)]
+        let mut excluded_perms = u32::from(
+            if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
+                libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
+            } else if matches!(options.attributes.mode, Preserve::Yes { .. }) {
+                libc::S_IWGRP | libc::S_IWOTH // exclude w for group and other
+            } else {
+                0
+            },
+        );
 
         let umask = if copy_attributes_from.is_some()
             && matches!(options.attributes.mode, Preserve::Yes { .. })

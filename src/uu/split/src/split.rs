@@ -1136,7 +1136,7 @@ where
     }
 
     for i in 1_u64..=num_chunks {
-        let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
+        let chunk_size = chunk_size_base + u64::from(chunk_size_reminder > i - 1);
         let buf = &mut Vec::new();
         if num_bytes > 0 {
             // Read `chunk_size` bytes from the reader into `buf`
@@ -1266,7 +1266,7 @@ where
 
     let mut chunk_number = 1;
     let sep = settings.separator;
-    let mut num_bytes_should_be_written = chunk_size_base + (chunk_size_reminder > 0) as u64;
+    let mut num_bytes_should_be_written = chunk_size_base + u64::from(chunk_size_reminder > 0);
     let mut num_bytes_written = 0;
 
     for line_result in reader.split(sep) {
@@ -1303,7 +1303,7 @@ where
         let mut skipped = -1;
         while num_bytes_should_be_written <= num_bytes_written {
             num_bytes_should_be_written +=
-                chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+                chunk_size_base + u64::from(chunk_size_reminder > chunk_number);
             chunk_number += 1;
             skipped += 1;
         }
