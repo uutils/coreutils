@@ -4380,9 +4380,9 @@ fn test_tabsize_formatting() {
 
     scene
         .ucmd()
-        .args(&["-C", "-w18", "-T4"])
+        .args(&["-x", "-w18", "-T4"])
         .succeeds()
-        .stdout_is("aaaaaaaa  cccc\nbbbb\t  dddddddd\n");
+        .stdout_is("aaaaaaaa  bbbb\ncccc\t  dddddddd\n");
 
     scene
         .ucmd()
