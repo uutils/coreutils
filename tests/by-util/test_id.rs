@@ -383,7 +383,7 @@ fn test_id_zero() {
 fn test_id_context() {
     use selinux::{self, KernelSupport};
     if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
     let ts = TestScenario::new(util_name!());
@@ -458,7 +458,7 @@ fn test_id_no_specified_user_posixly() {
     {
         use selinux::{self, KernelSupport};
         if selinux::kernel_support() == KernelSupport::Unsupported {
-            println!("test skipped: Kernel has no support for SElinux context",);
+            println!("test skipped: Kernel has no support for SElinux context");
         } else {
             let result = ts.ucmd().succeeds();
             assert!(result.stdout_str().contains("context="));

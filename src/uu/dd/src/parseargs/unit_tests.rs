@@ -29,29 +29,28 @@ fn unimplemented_flags_should_error_non_linux() {
         "noctty",
         "nofollow",
     ] {
-        let args = vec![format!("iflag={}", flag)];
+        let args = vec![format!("iflag={flag}")];
 
         if Parser::new()
             .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
             .is_ok()
         {
-            succeeded.push(format!("iflag={}", flag));
+            succeeded.push(format!("iflag={flag}"));
         }
 
-        let args = vec![format!("oflag={}", flag)];
+        let args = vec![format!("oflag={flag}")];
 
         if Parser::new()
             .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
             .is_ok()
         {
-            succeeded.push(format!("iflag={}", flag));
+            succeeded.push(format!("iflag={flag}"));
         }
     }
 
     assert!(
         succeeded.is_empty(),
-        "The following flags did not panic as expected: {:?}",
-        succeeded
+        "The following flags did not panic as expected: {succeeded:?}",
     );
 }
 
@@ -157,7 +156,7 @@ fn test_all_top_level_args_no_leading_dashes() {
     );
 
     // no conv flags apply to output
-    assert_eq!(settings.oconv, OConvFlags::default(),);
+    assert_eq!(settings.oconv, OConvFlags::default());
 
     // iconv=count_bytes,skip_bytes
     assert_eq!(

@@ -66,7 +66,7 @@ impl Config {
                     Some(signal_value) => signal_value,
                 }
             }
-            _ => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
+            _ => signal_by_name_or_value("TERM").unwrap(),
         };
 
         let kill_after = match options.get_one::<String>(options::KILL_AFTER) {
@@ -196,7 +196,7 @@ fn unblock_sigchld() {
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     if verbose {
         let s = signal_name_by_value(signal).unwrap();
-        show_error!("sending signal {} to command {}", s, cmd.quote());
+        show_error!("sending signal {s} to command {}", cmd.quote());
     }
 }
 

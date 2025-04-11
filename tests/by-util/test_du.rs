@@ -69,7 +69,7 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows"),))]
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn du_basics(s: &str) {
     let answer = concat!(
         "8\t./subdir/deeper/deeper_dir\n",
@@ -586,11 +586,7 @@ fn test_du_h_precision() {
             .arg("--apparent-size")
             .arg(&fpath)
             .succeeds()
-            .stdout_only(format!(
-                "{}\t{}\n",
-                expected_output,
-                &fpath.to_string_lossy()
-            ));
+            .stdout_only(format!("{expected_output}\t{}\n", fpath.to_string_lossy()));
     }
 }
 
@@ -660,7 +656,7 @@ fn birth_supported() -> bool {
     let ts = TestScenario::new(util_name!());
     let m = match std::fs::metadata(&ts.fixtures.subdir) {
         Ok(m) => m,
-        Err(e) => panic!("{}", e),
+        Err(e) => panic!("{e}"),
     };
     m.created().is_ok()
 }

@@ -23,7 +23,7 @@ use std::{
     io::{BufRead, Write},
     ops::Not,
 };
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::show_warning;
 
 #[derive(Debug, Clone)]
@@ -364,12 +364,7 @@ impl Sequence {
                     let origin_octal: &str = std::str::from_utf8(input).unwrap();
                     let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
                     let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
-                    show_warning!(
-                        "the ambiguous octal escape \\{} is being\n        interpreted as the 2-byte sequence \\0{}, {}",
-                        origin_octal,
-                        actual_octal_tail,
-                        outstand_char
-                    );
+                    show_warning!("the ambiguous octal escape \\{origin_octal} is being\n        interpreted as the 2-byte sequence \\0{actual_octal_tail}, {outstand_char}");
                 }
                 result
             },
@@ -669,12 +664,9 @@ where
         let filtered = buf.iter().filter_map(|&c| translator.translate(c));
         output_buf.extend(filtered);
 
-        if let Err(e) = output.write_all(&output_buf) {
-            return Err(USimpleError::new(
-                1,
-                format!("{}: write error: {}", uucore::util_name(), e),
-            ));
-        }
+        output
+            .write_all(&output_buf)
+            .map_err_context(|| "write error".into())?;
 
         buf.clear();
         output_buf.clear();

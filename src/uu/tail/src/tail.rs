@@ -123,7 +123,7 @@ fn tail_file(
         header_printer.print_input(input);
         let err_msg = "Is a directory".to_string();
 
-        show_error!("error reading '{}': {}", input.display_name, err_msg);
+        show_error!("error reading '{}': {err_msg}", input.display_name);
         if settings.follow.is_some() {
             let msg = if settings.retry {
                 ""
@@ -131,12 +131,11 @@ fn tail_file(
                 "; giving up on this name"
             };
             show_error!(
-                "{}: cannot follow end of this type of file{}",
+                "{}: cannot follow end of this type of file{msg}",
                 input.display_name,
-                msg
             );
         }
-        if !(observer.follow_name_retry()) {
+        if !observer.follow_name_retry() {
             // skip directory if not retry
             return Ok(());
         }
@@ -164,7 +163,7 @@ fn tail_file(
                     true,
                 )?;
             }
-            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 show!(e.map_err_context(|| {
                     format!("cannot open '{}' for reading", input.display_name)
@@ -291,7 +290,7 @@ fn forwards_thru_file(
     reader: &mut impl Read,
     num_delimiters: u64,
     delimiter: u8,
-) -> std::io::Result<usize> {
+) -> io::Result<usize> {
     // If num_delimiters == 0, always return 0.
     if num_delimiters == 0 {
         return Ok(0);
@@ -406,12 +405,11 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
     // Print the target section of the file.
     let stdout = stdout();
     let mut stdout = stdout.lock();
-    std::io::copy(file, &mut stdout).unwrap();
+    io::copy(file, &mut stdout).unwrap();
 }
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
-    let stdout = stdout();
-    let mut writer = BufWriter::new(stdout.lock());
+    let mut writer = BufWriter::new(stdout().lock());
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
@@ -470,6 +468,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         _ => {}
     }
+    writer.flush()?;
     Ok(())
 }
 

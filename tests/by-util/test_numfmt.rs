@@ -1073,3 +1073,48 @@ fn test_format_grouping_conflicts_with_to_option() {
         .fails_with_code(1)
         .stderr_contains("grouping cannot be combined with --to");
 }
+
+#[test]
+fn test_zero_terminated_command_line_args() {
+    new_ucmd!()
+        .args(&["--zero-terminated", "--to=si", "1000"])
+        .succeeds()
+        .stdout_is("1.0k\x00");
+
+    new_ucmd!()
+        .args(&["-z", "--to=si", "1000"])
+        .succeeds()
+        .stdout_is("1.0k\x00");
+
+    new_ucmd!()
+        .args(&["-z", "--to=si", "1000", "2000"])
+        .succeeds()
+        .stdout_is("1.0k\x002.0k\x00");
+}
+
+#[test]
+fn test_zero_terminated_input() {
+    let values = vec![
+        ("1000", "1.0k\x00"),
+        ("1000\x00", "1.0k\x00"),
+        ("1000\x002000\x00", "1.0k\x002.0k\x00"),
+    ];
+
+    for (input, expected) in values {
+        new_ucmd!()
+            .args(&["-z", "--to=si"])
+            .pipe_in(input)
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
+#[test]
+fn test_zero_terminated_embedded_newline() {
+    new_ucmd!()
+        .args(&["-z", "--from=si", "--field=-"])
+        .pipe_in("1K\n2K\x003K\n4K\x00")
+        .succeeds()
+        // Newlines get replaced by a single space
+        .stdout_is("1000 2000\x003000 4000\x00");
+}

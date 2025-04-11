@@ -279,7 +279,7 @@ fn test_touch_set_only_atime() {
 
         let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
         let (atime, mtime) = get_file_times(&at, file);
-        assert!(atime != mtime);
+        assert_ne!(atime, mtime);
         assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
     }
 }
@@ -380,7 +380,7 @@ fn test_touch_set_only_mtime() {
 
         let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
         let (atime, mtime) = get_file_times(&at, file);
-        assert!(atime != mtime);
+        assert_ne!(atime, mtime);
         assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
     }
 }
@@ -805,7 +805,7 @@ fn test_touch_changes_time_of_file_in_stdout() {
         .no_stderr();
 
     let (_, mtime_after) = get_file_times(&at, file);
-    assert!(mtime_after != mtime);
+    assert_ne!(mtime_after, mtime);
 }
 
 #[test]
@@ -824,8 +824,7 @@ fn test_touch_permission_denied_error_msg() {
 
     let full_path = at.plus_as_string(path_str);
     ucmd.arg(&full_path).fails().stderr_only(format!(
-        "touch: cannot touch '{}': Permission denied\n",
-        &full_path
+        "touch: cannot touch '{full_path}': Permission denied\n",
     ));
 }
 

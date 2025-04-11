@@ -1733,7 +1733,9 @@ fn test_ls_group_directories_first() {
         .succeeds();
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
-        (dirnames.into_iter().rev())
+        dirnames
+            .into_iter()
+            .rev()
             .chain(dots.into_iter().rev())
             .chain(filenames.into_iter().rev())
             .chain([""].into_iter())
@@ -2247,14 +2249,12 @@ mod quoting {
             at.mkdir(dirname);
 
             let expected = format!(
-                "{}:\n{}\n\n{}:\n",
+                "{}:\n{regular_mode}\n\n{dir_mode}:\n",
                 match *qt_style {
                     "shell-always" | "shell-escape-always" => "'.'",
                     "c" => "\".\"",
                     _ => ".",
                 },
-                regular_mode,
-                dir_mode
             );
 
             scene
@@ -4051,7 +4051,7 @@ fn test_ls_path() {
         .succeeds()
         .stdout_is(expected_stdout);
 
-    let abs_path = format!("{}/{}", at.as_string(), path);
+    let abs_path = format!("{}/{path}", at.as_string());
     let expected_stdout = format!("{abs_path}\n");
 
     scene
@@ -4155,12 +4155,12 @@ fn test_ls_dangling_symlinks() {
 fn test_ls_context1() {
     use selinux::{self, KernelSupport};
     if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
 
     let file = "test_ls_context_file";
-    let expected = format!("unconfined_u:object_r:user_tmp_t:s0 {}\n", file);
+    let expected = format!("unconfined_u:object_r:user_tmp_t:s0 {file}\n");
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch(file);
     ucmd.args(&["-Z", file]).succeeds().stdout_is(expected);
@@ -4171,7 +4171,7 @@ fn test_ls_context1() {
 fn test_ls_context2() {
     use selinux::{self, KernelSupport};
     if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
     let ts = TestScenario::new(util_name!());
@@ -4188,7 +4188,7 @@ fn test_ls_context2() {
 fn test_ls_context_format() {
     use selinux::{self, KernelSupport};
     if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
     let ts = TestScenario::new(util_name!());
@@ -4204,7 +4204,7 @@ fn test_ls_context_format() {
         // "verbose",
         "vertical",
     ] {
-        let format = format!("--format={}", word);
+        let format = format!("--format={word}");
         ts.ucmd()
             .args(&["-Z", format.as_str(), "/"])
             .succeeds()

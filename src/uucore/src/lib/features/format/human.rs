@@ -34,9 +34,9 @@ fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {
             // Check whether we get more than 10 if we round up to the first decimal
             // because we want do display 9.81 as "9.9", not as "10".
             if (10.0 * bytes).ceil() >= 100.0 {
-                format!("{:.0}{}", bytes.ceil(), prefix_str)
+                format!("{:.0}{prefix_str}", bytes.ceil())
             } else {
-                format!("{:.1}{}", (10.0 * bytes).ceil() / 10.0, prefix_str)
+                format!("{:.1}{prefix_str}", (10.0 * bytes).ceil() / 10.0)
             }
         }
     }

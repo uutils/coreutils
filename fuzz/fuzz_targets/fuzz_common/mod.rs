@@ -5,12 +5,12 @@
 
 use console::Style;
 use libc::STDIN_FILENO;
-use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
+use libc::{STDERR_FILENO, STDOUT_FILENO, close, dup, dup2, pipe};
 use pretty_print::{
     print_diff, print_end_with_status, print_or_empty, print_section, print_with_style,
 };
-use rand::prelude::IndexedRandom;
 use rand::Rng;
+use rand::prelude::IndexedRandom;
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::File;
@@ -18,7 +18,7 @@ use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicBool, Once};
+use std::sync::{Once, atomic::AtomicBool};
 use std::{io, thread};
 
 pub mod pretty_print;
@@ -43,7 +43,7 @@ pub fn is_gnu_cmd(cmd_path: &str) -> Result<(), std::io::Error> {
     CHECK_GNU.call_once(|| {
         let version_output = Command::new(cmd_path).arg("--version").output().unwrap();
 
-        println!("version_output {:#?}", version_output);
+        println!("version_output {version_output:#?}");
 
         let version_str = String::from_utf8_lossy(&version_output.stdout).to_string();
         if version_str.contains("GNU coreutils") {
@@ -112,7 +112,7 @@ where
     let original_stdin_fd = if let Some(input_str) = pipe_input {
         // we have pipe input
         let mut input_file = tempfile::tempfile().unwrap();
-        write!(input_file, "{}", input_str).unwrap();
+        write!(input_file, "{input_str}").unwrap();
         input_file.seek(SeekFrom::Start(0)).unwrap();
 
         // Redirect stdin to read from the in-memory file
@@ -132,6 +132,8 @@ where
     let (uumain_exit_status, captured_stdout, captured_stderr) = thread::scope(|s| {
         let out = s.spawn(|| read_from_fd(pipe_stdout_fds[0]));
         let err = s.spawn(|| read_from_fd(pipe_stderr_fds[0]));
+        #[allow(clippy::unnecessary_to_owned)]
+        // TODO: clippy wants us to use args.iter().cloned() ?
         let status = uumain_function(args.to_owned().into_iter());
         // Reset the exit code global variable in case we run another test after this one
         // See https://github.com/uutils/coreutils/issues/5777
@@ -320,10 +322,10 @@ pub fn compare_result(
     gnu_result: &CommandResult,
     fail_on_stderr_diff: bool,
 ) {
-    print_section(format!("Compare result for: {} {}", test_type, input));
+    print_section(format!("Compare result for: {test_type} {input}"));
 
     if let Some(pipe) = pipe_input {
-        println!("Pipe: {}", pipe);
+        println!("Pipe: {pipe}");
     }
 
     let mut discrepancies = Vec::new();
@@ -331,9 +333,9 @@ pub fn compare_result(
 
     if rust_result.stdout.trim() != gnu_result.stdout.trim() {
         discrepancies.push("stdout differs");
-        println!("Rust stdout:",);
+        println!("Rust stdout:");
         print_or_empty(rust_result.stdout.as_str());
-        println!("GNU stdout:",);
+        println!("GNU stdout:");
         print_or_empty(gnu_result.stdout.as_ref());
         print_diff(&rust_result.stdout, &gnu_result.stdout);
         should_panic = true;
@@ -341,9 +343,9 @@ pub fn compare_result(
 
     if rust_result.stderr.trim() != gnu_result.stderr.trim() {
         discrepancies.push("stderr differs");
-        println!("Rust stderr:",);
+        println!("Rust stderr:");
         print_or_empty(rust_result.stderr.as_str());
-        println!("GNU stderr:",);
+        println!("GNU stderr:");
         print_or_empty(gnu_result.stderr.as_str());
         print_diff(&rust_result.stderr, &gnu_result.stderr);
         if fail_on_stderr_diff {
@@ -369,16 +371,13 @@ pub fn compare_result(
         );
         if should_panic {
             print_end_with_status(
-                format!("Test failed and will panic for: {} {}", test_type, input),
+                format!("Test failed and will panic for: {test_type} {input}"),
                 false,
             );
-            panic!("Test failed for: {} {}", test_type, input);
+            panic!("Test failed for: {test_type} {input}");
         } else {
             print_end_with_status(
-                format!(
-                    "Test completed with discrepancies for: {} {}",
-                    test_type, input
-                ),
+                format!("Test completed with discrepancies for: {test_type} {input}"),
                 false,
             );
         }
@@ -409,6 +408,7 @@ pub fn generate_random_string(max_length: usize) -> String {
     result
 }
 
+#[allow(dead_code)]
 pub fn generate_random_file() -> Result<String, std::io::Error> {
     let mut rng = rand::rng();
     let file_name: String = (0..10)
@@ -429,6 +429,7 @@ pub fn generate_random_file() -> Result<String, std::io::Error> {
     Ok(file_path.to_str().unwrap().to_string())
 }
 
+#[allow(dead_code)]
 pub fn replace_fuzz_binary_name(cmd: &str, result: &mut CommandResult) {
     let fuzz_bin_name = format!("fuzz/target/x86_64-unknown-linux-gnu/release/fuzz_{cmd}");
 

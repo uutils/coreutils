@@ -458,16 +458,22 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<P
 fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
+
+    // On *nix platforms grant read-write-execute for owner only.
+    // The directory is created with these permission at creation time, using mkdir(3) syscall.
+    // This is not relevant on Windows systems. See: https://docs.rs/tempfile/latest/tempfile/#security
+    // `fs` is not imported on Windows anyways.
+    #[cfg(not(windows))]
+    builder.permissions(fs::Permissions::from_mode(0o700));
+
     match builder.tempdir_in(dir) {
         Ok(d) => {
             // `into_path` consumes the TempDir without removing it
             let path = d.into_path();
-            #[cfg(not(windows))]
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
             Ok(path)
         }
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
             let s = path.display().to_string();
             Err(MkTempError::NotFound("directory".to_string(), s).into())
@@ -497,7 +503,7 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
             Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
         },
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
             let s = path.display().to_string();
             Err(MkTempError::NotFound("file".to_string(), s).into())

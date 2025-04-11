@@ -48,11 +48,11 @@ impl InputOffset {
     pub fn format_byte_offset(&self) -> String {
         match (self.radix, self.label) {
             (Radix::Decimal, None) => format!("{:07}", self.byte_pos),
-            (Radix::Decimal, Some(l)) => format!("{:07} ({:07})", self.byte_pos, l),
+            (Radix::Decimal, Some(l)) => format!("{:07} ({l:07})", self.byte_pos),
             (Radix::Hexadecimal, None) => format!("{:06X}", self.byte_pos),
-            (Radix::Hexadecimal, Some(l)) => format!("{:06X} ({:06X})", self.byte_pos, l),
+            (Radix::Hexadecimal, Some(l)) => format!("{:06X} ({l:06X})", self.byte_pos),
             (Radix::Octal, None) => format!("{:07o}", self.byte_pos),
-            (Radix::Octal, Some(l)) => format!("{:07o} ({:07o})", self.byte_pos, l),
+            (Radix::Octal, Some(l)) => format!("{:07o} ({l:07o})", self.byte_pos),
             (Radix::NoPrefix, None) => String::new(),
             (Radix::NoPrefix, Some(l)) => format!("({l:07o})"),
         }

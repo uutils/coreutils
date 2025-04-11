@@ -20,7 +20,7 @@ fn init() {
         std::env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
     }
     // Print for debugging
-    eprintln!("Setting UUTESTS_BINARY_PATH={}", TESTS_BINARY);
+    eprintln!("Setting UUTESTS_BINARY_PATH={TESTS_BINARY}");
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn execution_phrase_double() {
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
-            .contains(&format!("Usage: {} ls", scenario.bin_path.display(),))
+            .contains(&format!("Usage: {} ls", scenario.bin_path.display()))
     );
 }
 

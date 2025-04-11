@@ -8,7 +8,7 @@
 // spell-checker:ignore powf copysign prec inity infinit bigdecimal extendedbigdecimal biguint underflowed
 
 use bigdecimal::{
-    BigDecimal,
+    BigDecimal, Context,
     num_bigint::{BigInt, BigUint, Sign},
 };
 use num_traits::Signed;
@@ -165,23 +165,24 @@ impl ExtendedParser for u64 {
                 ExtendedBigDecimal::BigDecimal(bd) => {
                     let (digits, scale) = bd.into_bigint_and_scale();
                     if scale == 0 {
-                        let negative = digits.sign() == Sign::Minus;
+                        let (sign, digits) = digits.into_parts();
+
                         match u64::try_from(digits) {
-                            Ok(i) => Ok(i),
-                            _ => Err(ExtendedParserError::Overflow(if negative {
-                                // TODO: We should wrap around here #7488
-                                0
-                            } else {
-                                u64::MAX
-                            })),
+                            Ok(i) => {
+                                if sign == Sign::Minus {
+                                    Ok(!i + 1)
+                                } else {
+                                    Ok(i)
+                                }
+                            }
+                            _ => Err(ExtendedParserError::Overflow(u64::MAX)),
                         }
                     } else {
                         // Should not happen.
                         Err(ExtendedParserError::NotNumeric)
                     }
                 }
-                // TODO: Handle -0 too #7488
-                // No other case should not happen.
+                ExtendedBigDecimal::MinusZero => Ok(0),
                 _ => Err(ExtendedParserError::NotNumeric),
             }
         }
@@ -286,6 +287,32 @@ fn make_error<'a>(overflow: bool, negative: bool) -> ExtendedParserError<'a, Ext
     }
 }
 
+/// Compute bd**exp using exponentiation by squaring algorithm, while maintaining the
+/// precision specified in ctx (the number of digits would otherwise explode).
+// TODO: We do lose a little bit of precision, and the last digits may not be correct.
+// TODO: Upstream this to bigdecimal-rs.
+fn pow_with_context(bd: BigDecimal, exp: u32, ctx: &bigdecimal::Context) -> BigDecimal {
+    if exp == 0 {
+        return 1.into();
+    }
+
+    fn trim_precision(bd: BigDecimal, ctx: &bigdecimal::Context) -> BigDecimal {
+        if bd.digits() > ctx.precision().get() {
+            bd.with_precision_round(ctx.precision(), ctx.rounding_mode())
+        } else {
+            bd
+        }
+    }
+
+    let bd = trim_precision(bd, ctx);
+    let ret = if exp % 2 == 0 {
+        pow_with_context(bd.square(), exp / 2, ctx)
+    } else {
+        &bd * pow_with_context(bd.square(), (exp - 1) / 2, ctx)
+    };
+    trim_precision(ret, ctx)
+}
+
 // Construct an ExtendedBigDecimal based on parsed data
 fn construct_extended_big_decimal<'a>(
     digits: BigUint,
@@ -339,13 +366,14 @@ fn construct_extended_big_decimal<'a>(
         // Confusingly, exponent is in base 2 for hex floating point numbers.
         // Note: We cannot overflow/underflow BigDecimal here, as we will not be able to reach the
         // maximum/minimum scale (i64 range).
-        let pow2 = BigDecimal::from_bigint(BigInt::from(2).pow(abs_exponent.to_u32().unwrap()), 0);
-
-        if !exponent.is_negative() {
-            bd * pow2
+        let base: BigDecimal = if !exponent.is_negative() {
+            2.into()
         } else {
-            bd / pow2
-        }
+            BigDecimal::from(2).inverse()
+        };
+        let pow2 = pow_with_context(base, abs_exponent.to_u32().unwrap(), &Context::default());
+
+        bd * pow2
     } else {
         // scale != 0, which means that integral_only is not set, so only base 10 and 16 are allowed.
         unreachable!();
@@ -500,10 +528,28 @@ mod tests {
     fn test_decimal_u64() {
         assert_eq!(Ok(123), u64::extended_parse("123"));
         assert_eq!(Ok(u64::MAX), u64::extended_parse(&format!("{}", u64::MAX)));
-        // TODO: We should wrap around here #7488
+        assert_eq!(Ok(0), u64::extended_parse("-0"));
+        assert_eq!(Ok(u64::MAX), u64::extended_parse("-1"));
+        assert_eq!(
+            Ok(u64::MAX / 2 + 1),
+            u64::extended_parse("-9223372036854775808") // i64::MIN
+        );
+        assert_eq!(
+            Ok(1123372036854675616),
+            u64::extended_parse("-17323372036854876000") // 2*i64::MIN
+        );
+        assert_eq!(Ok(1), u64::extended_parse("-18446744073709551615")); // -u64::MAX
         assert!(matches!(
-            u64::extended_parse("-123"),
-            Err(ExtendedParserError::Overflow(0))
+            u64::extended_parse("-18446744073709551616"), // -u64::MAX - 1
+            Err(ExtendedParserError::Overflow(u64::MAX))
+        ));
+        assert!(matches!(
+            u64::extended_parse("-92233720368547758150"),
+            Err(ExtendedParserError::Overflow(u64::MAX))
+        ));
+        assert!(matches!(
+            u64::extended_parse("-170141183460469231731687303715884105729"),
+            Err(ExtendedParserError::Overflow(u64::MAX))
         ));
         assert!(matches!(
             u64::extended_parse(""),
@@ -769,6 +815,26 @@ mod tests {
                 BigDecimal::from_str("15.999999999999999999999999948301211715435770320536956745627321652136743068695068359375").unwrap()
             )),
             ExtendedBigDecimal::extended_parse("0xf.fffffffffffffffffffff")
+        );
+
+        // Test very large exponents (they used to take forever as we kept all digits in the past)
+        // Wolfram Alpha can get us (close to?) these values with a bit of log trickery:
+        // 2**3000000000 = 10**log_10(2**3000000000) = 10**(3000000000 * log_10(2))
+        // TODO: We do lose a little bit of precision, and the last digits are not be correct.
+        assert_eq!(
+            Ok(ExtendedBigDecimal::BigDecimal(
+                // Wolfram Alpha says 9.8162042336235053508313854078782835648991393286913072670026492205522618203568834202759669215027003865... × 10^903089986
+                BigDecimal::from_str("9.816204233623505350831385407878283564899139328691307267002649220552261820356883420275966921514831318e+903089986").unwrap()
+            )),
+            ExtendedBigDecimal::extended_parse("0x1p3000000000")
+        );
+        assert_eq!(
+            Ok(ExtendedBigDecimal::BigDecimal(
+                // Wolfram Alpha says 1.3492131462369983551036088935544888715959511045742395978049631768570509541390540646442193112226520316... × 10^-9030900
+                BigDecimal::from_str("1.349213146236998355103608893554488871595951104574239597804963176857050954139054064644219311222656999e-9030900").unwrap()
+            )),
+            // Couldn't get a answer from Wolfram Alpha for smaller negative exponents
+            ExtendedBigDecimal::extended_parse("0x1p-30000000")
         );
 
         // ExtendedBigDecimal overflow/underflow

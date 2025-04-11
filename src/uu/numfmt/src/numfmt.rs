@@ -8,7 +8,8 @@ use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Error, Write};
+use std::result::Result as StdResult;
 use std::str::FromStr;
 
 use units::{IEC_BASES, SI_BASES};
@@ -38,10 +39,29 @@ fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
 where
     R: BufRead,
 {
-    for (idx, line_result) in input.lines().by_ref().enumerate() {
+    if options.zero_terminated {
+        handle_buffer_iterator(
+            input
+                .split(0)
+                // FIXME: This panics on UTF8 decoding, but this util in general doesn't handle
+                // invalid UTF8
+                .map(|bytes| Ok(String::from_utf8(bytes?).unwrap())),
+            options,
+        )
+    } else {
+        handle_buffer_iterator(input.lines(), options)
+    }
+}
+
+fn handle_buffer_iterator(
+    iter: impl Iterator<Item = StdResult<String, Error>>,
+    options: &NumfmtOptions,
+) -> UResult<()> {
+    let eol = if options.zero_terminated { '\0' } else { '\n' };
+    for (idx, line_result) in iter.enumerate() {
         match line_result {
             Ok(line) if idx < options.header => {
-                println!("{line}");
+                print!("{line}{eol}");
                 Ok(())
             }
             Ok(line) => format_and_handle_validation(line.as_ref(), options),
@@ -63,7 +83,7 @@ fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UR
                 show!(NumfmtError::FormattingError(error_message));
             }
             InvalidModes::Warn => {
-                show_error!("{}", error_message);
+                show_error!("{error_message}");
             }
             InvalidModes::Ignore => {}
         };
@@ -133,10 +153,10 @@ fn parse_unit_size_suffix(s: &str) -> Option<usize> {
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
-    let from = parse_unit(args.get_one::<String>(options::FROM).unwrap())?;
-    let to = parse_unit(args.get_one::<String>(options::TO).unwrap())?;
-    let from_unit = parse_unit_size(args.get_one::<String>(options::FROM_UNIT).unwrap())?;
-    let to_unit = parse_unit_size(args.get_one::<String>(options::TO_UNIT).unwrap())?;
+    let from = parse_unit(args.get_one::<String>(FROM).unwrap())?;
+    let to = parse_unit(args.get_one::<String>(TO).unwrap())?;
+    let from_unit = parse_unit_size(args.get_one::<String>(FROM_UNIT).unwrap())?;
+    let to_unit = parse_unit_size(args.get_one::<String>(TO_UNIT).unwrap())?;
 
     let transform = TransformOptions {
         from,
@@ -145,7 +165,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         to_unit,
     };
 
-    let padding = match args.get_one::<String>(options::PADDING) {
+    let padding = match args.get_one::<String>(PADDING) {
         Some(s) => s
             .parse::<isize>()
             .map_err(|_| s)
@@ -157,8 +177,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         None => Ok(0),
     }?;
 
-    let header = if args.value_source(options::HEADER) == Some(ValueSource::CommandLine) {
-        let value = args.get_one::<String>(options::HEADER).unwrap();
+    let header = if args.value_source(HEADER) == Some(ValueSource::CommandLine) {
+        let value = args.get_one::<String>(HEADER).unwrap();
 
         value
             .parse::<usize>()
@@ -172,7 +192,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Ok(0)
     }?;
 
-    let fields = args.get_one::<String>(options::FIELD).unwrap().as_str();
+    let fields = args.get_one::<String>(FIELD).unwrap().as_str();
     // a lone "-" means "all fields", even as part of a list of fields
     let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
         vec![Range {
@@ -183,7 +203,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Range::from_list(fields)?
     };
 
-    let format = match args.get_one::<String>(options::FORMAT) {
+    let format = match args.get_one::<String>(FORMAT) {
         Some(s) => s.parse()?,
         None => FormatOptions::default(),
     };
@@ -192,18 +212,16 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         return Err("grouping cannot be combined with --to".to_string());
     }
 
-    let delimiter = args
-        .get_one::<String>(options::DELIMITER)
-        .map_or(Ok(None), |arg| {
-            if arg.len() == 1 {
-                Ok(Some(arg.to_string()))
-            } else {
-                Err("the delimiter must be a single character".to_string())
-            }
-        })?;
+    let delimiter = args.get_one::<String>(DELIMITER).map_or(Ok(None), |arg| {
+        if arg.len() == 1 {
+            Ok(Some(arg.to_string()))
+        } else {
+            Err("the delimiter must be a single character".to_string())
+        }
+    })?;
 
     // unwrap is fine because the argument has a default value
-    let round = match args.get_one::<String>(options::ROUND).unwrap().as_str() {
+    let round = match args.get_one::<String>(ROUND).unwrap().as_str() {
         "up" => RoundMethod::Up,
         "down" => RoundMethod::Down,
         "from-zero" => RoundMethod::FromZero,
@@ -212,10 +230,11 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         _ => unreachable!("Should be restricted by clap"),
     };
 
-    let suffix = args.get_one::<String>(options::SUFFIX).cloned();
+    let suffix = args.get_one::<String>(SUFFIX).cloned();
 
-    let invalid =
-        InvalidModes::from_str(args.get_one::<String>(options::INVALID).unwrap()).unwrap();
+    let invalid = InvalidModes::from_str(args.get_one::<String>(INVALID).unwrap()).unwrap();
+
+    let zero_terminated = args.get_flag(ZERO_TERMINATED);
 
     Ok(NumfmtOptions {
         transform,
@@ -227,6 +246,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         suffix,
         format,
         invalid,
+        zero_terminated,
     })
 }
 
@@ -236,7 +256,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
-    let result = match matches.get_many::<String>(options::NUMBER) {
+    let result = match matches.get_many::<String>(NUMBER) {
         Some(values) => handle_args(values.map(|s| s.as_str()), &options),
         None => {
             let stdin = std::io::stdin();
@@ -263,58 +283,58 @@ pub fn uu_app() -> Command {
         .allow_negative_numbers(true)
         .infer_long_args(true)
         .arg(
-            Arg::new(options::DELIMITER)
+            Arg::new(DELIMITER)
                 .short('d')
-                .long(options::DELIMITER)
+                .long(DELIMITER)
                 .value_name("X")
                 .help("use X instead of whitespace for field delimiter"),
         )
         .arg(
-            Arg::new(options::FIELD)
-                .long(options::FIELD)
+            Arg::new(FIELD)
+                .long(FIELD)
                 .help("replace the numbers in these input fields; see FIELDS below")
                 .value_name("FIELDS")
                 .allow_hyphen_values(true)
-                .default_value(options::FIELD_DEFAULT),
+                .default_value(FIELD_DEFAULT),
         )
         .arg(
-            Arg::new(options::FORMAT)
-                .long(options::FORMAT)
+            Arg::new(FORMAT)
+                .long(FORMAT)
                 .help("use printf style floating-point FORMAT; see FORMAT below for details")
                 .value_name("FORMAT")
                 .allow_hyphen_values(true),
         )
         .arg(
-            Arg::new(options::FROM)
-                .long(options::FROM)
+            Arg::new(FROM)
+                .long(FROM)
                 .help("auto-scale input numbers to UNITs; see UNIT below")
                 .value_name("UNIT")
-                .default_value(options::FROM_DEFAULT),
+                .default_value(FROM_DEFAULT),
         )
         .arg(
-            Arg::new(options::FROM_UNIT)
-                .long(options::FROM_UNIT)
+            Arg::new(FROM_UNIT)
+                .long(FROM_UNIT)
                 .help("specify the input unit size")
                 .value_name("N")
-                .default_value(options::FROM_UNIT_DEFAULT),
+                .default_value(FROM_UNIT_DEFAULT),
         )
         .arg(
-            Arg::new(options::TO)
-                .long(options::TO)
+            Arg::new(TO)
+                .long(TO)
                 .help("auto-scale output numbers to UNITs; see UNIT below")
                 .value_name("UNIT")
-                .default_value(options::TO_DEFAULT),
+                .default_value(TO_DEFAULT),
         )
         .arg(
-            Arg::new(options::TO_UNIT)
-                .long(options::TO_UNIT)
+            Arg::new(TO_UNIT)
+                .long(TO_UNIT)
                 .help("the output unit size")
                 .value_name("N")
-                .default_value(options::TO_UNIT_DEFAULT),
+                .default_value(TO_UNIT_DEFAULT),
         )
         .arg(
-            Arg::new(options::PADDING)
-                .long(options::PADDING)
+            Arg::new(PADDING)
+                .long(PADDING)
                 .help(
                     "pad the output to N characters; positive N will \
                      right-align; negative N will left-align; padding is \
@@ -324,20 +344,20 @@ pub fn uu_app() -> Command {
                 .value_name("N"),
         )
         .arg(
-            Arg::new(options::HEADER)
-                .long(options::HEADER)
+            Arg::new(HEADER)
+                .long(HEADER)
                 .help(
                     "print (without converting) the first N header lines; \
                      N defaults to 1 if not specified",
                 )
                 .num_args(..=1)
                 .value_name("N")
-                .default_missing_value(options::HEADER_DEFAULT)
+                .default_missing_value(HEADER_DEFAULT)
                 .hide_default_value(true),
         )
         .arg(
-            Arg::new(options::ROUND)
-                .long(options::ROUND)
+            Arg::new(ROUND)
+                .long(ROUND)
                 .help("use METHOD for rounding when scaling")
                 .value_name("METHOD")
                 .default_value("from-zero")
@@ -350,8 +370,8 @@ pub fn uu_app() -> Command {
                 ])),
         )
         .arg(
-            Arg::new(options::SUFFIX)
-                .long(options::SUFFIX)
+            Arg::new(SUFFIX)
+                .long(SUFFIX)
                 .help(
                     "print SUFFIX after each formatted number, and accept \
                     inputs optionally ending with SUFFIX",
@@ -359,18 +379,21 @@ pub fn uu_app() -> Command {
                 .value_name("SUFFIX"),
         )
         .arg(
-            Arg::new(options::INVALID)
-                .long(options::INVALID)
+            Arg::new(INVALID)
+                .long(INVALID)
                 .help("set the failure mode for invalid input")
                 .default_value("abort")
                 .value_parser(["abort", "fail", "warn", "ignore"])
                 .value_name("INVALID"),
         )
         .arg(
-            Arg::new(options::NUMBER)
-                .hide(true)
-                .action(ArgAction::Append),
+            Arg::new(ZERO_TERMINATED)
+                .long(ZERO_TERMINATED)
+                .short('z')
+                .help("line delimiter is NUL, not newline")
+                .action(ArgAction::SetTrue),
         )
+        .arg(Arg::new(NUMBER).hide(true).action(ArgAction::Append))
 }
 
 #[cfg(test)]
@@ -406,6 +429,7 @@ mod tests {
             suffix: None,
             format: FormatOptions::default(),
             invalid: InvalidModes::Abort,
+            zero_terminated: false,
         }
     }
 
@@ -481,8 +505,9 @@ mod tests {
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Fail;
         handle_buffer(BufReader::new(&input_value[..]), &options).unwrap();
-        assert!(
-            get_exit_code() == 2,
+        assert_eq!(
+            get_exit_code(),
+            2,
             "should set exit code 2 for formatting errors"
         );
     }
@@ -502,8 +527,9 @@ mod tests {
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Fail;
         handle_args(input_value, &options).unwrap();
-        assert!(
-            get_exit_code() == 2,
+        assert_eq!(
+            get_exit_code(),
+            2,
             "should set exit code 2 for formatting errors"
         );
     }

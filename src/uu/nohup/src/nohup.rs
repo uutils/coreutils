@@ -131,7 +131,7 @@ fn replace_fds() -> UResult<()> {
 }
 
 fn find_stdout() -> UResult<File> {
-    let internal_failure_code = match std::env::var("POSIXLY_CORRECT") {
+    let internal_failure_code = match env::var("POSIXLY_CORRECT") {
         Ok(_) => POSIX_NOHUP_FAILURE,
         Err(_) => EXIT_CANCELED,
     };

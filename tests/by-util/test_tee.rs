@@ -243,8 +243,7 @@ mod linux_only {
         );
         assert!(
             result.stderr_str().contains(message),
-            "Expected to see error message fragment {} in stderr, but did not.\n stderr = {}",
-            message,
+            "Expected to see error message fragment {message} in stderr, but did not.\n stderr = {}",
             std::str::from_utf8(result.stderr()).unwrap(),
         );
     }
@@ -274,9 +273,8 @@ mod linux_only {
         let compare = at.read(name);
         assert!(
             compare.len() < contents.len(),
-            "Too many bytes ({}) written to {} (should be a short count from {})",
+            "Too many bytes ({}) written to {name} (should be a short count from {})",
             compare.len(),
-            name,
             contents.len()
         );
         assert!(

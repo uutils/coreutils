@@ -124,10 +124,7 @@ pub enum MainFunction {
 impl Behavior {
     /// Determine the mode for chmod after copy.
     pub fn mode(&self) -> u32 {
-        match self.specified_mode {
-            Some(x) => x,
-            None => DEFAULT_MODE,
-        }
+        self.specified_mode.unwrap_or(DEFAULT_MODE)
     }
 }
 
@@ -356,7 +353,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
         Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
-            show_error!("Invalid mode string: {}", err);
+            show_error!("Invalid mode string: {err}");
             1
         })?)
     } else {
@@ -678,7 +675,7 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
         return Ok(());
     };
 
-    let meta = match fs::metadata(path) {
+    let meta = match metadata(path) {
         Ok(meta) => meta,
         Err(e) => return Err(InstallError::MetadataFailed(e).into()),
     };
@@ -756,9 +753,8 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     if let Err(e) = fs::remove_file(to) {
         if e.kind() != std::io::ErrorKind::NotFound {
             show_error!(
-                "Failed to remove existing file {}. Error: {:?}",
+                "Failed to remove existing file {}. Error: {e:?}",
                 to.display(),
-                e
             );
         }
     }
@@ -863,7 +859,7 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
-    let meta = match fs::metadata(from) {
+    let meta = match metadata(from) {
         Ok(meta) => meta,
         Err(e) => return Err(InstallError::MetadataFailed(e).into()),
     };
@@ -874,7 +870,7 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     match set_file_times(to, accessed_time, modified_time) {
         Ok(_) => Ok(()),
         Err(e) => {
-            show_error!("{}", e);
+            show_error!("{e}");
             Ok(())
         }
     }
@@ -944,14 +940,14 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
     // Attempt to retrieve metadata for the source file.
     // If this fails, assume the file needs to be copied.
-    let from_meta = match fs::metadata(from) {
+    let from_meta = match metadata(from) {
         Ok(meta) => meta,
         Err(_) => return Ok(true),
     };
 
     // Attempt to retrieve metadata for the destination file.
     // If this fails, assume the file needs to be copied.
-    let to_meta = match fs::metadata(to) {
+    let to_meta = match metadata(to) {
         Ok(meta) => meta,
         Err(_) => return Ok(true),
     };

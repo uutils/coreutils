@@ -90,7 +90,7 @@ fn sleep(args: &[&str]) -> UResult<()> {
             }
         })
         .fold(Duration::ZERO, |acc, n| {
-            acc.saturating_add(SaturatingInto::<std::time::Duration>::saturating_into(n))
+            acc.saturating_add(SaturatingInto::<Duration>::saturating_into(n))
         });
 
     if arg_error {

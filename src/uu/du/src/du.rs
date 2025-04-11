@@ -236,7 +236,7 @@ fn get_size_on_disk(path: &Path) -> u64 {
 
     // bind file so it stays in scope until end of function
     // if it goes out of scope the handle below becomes invalid
-    let file = match fs::File::open(path) {
+    let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => return size_on_disk, // opening directories will fail
     };
@@ -249,7 +249,7 @@ fn get_size_on_disk(path: &Path) -> u64 {
             file.as_raw_handle() as HANDLE,
             FileStandardInfo,
             file_info_ptr as _,
-            std::mem::size_of::<FILE_STANDARD_INFO>() as u32,
+            size_of::<FILE_STANDARD_INFO>() as u32,
         );
 
         if success != 0 {
@@ -264,7 +264,7 @@ fn get_size_on_disk(path: &Path) -> u64 {
 fn get_file_info(path: &Path) -> Option<FileInfo> {
     let mut result = None;
 
-    let file = match fs::File::open(path) {
+    let file = match File::open(path) {
         Ok(file) => file,
         Err(_) => return result,
     };
@@ -277,7 +277,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
             file.as_raw_handle() as HANDLE,
             FileIdInfo,
             file_info_ptr as _,
-            std::mem::size_of::<FILE_ID_INFO>() as u32,
+            size_of::<FILE_ID_INFO>() as u32,
         );
 
         if success != 0 {
@@ -475,7 +475,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let mut exclude_patterns = Vec::new();
     for f in excludes_iterator.chain(exclude_from_iterator) {
         if matches.get_flag(options::VERBOSE) {
-            println!("adding {:?} to the exclude list ", &f);
+            println!("adding {f:?} to the exclude list ");
         }
         match parse_glob::from_str(&f) {
             Ok(glob) => exclude_patterns.push(glob),
@@ -568,7 +568,7 @@ impl StatPrinter {
             let secs = get_time_secs(time, stat)?;
             let tm = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs));
             let time_str = tm.format(&self.time_format).to_string();
-            print!("{}\t{}\t", self.convert_size(size), time_str);
+            print!("{}\t{time_str}\t", self.convert_size(size));
         } else {
             print!("{}\t", self.convert_size(size));
         }
@@ -663,7 +663,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             files.collect()
         } else {
             // Deduplicate while preserving order
-            let mut seen = std::collections::HashSet::new();
+            let mut seen = HashSet::new();
             files
                 .filter(|path| seen.insert(path.clone()))
                 .collect::<Vec<_>>()
@@ -1132,12 +1132,12 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{} argument {}", option, s.quote())
+            format!("invalid suffix in --{option} argument {}", s.quote())
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{} argument {}", option, s.quote())
+            format!("invalid --{option} argument {}", s.quote())
         }
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
     }
 }
 

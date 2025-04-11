@@ -421,7 +421,7 @@ fn test_mv_same_file() {
     ucmd.arg(file_a)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_a}' and '{file_a}' are the same file\n",));
+        .stderr_is(format!("mv: '{file_a}' and '{file_a}' are the same file\n"));
 }
 
 #[test]
@@ -438,7 +438,7 @@ fn test_mv_same_hardlink() {
     ucmd.arg(file_a)
         .arg(file_b)
         .fails()
-        .stderr_is(format!("mv: '{file_a}' and '{file_b}' are the same file\n",));
+        .stderr_is(format!("mv: '{file_a}' and '{file_b}' are the same file\n"));
 }
 
 #[test]
@@ -456,7 +456,7 @@ fn test_mv_same_symlink() {
     ucmd.arg(file_b)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_b}' and '{file_a}' are the same file\n",));
+        .stderr_is(format!("mv: '{file_b}' and '{file_a}' are the same file\n"));
 
     let (at2, mut ucmd2) = at_and_ucmd!();
     at2.touch(file_a);
@@ -1811,7 +1811,7 @@ mod inter_partition_copying {
 
         // make sure that file contents in other_fs_file didn't change.
         assert_eq!(
-            read_to_string(&other_fs_file_path,).expect("Unable to read other_fs_file"),
+            read_to_string(&other_fs_file_path).expect("Unable to read other_fs_file"),
             "other fs file contents"
         );
 

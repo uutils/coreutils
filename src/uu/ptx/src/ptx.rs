@@ -323,7 +323,7 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
                     continue;
                 }
                 let mut word = line[beg..end].to_owned();
-                if filter.only_specified && !(filter.only_set.contains(&word)) {
+                if filter.only_specified && !filter.only_set.contains(&word) {
                     continue;
                 }
                 if filter.ignore_specified && filter.ignore_set.contains(&word) {
@@ -519,9 +519,9 @@ fn get_output_chunks(
 
     // put left context truncation string if needed
     if before_beg != 0 && head_beg == head_end {
-        before = format!("{}{}", config.trunc_str, before);
+        before = format!("{}{before}", config.trunc_str);
     } else if before_beg != 0 && head_beg != 0 {
-        head = format!("{}{}", config.trunc_str, head);
+        head = format!("{}{head}", config.trunc_str);
     }
 
     (tail, before, after, head)
@@ -633,7 +633,8 @@ fn write_traditional_output(
     let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(if output_filename == "-" {
         Box::new(stdout())
     } else {
-        let file = File::create(output_filename).map_err_context(String::new)?;
+        let file = File::create(output_filename)
+            .map_err_context(|| output_filename.maybe_quote().to_string())?;
         Box::new(file)
     });
 
@@ -673,8 +674,11 @@ fn write_traditional_output(
                 return Err(PtxError::DumbFormat.into());
             }
         };
-        writeln!(writer, "{output_line}").map_err_context(String::new)?;
+        writeln!(writer, "{output_line}").map_err_context(|| "write failed".into())?;
     }
+
+    writer.flush().map_err_context(|| "write failed".into())?;
+
     Ok(())
 }
 

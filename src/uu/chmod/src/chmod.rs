@@ -106,7 +106,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Err(err) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("cannot stat attributes of {}: {}", fref.quote(), err),
+                    format!("cannot stat attributes of {}: {err}", fref.quote()),
                 ));
             }
         },
@@ -138,7 +138,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
-    let (recursive, dereference, traverse_symlinks) = configure_symlink_and_recursion(&matches)?;
+    let (recursive, dereference, traverse_symlinks) =
+        configure_symlink_and_recursion(&matches, TraverseSymlinks::First)?;
 
     let chmoder = Chmoder {
         changes,
@@ -259,6 +260,10 @@ impl Chmoder {
                         // Don't try to change the mode of the symlink itself
                         continue;
                     }
+                    if self.recursive && self.traverse_symlinks == TraverseSymlinks::None {
+                        continue;
+                    }
+
                     if !self.quiet {
                         show!(USimpleError::new(
                             1,
@@ -368,7 +373,7 @@ impl Chmoder {
                         format!("{}: Permission denied", file.quote()),
                     ));
                 } else {
-                    return Err(USimpleError::new(1, format!("{}: {}", file.quote(), err)));
+                    return Err(USimpleError::new(1, format!("{}: {err}", file.quote())));
                 }
             }
         };
@@ -436,24 +441,21 @@ impl Chmoder {
         if fperm == mode {
             if self.verbose && !self.changes {
                 println!(
-                    "mode of {} retained as {:04o} ({})",
+                    "mode of {} retained as {fperm:04o} ({})",
                     file.quote(),
-                    fperm,
                     display_permissions_unix(fperm as mode_t, false),
                 );
             }
             Ok(())
         } else if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
             if !self.quiet {
-                show_error!("{}", err);
+                show_error!("{err}");
             }
             if self.verbose {
                 println!(
-                    "failed to change mode of file {} from {:04o} ({}) to {:04o} ({})",
+                    "failed to change mode of file {} from {fperm:04o} ({}) to {mode:04o} ({})",
                     file.quote(),
-                    fperm,
                     display_permissions_unix(fperm as mode_t, false),
-                    mode,
                     display_permissions_unix(mode as mode_t, false)
                 );
             }
@@ -461,11 +463,9 @@ impl Chmoder {
         } else {
             if self.verbose || self.changes {
                 println!(
-                    "mode of {} changed from {:04o} ({}) to {:04o} ({})",
+                    "mode of {} changed from {fperm:04o} ({}) to {mode:04o} ({})",
                     file.quote(),
-                    fperm,
                     display_permissions_unix(fperm as mode_t, false),
-                    mode,
                     display_permissions_unix(mode as mode_t, false)
                 );
             }

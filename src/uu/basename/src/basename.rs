@@ -57,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             _ => {
                 return Err(UUsageError::new(
                     1,
-                    format!("extra operand {}", name_args[2].quote(),),
+                    format!("extra operand {}", name_args[2].quote()),
                 ));
             }
         }
@@ -68,7 +68,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
 
     for path in name_args {
-        print!("{}{}", basename(path, &suffix), line_ending);
+        print!("{}{line_ending}", basename(path, &suffix));
     }
 
     Ok(())
@@ -90,7 +90,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::NAME)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
                 .hide(true)
                 .trailing_var_arg(true),

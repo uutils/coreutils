@@ -484,11 +484,9 @@ fn wipe_file(
         if verbose {
             let pass_name = pass_name(&pass_type);
             show_error!(
-                "{}: pass {:2}/{} ({})...",
+                "{}: pass {:2}/{total_passes} ({pass_name})...",
                 path.maybe_quote(),
                 i + 1,
-                total_passes,
-                pass_name
             );
         }
         // size is an optional argument for exactly how many bytes we want to shred
@@ -578,10 +576,9 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
                 }
                 Err(e) => {
                     show_error!(
-                        "{}: Couldn't rename to {}: {}",
+                        "{}: Couldn't rename to {}: {e}",
                         last_path.maybe_quote(),
                         new_path.quote(),
-                        e
                     );
                     // TODO: replace with our error management
                     std::process::exit(1);

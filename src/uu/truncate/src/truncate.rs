@@ -180,7 +180,7 @@ pub fn uu_app() -> Command {
 /// size of the file.
 fn file_truncate(filename: &str, create: bool, size: u64) -> UResult<()> {
     #[cfg(unix)]
-    if let Ok(metadata) = std::fs::metadata(filename) {
+    if let Ok(metadata) = metadata(filename) {
         if metadata.file_type().is_fifo() {
             return Err(USimpleError::new(
                 1,
