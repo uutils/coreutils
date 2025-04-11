@@ -214,7 +214,7 @@ pub enum StrategyError {
 
 impl Strategy {
     /// Parse a strategy from the command-line arguments.
-    pub fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, StrategyError> {
+    pub fn from(matches: &ArgMatches, obs_lines: Option<&str>) -> Result<Self, StrategyError> {
         fn get_and_parse(
             matches: &ArgMatches,
             option: &str,

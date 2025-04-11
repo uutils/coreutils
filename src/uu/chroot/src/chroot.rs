@@ -390,7 +390,7 @@ fn handle_missing_groups(strategy: Strategy) -> Result<(), ChrootError> {
 /// Set supplemental groups for this process.
 fn set_supplemental_gids_with_strategy(
     strategy: Strategy,
-    groups: &Option<Vec<String>>,
+    groups: Option<&Vec<String>>,
 ) -> Result<(), ChrootError> {
     match groups {
         None => handle_missing_groups(strategy),
@@ -410,27 +410,27 @@ fn set_context(options: &Options) -> UResult<()> {
     match &options.userspec {
         None | Some(UserSpec::NeitherGroupNorUser) => {
             let strategy = Strategy::Nothing;
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
         }
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
             let gid = uid as libc::gid_t;
             let strategy = Strategy::FromUID(uid, false);
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_string(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
         }
         Some(UserSpec::GroupOnly(group)) => {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::Nothing;
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
         }
         Some(UserSpec::UserAndGroup(user, group)) => {
             let uid = name_to_uid(user)?;
             let gid = name_to_gid(group)?;
             let strategy = Strategy::FromUID(uid, true);
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
         }

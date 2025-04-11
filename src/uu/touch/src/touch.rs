@@ -156,20 +156,20 @@ fn get_year(s: &str) -> u8 {
 fn is_first_filename_timestamp(
     reference: Option<&OsString>,
     date: Option<&str>,
-    timestamp: &Option<String>,
+    timestamp: Option<&str>,
     files: &[&String],
 ) -> bool {
-    match std::env::var("_POSIX2_VERSION") {
-        Ok(s) if s == "199209" => {
-            if timestamp.is_none() && reference.is_none() && date.is_none() && files.len() >= 2 {
-                let s = files[0];
-                all_digits(s)
-                    && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
-            } else {
-                false
-            }
-        }
-        _ => false,
+    if timestamp.is_none()
+        && reference.is_none()
+        && date.is_none()
+        && files.len() >= 2
+        // env check is last as the slowest op
+        && matches!(std::env::var("_POSIX2_VERSION").as_deref(), Ok("199209"))
+    {
+        let s = files[0];
+        all_digits(s) && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
+    } else {
+        false
     }
 }
 
@@ -213,7 +213,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>(options::sources::TIMESTAMP)
         .map(|t| t.to_owned());
 
-    if is_first_filename_timestamp(reference, date.as_deref(), &timestamp, &filenames) {
+    if is_first_filename_timestamp(reference, date.as_deref(), timestamp.as_deref(), &filenames) {
         timestamp = if filenames[0].len() == 10 {
             Some(shr2(filenames[0]))
         } else {

@@ -1106,13 +1106,13 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // blocks to this output. Read/write statistics are updated on
     // each iteration and cumulative statistics are reported to
     // the progress reporting thread.
-    while below_count_limit(&i.settings.count, &rstat) {
+    while below_count_limit(i.settings.count, &rstat) {
         // Read a block from the input then write the block to the output.
         //
         // As an optimization, make an educated guess about the
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
-        let loop_bsize = calc_loop_bsize(&i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
+        let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
         let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
         if rstat_update.is_empty() {
             break;
@@ -1295,7 +1295,7 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize {
 // Calculate the buffer size appropriate for this loop iteration, respecting
 // a count=N if present.
 fn calc_loop_bsize(
-    count: &Option<Num>,
+    count: Option<Num>,
     rstat: &ReadStat,
     wstat: &WriteStat,
     ibs: usize,
@@ -1308,7 +1308,7 @@ fn calc_loop_bsize(
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(Num::Bytes(bmax)) => {
-            let bmax: u128 = (*bmax).into();
+            let bmax: u128 = bmax.into();
             let bremain: u128 = bmax - wstat.bytes_total;
             cmp::min(ideal_bsize as u128, bremain) as usize
         }
@@ -1318,10 +1318,10 @@ fn calc_loop_bsize(
 
 // Decide if the current progress is below a count=N limit or return
 // true if no such limit is set.
-fn below_count_limit(count: &Option<Num>, rstat: &ReadStat) -> bool {
+fn below_count_limit(count: Option<Num>, rstat: &ReadStat) -> bool {
     match count {
-        Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < *n,
-        Some(Num::Bytes(n)) => rstat.bytes_total < *n,
+        Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < n,
+        Some(Num::Bytes(n)) => rstat.bytes_total < n,
         None => true,
     }
 }
