@@ -91,10 +91,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         output_error,
     };
 
-    match tee(&options) {
-        Ok(_) => Ok(()),
-        Err(_) => Err(1.into()),
-    }
+    tee(&options).map_err(|_| 1.into())
 }
 
 pub fn uu_app() -> Command {
