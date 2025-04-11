@@ -176,7 +176,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(state.zflag);
 
     if state.cflag {
-        if state.selinux_supported {
+        return if state.selinux_supported {
             // print SElinux context and exit
             #[cfg(all(any(target_os = "linux", target_os = "android"), feature = "selinux"))]
             if let Ok(context) = selinux::SecurityContext::current(false) {
@@ -186,13 +186,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // print error because `cflag` was explicitly requested
                 return Err(USimpleError::new(1, "can't get process context"));
             }
-            return Ok(());
+            Ok(())
         } else {
-            return Err(USimpleError::new(
+            Err(USimpleError::new(
                 1,
                 "--context (-Z) works only on an SELinux-enabled kernel",
-            ));
-        }
+            ))
+        };
     }
 
     for i in 0..=users.len() {

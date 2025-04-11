@@ -581,19 +581,21 @@ impl EnvAppData {
                 }
                 return Err(exit.code().unwrap().into());
             }
-            Err(ref err) => match err.kind() {
-                io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => {
-                    return Err(self.make_error_no_such_file_or_dir(prog.deref()));
-                }
-                io::ErrorKind::PermissionDenied => {
-                    uucore::show_error!("{}: Permission denied", prog.quote());
-                    return Err(126.into());
-                }
-                _ => {
-                    uucore::show_error!("unknown error: {err:?}");
-                    return Err(126.into());
-                }
-            },
+            Err(ref err) => {
+                return match err.kind() {
+                    io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => {
+                        Err(self.make_error_no_such_file_or_dir(prog.deref()))
+                    }
+                    io::ErrorKind::PermissionDenied => {
+                        uucore::show_error!("{}: Permission denied", prog.quote());
+                        Err(126.into())
+                    }
+                    _ => {
+                        uucore::show_error!("unknown error: {err:?}");
+                        Err(126.into())
+                    }
+                };
+            }
             Ok(_) => (),
         }
         Ok(())
