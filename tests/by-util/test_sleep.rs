@@ -4,7 +4,8 @@
 // file that was distributed with this source code.
 use rstest::rstest;
 
-// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus
+use uucore::display::Quotable;
+// spell-checker:ignore dont SIGBUS SIGSEGV sigsegv sigbus infd
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -19,11 +20,11 @@ fn test_invalid_time_interval() {
     new_ucmd!()
         .arg("xyz")
         .fails()
-        .usage_error("invalid time interval 'xyz': Invalid input: xyz");
+        .usage_error("invalid time interval 'xyz'");
     new_ucmd!()
         .args(&["--", "-1"])
         .fails()
-        .usage_error("invalid time interval '-1': Number was negative");
+        .usage_error("invalid time interval '-1'");
 }
 
 #[test]
@@ -228,14 +229,23 @@ fn test_sleep_when_multiple_inputs_exceed_max_duration_then_no_error() {
 #[rstest]
 #[case::whitespace_prefix(" 0.1s")]
 #[case::multiple_whitespace_prefix("   0.1s")]
-#[case::whitespace_suffix("0.1s ")]
-#[case::mixed_newlines_spaces_tabs("\n\t0.1s \n ")]
-fn test_sleep_when_input_has_whitespace_then_no_error(#[case] input: &str) {
+fn test_sleep_when_input_has_leading_whitespace_then_no_error(#[case] input: &str) {
     new_ucmd!()
         .arg(input)
         .timeout(Duration::from_secs(10))
         .succeeds()
         .no_output();
+}
+
+#[rstest]
+#[case::whitespace_suffix("0.1s ")]
+#[case::mixed_newlines_spaces_tabs("\n\t0.1s \n ")]
+fn test_sleep_when_input_has_trailing_whitespace_then_error(#[case] input: &str) {
+    new_ucmd!()
+        .arg(input)
+        .timeout(Duration::from_secs(10))
+        .fails()
+        .usage_error(format!("invalid time interval {}", input.quote()));
 }
 
 #[rstest]
@@ -247,16 +257,14 @@ fn test_sleep_when_input_has_only_whitespace_then_error(#[case] input: &str) {
         .arg(input)
         .timeout(Duration::from_secs(10))
         .fails()
-        .usage_error(format!(
-            "invalid time interval '{input}': Found only whitespace in input"
-        ));
+        .usage_error(format!("invalid time interval {}", input.quote()));
 }
 
 #[test]
 fn test_sleep_when_multiple_input_some_with_error_then_shows_all_errors() {
-    let expected = "invalid time interval 'abc': Invalid input: abc\n\
-                    sleep: invalid time interval '1years': Invalid time unit: 'years' at position 2\n\
-                    sleep: invalid time interval ' ': Found only whitespace in input";
+    let expected = "invalid time interval 'abc'\n\
+                    sleep: invalid time interval '1years'\n\
+                    sleep: invalid time interval ' '";
 
     // Even if one of the arguments is valid, but the rest isn't, we should still fail and exit early.
     // So, the timeout of 10 seconds ensures we haven't executed `thread::sleep` with the only valid
@@ -273,7 +281,35 @@ fn test_negative_interval() {
     new_ucmd!()
         .args(&["--", "-1"])
         .fails()
-        .usage_error("invalid time interval '-1': Number was negative");
+        .usage_error("invalid time interval '-1'");
+}
+
+#[rstest]
+#[case::int("0x0")]
+#[case::negative_zero("-0x0")]
+#[case::int_suffix("0x0s")]
+#[case::int_suffix("0x0h")]
+#[case::frac("0x0.1")]
+#[case::frac_suffix("0x0.1s")]
+#[case::frac_suffix("0x0.001h")]
+#[case::scientific("0x1.0p-3")]
+#[case::scientific_suffix("0x1.0p-4s")]
+fn test_valid_hex_duration(#[case] input: &str) {
+    new_ucmd!().args(&["--", input]).succeeds().no_output();
+}
+
+#[rstest]
+#[case::negative("-0x1")]
+#[case::negative_suffix("-0x1s")]
+#[case::negative_frac_suffix("-0x0.1s")]
+#[case::wrong_capitalization("infD")]
+#[case::wrong_capitalization("INFD")]
+#[case::wrong_capitalization("iNfD")]
+fn test_invalid_hex_duration(#[case] input: &str) {
+    new_ucmd!()
+        .args(&["--", input])
+        .fails()
+        .usage_error(format!("invalid time interval {}", input.quote()));
 }
 
 #[cfg(unix)]

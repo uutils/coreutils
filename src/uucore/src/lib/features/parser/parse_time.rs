@@ -11,9 +11,8 @@
 use crate::{
     display::Quotable,
     extendedbigdecimal::ExtendedBigDecimal,
-    parser::num_parser::{ExtendedParser, ExtendedParserError},
+    parser::num_parser::{self, ExtendedParserError, ParseTarget},
 };
-use bigdecimal::BigDecimal;
 use num_traits::Signed;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
@@ -59,26 +58,18 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
 
     let len = string.len();
     if len == 0 {
-        return Err("empty string".to_owned());
-    }
-    let Some(slice) = string.get(..len - 1) else {
         return Err(format!("invalid time interval {}", string.quote()));
-    };
-    let (numstr, times) = match string.chars().next_back().unwrap() {
-        's' => (slice, 1),
-        'm' => (slice, 60),
-        'h' => (slice, 60 * 60),
-        'd' => (slice, 60 * 60 * 24),
-        val if !val.is_alphabetic() => (string, 1),
-        _ => match string.to_ascii_lowercase().as_str() {
-            "inf" | "infinity" => ("inf", 1),
-            _ => return Err(format!("invalid time interval {}", string.quote())),
-        },
-    };
-    let num = match ExtendedBigDecimal::extended_parse(numstr) {
+    }
+    let num = match num_parser::parse(
+        string,
+        ParseTarget::Duration,
+        &[('s', 1), ('m', 60), ('h', 60 * 60), ('d', 60 * 60 * 24)],
+    ) {
         Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
         Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
-        _ => return Err(format!("invalid time interval {}", string.quote())),
+        _ => {
+            return Err(format!("invalid time interval {}", string.quote()));
+        }
     };
 
     // Allow non-negative durations (-0 is fine), and infinity.
@@ -88,9 +79,6 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
         ExtendedBigDecimal::Infinity => return Ok(Duration::MAX),
         _ => return Err(format!("invalid time interval {}", string.quote())),
     };
-
-    // Pre-multiply times to avoid precision loss
-    let num: BigDecimal = num * times;
 
     // Transform to nanoseconds (9 digits after decimal point)
     let (nanos_bi, _) = num.with_scale(9).into_bigint_and_scale();
