@@ -1248,3 +1248,19 @@ fn test_du_no_deduplicated_input_args() {
         .collect();
     assert_eq!(result_seq, ["2\td", "2\td", "2\td"]);
 }
+
+#[test]
+fn test_du_blocksize_zero_do_not_panic() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("foo", "some content");
+    for block_size in ["0", "00", "000", "0x0"] {
+        ts.ucmd()
+            .arg(format!("-B{block_size}"))
+            .arg("foo")
+            .fails()
+            .stderr_only(format!(
+                "du: invalid --block-size argument '{block_size}'\n"
+            ));
+    }
+}
