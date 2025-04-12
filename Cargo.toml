@@ -149,7 +149,8 @@ feat_os_macos = [
   #
   "feat_require_unix_hostid",
 ]
-# "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms
+# "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
+# Also used for targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
 feat_os_unix = [
   "feat_Tier1",
   #
@@ -167,15 +168,6 @@ feat_os_windows = [
 feat_os_unix_gnueabihf = [
   "feat_Tier1",
   #
-  "feat_require_unix",
-  "feat_require_unix_hostid",
-  "feat_require_unix_utmpx",
-]
-# "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
-feat_os_unix_musl = [
-  "feat_Tier1",
-  #
-  "feat_require_crate_cpp",
   "feat_require_unix",
   "feat_require_unix_hostid",
   "feat_require_unix_utmpx",
