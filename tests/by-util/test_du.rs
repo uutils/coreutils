@@ -1264,3 +1264,92 @@ fn test_du_blocksize_zero_do_not_panic() {
             ));
     }
 }
+
+#[test]
+fn test_du_blocksize_bytes_order() {
+    for (args, expected_output) in [
+        // Division is only correct here because 123_456 is even. Otherwise, we would need div_ceil.
+        (["--apparent-size", "-B2"].as_slice(), 123_456 / 2),
+        (["-bB2"].as_slice(), 123_456 / 2),
+        (["-b", "-B2"].as_slice(), 123_456 / 2),
+        (["-B2", "-b"].as_slice(), 123_456),
+        (["-b", "-B2", "-b"].as_slice(), 123_456),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let fpath = at.plus("test.txt");
+        std::fs::File::create(&fpath)
+            .expect("cannot create test file")
+            .set_len(123_456)
+            .expect("cannot truncate test len to size");
+        ucmd.args(args)
+            .arg(&fpath)
+            .succeeds()
+            .stdout_only(format!("{expected_output}\t{}\n", fpath.to_string_lossy()));
+    }
+}
+
+#[test]
+fn test_du_blocksize_multiplier() {
+    for (blocksize, expected_output) in [
+        ("1", "123456789"),
+        ("2", "61728395"),
+        ("1000", "123457"),
+        ("1024", "120564"),
+        ("1kB", "123457"),
+        ("1KB", "123457"),
+        ("1k", "120564"),
+        ("1K", "120564"),
+        ("kB", "123457kB"),
+        ("KB", "123457kB"),
+        ("k", "120564k"),
+        ("K", "120564k"),
+        ("2kB", "61729"),
+        ("2KB", "61729"),
+        ("2k", "60282"),
+        ("2K", "60282"),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let fpath = at.plus("test.txt");
+        std::fs::File::create(&fpath)
+            .expect("cannot create test file")
+            .set_len(123_456_789)
+            .expect("cannot truncate test len to size");
+        ucmd.arg("--apparent-size")
+            .arg("-B")
+            .arg(blocksize)
+            .arg(&fpath)
+            .succeeds()
+            .stdout_only(format!("{expected_output}\t{}\n", fpath.to_string_lossy()));
+    }
+}
+
+#[test]
+fn test_du_blocksize_refuse_lowercase_b() {
+    for (has_suffix, blocksize) in [
+        (false, "kb"),
+        (false, "Kb"),
+        (true, "1kb"),
+        (true, "1Kb"),
+        (true, "2kb"),
+        (true, "2Kb"),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let fpath = at.plus("test.txt");
+        std::fs::File::create(&fpath)
+            .expect("cannot create test file")
+            .set_len(123_456)
+            .expect("cannot truncate test len to size");
+        ucmd.arg("--apparent-size")
+            .arg("-B")
+            .arg(blocksize)
+            .arg(&fpath)
+            .fails()
+            .stderr_only(format!(
+                "du: invalid {}--block-size argument '{blocksize}'\n",
+                if has_suffix { "suffix in " } else { "" }
+            ));
+    }
+}
+
+// TODO: Also test ordering wrt. --si and -h
