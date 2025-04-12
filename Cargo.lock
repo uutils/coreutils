@@ -585,6 +585,7 @@ dependencies = [
  "uucore",
  "uuhelp_parser",
  "uutests",
+ "uutils-args",
  "walkdir",
  "xattr",
  "zip",
@@ -1319,6 +1320,12 @@ name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
+
+[[package]]
+name = "lexopt"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fa0e2a1fcbe2f6be6c42e342259976206b383122fc152e872795338b5a3f3a7"
 
 [[package]]
 name = "libc"
@@ -3637,6 +3644,27 @@ dependencies = [
  "time",
  "uucore",
  "xattr",
+]
+
+[[package]]
+name = "uutils-args"
+version = "0.1.0"
+source = "git+https://github.com/uutils/uutils-args.git?rev=bbb193d3870fb5b564b1189bc80d4df8b3f65280#bbb193d3870fb5b564b1189bc80d4df8b3f65280"
+dependencies = [
+ "lexopt",
+ "roff",
+ "strsim",
+ "uutils-args-derive",
+]
+
+[[package]]
+name = "uutils-args-derive"
+version = "0.1.0"
+source = "git+https://github.com/uutils/uutils-args.git?rev=bbb193d3870fb5b564b1189bc80d4df8b3f65280#bbb193d3870fb5b564b1189bc80d4df8b3f65280"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
