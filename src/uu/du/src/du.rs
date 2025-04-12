@@ -683,11 +683,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if matches.get_flag(options::BLOCK_SIZE_1M) {
         SizeFormat::BlockSize(1024 * 1024)
     } else {
-        SizeFormat::BlockSize(read_block_size(
-            matches
-                .get_one::<String>(options::BLOCK_SIZE)
-                .map(AsRef::as_ref),
-        )?)
+        let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
+        let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
+        if block_size == 0 {
+            return Err(std::io::Error::other(format!(
+                "invalid --{} argument {}",
+                options::BLOCK_SIZE,
+                block_size_str.map_or("???BUG", |v| v).quote()
+            ))
+            .into());
+        }
+        SizeFormat::BlockSize(block_size)
     };
 
     let traversal_options = TraversalOptions {
