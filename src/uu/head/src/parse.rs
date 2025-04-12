@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use std::ffi::OsString;
-use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64_max};
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct ParseError;
@@ -49,10 +49,11 @@ fn process_num_block(
     last_char: char,
     chars: &mut std::str::CharIndices,
 ) -> Option<Result<Vec<OsString>, ParseError>> {
-    let num = src.chars().fold(0u32, |acc, ch| {
-        acc.saturating_mul(10)
-            .saturating_add(ch.to_digit(10).unwrap())
-    });
+    let num = match src.parse::<usize>() {
+        Ok(n) => n,
+        Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => usize::MAX,
+        _ => return Some(Err(ParseError)),
+    };
     let mut quiet = false;
     let mut verbose = false;
     let mut zero_terminated = false;
@@ -129,7 +130,7 @@ pub fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
     if trimmed_string.is_empty() {
         Ok((0, all_but_last))
     } else {
-        parse_size_u64(trimmed_string).map(|n| (n, all_but_last))
+        parse_size_u64_max(trimmed_string).map(|n| (n, all_but_last))
     }
 }
 
@@ -193,11 +194,11 @@ mod tests {
     fn test_parse_obsolete_overflow_x64() {
         assert_eq!(
             obsolete("-1000000000000000m"),
-            obsolete_result(&["-c", "4294967295"])
+            obsolete_result(&["-c", "18446744073709551615"])
         );
         assert_eq!(
             obsolete("-10000000000000000000000"),
-            obsolete_result(&["-n", "4294967295"])
+            obsolete_result(&["-n", "18446744073709551615"])
         );
     }
 
