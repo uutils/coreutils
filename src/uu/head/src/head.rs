@@ -282,13 +282,7 @@ fn read_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Resu
 }
 
 fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
-    match usize::try_from(n) {
-        Ok(value) => Some(value),
-        Err(e) => {
-            show!(HeadError::NumTooLarge(e));
-            None
-        }
-    }
+    usize::try_from(n).ok()
 }
 
 fn read_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
