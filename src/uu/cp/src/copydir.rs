@@ -224,7 +224,7 @@ where
 #[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
-    progress_bar: &Option<ProgressBar>,
+    progress_bar: Option<&ProgressBar>,
     entry: Entry,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
@@ -314,7 +314,7 @@ fn copy_direntry(
 /// will not cause a short-circuit.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn copy_directory(
-    progress_bar: &Option<ProgressBar>,
+    progress_bar: Option<&ProgressBar>,
     root: &Path,
     target: &Path,
     options: &Options,

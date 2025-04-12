@@ -1085,7 +1085,7 @@ fn write_columns(
         for (i, cell) in row.iter().enumerate() {
             if cell.is_none() && options.merge_files_print.is_some() {
                 out.write_all(
-                    get_line_for_printing(options, &blank_line, columns, i, &line_width, indexes)
+                    get_line_for_printing(options, &blank_line, columns, i, line_width, indexes)
                         .as_bytes(),
                 )?;
             } else if cell.is_none() {
@@ -1095,7 +1095,7 @@ fn write_columns(
                 let file_line = cell.unwrap();
 
                 out.write_all(
-                    get_line_for_printing(options, file_line, columns, i, &line_width, indexes)
+                    get_line_for_printing(options, file_line, columns, i, line_width, indexes)
                         .as_bytes(),
                 )?;
                 lines_printed += 1;
@@ -1116,7 +1116,7 @@ fn get_line_for_printing(
     file_line: &FileLine,
     columns: usize,
     index: usize,
-    line_width: &Option<usize>,
+    line_width: Option<usize>,
     indexes: usize,
 ) -> String {
     let blank_line = String::new();

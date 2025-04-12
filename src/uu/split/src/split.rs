@@ -55,7 +55,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
     let matches = uu_app().try_get_matches_from(args)?;
 
-    match Settings::from(&matches, &obs_lines) {
+    match Settings::from(&matches, obs_lines.as_deref()) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
         Err(e) => Err(USimpleError::new(1, format!("{e}"))),
@@ -460,7 +460,7 @@ impl SettingsError {
 
 impl Settings {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, SettingsError> {
+    fn from(matches: &ArgMatches, obs_lines: Option<&str>) -> Result<Self, SettingsError> {
         let strategy = Strategy::from(matches, obs_lines).map_err(SettingsError::Strategy)?;
         let suffix = Suffix::from(matches, &strategy).map_err(SettingsError::Suffix)?;
 
@@ -541,7 +541,7 @@ impl Settings {
             ));
         }
 
-        platform::instantiate_current_writer(&self.filter, filename, is_new)
+        platform::instantiate_current_writer(self.filter.as_deref(), filename, is_new)
     }
 }
 
@@ -607,14 +607,14 @@ fn get_input_size<R>(
     input: &String,
     reader: &mut R,
     buf: &mut Vec<u8>,
-    io_blksize: &Option<u64>,
+    io_blksize: Option<u64>,
 ) -> io::Result<u64>
 where
     R: BufRead,
 {
     // Set read limit to io_blksize if specified
     let read_limit: u64 = if let Some(custom_blksize) = io_blksize {
-        *custom_blksize
+        custom_blksize
     } else {
         // otherwise try to get it from filesystem, or use default
         uucore::fs::sane_blksize::sane_blksize_from_path(Path::new(input))
@@ -1084,7 +1084,7 @@ where
 {
     // Get the size of the input in bytes
     let initial_buf = &mut Vec::new();
-    let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
+    let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
     let mut reader = initial_buf.chain(reader);
 
     // If input file is empty and we would not have determined the Kth chunk
@@ -1230,7 +1230,7 @@ where
     // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
     let initial_buf = &mut Vec::new();
-    let num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
+    let num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
     let reader = initial_buf.chain(reader);
 
     // If input file is empty and we would not have determined the Kth chunk

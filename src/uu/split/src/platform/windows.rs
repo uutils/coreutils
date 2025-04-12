@@ -12,7 +12,7 @@ use uucore::fs;
 /// Unlike the unix version of this function, this _always_ returns
 /// a file writer
 pub fn instantiate_current_writer(
-    _filter: &Option<String>,
+    _filter: Option<&str>,
     filename: &str,
     is_new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {
