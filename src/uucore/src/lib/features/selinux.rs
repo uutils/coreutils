@@ -7,6 +7,38 @@ use std::path::Path;
 
 use selinux::SecurityContext;
 
+#[derive(Debug)]
+pub enum Error {
+    SELinuxNotEnabled,
+}
+
+/// Checks if SELinux is enabled on the system.
+///
+/// This function verifies whether the kernel has SELinux support enabled.
+///
+/// # Returns
+///
+/// * `Ok(())` - If SELinux is enabled on the system.
+/// * `Err(Error::SELinuxNotEnabled)` - If SELinux is not enabled.
+///
+/// # Examples
+///
+/// ```
+/// use uucore::selinux::check_selinux_enabled;
+///
+/// match check_selinux_enabled() {
+///     Ok(_) => println!("SELinux is enabled"),
+///     Err(_) => println!("SELinux is not enabled"),
+/// }
+/// ```
+pub fn check_selinux_enabled() -> Result<(), Error> {
+    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+        Err(Error::SELinuxNotEnabled)
+    } else {
+        Ok(())
+    }
+}
+
 /// Sets the SELinux security context for the given filesystem path.
 ///
 /// If a specific context is provided, it attempts to set this context explicitly.
@@ -52,9 +84,7 @@ use selinux::SecurityContext;
 /// ```
 pub fn set_selinux_security_context(path: &Path, context: Option<&String>) -> Result<(), String> {
     // Check if SELinux is enabled on the system
-    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
-        return Err("SELinux is not enabled on this system".into());
-    }
+    check_selinux_enabled().map_err(|e| format!("{:?}", e))?;
 
     if let Some(ctx_str) = context {
         // Create a CString from the provided context string
@@ -126,5 +156,19 @@ mod tests {
             result.unwrap_err(),
             "Invalid context string (contains null bytes)"
         );
+    }
+
+    #[test]
+    fn test_check_selinux_enabled_runtime_behavior() {
+        let result = check_selinux_enabled();
+
+        match selinux::kernel_support() {
+            selinux::KernelSupport::Unsupported => {
+                assert!(matches!(result, Err(Error::SELinuxNotEnabled)));
+            }
+            _ => {
+                assert!(result.is_ok(), "Expected Ok(()) when SELinux is supported");
+            }
+        }
     }
 }
