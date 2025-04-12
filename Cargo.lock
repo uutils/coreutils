@@ -2766,6 +2766,7 @@ dependencies = [
  "glob",
  "thiserror 2.0.12",
  "uucore",
+ "uutils-args",
  "windows-sys 0.59.0",
 ]
 

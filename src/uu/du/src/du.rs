@@ -3,11 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (terms) Kibi Giga Tera Tebi Peta Pebi Exbi
+
 use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
+use std::ffi::{OsStr, OsString};
 #[cfg(not(windows))]
 use std::fs::Metadata;
 use std::fs::{self, DirEntry, File};
@@ -31,6 +34,7 @@ use uucore::parser::parse_glob;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
+use uutils_args::{Arguments, Options, Value, ValueResult};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -74,6 +78,112 @@ const ABOUT: &str = help_about!("du.md");
 const AFTER_HELP: &str = help_section!("after help", "du.md");
 const USAGE: &str = help_usage!("du.md");
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
+enum SizeUnit {
+    Kilo,
+    Kibi,
+    Mega,
+    Mebi,
+    Giga,
+    Gibi,
+    Tera,
+    Tebi,
+    Peta,
+    Pebi,
+    Exa,
+    Exbi,
+    // GNU du does not recognize higher prefixes, so we shouldn't either.
+}
+
+#[derive(Arguments)]
+enum NewArg {
+    #[arg(
+        "-0",
+        "-a",
+        "--all",
+        "-c",
+        "--count-links",
+        "-D",
+        "--dereference",
+        "--dereference-args",
+        "-H",
+        "--inodes",
+        "-l",
+        "-L",
+        "--no-dereference",
+        "--one-file-system",
+        "-P",
+        "-s",
+        "-S",
+        "--separate-dirs",
+        "--summarize",
+        "--verbose",
+        "-x"
+    )]
+    Ignore,
+
+    #[arg(
+        "--exclude-from=X",
+        "--exclude=X",
+        "--files0-from=X",
+        "--threshold=X",
+        "--time-style=X"
+    )]
+    IgnoreArg(#[allow(dead_code)] OsString),
+
+    #[arg("--time[=X]", "-d[X]")]
+    IgnoreOptionArg(#[allow(dead_code)] Option<OsString>),
+
+    #[arg("--apparent-size")]
+    ApparentSize,
+
+    #[arg("-B SIZE", "--block-size=SIZE")]
+    BlockSize(SizeFormat),
+
+    #[arg("-h", "--human-readable")]
+    HumanBinary,
+
+    #[arg("--si")]
+    HumanDecimal,
+
+    #[arg("-b", "--bytes")]
+    Bytes,
+
+    #[arg("-k")]
+    KibiBytes,
+
+    #[arg("-m")]
+    MebiBytes,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Settings {
+    apparent_size: bool,
+    size_format: SizeFormat,
+}
+
+impl Options<NewArg> for Settings {
+    fn apply(&mut self, arg: NewArg) -> Result<(), uutils_args::Error> {
+        match arg {
+            NewArg::ApparentSize => self.apparent_size = true,
+            NewArg::BlockSize(size_format) => self.size_format = size_format,
+            NewArg::Bytes => {
+                self.apparent_size = true;
+                self.size_format = SizeFormat::BlockSize(1);
+            }
+            NewArg::HumanBinary => self.size_format = SizeFormat::HumanBinary,
+            NewArg::HumanDecimal => self.size_format = SizeFormat::HumanDecimal,
+            NewArg::KibiBytes => self.size_format = SizeFormat::BlockSize(1024),
+            NewArg::MebiBytes => self.size_format = SizeFormat::BlockSize(1024 * 1024),
+            NewArg::Ignore => {}
+            NewArg::IgnoreArg(_) => {}
+            NewArg::IgnoreOptionArg(_) => {}
+        }
+        Ok(())
+    }
+}
+
 struct TraversalOptions {
     all: bool,
     separate_dirs: bool,
@@ -111,11 +221,54 @@ enum Time {
     Created,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum SizeFormat {
     HumanDecimal,
     HumanBinary,
     BlockSize(u64),
+    #[allow(dead_code)]
+    Unit(SizeUnit),
+}
+
+impl SizeFormat {
+    fn parse(s: &OsStr, _lenient: bool) -> ValueResult<SizeFormat> {
+        // FIXME: Must have a custom parser, since "Unit" and "Divisor" distinction is lost by parse_size_u64!
+        // FIXME: Must be more lenient when parsing envvars, i.e. allow trailing (potentially non-UTF-8) garbage!
+        if let Some(s) = s.to_str() {
+            let bytes = parse_size_u64(s)?;
+            // FIXME: Use USimpleError maybe?
+            if bytes == 0 {
+                Err("".into()) // FIXME: Error messages are ignored?!
+            } else {
+                Ok(SizeFormat::BlockSize(bytes))
+            }
+        } else {
+            Err("".into()) // FIXME: Error messages are ignored?!
+        }
+    }
+}
+
+impl Default for SizeFormat {
+    fn default() -> SizeFormat {
+        for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
+            if let Some(env_size) = env::var_os(env_var) {
+                if let Ok(v) = SizeFormat::parse(&env_size, true) {
+                    return v;
+                }
+            }
+        }
+        if env::var("POSIXLY_CORRECT").is_ok() {
+            SizeFormat::BlockSize(512)
+        } else {
+            SizeFormat::BlockSize(1024)
+        }
+    }
+}
+
+impl Value for SizeFormat {
+    fn from_value(s: &OsStr) -> ValueResult<SizeFormat> {
+        SizeFormat::parse(s, false)
+    }
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -278,26 +431,6 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
     }
 
     result
-}
-
-fn read_block_size(s: Option<&str>) -> UResult<u64> {
-    if let Some(s) = s {
-        parse_size_u64(s)
-            .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
-    } else {
-        for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-            if let Ok(env_size) = env::var(env_var) {
-                if let Ok(v) = parse_size_u64(&env_size) {
-                    return Ok(v);
-                }
-            }
-        }
-        if env::var("POSIXLY_CORRECT").is_ok() {
-            Ok(512)
-        } else {
-            Ok(1024)
-        }
-    }
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
@@ -549,6 +682,7 @@ impl StatPrinter {
                     size.div_ceil(block_size).to_string()
                 }
             }
+            SizeFormat::Unit(_) => unimplemented!(), // FIXME
         }
     }
 
@@ -618,7 +752,12 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let raw_args = args.collect::<Vec<_>>();
+    let (settings, _operands) = Settings::default()
+        .parse(&raw_args)
+        // FIXME: Leads to ugly errors
+        .map_err(|e| std::io::Error::other(format!("{e}").trim_start_matches("error: ")))?;
+    let matches = uu_app().try_get_matches_from(raw_args.iter())?;
 
     let summarize = matches.get_flag(options::SUMMARIZE);
 
@@ -665,29 +804,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     });
 
-    let size_format = if matches.get_flag(options::HUMAN_READABLE) {
-        SizeFormat::HumanBinary
-    } else if matches.get_flag(options::SI) {
-        SizeFormat::HumanDecimal
-    } else if matches.get_flag(options::BYTES) {
-        SizeFormat::BlockSize(1)
-    } else if matches.get_flag(options::BLOCK_SIZE_1K) {
-        SizeFormat::BlockSize(1024)
-    } else if matches.get_flag(options::BLOCK_SIZE_1M) {
-        SizeFormat::BlockSize(1024 * 1024)
-    } else {
-        let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
-        let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
-        if block_size == 0 {
-            return Err(std::io::Error::other(format!(
-                "invalid --{} argument {}",
-                options::BLOCK_SIZE,
-                block_size_str.map_or("???BUG", |v| v).quote()
-            ))
-            .into());
-        }
-        SizeFormat::BlockSize(block_size)
-    };
+    let size_format = settings.size_format;
 
     let traversal_options = TraversalOptions {
         all: matches.get_flag(options::ALL),
@@ -726,7 +843,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 })
             })
             .transpose()?,
-        apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
+        apparent_size: settings.apparent_size,
         time,
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
@@ -1110,9 +1227,13 @@ mod test_du {
 
     #[test]
     fn test_read_block_size() {
-        let test_data = [Some("1024".to_string()), Some("K".to_string()), None];
-        for it in &test_data {
-            assert!(matches!(read_block_size(it.as_deref()), Ok(1024)));
+        for (input, expected) in [
+            ("1024", SizeFormat::BlockSize(1024)),
+            ("1K", SizeFormat::BlockSize(1024)),
+            // FIXME: data loss! Should also return whether a suffix was used, see test_du_blocksize_multiplier and #7738
+            // ("K", SizeFormat::Unit(SizeUnit::Kibi)),
+        ] {
+            assert_eq!(expected, SizeFormat::from_value(OsStr::new(input)).unwrap());
         }
     }
 }
