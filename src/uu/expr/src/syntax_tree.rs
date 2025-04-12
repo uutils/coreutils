@@ -232,7 +232,7 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
                         // Empty repeating pattern
                         invalid_content_error = true;
                     }
-                    (x, None) | (x, Some("")) => {
+                    (x, None | Some("")) => {
                         if x.parse::<i16>().is_err() {
                             invalid_content_error = true;
                         }

@@ -516,9 +516,11 @@ impl Settings {
         // As those are writing to stdout of `split` and cannot write to filter command child process
         let kth_chunk = matches!(
             result.strategy,
-            Strategy::Number(NumberType::KthBytes(_, _))
-                | Strategy::Number(NumberType::KthLines(_, _))
-                | Strategy::Number(NumberType::KthRoundRobin(_, _))
+            Strategy::Number(
+                NumberType::KthBytes(_, _)
+                    | NumberType::KthLines(_, _)
+                    | NumberType::KthRoundRobin(_, _)
+            )
         );
         if kth_chunk && result.filter.is_some() {
             return Err(SettingsError::FilterWithKthChunkNumber);

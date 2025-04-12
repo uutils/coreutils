@@ -1153,7 +1153,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         wstat += wstat_update;
         match alarm.get_trigger() {
             ALARM_TRIGGER_NONE => {}
-            t @ ALARM_TRIGGER_TIMER | t @ ALARM_TRIGGER_SIGNAL => {
+            t @ (ALARM_TRIGGER_TIMER | ALARM_TRIGGER_SIGNAL) => {
                 let tp = match t {
                     ALARM_TRIGGER_TIMER => ProgUpdateType::Periodic,
                     _ => ProgUpdateType::Signal,
