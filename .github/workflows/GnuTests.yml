@@ -49,7 +49,7 @@ jobs:
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="$DEFAULT_BRANCH"
-        repo_GNU_ref="v9.6"
+        repo_GNU_ref="v9.7"
         repo_reference_branch="$DEFAULT_BRANCH"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
