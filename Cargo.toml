@@ -601,4 +601,11 @@ unused_qualifications = "warn"
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 #cargo = { level = "warn", priority = -1 }
+cognitive_complexity = "warn"
+default_trait_access = "warn"
+implicit_clone = "warn"
+manual_string_new = "warn"
+match_bool = "warn"
+range-plus-one = "warn"
+redundant-clone = "warn"
 ref_option = "warn"
