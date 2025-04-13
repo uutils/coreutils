@@ -168,21 +168,17 @@ fn execute(
 }
 
 fn bytes_from_os_string(input: &OsStr) -> Option<&[u8]> {
-    let option = {
-        #[cfg(target_family = "unix")]
-        {
-            use std::os::unix::ffi::OsStrExt;
+    #[cfg(target_family = "unix")]
+    {
+        use std::os::unix::ffi::OsStrExt;
 
-            Some(input.as_bytes())
-        }
+        Some(input.as_bytes())
+    }
 
-        #[cfg(not(target_family = "unix"))]
-        {
-            // TODO
-            // Verify that this works correctly on these platforms
-            input.to_str().map(|st| st.as_bytes())
-        }
-    };
-
-    option
+    #[cfg(not(target_family = "unix"))]
+    {
+        // TODO
+        // Verify that this works correctly on these platforms
+        input.to_str().map(|st| st.as_bytes())
+    }
 }

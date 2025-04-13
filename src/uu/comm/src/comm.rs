@@ -267,7 +267,7 @@ fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
         Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
     } else {
         if metadata(name)?.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::Other, "Is a directory"));
+            return Err(io::Error::other("Is a directory"));
         }
         let f = File::open(name)?;
         Ok(LineReader::new(

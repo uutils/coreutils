@@ -55,7 +55,7 @@ fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
         }
     }
 
-    if nums.iter().any(|&n| n == 0) {
+    if nums.contains(&0) {
         return Err(ParseError::TabSizeCannotBeZero);
     }
 

@@ -794,8 +794,7 @@ fn files0_iter<'a>(
                     // ...Windows does not, we must go through Strings.
                     #[cfg(not(unix))]
                     {
-                        let s = String::from_utf8(p)
-                            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                        let s = String::from_utf8(p).map_err(io::Error::other)?;
                         Ok(Input::Path(PathBuf::from(s).into()))
                     }
                 }

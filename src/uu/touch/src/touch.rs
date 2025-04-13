@@ -477,7 +477,7 @@ fn touch_file(
                 false
             };
             if is_directory {
-                let custom_err = Error::new(ErrorKind::Other, "No such file or directory");
+                let custom_err = Error::other("No such file or directory");
                 return Err(
                     custom_err.map_err_context(|| format!("cannot touch {}", filename.quote()))
                 );

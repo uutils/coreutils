@@ -2286,10 +2286,10 @@ impl UChild {
             if start.elapsed() < timeout {
                 self.delay(10);
             } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("kill: Timeout of '{}s' reached", timeout.as_secs_f64()),
-                ));
+                return Err(io::Error::other(format!(
+                    "kill: Timeout of '{}s' reached",
+                    timeout.as_secs_f64()
+                )));
             }
             hint::spin_loop();
         }
@@ -2354,10 +2354,10 @@ impl UChild {
             if start.elapsed() < timeout {
                 self.delay(10);
             } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("kill: Timeout of '{}s' reached", timeout.as_secs_f64()),
-                ));
+                return Err(io::Error::other(format!(
+                    "kill: Timeout of '{}s' reached",
+                    timeout.as_secs_f64()
+                )));
             }
             hint::spin_loop();
         }
@@ -2446,10 +2446,10 @@ impl UChild {
                     handle.join().unwrap().unwrap();
                     result
                 }
-                Err(RecvTimeoutError::Timeout) => Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("wait: Timeout of '{}s' reached", timeout.as_secs_f64()),
-                )),
+                Err(RecvTimeoutError::Timeout) => Err(io::Error::other(format!(
+                    "wait: Timeout of '{}s' reached",
+                    timeout.as_secs_f64()
+                ))),
                 Err(RecvTimeoutError::Disconnected) => {
                     handle.join().expect("Panic caused disconnect").unwrap();
                     panic!("Error receiving from waiting thread because of unexpected disconnect");
@@ -2691,10 +2691,9 @@ impl UChild {
             .name("pipe_in".to_string())
             .spawn(
                 move || match writer.write_all(&content).and_then(|()| writer.flush()) {
-                    Err(error) if !ignore_stdin_write_error => Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("failed to write to stdin of child: {error}"),
-                    )),
+                    Err(error) if !ignore_stdin_write_error => Err(io::Error::other(format!(
+                        "failed to write to stdin of child: {error}"
+                    ))),
                     Ok(()) | Err(_) => Ok(()),
                 },
             )
@@ -2736,10 +2735,9 @@ impl UChild {
         let mut writer = self.access_stdin_as_writer();
 
         match writer.write_all(&data.into()).and_then(|()| writer.flush()) {
-            Err(error) if !ignore_stdin_write_error => Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("failed to write to stdin of child: {error}"),
-            )),
+            Err(error) if !ignore_stdin_write_error => Err(io::Error::other(format!(
+                "failed to write to stdin of child: {error}"
+            ))),
             Ok(()) | Err(_) => Ok(()),
         }
     }

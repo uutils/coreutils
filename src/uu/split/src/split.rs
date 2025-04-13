@@ -535,10 +535,9 @@ impl Settings {
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
         if platform::paths_refer_to_same_file(&self.input, filename) {
-            return Err(io::Error::new(
-                ErrorKind::Other,
-                format!("'{filename}' would overwrite input; aborting"),
-            ));
+            return Err(io::Error::other(format!(
+                "'{filename}' would overwrite input; aborting"
+            )));
         }
 
         platform::instantiate_current_writer(self.filter.as_deref(), filename, is_new)
@@ -638,10 +637,9 @@ where
     } else if input == "-" {
         // STDIN stream that did not fit all content into a buffer
         // Most likely continuous/infinite input stream
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            format!("{input}: cannot determine input size"),
-        ));
+        return Err(io::Error::other(format!(
+            "{input}: cannot determine input size"
+        )));
     } else {
         // Could be that file size is larger than set read limit
         // Get the file size from filesystem metadata
@@ -664,10 +662,9 @@ where
                 // Give up and return an error
                 // TODO It might be possible to do more here
                 // to address all possible file types and edge cases
-                return Err(io::Error::new(
-                    ErrorKind::Other,
-                    format!("{input}: cannot determine file size"),
-                ));
+                return Err(io::Error::other(format!(
+                    "{input}: cannot determine file size"
+                )));
             }
         }
     }
@@ -750,9 +747,10 @@ impl Write for ByteChunkWriter<'_> {
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size;
 
                 // Allocate the new file, since at this point we know there are bytes to be written to it.
-                let filename = self.filename_iterator.next().ok_or_else(|| {
-                    io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
-                })?;
+                let filename = self
+                    .filename_iterator
+                    .next()
+                    .ok_or_else(|| io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
@@ -871,9 +869,10 @@ impl Write for LineChunkWriter<'_> {
             // corresponding writer.
             if self.num_lines_remaining_in_current_chunk == 0 {
                 self.num_chunks_written += 1;
-                let filename = self.filename_iterator.next().ok_or_else(|| {
-                    io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
-                })?;
+                let filename = self
+                    .filename_iterator
+                    .next()
+                    .ok_or_else(|| io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
@@ -948,7 +947,7 @@ impl ManageOutFiles for OutFiles {
         // This object is responsible for creating the filename for each chunk
         let mut filename_iterator: FilenameIterator<'_> =
             FilenameIterator::new(&settings.prefix, &settings.suffix)
-                .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
+                .map_err(|e| io::Error::other(format!("{e}")))?;
         let mut out_files: Self = Self::new();
         for _ in 0..num_files {
             let filename = filename_iterator
