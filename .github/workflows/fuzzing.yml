@@ -36,7 +36,7 @@ jobs:
 
   fuzz-run:
     needs: fuzz-build
-    name: Run the fuzzers
+    name: Fuzz
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
