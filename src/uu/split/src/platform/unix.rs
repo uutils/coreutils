@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use std::env;
 use std::io::Write;
-use std::io::{BufWriter, Error, ErrorKind, Result};
+use std::io::{BufWriter, Error, Result};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use uucore::error::USimpleError;
@@ -134,22 +134,14 @@ pub fn instantiate_current_writer(
                     .create(true)
                     .truncate(true)
                     .open(Path::new(&filename))
-                    .map_err(|_| {
-                        Error::new(
-                            ErrorKind::Other,
-                            format!("unable to open '{filename}'; aborting"),
-                        )
-                    })?
+                    .map_err(|_| Error::other(format!("unable to open '{filename}'; aborting")))?
             } else {
                 // re-open file that we previously created to append to it
                 std::fs::OpenOptions::new()
                     .append(true)
                     .open(Path::new(&filename))
                     .map_err(|_| {
-                        Error::new(
-                            ErrorKind::Other,
-                            format!("unable to re-open '{filename}'; aborting"),
-                        )
+                        Error::other(format!("unable to re-open '{filename}'; aborting"))
                     })?
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
