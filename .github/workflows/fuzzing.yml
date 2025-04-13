@@ -48,7 +48,7 @@ jobs:
           # https://github.com/uutils/coreutils/issues/5311
           - { name: fuzz_date, should_pass: false }
           - { name: fuzz_expr, should_pass: true }
-          - { name: fuzz_printf, should_pass: false }
+          - { name: fuzz_printf, should_pass: true }
           - { name: fuzz_echo, should_pass: true }
           - { name: fuzz_seq, should_pass: false }
           - { name: fuzz_sort, should_pass: false }
