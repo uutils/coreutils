@@ -369,6 +369,11 @@ pub fn uu_app() -> Command {
 /// - `-c`/`--no-create` was passed (`opts.no_create`)
 /// - Either `-h`/`--no-dereference` was passed (`opts.no_deref`) or the file couldn't be created
 pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
+    // Ideally, we would like to parse the date string in such a way that we still know whether it is logically "now".
+    // However, that would require re-implementing a lot of logic from scratch.
+    // Instead, we measure the time immediately before and after the times are computed, and use that to make an educated guess.
+    // TODO: Rewrite *all* the date-parsing logic.
+    let time_before_now = FileTime::now();
     let (atime, mtime) = match &opts.source {
         Source::Reference(reference) => {
             let (atime, mtime) = stat(reference, !opts.no_deref)
@@ -382,7 +387,6 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
         }
         &Source::Timestamp(ts) => (ts, ts),
     };
-
     let (atime, mtime) = if let Some(date) = &opts.date {
         (
             parse_date(
@@ -397,18 +401,30 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     } else {
         (atime, mtime)
     };
+    let time_after_now = FileTime::now();
+    let special_syscall_for_touch_now = opts.change_times == ChangeTimes::Both
+        && (time_before_now <= atime)
+        && (atime <= time_after_now)
+        && (time_before_now <= mtime)
+        && (mtime <= time_after_now);
 
     for (ind, file) in files.iter().enumerate() {
         let (path, is_stdout) = match file {
             InputFile::Stdout => (Cow::Owned(pathbuf_from_stdout()?), true),
             InputFile::Path(path) => (Cow::Borrowed(path), false),
         };
-        touch_file(&path, is_stdout, opts, atime, mtime).map_err(|e| {
-            TouchError::TouchFileError {
-                path: path.into_owned(),
-                index: ind,
-                error: e,
-            }
+        touch_file(
+            &path,
+            is_stdout,
+            special_syscall_for_touch_now,
+            opts,
+            atime,
+            mtime,
+        )
+        .map_err(|e| TouchError::TouchFileError {
+            path: path.into_owned(),
+            index: ind,
+            error: e,
         })?;
     }
 
@@ -426,6 +442,7 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
 fn touch_file(
     path: &Path,
     is_stdout: bool,
+    special_syscall_for_touch_now: bool,
     opts: &Options,
     atime: FileTime,
     mtime: FileTime,
@@ -496,7 +513,14 @@ fn touch_file(
         }
     }
 
-    update_times(path, is_stdout, opts, atime, mtime)
+    update_times(
+        path,
+        is_stdout,
+        special_syscall_for_touch_now,
+        opts,
+        atime,
+        mtime,
+    )
 }
 
 /// Returns which of the times (access, modification) are to be changed.
@@ -536,6 +560,7 @@ fn determine_atime_mtime_change(matches: &ArgMatches) -> ChangeTimes {
 fn update_times(
     path: &Path,
     is_stdout: bool,
+    _special_syscall_for_touch_now: bool,
     opts: &Options,
     atime: FileTime,
     mtime: FileTime,
@@ -561,8 +586,10 @@ fn update_times(
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
     if opts.no_deref && !is_stdout {
+        // TODO: exploit 'special_syscall_for_touch_now' if possible
         set_symlink_file_times(path, atime, mtime)
     } else {
+        // TODO: exploit 'special_syscall_for_touch_now' if possible
         set_file_times(path, atime, mtime)
     }
     .map_err_context(|| format!("setting times of {}", path.quote()))
