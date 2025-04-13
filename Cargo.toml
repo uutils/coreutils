@@ -50,6 +50,7 @@ feat_selinux = [
   "cp/selinux",
   "id/selinux",
   "ls/selinux",
+  "mkdir/selinux",
   "selinux",
   "feat_require_selinux",
 ]

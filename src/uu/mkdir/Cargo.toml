@@ -21,6 +21,8 @@ path = "src/mkdir.rs"
 clap = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
 
+[features]
+selinux = ["uucore/selinux"]
 
 [[bin]]
 name = "mkdir"
