@@ -8,6 +8,9 @@
 
 pub mod error;
 
+#[cfg(feature = "special_syscall_touch_now")]
+mod now_other_user;
+
 use chrono::{
     DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime,
     TimeZone, Timelike,
@@ -560,7 +563,7 @@ fn determine_atime_mtime_change(matches: &ArgMatches) -> ChangeTimes {
 fn update_times(
     path: &Path,
     is_stdout: bool,
-    _special_syscall_for_touch_now: bool,
+    special_syscall_for_touch_now: bool,
     opts: &Options,
     atime: FileTime,
     mtime: FileTime,
@@ -586,13 +589,59 @@ fn update_times(
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
     if opts.no_deref && !is_stdout {
-        // TODO: exploit 'special_syscall_for_touch_now' if possible
-        set_symlink_file_times(path, atime, mtime)
+        set_symlink_file_times_helper(special_syscall_for_touch_now, path, atime, mtime)
     } else {
-        // TODO: exploit 'special_syscall_for_touch_now' if possible
-        set_file_times(path, atime, mtime)
+        set_file_times_helper(special_syscall_for_touch_now, path, atime, mtime)
     }
     .map_err_context(|| format!("setting times of {}", path.quote()))
+}
+
+#[cfg(feature = "special_syscall_touch_now")]
+fn set_symlink_file_times_helper(
+    special_syscall_for_touch_now: bool,
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+) -> std::io::Result<()> {
+    if special_syscall_for_touch_now {
+        now_other_user::set_symlink_file_times_now(path)
+    } else {
+        set_symlink_file_times(path, atime, mtime)
+    }
+}
+
+#[cfg(not(feature = "special_syscall_touch_now"))]
+fn set_symlink_file_times_helper(
+    _special_syscall_for_touch_now: bool,
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+) -> std::io::Result<()> {
+    set_symlink_file_times(path, atime, mtime)
+}
+
+#[cfg(feature = "special_syscall_touch_now")]
+fn set_file_times_helper(
+    special_syscall_for_touch_now: bool,
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+) -> std::io::Result<()> {
+    if special_syscall_for_touch_now {
+        now_other_user::set_file_times_now(path)
+    } else {
+        set_file_times(path, atime, mtime)
+    }
+}
+
+#[cfg(not(feature = "special_syscall_touch_now"))]
+fn set_file_times_helper(
+    _special_syscall_for_touch_now: bool,
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+) -> std::io::Result<()> {
+    set_file_times(path, atime, mtime)
 }
 
 /// Get metadata of the provided path

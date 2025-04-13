@@ -261,6 +261,7 @@ feat_os_windows_legacy = [
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
 test = ["uu_test"]
+feat_special_syscall_touch_now = ["touch/special_syscall_touch_now"]
 
 [workspace.package]
 authors = ["uutils developers"]

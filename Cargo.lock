@@ -3403,6 +3403,7 @@ dependencies = [
  "chrono",
  "clap",
  "filetime",
+ "libc",
  "parse_datetime",
  "thiserror 2.0.12",
  "uucore",

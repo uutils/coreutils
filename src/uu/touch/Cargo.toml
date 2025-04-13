@@ -22,9 +22,13 @@ path = "src/touch.rs"
 filetime = { workspace = true }
 clap = { workspace = true }
 chrono = { workspace = true }
+libc = { workspace = true, optional = true }
 parse_datetime = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["libc", "parser"] }
+
+[features]
+special_syscall_touch_now = ["libc"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [

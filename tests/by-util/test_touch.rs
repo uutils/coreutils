@@ -2,17 +2,24 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
+// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime dyesterday
 
 use filetime::FileTime;
 #[cfg(not(target_os = "freebsd"))]
 use filetime::set_symlink_file_times;
 use std::fs::remove_file;
+#[cfg(unix)]
+use std::path::Path;
 use std::path::PathBuf;
+#[cfg(unix)]
+use uucore::process::geteuid;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::{AtPath, TestScenario};
 use uutests::util_name;
+
+#[cfg(unix)]
+const EXISTING_OTHER_USER_SYMLINK_FILE: &str = "/dev/stderr";
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.metadata(path);
@@ -1005,4 +1012,77 @@ fn test_obsolete_posix_format_with_year() {
         .no_output();
     assert!(at.file_exists("11111111"));
     assert!(!at.file_exists("0101000090"));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_touch_other_user_different_time_fails() {
+    if geteuid() == 0 {
+        new_ucmd!()
+            .args(&["-dyesterday", "/dev/null"])
+            .fails()
+            .code_is(1)
+            .stderr_only("touch: setting times of '/dev/null': Permission denied\n");
+    }
+}
+
+#[cfg(all(unix, not(feature = "feat_special_syscall_touch_now")))]
+#[test]
+fn test_touch_other_user_special_syscall_needed() {
+    if geteuid() == 0 {
+        new_ucmd!()
+            .args(&["/dev/null"])
+            .fails()
+            .code_is(1)
+            .stderr_only("touch: setting times of '/dev/null': Permission denied\n");
+    }
+}
+
+#[cfg(all(unix, feature = "feat_special_syscall_touch_now"))]
+#[test]
+fn test_touch_other_user_special_syscall_works() {
+    new_ucmd!().arg("/dev/null").succeeds().no_output();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_touch_other_user_symlink_different_time_fails() {
+    if geteuid() == 0 {
+        // Abuse `AtPath` to test common assumption:
+        let at = AtPath::new(Path::new("/"));
+        assert!(
+            at.symlink_exists(EXISTING_OTHER_USER_SYMLINK_FILE),
+            "This test only makes sense if {EXISTING_OTHER_USER_SYMLINK_FILE} is an existing symlink owned by a different user."
+        );
+        new_ucmd!()
+            .args(&["-h", "-dyesterday", EXISTING_OTHER_USER_SYMLINK_FILE])
+            .fails()
+            .code_is(1)
+            .stderr_only(format!(
+                "touch: setting times of '{EXISTING_OTHER_USER_SYMLINK_FILE}': Permission denied\n"
+            ));
+    }
+}
+
+#[cfg(all(unix, not(feature = "feat_special_syscall_touch_now")))]
+#[test]
+fn test_touch_other_user_symlink_special_syscall_needed() {
+    if geteuid() == 0 {
+        new_ucmd!()
+            .args(&["-h", EXISTING_OTHER_USER_SYMLINK_FILE])
+            .fails()
+            .code_is(1)
+            .stderr_only(format!(
+                "touch: setting times of '{EXISTING_OTHER_USER_SYMLINK_FILE}': Permission denied\n"
+            ));
+    }
+}
+
+#[cfg(all(unix, feature = "feat_special_syscall_touch_now"))]
+#[test]
+fn test_touch_other_user_symlink_special_syscall_works() {
+    new_ucmd!()
+        .args(&["-h", EXISTING_OTHER_USER_SYMLINK_FILE])
+        .succeeds()
+        .no_output();
 }
