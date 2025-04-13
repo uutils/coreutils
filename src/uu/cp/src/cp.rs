@@ -2304,7 +2304,7 @@ fn copy_file(
         }
         handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
         if are_hardlinks_to_same_file(source, dest) {
-            if options.copy_mode == CopyMode::Copy && options.backup != BackupMode::NoBackup {
+            if options.copy_mode == CopyMode::Copy {
                 return Ok(());
             }
             if options.copy_mode == CopyMode::Link && (!source_is_symlink || !dest_is_symlink) {

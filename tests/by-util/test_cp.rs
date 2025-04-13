@@ -4675,6 +4675,7 @@ fn test_cp_no_dereference_attributes_only_with_symlink() {
 /// contains the test for cp when the source and destination points to the same file
 mod same_file {
 
+    use std::os::unix::fs::MetadataExt;
     use uutests::util::TestScenario;
     use uutests::util_name;
 
@@ -5593,6 +5594,26 @@ mod same_file {
         assert_eq!(hardlink_to_symlink, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
         assert_eq!(at.read(FILE_NAME), CONTENTS);
+    }
+
+    #[test]
+    fn test_hardlink_of_symlink_to_hardlink_of_same_symlink_with_option_no_deref() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let hardlink1 = "hardlink_to_symlink_1";
+        let hardlink2 = "hardlink_to_symlink_2";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        at.hard_link(SYMLINK_NAME, hardlink1);
+        at.hard_link(SYMLINK_NAME, hardlink2);
+        let ino = at.symlink_metadata(hardlink1).ino();
+        assert_eq!(ino, at.symlink_metadata(hardlink2).ino()); // Sanity check
+        scene.ucmd().args(&["-P", hardlink1, hardlink2]).succeeds();
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.symlink_exists(SYMLINK_NAME));
+        // If hardlink a and b point to the same symlink, then cp a b doesn't create a new file
+        assert_eq!(ino, at.symlink_metadata(hardlink1).ino());
+        assert_eq!(ino, at.symlink_metadata(hardlink2).ino());
     }
 }
 
