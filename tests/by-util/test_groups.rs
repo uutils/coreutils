@@ -7,7 +7,7 @@
 
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
-use uutests::util::{TestScenario, check_coreutil_version, expected_result, whoami};
+use uutests::util::{TestScenario, check_program_version, expected_result, whoami};
 use uutests::util_name;
 
 const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced in GNU's coreutils 8.31
@@ -49,7 +49,7 @@ fn test_groups_username() {
 #[test]
 #[cfg(unix)]
 fn test_groups_username_multiple() {
-    unwrap_or_return!(check_coreutil_version(
+    unwrap_or_return!(check_program_version(
         util_name!(),
         VERSION_MIN_MULTIPLE_USERS
     ));

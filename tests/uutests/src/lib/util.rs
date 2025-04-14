@@ -2857,7 +2857,7 @@ const UUTILS_INFO: &str = "uutils-tests-info";
 ///
 /// #[test]
 /// fn test_xyz() {
-///     unwrap_or_return!(check_coreutil_version(
+///     unwrap_or_return!(check_program_version(
 ///         util_name!(),
 ///         VERSION_MIN_MULTIPLE_USERS
 ///     ));
@@ -2865,7 +2865,7 @@ const UUTILS_INFO: &str = "uutils-tests-info";
 /// }
 /// ```
 #[cfg(unix)]
-pub fn check_coreutil_version(
+pub fn check_program_version(
     util_name: &str,
     version_expected: &str,
 ) -> std::result::Result<String, String> {
@@ -2943,7 +2943,7 @@ fn parse_coreutil_version(version_string: &str) -> f32 {
 #[cfg(unix)]
 pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
     let util_name = ts.util_name.as_str();
-    println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
+    println!("{}", check_program_version(util_name, VERSION_MIN)?);
     let util_name = host_name_for(util_name);
 
     let result = ts
@@ -3312,14 +3312,14 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
-    fn test_check_coreutil_version() {
-        match check_coreutil_version("id", VERSION_MIN) {
+    fn test_check_program_version() {
+        match check_program_version("id", VERSION_MIN) {
             Ok(s) => assert!(s.starts_with("uutils-tests-")),
             Err(s) => assert!(s.starts_with("uutils-tests-warning")),
         };
         #[cfg(target_os = "linux")]
         std::assert_eq!(
-            check_coreutil_version("no test name", VERSION_MIN),
+            check_program_version("no test name", VERSION_MIN),
             Err("uutils-tests-warning: 'no test name' \
             No such file or directory (os error 2)"
                 .to_string())

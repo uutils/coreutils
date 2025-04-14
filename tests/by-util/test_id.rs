@@ -7,7 +7,7 @@
 
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
-use uutests::util::{TestScenario, check_coreutil_version, expected_result, is_ci, whoami};
+use uutests::util::{TestScenario, check_program_version, expected_result, is_ci, whoami};
 use uutests::util_name;
 
 const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced in GNU's coreutils 8.31
@@ -179,7 +179,7 @@ fn test_id_password_style() {
 #[test]
 #[cfg(unix)]
 fn test_id_multiple_users() {
-    unwrap_or_return!(check_coreutil_version(
+    unwrap_or_return!(check_program_version(
         util_name!(),
         VERSION_MIN_MULTIPLE_USERS
     ));
@@ -237,7 +237,7 @@ fn test_id_multiple_users() {
 #[test]
 #[cfg(unix)]
 fn test_id_multiple_users_non_existing() {
-    unwrap_or_return!(check_coreutil_version(
+    unwrap_or_return!(check_program_version(
         util_name!(),
         VERSION_MIN_MULTIPLE_USERS
     ));
