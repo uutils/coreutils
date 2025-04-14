@@ -126,13 +126,19 @@ impl Parser {
         Self::default()
     }
 
-    pub(crate) fn parse(self, operands: &[&str]) -> Result<Settings, ParseError> {
+    pub(crate) fn parse(
+        self,
+        operands: impl IntoIterator<Item: AsRef<str>>,
+    ) -> Result<Settings, ParseError> {
         self.read(operands)?.validate()
     }
 
-    pub(crate) fn read(mut self, operands: &[&str]) -> Result<Self, ParseError> {
+    pub(crate) fn read(
+        mut self,
+        operands: impl IntoIterator<Item: AsRef<str>>,
+    ) -> Result<Self, ParseError> {
         for operand in operands {
-            self.parse_operand(operand)?;
+            self.parse_operand(operand.as_ref())?;
         }
 
         Ok(self)
