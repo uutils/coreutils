@@ -1965,7 +1965,6 @@ fn test_follow_name_truncate3() {
         .stdout_only(expected_stdout);
 }
 
-
 #[test]
 #[cfg(all(
     not(target_os = "apple"),
