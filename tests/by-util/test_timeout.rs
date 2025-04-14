@@ -77,7 +77,7 @@ fn test_command_empty_args() {
     new_ucmd!()
         .args(&["", ""])
         .fails()
-        .stderr_contains("timeout: empty string");
+        .stderr_contains("timeout: invalid time interval ''");
 }
 
 #[test]
