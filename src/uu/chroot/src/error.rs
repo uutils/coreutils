@@ -34,10 +34,6 @@ pub enum ChrootError {
     #[error("invalid group list: {list}", list = .0.quote())]
     InvalidGroupList(String),
 
-    /// The given user and group specification was invalid.
-    #[error("invalid userspec: {spec}", spec = .0.quote())]
-    InvalidUserspec(String),
-
     /// The new root directory was not given.
     #[error(
         "Missing operand: NEWROOT\nTry '{0} --help' for more information.",

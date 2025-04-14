@@ -53,8 +53,8 @@ struct Options {
 ///
 /// The `spec` must be of the form `[USER][:[GROUP]]`, otherwise an
 /// error is returned.
-fn parse_userspec(spec: &str) -> UResult<UserSpec> {
-    Ok(match spec.split_once(':') {
+fn parse_userspec(spec: &str) -> UserSpec {
+    match spec.split_once(':') {
         // ""
         None if spec.is_empty() => UserSpec::NeitherGroupNorUser,
         // "usr"
@@ -67,10 +67,7 @@ fn parse_userspec(spec: &str) -> UResult<UserSpec> {
         Some((usr, "")) => UserSpec::UserOnly(usr.to_string()),
         // "usr:grp"
         Some((usr, grp)) => UserSpec::UserAndGroup(usr.to_string(), grp.to_string()),
-        // BUG: this would never be reached. Should we check for another ':', or some invalid characters?
-        // everything else
-        // _ => Err(ChrootError::InvalidUserspec(spec.to_string()).into()),
-    })
+    }
 }
 
 // Pre-condition: `list_str` is non-empty.
@@ -145,10 +142,9 @@ impl Options {
             }
         };
         let skip_chdir = matches.get_flag(options::SKIP_CHDIR);
-        let userspec = match matches.get_one::<String>(options::USERSPEC) {
-            None => None,
-            Some(s) => Some(parse_userspec(s)?),
-        };
+        let userspec = matches
+            .get_one::<String>(options::USERSPEC)
+            .map(|s| parse_userspec(s));
         Ok(Self {
             newroot,
             skip_chdir,
