@@ -4376,8 +4376,6 @@ fn test_tabsize_formatting() {
     at.touch("cccc");
     at.touch("dddddddd");
 
-    // Need additional options to simulate columns output.
-
     scene
         .ucmd()
         .args(&["-x", "-w18", "-T4"])
@@ -4386,9 +4384,27 @@ fn test_tabsize_formatting() {
 
     scene
         .ucmd()
+        .args(&["-C", "-w18", "-T4"])
+        .succeeds()
+        .stdout_is("aaaaaaaa  cccc\nbbbb\t  dddddddd\n");
+
+    scene
+        .ucmd()
+        .args(&["-x", "-w18", "-T2"])
+        .succeeds()
+        .stdout_is("aaaaaaaa\tbbbb\ncccc\t\t\tdddddddd\n");
+
+    scene
+        .ucmd()
         .args(&["-C", "-w18", "-T2"])
         .succeeds()
         .stdout_is("aaaaaaaa\tcccc\nbbbb\t\t\tdddddddd\n");
+
+    scene
+        .ucmd()
+        .args(&["-x", "-w18", "-T0"])
+        .succeeds()
+        .stdout_is("aaaaaaaa  bbbb\ncccc      dddddddd\n");
 
     // use spaces
     scene
