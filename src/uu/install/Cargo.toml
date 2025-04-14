@@ -2,9 +2,9 @@
 name = "uu_install"
 description = "install ~ (uutils) copy files from SOURCE to DESTINATION (with specified attributes)"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/install"
-authors = ["Ben Eills <ben@beneills.com>", "uutils developers"]
-license.workspace = true
 version.workspace = true
+authors.workspace = true
+license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true

@@ -29,6 +29,26 @@ mod options {
     pub const PARENTS: &str = "parents";
     pub const VERBOSE: &str = "verbose";
     pub const DIRS: &str = "dirs";
+    pub const SELINUX: &str = "z";
+    pub const CONTEXT: &str = "context";
+}
+
+/// Configuration for directory creation.
+pub struct Config<'a> {
+    /// Create parent directories as needed.
+    pub recursive: bool,
+
+    /// File permissions (octal).
+    pub mode: u32,
+
+    /// Print message for each created directory.
+    pub verbose: bool,
+
+    /// Set SELinux security context.
+    pub set_selinux_context: bool,
+
+    /// Specific SELinux context.
+    pub context: Option<&'a String>,
 }
 
 #[cfg(windows)]
@@ -91,8 +111,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let verbose = matches.get_flag(options::VERBOSE);
     let recursive = matches.get_flag(options::PARENTS);
 
+    // Extract the SELinux related flags and options
+    let set_selinux_context = matches.get_flag(options::SELINUX);
+    let context = matches.get_one::<String>(options::CONTEXT);
+
     match get_mode(&matches, mode_had_minus_prefix) {
-        Ok(mode) => exec(dirs, recursive, mode, verbose),
+        Ok(mode) => {
+            let config = Config {
+                recursive,
+                mode,
+                verbose,
+                set_selinux_context: set_selinux_context || context.is_some(),
+                context,
+            };
+            exec(dirs, &config)
+        }
         Err(f) => Err(USimpleError::new(1, f)),
     }
 }
@@ -125,6 +158,15 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(options::SELINUX)
+                .short('Z')
+                .help("set SELinux security context of each created directory to the default type")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(Arg::new(options::CONTEXT).long(options::CONTEXT).value_name("CTX").help(
+            "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX",
+        ))
+        .arg(
             Arg::new(options::DIRS)
                 .action(ArgAction::Append)
                 .num_args(1..)
@@ -137,12 +179,12 @@ pub fn uu_app() -> Command {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+fn exec(dirs: ValuesRef<OsString>, config: &Config) -> UResult<()> {
     for dir in dirs {
         let path_buf = PathBuf::from(dir);
         let path = path_buf.as_path();
 
-        show_if_err!(mkdir(path, recursive, mode, verbose));
+        show_if_err!(mkdir(path, config));
     }
     Ok(())
 }
@@ -160,7 +202,7 @@ fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) ->
 ///
 /// To match the GNU behavior, a path with the last directory being a single dot
 /// (like `some/path/to/.`) is created (with the dot stripped).
-pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
     if path.as_os_str().is_empty() {
         return Err(USimpleError::new(
             1,
@@ -173,7 +215,7 @@ pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<
     // std::fs::create_dir("foo/."); fails in pure Rust
     let path_buf = dir_strip_dot_for_creation(path);
     let path = path_buf.as_path();
-    create_dir(path, recursive, verbose, false, mode)
+    create_dir(path, false, config)
 }
 
 #[cfg(any(unix, target_os = "redox"))]
@@ -194,15 +236,9 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
 // Return true if the directory at `path` has been created by this call.
 // `is_parent` argument is not used on windows
 #[allow(unused_variables)]
-fn create_dir(
-    path: &Path,
-    recursive: bool,
-    verbose: bool,
-    is_parent: bool,
-    mode: u32,
-) -> UResult<()> {
+fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     let path_exists = path.exists();
-    if path_exists && !recursive {
+    if path_exists && !config.recursive {
         return Err(USimpleError::new(
             1,
             format!("{}: File exists", path.display()),
@@ -212,9 +248,9 @@ fn create_dir(
         return Ok(());
     }
 
-    if recursive {
+    if config.recursive {
         match path.parent() {
-            Some(p) => create_dir(p, recursive, verbose, true, mode)?,
+            Some(p) => create_dir(p, true, config)?,
             None => {
                 USimpleError::new(1, "failed to create whole tree");
             }
@@ -223,7 +259,7 @@ fn create_dir(
 
     match std::fs::create_dir(path) {
         Ok(()) => {
-            if verbose {
+            if config.verbose {
                 println!(
                     "{}: created directory {}",
                     uucore::util_name(),
@@ -233,7 +269,7 @@ fn create_dir(
 
             #[cfg(all(unix, target_os = "linux"))]
             let new_mode = if path_exists {
-                mode
+                config.mode
             } else {
                 // TODO: Make this macos and freebsd compatible by creating a function to get permission bits from
                 // acl in extended attributes
@@ -242,19 +278,33 @@ fn create_dir(
                 if is_parent {
                     (!mode::get_umask() & 0o777) | 0o300 | acl_perm_bits
                 } else {
-                    mode | acl_perm_bits
+                    config.mode | acl_perm_bits
                 }
             };
             #[cfg(all(unix, not(target_os = "linux")))]
             let new_mode = if is_parent {
                 (!mode::get_umask() & 0o777) | 0o300
             } else {
-                mode
+                config.mode
             };
             #[cfg(windows)]
-            let new_mode = mode;
+            let new_mode = config.mode;
 
             chmod(path, new_mode)?;
+
+            // Apply SELinux context if requested
+            #[cfg(feature = "selinux")]
+            if config.set_selinux_context && uucore::selinux::check_selinux_enabled().is_ok() {
+                if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
+                {
+                    let _ = std::fs::remove_dir(path);
+                    return Err(USimpleError::new(
+                        1,
+                        format!("failed to set SELinux security context: {}", e),
+                    ));
+                }
+            }
+
             Ok(())
         }
 

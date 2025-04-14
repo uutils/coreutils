@@ -50,6 +50,7 @@ feat_selinux = [
   "cp/selinux",
   "id/selinux",
   "ls/selinux",
+  "mkdir/selinux",
   "selinux",
   "feat_require_selinux",
 ]
@@ -174,6 +175,7 @@ feat_os_unix_gnueabihf = [
 feat_os_unix_musl = [
   "feat_Tier1",
   #
+  "feat_require_crate_cpp",
   "feat_require_unix",
   "feat_require_unix_hostid",
 ]
@@ -599,3 +601,11 @@ unused_qualifications = "warn"
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 #cargo = { level = "warn", priority = -1 }
+cognitive_complexity = "warn"
+default_trait_access = "warn"
+implicit_clone = "warn"
+manual_string_new = "warn"
+match_bool = "warn"
+range-plus-one = "warn"
+redundant-clone = "warn"
+ref_option = "warn"

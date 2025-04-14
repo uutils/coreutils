@@ -113,6 +113,26 @@ fn escaped_unicode_null_byte() {
 }
 
 #[test]
+fn escaped_unicode_incomplete() {
+    for arg in ["\\u", "\\U", "\\uabc", "\\Uabcd"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_only("printf: missing hexadecimal number in escape\n");
+    }
+}
+
+#[test]
+fn escaped_unicode_invalid() {
+    for arg in ["\\ud9d0", "\\U0000D8F9"] {
+        new_ucmd!().arg(arg).fails_with_code(1).stderr_only(format!(
+            "printf: invalid universal character name {}\n",
+            arg
+        ));
+    }
+}
+
+#[test]
 fn escaped_percent_sign() {
     new_ucmd!()
         .args(&["hello%% world"])
@@ -223,6 +243,11 @@ fn sub_q_string_special_non_printable() {
 }
 
 #[test]
+fn sub_q_string_empty() {
+    new_ucmd!().args(&["%q", ""]).succeeds().stdout_only("''");
+}
+
+#[test]
 fn sub_char() {
     new_ucmd!()
         .args(&["the letter %c", "A"])
@@ -315,6 +340,16 @@ fn sub_num_int_char_const_in() {
         .args(&["emoji is %i", "\"🙃"])
         .succeeds()
         .stdout_only("emoji is 128579");
+}
+
+#[test]
+fn sub_num_thousands() {
+    // For "C" locale, the thousands separator is ignored but should
+    // not result in an error
+    new_ucmd!()
+        .args(&["%'i", "123456"])
+        .succeeds()
+        .stdout_only("123456");
 }
 
 #[test]

@@ -204,7 +204,7 @@ impl Sequence {
         if translating
             && set2.iter().any(|&x| {
                 matches!(x, Self::Class(_))
-                    && !matches!(x, Self::Class(Class::Upper) | Self::Class(Class::Lower))
+                    && !matches!(x, Self::Class(Class::Upper | Class::Lower))
             })
         {
             return Err(BadSequence::ClassExceptLowerUpperInSet2);
@@ -290,7 +290,7 @@ impl Sequence {
             && !truncate_set1_flag
             && matches!(
                 set2.last().copied(),
-                Some(Self::Class(Class::Upper)) | Some(Self::Class(Class::Lower))
+                Some(Self::Class(Class::Upper | Class::Lower))
             )
         {
             return Err(BadSequence::Set1LongerSet2EndsInClass);

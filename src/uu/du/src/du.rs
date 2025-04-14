@@ -580,20 +580,18 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
         // First, check if the file_name is a directory
         let path = PathBuf::from(file_name);
         if path.is_dir() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("{file_name}: read error: Is a directory"),
-            ));
+            return Err(std::io::Error::other(format!(
+                "{file_name}: read error: Is a directory"
+            )));
         }
 
         // Attempt to open the file and handle the error if it does not exist
         match File::open(file_name) {
             Ok(file) => Box::new(BufReader::new(file)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("cannot open '{file_name}' for reading: No such file or directory"),
-                ));
+                return Err(std::io::Error::other(format!(
+                    "cannot open '{file_name}' for reading: No such file or directory"
+                )));
             }
             Err(e) => return Err(e),
         }
@@ -637,13 +635,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let files = if let Some(file_from) = matches.get_one::<String>(options::FILES0_FROM) {
         if file_from == "-" && matches.get_one::<String>(options::FILE).is_some() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "extra operand {}\nfile operands cannot be combined with --files0-from",
-                    matches.get_one::<String>(options::FILE).unwrap().quote()
-                ),
-            )
+            return Err(std::io::Error::other(format!(
+                "extra operand {}\nfile operands cannot be combined with --files0-from",
+                matches.get_one::<String>(options::FILE).unwrap().quote()
+            ))
             .into());
         }
 
@@ -683,11 +678,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if matches.get_flag(options::BLOCK_SIZE_1M) {
         SizeFormat::BlockSize(1024 * 1024)
     } else {
-        SizeFormat::BlockSize(read_block_size(
-            matches
-                .get_one::<String>(options::BLOCK_SIZE)
-                .map(AsRef::as_ref),
-        )?)
+        let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
+        let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
+        if block_size == 0 {
+            return Err(std::io::Error::other(format!(
+                "invalid --{} argument {}",
+                options::BLOCK_SIZE,
+                block_size_str.map_or("???BUG", |v| v).quote()
+            ))
+            .into());
+        }
+        SizeFormat::BlockSize(block_size)
     };
 
     let traversal_options = TraversalOptions {

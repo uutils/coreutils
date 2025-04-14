@@ -60,7 +60,7 @@ fi
 
 ###
 
-release_tag_GNU="v9.6"
+release_tag_GNU="v9.7"
 
 if test ! -d "${path_GNU}"; then
     echo "Could not find GNU coreutils (expected at '${path_GNU}')"

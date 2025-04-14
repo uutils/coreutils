@@ -191,16 +191,10 @@ fn arg_iterate<'a>(
         if let Some(s) = second.to_str() {
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(HeadError::ParseError(format!(
-                        "bad argument format: {}",
-                        s.quote()
-                    ))),
-                    parse::ParseError::Overflow => Err(HeadError::ParseError(format!(
-                        "invalid argument: {} Value too large for defined datatype",
-                        s.quote()
-                    ))),
-                },
+                Some(Err(parse::ParseError)) => Err(HeadError::ParseError(format!(
+                    "bad argument format: {}",
+                    s.quote()
+                ))),
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
@@ -288,13 +282,7 @@ fn read_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Resu
 }
 
 fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
-    match usize::try_from(n) {
-        Ok(value) => Some(value),
-        Err(e) => {
-            show!(HeadError::NumTooLarge(e));
-            None
-        }
-    }
+    usize::try_from(n).ok()
 }
 
 fn read_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
@@ -668,7 +656,7 @@ mod tests {
         //test that bad obsoletes are an error
         assert!(arg_outputs("head -123FooBar").is_err());
         //test overflow
-        assert!(arg_outputs("head -100000000000000000000000000000000000000000").is_err());
+        assert!(arg_outputs("head -100000000000000000000000000000000000000000").is_ok());
         //test that empty args remain unchanged
         assert_eq!(arg_outputs("head"), Ok("head".to_owned()));
     }

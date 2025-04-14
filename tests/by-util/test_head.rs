@@ -321,24 +321,20 @@ fn test_bad_utf8_lines() {
 fn test_head_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1024R", "emptyfile.txt"])
-        .fails()
-        .stderr_is(
-            "head: invalid number of bytes: '1024R': Value too large for defined data type\n",
-        );
+        .succeeds()
+        .no_output();
     new_ucmd!()
         .args(&["-n", "1024R", "emptyfile.txt"])
-        .fails()
-        .stderr_is(
-            "head: invalid number of lines: '1024R': Value too large for defined data type\n",
-        );
+        .succeeds()
+        .no_output();
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_is("head: invalid number of bytes: '1Y': Value too large for defined data type\n");
+        .succeeds()
+        .no_output();
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_is("head: invalid number of lines: '1Y': Value too large for defined data type\n");
+        .succeeds()
+        .no_output();
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];
@@ -350,10 +346,7 @@ fn test_head_invalid_num() {
     {
         let sizes = ["-1000G", "-10T"];
         for size in &sizes {
-            new_ucmd!()
-                .args(&["-c", size])
-                .fails()
-                .stderr_is("head: out of range integral type conversion attempted: number of -bytes or -lines is too large\n");
+            new_ucmd!().args(&["-c", size]).succeeds().no_output();
         }
     }
     new_ucmd!()
@@ -778,8 +771,7 @@ fn test_value_too_large() {
 
     new_ucmd!()
         .args(&["-n", format!("{MAX}0").as_str(), "lorem_ipsum.txt"])
-        .fails()
-        .stderr_contains("Value too large for defined data type");
+        .succeeds();
 }
 
 #[test]

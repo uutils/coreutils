@@ -867,13 +867,11 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     let modified_time = FileTime::from_last_modification_time(&meta);
     let accessed_time = FileTime::from_last_access_time(&meta);
 
-    match set_file_times(to, accessed_time, modified_time) {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            show_error!("{e}");
-            Ok(())
-        }
+    if let Err(e) = set_file_times(to, accessed_time, modified_time) {
+        show_error!("{e}");
+        // ignore error
     }
+    Ok(())
 }
 
 /// Copy one file to a new location, changing metadata.

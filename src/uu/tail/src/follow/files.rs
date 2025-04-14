@@ -162,12 +162,13 @@ impl FileHandling {
     pub fn needs_header(&self, path: &Path, verbose: bool) -> bool {
         if verbose {
             if let Some(ref last) = self.last {
-                return !last.eq(&path);
+                !last.eq(&path)
             } else {
-                return true;
+                true
             }
+        } else {
+            false
         }
-        false
     }
 }
 

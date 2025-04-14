@@ -428,7 +428,7 @@ fn escape_name_inner(name: &[u8], style: &QuotingStyle, dirname: bool) -> Vec<u8
                 (Quotes::Single, true)
             } else if name.contains(&b'\'') {
                 (Quotes::Double, true)
-            } else if *always_quote {
+            } else if *always_quote || name.is_empty() {
                 (Quotes::Single, true)
             } else {
                 (Quotes::Single, false)
@@ -605,6 +605,25 @@ mod tests {
                 ("'one_two'", "shell-always-show"),
                 ("one_two", "shell-escape"),
                 ("'one_two'", "shell-escape-always"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_empty_string() {
+        check_names(
+            "",
+            &[
+                ("", "literal"),
+                ("", "literal-show"),
+                ("", "escape"),
+                ("\"\"", "c"),
+                ("''", "shell"),
+                ("''", "shell-show"),
+                ("''", "shell-always"),
+                ("''", "shell-always-show"),
+                ("''", "shell-escape"),
+                ("''", "shell-escape-always"),
             ],
         );
     }

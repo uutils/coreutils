@@ -370,7 +370,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}? ", target.quote()) {
-                    return Err(io::Error::new(io::ErrorKind::Other, "").into());
+                    return Err(io::Error::other("").into());
                 }
             }
             OverwriteMode::Force => {}
@@ -609,7 +609,7 @@ fn rename(
 
         if opts.update == UpdateMode::ReplaceNoneFail {
             let err_msg = format!("not replacing {}", to.quote());
-            return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+            return Err(io::Error::other(err_msg));
         }
 
         match opts.overwrite {
@@ -621,7 +621,7 @@ fn rename(
             }
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
-                    return Err(io::Error::new(io::ErrorKind::Other, ""));
+                    return Err(io::Error::other(""));
                 }
             }
             OverwriteMode::Force => {}
@@ -640,7 +640,7 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
+                return Err(io::Error::other("Directory not empty"));
             }
         }
     }
@@ -756,7 +756,7 @@ fn rename_with_fallback(
                         io::ErrorKind::PermissionDenied,
                         "Permission denied",
                     )),
-                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
+                    _ => Err(io::Error::other(format!("{err:?}"))),
                 };
             }
         } else {
@@ -811,8 +811,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
     #[cfg(not(any(windows, unix)))]
     {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             "your operating system does not support symlinks",
         ));
     }

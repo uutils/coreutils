@@ -111,21 +111,18 @@ fn parse_implicit_precision(s: &str) -> usize {
 
 fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     match (s, u) {
-        (Some((raw_suffix, false)), &Unit::Auto) | (Some((raw_suffix, false)), &Unit::Si) => {
-            match raw_suffix {
-                RawSuffix::K => Ok(i * 1e3),
-                RawSuffix::M => Ok(i * 1e6),
-                RawSuffix::G => Ok(i * 1e9),
-                RawSuffix::T => Ok(i * 1e12),
-                RawSuffix::P => Ok(i * 1e15),
-                RawSuffix::E => Ok(i * 1e18),
-                RawSuffix::Z => Ok(i * 1e21),
-                RawSuffix::Y => Ok(i * 1e24),
-            }
-        }
+        (Some((raw_suffix, false)), &Unit::Auto | &Unit::Si) => match raw_suffix {
+            RawSuffix::K => Ok(i * 1e3),
+            RawSuffix::M => Ok(i * 1e6),
+            RawSuffix::G => Ok(i * 1e9),
+            RawSuffix::T => Ok(i * 1e12),
+            RawSuffix::P => Ok(i * 1e15),
+            RawSuffix::E => Ok(i * 1e18),
+            RawSuffix::Z => Ok(i * 1e21),
+            RawSuffix::Y => Ok(i * 1e24),
+        },
         (Some((raw_suffix, false)), &Unit::Iec(false))
-        | (Some((raw_suffix, true)), &Unit::Auto)
-        | (Some((raw_suffix, true)), &Unit::Iec(true)) => match raw_suffix {
+        | (Some((raw_suffix, true)), &Unit::Auto | &Unit::Iec(true)) => match raw_suffix {
             RawSuffix::K => Ok(i * IEC_BASES[1]),
             RawSuffix::M => Ok(i * IEC_BASES[2]),
             RawSuffix::G => Ok(i * IEC_BASES[3]),

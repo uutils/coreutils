@@ -357,24 +357,24 @@ impl Chmoder {
             Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
                 // Handle dangling symlinks or other errors
-                if file.is_symlink() && !self.dereference {
+                return if file.is_symlink() && !self.dereference {
                     if self.verbose {
                         println!(
                             "neither symbolic link {} nor referent has been changed",
                             file.quote()
                         );
                     }
-                    return Ok(()); // Skip dangling symlinks
+                    Ok(()) // Skip dangling symlinks
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
                     // These two filenames would normally be conditionally
                     // quoted, but GNU's tests expect them to always be quoted
-                    return Err(USimpleError::new(
+                    Err(USimpleError::new(
                         1,
                         format!("{}: Permission denied", file.quote()),
-                    ));
+                    ))
                 } else {
-                    return Err(USimpleError::new(1, format!("{}: {err}", file.quote())));
-                }
+                    Err(USimpleError::new(1, format!("{}: {err}", file.quote())))
+                };
             }
         };
 

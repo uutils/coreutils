@@ -82,7 +82,7 @@ fn get_local_to_root_parent(
 /// Given an iterator, return all its items except the last.
 fn skip_last<T>(mut iter: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
     let last = iter.next();
-    iter.scan(last, |state, item| std::mem::replace(state, Some(item)))
+    iter.scan(last, |state, item| state.replace(item))
 }
 
 /// Paths that are invariant throughout the traversal when copying a directory.
@@ -224,7 +224,7 @@ where
 #[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
-    progress_bar: &Option<ProgressBar>,
+    progress_bar: Option<&ProgressBar>,
     entry: Entry,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
@@ -251,68 +251,53 @@ fn copy_direntry(
         && !ends_with_slash_dot(&source_absolute)
         && !local_to_target.exists()
     {
-        if target_is_file {
-            return Err("cannot overwrite non-directory with directory".into());
+        return if target_is_file {
+            Err("cannot overwrite non-directory with directory".into())
         } else {
             build_dir(&local_to_target, false, options, Some(&source_absolute))?;
             if options.verbose {
                 println!("{}", context_for(&source_relative, &local_to_target));
             }
-            return Ok(());
-        }
+            Ok(())
+        };
     }
 
     // If the source is not a directory, then we need to copy the file.
     if !source_absolute.is_dir() {
-        if preserve_hard_links {
-            match copy_file(
-                progress_bar,
-                &source_absolute,
-                local_to_target.as_path(),
-                options,
-                symlinked_files,
-                copied_destinations,
-                copied_files,
-                false,
-            ) {
-                Ok(_) => Ok(()),
-                Err(err) => {
-                    if source_absolute.is_symlink() {
-                        // silent the error with a symlink
-                        // In case we do --archive, we might copy the symlink
-                        // before the file itself
-                        Ok(())
-                    } else {
-                        Err(err)
+        if let Err(err) = copy_file(
+            progress_bar,
+            &source_absolute,
+            local_to_target.as_path(),
+            options,
+            symlinked_files,
+            copied_destinations,
+            copied_files,
+            false,
+        ) {
+            if preserve_hard_links {
+                if !source_absolute.is_symlink() {
+                    return Err(err);
+                }
+                // silent the error with a symlink
+                // In case we do --archive, we might copy the symlink
+                // before the file itself
+            } else {
+                // At this point, `path` is just a plain old file.
+                // Terminate this function immediately if there is any
+                // kind of error *except* a "permission denied" error.
+                //
+                // TODO What other kinds of errors, if any, should
+                // cause us to continue walking the directory?
+                match err {
+                    Error::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                        show!(uio_error!(
+                            e,
+                            "cannot open {} for reading",
+                            source_relative.quote(),
+                        ));
                     }
+                    e => return Err(e),
                 }
-            }?;
-        } else {
-            // At this point, `path` is just a plain old file.
-            // Terminate this function immediately if there is any
-            // kind of error *except* a "permission denied" error.
-            //
-            // TODO What other kinds of errors, if any, should
-            // cause us to continue walking the directory?
-            match copy_file(
-                progress_bar,
-                &source_absolute,
-                local_to_target.as_path(),
-                options,
-                symlinked_files,
-                copied_destinations,
-                copied_files,
-                false,
-            ) {
-                Ok(_) => {}
-                Err(Error::IoErrContext(e, _)) if e.kind() == io::ErrorKind::PermissionDenied => {
-                    show!(uio_error!(
-                        e,
-                        "cannot open {} for reading",
-                        source_relative.quote(),
-                    ));
-                }
-                Err(e) => return Err(e),
             }
         }
     }
@@ -329,7 +314,7 @@ fn copy_direntry(
 /// will not cause a short-circuit.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn copy_directory(
-    progress_bar: &Option<ProgressBar>,
+    progress_bar: Option<&ProgressBar>,
     root: &Path,
     target: &Path,
     options: &Options,

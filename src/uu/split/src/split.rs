@@ -55,7 +55,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
     let matches = uu_app().try_get_matches_from(args)?;
 
-    match Settings::from(&matches, &obs_lines) {
+    match Settings::from(&matches, obs_lines.as_deref()) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
         Err(e) => Err(USimpleError::new(1, format!("{e}"))),
@@ -460,7 +460,7 @@ impl SettingsError {
 
 impl Settings {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, SettingsError> {
+    fn from(matches: &ArgMatches, obs_lines: Option<&str>) -> Result<Self, SettingsError> {
         let strategy = Strategy::from(matches, obs_lines).map_err(SettingsError::Strategy)?;
         let suffix = Suffix::from(matches, &strategy).map_err(SettingsError::Suffix)?;
 
@@ -516,9 +516,11 @@ impl Settings {
         // As those are writing to stdout of `split` and cannot write to filter command child process
         let kth_chunk = matches!(
             result.strategy,
-            Strategy::Number(NumberType::KthBytes(_, _))
-                | Strategy::Number(NumberType::KthLines(_, _))
-                | Strategy::Number(NumberType::KthRoundRobin(_, _))
+            Strategy::Number(
+                NumberType::KthBytes(_, _)
+                    | NumberType::KthLines(_, _)
+                    | NumberType::KthRoundRobin(_, _)
+            )
         );
         if kth_chunk && result.filter.is_some() {
             return Err(SettingsError::FilterWithKthChunkNumber);
@@ -533,13 +535,12 @@ impl Settings {
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
         if platform::paths_refer_to_same_file(&self.input, filename) {
-            return Err(io::Error::new(
-                ErrorKind::Other,
-                format!("'{filename}' would overwrite input; aborting"),
-            ));
+            return Err(io::Error::other(format!(
+                "'{filename}' would overwrite input; aborting"
+            )));
         }
 
-        platform::instantiate_current_writer(&self.filter, filename, is_new)
+        platform::instantiate_current_writer(self.filter.as_deref(), filename, is_new)
     }
 }
 
@@ -605,14 +606,14 @@ fn get_input_size<R>(
     input: &String,
     reader: &mut R,
     buf: &mut Vec<u8>,
-    io_blksize: &Option<u64>,
+    io_blksize: Option<u64>,
 ) -> io::Result<u64>
 where
     R: BufRead,
 {
     // Set read limit to io_blksize if specified
     let read_limit: u64 = if let Some(custom_blksize) = io_blksize {
-        *custom_blksize
+        custom_blksize
     } else {
         // otherwise try to get it from filesystem, or use default
         uucore::fs::sane_blksize::sane_blksize_from_path(Path::new(input))
@@ -636,10 +637,9 @@ where
     } else if input == "-" {
         // STDIN stream that did not fit all content into a buffer
         // Most likely continuous/infinite input stream
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            format!("{input}: cannot determine input size"),
-        ));
+        return Err(io::Error::other(format!(
+            "{input}: cannot determine input size"
+        )));
     } else {
         // Could be that file size is larger than set read limit
         // Get the file size from filesystem metadata
@@ -662,10 +662,9 @@ where
                 // Give up and return an error
                 // TODO It might be possible to do more here
                 // to address all possible file types and edge cases
-                return Err(io::Error::new(
-                    ErrorKind::Other,
-                    format!("{input}: cannot determine file size"),
-                ));
+                return Err(io::Error::other(format!(
+                    "{input}: cannot determine file size"
+                )));
             }
         }
     }
@@ -748,9 +747,10 @@ impl Write for ByteChunkWriter<'_> {
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size;
 
                 // Allocate the new file, since at this point we know there are bytes to be written to it.
-                let filename = self.filename_iterator.next().ok_or_else(|| {
-                    io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
-                })?;
+                let filename = self
+                    .filename_iterator
+                    .next()
+                    .ok_or_else(|| io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
@@ -869,9 +869,10 @@ impl Write for LineChunkWriter<'_> {
             // corresponding writer.
             if self.num_lines_remaining_in_current_chunk == 0 {
                 self.num_chunks_written += 1;
-                let filename = self.filename_iterator.next().ok_or_else(|| {
-                    io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
-                })?;
+                let filename = self
+                    .filename_iterator
+                    .next()
+                    .ok_or_else(|| io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
@@ -946,7 +947,7 @@ impl ManageOutFiles for OutFiles {
         // This object is responsible for creating the filename for each chunk
         let mut filename_iterator: FilenameIterator<'_> =
             FilenameIterator::new(&settings.prefix, &settings.suffix)
-                .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
+                .map_err(|e| io::Error::other(format!("{e}")))?;
         let mut out_files: Self = Self::new();
         for _ in 0..num_files {
             let filename = filename_iterator
@@ -1082,7 +1083,7 @@ where
 {
     // Get the size of the input in bytes
     let initial_buf = &mut Vec::new();
-    let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
+    let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
     let mut reader = initial_buf.chain(reader);
 
     // If input file is empty and we would not have determined the Kth chunk
@@ -1228,7 +1229,7 @@ where
     // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
     let initial_buf = &mut Vec::new();
-    let num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
+    let num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
     let reader = initial_buf.chain(reader);
 
     // If input file is empty and we would not have determined the Kth chunk

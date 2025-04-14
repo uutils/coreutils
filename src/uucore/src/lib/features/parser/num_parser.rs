@@ -502,7 +502,7 @@ fn parse(
 
     let ebd_result = construct_extended_big_decimal(digits, negative, base, scale, exponent);
 
-    // Return what has been parsed so far. It there are extra characters, mark the
+    // Return what has been parsed so far. If there are extra characters, mark the
     // parsing as a partial match.
     if let Some((first_unparsed, _)) = chars.next() {
         Err(ExtendedParserError::PartialMatch(
