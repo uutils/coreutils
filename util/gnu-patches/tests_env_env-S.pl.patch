@@ -2,7 +2,7 @@ Index: gnu/tests/env/env-S.pl
 ===================================================================
 --- gnu.orig/tests/env/env-S.pl
 +++ gnu/tests/env/env-S.pl
-@@ -209,27 +209,28 @@ my @Tests =
+@@ -212,27 +212,28 @@ my @Tests =
        {ERR=>"$prog: no terminating quote in -S string\n"}],
       ['err5', q[-S'A=B\\q'], {EXIT=>125},
        {ERR=>"$prog: invalid sequence '\\q' in -S\n"}],
