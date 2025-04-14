@@ -313,7 +313,7 @@ fn copy_direntry(
 ///
 /// Any errors encountered copying files in the tree will be logged but
 /// will not cause a short-circuit.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 pub(crate) fn copy_directory(
     progress_bar: Option<&ProgressBar>,
     root: &Path,
@@ -563,7 +563,7 @@ fn build_dir(
 
         // we need to allow trivial casts here because some systems like linux have u32 constants in
         // in libc while others don't.
-        #[allow(clippy::unnecessary_cast)]
+        #[expect(clippy::unnecessary_cast)]
         let mut excluded_perms = if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
             libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
         } else if matches!(options.attributes.mode, Preserve::Yes { .. }) {
@@ -596,7 +596,6 @@ mod tests {
     use super::ends_with_slash_dot;
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_ends_with_slash_dot() {
         assert!(ends_with_slash_dot("/."));
         assert!(ends_with_slash_dot("./."));

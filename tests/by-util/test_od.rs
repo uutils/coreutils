@@ -438,7 +438,7 @@ fn test_big_endian() {
 }
 
 #[test]
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn test_alignment_Xxa() {
     let input: [u8; 8] = [0x0A, 0x0D, 0x65, 0x66, 0x67, 0x00, 0x9e, 0x9f];
 
@@ -464,7 +464,7 @@ fn test_alignment_Xxa() {
 }
 
 #[test]
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn test_alignment_Fx() {
     let input: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0]; // 0xc000000000000000 -2
 

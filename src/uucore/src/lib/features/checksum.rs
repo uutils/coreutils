@@ -276,7 +276,7 @@ pub fn create_sha3(bits: Option<usize>) -> UResult<HashAlgorithm> {
     }
 }
 
-#[allow(clippy::comparison_chain)]
+#[expect(clippy::comparison_chain)]
 fn print_cksum_report(res: &ChecksumResult) {
     if res.bad_format == 1 {
         show_warning_caps!("{} line is improperly formatted", res.bad_format);
@@ -559,7 +559,7 @@ impl LineFormat {
         })
     }
 
-    #[allow(rustdoc::invalid_html_tags)]
+    #[expect(rustdoc::invalid_html_tags)]
     /// parse [untagged output format]
     /// The format is simple, either "<checksum>  <filename>" or
     /// "<checksum> *<filename>"
@@ -589,7 +589,7 @@ impl LineFormat {
         })
     }
 
-    #[allow(rustdoc::invalid_html_tags)]
+    #[expect(rustdoc::invalid_html_tags)]
     /// parse [untagged output format]
     /// Normally the format is simple, either "<checksum>  <filename>" or
     /// "<checksum> *<filename>"
@@ -1363,7 +1363,7 @@ mod tests {
 
     #[test]
     fn test_algo_based_parser() {
-        #[allow(clippy::type_complexity)]
+        #[expect(clippy::type_complexity)]
         let test_cases: &[(&[u8], Option<(&[u8], Option<&[u8]>, &[u8], &[u8])>)] = &[
             (b"SHA256 (example.txt) = d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Some((b"SHA256", None, b"example.txt", b"d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"))),
             // cspell:disable
@@ -1434,7 +1434,7 @@ mod tests {
 
     #[test]
     fn test_double_space_parser() {
-        #[allow(clippy::type_complexity)]
+        #[expect(clippy::type_complexity)]
         let test_cases: &[(&[u8], Option<(&[u8], &[u8])>)] = &[
             (
                 b"60b725f10c9c85c70d97880dfe8191b3  a",
@@ -1477,7 +1477,7 @@ mod tests {
 
     #[test]
     fn test_single_space_parser() {
-        #[allow(clippy::type_complexity)]
+        #[expect(clippy::type_complexity)]
         let test_cases: &[(&[u8], Option<(&[u8], &[u8])>)] = &[
             (
                 b"60b725f10c9c85c70d97880dfe8191b3 a",

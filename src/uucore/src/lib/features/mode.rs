@@ -137,7 +137,7 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
     (srwx, pos)
 }
 
-#[allow(clippy::unnecessary_cast)]
+#[expect(clippy::unnecessary_cast)]
 pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
     #[cfg(all(
         not(target_os = "freebsd"),

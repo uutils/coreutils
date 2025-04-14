@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore rustdoc
-#![allow(rustdoc::private_intra_doc_links)]
+#![expect(rustdoc::private_intra_doc_links)]
 
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
@@ -672,7 +672,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn input_splitter() {
         let input = vec![
             Ok(String::from("aaa")),
@@ -745,7 +745,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn input_splitter_interrupt_rewind() {
         let input = vec![
             Ok(String::from("aaa")),

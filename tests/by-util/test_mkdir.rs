@@ -5,7 +5,8 @@
 
 // spell-checker:ignore bindgen getfattr testtest
 
-#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+#![expect(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_truncation)]
 
 #[cfg(not(windows))]
 use libc::mode_t;

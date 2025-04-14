@@ -767,7 +767,7 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
 }
 
 impl Config {
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
         let (mut format, opt) = extract_format(options);
@@ -2249,7 +2249,6 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         .any(|p| p.matches_with(&file_name, options))
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn enter_directory(
     path_data: &PathData,
     read_dir: ReadDir,
@@ -3130,7 +3129,7 @@ fn file_is_executable(md: &Metadata) -> bool {
     // S_IXUSR -> user has execute permission
     // S_IXGRP -> group has execute permission
     // S_IXOTH -> other users have execute permission
-    #[allow(clippy::unnecessary_cast)]
+    #[expect(clippy::unnecessary_cast)]
     return md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0;
 }
 

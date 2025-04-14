@@ -17,7 +17,7 @@ pub struct ProcessChecker {
 
 impl ProcessChecker {
     pub fn new(process_id: Pid) -> Self {
-        #[allow(non_snake_case)]
+        #[expect(non_snake_case)]
         let FALSE: BOOL = 0;
         let h = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, FALSE, process_id) };
         Self {
@@ -26,7 +26,7 @@ impl ProcessChecker {
         }
     }
 
-    #[allow(clippy::wrong_self_convention)]
+    #[expect(clippy::wrong_self_convention)]
     pub fn is_dead(&mut self) -> bool {
         if !self.dead {
             self.dead = unsafe {

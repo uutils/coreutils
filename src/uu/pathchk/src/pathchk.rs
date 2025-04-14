@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-#![allow(unused_must_use)] // because we of writeln!
+#![expect(unused_must_use)] // because we of writeln!
 
 // spell-checker:ignore (ToDO) lstat
 use clap::{Arg, ArgAction, Command};

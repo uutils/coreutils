@@ -157,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_parse_numbers_obsolete() {
         assert_eq!(obsolete("-5"), obsolete_result(&["-n", "5"]));
         assert_eq!(obsolete("-100"), obsolete_result(&["-n", "100"]));

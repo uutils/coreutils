@@ -164,7 +164,7 @@ impl Pinky {
         let last_change;
 
         match pts_path.metadata() {
-            #[allow(clippy::unnecessary_cast)]
+            #[expect(clippy::unnecessary_cast)]
             Ok(meta) => {
                 mesg = if meta.mode() & S_IWGRP as u32 == 0 {
                     '*'

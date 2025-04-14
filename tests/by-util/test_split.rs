@@ -216,7 +216,7 @@ fn test_split_bytes_prime_part_size() {
     let mut fns = glob.collect();
     // glob.collect() is not guaranteed to return in sorted order, so we sort.
     fns.sort();
-    #[allow(clippy::needless_range_loop)]
+    #[expect(clippy::needless_range_loop)]
     for i in 0..5 {
         assert_eq!(glob.directory.metadata(&fns[i]).len(), 1753);
     }

@@ -268,7 +268,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_parse_format_with_invalid_formats() {
         assert!("".parse::<FormatOptions>().is_err());
         assert!("hello".parse::<FormatOptions>().is_err());

@@ -99,7 +99,7 @@ impl Number {
     /// That's okay because each of these numbers will be displayed
     /// differently and we only intend to use these numbers for display
     /// purposes and not for mathematical purposes.
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     fn digits(&self) -> Vec<u8> {
         match self {
             Self::FixedWidth(number) => number.digits.clone(),
@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_dynamic_width_number_display_alphabetic() {
         fn num(n: usize) -> Number {
             let mut number = Number::DynamicWidth(DynamicWidthNumber::new(26, 0));
@@ -444,7 +444,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_dynamic_width_number_display_numeric_hexadecimal() {
         fn num(n: usize) -> Number {
             let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16, 0));
@@ -469,7 +469,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_fixed_width_number_increment() {
         let mut n = Number::FixedWidth(FixedWidthNumber::new(3, 2, 0).unwrap());
         assert_eq!(n.digits(), vec![0, 0]);
@@ -493,7 +493,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn test_fixed_width_number_display_alphabetic() {
         fn num(n: usize) -> Result<Number, Overflow> {
             let mut number = Number::FixedWidth(FixedWidthNumber::new(26, 2, 0).unwrap());

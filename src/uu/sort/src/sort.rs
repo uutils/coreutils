@@ -209,7 +209,7 @@ impl Output {
         let file = if let Some(name) = name {
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
-            #[allow(clippy::suspicious_open_options)]
+            #[expect(clippy::suspicious_open_options)]
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
@@ -1832,7 +1832,7 @@ fn month_parse(line: &str) -> Month {
 }
 
 fn month_compare(a: &str, b: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)]
+    #![expect(clippy::comparison_chain)]
     let ma = month_parse(a);
     let mb = month_parse(b);
 

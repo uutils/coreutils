@@ -15,7 +15,7 @@ include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 /// # Errors
 /// Returns an error if the writer fails.
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines)]
 fn main() -> io::Result<()> {
     let mut tldr_zip = File::open("docs/tldr.zip")
         .ok()

@@ -30,8 +30,8 @@
 //   `uu_ls -Z` being implemented and therefore fails at the moment
 //
 
-#![allow(non_camel_case_types)]
-#![allow(dead_code)]
+#![expect(non_camel_case_types)]
+#![expect(dead_code)]
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::CStr;
@@ -109,7 +109,7 @@ struct State {
 }
 
 #[uucore::main]
-#[allow(clippy::cognitive_complexity)]
+#[expect(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
