@@ -282,10 +282,10 @@ fn print_nusers(nusers: Option<usize>) -> UResult<()> {
 }
 
 fn print_time() {
-    print!(" {}  ", get_formatted_time());
+    print!(" {} ", get_formatted_time());
 }
 
 fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
-    print!("up  {},  ", get_formated_uptime(boot_time)?);
+    print!("up {},  ", get_formated_uptime(boot_time)?);
     Ok(())
 }

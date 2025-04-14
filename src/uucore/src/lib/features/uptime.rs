@@ -174,11 +174,17 @@ pub fn get_formated_uptime(boot_time: Option<time_t>) -> UResult<String> {
     let up_days = up_secs / 86400;
     let up_hours = (up_secs - (up_days * 86400)) / 3600;
     let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
-    match up_days.cmp(&1) {
-        std::cmp::Ordering::Equal => Ok(format!("{up_days:1} day, {up_hours:2}:{up_mins:02}")),
-        std::cmp::Ordering::Greater => Ok(format!("{up_days:1} days {up_hours:2}:{up_mins:02}")),
-        _ => Ok(format!("{up_hours:2}:{up_mins:02}")),
-    }
+    let day_str = match up_days.cmp(&1) {
+        std::cmp::Ordering::Equal => format!("{up_days:1} day, "),
+        std::cmp::Ordering::Greater => format!("{up_days:1} days, "),
+        _ => "".to_string(),
+    };
+    let hour_min_str = if up_hours > 0 {
+        format!("{up_hours:2}:{up_mins:02}")
+    } else {
+        format!("{up_mins:02} min")
+    };
+    Ok(format!("{}{}", day_str, hour_min_str))
 }
 
 /// Get the number of users currently logged in
