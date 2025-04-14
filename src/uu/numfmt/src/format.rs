@@ -210,7 +210,7 @@ fn consider_suffix(
     round_method: RoundMethod,
     precision: usize,
 ) -> Result<(f64, Option<Suffix>)> {
-    use crate::units::RawSuffix::*;
+    use crate::units::RawSuffix::{E, G, K, M, P, T, Y, Z};
 
     let abs_n = n.abs();
     let suffixes = [K, M, G, T, P, E, Z, Y];

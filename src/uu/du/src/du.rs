@@ -227,9 +227,8 @@ fn get_size_on_disk(path: &Path) -> u64 {
 
     // bind file so it stays in scope until end of function
     // if it goes out of scope the handle below becomes invalid
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return size_on_disk, // opening directories will fail
+    let Ok(file) = File::open(path) else {
+        return size_on_disk; // opening directories will fail
     };
 
     unsafe {
@@ -239,7 +238,7 @@ fn get_size_on_disk(path: &Path) -> u64 {
         let success = GetFileInformationByHandleEx(
             file.as_raw_handle() as HANDLE,
             FileStandardInfo,
-            file_info_ptr as _,
+            file_info_ptr.cast(),
             size_of::<FILE_STANDARD_INFO>() as u32,
         );
 
@@ -255,9 +254,8 @@ fn get_size_on_disk(path: &Path) -> u64 {
 fn get_file_info(path: &Path) -> Option<FileInfo> {
     let mut result = None;
 
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(_) => return result,
+    let Ok(file) = File::open(path) else {
+        return result;
     };
 
     unsafe {
@@ -267,7 +265,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
         let success = GetFileInformationByHandleEx(
             file.as_raw_handle() as HANDLE,
             FileIdInfo,
-            file_info_ptr as _,
+            file_info_ptr.cast(),
             size_of::<FILE_ID_INFO>() as u32,
         );
 

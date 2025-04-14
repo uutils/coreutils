@@ -80,7 +80,7 @@ impl<'a> StyleManager<'a> {
     /// Resets the current style and returns the default ANSI reset code to
     /// reset all text formatting attributes. If `force` is true, the reset is
     /// done even if the reset has been applied before.
-    pub(crate) fn reset(&mut self, force: bool) -> &str {
+    pub(crate) fn reset(&mut self, force: bool) -> &'static str {
         // todo:
         // We need to use style from `Indicator::Reset` but as of now ls colors
         // uses a fallback mechanism and because of that if `Indicator::Reset`

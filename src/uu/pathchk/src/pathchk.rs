@@ -115,7 +115,7 @@ fn check_path(mode: &Mode, path: &[String]) -> bool {
         Mode::Basic => check_basic(path),
         Mode::Extra => check_default(path) && check_extra(path),
         Mode::Both => check_basic(path) && check_extra(path),
-        _ => check_default(path),
+        Mode::Default => check_default(path),
     }
 }
 
