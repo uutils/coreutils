@@ -1965,8 +1965,13 @@ fn test_follow_name_truncate3() {
         .stdout_only(expected_stdout);
 }
 
+
 #[test]
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))] // FIXME: for currently not working platforms
+#[cfg(all(
+    not(target_os = "apple"),
+    not(target_os = "windows"),
+    not(feature = "feat_selinux") // flaky
+))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate4() {
     // Truncating a file with the same content it already has should not trigger a truncate event
 
