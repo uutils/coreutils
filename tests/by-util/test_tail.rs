@@ -1967,7 +1967,7 @@ fn test_follow_name_truncate3() {
 
 #[test]
 #[cfg(all(
-    not(target_os = "apple"),
+    not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(feature = "feat_selinux") // flaky
 ))] // FIXME: for currently not working platforms
