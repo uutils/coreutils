@@ -19,7 +19,6 @@ path = "src/sleep.rs"
 
 [dependencies]
 clap = { workspace = true }
-fundu = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 
 [[bin]]

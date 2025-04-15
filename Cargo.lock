@@ -3249,7 +3249,6 @@ name = "uu_sleep"
 version = "0.0.30"
 dependencies = [
  "clap",
- "fundu",
  "uucore",
 ]
 
