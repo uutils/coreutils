@@ -25,7 +25,7 @@ use std::time::Duration;
 /// one hundred twenty three seconds or "4.5d" meaning four and a half
 /// days. If no unit is specified, the unit is assumed to be seconds.
 ///
-/// The only allowed suffixes are
+/// If `allow_suffixes` is true, the allowed suffixes are
 ///
 /// * "s" for seconds,
 /// * "m" for minutes,
@@ -48,8 +48,10 @@ use std::time::Duration;
 /// ```rust
 /// use std::time::Duration;
 /// use uucore::parser::parse_time::from_str;
-/// assert_eq!(from_str("123"), Ok(Duration::from_secs(123)));
-/// assert_eq!(from_str("2d"), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
+/// assert_eq!(from_str("123", true), Ok(Duration::from_secs(123)));
+/// assert_eq!(from_str("123", false), Ok(Duration::from_secs(123)));
+/// assert_eq!(from_str("2d", true), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
+/// assert!(from_str("2d", false).is_err());
 /// ```
 pub fn from_str(string: &str, allow_suffixes: bool) -> Result<Duration, String> {
     // TODO: Switch to Duration::NANOSECOND if that ever becomes stable
