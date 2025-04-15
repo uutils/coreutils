@@ -264,9 +264,6 @@ sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc
 # Update the GNU error message to match ours
 sed -i -e "s/link-to-dir: hard link not allowed for directory/failed to create hard link 'link-to-dir' =>/" -e "s|link-to-dir/: hard link not allowed for directory|failed to create hard link 'link-to-dir/' =>|" tests/ln/hard-to-sym.sh
 
-# GNU sleep accepts some crazy string, not sure we should match this behavior
-sed -i -e "s/timeout 10 sleep 0x.002p1/#timeout 10 sleep 0x.002p1/" tests/misc/sleep.sh
-
 # install verbose messages shows ginstall as command
 sed -i -e "s/ginstall: creating directory/install: creating directory/g" tests/install/basic-1.sh
 
