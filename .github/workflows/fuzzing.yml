@@ -36,7 +36,7 @@ jobs:
 
   fuzz-run:
     needs: fuzz-build
-    name: Run the fuzzers
+    name: Fuzz
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -48,7 +48,7 @@ jobs:
           # https://github.com/uutils/coreutils/issues/5311
           - { name: fuzz_date, should_pass: false }
           - { name: fuzz_expr, should_pass: true }
-          - { name: fuzz_printf, should_pass: false }
+          - { name: fuzz_printf, should_pass: true }
           - { name: fuzz_echo, should_pass: true }
           - { name: fuzz_seq, should_pass: false }
           - { name: fuzz_sort, should_pass: false }
@@ -81,13 +81,201 @@ jobs:
         path: |
           fuzz/corpus/${{ matrix.test-target.name }}
     - name: Run ${{ matrix.test-target.name }} for XX seconds
+      id: run_fuzzer
       shell: bash
       continue-on-error: ${{ !matrix.test-target.name.should_pass }}
       run: |
-        cargo +nightly fuzz run ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0
+        mkdir -p fuzz/stats
+        STATS_FILE="fuzz/stats/${{ matrix.test-target.name }}.txt"
+        cargo +nightly fuzz run ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
+
+        # Extract key stats from the output
+        if grep -q "stat::number_of_executed_units" "$STATS_FILE"; then
+          RUNS=$(grep "stat::number_of_executed_units" "$STATS_FILE" | awk '{print $2}')
+          echo "runs=$RUNS" >> "$GITHUB_OUTPUT"
+        else
+          echo "runs=unknown" >> "$GITHUB_OUTPUT"
+        fi
+
+        if grep -q "stat::average_exec_per_sec" "$STATS_FILE"; then
+          EXEC_RATE=$(grep "stat::average_exec_per_sec" "$STATS_FILE" | awk '{print $2}')
+          echo "exec_rate=$EXEC_RATE" >> "$GITHUB_OUTPUT"
+        else
+          echo "exec_rate=unknown" >> "$GITHUB_OUTPUT"
+        fi
+
+        if grep -q "stat::new_units_added" "$STATS_FILE"; then
+          NEW_UNITS=$(grep "stat::new_units_added" "$STATS_FILE" | awk '{print $2}')
+          echo "new_units=$NEW_UNITS" >> "$GITHUB_OUTPUT"
+        else
+          echo "new_units=unknown" >> "$GITHUB_OUTPUT"
+        fi
+
+        # Save should_pass value to file for summary job to use
+        echo "${{ matrix.test-target.should_pass }}" > "fuzz/stats/${{ matrix.test-target.name }}.should_pass"
+
+        # Print stats to job output for immediate visibility
+        echo "----------------------------------------"
+        echo "FUZZING STATISTICS FOR ${{ matrix.test-target.name }}"
+        echo "----------------------------------------"
+        echo "Runs:           $(grep -q "stat::number_of_executed_units" "$STATS_FILE" && grep "stat::number_of_executed_units" "$STATS_FILE" | awk '{print $2}' || echo "unknown")"
+        echo "Execution Rate: $(grep -q "stat::average_exec_per_sec" "$STATS_FILE" && grep "stat::average_exec_per_sec" "$STATS_FILE" | awk '{print $2}' || echo "unknown") execs/sec"
+        echo "New Units:      $(grep -q "stat::new_units_added" "$STATS_FILE" && grep "stat::new_units_added" "$STATS_FILE" | awk '{print $2}' || echo "unknown")"
+        echo "Expected:       ${{ matrix.test-target.name.should_pass }}"
+        if grep -q "SUMMARY: " "$STATS_FILE"; then
+          echo "Status:         $(grep "SUMMARY: " "$STATS_FILE" | head -1)"
+        else
+          echo "Status:         Completed"
+        fi
+        echo "----------------------------------------"
+
+        # Add summary to GitHub step summary
+        echo "### Fuzzing Results for ${{ matrix.test-target.name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+
+        if grep -q "stat::number_of_executed_units" "$STATS_FILE"; then
+          echo "| Runs | $(grep "stat::number_of_executed_units" "$STATS_FILE" | awk '{print $2}') |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        if grep -q "stat::average_exec_per_sec" "$STATS_FILE"; then
+          echo "| Execution Rate | $(grep "stat::average_exec_per_sec" "$STATS_FILE" | awk '{print $2}') execs/sec |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        if grep -q "stat::new_units_added" "$STATS_FILE"; then
+          echo "| New Units | $(grep "stat::new_units_added" "$STATS_FILE" | awk '{print $2}') |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "| Should pass | ${{ matrix.test-target.should_pass }} |" >> $GITHUB_STEP_SUMMARY
+
+        if grep -q "SUMMARY: " "$STATS_FILE"; then
+          echo "| Status | $(grep "SUMMARY: " "$STATS_FILE" | head -1) |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Status | Completed |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
     - name: Save Corpus Cache
       uses: actions/cache/save@v4
       with:
         key: corpus-cache-${{ matrix.test-target.name }}
         path: |
           fuzz/corpus/${{ matrix.test-target.name }}
+    - name: Upload Stats
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-stats-${{ matrix.test-target.name }}
+        path: |
+          fuzz/stats/${{ matrix.test-target.name }}.txt
+          fuzz/stats/${{ matrix.test-target.name }}.should_pass
+        retention-days: 5
+  fuzz-summary:
+    needs: fuzz-run
+    name: Fuzzing Summary
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download all stats
+        uses: actions/download-artifact@v4
+        with:
+          path: fuzz/stats-artifacts
+          pattern: fuzz-stats-*
+          merge-multiple: true
+      - name: Prepare stats directory
+        run: |
+          mkdir -p fuzz/stats
+          # Debug: List content of stats-artifacts directory
+          echo "Contents of stats-artifacts directory:"
+          find fuzz/stats-artifacts -type f | sort
+
+          # Extract files from the artifact directories - handle nested directories
+          find fuzz/stats-artifacts -type f -name "*.txt" -exec cp {} fuzz/stats/ \;
+          find fuzz/stats-artifacts -type f -name "*.should_pass" -exec cp {} fuzz/stats/ \;
+
+          # Debug information
+          echo "Contents of stats directory after extraction:"
+          ls -la fuzz/stats/
+          echo "Contents of should_pass files (if any):"
+          cat fuzz/stats/*.should_pass 2>/dev/null || echo "No should_pass files found"
+      - name: Generate Summary
+        run: |
+          echo "# Fuzzing Summary" > fuzzing_summary.md
+          echo "" >> fuzzing_summary.md
+          echo "| Target | Runs | Exec/sec | New Units | Should pass | Status |" >> fuzzing_summary.md
+          echo "|--------|------|----------|-----------|-------------|--------|" >> fuzzing_summary.md
+
+          TOTAL_RUNS=0
+          TOTAL_NEW_UNITS=0
+
+          for stat_file in fuzz/stats/*.txt; do
+            TARGET=$(basename "$stat_file" .txt)
+            SHOULD_PASS_FILE="${stat_file%.*}.should_pass"
+
+            # Get expected status
+            if [ -f "$SHOULD_PASS_FILE" ]; then
+              EXPECTED=$(cat "$SHOULD_PASS_FILE")
+            else
+              EXPECTED="unknown"
+            fi
+
+            # Extract runs
+            if grep -q "stat::number_of_executed_units" "$stat_file"; then
+              RUNS=$(grep "stat::number_of_executed_units" "$stat_file" | awk '{print $2}')
+              TOTAL_RUNS=$((TOTAL_RUNS + RUNS))
+            else
+              RUNS="unknown"
+            fi
+
+            # Extract execution rate
+            if grep -q "stat::average_exec_per_sec" "$stat_file"; then
+              EXEC_RATE=$(grep "stat::average_exec_per_sec" "$stat_file" | awk '{print $2}')
+            else
+              EXEC_RATE="unknown"
+            fi
+
+            # Extract new units added
+            if grep -q "stat::new_units_added" "$stat_file"; then
+              NEW_UNITS=$(grep "stat::new_units_added" "$stat_file" | awk '{print $2}')
+              if [[ "$NEW_UNITS" =~ ^[0-9]+$ ]]; then
+                TOTAL_NEW_UNITS=$((TOTAL_NEW_UNITS + NEW_UNITS))
+              fi
+            else
+              NEW_UNITS="unknown"
+            fi
+
+            # Extract status
+            if grep -q "SUMMARY: " "$stat_file"; then
+              STATUS=$(grep "SUMMARY: " "$stat_file" | head -1)
+            else
+              STATUS="Completed"
+            fi
+
+            echo "| $TARGET | $RUNS | $EXEC_RATE | $NEW_UNITS | $EXPECTED | $STATUS |" >> fuzzing_summary.md
+          done
+
+          echo "" >> fuzzing_summary.md
+          echo "## Overall Statistics" >> fuzzing_summary.md
+          echo "" >> fuzzing_summary.md
+          echo "- **Total runs:** $TOTAL_RUNS" >> fuzzing_summary.md
+          echo "- **Total new units discovered:** $TOTAL_NEW_UNITS" >> fuzzing_summary.md
+          echo "- **Average execution rate:** $(grep -h "stat::average_exec_per_sec" fuzz/stats/*.txt | awk '{sum += $2; count++} END {if (count > 0) print sum/count " execs/sec"; else print "unknown"}')" >> fuzzing_summary.md
+
+          # Add count by expected status
+          echo "- **Tests expected to pass:** $(find fuzz/stats -name "*.should_pass" -exec cat {} \; | grep -c "true")" >> fuzzing_summary.md
+          echo "- **Tests expected to fail:** $(find fuzz/stats -name "*.should_pass" -exec cat {} \; | grep -c "false")" >> fuzzing_summary.md
+
+          # Write to GitHub step summary
+          cat fuzzing_summary.md >> $GITHUB_STEP_SUMMARY
+      - name: Show Summary
+        run: |
+          cat fuzzing_summary.md
+      - name: Upload Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzzing-summary
+          path: fuzzing_summary.md
+          retention-days: 5
