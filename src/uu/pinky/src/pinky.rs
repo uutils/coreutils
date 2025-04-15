@@ -10,7 +10,18 @@ use uucore::{format_usage, help_about, help_usage};
 
 mod platform;
 
+#[cfg(target_env = "musl")]
+const ABOUT: &str = concat!(
+    help_about!("pinky.md"),
+    "\n\nWarning: When built with musl libc, the `pinky` utility may show incomplete \n",
+    "or missing user information due to musl's stub implementation of `utmpx` \n",
+    "functions. This limitation affects the ability to retrieve accurate details \n",
+    "about logged-in users."
+);
+
+#[cfg(not(target_env = "musl"))]
 const ABOUT: &str = help_about!("pinky.md");
+
 const USAGE: &str = help_usage!("pinky.md");
 
 mod options {
