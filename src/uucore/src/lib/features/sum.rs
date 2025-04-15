@@ -125,12 +125,12 @@ impl Digest for Sm3 {
 // NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
 const CRC_TABLE_LEN: usize = 256;
 
-pub struct CRC {
+pub struct Crc {
     state: u32,
     size: usize,
     crc_table: [u32; CRC_TABLE_LEN],
 }
-impl CRC {
+impl Crc {
     fn generate_crc_table() -> [u32; CRC_TABLE_LEN] {
         let mut table = [0; CRC_TABLE_LEN];
 
@@ -166,7 +166,7 @@ impl CRC {
     }
 }
 
-impl Digest for CRC {
+impl Digest for Crc {
     fn new() -> Self {
         Self {
             state: 0,
@@ -238,10 +238,10 @@ impl Digest for CRC32B {
     }
 }
 
-pub struct BSD {
+pub struct Bsd {
     state: u16,
 }
-impl Digest for BSD {
+impl Digest for Bsd {
     fn new() -> Self {
         Self { state: 0 }
     }
@@ -272,10 +272,10 @@ impl Digest for BSD {
     }
 }
 
-pub struct SYSV {
+pub struct SysV {
     state: u32,
 }
-impl Digest for SYSV {
+impl Digest for SysV {
     fn new() -> Self {
         Self { state: 0 }
     }
