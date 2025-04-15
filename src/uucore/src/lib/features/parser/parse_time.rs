@@ -52,6 +52,17 @@ use std::time::Duration;
 /// assert_eq!(from_str("2d"), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
 /// ```
 pub fn from_str(string: &str) -> Result<Duration, String> {
+    from_str_inner(
+        string,
+        &[('s', 1), ('m', 60), ('h', 60 * 60), ('d', 60 * 60 * 24)],
+    )
+}
+
+pub fn from_str_without_suffix(string: &str) -> Result<Duration, String> {
+    from_str_inner(string, &[])
+}
+
+fn from_str_inner(string: &str, allowed_suffixes: &[(char, u32)]) -> Result<Duration, String> {
     // TODO: Switch to Duration::NANOSECOND if that ever becomes stable
     // https://github.com/rust-lang/rust/issues/57391
     const NANOSECOND_DURATION: Duration = Duration::from_nanos(1);
@@ -60,11 +71,7 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
     if len == 0 {
         return Err(format!("invalid time interval {}", string.quote()));
     }
-    let num = match num_parser::parse(
-        string,
-        ParseTarget::Duration,
-        &[('s', 1), ('m', 60), ('h', 60 * 60), ('d', 60 * 60 * 24)],
-    ) {
+    let num = match num_parser::parse(string, ParseTarget::Duration, allowed_suffixes) {
         Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
         Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
         _ => {
@@ -100,17 +107,19 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
 #[cfg(test)]
 mod tests {
 
-    use crate::parser::parse_time::from_str;
+    use crate::parser::parse_time::{from_str, from_str_without_suffix};
     use std::time::Duration;
 
     #[test]
     fn test_no_units() {
         assert_eq!(from_str("123"), Ok(Duration::from_secs(123)));
+        assert_eq!(from_str_without_suffix("123"), Ok(Duration::from_secs(123)));
     }
 
     #[test]
     fn test_units() {
         assert_eq!(from_str("2d"), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
+        assert!(from_str_without_suffix("2d").is_err());
     }
 
     #[test]
@@ -119,6 +128,10 @@ mod tests {
         assert_eq!(from_str("9223372036854775808d"), Ok(Duration::MAX));
         // ExtendedBigDecimal overflow
         assert_eq!(from_str("1e92233720368547758080"), Ok(Duration::MAX));
+        assert_eq!(
+            from_str_without_suffix("1e92233720368547758080"),
+            Ok(Duration::MAX)
+        );
     }
 
     #[test]
@@ -136,6 +149,22 @@ mod tests {
         assert_eq!(from_str("1e-9"), Ok(NANOSECOND_DURATION));
         assert_eq!(from_str("1.9e-9"), Ok(NANOSECOND_DURATION));
         assert_eq!(from_str("2e-9"), Ok(Duration::from_nanos(2)));
+
+        // ExtendedBigDecimal underflow
+        assert_eq!(
+            from_str_without_suffix("1e-92233720368547758080"),
+            Ok(NANOSECOND_DURATION)
+        );
+        // nanoseconds underflow (in Duration)
+        assert_eq!(
+            from_str_without_suffix("0.0000000001"),
+            Ok(NANOSECOND_DURATION)
+        );
+        assert_eq!(from_str_without_suffix("1e-10"), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str_without_suffix("9e-10"), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str_without_suffix("1e-9"), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str_without_suffix("1.9e-9"), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str_without_suffix("2e-9"), Ok(Duration::from_nanos(2)));
     }
 
     #[test]
@@ -144,12 +173,27 @@ mod tests {
         assert_eq!(from_str("0e-100"), Ok(Duration::ZERO));
         assert_eq!(from_str("0e-92233720368547758080"), Ok(Duration::ZERO));
         assert_eq!(from_str("0.000000000000000000000"), Ok(Duration::ZERO));
+
+        assert_eq!(from_str_without_suffix("0e-9"), Ok(Duration::ZERO));
+        assert_eq!(from_str_without_suffix("0e-100"), Ok(Duration::ZERO));
+        assert_eq!(
+            from_str_without_suffix("0e-92233720368547758080"),
+            Ok(Duration::ZERO)
+        );
+        assert_eq!(
+            from_str_without_suffix("0.000000000000000000000"),
+            Ok(Duration::ZERO)
+        );
     }
 
     #[test]
     fn test_hex_float() {
         assert_eq!(
             from_str("0x1.1p-1"),
+            Ok(Duration::from_secs_f64(0.53125f64))
+        );
+        assert_eq!(
+            from_str_without_suffix("0x1.1p-1"),
             Ok(Duration::from_secs_f64(0.53125f64))
         );
         assert_eq!(
@@ -162,26 +206,37 @@ mod tests {
     #[test]
     fn test_error_empty() {
         assert!(from_str("").is_err());
+        assert!(from_str_without_suffix("").is_err());
     }
 
     #[test]
     fn test_error_invalid_unit() {
         assert!(from_str("123X").is_err());
+        assert!(from_str_without_suffix("123X").is_err());
     }
 
     #[test]
     fn test_error_multi_bytes_characters() {
         assert!(from_str("10€").is_err());
+        assert!(from_str_without_suffix("10€").is_err());
     }
 
     #[test]
     fn test_error_invalid_magnitude() {
         assert!(from_str("12abc3s").is_err());
+        assert!(from_str_without_suffix("12abc3s").is_err());
+    }
+
+    #[test]
+    fn test_error_only_point() {
+        assert!(from_str(".").is_err());
+        assert!(from_str_without_suffix(".").is_err());
     }
 
     #[test]
     fn test_negative() {
         assert!(from_str("-1").is_err());
+        assert!(from_str_without_suffix("-1").is_err());
     }
 
     #[test]
@@ -191,6 +246,10 @@ mod tests {
         assert_eq!(from_str("infinityh"), Ok(Duration::MAX));
         assert_eq!(from_str("INF"), Ok(Duration::MAX));
         assert_eq!(from_str("INFs"), Ok(Duration::MAX));
+
+        assert_eq!(from_str_without_suffix("inf"), Ok(Duration::MAX));
+        assert_eq!(from_str_without_suffix("infinity"), Ok(Duration::MAX));
+        assert_eq!(from_str_without_suffix("INF"), Ok(Duration::MAX));
     }
 
     #[test]
@@ -200,6 +259,10 @@ mod tests {
         assert!(from_str("-nanh").is_err());
         assert!(from_str("NAN").is_err());
         assert!(from_str("-NAN").is_err());
+
+        assert!(from_str_without_suffix("nan").is_err());
+        assert!(from_str_without_suffix("NAN").is_err());
+        assert!(from_str_without_suffix("-NAN").is_err());
     }
 
     /// Test that capital letters are not allowed in suffixes.

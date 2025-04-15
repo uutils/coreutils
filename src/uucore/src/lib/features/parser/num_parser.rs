@@ -459,6 +459,8 @@ pub(crate) fn parse<'a>(
     let mut digits = BigUint::zero();
     let mut scale = 0u64;
     let mut exponent = BigInt::zero();
+
+    // track whether there are digits before the decimal point
     while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
         chars.next();
         digits = digits * base as u8 + d;
@@ -466,13 +468,20 @@ pub(crate) fn parse<'a>(
 
     // Parse fractional/exponent part of the number for supported bases.
     if matches!(base, Base::Decimal | Base::Hexadecimal) && target != ParseTarget::Integral {
+        let mut digit_after_decimal = false;
         // Parse the fractional part of the number if there can be one and the input contains
         // a '.' decimal separator.
-        if matches!(chars.peek(), Some(&(_, '.'))) {
+        if let Some(&(decimal_idx, '.')) = chars.peek() {
             chars.next();
             while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
+                digit_after_decimal = true;
                 chars.next();
                 (digits, scale) = (digits * base as u8 + d, scale + 1);
+            }
+
+            // fail if there's only a decimal point
+            if decimal_idx == 0 && !digit_after_decimal {
+                return Err(ExtendedParserError::NotNumeric);
             }
         }
 
