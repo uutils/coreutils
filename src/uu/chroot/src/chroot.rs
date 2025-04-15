@@ -53,22 +53,20 @@ struct Options {
 ///
 /// The `spec` must be of the form `[USER][:[GROUP]]`, otherwise an
 /// error is returned.
-fn parse_userspec(spec: &str) -> UResult<UserSpec> {
-    match &spec.splitn(2, ':').collect::<Vec<&str>>()[..] {
+fn parse_userspec(spec: &str) -> UserSpec {
+    match spec.split_once(':') {
         // ""
-        [""] => Ok(UserSpec::NeitherGroupNorUser),
+        None if spec.is_empty() => UserSpec::NeitherGroupNorUser,
         // "usr"
-        [usr] => Ok(UserSpec::UserOnly(usr.to_string())),
+        None => UserSpec::UserOnly(spec.to_string()),
         // ":"
-        ["", ""] => Ok(UserSpec::NeitherGroupNorUser),
+        Some(("", "")) => UserSpec::NeitherGroupNorUser,
         // ":grp"
-        ["", grp] => Ok(UserSpec::GroupOnly(grp.to_string())),
+        Some(("", grp)) => UserSpec::GroupOnly(grp.to_string()),
         // "usr:"
-        [usr, ""] => Ok(UserSpec::UserOnly(usr.to_string())),
+        Some((usr, "")) => UserSpec::UserOnly(usr.to_string()),
         // "usr:grp"
-        [usr, grp] => Ok(UserSpec::UserAndGroup(usr.to_string(), grp.to_string())),
-        // everything else
-        _ => Err(ChrootError::InvalidUserspec(spec.to_string()).into()),
+        Some((usr, grp)) => UserSpec::UserAndGroup(usr.to_string(), grp.to_string()),
     }
 }
 
@@ -144,10 +142,9 @@ impl Options {
             }
         };
         let skip_chdir = matches.get_flag(options::SKIP_CHDIR);
-        let userspec = match matches.get_one::<String>(options::USERSPEC) {
-            None => None,
-            Some(s) => Some(parse_userspec(s)?),
-        };
+        let userspec = matches
+            .get_one::<String>(options::USERSPEC)
+            .map(|s| parse_userspec(s));
         Ok(Self {
             newroot,
             skip_chdir,
