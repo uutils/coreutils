@@ -71,14 +71,15 @@ impl Config {
 
         let kill_after = match options.get_one::<String>(options::KILL_AFTER) {
             None => None,
-            Some(kill_after) => match parse_time::from_str(kill_after) {
+            Some(kill_after) => match parse_time::from_str(kill_after, true) {
                 Ok(k) => Some(k),
                 Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
             },
         };
 
         let duration =
-            match parse_time::from_str(options.get_one::<String>(options::DURATION).unwrap()) {
+            match parse_time::from_str(options.get_one::<String>(options::DURATION).unwrap(), true)
+            {
                 Ok(duration) => duration,
                 Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
             };

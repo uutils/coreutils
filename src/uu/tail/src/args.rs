@@ -228,7 +228,7 @@ impl Settings {
         };
 
         if let Some(source) = matches.get_one::<String>(options::SLEEP_INT) {
-            settings.sleep_sec = match parse_time::from_str_without_suffix(source) {
+            settings.sleep_sec = match parse_time::from_str(source, false) {
                 Ok(duration) => duration,
                 Err(_) => {
                     return Err(UUsageError::new(
