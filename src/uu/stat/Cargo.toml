@@ -22,6 +22,9 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "libc", "fs", "fsext"] }
 chrono = { workspace = true }
 
+[features]
+selinux = ["uucore/selinux"]
+
 [[bin]]
 name = "stat"
 path = "src/main.rs"
