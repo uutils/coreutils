@@ -47,13 +47,15 @@ pub mod options {
 const MULTI_FILE_TOP_PROMPT: &str = "\r::::::::::::::\n\r{}\n\r::::::::::::::\n";
 
 struct Options {
-    clean_print: bool,
-    from_line: usize,
-    lines: Option<u16>,
-    pattern: Option<String>,
-    print_over: bool,
     silent: bool,
+    _logical: bool,  // not implemented
+    _no_pause: bool, // not implemented
+    print_over: bool,
+    clean_print: bool,
     squeeze: bool,
+    lines: Option<u16>,
+    from_line: usize,
+    pattern: Option<String>,
 }
 
 impl Options {
@@ -76,13 +78,15 @@ impl Options {
             .get_one::<String>(options::PATTERN)
             .map(|s| s.to_owned());
         Self {
-            clean_print: matches.get_flag(options::CLEAN_PRINT),
-            from_line,
-            lines,
-            pattern,
-            print_over: matches.get_flag(options::PRINT_OVER),
             silent: matches.get_flag(options::SILENT),
+            _logical: matches.get_flag(options::LOGICAL),
+            _no_pause: matches.get_flag(options::NO_PAUSE),
+            print_over: matches.get_flag(options::PRINT_OVER),
+            clean_print: matches.get_flag(options::CLEAN_PRINT),
             squeeze: matches.get_flag(options::SQUEEZE),
+            lines,
+            from_line,
+            pattern,
         }
     }
 }
@@ -243,57 +247,54 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .infer_long_args(true)
         .arg(
-            Arg::new(options::PRINT_OVER)
-                .short('c')
-                .long(options::PRINT_OVER)
-                .help("Do not scroll, display text and clean line ends")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
             Arg::new(options::SILENT)
                 .short('d')
                 .long(options::SILENT)
-                .help("Display help instead of ringing bell")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .help("Display help instead of ringing bell when an illegal key is pressed."),
+        )
+        .arg(
+            Arg::new(options::LOGICAL)
+                .short('f')
+                .long(options::LOGICAL)
+                .action(ArgAction::SetTrue)
+                .help("Do not pause after form feed"),
+        )
+        .arg(
+            Arg::new(options::NO_PAUSE)
+                .short('l')
+                .long(options::NO_PAUSE)
+                .action(ArgAction::SetTrue)
+                .help("Count logical lines rather than screen lines"),
+        )
+        .arg(
+            Arg::new(options::PRINT_OVER)
+                .short('p')
+                .long(options::PRINT_OVER)
+                .action(ArgAction::SetTrue)
+                .help("Do not scroll, clean screen and display text"),
         )
         .arg(
             Arg::new(options::CLEAN_PRINT)
-                .short('p')
+                .short('c')
                 .long(options::CLEAN_PRINT)
-                .help("Do not scroll, clean screen and display text")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .help("Do not scroll, display text and clean line ends"),
         )
         .arg(
             Arg::new(options::SQUEEZE)
                 .short('s')
                 .long(options::SQUEEZE)
-                .help("Squeeze multiple blank lines into one")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .help("Squeeze multiple blank lines into one"),
         )
         .arg(
             Arg::new(options::PLAIN)
                 .short('u')
                 .long(options::PLAIN)
                 .action(ArgAction::SetTrue)
-                .hide(true),
-        )
-        .arg(
-            Arg::new(options::PATTERN)
-                .short('P')
-                .long(options::PATTERN)
-                .allow_hyphen_values(true)
-                .required(false)
-                .value_name("pattern")
-                .help("Display file beginning from pattern match"),
-        )
-        .arg(
-            Arg::new(options::FROM_LINE)
-                .short('F')
-                .long(options::FROM_LINE)
-                .num_args(1)
-                .value_name("number")
-                .value_parser(value_parser!(usize))
-                .help("Display file beginning from line number"),
+                .hide(true)
+                .help("Suppress underlining"),
         )
         .arg(
             Arg::new(options::LINES)
@@ -309,23 +310,26 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER)
                 .num_args(1)
                 .value_parser(value_parser!(u16).range(0..))
-                .help("Same as --lines"),
-        )
-        // The commented arguments below are unimplemented:
-        /*
-        .arg(
-            Arg::new(options::LOGICAL)
-                .short('f')
-                .long(options::LOGICAL)
-                .help("Count logical rather than screen lines"),
+                .help("same as --lines option argument"),
         )
         .arg(
-            Arg::new(options::NO_PAUSE)
-                .short('l')
-                .long(options::NO_PAUSE)
-                .help("Suppress pause after form feed"),
+            Arg::new(options::FROM_LINE)
+                .short('F')
+                .long(options::FROM_LINE)
+                .num_args(1)
+                .value_name("number")
+                .value_parser(value_parser!(usize))
+                .help("Start displaying each file at line number"),
         )
-        */
+        .arg(
+            Arg::new(options::PATTERN)
+                .short('P')
+                .long(options::PATTERN)
+                .allow_hyphen_values(true)
+                .required(false)
+                .value_name("pattern")
+                .help("The string to be searched in each file before starting to display it"),
+        )
         .arg(
             Arg::new(options::FILES)
                 .required(false)
@@ -784,13 +788,15 @@ mod tests {
             Self {
                 content: content.to_string(),
                 options: Options {
-                    clean_print: false,
-                    from_line: 0,
-                    lines: None,
-                    pattern: None,
-                    print_over: false,
                     silent: false,
+                    _logical: false,
+                    _no_pause: false,
+                    print_over: false,
+                    clean_print: false,
                     squeeze: false,
+                    lines: None,
+                    from_line: 0,
+                    pattern: None,
                 },
                 rows: 24,
                 next_file: None,
