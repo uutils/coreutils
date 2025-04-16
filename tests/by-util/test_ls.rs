@@ -4153,8 +4153,7 @@ fn test_ls_dangling_symlinks() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_ls_context1() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
+    if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
@@ -4169,8 +4168,7 @@ fn test_ls_context1() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_ls_context2() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
+    if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
@@ -4206,8 +4204,7 @@ fn test_ls_context_long() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_ls_context_format() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
+    if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
