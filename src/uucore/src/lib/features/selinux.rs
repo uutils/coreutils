@@ -325,6 +325,11 @@ mod tests {
 
     #[test]
     fn test_get_selinux_security_context() {
+        if !is_selinux_enabled() {
+            // Skip the test if SELinux is not enabled
+            return;
+        }
+
         let tmpfile = NamedTempFile::new().expect("Failed to create tempfile");
         let path = tmpfile.path();
         if !is_selinux_enabled() {
@@ -394,6 +399,11 @@ mod tests {
 
     #[test]
     fn test_get_selinux_context_nonexistent_file() {
+        if !is_selinux_enabled() {
+            // Skip the test if SELinux is not enabled
+            return;
+        }
+
         let path = Path::new("/nonexistent/file/that/does/not/exist");
         if !is_selinux_enabled() {
             println!("test skipped: Kernel has no support for SElinux context");
