@@ -381,8 +381,7 @@ fn test_id_zero() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_id_context() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
+    if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
@@ -456,8 +455,7 @@ fn test_id_no_specified_user_posixly() {
         feature = "feat_selinux"
     ))]
     {
-        use selinux::{self, KernelSupport};
-        if selinux::kernel_support() == KernelSupport::Unsupported {
+        if !uucore::selinux::is_selinux_enabled() {
             println!("test skipped: Kernel has no support for SElinux context");
         } else {
             let result = ts.ucmd().succeeds();
