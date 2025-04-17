@@ -303,6 +303,12 @@ fn test_type_option_with_file() {
         .fails()
         .stderr_contains("no file systems processed");
 
+    // Assume the mount point at /dev has a different filesystem type to the mount point at /
+    new_ucmd!()
+        .args(&["-t", fs_type, "/dev"])
+        .fails()
+        .stderr_contains("no file systems processed");
+
     let fs_types = new_ucmd!()
         .arg("--output=fstype")
         .succeeds()
