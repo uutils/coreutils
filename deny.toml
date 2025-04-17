@@ -84,7 +84,7 @@ skip = [
   { name = "thiserror-impl", version = "1.0.69" },
   # bindgen
   { name = "itertools", version = "0.13.0" },
-  # indexmap
+  # ordered-multimap
   { name = "hashbrown", version = "0.14.5" },
   # cexpr (via bindgen)
   { name = "nom", version = "7.1.3" },
