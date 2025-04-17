@@ -27,7 +27,10 @@ use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("more.md");
 const USAGE: &str = help_usage!("more.md");
-const BELL: &str = "\x07";
+const BELL: char = '\x07';
+const MULTI_FILE_TOP_PROMPT: &str = "\r::::::::::::::\n\r{}\n\r::::::::::::::\n";
+const DEFAULT_PROMPT: &str = "--More--";
+const HELP_MESSAGE: &str = "[Press space to continue, 'q' to quit.]";
 
 pub mod options {
     pub const SILENT: &str = "silent";
@@ -43,8 +46,6 @@ pub mod options {
     pub const FROM_LINE: &str = "from-line";
     pub const FILES: &str = "files";
 }
-
-const MULTI_FILE_TOP_PROMPT: &str = "\r::::::::::::::\n\r{}\n\r::::::::::::::\n";
 
 struct Options {
     silent: bool,
@@ -66,17 +67,14 @@ impl Options {
         ) {
             // We add 1 to the number of lines to display because the last line
             // is used for the banner
-            (Some(number), _) if number > 0 => Some(number + 1),
-            (None, Some(number)) if number > 0 => Some(number + 1),
-            (_, _) => None,
+            (Some(n), _) | (None, Some(n)) if n > 0 => Some(n + 1),
+            _ => None, // Use terminal height
         };
         let from_line = match matches.get_one::<usize>(options::FROM_LINE).copied() {
-            Some(number) if number > 1 => number - 1,
+            Some(number) => number.saturating_sub(1),
             _ => 0,
         };
-        let pattern = matches
-            .get_one::<String>(options::PATTERN)
-            .map(|s| s.to_owned());
+        let pattern = matches.get_one::<String>(options::PATTERN).cloned();
         Self {
             silent: matches.get_flag(options::SILENT),
             _logical: matches.get_flag(options::LOGICAL),
@@ -173,7 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Disable raw mode before exiting if a panic occurs
     set_hook(Box::new(|panic_info| {
         // Ignore errors in panic hook
-        let _ = terminal::disable_raw_mode().unwrap();
+        let _ = terminal::disable_raw_mode();
         print!("\r");
         println!("{panic_info}");
     }));
@@ -398,13 +396,12 @@ fn more(
 
     loop {
         let mut wrong_key = None;
-        if event::poll(Duration::from_millis(10))? {
+        if event::poll(Duration::from_millis(100))? {
             match event::read()? {
                 // --- Quit ---
                 Event::Key(
                     KeyEvent {
                         code: KeyCode::Char('q'),
-                        modifiers: KeyModifiers::NONE,
                         kind: KeyEventKind::Press,
                         ..
                     }
@@ -428,7 +425,7 @@ fn more(
                     pager.page_down();
                 }
                 Event::Key(KeyEvent {
-                    code: KeyCode::Char('j'),
+                    code: KeyCode::Enter | KeyCode::Char('j'),
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
@@ -445,6 +442,10 @@ fn more(
                     ..
                 }) => {
                     if !pager.is_seekable() {
+                        if !options.silent {
+                            write!(stdout, "\r{}", BELL)?;
+                            stdout.flush()?;
+                        }
                         continue;
                     }
                     pager.page_up()?;
@@ -456,6 +457,10 @@ fn more(
                     ..
                 }) => {
                     if !pager.is_seekable() {
+                        if !options.silent {
+                            write!(stdout, "\r{}", BELL)?;
+                            stdout.flush()?;
+                        }
                         continue;
                     }
                     pager.prev_line();
@@ -642,12 +647,12 @@ impl<'a> Pager<'a> {
             _ => String::new(),
         };
 
-        let status = format!("--More--{status_inner}");
+        let status = format!("{DEFAULT_PROMPT}{status_inner}");
         let banner = match (self.silent, wrong_key) {
             (true, Some(key)) => format!(
                 "{status} [Unknown key: '{key}'. Press 'h' for instructions. (unimplemented)]"
             ),
-            (true, None) => format!("{status}[Press space to continue, 'q' to quit.]"),
+            (true, None) => format!("{status}{HELP_MESSAGE}"),
             (false, Some(_)) => format!("{status}{BELL}"),
             (false, None) => status,
         };
