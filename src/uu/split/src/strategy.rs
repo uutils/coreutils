@@ -108,7 +108,7 @@ impl NumberType {
     /// # Errors
     ///
     /// If the string is not one of the valid number types,
-    /// if `K` is not a nonnegative integer,
+    /// if `K` is not a non-negative integer,
     /// or if `K` is 0,
     /// or if `N` is not a positive integer,
     /// or if `K` is greater than `N`
@@ -117,9 +117,9 @@ impl NumberType {
         fn is_invalid_chunk(chunk_number: u64, num_chunks: u64) -> bool {
             chunk_number > num_chunks || chunk_number == 0
         }
-        let parts: Vec<&str> = s.split('/').collect();
-        match &parts[..] {
-            [n_str] => {
+        let mut parts = s.splitn(4, '/');
+        match (parts.next(), parts.next(), parts.next(), parts.next()) {
+            (Some(n_str), None, None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 if num_chunks > 0 {
@@ -128,7 +128,9 @@ impl NumberType {
                     Err(NumberTypeError::NumberOfChunks(s.to_string()))
                 }
             }
-            [k_str, n_str] if !k_str.starts_with('l') && !k_str.starts_with('r') => {
+            (Some(k_str), Some(n_str), None, None)
+                if !k_str.starts_with('l') && !k_str.starts_with('r') =>
+            {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size_u64(k_str)
@@ -138,12 +140,12 @@ impl NumberType {
                 }
                 Ok(Self::KthBytes(chunk_number, num_chunks))
             }
-            ["l", n_str] => {
+            (Some("l"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::Lines(num_chunks))
             }
-            ["l", k_str, n_str] => {
+            (Some("l"), Some(k_str), Some(n_str), None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size_u64(k_str)
@@ -153,12 +155,12 @@ impl NumberType {
                 }
                 Ok(Self::KthLines(chunk_number, num_chunks))
             }
-            ["r", n_str] => {
+            (Some("r"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::RoundRobin(num_chunks))
             }
-            ["r", k_str, n_str] => {
+            (Some("r"), Some(k_str), Some(n_str), None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size_u64(k_str)

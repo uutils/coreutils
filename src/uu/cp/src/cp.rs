@@ -771,7 +771,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if let Ok(mut matches) = matches {
         let options = Options::from_matches(&matches)?;
 
-        if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
+        if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::None {
             return Err(UUsageError::new(
                 EXIT_ERR,
                 "options --backup and --no-clobber are mutually exclusive",
@@ -997,7 +997,7 @@ impl Options {
         };
         let update_mode = update_control::determine_update_mode(matches);
 
-        if backup_mode != BackupMode::NoBackup
+        if backup_mode != BackupMode::None
             && matches
                 .get_one::<String>(update_control::arguments::OPT_UPDATE)
                 .is_some_and(|v| v == "none" || v == "none-fail")
@@ -1331,7 +1331,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
 
     for source in sources {
         let normalized_source = normalize_path(source);
-        if options.backup == BackupMode::NoBackup && seen_sources.contains(&normalized_source) {
+        if options.backup == BackupMode::None && seen_sources.contains(&normalized_source) {
             let file_type = if source.symlink_metadata()?.file_type().is_dir() {
                 "directory"
             } else {
@@ -1353,9 +1353,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 || matches!(options.copy_mode, CopyMode::SymLink)
             {
                 // There is already a file and it isn't a symlink (managed in a different place)
-                if copied_destinations.contains(&dest)
-                    && options.backup != BackupMode::NumberedBackup
-                {
+                if copied_destinations.contains(&dest) && options.backup != BackupMode::Numbered {
                     // If the target file was already created in this cp call, do not overwrite
                     return Err(Error::Error(format!(
                         "will not overwrite just-created '{}' with '{}'",
@@ -1788,7 +1786,7 @@ fn is_forbidden_to_copy_to_same_file(
     if !paths_refer_to_same_file(source, dest, dereference_to_compare) {
         return false;
     }
-    if options.backup != BackupMode::NoBackup {
+    if options.backup != BackupMode::None {
         if options.force() && !source_is_symlink {
             return false;
         }
@@ -1828,14 +1826,14 @@ fn handle_existing_dest(
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
-    if options.update == UpdateMode::ReplaceNone {
+    if options.update == UpdateMode::None {
         if options.debug {
             println!("skipped {}", dest.quote());
         }
         return Err(Error::Skipped(false));
     }
 
-    if options.update != UpdateMode::ReplaceIfOlder {
+    if options.update != UpdateMode::IfOlder {
         options.overwrite.verify(dest, options.debug)?;
     }
 
@@ -2081,7 +2079,7 @@ fn handle_copy_mode(
         CopyMode::Update => {
             if dest.exists() {
                 match options.update {
-                    UpdateMode::ReplaceAll => {
+                    UpdateMode::All => {
                         copy_helper(
                             source,
                             dest,
@@ -2094,17 +2092,17 @@ fn handle_copy_mode(
                             source_is_stream,
                         )?;
                     }
-                    UpdateMode::ReplaceNone => {
+                    UpdateMode::None => {
                         if options.debug {
                             println!("skipped {}", dest.quote());
                         }
 
                         return Ok(PerformedAction::Skipped);
                     }
-                    UpdateMode::ReplaceNoneFail => {
+                    UpdateMode::NoneFail => {
                         return Err(Error::Error(format!("not replacing '{}'", dest.display())));
                     }
-                    UpdateMode::ReplaceIfOlder => {
+                    UpdateMode::IfOlder => {
                         let dest_metadata = fs::symlink_metadata(dest)?;
 
                         let src_time = source_metadata.modified()?;
@@ -2261,7 +2259,7 @@ fn copy_file(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
-            && options.backup == BackupMode::NoBackup
+            && options.backup == BackupMode::None
         {
             fs::remove_file(dest)?;
         }
@@ -2292,7 +2290,7 @@ fn copy_file(
                 if !options.dereference {
                     return Ok(());
                 }
-            } else if options.backup != BackupMode::NoBackup && !dest_is_symlink {
+            } else if options.backup != BackupMode::None && !dest_is_symlink {
                 if source == dest {
                     if !options.force() {
                         return Ok(());

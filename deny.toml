@@ -84,7 +84,7 @@ skip = [
   { name = "thiserror-impl", version = "1.0.69" },
   # bindgen
   { name = "itertools", version = "0.13.0" },
-  # indexmap
+  # ordered-multimap
   { name = "hashbrown", version = "0.14.5" },
   # cexpr (via bindgen)
   { name = "nom", version = "7.1.3" },
@@ -98,8 +98,6 @@ skip = [
   { name = "rand_chacha", version = "0.3.1" },
   # rand
   { name = "rand_core", version = "0.6.4" },
-  # ppv-lite86, utmp-classic, utmp-classic-raw
-  { name = "zerocopy", version = "0.7.35" },
   # crossterm, procfs, terminal_size
   { name = "rustix", version = "0.38.43" },
   # rustix

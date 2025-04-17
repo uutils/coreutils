@@ -157,10 +157,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let backup_mode = backup_control::determine_backup_mode(&matches)?;
     let update_mode = update_control::determine_update_mode(&matches);
 
-    if backup_mode != BackupMode::NoBackup
+    if backup_mode != BackupMode::None
         && (overwrite_mode == OverwriteMode::NoClobber
-            || update_mode == UpdateMode::ReplaceNone
-            || update_mode == UpdateMode::ReplaceNoneFail)
+            || update_mode == UpdateMode::None
+            || update_mode == UpdateMode::NoneFail)
     {
         return Err(UUsageError::new(
             1,
@@ -319,9 +319,7 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
 }
 
 fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()> {
-    if opts.backup == BackupMode::SimpleBackup
-        && source_is_target_backup(source, target, &opts.suffix)
-    {
+    if opts.backup == BackupMode::Simple && source_is_target_backup(source, target, &opts.suffix) {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             format!(
@@ -346,7 +344,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     if path_ends_with_terminator(target)
         && (!target_is_dir && !source_is_dir)
         && !opts.no_target_dir
-        && opts.update != UpdateMode::ReplaceIfOlder
+        && opts.update != UpdateMode::IfOlder
     {
         return Err(MvError::FailedToAccessNotADirectory(target.quote().to_string()).into());
     }
@@ -428,7 +426,7 @@ fn assert_not_same_file(
     let same_file = (canonicalized_source.eq(&canonicalized_target)
         || are_hardlinks_to_same_file(source, target)
         || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
-        && opts.backup == BackupMode::NoBackup;
+        && opts.backup == BackupMode::None;
 
     // get the expected target path to show in errors
     // this is based on the argument and not canonicalized
@@ -539,8 +537,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             }
         };
 
-        if moved_destinations.contains(&targetpath) && options.backup != BackupMode::NumberedBackup
-        {
+        if moved_destinations.contains(&targetpath) && options.backup != BackupMode::Numbered {
             // If the target file was already created in this mv call, do not overwrite
             show!(USimpleError::new(
                 1,
@@ -594,20 +591,20 @@ fn rename(
     let mut backup_path = None;
 
     if to.exists() {
-        if opts.update == UpdateMode::ReplaceNone {
+        if opts.update == UpdateMode::None {
             if opts.debug {
                 println!("skipped {}", to.quote());
             }
             return Ok(());
         }
 
-        if (opts.update == UpdateMode::ReplaceIfOlder)
+        if (opts.update == UpdateMode::IfOlder)
             && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
         {
             return Ok(());
         }
 
-        if opts.update == UpdateMode::ReplaceNoneFail {
+        if opts.update == UpdateMode::NoneFail {
             let err_msg = format!("not replacing {}", to.quote());
             return Err(io::Error::other(err_msg));
         }

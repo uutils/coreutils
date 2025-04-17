@@ -826,6 +826,12 @@ fn partial_integer() {
         .fails_with_code(1)
         .stdout_is("42 is a lot")
         .stderr_is("printf: '42x23': value not completely converted\n");
+
+    new_ucmd!()
+        .args(&["%d is not %s", "0xwa", "a lot"])
+        .fails_with_code(1)
+        .stdout_is("0 is not a lot")
+        .stderr_is("printf: '0xwa': value not completely converted\n");
 }
 
 #[test]
@@ -1278,6 +1284,80 @@ fn float_switch_switch_decimal_scientific() {
         .args(&["%g", "0.00001"])
         .succeeds()
         .stdout_only("1e-05");
+}
+
+#[test]
+fn float_arg_zero() {
+    new_ucmd!()
+        .args(&["%f", "0."])
+        .succeeds()
+        .stdout_only("0.000000");
+
+    new_ucmd!()
+        .args(&["%f", ".0"])
+        .succeeds()
+        .stdout_only("0.000000");
+
+    new_ucmd!()
+        .args(&["%f", ".0e100000"])
+        .succeeds()
+        .stdout_only("0.000000");
+}
+
+#[test]
+fn float_arg_invalid() {
+    // Just a dot fails.
+    new_ucmd!()
+        .args(&["%f", "."])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("expected a numeric value");
+
+    new_ucmd!()
+        .args(&["%f", "-."])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("expected a numeric value");
+
+    // Just an exponent indicator fails.
+    new_ucmd!()
+        .args(&["%f", "e"])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("expected a numeric value");
+
+    // No digit but only exponent fails
+    new_ucmd!()
+        .args(&["%f", ".e12"])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("expected a numeric value");
+
+    // No exponent partially fails
+    new_ucmd!()
+        .args(&["%f", "123e"])
+        .fails()
+        .stdout_is("123.000000")
+        .stderr_contains("value not completely converted");
+
+    // Nothing past `0x` parses as zero
+    new_ucmd!()
+        .args(&["%f", "0x"])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("value not completely converted");
+
+    new_ucmd!()
+        .args(&["%f", "0x."])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("value not completely converted");
+
+    new_ucmd!()
+        .args(&["%f", "0xp12"])
+        .fails()
+        .stdout_is("0.000000")
+        .stderr_contains("value not completely converted");
 }
 
 #[test]

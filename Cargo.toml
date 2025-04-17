@@ -51,6 +51,7 @@ feat_selinux = [
   "id/selinux",
   "ls/selinux",
   "mkdir/selinux",
+  "stat/selinux",
   "selinux",
   "feat_require_selinux",
 ]
@@ -536,7 +537,7 @@ xattr = { workspace = true }
 # to deserialize a utmpx struct into a binary file
 [target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
 serde = { version = "1.0.202", features = ["derive"] }
-bincode = { version = "1.3.3" }
+bincode = { version = "2.0.1", features = ["serde"] }
 serde-big-array = "0.5.1"
 
 

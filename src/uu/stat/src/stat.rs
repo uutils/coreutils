@@ -902,7 +902,27 @@ impl Stater {
                     // FIXME: blocksize differs on various platform
                     // See coreutils/gnulib/lib/stat-size.h ST_NBLOCKSIZE // spell-checker:disable-line
                     'B' => OutputType::Unsigned(512),
-
+                    // SELinux security context string
+                    'C' => {
+                        #[cfg(feature = "selinux")]
+                        {
+                            if uucore::selinux::is_selinux_enabled() {
+                                match uucore::selinux::get_selinux_security_context(Path::new(file))
+                                {
+                                    Ok(ctx) => OutputType::Str(ctx),
+                                    Err(_) => OutputType::Str(
+                                        "failed to get security context".to_string(),
+                                    ),
+                                }
+                            } else {
+                                OutputType::Str("unsupported on this system".to_string())
+                            }
+                        }
+                        #[cfg(not(feature = "selinux"))]
+                        {
+                            OutputType::Str("unsupported for this operating system".to_string())
+                        }
+                    }
                     // device number in decimal
                     'd' => OutputType::Unsigned(meta.dev()),
                     // device number in hex
