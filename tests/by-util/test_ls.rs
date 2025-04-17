@@ -837,7 +837,7 @@ fn test_ls_columns() {
 
     for option in COLUMN_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
-        result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
+        result.stdout_only("test-columns-1\ttest-columns-2\ttest-columns-3\ttest-columns-4\n");
     }
 
     for option in COLUMN_ARGS {
@@ -846,7 +846,7 @@ fn test_ls_columns() {
             .arg("-w=40")
             .arg(option)
             .succeeds()
-            .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
+            .stdout_only("test-columns-1\ttest-columns-3\ntest-columns-2\ttest-columns-4\n");
     }
 
     // On windows we are always able to get the terminal size, so we can't simulate falling back to the
@@ -859,7 +859,7 @@ fn test_ls_columns() {
                 .env("COLUMNS", "40")
                 .arg(option)
                 .succeeds()
-                .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
+                .stdout_only("test-columns-1\ttest-columns-3\ntest-columns-2\ttest-columns-4\n");
         }
 
         scene
@@ -867,7 +867,7 @@ fn test_ls_columns() {
             .env("COLUMNS", "garbage")
             .arg("-C")
             .succeeds()
-            .stdout_is("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n")
+            .stdout_is("test-columns-1\ttest-columns-2\ttest-columns-3\ttest-columns-4\n")
             .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'\n");
     }
     scene
@@ -4366,28 +4366,52 @@ fn test_tabsize_option() {
     scene.ucmd().arg("-T").fails();
 }
 
-#[ignore = "issue #3624"]
 #[test]
 fn test_tabsize_formatting() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
     at.touch("aaaaaaaa");
     at.touch("bbbb");
     at.touch("cccc");
     at.touch("dddddddd");
 
-    ucmd.args(&["-T", "4"])
+    scene
+        .ucmd()
+        .args(&["-x", "-w18", "-T4"])
         .succeeds()
-        .stdout_is("aaaaaaaa bbbb\ncccc\t dddddddd");
+        .stdout_is("aaaaaaaa  bbbb\ncccc\t  dddddddd\n");
 
-    ucmd.args(&["-T", "2"])
+    scene
+        .ucmd()
+        .args(&["-C", "-w18", "-T4"])
         .succeeds()
-        .stdout_is("aaaaaaaa bbbb\ncccc\t\t dddddddd");
+        .stdout_is("aaaaaaaa  cccc\nbbbb\t  dddddddd\n");
+
+    scene
+        .ucmd()
+        .args(&["-x", "-w18", "-T2"])
+        .succeeds()
+        .stdout_is("aaaaaaaa\tbbbb\ncccc\t\t\tdddddddd\n");
+
+    scene
+        .ucmd()
+        .args(&["-C", "-w18", "-T2"])
+        .succeeds()
+        .stdout_is("aaaaaaaa\tcccc\nbbbb\t\t\tdddddddd\n");
+
+    scene
+        .ucmd()
+        .args(&["-x", "-w18", "-T0"])
+        .succeeds()
+        .stdout_is("aaaaaaaa  bbbb\ncccc      dddddddd\n");
 
     // use spaces
-    ucmd.args(&["-T", "0"])
+    scene
+        .ucmd()
+        .args(&["-C", "-w18", "-T0"])
         .succeeds()
-        .stdout_is("aaaaaaaa bbbb\ncccc     dddddddd");
+        .stdout_is("aaaaaaaa  cccc\nbbbb      dddddddd\n");
 }
 
 #[cfg(any(
