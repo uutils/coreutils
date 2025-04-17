@@ -6,11 +6,7 @@
 //spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE SIGBUS SIGSEGV sigbus tmpfs
 
 #![allow(dead_code)]
-#![allow(
-    clippy::too_many_lines,
-    clippy::should_panic_without_expect,
-    clippy::missing_errors_doc
-)]
+#![allow(clippy::too_many_lines, clippy::missing_errors_doc)]
 
 #[cfg(unix)]
 use libc::mode_t;
@@ -2243,7 +2239,6 @@ impl UChild {
     }
 
     /// Return true if the child process is exited and false otherwise.
-    #[allow(clippy::wrong_self_convention)]
     pub fn is_not_alive(&mut self) -> bool {
         !self.is_alive()
     }

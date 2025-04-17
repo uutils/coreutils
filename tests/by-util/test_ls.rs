@@ -4,11 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
 // spell-checker:ignore (words) fakeroot setcap
-#![allow(
-    clippy::similar_names,
-    clippy::too_many_lines,
-    clippy::cast_possible_truncation
-)]
+#![allow(clippy::similar_names, clippy::too_many_lines)]
 
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};

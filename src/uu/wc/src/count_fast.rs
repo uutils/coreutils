@@ -64,8 +64,6 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
             Ok(0) => break,
             Ok(res) => {
                 byte_count += res;
-                // Silent the warning as we want to the error message
-                #[allow(clippy::question_mark)]
                 if splice_exact(&pipe_rd, &null_file, res).is_err() {
                     return Err(byte_count);
                 }

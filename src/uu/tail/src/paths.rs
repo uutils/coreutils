@@ -136,7 +136,6 @@ impl HeaderPrinter {
     }
 }
 pub trait FileExtTail {
-    #[allow(clippy::wrong_self_convention)]
     fn is_seekable(&mut self, current_offset: u64) -> bool;
 }
 
