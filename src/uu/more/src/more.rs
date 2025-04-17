@@ -105,24 +105,28 @@ fn setup_term() -> UResult<usize> {
 }
 
 #[cfg(not(target_os = "fuchsia"))]
-fn reset_term(stdout: &mut Stdout) {
-    let _ = terminal::disable_raw_mode();
+fn reset_term(stdout: &mut Stdout) -> UResult<()> {
+    terminal::disable_raw_mode()?;
     // Clear the prompt
-    let _ = queue!(stdout, Clear(ClearType::CurrentLine));
+    queue!(stdout, Clear(ClearType::CurrentLine))?;
     // Move cursor to the beginning without printing new line
     print!("\r");
-    let _ = stdout.flush();
+    stdout.flush()?;
+    Ok(())
 }
 
 #[cfg(target_os = "fuchsia")]
 #[inline(always)]
-fn reset_term(_: &mut usize) {}
+fn reset_term(_: &mut usize) -> UResult<()> {
+    Ok(())
+}
 
 struct TerminalGuard;
 
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
-        reset_term(&mut stdout());
+        // Ignore errors in destructor
+        let _ = reset_term(&mut stdout());
     }
 }
 
@@ -168,7 +172,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Disable raw mode before exiting if a panic occurs
     set_hook(Box::new(|panic_info| {
-        terminal::disable_raw_mode().unwrap();
+        // Ignore errors in panic hook
+        let _ = terminal::disable_raw_mode().unwrap();
         print!("\r");
         println!("{panic_info}");
     }));
@@ -225,6 +230,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         let stdin = stdin();
         if stdin.is_tty() {
+            // stdin is not a pipe
             return Err(UUsageError::new(1, "bad usage"));
         }
         more(
@@ -442,7 +448,7 @@ fn more(
                         continue;
                     }
                     pager.page_up()?;
-                    paging_add_back_message(options, stdout)?;
+                    paging_add_back_message(stdout)?;
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('k'),
@@ -622,29 +628,21 @@ impl<'a> Pager<'a> {
     }
 
     fn draw_prompt(&mut self, stdout: &mut impl Write, wrong_key: Option<char>) {
-        let status_inner = if self.eof_reached {
-            format!("Next file: {}", self.next_file.unwrap_or_default())
-        } else if self.is_seekable() {
-            // Calculate percentage based on byte position for files
-            if let (Some(size), Ok(current_pos)) = (self.file_size, self.reader.stream_position()) {
-                if size > 0 {
+        let status_inner = match (self.eof_reached, self.next_file) {
+            (true, Some(next_file)) => format!("(Next file: {})", next_file),
+            _ if self.is_seekable() => match (self.file_size, self.reader.stream_position()) {
+                (Some(size), Ok(current_pos)) if size > 0 => {
                     format!(
-                        "{}%",
+                        "({}%)",
                         (current_pos as f64 / size as f64 * 100.0).round() as u16
                     )
-                } else {
-                    "0%".to_string() // Empty file
                 }
-            } else {
-                // Couldn't get size or position, show nothing
-                "".to_string()
-            }
-        } else {
-            // For stdin, show nothing extra
-            "".to_string()
+                _ => String::from("(0%)"),
+            },
+            _ => String::new(),
         };
 
-        let status = format!("--More--({status_inner})");
+        let status = format!("--More--{status_inner}");
         let banner = match (self.silent, wrong_key) {
             (true, Some(key)) => format!(
                 "{status} [Unknown key: '{key}'. Press 'h' for instructions. (unimplemented)]"
@@ -763,11 +761,9 @@ impl<'a> Pager<'a> {
     }
 }
 
-fn paging_add_back_message(options: &Options, stdout: &mut Stdout) -> UResult<()> {
-    if options.lines.is_some() {
-        execute!(stdout, MoveUp(1))?;
-        stdout.write_all("\n\r...back 1 page\n".as_bytes())?;
-    }
+fn paging_add_back_message(stdout: &mut Stdout) -> UResult<()> {
+    execute!(stdout, MoveUp(1))?;
+    stdout.write_all("\n\r...back 1 page\n".as_bytes())?;
     Ok(())
 }
 
