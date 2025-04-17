@@ -7,15 +7,16 @@
 
 use std::borrow::Borrow;
 use std::env;
+use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_section, help_usage, parse_glob};
+use uucore::{format_usage, help_about, help_section, help_usage, parser::parse_glob};
 
 mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -114,13 +115,7 @@ fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
             }
             let (prefix, suffix) = get_colors_format_strings(fmt);
             let ls_colors = parts.join(sep);
-            format!(
-                "{}{}:{}:{}",
-                prefix,
-                generate_type_output(fmt),
-                ls_colors,
-                suffix
-            )
+            format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt),)
         }
     }
 }
@@ -233,10 +228,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 );
             }
             Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("{}: {}", path.maybe_quote(), e),
-                ));
+                return Err(USimpleError::new(1, format!("{}: {e}", path.maybe_quote())));
             }
         }
     }
@@ -252,7 +244,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
@@ -388,9 +380,8 @@ where
         if val.is_empty() {
             return Err(format!(
                 // The double space is what GNU is doing
-                "{}:{}: invalid line;  missing second token",
+                "{}:{num}: invalid line;  missing second token",
                 fp.maybe_quote(),
-                num
             ));
         }
 
@@ -516,7 +507,7 @@ pub fn generate_dircolors_config() -> String {
     );
     config.push_str("COLORTERM ?*\n");
     for term in TERMS {
-        config.push_str(&format!("TERM {term}\n"));
+        let _ = writeln!(config, "TERM {term}");
     }
 
     config.push_str(
@@ -537,14 +528,14 @@ pub fn generate_dircolors_config() -> String {
     );
 
     for (name, _, code) in FILE_TYPES {
-        config.push_str(&format!("{name} {code}\n"));
+        let _ = writeln!(config, "{name} {code}");
     }
 
     config.push_str("# List any file extensions like '.gz' or '.tar' that you would like ls\n");
     config.push_str("# to color below. Put the extension, a space, and the color init string.\n");
 
     for (ext, color) in FILE_COLORS {
-        config.push_str(&format!("{ext} {color}\n"));
+        let _ = writeln!(config, "{ext} {color}");
     }
     config.push_str("# Subsequent TERM or COLORTERM entries, can be used to add / override\n");
     config.push_str("# config specific to those matching environment variables.");

@@ -4,17 +4,17 @@
 // file that was distributed with this source code.
 // spell-checker:ignore badoption
 use clap::{
-    builder::ValueParser, crate_version, error::ContextKind, error::Error, error::ErrorKind, Arg,
-    ArgAction, ArgMatches, Command,
+    Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
+    error::ErrorKind,
 };
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::posix::{posix_version, OBSOLETE};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::posix::{OBSOLETE, posix_version};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("uniq.md");
@@ -110,6 +110,7 @@ impl Uniq {
         {
             write_line_terminator!(writer, line_terminator)?;
         }
+        writer.flush().map_err_context(|| "write error".into())?;
         Ok(())
     }
 
@@ -139,11 +140,7 @@ impl Uniq {
     }
 
     fn get_line_terminator(&self) -> u8 {
-        if self.zero_terminated {
-            0
-        } else {
-            b'\n'
-        }
+        if self.zero_terminated { 0 } else { b'\n' }
     }
 
     fn cmp_keys(&self, first: &[u8], second: &[u8]) -> bool {
@@ -230,7 +227,7 @@ impl Uniq {
         } else {
             writer.write_all(line)
         }
-        .map_err_context(|| "Failed to write line".to_string())?;
+        .map_err_context(|| "write error".to_string())?;
 
         write_line_terminator!(writer, line_terminator)
     }
@@ -244,11 +241,7 @@ fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
                 IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
                 _ => Err(USimpleError::new(
                     1,
-                    format!(
-                        "Invalid argument for {}: {}",
-                        opt_name,
-                        arg_str.maybe_quote()
-                    ),
+                    format!("Invalid argument for {opt_name}: {}", arg_str.maybe_quote()),
                 )),
             },
         },
@@ -599,7 +592,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

@@ -5,11 +5,11 @@
 #![allow(unused_must_use)] // because we of writeln!
 
 // spell-checker:ignore (ToDO) lstat
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, UUsageError};
+use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::{format_usage, help_about, help_usage};
 
 // operating mode
@@ -79,7 +79,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -115,7 +115,7 @@ fn check_path(mode: &Mode, path: &[String]) -> bool {
         Mode::Basic => check_basic(path),
         Mode::Extra => check_default(path) && check_extra(path),
         Mode::Both => check_basic(path) && check_extra(path),
-        _ => check_default(path),
+        Mode::Default => check_default(path),
     }
 }
 
@@ -140,9 +140,7 @@ fn check_basic(path: &[String]) -> bool {
         if component_len > POSIX_NAME_MAX {
             writeln!(
                 std::io::stderr(),
-                "limit {} exceeded by length {} of file name component {}",
-                POSIX_NAME_MAX,
-                component_len,
+                "limit {POSIX_NAME_MAX} exceeded by length {component_len} of file name component {}",
                 p.quote()
             );
             return false;
@@ -184,9 +182,8 @@ fn check_default(path: &[String]) -> bool {
     if total_len > libc::PATH_MAX as usize {
         writeln!(
             std::io::stderr(),
-            "limit {} exceeded by length {} of file name {}",
+            "limit {} exceeded by length {total_len} of file name {}",
             libc::PATH_MAX,
-            total_len,
             joined_path.quote()
         );
         return false;
@@ -197,7 +194,7 @@ fn check_default(path: &[String]) -> bool {
         // but some non-POSIX hosts do (as an alias for "."),
         // so allow "" if `symlink_metadata` (corresponds to `lstat`) does.
         if fs::symlink_metadata(&joined_path).is_err() {
-            writeln!(std::io::stderr(), "pathchk: '': No such file or directory",);
+            writeln!(std::io::stderr(), "pathchk: '': No such file or directory");
             return false;
         }
     }
@@ -208,9 +205,8 @@ fn check_default(path: &[String]) -> bool {
         if component_len > libc::FILENAME_MAX as usize {
             writeln!(
                 std::io::stderr(),
-                "limit {} exceeded by length {} of file name component {}",
+                "limit {} exceeded by length {component_len} of file name component {}",
                 libc::FILENAME_MAX,
-                component_len,
                 p.quote()
             );
             return false;
@@ -244,8 +240,7 @@ fn check_portable_chars(path_segment: &str) -> bool {
             let invalid = path_segment[i..].chars().next().unwrap();
             writeln!(
                 std::io::stderr(),
-                "nonportable character '{}' in file name component {}",
-                invalid,
+                "nonportable character '{invalid}' in file name component {}",
                 path_segment.quote()
             );
             return false;

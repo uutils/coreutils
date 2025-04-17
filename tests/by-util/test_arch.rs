@@ -2,7 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_arch() {
@@ -19,5 +21,14 @@ fn test_arch_help() {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_arch_output_is_not_empty() {
+    let result = new_ucmd!().succeeds();
+    assert!(
+        !result.stdout_str().trim().is_empty(),
+        "arch output was empty"
+    );
 }

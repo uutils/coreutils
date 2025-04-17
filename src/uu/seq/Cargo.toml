@@ -1,17 +1,15 @@
-# spell-checker:ignore bigdecimal cfgs
+# spell-checker:ignore bigdecimal cfgs extendedbigdecimal
 [package]
 name = "uu_seq"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "seq ~ (uutils) display a sequence of numbers"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/seq"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
 
 [lib]
@@ -23,11 +21,21 @@ clap = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["format", "quoting-style"] }
+uucore = { workspace = true, features = [
+  "extendedbigdecimal",
+  "format",
+  "parser",
+  "quoting-style",
+] }
 
 [[bin]]
 name = "seq"
 path = "src/main.rs"
+
+# FIXME: this is the only crate that has a separate lints configuration,
+#        which for now means a full copy of all clippy and rust lints here.
+[lints.clippy]
+all = { level = "deny", priority = -1 }
 
 # Allow "fuzzing" as a "cfg" condition name
 # https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html

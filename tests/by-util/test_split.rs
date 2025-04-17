@@ -4,8 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
 
-use crate::common::util::{AtPath, TestScenario};
-use rand::{rng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rng};
 use regex::Regex;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
@@ -13,9 +12,14 @@ use rlimit::Resource;
 use std::env;
 use std::path::Path;
 use std::{
-    fs::{read_dir, File},
+    fs::{File, read_dir},
     io::{BufWriter, Read, Write},
 };
+use uutests::util::{AtPath, TestScenario};
+
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util_name;
 
 fn random_chars(n: usize) -> String {
     rng()
@@ -120,15 +124,14 @@ impl RandomFile {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_split_non_existing_file() {
     new_ucmd!()
         .arg("non-existing")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_is("split: cannot open 'non-existing' for reading: No such file or directory\n");
 }
 
@@ -325,13 +328,18 @@ fn test_filter_with_env_var_set() {
     RandomFile::new(&at, name).add_lines(n_lines);
 
     let env_var_value = "some-value";
-    env::set_var("FILE", env_var_value);
+    unsafe {
+        env::set_var("FILE", env_var_value);
+    }
     ucmd.args(&[format!("--filter={}", "cat > $FILE").as_str(), name])
         .succeeds();
 
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.collate(), at.read_bytes(name));
-    assert!(env::var("FILE").unwrap_or_else(|_| "var was unset".to_owned()) == env_var_value);
+    assert_eq!(
+        env::var("FILE").unwrap_or_else(|_| "var was unset".to_owned()),
+        env_var_value
+    );
 }
 
 #[test]
@@ -403,26 +411,22 @@ fn test_split_lines_number() {
     scene
         .ucmd()
         .args(&["--lines", "0", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("split: invalid number of lines: 0\n");
     scene
         .ucmd()
         .args(&["-0", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("split: invalid number of lines: 0\n");
     scene
         .ucmd()
         .args(&["--lines", "2fb", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("split: invalid number of lines: '2fb'\n");
     scene
         .ucmd()
         .args(&["--lines", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("split: invalid number of lines: 'file'\n");
 }
 
@@ -476,8 +480,7 @@ fn test_split_obs_lines_within_invalid_combined_shorts() {
     scene
         .ucmd()
         .args(&["-2fb", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("error: unexpected argument '-f' found\n");
 }
 
@@ -545,14 +548,12 @@ fn test_split_both_lines_and_obs_lines_standalone() {
     scene
         .ucmd()
         .args(&["-l", "2", "-2", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: cannot split in more than one way\n");
     scene
         .ucmd()
         .args(&["--lines", "2", "-2", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: cannot split in more than one way\n");
 }
 
@@ -568,62 +569,52 @@ fn test_split_obs_lines_as_other_option_value() {
     scene
         .ucmd()
         .args(&["--lines", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of lines: '-200'\n");
     scene
         .ucmd()
         .args(&["-l", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of lines: '-200'\n");
     scene
         .ucmd()
         .args(&["-a", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid suffix length: '-200'\n");
     scene
         .ucmd()
         .args(&["--suffix-length", "-d200e", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid suffix length: '-d200e'\n");
     scene
         .ucmd()
         .args(&["-C", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of bytes: '-200'\n");
     scene
         .ucmd()
         .args(&["--line-bytes", "-x200a4", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of bytes: '-x200a4'\n");
     scene
         .ucmd()
         .args(&["-b", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of bytes: '-200'\n");
     scene
         .ucmd()
         .args(&["--bytes", "-200xd", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of bytes: '-200xd'\n");
     scene
         .ucmd()
         .args(&["-n", "-200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of chunks: '-200'\n");
     scene
         .ucmd()
         .args(&["--number", "-e200", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: invalid number of chunks: '-e200'\n");
 }
 
@@ -677,14 +668,12 @@ fn test_split_obs_lines_within_combined_with_number() {
     scene
         .ucmd()
         .args(&["-3dxen", "4", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: cannot split in more than one way\n");
     scene
         .ucmd()
         .args(&["-dxe30n", "4", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("split: cannot split in more than one way\n");
 }
 
@@ -692,8 +681,7 @@ fn test_split_obs_lines_within_combined_with_number() {
 fn test_split_invalid_bytes_size() {
     new_ucmd!()
         .args(&["-b", "1024W"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("split: invalid number of bytes: '1024W'\n");
     #[cfg(target_pointer_width = "32")]
     {
@@ -1648,7 +1636,9 @@ fn test_round_robin() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+// TODO(#7542): Re-enable on Android once we figure out why rlimit is broken.
+// #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_round_robin_limited_file_descriptors() {
     new_ucmd!()
         .args(&["-n", "r/40", "onehundredlines.txt"])
@@ -1977,9 +1967,9 @@ fn test_split_separator_same_multiple() {
 #[test]
 fn test_long_lines() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let line1 = format!("{:131070}\n", "");
-    let line2 = format!("{:1}\n", "");
-    let line3 = format!("{:131071}\n", "");
+    let line1 = [" ".repeat(131_070), String::from("\n")].concat();
+    let line2 = [" ", "\n"].concat();
+    let line3 = [" ".repeat(131_071), String::from("\n")].concat();
     let infile = [line1, line2, line3].concat();
     ucmd.args(&["-C", "131072"])
         .pipe_in(infile)

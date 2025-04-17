@@ -5,7 +5,10 @@
 
 // spell-checker:ignore bsdutils toybox
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 struct TestData<'b> {
     name: &'b str,
@@ -137,7 +140,7 @@ const EXAMPLE_DATA: &[TestData] = &[
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -146,7 +149,7 @@ fn test_combine_pairs_of_lines() {
         for d in ["-d", "--delimiters"] {
             new_ucmd!()
                 .args(&[s, d, "\t\n", "html_colors.txt"])
-                .run()
+                .succeeds()
                 .stdout_is_fixture("html_colors.expected");
         }
     }

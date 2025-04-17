@@ -8,11 +8,11 @@
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
 use std::{
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     io::{BufRead, BufWriter, Write},
 };
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
@@ -43,7 +43,7 @@ mod options {
 
 /// Command line options for csplit.
 pub struct CsplitOptions {
-    split_name: crate::SplitName,
+    split_name: SplitName,
     keep_files: bool,
     quiet: bool,
     elide_empty_files: bool,
@@ -202,7 +202,12 @@ impl Drop for SplitWriter<'_> {
     fn drop(&mut self) {
         if self.options.elide_empty_files && self.size == 0 {
             let file_name = self.options.split_name.get(self.counter);
-            remove_file(file_name).expect("Failed to elide split");
+            // In the case of `echo a | csplit -z - %a%1`, the file
+            // `xx00` does not exist because the positive offset
+            // advanced past the end of the input. Since there is no
+            // file to remove in that case, `remove_file` would return
+            // an error, so we just ignore it.
+            let _ = remove_file(file_name);
         }
     }
 }
@@ -592,7 +597,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .args_override_self(true)
@@ -656,7 +661,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::PATTERN)
                 .hide(true)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .required(true),
         )
         .after_help(AFTER_HELP)

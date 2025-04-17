@@ -4,7 +4,9 @@
 // file that was distributed with this source code.
 #![allow(clippy::borrow_as_ptr)]
 
-use crate::common::util::TestScenario;
+use uutests::util::TestScenario;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
+
 use regex::Regex;
 #[cfg(target_os = "linux")]
 use std::fmt::Write;
@@ -17,7 +19,7 @@ use std::fmt::Write;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -160,11 +162,15 @@ fn test_tee_no_more_writeable_2() {
 
 #[cfg(target_os = "linux")]
 mod linux_only {
-    use crate::common::util::{AtPath, TestScenario, UCommand};
+    use uutests::util::{AtPath, CmdResult, TestScenario, UCommand};
 
     use std::fmt::Write;
     use std::fs::File;
-    use std::process::{Output, Stdio};
+    use std::process::Stdio;
+    use std::time::Duration;
+    use uutests::at_and_ucmd;
+    use uutests::new_ucmd;
+    use uutests::util_name;
 
     fn make_broken_pipe() -> File {
         use libc::c_int;
@@ -183,64 +189,76 @@ mod linux_only {
         unsafe { File::from_raw_fd(fds[1]) }
     }
 
-    fn run_tee(proc: &mut UCommand) -> (String, Output) {
+    fn make_hanging_read() -> File {
+        use libc::c_int;
+        use std::os::unix::io::FromRawFd;
+
+        let mut fds: [c_int; 2] = [0, 0];
+        assert!(
+            (unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) } == 0),
+            "Failed to create pipe"
+        );
+
+        // PURPOSELY leak the write end of the pipe, so the read end hangs.
+
+        // Return the read end of the pipe
+        unsafe { File::from_raw_fd(fds[0]) }
+    }
+
+    fn run_tee(proc: &mut UCommand) -> (String, CmdResult) {
         let content = (1..=100_000).fold(String::new(), |mut output, x| {
             let _ = writeln!(output, "{x}");
             output
         });
 
-        #[allow(deprecated)]
-        let output = proc
+        let result = proc
             .ignore_stdin_write_error()
             .set_stdin(Stdio::piped())
             .run_no_wait()
-            .pipe_in_and_wait_with_output(content.as_bytes());
+            .pipe_in_and_wait(content.as_bytes());
 
-        (content, output)
+        (content, result)
     }
 
-    fn expect_success(output: &Output) {
+    fn expect_success(result: &CmdResult) {
         assert!(
-            output.status.success(),
+            result.succeeded(),
             "Command was expected to succeed.\nstdout = {}\n stderr = {}",
-            std::str::from_utf8(&output.stdout).unwrap(),
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stdout()).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
         assert!(
-            output.stderr.is_empty(),
+            result.stderr_str().is_empty(),
             "Unexpected data on stderr.\n stderr = {}",
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
     }
 
-    fn expect_failure(output: &Output, message: &str) {
+    fn expect_failure(result: &CmdResult, message: &str) {
         assert!(
-            !output.status.success(),
+            !result.succeeded(),
             "Command was expected to fail.\nstdout = {}\n stderr = {}",
-            std::str::from_utf8(&output.stdout).unwrap(),
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stdout()).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
         assert!(
-            std::str::from_utf8(&output.stderr)
-                .unwrap()
-                .contains(message),
-            "Expected to see error message fragment {} in stderr, but did not.\n stderr = {}",
-            message,
-            std::str::from_utf8(&output.stderr).unwrap(),
+            result.stderr_str().contains(message),
+            "Expected to see error message fragment {message} in stderr, but did not.\n stderr = {}",
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
     }
 
-    fn expect_silent_failure(output: &Output) {
+    fn expect_silent_failure(result: &CmdResult) {
         assert!(
-            !output.status.success(),
+            !result.succeeded(),
             "Command was expected to fail.\nstdout = {}\n stderr = {}",
-            std::str::from_utf8(&output.stdout).unwrap(),
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stdout()).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
         assert!(
-            output.stderr.is_empty(),
+            result.stderr_str().is_empty(),
             "Unexpected data on stderr.\n stderr = {}",
-            std::str::from_utf8(&output.stderr).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
         );
     }
 
@@ -255,13 +273,14 @@ mod linux_only {
         let compare = at.read(name);
         assert!(
             compare.len() < contents.len(),
-            "Too many bytes ({}) written to {} (should be a short count from {})",
+            "Too many bytes ({}) written to {name} (should be a short count from {})",
             compare.len(),
-            name,
             contents.len()
         );
-        assert!(contents.starts_with(&compare),
-                "Expected truncated output to be a prefix of the correct output, but it isn't.\n Correct: {contents}\n Compare: {compare}");
+        assert!(
+            contents.starts_with(&compare),
+            "Expected truncated output to be a prefix of the correct output, but it isn't.\n Correct: {contents}\n Compare: {compare}"
+        );
     }
 
     #[test]
@@ -534,5 +553,32 @@ mod linux_only {
 
         expect_failure(&output, "No space left");
         expect_short(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_mode_broken_pipe_only() {
+        new_ucmd!()
+            .timeout(Duration::from_secs(1))
+            .arg("-p")
+            .set_stdin(make_hanging_read())
+            .set_stdout(make_broken_pipe())
+            .succeeds();
+    }
+
+    #[test]
+    fn test_pipe_mode_broken_pipe_file() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("-p")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
     }
 }

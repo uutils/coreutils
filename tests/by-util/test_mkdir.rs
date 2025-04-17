@@ -3,26 +3,29 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore bindgen
+// spell-checker:ignore bindgen getfattr testtest
 
 #![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 
-use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use libc::mode_t;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(not(windows))]
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_no_arg() {
     new_ucmd!()
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("error: the following required arguments were not provided:");
 }
 
@@ -37,7 +40,7 @@ fn test_mkdir_verbose() {
     new_ucmd!()
         .arg("test_dir")
         .arg("-v")
-        .run()
+        .succeeds()
         .stdout_is(expected);
 }
 
@@ -354,4 +357,61 @@ fn test_empty_argument() {
         .arg("")
         .fails()
         .stderr_only("mkdir: cannot create directory '': No such file or directory\n");
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dest = "test_dir_a";
+    let args = ["-Z", "--context=unconfined_u:object_r:user_tmp_t:s0"];
+    for arg in args {
+        new_ucmd!()
+            .arg(arg)
+            .arg("-v")
+            .arg(at.plus_as_string(dest))
+            .succeeds()
+            .stdout_contains("created directory");
+
+        let getfattr_output = Command::new("getfattr")
+            .arg(at.plus_as_string(dest))
+            .arg("-n")
+            .arg("security.selinux")
+            .output()
+            .expect("Failed to run `getfattr` on the destination file");
+
+        assert!(
+            getfattr_output.status.success(),
+            "getfattr did not run successfully: {}",
+            String::from_utf8_lossy(&getfattr_output.stderr)
+        );
+
+        let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
+        assert!(
+            stdout.contains("unconfined_u"),
+            "Expected '{}' not found in getfattr output:\n{}",
+            "unconfined_u",
+            stdout
+        );
+        at.rmdir(dest);
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux_invalid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dest = "test_dir_a";
+    new_ucmd!()
+        .arg("--context=testtest")
+        .arg(at.plus_as_string(dest))
+        .fails()
+        .no_stdout()
+        .stderr_contains("failed to set SELinux security context:");
+    // invalid context, so, no directory
+    assert!(!at.dir_exists(dest));
 }

@@ -7,15 +7,15 @@
 
 mod flags;
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
+use clap::{Arg, ArgAction, ArgMatches, Command};
+use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
-    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags,
-    OutputFlags, SpecialCharacterIndices, Termios,
+    ControlFlags, InputFlags, LocalFlags, OutputFlags, SpecialCharacterIndices, Termios,
+    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::fs::File;
-use std::io::{self, stdout, Stdout};
+use std::io::{self, Stdout, stdout};
 use std::ops::ControlFlow;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
@@ -40,6 +40,7 @@ const SUMMARY: &str = help_about!("stty.md");
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
     name: &'static str,
+    #[expect(clippy::struct_field_names)]
     flag: T,
     show: bool,
     sane: bool,
@@ -256,7 +257,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
 
     if opts.all {
         let mut size = TermSize::default();
-        unsafe { tiocgwinsz(opts.file.as_raw_fd(), &mut size as *mut _)? };
+        unsafe { tiocgwinsz(opts.file.as_raw_fd(), &raw mut size)? };
         print!("rows {}; columns {}; ", size.rows, size.columns);
     }
 
@@ -463,7 +464,7 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .infer_long_args(true)
@@ -499,7 +500,7 @@ pub fn uu_app() -> Command {
 impl TermiosFlag for ControlFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
         termios.control_flags.contains(*self)
-            && group.map_or(true, |g| !termios.control_flags.intersects(g - *self))
+            && group.is_none_or(|g| !termios.control_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
@@ -510,7 +511,7 @@ impl TermiosFlag for ControlFlags {
 impl TermiosFlag for InputFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
         termios.input_flags.contains(*self)
-            && group.map_or(true, |g| !termios.input_flags.intersects(g - *self))
+            && group.is_none_or(|g| !termios.input_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
@@ -521,7 +522,7 @@ impl TermiosFlag for InputFlags {
 impl TermiosFlag for OutputFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
         termios.output_flags.contains(*self)
-            && group.map_or(true, |g| !termios.output_flags.intersects(g - *self))
+            && group.is_none_or(|g| !termios.output_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
@@ -532,7 +533,7 @@ impl TermiosFlag for OutputFlags {
 impl TermiosFlag for LocalFlags {
     fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
         termios.local_flags.contains(*self)
-            && group.map_or(true, |g| !termios.local_flags.intersects(g - *self))
+            && group.is_none_or(|g| !termios.local_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {

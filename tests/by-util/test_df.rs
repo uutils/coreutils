@@ -12,11 +12,15 @@
 
 use std::collections::HashSet;
 
-use crate::common::util::TestScenario;
+#[cfg(not(any(target_os = "freebsd", target_os = "windows")))]
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -285,6 +289,7 @@ fn test_type_option() {
 
 #[test]
 #[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(feature = "feat_selinux"))]
 fn test_type_option_with_file() {
     let fs_type = new_ucmd!()
         .args(&["--output=fstype", "."])

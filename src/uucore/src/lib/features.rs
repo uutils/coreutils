@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // features ~ feature-gated modules (core/bundler file)
+//
+// spell-checker:ignore (features) extendedbigdecimal
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
@@ -16,6 +18,8 @@ pub mod colors;
 pub mod custom_tz_fmt;
 #[cfg(feature = "encoding")]
 pub mod encoding;
+#[cfg(feature = "extendedbigdecimal")]
+pub mod extendedbigdecimal;
 #[cfg(feature = "format")]
 pub mod format;
 #[cfg(feature = "fs")]
@@ -24,6 +28,8 @@ pub mod fs;
 pub mod fsext;
 #[cfg(feature = "lines")]
 pub mod lines;
+#[cfg(feature = "parser")]
+pub mod parser;
 #[cfg(feature = "quoting-style")]
 pub mod quoting_style;
 #[cfg(feature = "ranges")]
@@ -34,6 +40,8 @@ pub mod ringbuffer;
 pub mod sum;
 #[cfg(feature = "update-control")]
 pub mod update_control;
+#[cfg(feature = "uptime")]
+pub mod uptime;
 #[cfg(feature = "version-cmp")]
 pub mod version_cmp;
 
@@ -58,6 +66,8 @@ pub mod tty;
 
 #[cfg(all(unix, feature = "fsxattr"))]
 pub mod fsxattr;
+#[cfg(all(target_os = "linux", feature = "selinux"))]
+pub mod selinux;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
 #[cfg(all(

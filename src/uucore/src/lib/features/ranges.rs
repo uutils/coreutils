@@ -84,7 +84,7 @@ impl Range {
 
         for item in list.split(&[',', ' ']) {
             let range_item = FromStr::from_str(item)
-                .map_err(|e| format!("range {} was invalid: {}", item.quote(), e))?;
+                .map_err(|e| format!("range {} was invalid: {e}", item.quote()))?;
             ranges.push(range_item);
         }
 
@@ -165,7 +165,7 @@ pub fn contain(ranges: &[Range], n: usize) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::{complement, Range};
+    use super::{Range, complement};
     use std::str::FromStr;
 
     fn m(a: Vec<Range>, b: &[Range]) {

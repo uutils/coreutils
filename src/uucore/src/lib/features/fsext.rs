@@ -59,7 +59,7 @@ fn to_nul_terminated_wide_string(s: impl AsRef<OsStr>) -> Vec<u16> {
 
 #[cfg(unix)]
 use libc::{
-    mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
+    S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t, strerror,
 };
 use std::borrow::Cow;
 #[cfg(unix)]
@@ -367,7 +367,7 @@ use libc::c_int;
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
-extern "C" {
+unsafe extern "C" {
     #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
     #[link_name = "getmntinfo$INODE64"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
@@ -460,14 +460,14 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
             unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
         if INVALID_HANDLE_VALUE == find_handle {
             let os_err = IOError::last_os_error();
-            let msg = format!("FindFirstVolumeW failed: {}", os_err);
+            let msg = format!("FindFirstVolumeW failed: {os_err}");
             return Err(USimpleError::new(EXIT_ERR, msg));
         }
         let mut mounts = Vec::<MountInfo>::new();
         loop {
             let volume_name = LPWSTR2String(&volume_name_buf);
             if !volume_name.starts_with("\\\\?\\") || !volume_name.ends_with('\\') {
-                show_warning!("A bad path was skipped: {}", volume_name);
+                show_warning!("A bad path was skipped: {volume_name}");
                 continue;
             }
             if let Some(m) = MountInfo::new(volume_name) {
@@ -812,9 +812,10 @@ impl FsMeta for StatFs {
         target_os = "openbsd"
     ))]
     fn fsid(&self) -> u64 {
-        let f_fsid: &[u32; 2] =
-            unsafe { &*(&self.f_fsid as *const nix::sys::statfs::fsid_t as *const [u32; 2]) };
-        (u64::from(f_fsid[0])) << 32 | u64::from(f_fsid[1])
+        // Use type inference to determine the type of f_fsid
+        // (libc::__fsid_t on Android, libc::fsid_t on other platforms)
+        let f_fsid: &[u32; 2] = unsafe { &*(&self.f_fsid as *const _ as *const [u32; 2]) };
+        ((u64::from(f_fsid[0])) << 32) | u64::from(f_fsid[1])
     }
     #[cfg(not(any(
         target_vendor = "apple",
@@ -879,7 +880,7 @@ where
 }
 
 #[cfg(unix)]
-pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
+pub fn pretty_filetype(mode: mode_t, size: u64) -> String {
     match mode & S_IFMT {
         S_IFREG => {
             if size == 0 {
@@ -895,9 +896,9 @@ pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
         S_IFIFO => "fifo",
         S_IFSOCK => "socket",
         // TODO: Other file types
-        // See coreutils/gnulib/lib/file-type.c // spell-checker:disable-line
-        _ => "weird file",
+        _ => return format!("weird file ({:07o})", mode & S_IFMT),
     }
+    .to_owned()
 }
 
 pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
@@ -1035,7 +1036,7 @@ mod tests {
         assert_eq!("character special file", pretty_filetype(S_IFCHR, 0));
         assert_eq!("regular file", pretty_filetype(S_IFREG, 1));
         assert_eq!("regular empty file", pretty_filetype(S_IFREG, 0));
-        assert_eq!("weird file", pretty_filetype(0, 0));
+        assert_eq!("weird file (0000000)", pretty_filetype(0, 0));
     }
 
     #[test]

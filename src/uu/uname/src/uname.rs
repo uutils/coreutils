@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use platform_info::*;
 use uucore::{
     error::{UResult, USimpleError},
@@ -145,7 +145,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

@@ -5,21 +5,24 @@
 
 // spell-checker:ignore wipesync
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_invalid_remove_arg() {
-    new_ucmd!().arg("--remove=unknown").fails().code_is(1);
+    new_ucmd!().arg("--remove=unknown").fails_with_code(1);
 }
 
 #[test]
 fn test_ambiguous_remove_arg() {
-    new_ucmd!().arg("--remove=wip").fails().code_is(1);
+    new_ucmd!().arg("--remove=wip").fails_with_code(1);
 }
 
 #[test]
@@ -36,7 +39,7 @@ fn test_shred() {
     // File exists
     assert!(at.file_exists(file));
     // File is obfuscated
-    assert!(at.read_bytes(file) != file_original_content.as_bytes());
+    assert_ne!(at.read_bytes(file), file_original_content.as_bytes());
 }
 
 #[test]
@@ -126,13 +129,13 @@ fn test_shred_force() {
     at.set_readonly(file);
 
     // Try shred -u.
-    scene.ucmd().arg("-u").arg(file).run();
+    scene.ucmd().arg("-u").arg(file).fails();
 
     // file_a was not deleted because it is readonly.
     assert!(at.file_exists(file));
 
     // Try shred -u -f.
-    scene.ucmd().arg("-u").arg("-f").arg(file).run();
+    scene.ucmd().arg("-u").arg("-f").arg(file).succeeds();
 
     // file_a was deleted.
     assert!(!at.file_exists(file));

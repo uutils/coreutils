@@ -4,15 +4,15 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
-use clap::{crate_version, Arg, ArgAction, Command};
-use std::fs::{metadata, OpenOptions};
+use clap::{Arg, ArgAction, Command};
+use std::fs::{OpenOptions, metadata};
 use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::parse_size::{parse_size_u64, ParseSizeError};
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -116,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -180,7 +180,7 @@ pub fn uu_app() -> Command {
 /// size of the file.
 fn file_truncate(filename: &str, create: bool, size: u64) -> UResult<()> {
     #[cfg(unix)]
-    if let Ok(metadata) = std::fs::metadata(filename) {
+    if let Ok(metadata) = metadata(filename) {
         if metadata.file_type().is_fifo() {
             return Err(USimpleError::new(
                 1,
@@ -229,7 +229,7 @@ fn truncate_reference_and_size(
             return Err(USimpleError::new(
                 1,
                 String::from("you must specify a relative '--size' with '--reference'"),
-            ))
+            ));
         }
         Ok(m) => m,
     };
@@ -408,8 +408,8 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_mode_and_size;
     use crate::TruncateMode;
+    use crate::parse_mode_and_size;
 
     #[test]
     fn test_parse_mode_and_size() {

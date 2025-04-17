@@ -33,12 +33,12 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::ffi::CStr;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
-use uucore::error::{set_exit_code, USimpleError};
+use uucore::error::{USimpleError, set_exit_code};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::line_ending::LineEnding;
@@ -176,23 +176,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(state.zflag);
 
     if state.cflag {
-        if state.selinux_supported {
+        return if state.selinux_supported {
             // print SElinux context and exit
             #[cfg(all(any(target_os = "linux", target_os = "android"), feature = "selinux"))]
             if let Ok(context) = selinux::SecurityContext::current(false) {
                 let bytes = context.as_bytes();
-                print!("{}{}", String::from_utf8_lossy(bytes), line_ending);
+                print!("{}{line_ending}", String::from_utf8_lossy(bytes));
             } else {
                 // print error because `cflag` was explicitly requested
                 return Err(USimpleError::new(1, "can't get process context"));
             }
-            return Ok(());
+            Ok(())
         } else {
-            return Err(USimpleError::new(
+            Err(USimpleError::new(
                 1,
                 "--context (-Z) works only on an SELinux-enabled kernel",
-            ));
-        }
+            ))
+        };
     }
 
     for i in 0..=users.len() {
@@ -246,7 +246,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 "{}",
                 if state.nflag {
                     entries::gid2grp(gid).unwrap_or_else(|_| {
-                        show_error!("cannot find name for group ID {}", gid);
+                        show_error!("cannot find name for group ID {gid}");
                         set_exit_code(1);
                         gid.to_string()
                     })
@@ -261,7 +261,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 "{}",
                 if state.nflag {
                     entries::uid2usr(uid).unwrap_or_else(|_| {
-                        show_error!("cannot find name for user ID {}", uid);
+                        show_error!("cannot find name for user ID {uid}");
                         set_exit_code(1);
                         uid.to_string()
                     })
@@ -286,7 +286,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .map(|&id| {
                         if state.nflag {
                             entries::gid2grp(id).unwrap_or_else(|_| {
-                                show_error!("cannot find name for group ID {}", id);
+                                show_error!("cannot find name for group ID {id}");
                                 set_exit_code(1);
                                 id.to_string()
                             })
@@ -320,7 +320,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -448,7 +448,7 @@ fn pretty(possible_pw: Option<Passwd>) {
                 .join(" ")
         );
     } else {
-        let login = cstr2cow!(getlogin() as *const _);
+        let login = cstr2cow!(getlogin().cast_const());
         let rid = getuid();
         if let Ok(p) = Passwd::locate(rid) {
             if login == p.name {
@@ -557,40 +557,37 @@ fn id_print(state: &State, groups: &[u32]) {
     let egid = state.ids.as_ref().unwrap().egid;
 
     print!(
-        "uid={}({})",
-        uid,
+        "uid={uid}({})",
         entries::uid2usr(uid).unwrap_or_else(|_| {
-            show_error!("cannot find name for user ID {}", uid);
+            show_error!("cannot find name for user ID {uid}");
             set_exit_code(1);
             uid.to_string()
         })
     );
     print!(
-        " gid={}({})",
-        gid,
+        " gid={gid}({})",
         entries::gid2grp(gid).unwrap_or_else(|_| {
-            show_error!("cannot find name for group ID {}", gid);
+            show_error!("cannot find name for group ID {gid}");
             set_exit_code(1);
             gid.to_string()
         })
     );
     if !state.user_specified && (euid != uid) {
         print!(
-            " euid={}({})",
-            euid,
+            " euid={euid}({})",
             entries::uid2usr(euid).unwrap_or_else(|_| {
-                show_error!("cannot find name for user ID {}", euid);
+                show_error!("cannot find name for user ID {euid}");
                 set_exit_code(1);
                 euid.to_string()
             })
         );
     }
     if !state.user_specified && (egid != gid) {
+        // BUG?  printing egid={euid} ?
         print!(
-            " egid={}({})",
-            euid,
+            " egid={egid}({})",
             entries::gid2grp(egid).unwrap_or_else(|_| {
-                show_error!("cannot find name for group ID {}", egid);
+                show_error!("cannot find name for group ID {egid}");
                 set_exit_code(1);
                 egid.to_string()
             })
@@ -601,10 +598,9 @@ fn id_print(state: &State, groups: &[u32]) {
         groups
             .iter()
             .map(|&gr| format!(
-                "{}({})",
-                gr,
+                "{gr}({})",
                 entries::gid2grp(gr).unwrap_or_else(|_| {
-                    show_error!("cannot find name for group ID {}", gr);
+                    show_error!("cannot find name for group ID {gr}");
                     set_exit_code(1);
                     gr.to_string()
                 })
@@ -651,6 +647,7 @@ mod audit {
     pub type au_tid_addr_t = au_tid_addr;
 
     #[repr(C)]
+    #[expect(clippy::struct_field_names)]
     pub struct c_auditinfo_addr {
         pub ai_auid: au_id_t,         // Audit user ID
         pub ai_mask: au_mask_t,       // Audit masks.
@@ -660,7 +657,7 @@ mod audit {
     }
     pub type c_auditinfo_addr_t = c_auditinfo_addr;
 
-    extern "C" {
+    unsafe extern "C" {
         pub fn getaudit(auditinfo_addr: *mut c_auditinfo_addr_t) -> c_int;
     }
 }

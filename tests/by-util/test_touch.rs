@@ -4,12 +4,15 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
-use crate::common::util::{AtPath, TestScenario};
+use filetime::FileTime;
 #[cfg(not(target_os = "freebsd"))]
 use filetime::set_symlink_file_times;
-use filetime::FileTime;
 use std::fs::remove_file;
 use std::path::PathBuf;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::{AtPath, TestScenario};
+use uutests::util_name;
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.metadata(path);
@@ -42,7 +45,7 @@ fn str_to_filetime(format: &str, s: &str) -> FileTime {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -116,6 +119,69 @@ fn test_touch_set_mdhms_time() {
     assert_eq!(atime, mtime);
     assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45296);
     assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45296);
+}
+
+#[test]
+#[cfg(target_pointer_width = "64")]
+fn test_touch_2_digit_years_68() {
+    // 68 and before are 20xx
+    // it will fail on 32 bits, because of wraparound for anything after
+    // 2038-01-19
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_two_digit_68_time";
+
+    ucmd.args(&["-t", "6801010000", file])
+        .succeeds()
+        .no_output();
+
+    assert!(at.file_exists(file));
+
+    //  January 1, 2068, 00:00:00
+    let expected = FileTime::from_unix_time(3_092_601_600, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+fn test_touch_2_digit_years_2038() {
+    // Same as test_touch_2_digit_years_68 but for 32 bits systems
+    // we test a date before the y2038 bug
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_two_digit_68_time";
+
+    ucmd.args(&["-t", "3801010000", file])
+        .succeeds()
+        .no_output();
+
+    assert!(at.file_exists(file));
+
+    // January 1, 2038, 00:00:00
+    let expected = FileTime::from_unix_time(2_145_916_800, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+fn test_touch_2_digit_years_69() {
+    // 69 and after are 19xx
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_two_digit_69_time";
+
+    ucmd.args(&["-t", "6901010000", file])
+        .succeeds()
+        .no_output();
+
+    assert!(at.file_exists(file));
+    // January 1, 1969, 00:00:00
+    let expected = FileTime::from_unix_time(-31_536_000, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
 }
 
 #[test]
@@ -213,7 +279,7 @@ fn test_touch_set_only_atime() {
 
         let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
         let (atime, mtime) = get_file_times(&at, file);
-        assert!(atime != mtime);
+        assert_ne!(atime, mtime);
         assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
     }
 }
@@ -314,7 +380,7 @@ fn test_touch_set_only_mtime() {
 
         let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
         let (atime, mtime) = get_file_times(&at, file);
-        assert!(atime != mtime);
+        assert_ne!(atime, mtime);
         assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
     }
 }
@@ -739,7 +805,7 @@ fn test_touch_changes_time_of_file_in_stdout() {
         .no_stderr();
 
     let (_, mtime_after) = get_file_times(&at, file);
-    assert!(mtime_after != mtime);
+    assert_ne!(mtime_after, mtime);
 }
 
 #[test]
@@ -758,8 +824,7 @@ fn test_touch_permission_denied_error_msg() {
 
     let full_path = at.plus_as_string(path_str);
     ucmd.arg(&full_path).fails().stderr_only(format!(
-        "touch: cannot touch '{}': Permission denied\n",
-        &full_path
+        "touch: cannot touch '{full_path}': Permission denied\n",
     ));
 }
 
@@ -806,7 +871,7 @@ fn test_touch_leap_second() {
 fn test_touch_trailing_slash_no_create() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
-    ucmd.args(&["-c", "file/"]).fails().code_is(1);
+    ucmd.args(&["-c", "file/"]).fails_with_code(1);
 
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-c", "no-file/"]).succeeds();
@@ -822,7 +887,7 @@ fn test_touch_trailing_slash_no_create() {
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("loop", "loop");
-    ucmd.args(&["-c", "loop/"]).fails().code_is(1);
+    ucmd.args(&["-c", "loop/"]).fails_with_code(1);
     assert!(!at.file_exists("loop"));
 
     #[cfg(not(target_os = "macos"))]
@@ -831,7 +896,7 @@ fn test_touch_trailing_slash_no_create() {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("file2");
         at.relative_symlink_file("file2", "link1");
-        ucmd.args(&["-c", "link1/"]).fails().code_is(1);
+        ucmd.args(&["-c", "link1/"]).fails_with_code(1);
         assert!(at.file_exists("file2"));
         assert!(at.symlink_exists("link1"));
     }
@@ -916,4 +981,28 @@ fn test_touch_reference_symlink_with_no_deref() {
         .succeeds();
     // Times should be taken from the symlink, not the destination
     assert_eq!((time, time), get_symlink_times(&at, arg));
+}
+
+#[test]
+fn test_obsolete_posix_format() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("_POSIX2_VERSION", "199209")
+        .env("POSIXLY_CORRECT", "1")
+        .args(&["01010000", "11111111"])
+        .succeeds()
+        .no_output();
+    assert!(at.file_exists("11111111"));
+    assert!(!at.file_exists("01010000"));
+}
+
+#[test]
+fn test_obsolete_posix_format_with_year() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.env("_POSIX2_VERSION", "199209")
+        .env("POSIXLY_CORRECT", "1")
+        .args(&["0101000090", "11111111"])
+        .succeeds()
+        .no_output();
+    assert!(at.file_exists("11111111"));
+    assert!(!at.file_exists("0101000090"));
 }

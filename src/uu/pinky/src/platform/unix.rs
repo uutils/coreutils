@@ -5,17 +5,17 @@
 
 // spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
 
+use crate::Capitalize;
 use crate::options;
 use crate::uu_app;
-use crate::Capitalize;
 
 use uucore::entries::{Locate, Passwd};
 use uucore::error::{FromIo, UResult};
 use uucore::libc::S_IWGRP;
-use uucore::utmpx::{self, time, Utmpx};
+use uucore::utmpx::{self, Utmpx, time};
 
-use std::io::prelude::*;
 use std::io::BufReader;
+use std::io::prelude::*;
 
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
@@ -194,7 +194,7 @@ impl Pinky {
             }
         }
 
-        print!(" {}{:<8.*}", mesg, utmpx::UT_LINESIZE, ut.tty_device());
+        print!(" {mesg}{:<8.*}", utmpx::UT_LINESIZE, ut.tty_device());
 
         if self.include_idle {
             if last_change == 0 {

@@ -3,11 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
-use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 mod helper;
@@ -223,7 +223,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(ABOUT)
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
         .infer_long_args(true)
@@ -372,12 +372,11 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                     return Err(USimpleError::new(1, "line number overflow"));
                 };
                 println!(
-                    "{}{}{}",
+                    "{}{}{line}",
                     settings
                         .number_format
                         .format(line_number, settings.number_width),
                     settings.number_separator,
-                    line
                 );
                 // update line number for the potential next line
                 match line_number.checked_add(settings.line_increment) {

@@ -50,7 +50,7 @@ impl Symbol {
                     "(" => Self::LParen,
                     "!" => Self::Bang,
                     "-a" | "-o" => Self::BoolOp(s),
-                    "=" | "==" | "!=" => Self::Op(Operator::String(s)),
+                    "=" | "==" | "!=" | "<" | ">" => Self::Op(Operator::String(s)),
                     "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Self::Op(Operator::Int(s)),
                     "-ef" | "-nt" | "-ot" => Self::Op(Operator::File(s)),
                     "-n" | "-z" => Self::UnaryOp(UnaryOperator::StrlenOp(s)),
@@ -79,11 +79,8 @@ impl Symbol {
             Self::Bang => OsString::from("!"),
             Self::BoolOp(s)
             | Self::Literal(s)
-            | Self::Op(Operator::String(s))
-            | Self::Op(Operator::Int(s))
-            | Self::Op(Operator::File(s))
-            | Self::UnaryOp(UnaryOperator::StrlenOp(s))
-            | Self::UnaryOp(UnaryOperator::FiletestOp(s)) => s,
+            | Self::Op(Operator::String(s) | Operator::Int(s) | Operator::File(s))
+            | Self::UnaryOp(UnaryOperator::StrlenOp(s) | UnaryOperator::FiletestOp(s)) => s,
             Self::None => panic!(),
         })
     }
@@ -99,11 +96,10 @@ impl std::fmt::Display for Symbol {
             Self::Bang => OsStr::new("!"),
             Self::BoolOp(s)
             | Self::Literal(s)
-            | Self::Op(Operator::String(s))
-            | Self::Op(Operator::Int(s))
-            | Self::Op(Operator::File(s))
-            | Self::UnaryOp(UnaryOperator::StrlenOp(s))
-            | Self::UnaryOp(UnaryOperator::FiletestOp(s)) => OsStr::new(s),
+            | Self::Op(Operator::String(s) | Operator::Int(s) | Operator::File(s))
+            | Self::UnaryOp(UnaryOperator::StrlenOp(s) | UnaryOperator::FiletestOp(s)) => {
+                OsStr::new(s)
+            }
             Self::None => OsStr::new("None"),
         };
         write!(f, "{}", s.quote())

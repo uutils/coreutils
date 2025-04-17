@@ -5,13 +5,13 @@
 
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO
 
-use clap::{crate_version, value_parser, Arg, ArgMatches, Command};
-use libc::{dev_t, mode_t};
+use clap::{Arg, ArgMatches, Command, value_parser};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
+use libc::{dev_t, mode_t};
 use std::ffi::CString;
 
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("mknod.md");
@@ -107,7 +107,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let exit_code = match file_type {
                     FileType::Block => _mknod(file_name, S_IFBLK | mode, dev),
                     FileType::Character => _mknod(file_name, S_IFCHR | mode, dev),
-                    _ => unreachable!("file_type was validated to be only block or character"),
+                    FileType::Fifo => {
+                        unreachable!("file_type was validated to be only block or character")
+                    }
                 };
                 set_exit_code(exit_code);
                 Ok(())
@@ -118,7 +120,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
         .about(ABOUT)

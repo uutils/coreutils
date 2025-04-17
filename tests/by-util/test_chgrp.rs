@@ -4,8 +4,11 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) nosuchgroup groupname
 
-use crate::common::util::TestScenario;
 use uucore::process::getegid;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_option() {
@@ -14,7 +17,7 @@ fn test_invalid_option() {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 static DIR: &str = "/dev";
@@ -98,8 +101,7 @@ fn test_preserve_root() {
         "./../../../../../../../../../../../../../../",
     ] {
         let expected_error = format!(
-            "chgrp: it is dangerous to operate recursively on '{}' (same as '/')\nchgrp: use --no-preserve-root to override this failsafe\n",
-            d,
+            "chgrp: it is dangerous to operate recursively on '{d}' (same as '/')\nchgrp: use --no-preserve-root to override this failsafe\n",
         );
         new_ucmd!()
             .arg("--preserve-root")
@@ -124,8 +126,7 @@ fn test_preserve_root_symlink() {
     ] {
         let (at, mut ucmd) = at_and_ucmd!();
         at.symlink_file(d, file);
-        let expected_error =
-            "chgrp: it is dangerous to operate recursively on 'test_chgrp_symlink2root' (same as '/')\nchgrp: use --no-preserve-root to override this failsafe\n";
+        let expected_error = "chgrp: it is dangerous to operate recursively on 'test_chgrp_symlink2root' (same as '/')\nchgrp: use --no-preserve-root to override this failsafe\n";
         ucmd.arg("--preserve-root")
             .arg("-HR")
             .arg("bin")
@@ -388,8 +389,14 @@ fn test_traverse_symlinks() {
             .arg("dir3/file")
             .succeeds();
 
-        assert!(at.plus("dir2/file").metadata().unwrap().gid() == first_group.as_raw());
-        assert!(at.plus("dir3/file").metadata().unwrap().gid() == first_group.as_raw());
+        assert_eq!(
+            at.plus("dir2/file").metadata().unwrap().gid(),
+            first_group.as_raw()
+        );
+        assert_eq!(
+            at.plus("dir3/file").metadata().unwrap().gid(),
+            first_group.as_raw()
+        );
 
         ucmd.arg("-R")
             .args(args)

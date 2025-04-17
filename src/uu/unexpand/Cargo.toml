@@ -1,22 +1,24 @@
 [package]
 name = "uu_unexpand"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "unexpand ~ (uutils) convert input spaces to tabs"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/unexpand"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/unexpand.rs"
 
 [dependencies]
+thiserror = { workspace = true }
 clap = { workspace = true }
 unicode-width = { workspace = true }
 uucore = { workspace = true }

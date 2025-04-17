@@ -1,17 +1,18 @@
 [package]
 name = "uu_sort"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "sort ~ (uutils) sort input lines"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sort"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/sort.rs"
@@ -30,7 +31,7 @@ self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
-uucore = { workspace = true, features = ["fs", "version-cmp"] }
+uucore = { workspace = true, features = ["fs", "parser", "version-cmp"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = { workspace = true }

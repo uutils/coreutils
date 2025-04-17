@@ -6,10 +6,14 @@
 // spell-checker:ignore bincode serde utmp runlevel testusr testx
 #![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
-use crate::common::util::TestScenario;
+#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
-use bincode::serialize;
+use bincode::{config, serde::encode_to_vec};
 use regex::Regex;
 #[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
 use serde::Serialize;
@@ -22,7 +26,7 @@ use std::{io::Write, path::PathBuf};
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -130,12 +134,14 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
         }
         arr
     }
+
     // Creates a file utmp records of three different types including a valid BOOT_TIME entry
     fn utmp(path: &PathBuf) {
         // Definitions of our utmpx structs
         const BOOT_TIME: i32 = 2;
         const RUN_LVL: i32 = 1;
         const USER_PROCESS: i32 = 7;
+
         #[derive(Serialize)]
         #[repr(C)]
         pub struct TimeVal {
@@ -149,6 +155,7 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             e_termination: i16,
             e_exit: i16,
         }
+
         #[derive(Serialize)]
         #[repr(C, align(4))]
         pub struct Utmp {
@@ -226,9 +233,10 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             glibc_reserved: [0; 20],
         };
 
-        let mut buf = serialize(&utmp).unwrap();
-        buf.append(&mut serialize(&utmp1).unwrap());
-        buf.append(&mut serialize(&utmp2).unwrap());
+        let config = config::legacy();
+        let mut buf = encode_to_vec(utmp, config).unwrap();
+        buf.append(&mut encode_to_vec(utmp1, config).unwrap());
+        buf.append(&mut encode_to_vec(utmp2, config).unwrap());
         let mut f = File::create(path).unwrap();
         f.write_all(&buf).unwrap();
     }
@@ -263,7 +271,7 @@ fn test_uptime_with_dir() {
 fn test_uptime_check_users_openbsd() {
     new_ucmd!()
         .args(&["openbsd_utmp"])
-        .run()
+        .succeeds()
         .stdout_contains("4 users");
 }
 
@@ -272,9 +280,4 @@ fn test_uptime_since() {
     let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap();
 
     new_ucmd!().arg("--since").succeeds().stdout_matches(&re);
-}
-
-#[test]
-fn test_failed() {
-    new_ucmd!().arg("will-fail").fails();
 }

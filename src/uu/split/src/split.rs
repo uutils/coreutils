@@ -12,17 +12,17 @@ mod strategy;
 
 use crate::filenames::{FilenameIterator, Suffix, SuffixError};
 use crate::strategy::{NumberType, Strategy, StrategyError};
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
+use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, parser::ValueSource};
 use std::env;
 use std::ffi::OsString;
-use std::fmt;
-use std::fs::{metadata, File};
+use std::fs::{File, metadata};
 use std::io;
-use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::parse_size::parse_size_u64;
+use uucore::parser::parse_size::parse_size_u64;
 
 use uucore::uio_error;
 use uucore::{format_usage, help_about, help_section, help_usage};
@@ -55,7 +55,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
     let matches = uu_app().try_get_matches_from(args)?;
 
-    match Settings::from(&matches, &obs_lines) {
+    match Settings::from(&matches, obs_lines.as_deref()) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
         Err(e) => Err(USimpleError::new(1, format!("{e}"))),
@@ -228,7 +228,7 @@ fn handle_preceding_options(
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
@@ -411,31 +411,39 @@ struct Settings {
     io_blksize: Option<u64>,
 }
 
+#[derive(Debug, Error)]
 /// An error when parsing settings from command-line arguments.
 enum SettingsError {
     /// Invalid chunking strategy.
+    #[error("{0}")]
     Strategy(StrategyError),
 
     /// Invalid suffix length parameter.
+    #[error("{0}")]
     Suffix(SuffixError),
 
     /// Multi-character (Invalid) separator
+    #[error("multi-character separator {}", .0.quote())]
     MultiCharacterSeparator(String),
 
     /// Multiple different separator characters
+    #[error("multiple separator characters specified")]
     MultipleSeparatorCharacters,
 
     /// Using `--filter` with `--number` option sub-strategies that print Kth chunk out of N chunks to stdout
     /// K/N
     /// l/K/N
     /// r/K/N
+    #[error("--filter does not process a chunk extracted to stdout")]
     FilterWithKthChunkNumber,
 
     /// Invalid IO block size
+    #[error("invalid IO block size: {}", .0.quote())]
     InvalidIOBlockSize(String),
 
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
+    #[error("{OPT_FILTER} is currently not supported in this platform")]
     NotSupported,
 }
 
@@ -450,33 +458,9 @@ impl SettingsError {
     }
 }
 
-impl fmt::Display for SettingsError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Strategy(e) => e.fmt(f),
-            Self::Suffix(e) => e.fmt(f),
-            Self::MultiCharacterSeparator(s) => {
-                write!(f, "multi-character separator {}", s.quote())
-            }
-            Self::MultipleSeparatorCharacters => {
-                write!(f, "multiple separator characters specified")
-            }
-            Self::FilterWithKthChunkNumber => {
-                write!(f, "--filter does not process a chunk extracted to stdout")
-            }
-            Self::InvalidIOBlockSize(s) => write!(f, "invalid IO block size: {}", s.quote()),
-            #[cfg(windows)]
-            Self::NotSupported => write!(
-                f,
-                "{OPT_FILTER} is currently not supported in this platform"
-            ),
-        }
-    }
-}
-
 impl Settings {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, SettingsError> {
+    fn from(matches: &ArgMatches, obs_lines: Option<&str>) -> Result<Self, SettingsError> {
         let strategy = Strategy::from(matches, obs_lines).map_err(SettingsError::Strategy)?;
         let suffix = Suffix::from(matches, &strategy).map_err(SettingsError::Suffix)?;
 
@@ -532,9 +516,11 @@ impl Settings {
         // As those are writing to stdout of `split` and cannot write to filter command child process
         let kth_chunk = matches!(
             result.strategy,
-            Strategy::Number(NumberType::KthBytes(_, _))
-                | Strategy::Number(NumberType::KthLines(_, _))
-                | Strategy::Number(NumberType::KthRoundRobin(_, _))
+            Strategy::Number(
+                NumberType::KthBytes(_, _)
+                    | NumberType::KthLines(_, _)
+                    | NumberType::KthRoundRobin(_, _)
+            )
         );
         if kth_chunk && result.filter.is_some() {
             return Err(SettingsError::FilterWithKthChunkNumber);
@@ -549,20 +535,19 @@ impl Settings {
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
         if platform::paths_refer_to_same_file(&self.input, filename) {
-            return Err(io::Error::new(
-                ErrorKind::Other,
-                format!("'{filename}' would overwrite input; aborting"),
-            ));
+            return Err(io::Error::other(format!(
+                "'{filename}' would overwrite input; aborting"
+            )));
         }
 
-        platform::instantiate_current_writer(&self.filter, filename, is_new)
+        platform::instantiate_current_writer(self.filter.as_deref(), filename, is_new)
     }
 }
 
 /// When using `--filter` option, writing to child command process stdin
 /// could fail with BrokenPipe error
 /// It can be safely ignored
-fn ignorable_io_error(error: &std::io::Error, settings: &Settings) -> bool {
+fn ignorable_io_error(error: &io::Error, settings: &Settings) -> bool {
     error.kind() == ErrorKind::BrokenPipe && settings.filter.is_some()
 }
 
@@ -571,11 +556,7 @@ fn ignorable_io_error(error: &std::io::Error, settings: &Settings) -> bool {
 /// If ignorable io error occurs, return number of bytes as if all bytes written
 /// Should not be used for Kth chunk number sub-strategies
 /// as those do not work with `--filter` option
-fn custom_write<T: Write>(
-    bytes: &[u8],
-    writer: &mut T,
-    settings: &Settings,
-) -> std::io::Result<usize> {
+fn custom_write<T: Write>(bytes: &[u8], writer: &mut T, settings: &Settings) -> io::Result<usize> {
     match writer.write(bytes) {
         Ok(n) => Ok(n),
         Err(e) if ignorable_io_error(&e, settings) => Ok(bytes.len()),
@@ -592,7 +573,7 @@ fn custom_write_all<T: Write>(
     bytes: &[u8],
     writer: &mut T,
     settings: &Settings,
-) -> std::io::Result<bool> {
+) -> io::Result<bool> {
     match writer.write_all(bytes) {
         Ok(()) => Ok(true),
         Err(e) if ignorable_io_error(&e, settings) => Ok(false),
@@ -625,14 +606,14 @@ fn get_input_size<R>(
     input: &String,
     reader: &mut R,
     buf: &mut Vec<u8>,
-    io_blksize: &Option<u64>,
-) -> std::io::Result<u64>
+    io_blksize: Option<u64>,
+) -> io::Result<u64>
 where
     R: BufRead,
 {
     // Set read limit to io_blksize if specified
     let read_limit: u64 = if let Some(custom_blksize) = io_blksize {
-        *custom_blksize
+        custom_blksize
     } else {
         // otherwise try to get it from filesystem, or use default
         uucore::fs::sane_blksize::sane_blksize_from_path(Path::new(input))
@@ -656,10 +637,9 @@ where
     } else if input == "-" {
         // STDIN stream that did not fit all content into a buffer
         // Most likely continuous/infinite input stream
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            format!("{input}: cannot determine input size"),
-        ));
+        return Err(io::Error::other(format!(
+            "{input}: cannot determine input size"
+        )));
     } else {
         // Could be that file size is larger than set read limit
         // Get the file size from filesystem metadata
@@ -682,10 +662,9 @@ where
                 // Give up and return an error
                 // TODO It might be possible to do more here
                 // to address all possible file types and edge cases
-                return Err(io::Error::new(
-                    ErrorKind::Other,
-                    format!("{input}: cannot determine file size"),
-                ));
+                return Err(io::Error::other(format!(
+                    "{input}: cannot determine file size"
+                )));
             }
         }
     }
@@ -750,7 +729,7 @@ impl<'a> ByteChunkWriter<'a> {
 
 impl Write for ByteChunkWriter<'_> {
     /// Implements `--bytes=SIZE`
-    fn write(&mut self, mut buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, mut buf: &[u8]) -> io::Result<usize> {
         // If the length of `buf` exceeds the number of bytes remaining
         // in the current chunk, we will need to write to multiple
         // different underlying writers. In that case, each iteration of
@@ -768,9 +747,10 @@ impl Write for ByteChunkWriter<'_> {
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size;
 
                 // Allocate the new file, since at this point we know there are bytes to be written to it.
-                let filename = self.filename_iterator.next().ok_or_else(|| {
-                    std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
-                })?;
+                let filename = self
+                    .filename_iterator
+                    .next()
+                    .ok_or_else(|| io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
@@ -810,7 +790,7 @@ impl Write for ByteChunkWriter<'_> {
             }
         }
     }
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
     }
 }
@@ -874,7 +854,7 @@ impl<'a> LineChunkWriter<'a> {
 
 impl Write for LineChunkWriter<'_> {
     /// Implements `--lines=NUMBER`
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         // If the number of lines in `buf` exceeds the number of lines
         // remaining in the current chunk, we will need to write to
         // multiple different underlying writers. In that case, each
@@ -889,9 +869,10 @@ impl Write for LineChunkWriter<'_> {
             // corresponding writer.
             if self.num_lines_remaining_in_current_chunk == 0 {
                 self.num_chunks_written += 1;
-                let filename = self.filename_iterator.next().ok_or_else(|| {
-                    std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
-                })?;
+                let filename = self
+                    .filename_iterator
+                    .next()
+                    .ok_or_else(|| io::Error::other("output file suffixes exhausted"))?;
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
@@ -914,7 +895,7 @@ impl Write for LineChunkWriter<'_> {
         Ok(total_bytes_written)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
     }
 }
@@ -966,7 +947,7 @@ impl ManageOutFiles for OutFiles {
         // This object is responsible for creating the filename for each chunk
         let mut filename_iterator: FilenameIterator<'_> =
             FilenameIterator::new(&settings.prefix, &settings.suffix)
-                .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
+                .map_err(|e| io::Error::other(format!("{e}")))?;
         let mut out_files: Self = Self::new();
         for _ in 0..num_files {
             let filename = filename_iterator
@@ -1041,7 +1022,9 @@ impl ManageOutFiles for OutFiles {
             }
 
             // If this fails - give up and propagate the error
-            uucore::show_error!("at file descriptor limit, but no file descriptor left to close. Closed {count} writers before.");
+            uucore::show_error!(
+                "at file descriptor limit, but no file descriptor left to close. Closed {count} writers before."
+            );
             return Err(maybe_writer.err().unwrap().into());
         }
     }
@@ -1100,7 +1083,7 @@ where
 {
     // Get the size of the input in bytes
     let initial_buf = &mut Vec::new();
-    let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
+    let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
     let mut reader = initial_buf.chain(reader);
 
     // If input file is empty and we would not have determined the Kth chunk
@@ -1135,7 +1118,7 @@ where
     }
 
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
-    let mut stdout_writer = std::io::stdout().lock();
+    let mut stdout_writer = io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
     let mut out_files: OutFiles = OutFiles::new();
 
@@ -1179,7 +1162,7 @@ where
                 Err(error) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("{}: cannot read from input : {}", settings.input, error),
+                        format!("{}: cannot read from input : {error}", settings.input),
                     ));
                 }
             }
@@ -1246,7 +1229,7 @@ where
     // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
     let initial_buf = &mut Vec::new();
-    let num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
+    let num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
     let reader = initial_buf.chain(reader);
 
     // If input file is empty and we would not have determined the Kth chunk
@@ -1261,7 +1244,7 @@ where
     }
 
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
-    let mut stdout_writer = std::io::stdout().lock();
+    let mut stdout_writer = io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
     let mut out_files: OutFiles = OutFiles::new();
 
@@ -1381,7 +1364,7 @@ where
     R: BufRead,
 {
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
-    let mut stdout_writer = std::io::stdout().lock();
+    let mut stdout_writer = io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
     let mut out_files: OutFiles = OutFiles::new();
 
@@ -1428,7 +1411,7 @@ where
     Ok(())
 }
 
-/// Like `std::io::Lines`, but includes the line ending character.
+/// Like `io::Lines`, but includes the line ending character.
 ///
 /// This struct is generally created by calling `lines_with_sep` on a
 /// reader.
@@ -1441,7 +1424,7 @@ impl<R> Iterator for LinesWithSep<R>
 where
     R: BufRead,
 {
-    type Item = std::io::Result<Vec<u8>>;
+    type Item = io::Result<Vec<u8>>;
 
     /// Read bytes from a buffer up to the requested number of lines.
     fn next(&mut self) -> Option<Self::Item> {
@@ -1478,8 +1461,7 @@ where
     // to be overwritten for sure at the beginning of the loop below
     // because we start with `remaining == 0`, indicating that a new
     // chunk should start.
-    let mut writer: BufWriter<Box<dyn Write>> =
-        BufWriter::new(Box::new(std::io::Cursor::new(vec![])));
+    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(Box::new(io::Cursor::new(vec![])));
 
     let mut remaining = 0;
     for line in lines_with_sep(reader, settings.separator) {
@@ -1574,11 +1556,11 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            match std::io::copy(&mut reader, &mut writer) {
+            match io::copy(&mut reader, &mut writer) {
                 Ok(_) => Ok(()),
                 Err(e) => match e.kind() {
                     // TODO Since the writer object controls the creation of
-                    // new files, we need to rely on the `std::io::Result`
+                    // new files, we need to rely on the `io::Result`
                     // returned by its `write()` method to communicate any
                     // errors to this calling scope. If a new file cannot be
                     // created because we have exceeded the number of
@@ -1592,11 +1574,11 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
-            match std::io::copy(&mut reader, &mut writer) {
+            match io::copy(&mut reader, &mut writer) {
                 Ok(_) => Ok(()),
                 Err(e) => match e.kind() {
                     // TODO Since the writer object controls the creation of
-                    // new files, we need to rely on the `std::io::Result`
+                    // new files, we need to rely on the `io::Result`
                     // returned by its `write()` method to communicate any
                     // errors to this calling scope. If a new file cannot be
                     // created because we have exceeded the number of

@@ -2,18 +2,20 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_default_80_column_wrap() {
     new_ucmd!()
         .arg("lorem_ipsum.txt")
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_80_column.expected");
 }
 
@@ -21,7 +23,7 @@ fn test_default_80_column_wrap() {
 fn test_40_column_hard_cutoff() {
     new_ucmd!()
         .args(&["-w", "40", "lorem_ipsum.txt"])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_40_column_hard.expected");
 }
 
@@ -29,7 +31,7 @@ fn test_40_column_hard_cutoff() {
 fn test_40_column_word_boundary() {
     new_ucmd!()
         .args(&["-s", "-w", "40", "lorem_ipsum.txt"])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_40_column_word.expected");
 }
 
@@ -37,7 +39,7 @@ fn test_40_column_word_boundary() {
 fn test_default_wrap_with_newlines() {
     new_ucmd!()
         .arg("lorem_ipsum_new_line.txt")
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_new_line_80_column.expected");
 }
 

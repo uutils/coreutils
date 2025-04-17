@@ -16,8 +16,8 @@ base = "../gnu/tests/"
 result_json = "result.json"
 try:
     urllib.request.urlretrieve(
-        "https://raw.githubusercontent.com/uutils/coreutils-tracking/main/gnu-full-result.json",
-        result_json
+        "https://raw.githubusercontent.com/uutils/coreutils-tracking/main/aggregated-result.json",
+        result_json,
     )
 except Exception as e:
     print(f"Failed to download the file: {e}")
@@ -39,9 +39,9 @@ for files in types:
 list_of_files = sorted(tests, key=lambda x: os.stat(x).st_size)
 
 
-def show_list(l):
+def show_list(list_test):
     # Remove the factor tests and reverse the list (bigger first)
-    tests = list(filter(lambda k: "factor" not in k, l))
+    tests = list(filter(lambda k: "factor" not in k, list_test))
 
     for f in reversed(tests):
         if contains_require_root(f):

@@ -9,7 +9,7 @@ use std::{env, fmt};
 
 use uucore::{
     display::Quotable,
-    parse_size::{parse_size_u64, ParseSizeError},
+    parser::parse_size::{ParseSizeError, parse_size_u64},
 };
 
 /// The first ten powers of 1024.
@@ -98,9 +98,9 @@ pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> Strin
         if rem % (bases[i] / 10) == 0 {
             format!("{quot}.{tenths_place}{suffix}")
         } else if tenths_place + 1 == 10 || quot >= 10 {
-            format!("{}{}", quot + 1, suffix)
+            format!("{}{suffix}", quot + 1)
         } else {
-            format!("{}.{}{}", quot, tenths_place + 1, suffix)
+            format!("{quot}.{}{suffix}", tenths_place + 1)
         }
     }
 }
@@ -184,11 +184,7 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
 fn block_size_from_env() -> Option<u64> {
     for env_var in ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
         if let Ok(env_size) = env::var(env_var) {
-            if let Ok(size) = parse_size_u64(&env_size) {
-                return Some(size);
-            } else {
-                return None;
-            }
+            return parse_size_u64(&env_size).ok();
         }
     }
 
@@ -216,7 +212,7 @@ mod tests {
 
     use std::env;
 
-    use crate::blocks::{to_magnitude_and_suffix, BlockSize, SuffixType};
+    use crate::blocks::{BlockSize, SuffixType, to_magnitude_and_suffix};
 
     #[test]
     fn test_to_magnitude_and_suffix_powers_of_1024() {
@@ -294,8 +290,8 @@ mod tests {
     #[test]
     fn test_default_block_size() {
         assert_eq!(BlockSize::Bytes(1024), BlockSize::default());
-        env::set_var("POSIXLY_CORRECT", "1");
+        unsafe { env::set_var("POSIXLY_CORRECT", "1") };
         assert_eq!(BlockSize::Bytes(512), BlockSize::default());
-        env::remove_var("POSIXLY_CORRECT");
+        unsafe { env::remove_var("POSIXLY_CORRECT") };
     }
 }

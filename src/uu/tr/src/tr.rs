@@ -9,14 +9,14 @@ mod operation;
 mod unicode_table;
 
 use crate::operation::DeleteOperation;
-use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use operation::{
-    translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
+    Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
 };
 use std::ffi::OsString;
-use std::io::{stdin, stdout, BufWriter};
+use std::io::{BufWriter, Write, stdin, stdout};
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
 use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show};
 
@@ -85,7 +85,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     "{start} {op}\nOnly one string may be given when deleting without squeezing repeats.",
                 )
             } else {
-                format!("{start} {op}",)
+                format!("{start} {op}")
             };
             return Err(UUsageError::new(1, msg));
         }
@@ -110,9 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let stdin = stdin();
     let mut locked_stdin = stdin.lock();
-    let stdout = stdout();
-    let locked_stdout = stdout.lock();
-    let mut buffered_stdout = BufWriter::new(locked_stdout);
+    let mut buffered_stdout = BufWriter::new(stdout().lock());
 
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
@@ -155,12 +153,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let op = TranslateOperation::new(set1, set2)?;
         translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
     }
+
+    buffered_stdout
+        .flush()
+        .map_err_context(|| "write error".into())?;
+
     Ok(())
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

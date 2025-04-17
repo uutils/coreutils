@@ -4,10 +4,11 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
 
-use crate::common::util::{is_ci, run_ucmd_as_root, CmdResult, TestScenario};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::process::geteuid;
-
+use uutests::new_ucmd;
+use uutests::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};
+use uutests::util_name;
 // Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
 // If we are running inside the CI and "needle" is in "stderr" skipping this test is
 // considered okay. If we are not inside the CI this calls assert!(result.success).
@@ -81,7 +82,7 @@ fn test_invalid_option() {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -102,13 +103,13 @@ fn test_chown_only_owner() {
     at.touch(file1);
 
     // since only superuser can change owner, we have to change from ourself to ourself
-    let result = scene
+    scene
         .ucmd()
         .arg(user_name)
         .arg("--verbose")
         .arg(file1)
-        .run();
-    result.stderr_contains("retained as");
+        .succeeds()
+        .stderr_contains("retained as");
 
     // try to change to another existing user, e.g. 'root'
     scene
@@ -672,16 +673,16 @@ fn test_chown_recursive() {
     at.touch(at.plus_as_string("a/b/c/c"));
     at.touch(at.plus_as_string("z/y"));
 
-    let result = scene
+    scene
         .ucmd()
         .arg("-R")
         .arg("--verbose")
         .arg(user_name)
         .arg("a")
         .arg("z")
-        .run();
-    result.stderr_contains("ownership of 'a/a' retained as");
-    result.stderr_contains("ownership of 'z/y' retained as");
+        .succeeds()
+        .stderr_contains("ownership of 'a/a' retained as")
+        .stderr_contains("ownership of 'z/y' retained as");
 }
 
 #[test]

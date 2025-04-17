@@ -1,21 +1,22 @@
 [package]
 name = "uu_cp"
-version = "0.0.29"
+description = "cp ~ (uutils) copy SOURCE to DESTINATION"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cp"
 authors = [
   "Jordy Dickinson <jordy.dickinson@gmail.com>",
   "Joshua S. Miller <jsmiller@uchicago.edu>",
   "uutils developers",
 ]
-license = "MIT"
-description = "cp ~ (uutils) copy SOURCE to DESTINATION"
-
-homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cp"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+license.workspace = true
+version.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/cp.rs"
@@ -24,6 +25,7 @@ path = "src/cp.rs"
 clap = { workspace = true }
 filetime = { workspace = true }
 libc = { workspace = true }
+linux-raw-sys = { workspace = true }
 quick-error = { workspace = true }
 selinux = { workspace = true, optional = true }
 uucore = { workspace = true, features = [
@@ -32,6 +34,7 @@ uucore = { workspace = true, features = [
   "entries",
   "fs",
   "fsxattr",
+  "parser",
   "perms",
   "mode",
   "update-control",

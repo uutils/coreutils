@@ -2,12 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 #[cfg(not(windows))]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[cfg(not(windows))]
@@ -23,12 +25,14 @@ fn test_mknod_help() {
 #[test]
 #[cfg(not(windows))]
 fn test_mknod_version() {
-    assert!(new_ucmd!()
-        .arg("--version")
-        .succeeds()
-        .no_stderr()
-        .stdout_str()
-        .starts_with("mknod"));
+    assert!(
+        new_ucmd!()
+            .arg("--version")
+            .succeeds()
+            .no_stderr()
+            .stdout_str()
+            .starts_with("mknod")
+    );
 }
 
 #[test]
@@ -80,15 +84,13 @@ fn test_mknod_character_device_requires_major_and_minor() {
     new_ucmd!()
         .arg("test_file")
         .arg("c")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("Special files require major and minor device numbers.");
     new_ucmd!()
         .arg("test_file")
         .arg("c")
         .arg("1")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("Special files require major and minor device numbers.");
     new_ucmd!()
         .arg("test_file")

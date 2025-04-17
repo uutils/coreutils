@@ -5,17 +5,17 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 use clap::builder::ValueParser;
-use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufReader, Read, Write};
+use std::io::{self, BufReader, Read, Write, stdin, stdout};
 use std::iter;
 use std::path::Path;
 use uucore::checksum::{
-    calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
-    ChecksumError, ChecksumOptions, ChecksumVerbose, ALGORITHM_OPTIONS_BLAKE2B,
-    ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC, ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV,
-    SUPPORTED_ALGORITHMS,
+    ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
+    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, ChecksumError, ChecksumOptions,
+    ChecksumVerbose, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
+    perform_checksum_validation,
 };
 use uucore::{
     encoding,
@@ -205,61 +205,33 @@ mod options {
     pub const ZERO: &str = "zero";
 }
 
-/// Determines whether to prompt an asterisk (*) in the output.
-///
-/// This function checks the `tag`, `binary`, and `had_reset` flags and returns a boolean
-/// indicating whether to prompt an asterisk (*) in the output.
-/// It relies on the overrides provided by clap (i.e., `--binary` overrides `--text` and vice versa).
-/// Same for `--tag` and `--untagged`.
-fn prompt_asterisk(tag: bool, binary: bool, had_reset: bool) -> bool {
-    if tag {
-        return false;
-    }
-    if had_reset {
-        return false;
-    }
-    binary
-}
-
-/**
- * Determine if we had a reset.
- * This is basically a hack to support the behavior of cksum
- * when we have the following arguments:
- * --binary --tag --untagged
- * Don't do it with clap because if it struggling with the --overrides_with
- * marking the value as set even if not present
- */
-fn had_reset(args: &[OsString]) -> bool {
-    // Indices where "--binary" or "-b", "--tag", and "--untagged" are found
-    let binary_index = args.iter().position(|x| x == "--binary" || x == "-b");
-    let tag_index = args.iter().position(|x| x == "--tag");
-    let untagged_index = args.iter().position(|x| x == "--untagged");
-
-    // Check if all arguments are present and in the correct order
-    match (binary_index, tag_index, untagged_index) {
-        (Some(b), Some(t), Some(u)) => b < t && t < u,
-        _ => false,
-    }
-}
-
 /***
  * cksum has a bunch of legacy behavior.
  * We handle this in this function to make sure they are self contained
  * and "easier" to understand
  */
-fn handle_tag_text_binary_flags(matches: &clap::ArgMatches) -> UResult<(bool, bool)> {
-    let untagged = matches.get_flag(options::UNTAGGED);
-    let tag = matches.get_flag(options::TAG);
-    let tag = tag || !untagged;
+fn handle_tag_text_binary_flags<S: AsRef<OsStr>>(
+    args: impl Iterator<Item = S>,
+) -> UResult<(bool, bool)> {
+    let mut tag = true;
+    let mut binary = false;
 
-    let binary_flag = matches.get_flag(options::BINARY);
+    // --binary, --tag and --untagged are tight together: none of them
+    // conflicts with each other but --tag will reset "binary" and set "tag".
 
-    let args: Vec<OsString> = std::env::args_os().collect();
-    let had_reset = had_reset(&args);
+    for arg in args {
+        let arg = arg.as_ref();
+        if arg == "-b" || arg == "--binary" {
+            binary = true;
+        } else if arg == "--tag" {
+            tag = true;
+            binary = false;
+        } else if arg == "--untagged" {
+            tag = false;
+        }
+    }
 
-    let asterisk = prompt_asterisk(tag, binary_flag, had_reset);
-
-    Ok((tag, asterisk))
+    Ok((tag, !tag && binary))
 }
 
 #[uucore::main]
@@ -336,7 +308,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return perform_checksum_validation(files.iter().copied(), algo_option, length, opts);
     }
 
-    let (tag, asterisk) = handle_tag_text_binary_flags(&matches)?;
+    let (tag, asterisk) = handle_tag_text_binary_flags(std::env::args_os())?;
 
     let algo = detect_algo(algo_name, length)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
@@ -370,7 +342,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -378,7 +350,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -501,75 +473,7 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use super::had_reset;
     use crate::calculate_blake2b_length;
-    use crate::prompt_asterisk;
-    use std::ffi::OsString;
-
-    #[test]
-    fn test_had_reset() {
-        let args = ["--binary", "--tag", "--untagged"]
-            .iter()
-            .map(|&s| s.into())
-            .collect::<Vec<OsString>>();
-        assert!(had_reset(&args));
-
-        let args = ["-b", "--tag", "--untagged"]
-            .iter()
-            .map(|&s| s.into())
-            .collect::<Vec<OsString>>();
-        assert!(had_reset(&args));
-
-        let args = ["-b", "--binary", "--tag", "--untagged"]
-            .iter()
-            .map(|&s| s.into())
-            .collect::<Vec<OsString>>();
-        assert!(had_reset(&args));
-
-        let args = ["--untagged", "--tag", "--binary"]
-            .iter()
-            .map(|&s| s.into())
-            .collect::<Vec<OsString>>();
-        assert!(!had_reset(&args));
-
-        let args = ["--untagged", "--tag", "-b"]
-            .iter()
-            .map(|&s| s.into())
-            .collect::<Vec<OsString>>();
-        assert!(!had_reset(&args));
-
-        let args = ["--binary", "--tag"]
-            .iter()
-            .map(|&s| s.into())
-            .collect::<Vec<OsString>>();
-        assert!(!had_reset(&args));
-
-        let args = ["--tag", "--untagged"]
-            .iter()
-            .map(|&s| s.into())
-            .collect::<Vec<OsString>>();
-        assert!(!had_reset(&args));
-
-        let args = ["--text", "--untagged"]
-            .iter()
-            .map(|&s| s.into())
-            .collect::<Vec<OsString>>();
-        assert!(!had_reset(&args));
-
-        let args = ["--binary", "--untagged"]
-            .iter()
-            .map(|&s| s.into())
-            .collect::<Vec<OsString>>();
-        assert!(!had_reset(&args));
-    }
-
-    #[test]
-    fn test_prompt_asterisk() {
-        assert!(!prompt_asterisk(true, false, false));
-        assert!(!prompt_asterisk(false, false, true));
-        assert!(prompt_asterisk(false, true, false));
-        assert!(!prompt_asterisk(false, false, false));
-    }
 
     #[test]
     fn test_calculate_length() {

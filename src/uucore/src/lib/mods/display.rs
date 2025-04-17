@@ -25,7 +25,8 @@
 //! ```
 
 use std::ffi::OsStr;
-use std::io::{self, Write as IoWrite};
+use std::fs::File;
+use std::io::{self, BufWriter, Stdout, StdoutLock, Write as IoWrite};
 
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -42,33 +43,77 @@ pub use os_display::{Quotable, Quoted};
 /// output is likely to be captured, like `pwd` and `basename`. For informational output
 /// use `Quotable::quote`.
 ///
-/// FIXME: This is lossy on Windows. It could probably be implemented using some low-level
-/// API that takes UTF-16, without going through io::Write. This is not a big priority
+/// FIXME: Invalid Unicode will produce an error on Windows. That could be fixed by
+/// using low-level library calls and bypassing `io::Write`. This is not a big priority
 /// because broken filenames are much rarer on Windows than on Unix.
 pub fn println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
-    let stdout = io::stdout();
-    let mut stdout = stdout.lock();
-    #[cfg(any(unix, target_os = "wasi"))]
-    {
-        stdout.write_all(text.as_ref().as_bytes())?;
-        stdout.write_all(b"\n")?;
-    }
-    #[cfg(not(any(unix, target_os = "wasi")))]
-    {
-        writeln!(stdout, "{}", std::path::Path::new(text.as_ref()).display())?;
-    }
+    let mut stdout = io::stdout().lock();
+    stdout.write_all_os(text.as_ref())?;
+    stdout.write_all(b"\n")?;
     Ok(())
 }
 
 /// Like `println_verbatim`, without the trailing newline.
 pub fn print_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
-    let mut stdout = io::stdout();
-    #[cfg(any(unix, target_os = "wasi"))]
-    {
-        stdout.write_all(text.as_ref().as_bytes())
+    io::stdout().write_all_os(text.as_ref())
+}
+
+/// [`io::Write`], but for OS strings.
+///
+/// On Unix this works straightforwardly.
+///
+/// On Windows this currently returns an error if the OS string is not valid Unicode.
+/// This may in the future change to allow those strings to be written to consoles.
+pub trait OsWrite: io::Write {
+    /// Write the entire OS string into this writer.
+    ///
+    /// # Errors
+    ///
+    /// An error is returned if the underlying I/O operation fails.
+    ///
+    /// On Windows, if the OS string is not valid Unicode, an error of kind
+    /// [`io::ErrorKind::InvalidData`] is returned.
+    fn write_all_os(&mut self, buf: &OsStr) -> io::Result<()> {
+        #[cfg(any(unix, target_os = "wasi"))]
+        {
+            self.write_all(buf.as_bytes())
+        }
+
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        {
+            // It's possible to write a better OsWrite impl for Windows consoles (e.g. Stdout)
+            // as those are fundamentally 16-bit. If the OS string is invalid then it can be
+            // encoded to 16-bit and written using raw windows_sys calls. But this is quite involved
+            // (see `sys/pal/windows/stdio.rs` in the stdlib) and the value-add is small.
+            //
+            // There's no way to write invalid OS strings to Windows files, as those are 8-bit.
+
+            match buf.to_str() {
+                Some(text) => self.write_all(text.as_bytes()),
+                // We could output replacement characters instead, but the
+                // stdlib errors when sending invalid UTF-8 to the console,
+                // so let's follow that.
+                None => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "OS string cannot be converted to bytes",
+                )),
+            }
+        }
     }
-    #[cfg(not(any(unix, target_os = "wasi")))]
-    {
-        write!(stdout, "{}", std::path::Path::new(text.as_ref()).display())
+}
+
+// We do not have a blanket impl for all Write because a smarter Windows impl should
+// be able to make use of AsRawHandle. Please keep this in mind when adding new impls.
+impl OsWrite for File {}
+impl OsWrite for Stdout {}
+impl OsWrite for StdoutLock<'_> {}
+// A future smarter Windows implementation can first flush the BufWriter before
+// doing a raw write.
+impl<W: OsWrite> OsWrite for BufWriter<W> {}
+
+impl OsWrite for Box<dyn OsWrite> {
+    fn write_all_os(&mut self, buf: &OsStr) -> io::Result<()> {
+        let this: &mut dyn OsWrite = self;
+        this.write_all_os(buf)
     }
 }

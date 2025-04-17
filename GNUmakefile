@@ -3,10 +3,18 @@
 # Config options
 PROFILE         ?= debug
 MULTICALL       ?= n
+COMPLETIONS     ?= y
+MANPAGES        ?= y
 INSTALL         ?= install
 ifneq (,$(filter install, $(MAKECMDGOALS)))
 override PROFILE:=release
 endif
+
+# Needed for the foreach loops to split each loop into a separate command
+define newline
+
+
+endef
 
 PROFILE_CMD :=
 ifeq ($(PROFILE),release)
@@ -33,23 +41,32 @@ PROG_PREFIX ?=
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
 BASEDIR       ?= $(shell pwd)
+ifdef CARGO_TARGET_DIR
+BUILDDIR 	  := $(CARGO_TARGET_DIR)/${PROFILE}
+else
 BUILDDIR      := $(BASEDIR)/target/${PROFILE}
+endif
 PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
 
 BUSYBOX_ROOT := $(BASEDIR)/tmp
-BUSYBOX_VER  := 1.35.0
+BUSYBOX_VER  := 1.36.1
 BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
 
 TOYBOX_ROOT := $(BASEDIR)/tmp
-TOYBOX_VER  := 0.8.8
+TOYBOX_VER  := 0.8.12
 TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
-ifeq ($(SELINUX_ENABLED),)
-	SELINUX_ENABLED := 0
+
+ifdef SELINUX_ENABLED
+	override SELINUX_ENABLED := 0
+# Now check if we should enable it (only on non-Windows)
 	ifneq ($(OS),Windows_NT)
-		ifeq ($(shell /sbin/selinuxenabled 2>/dev/null ; echo $$?),0)
-			SELINUX_ENABLED := 1
+		ifeq ($(shell if [ -x /sbin/selinuxenabled ] && /sbin/selinuxenabled 2>/dev/null; then echo 0; else echo 1; fi),0)
+			override SELINUX_ENABLED := 1
+$(info /sbin/selinuxenabled successful)
+	    else
+$(info SELINUX_ENABLED=1 but /sbin/selinuxenabled failed)
 		endif
 	endif
 endif
@@ -164,9 +181,7 @@ SELINUX_PROGS := \
 
 ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
-endif
-
-ifeq ($(SELINUX_ENABLED),1)
+# Build the selinux command even if not on the system
 	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
@@ -253,6 +268,7 @@ TEST_SPEC_FEATURE := test_unimplemented
 else ifeq ($(SELINUX_ENABLED),1)
 TEST_NO_FAIL_FAST :=
 TEST_SPEC_FEATURE := feat_selinux
+BUILD_SPEC_FEATURE := feat_selinux
 endif
 
 define TEST_BUSYBOX
@@ -276,11 +292,15 @@ use_default := 1
 
 build-pkgs:
 ifneq (${MULTICALL}, y)
+ifdef BUILD_SPEC_FEATURE
+	${CARGO} build ${CARGOFLAGS} --features "$(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+else
 	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
+endif
 endif
 
 build-coreutils:
-	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
+	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
 
 build: build-coreutils build-pkgs
 
@@ -337,45 +357,58 @@ clean:
 distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
+ifeq ($(MANPAGES),y)
 manpages: build-coreutils
 	mkdir -p $(BUILDDIR)/man/
 	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1; \
+		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
 
+install-manpages: manpages
+	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
+	$(foreach prog, $(INSTALLEES), \
+		$(INSTALL) $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/ $(newline) \
+	)
+else
+install-manpages:
+endif
+
+ifeq ($(COMPLETIONS),y)
 completions: build-coreutils
 	mkdir -p $(BUILDDIR)/completions/zsh $(BUILDDIR)/completions/bash $(BUILDDIR)/completions/fish
 	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR)/coreutils completion $(prog) zsh > $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog); \
-		$(BUILDDIR)/coreutils completion $(prog) bash > $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog); \
-		$(BUILDDIR)/coreutils completion $(prog) fish > $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish; \
+		$(BUILDDIR)/coreutils completion $(prog) zsh > $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/coreutils completion $(prog) bash > $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(newline) \
+		$(BUILDDIR)/coreutils completion $(prog) fish > $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(newline) \
 	)
 
-install: build manpages completions
-	mkdir -p $(INSTALLDIR_BIN)
-ifeq (${MULTICALL}, y)
-	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
-	cd $(INSTALLDIR_BIN) && $(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
-		ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) &&) :
-	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
-else
-	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
-	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
-endif
-	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
-	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1 $(DESTDIR)$(DATAROOTDIR)/man/man1/; \
-	)
-
+install-completions: completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES), \
-		$(INSTALL) $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/; \
-		$(INSTALL) $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/; \
-		$(INSTALL) $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/; \
+		$(INSTALL) $(BUILDDIR)/completions/zsh/_$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/ $(newline) \
+		$(INSTALL) $(BUILDDIR)/completions/bash/$(PROG_PREFIX)$(prog) $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/ $(newline) \
+		$(INSTALL) $(BUILDDIR)/completions/fish/$(PROG_PREFIX)$(prog).fish $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/ $(newline) \
 	)
+else
+install-completions:
+endif
+
+install: build install-manpages install-completions
+	mkdir -p $(INSTALLDIR_BIN)
+ifeq (${MULTICALL}, y)
+	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
+	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
+		cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) $(newline) \
+	)
+	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
+else
+	$(foreach prog, $(INSTALLEES), \
+		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog) $(newline) \
+	)
+	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
+endif
 
 uninstall:
 ifeq (${MULTICALL}, y)

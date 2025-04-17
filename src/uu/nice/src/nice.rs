@@ -5,14 +5,14 @@
 
 // spell-checker:ignore (ToDO) getpriority execvp setpriority nstr PRIO cstrs ENOENT
 
-use libc::{c_char, c_int, execvp, PRIO_PROCESS};
+use libc::{PRIO_PROCESS, c_char, c_int, execvp};
 use std::ffi::{CString, OsString};
 use std::io::{Error, Write};
 use std::ptr;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use uucore::{
-    error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
+    error::{UClapError, UResult, USimpleError, UUsageError, set_exit_code},
     format_usage, help_about, help_usage, show_error,
 };
 
@@ -71,8 +71,7 @@ fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
             saw_n = false;
         } else if s.to_str() == Some("-n")
             || s.to_str()
-                .map(|s| is_prefix_of(s, "--adjustment", "--a".len()))
-                .unwrap_or_default()
+                .is_some_and(|s| is_prefix_of(s, "--adjustment", "--a".len()))
         {
             saw_n = true;
         } else if let Ok(s) = s.clone().into_string() {
@@ -132,7 +131,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     return Err(USimpleError::new(
                         125,
                         format!("\"{nstr}\" is not a valid number: {e}"),
-                    ))
+                    ));
                 }
             }
         }
@@ -191,7 +190,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .trailing_var_arg(true)
         .infer_long_args(true)
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .arg(
             Arg::new(options::ADJUSTMENT)
                 .short('n')

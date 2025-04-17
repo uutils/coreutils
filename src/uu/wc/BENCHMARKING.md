@@ -26,10 +26,11 @@ output of uutils `cat` into it. Note that GNU `cat` is slower and therefore less
 suitable, and that if a file is given as its input directly (as in
 `wc -c < largefile`) the first strategy kicks in. Try `uucat somefile | wc -c`.
 
-### Counting lines
+### Counting lines and UTF-8 characters
 
-In the case of `wc -l` or `wc -cl` the input doesn't have to be decoded. It's
-read in chunks and the `bytecount` crate is used to count the newlines.
+If the flags set are a subset of `-clm` then the input doesn't have to be decoded. The
+input is read in chunks and the `bytecount` crate is used to count the newlines (`-l` flag) 
+and/or UTF-8 characters (`-m` flag).
 
 It's useful to vary the line length in the input. GNU wc seems particularly
 bad at short lines.

@@ -7,15 +7,15 @@
 mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::ffi::CString;
 use std::io::Error;
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process;
-use uucore::entries::{grp2gid, usr2uid, Locate, Passwd};
-use uucore::error::{set_exit_code, UClapError, UResult, UUsageError};
-use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
+use uucore::error::{UClapError, UResult, UUsageError, set_exit_code};
+use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{format_usage, help_about, help_usage, show};
 
@@ -53,28 +53,26 @@ struct Options {
 ///
 /// The `spec` must be of the form `[USER][:[GROUP]]`, otherwise an
 /// error is returned.
-fn parse_userspec(spec: &str) -> UResult<UserSpec> {
-    match &spec.splitn(2, ':').collect::<Vec<&str>>()[..] {
+fn parse_userspec(spec: &str) -> UserSpec {
+    match spec.split_once(':') {
         // ""
-        [""] => Ok(UserSpec::NeitherGroupNorUser),
+        None if spec.is_empty() => UserSpec::NeitherGroupNorUser,
         // "usr"
-        [usr] => Ok(UserSpec::UserOnly(usr.to_string())),
+        None => UserSpec::UserOnly(spec.to_string()),
         // ":"
-        ["", ""] => Ok(UserSpec::NeitherGroupNorUser),
+        Some(("", "")) => UserSpec::NeitherGroupNorUser,
         // ":grp"
-        ["", grp] => Ok(UserSpec::GroupOnly(grp.to_string())),
+        Some(("", grp)) => UserSpec::GroupOnly(grp.to_string()),
         // "usr:"
-        [usr, ""] => Ok(UserSpec::UserOnly(usr.to_string())),
+        Some((usr, "")) => UserSpec::UserOnly(usr.to_string()),
         // "usr:grp"
-        [usr, grp] => Ok(UserSpec::UserAndGroup(usr.to_string(), grp.to_string())),
-        // everything else
-        _ => Err(ChrootError::InvalidUserspec(spec.to_string()).into()),
+        Some((usr, grp)) => UserSpec::UserAndGroup(usr.to_string(), grp.to_string()),
     }
 }
 
 // Pre-condition: `list_str` is non-empty.
 fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
-    let split: Vec<&str> = list_str.split(",").collect();
+    let split: Vec<&str> = list_str.split(',').collect();
     if split.len() == 1 {
         let name = split[0].trim();
         if name.is_empty() {
@@ -144,10 +142,9 @@ impl Options {
             }
         };
         let skip_chdir = matches.get_flag(options::SKIP_CHDIR);
-        let userspec = match matches.get_one::<String>(options::USERSPEC) {
-            None => None,
-            Some(s) => Some(parse_userspec(s)?),
-        };
+        let userspec = matches
+            .get_one::<String>(options::USERSPEC)
+            .map(|s| parse_userspec(s));
         Ok(Self {
             newroot,
             skip_chdir,
@@ -224,7 +221,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 ChrootError::CommandFailed(command[0].to_string(), e)
             }
-            .into())
+            .into());
         }
     };
 
@@ -239,7 +236,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -390,7 +387,7 @@ fn handle_missing_groups(strategy: Strategy) -> Result<(), ChrootError> {
 /// Set supplemental groups for this process.
 fn set_supplemental_gids_with_strategy(
     strategy: Strategy,
-    groups: &Option<Vec<String>>,
+    groups: Option<&Vec<String>>,
 ) -> Result<(), ChrootError> {
     match groups {
         None => handle_missing_groups(strategy),
@@ -410,27 +407,27 @@ fn set_context(options: &Options) -> UResult<()> {
     match &options.userspec {
         None | Some(UserSpec::NeitherGroupNorUser) => {
             let strategy = Strategy::Nothing;
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
         }
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
             let gid = uid as libc::gid_t;
             let strategy = Strategy::FromUID(uid, false);
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_string(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
         }
         Some(UserSpec::GroupOnly(group)) => {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::Nothing;
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
         }
         Some(UserSpec::UserAndGroup(user, group)) => {
             let uid = name_to_uid(user)?;
             let gid = name_to_gid(group)?;
             let strategy = Strategy::FromUID(uid, true);
-            set_supplemental_gids_with_strategy(strategy, &options.groups)?;
+            set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_string(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_string(), e))?;
         }
@@ -444,7 +441,8 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
             CString::new(root.as_os_str().as_bytes().to_vec())
                 .unwrap()
                 .as_bytes_with_nul()
-                .as_ptr() as *const libc::c_char,
+                .as_ptr()
+                .cast::<libc::c_char>(),
         )
     };
 

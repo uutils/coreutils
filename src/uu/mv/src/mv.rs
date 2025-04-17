@@ -8,7 +8,7 @@
 mod error;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
 use std::env;
@@ -19,13 +19,13 @@ use std::io;
 use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
-use std::path::{absolute, Path, PathBuf};
+use std::path::{Path, PathBuf, absolute};
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::{
-    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file, canonicalize,
-    path_ends_with_terminator, MissingHandling, ResolveMode,
+    MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
+    are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
@@ -37,8 +37,8 @@ pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
 use fs_extra::dir::{
-    get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
-    TransitProcess, TransitProcessResult,
+    CopyOptions as DirCopyOptions, TransitProcess, TransitProcessResult, get_size as dir_get_size,
+    move_dir, move_dir_with_progress,
 };
 
 use crate::error::MvError;
@@ -88,14 +88,32 @@ pub struct Options {
     pub debug: bool,
 }
 
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            overwrite: OverwriteMode::default(),
+            backup: BackupMode::default(),
+            suffix: backup_control::DEFAULT_BACKUP_SUFFIX.to_owned(),
+            update: UpdateMode::default(),
+            target_dir: None,
+            no_target_dir: false,
+            verbose: false,
+            strip_slashes: false,
+            progress_bar: false,
+            debug: false,
+        }
+    }
+}
+
 /// specifies behavior of the overwrite flag
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub enum OverwriteMode {
     /// '-n' '--no-clobber'   do not overwrite
     NoClobber,
     /// '-i' '--interactive'  prompt before overwrite
     Interactive,
     ///'-f' '--force'         overwrite without prompt
+    #[default]
     Force,
 }
 
@@ -139,10 +157,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let backup_mode = backup_control::determine_backup_mode(&matches)?;
     let update_mode = update_control::determine_update_mode(&matches);
 
-    if backup_mode != BackupMode::NoBackup
+    if backup_mode != BackupMode::None
         && (overwrite_mode == OverwriteMode::NoClobber
-            || update_mode == UpdateMode::ReplaceNone
-            || update_mode == UpdateMode::ReplaceNoneFail)
+            || update_mode == UpdateMode::None
+            || update_mode == UpdateMode::NoneFail)
     {
         return Err(UUsageError::new(
             1,
@@ -180,7 +198,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(format!(
@@ -301,9 +319,7 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
 }
 
 fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()> {
-    if opts.backup == BackupMode::SimpleBackup
-        && source_is_target_backup(source, target, &opts.suffix)
-    {
+    if opts.backup == BackupMode::Simple && source_is_target_backup(source, target, &opts.suffix) {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             format!(
@@ -328,7 +344,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     if path_ends_with_terminator(target)
         && (!target_is_dir && !source_is_dir)
         && !opts.no_target_dir
-        && opts.update != UpdateMode::ReplaceIfOlder
+        && opts.update != UpdateMode::IfOlder
     {
         return Err(MvError::FailedToAccessNotADirectory(target.quote().to_string()).into());
     }
@@ -352,7 +368,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}? ", target.quote()) {
-                    return Err(io::Error::new(io::ErrorKind::Other, "").into());
+                    return Err(io::Error::other("").into());
                 }
             }
             OverwriteMode::Force => {}
@@ -410,7 +426,7 @@ fn assert_not_same_file(
     let same_file = (canonicalized_source.eq(&canonicalized_target)
         || are_hardlinks_to_same_file(source, target)
         || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
-        && opts.backup == BackupMode::NoBackup;
+        && opts.backup == BackupMode::None;
 
     // get the expected target path to show in errors
     // this is based on the argument and not canonicalized
@@ -420,7 +436,7 @@ fn assert_not_same_file(
             let mut path = target
                 .display()
                 .to_string()
-                .trim_end_matches("/")
+                .trim_end_matches('/')
                 .to_owned();
 
             path.push('/');
@@ -521,8 +537,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
             }
         };
 
-        if moved_destinations.contains(&targetpath) && options.backup != BackupMode::NumberedBackup
-        {
+        if moved_destinations.contains(&targetpath) && options.backup != BackupMode::Numbered {
             // If the target file was already created in this mv call, do not overwrite
             show!(USimpleError::new(
                 1,
@@ -576,22 +591,22 @@ fn rename(
     let mut backup_path = None;
 
     if to.exists() {
-        if opts.update == UpdateMode::ReplaceNone {
+        if opts.update == UpdateMode::None {
             if opts.debug {
                 println!("skipped {}", to.quote());
             }
             return Ok(());
         }
 
-        if (opts.update == UpdateMode::ReplaceIfOlder)
+        if (opts.update == UpdateMode::IfOlder)
             && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
         {
             return Ok(());
         }
 
-        if opts.update == UpdateMode::ReplaceNoneFail {
+        if opts.update == UpdateMode::NoneFail {
             let err_msg = format!("not replacing {}", to.quote());
-            return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+            return Err(io::Error::other(err_msg));
         }
 
         match opts.overwrite {
@@ -603,7 +618,7 @@ fn rename(
             }
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
-                    return Err(io::Error::new(io::ErrorKind::Other, ""));
+                    return Err(io::Error::other(""));
                 }
             }
             OverwriteMode::Force => {}
@@ -622,7 +637,7 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
+                return Err(io::Error::other("Directory not empty"));
             }
         }
     }
@@ -657,7 +672,22 @@ fn rename_with_fallback(
     to: &Path,
     multi_progress: Option<&MultiProgress>,
 ) -> io::Result<()> {
-    if fs::rename(from, to).is_err() {
+    if let Err(err) = fs::rename(from, to) {
+        #[cfg(windows)]
+        const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
+        #[cfg(unix)]
+        const EXDEV: i32 = libc::EXDEV as _;
+
+        // We will only copy if:
+        // 1. Files are on different devices (EXDEV error)
+        // 2. On Windows, if the target file exists and source file is opened by another process
+        //    (MoveFileExW fails with "Access Denied" even if the source file has FILE_SHARE_DELETE permission)
+        let should_fallback = matches!(err.raw_os_error(), Some(EXDEV))
+            || (from.is_file() && can_delete_file(from).unwrap_or(false));
+        if !should_fallback {
+            return Err(err);
+        }
+
         // Get metadata without following symlinks
         let metadata = from.symlink_metadata()?;
         let file_type = metadata.file_type();
@@ -723,7 +753,7 @@ fn rename_with_fallback(
                         io::ErrorKind::PermissionDenied,
                         "Permission denied",
                     )),
-                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
+                    _ => Err(io::Error::other(format!("{err:?}"))),
                 };
             }
         } else {
@@ -778,8 +808,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
     #[cfg(not(any(windows, unix)))]
     {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             "your operating system does not support symlinks",
         ));
     }
@@ -791,4 +820,56 @@ fn is_empty_dir(path: &Path) -> bool {
         Ok(contents) => contents.peekable().peek().is_none(),
         Err(_e) => false,
     }
+}
+
+/// Checks if a file can be deleted by attempting to open it with delete permissions.
+#[cfg(windows)]
+fn can_delete_file(path: &Path) -> Result<bool, io::Error> {
+    use std::{
+        os::windows::ffi::OsStrExt as _,
+        ptr::{null, null_mut},
+    };
+
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, INVALID_HANDLE_VALUE},
+        Storage::FileSystem::{
+            CreateFileW, DELETE, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_DELETE, FILE_SHARE_READ,
+            FILE_SHARE_WRITE, OPEN_EXISTING,
+        },
+    };
+
+    let wide_path = path
+        .as_os_str()
+        .encode_wide()
+        .chain([0])
+        .collect::<Vec<u16>>();
+
+    let handle = unsafe {
+        CreateFileW(
+            wide_path.as_ptr(),
+            DELETE,
+            FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+            null(),
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            null_mut(),
+        )
+    };
+
+    if handle == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+
+    unsafe { CloseHandle(handle) };
+
+    Ok(true)
+}
+
+#[cfg(not(windows))]
+fn can_delete_file(_: &Path) -> Result<bool, io::Error> {
+    // On non-Windows platforms, always return false to indicate that we don't need
+    // to try the copy+delete fallback. This is because on Unix-like systems,
+    // rename() failing with errors other than EXDEV means the operation cannot
+    // succeed even with a copy+delete approach (e.g. permission errors).
+    Ok(false)
 }

@@ -8,8 +8,8 @@
 use std::io::{BufWriter, Stdout, Write};
 use std::{cmp, mem};
 
-use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 use crate::FmtOptions;
+use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 
 struct BreakArgs<'a> {
     opts: &'a FmtOptions,
@@ -164,9 +164,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
 
                 // We find identical breakpoints here by comparing addresses of the references.
                 // This is OK because the backing vector is not mutating once we are linebreaking.
-                let winfo_ptr = winfo as *const _;
-                let next_break_ptr = next_break as *const _;
-                if winfo_ptr == next_break_ptr {
+                if std::ptr::eq(winfo, next_break) {
                     // OK, we found the matching word
                     if break_before {
                         write_newline(args.indent_str, args.ostream)?;
@@ -465,11 +463,7 @@ fn restart_active_breaks<'a>(
 // Number of spaces to add before a word, based on mode, newline, sentence start.
 fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize {
     if uniform || newline {
-        if start || (newline && punct) {
-            2
-        } else {
-            1
-        }
+        if start || (newline && punct) { 2 } else { 1 }
     } else {
         0
     }

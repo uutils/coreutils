@@ -4,9 +4,11 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) Sdivide
 
-use crate::common::util::{TestScenario, UCommand};
 use chrono::{DateTime, Duration, Utc};
 use std::fs::metadata;
+use uutests::new_ucmd;
+use uutests::util::{TestScenario, UCommand};
+use uutests::util_name;
 
 const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
 
@@ -47,9 +49,8 @@ fn valid_last_modified_template_vars(from: DateTime<Utc>) -> Vec<Vec<(String, St
 fn test_invalid_flag() {
     new_ucmd!()
         .arg("--invalid-argument")
-        .fails()
-        .no_stdout()
-        .code_is(1);
+        .fails_with_code(1)
+        .no_stdout();
 }
 
 #[test]
@@ -266,7 +267,7 @@ fn test_with_stdin() {
     scenario
         .pipe_in_fixture("stdin.log")
         .args(&["--pages=1:2", "-n", "-"])
-        .run()
+        .succeeds()
         .stdout_is_templated_fixture_any(
             expected_file_path,
             &valid_last_modified_template_vars(start),
@@ -453,7 +454,7 @@ fn test_with_join_lines_option() {
     let start = Utc::now();
     scenario
         .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
-        .run()
+        .succeeds()
         .stdout_is_templated_fixture_any(
             expected_file_path,
             &valid_last_modified_template_vars(start),

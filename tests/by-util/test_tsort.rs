@@ -4,17 +4,20 @@
 // file that was distributed with this source code.
 #![allow(clippy::cast_possible_wrap)]
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 #[test]
 fn test_sort_call_graph() {
     new_ucmd!()
         .arg("call_graph.txt")
-        .run()
+        .succeeds()
         .stdout_is_fixture("call_graph.expected");
 }
 
@@ -89,8 +92,7 @@ fn test_cycle() {
     // The graph looks like:  a --> b <==> c --> d
     new_ucmd!()
         .pipe_in("a b b c c d c b")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("a\nc\nd\nb\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\n");
 }
@@ -106,8 +108,7 @@ fn test_two_cycles() {
     //
     new_ucmd!()
         .pipe_in("a b b c c b b d d b")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("a\nc\nd\nb\n")
         .stderr_is("tsort: -: input contains a loop:\ntsort: b\ntsort: c\ntsort: -: input contains a loop:\ntsort: b\ntsort: d\n");
 }

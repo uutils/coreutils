@@ -1,4 +1,7 @@
+# spell-checker:ignore (misc) direnv
+
 target/
+coverage/
 /src/*/gen_table
 /build/
 /tmp/
@@ -15,3 +18,6 @@ lib*.a
 *.iml
 ### macOS ###
 .DS_Store
+
+### direnv ###
+/.direnv/

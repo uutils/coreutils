@@ -238,14 +238,14 @@ pub fn numeric_str_cmp((a, a_info): (&str, &NumInfo), (b, b_info): (&str, &NumIn
                         Ordering::Equal
                     } else {
                         Ordering::Greater
-                    }
+                    };
                 }
                 (None, Some(c)) => {
                     break if c == '0' && b_chars.all(|c| c == '0') {
                         Ordering::Equal
                     } else {
                         Ordering::Less
-                    }
+                    };
                 }
                 (Some(a_char), Some(b_char)) => {
                     let ord = a_char.cmp(&b_char);

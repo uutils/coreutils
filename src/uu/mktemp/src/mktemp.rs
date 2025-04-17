@@ -5,8 +5,8 @@
 
 // spell-checker:ignore (paths) GPGHome findxs
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
-use uucore::display::{println_verbatim, Quotable};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
+use uucore::display::{Quotable, println_verbatim};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
 
@@ -14,7 +14,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::iter;
-use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 #[cfg(unix)]
 use std::fs;
@@ -346,7 +346,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -424,7 +424,7 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<P
     let len = prefix.len() + suffix.len() + rand;
     let mut buf = Vec::with_capacity(len);
     buf.extend(prefix.as_bytes());
-    buf.extend(iter::repeat(b'X').take(rand));
+    buf.extend(iter::repeat_n(b'X', rand));
     buf.extend(suffix.as_bytes());
 
     // Randomize.
@@ -458,16 +458,22 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<P
 fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
+
+    // On *nix platforms grant read-write-execute for owner only.
+    // The directory is created with these permission at creation time, using mkdir(3) syscall.
+    // This is not relevant on Windows systems. See: https://docs.rs/tempfile/latest/tempfile/#security
+    // `fs` is not imported on Windows anyways.
+    #[cfg(not(windows))]
+    builder.permissions(fs::Permissions::from_mode(0o700));
+
     match builder.tempdir_in(dir) {
         Ok(d) => {
             // `into_path` consumes the TempDir without removing it
             let path = d.into_path();
-            #[cfg(not(windows))]
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
             Ok(path)
         }
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
             let s = path.display().to_string();
             Err(MkTempError::NotFound("directory".to_string(), s).into())
@@ -497,7 +503,7 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
             Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
         },
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
             let s = path.display().to_string();
             Err(MkTempError::NotFound("file".to_string(), s).into())

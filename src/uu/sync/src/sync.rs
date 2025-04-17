@@ -5,11 +5,11 @@
 
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::errno::Errno;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::{open, OFlag};
+use nix::fcntl::{OFlag, open};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::sys::stat::Mode;
 use std::path::Path;
@@ -43,8 +43,10 @@ mod platform {
         // see https://github.com/rust-lang/libc/pull/2161
         #[cfg(target_os = "android")]
         libc::syscall(libc::SYS_sync);
-        #[cfg(not(target_os = "android"))]
-        libc::sync();
+        unsafe {
+            #[cfg(not(target_os = "android"))]
+            libc::sync();
+        }
         Ok(())
     }
 
@@ -55,7 +57,7 @@ mod platform {
         for path in files {
             let f = File::open(path).unwrap();
             let fd = f.as_raw_fd();
-            libc::syscall(libc::SYS_syncfs, fd);
+            unsafe { libc::syscall(libc::SYS_syncfs, fd) };
         }
         Ok(())
     }
@@ -67,7 +69,7 @@ mod platform {
         for path in files {
             let f = File::open(path).unwrap();
             let fd = f.as_raw_fd();
-            libc::syscall(libc::SYS_fdatasync, fd);
+            unsafe { libc::syscall(libc::SYS_fdatasync, fd) };
         }
         Ok(())
     }
@@ -81,7 +83,7 @@ mod platform {
     use uucore::error::{UResult, USimpleError};
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
-        GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
+        ERROR_NO_MORE_FILES, GetLastError, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
     };
     use windows_sys::Win32::Storage::FileSystem::{
         FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, FlushFileBuffers, GetDriveTypeW,
@@ -92,13 +94,13 @@ mod platform {
     /// This function is unsafe because it calls an unsafe function.
     unsafe fn flush_volume(name: &str) -> UResult<()> {
         let name_wide = name.to_wide_null();
-        if GetDriveTypeW(name_wide.as_ptr()) == DRIVE_FIXED {
+        if unsafe { GetDriveTypeW(name_wide.as_ptr()) } == DRIVE_FIXED {
             let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
-                    if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
+                    if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
                         Err(USimpleError::new(
-                            GetLastError() as i32,
+                            unsafe { GetLastError() } as i32,
                             "failed to flush file buffer",
                         ))
                     } else {
@@ -119,10 +121,10 @@ mod platform {
     /// This function is unsafe because it calls an unsafe function.
     unsafe fn find_first_volume() -> UResult<(String, HANDLE)> {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
-        let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
+        let handle = unsafe { FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32) };
         if handle == INVALID_HANDLE_VALUE {
             return Err(USimpleError::new(
-                GetLastError() as i32,
+                unsafe { GetLastError() } as i32,
                 "failed to find first volume",
             ));
         }
@@ -132,14 +134,16 @@ mod platform {
     /// # Safety
     /// This function is unsafe because it calls an unsafe function.
     unsafe fn find_all_volumes() -> UResult<Vec<String>> {
-        let (first_volume, next_volume_handle) = find_first_volume()?;
+        let (first_volume, next_volume_handle) = unsafe { find_first_volume()? };
         let mut volumes = vec![first_volume];
         loop {
             let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
-            if FindNextVolumeW(next_volume_handle, name.as_mut_ptr(), name.len() as u32) == 0 {
-                return match GetLastError() {
+            if unsafe { FindNextVolumeW(next_volume_handle, name.as_mut_ptr(), name.len() as u32) }
+                == 0
+            {
+                return match unsafe { GetLastError() } {
                     ERROR_NO_MORE_FILES => {
-                        FindVolumeClose(next_volume_handle);
+                        unsafe { FindVolumeClose(next_volume_handle) };
                         Ok(volumes)
                     }
                     err => Err(USimpleError::new(err as i32, "failed to find next volume")),
@@ -153,9 +157,9 @@ mod platform {
     /// # Safety
     /// This function is unsafe because it calls `find_all_volumes` which is unsafe.
     pub unsafe fn do_sync() -> UResult<()> {
-        let volumes = find_all_volumes()?;
+        let volumes = unsafe { find_all_volumes()? };
         for vol in &volumes {
-            flush_volume(vol)?;
+            unsafe { flush_volume(vol)? };
         }
         Ok(())
     }
@@ -164,15 +168,17 @@ mod platform {
     /// This function is unsafe because it calls `find_all_volumes` which is unsafe.
     pub unsafe fn do_syncfs(files: Vec<String>) -> UResult<()> {
         for path in files {
-            flush_volume(
-                Path::new(&path)
-                    .components()
-                    .next()
-                    .unwrap()
-                    .as_os_str()
-                    .to_str()
-                    .unwrap(),
-            )?;
+            unsafe {
+                flush_volume(
+                    Path::new(&path)
+                        .components()
+                        .next()
+                        .unwrap()
+                        .as_os_str()
+                        .to_str()
+                        .unwrap(),
+                )?;
+            }
         }
         Ok(())
     }
@@ -229,7 +235,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

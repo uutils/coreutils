@@ -4,13 +4,16 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) gpghome
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 use uucore::display::Quotable;
 
-use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::path::MAIN_SEPARATOR;
+use std::path::PathBuf;
 use tempfile::tempdir;
 
 #[cfg(unix)]
@@ -54,9 +57,8 @@ macro_rules! assert_suffix_matches_template {
         let suffix = &$s[n - m..n];
         assert!(
             matches_template($template, suffix),
-            "\"{}\" does not end with \"{}\"",
+            "\"{}\" does not end with \"{suffix}\"",
             $template,
-            suffix
         );
     }};
 }
@@ -644,8 +646,7 @@ fn test_too_few_xs_suffix_directory() {
 fn test_too_many_arguments() {
     new_ucmd!()
         .args(&["-q", "a", "b"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .usage_error("too many templates");
 }
 
@@ -778,13 +779,11 @@ fn test_nonexistent_tmpdir_env_var() {
         let stderr = result.stderr_str();
         assert!(
             stderr.starts_with("mktemp: failed to create file via template"),
-            "{}",
-            stderr
+            "{stderr}",
         );
         assert!(
             stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
-            "{}",
-            stderr
+            "{stderr}",
         );
     }
 
@@ -797,13 +796,11 @@ fn test_nonexistent_tmpdir_env_var() {
         let stderr = result.stderr_str();
         assert!(
             stderr.starts_with("mktemp: failed to create directory via template"),
-            "{}",
-            stderr
+            "{stderr}",
         );
         assert!(
             stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
-            "{}",
-            stderr
+            "{stderr}",
         );
     }
 }
@@ -821,13 +818,11 @@ fn test_nonexistent_dir_prefix() {
         let stderr = result.stderr_str();
         assert!(
             stderr.starts_with("mktemp: failed to create file via template"),
-            "{}",
-            stderr
+            "{stderr}",
         );
         assert!(
             stderr.ends_with("d\\XXX': No such file or directory\n"),
-            "{}",
-            stderr
+            "{stderr}",
         );
     }
 
@@ -842,13 +837,11 @@ fn test_nonexistent_dir_prefix() {
         let stderr = result.stderr_str();
         assert!(
             stderr.starts_with("mktemp: failed to create directory via template"),
-            "{}",
-            stderr
+            "{stderr}",
         );
         assert!(
             stderr.ends_with("d\\XXX': No such file or directory\n"),
-            "{}",
-            stderr
+            "{stderr}",
         );
     }
 }

@@ -7,12 +7,12 @@
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
 use chrono::{DateTime, Local};
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
 use regex::Regex;
-use std::fs::{metadata, File};
-use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Write};
+use std::fs::{File, metadata};
+use std::io::{BufRead, BufReader, Lines, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
@@ -139,35 +139,35 @@ quick_error! {
     enum PrError {
         Input(err: std::io::Error, path: String) {
             context(path: &'a str, err: std::io::Error) -> (err, path.to_owned())
-            display("pr: Reading from input {0} gave error", path)
+            display("pr: Reading from input {path} gave error")
             source(err)
         }
 
         UnknownFiletype(path: String) {
-            display("pr: {0}: unknown filetype", path)
+            display("pr: {path}: unknown filetype")
         }
 
         EncounteredErrors(msg: String) {
-            display("pr: {0}", msg)
+            display("pr: {msg}")
         }
 
         IsDirectory(path: String) {
-            display("pr: {0}: Is a directory", path)
+            display("pr: {path}: Is a directory")
         }
 
         IsSocket(path: String) {
-            display("pr: cannot open {}, Operation not supported on socket", path)
+            display("pr: cannot open {path}, Operation not supported on socket")
         }
 
         NotExists(path: String) {
-            display("pr: cannot open {}, No such file or directory", path)
+            display("pr: cannot open {path}, No such file or directory")
         }
     }
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
@@ -470,7 +470,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         let i = value_to_parse.0;
         let option = value_to_parse.1;
         i.parse().map_err(|_e| {
-            PrError::EncounteredErrors(format!("invalid {} argument {}", option, i.quote()))
+            PrError::EncounteredErrors(format!("invalid {option} argument {}", i.quote()))
         })
     };
     matches
@@ -655,8 +655,7 @@ fn build_options(
 
     let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
-    let display_header_and_trailer =
-        !(page_length_le_ht) && !matches.get_flag(options::OMIT_HEADER);
+    let display_header_and_trailer = !page_length_le_ht && !matches.get_flag(options::OMIT_HEADER);
 
     let content_lines_per_page = if page_length_le_ht {
         page_length
@@ -917,7 +916,7 @@ fn read_stream_and_create_pages(
                 let current_page = x + 1;
 
                 current_page >= start_page
-                    && last_page.map_or(true, |last_page| current_page <= last_page)
+                    && last_page.is_none_or(|last_page| current_page <= last_page)
             }),
     )
 }
@@ -1086,7 +1085,7 @@ fn write_columns(
         for (i, cell) in row.iter().enumerate() {
             if cell.is_none() && options.merge_files_print.is_some() {
                 out.write_all(
-                    get_line_for_printing(options, &blank_line, columns, i, &line_width, indexes)
+                    get_line_for_printing(options, &blank_line, columns, i, line_width, indexes)
                         .as_bytes(),
                 )?;
             } else if cell.is_none() {
@@ -1096,7 +1095,7 @@ fn write_columns(
                 let file_line = cell.unwrap();
 
                 out.write_all(
-                    get_line_for_printing(options, file_line, columns, i, &line_width, indexes)
+                    get_line_for_printing(options, file_line, columns, i, line_width, indexes)
                         .as_bytes(),
                 )?;
                 lines_printed += 1;
@@ -1117,15 +1116,14 @@ fn get_line_for_printing(
     file_line: &FileLine,
     columns: usize,
     index: usize,
-    line_width: &Option<usize>,
+    line_width: Option<usize>,
     indexes: usize,
 ) -> String {
     let blank_line = String::new();
     let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
 
     let mut complete_line = format!(
-        "{}{}",
-        formatted_line_number,
+        "{formatted_line_number}{}",
         file_line.line_content.as_ref().unwrap()
     );
 
@@ -1142,8 +1140,7 @@ fn get_line_for_printing(
     };
 
     format!(
-        "{}{}{}",
-        offset_spaces,
+        "{offset_spaces}{}{sep}",
         line_width
             .map(|i| {
                 let min_width = (i - (columns - 1)) / columns;
@@ -1156,7 +1153,6 @@ fn get_line_for_printing(
                 complete_line.chars().take(min_width).collect()
             })
             .unwrap_or(complete_line),
-        sep
     )
 }
 
@@ -1169,11 +1165,7 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
         let width = num_opt.width;
         let separator = &num_opt.separator;
         if line_str.len() >= width {
-            format!(
-                "{:>width$}{}",
-                &line_str[line_str.len() - width..],
-                separator
-            )
+            format!("{:>width$}{separator}", &line_str[line_str.len() - width..],)
         } else {
             format!("{line_str:>width$}{separator}")
         }
@@ -1187,8 +1179,8 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
 fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     if options.display_header_and_trailer {
         let first_line = format!(
-            "{} {} Page {}",
-            options.last_modified_time, options.header, page
+            "{} {} Page {page}",
+            options.last_modified_time, options.header
         );
         vec![
             String::new(),

@@ -141,7 +141,7 @@ impl BytesChunk {
     ///
     /// * `chunk`: The chunk to create a new `BytesChunk` chunk from
     /// * `offset`: Start to copy the old chunk's buffer from this position. May not be larger
-    ///             than `chunk.bytes`.
+    ///   than `chunk.bytes`.
     ///
     /// # Examples
     ///
@@ -289,7 +289,7 @@ impl BytesChunkBuffer {
         let mut chunk = Box::new(BytesChunk::new());
 
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
-        while (chunk.fill(reader)?).is_some() {
+        while chunk.fill(reader)?.is_some() {
             self.bytes += chunk.bytes as u64;
             self.chunks.push_back(chunk);
 
@@ -319,7 +319,7 @@ impl BytesChunkBuffer {
         Ok(())
     }
 
-    pub fn print(&self, mut writer: impl Write) -> UResult<()> {
+    pub fn print(&self, writer: &mut impl Write) -> UResult<()> {
         for chunk in &self.chunks {
             writer.write_all(chunk.get_buffer())?;
         }
@@ -477,7 +477,7 @@ impl LinesChunk {
     /// # Arguments
     ///
     /// * `offset`: the offset in number of lines. If offset is 0 then 0 is returned, if larger than
-    ///             the contained lines then self.bytes is returned.
+    ///   the contained lines then self.bytes is returned.
     ///
     /// # Examples
     ///
@@ -565,7 +565,7 @@ impl LinesChunkBuffer {
     pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
         let mut chunk = Box::new(LinesChunk::new(self.delimiter));
 
-        while (chunk.fill(reader)?).is_some() {
+        while chunk.fill(reader)?.is_some() {
             self.lines += chunk.lines as u64;
             self.chunks.push_back(chunk);
 
@@ -627,7 +627,7 @@ impl LinesChunkBuffer {
 
 #[cfg(test)]
 mod tests {
-    use crate::chunks::{BytesChunk, BUFFER_SIZE};
+    use crate::chunks::{BUFFER_SIZE, BytesChunk};
 
     #[test]
     fn test_bytes_chunk_from_when_offset_is_zero() {

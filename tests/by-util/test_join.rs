@@ -4,17 +4,19 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) autoformat nocheck
 
-use crate::common::util::TestScenario;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
 #[cfg(unix)]
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]

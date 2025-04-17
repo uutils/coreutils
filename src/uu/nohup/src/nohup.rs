@@ -5,9 +5,9 @@
 
 // spell-checker:ignore (ToDO) execvp SIGHUP cproc vprocmgr cstrs homeout
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
+use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
-use libc::{SIGHUP, SIG_IGN};
 use std::env;
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
@@ -16,7 +16,7 @@ use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UClapError, UError, UResult};
+use uucore::error::{UClapError, UError, UResult, set_exit_code};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 const ABOUT: &str = help_about!("nohup.md");
@@ -91,7 +91,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
@@ -131,7 +131,7 @@ fn replace_fds() -> UResult<()> {
 }
 
 fn find_stdout() -> UResult<File> {
-    let internal_failure_code = match std::env::var("POSIXLY_CORRECT") {
+    let internal_failure_code = match env::var("POSIXLY_CORRECT") {
         Ok(_) => POSIX_NOHUP_FAILURE,
         Err(_) => EXIT_CANCELED,
     };
@@ -177,7 +177,7 @@ fn find_stdout() -> UResult<File> {
 }
 
 #[cfg(target_vendor = "apple")]
-extern "C" {
+unsafe extern "C" {
     fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
 }
 

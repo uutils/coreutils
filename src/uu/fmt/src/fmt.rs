@@ -5,9 +5,9 @@
 
 // spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, Read, Stdout, Write};
+use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
@@ -110,9 +110,12 @@ impl FmtOptions {
                 }
                 (w, g)
             }
-            (Some(w), None) => {
+            (Some(0), None) => {
                 // Only allow a goal of zero if the width is set to be zero
-                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(if w == 0 { 0 } else { 1 });
+                (0, 0)
+            }
+            (Some(w), None) => {
+                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(1);
                 (w, g)
             }
             (None, Some(g)) => {
@@ -124,7 +127,10 @@ impl FmtOptions {
             }
             (None, None) => (DEFAULT_WIDTH, DEFAULT_GOAL),
         };
-        debug_assert!(width >= goal, "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}.");
+        debug_assert!(
+            width >= goal,
+            "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}."
+        );
 
         if width > MAX_WIDTH {
             return Err(USimpleError::new(
@@ -140,7 +146,7 @@ impl FmtOptions {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("Invalid TABWIDTH specification: {}: {}", s.quote(), e),
+                        format!("Invalid TABWIDTH specification: {}: {e}", s.quote()),
                     ));
                 }
             };
@@ -267,14 +273,14 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
 fn extract_width(matches: &ArgMatches) -> UResult<Option<usize>> {
     let width_opt = matches.get_one::<String>(options::WIDTH);
     if let Some(width_str) = width_opt {
-        if let Ok(width) = width_str.parse::<usize>() {
-            return Ok(Some(width));
+        return if let Ok(width) = width_str.parse::<usize>() {
+            Ok(Some(width))
         } else {
-            return Err(USimpleError::new(
+            Err(USimpleError::new(
                 1,
                 format!("invalid width: {}", width_str.quote()),
-            ));
-        }
+            ))
+        };
     }
 
     if let Some(1) = matches.index_of(options::FILES_OR_WIDTH) {
@@ -329,7 +335,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

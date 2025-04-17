@@ -5,13 +5,13 @@
 
 // spell-checker:ignore (ToDO) signalname pids killpg
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::signals::{signal_by_name_or_value, signal_name_by_value, ALL_SIGNALS};
+use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
 use uucore::{format_usage, help_about, help_usage, show};
 
 static ABOUT: &str = help_about!("kill.md");
@@ -74,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 let sig = (sig as i32)
                     .try_into()
-                    .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+                    .map_err(|e| Error::from_raw_os_error(e as i32))?;
                 Some(sig)
             };
 
@@ -103,7 +103,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -193,7 +193,7 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     }
     Err(USimpleError::new(
         1,
-        format!("unknown signal name {}", signal_name_or_value.quote()),
+        format!("{}: invalid signal", signal_name_or_value.quote()),
     ))
 }
 
@@ -221,7 +221,7 @@ fn parse_signal_value(signal_name: &str) -> UResult<usize> {
         Some(x) => Ok(x),
         None => Err(USimpleError::new(
             1,
-            format!("unknown signal name {}", signal_name.quote()),
+            format!("{}: invalid signal", signal_name.quote()),
         )),
     }
 }
@@ -230,7 +230,7 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
     pids.iter()
         .map(|x| {
             x.parse::<i32>().map_err(|e| {
-                USimpleError::new(1, format!("failed to parse argument {}: {}", x.quote(), e))
+                USimpleError::new(1, format!("failed to parse argument {}: {e}", x.quote()))
             })
         })
         .collect()
@@ -239,8 +239,10 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
 fn kill(sig: Option<Signal>, pids: &[i32]) {
     for &pid in pids {
         if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
-            show!(Error::from_raw_os_error(e as i32)
-                .map_err_context(|| format!("sending signal to {pid} failed")));
+            show!(
+                Error::from_raw_os_error(e as i32)
+                    .map_err_context(|| format!("sending signal to {pid} failed"))
+            );
         }
     }
 }

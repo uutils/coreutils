@@ -70,9 +70,21 @@ macro_rules! chars2string {
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmp";
 
+    #[cfg(not(target_env = "musl"))]
     pub use libc::__UT_HOSTSIZE as UT_HOSTSIZE;
+    #[cfg(target_env = "musl")]
+    pub use libc::UT_HOSTSIZE;
+
+    #[cfg(not(target_env = "musl"))]
     pub use libc::__UT_LINESIZE as UT_LINESIZE;
+    #[cfg(target_env = "musl")]
+    pub use libc::UT_LINESIZE;
+
+    #[cfg(not(target_env = "musl"))]
     pub use libc::__UT_NAMESIZE as UT_NAMESIZE;
+    #[cfg(target_env = "musl")]
+    pub use libc::UT_NAMESIZE;
+
     pub const UT_IDSIZE: usize = 4;
 
     pub use libc::ACCOUNTING;
@@ -226,7 +238,7 @@ impl Utmpx {
         let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
 
         if !hostname.is_empty() {
-            use dns_lookup::{getaddrinfo, AddrInfoHints};
+            use dns_lookup::{AddrInfoHints, getaddrinfo};
 
             const AI_CANONNAME: i32 = 0x2;
             let hints = AddrInfoHints {
@@ -304,7 +316,7 @@ impl Utmpx {
 // I believe the only technical memory unsafety that could happen is a data
 // race while copying the data out of the pointer returned by getutxent(), but
 // ordinary race conditions are also very much possible.
-static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 /// Iterator of login records
 pub struct UtmpxIter {

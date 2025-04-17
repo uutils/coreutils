@@ -1,17 +1,18 @@
 [package]
 name = "uu_du"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "du ~ (uutils) display disk usage"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/du"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/du.rs"
@@ -21,7 +22,7 @@ chrono = { workspace = true }
 # For the --exclude & --exclude-from options
 glob = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["format"] }
+uucore = { workspace = true, features = ["format", "parser"] }
 thiserror = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

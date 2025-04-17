@@ -10,10 +10,10 @@ mod formatter;
 use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use iana_time_zone::get_timezone;
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-use libc::{clock_settime, timespec, CLOCK_REALTIME};
+use libc::{CLOCK_REALTIME, clock_settime, timespec};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -25,7 +25,7 @@ use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 // Options
 const DATE: &str = "date";
@@ -301,7 +301,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -310,6 +310,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(OPT_DATE)
                 .value_name("STRING")
+                .allow_hyphen_values(true)
                 .help("display time described by STRING, not 'now'"),
         )
         .arg(

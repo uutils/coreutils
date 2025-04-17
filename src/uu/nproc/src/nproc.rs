@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr threadstr sysconf
+// spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr sysconf
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::{env, thread};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
@@ -36,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Err(e) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("{} is not a valid number: {}", numstr.quote(), e),
+                    format!("{} is not a valid number: {e}", numstr.quote()),
                 ));
             }
         },
@@ -47,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Uses the OpenMP variable to limit the number of threads
         // If the parsing fails, returns the max size (so, no impact)
         // If OMP_THREAD_LIMIT=0, rejects the value
-        Ok(threadstr) => match threadstr.parse() {
+        Ok(threads) => match threads.parse() {
             Ok(0) | Err(_) => usize::MAX,
             Ok(n) => n,
         },
@@ -63,14 +63,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match env::var("OMP_NUM_THREADS") {
             // Uses the OpenMP variable to force the number of threads
             // If the parsing fails, returns the number of CPU
-            Ok(threadstr) => {
+            Ok(threads) => {
                 // In some cases, OMP_NUM_THREADS can be "x,y,z"
                 // In this case, only take the first one (like GNU)
                 // If OMP_NUM_THREADS=0, rejects the value
-                let thread: Vec<&str> = threadstr.split_terminator(',').collect();
-                match &thread[..] {
-                    [] => available_parallelism(),
-                    [s, ..] => match s.parse() {
+                match threads.split_terminator(',').next() {
+                    None => available_parallelism(),
+                    Some(s) => match s.parse() {
                         Ok(0) | Err(_) => available_parallelism(),
                         Ok(n) => n,
                     },
@@ -94,7 +93,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

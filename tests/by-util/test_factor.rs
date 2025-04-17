@@ -10,25 +10,28 @@
     clippy::cast_sign_loss
 )]
 
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
+use std::fmt::Write;
 use std::time::{Duration, SystemTime};
 
 use rand::distr::{Distribution, Uniform};
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::SmallRng};
 
 const NUM_PRIMES: usize = 10000;
 const NUM_TESTS: usize = 100;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_valid_arg_exponents() {
-    new_ucmd!().arg("-h").succeeds().code_is(0);
-    new_ucmd!().arg("--exponents").succeeds().code_is(0);
+    new_ucmd!().arg("-h").succeeds();
+    new_ucmd!().arg("--exponents").succeeds();
 }
 
 #[test]
@@ -44,16 +47,16 @@ fn test_repeated_exponents() {
 #[cfg(feature = "sort")]
 #[cfg(not(target_os = "android"))]
 fn test_parallel() {
-    use crate::common::util::AtPath;
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
     use std::{fs::OpenOptions, time::Duration};
     use tempfile::TempDir;
+    use uutests::util::AtPath;
     // factor should only flush the buffer at line breaks
     let n_integers = 100_000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
-        input_string.push_str(&(format!("{i} "))[..]);
+        let _ = write!(input_string, "{i} ");
     }
 
     let tmp_dir = TempDir::new().unwrap();
@@ -98,7 +101,7 @@ fn test_first_1000_integers() {
     let n_integers = 1000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
-        input_string.push_str(&(format!("{i} "))[..]);
+        let _ = write!(input_string, "{i} ");
     }
 
     println!("STDIN='{input_string}'");
@@ -122,7 +125,7 @@ fn test_first_1000_integers_with_exponents() {
     let n_integers = 1000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
-        input_string.push_str(&(format!("{i} "))[..]);
+        let _ = write!(input_string, "{i} ");
     }
 
     println!("STDIN='{input_string}'");
@@ -183,7 +186,7 @@ fn test_random() {
                     factors.push(factor);
                 }
                 None => break,
-            };
+            }
         }
 
         factors.sort_unstable();
@@ -195,11 +198,11 @@ fn test_random() {
     let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_gt(1 << 63);
-        input_string.push_str(&(format!("{product} "))[..]);
+        let _ = write!(input_string, "{product} ");
 
-        output_string.push_str(&(format!("{product}:"))[..]);
+        let _ = write!(output_string, "{product}:");
         for factor in factors {
-            output_string.push_str(&(format!(" {factor}"))[..]);
+            let _ = write!(output_string, " {factor}");
         }
         output_string.push('\n');
     }
@@ -279,11 +282,11 @@ fn test_random_big() {
     let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_64();
-        input_string.push_str(&(format!("{product} "))[..]);
+        let _ = write!(input_string, "{product} ");
 
-        output_string.push_str(&(format!("{product}:"))[..]);
+        let _ = write!(output_string, "{product}:");
         for factor in factors {
-            output_string.push_str(&(format!(" {factor}"))[..]);
+            let _ = write!(output_string, " {factor}");
         }
         output_string.push('\n');
     }
@@ -296,8 +299,8 @@ fn test_big_primes() {
     let mut input_string = String::new();
     let mut output_string = String::new();
     for prime in PRIMES64 {
-        input_string.push_str(&(format!("{prime} "))[..]);
-        output_string.push_str(&(format!("{prime}: {prime}\n"))[..]);
+        let _ = write!(input_string, "{prime} ");
+        let _ = writeln!(output_string, "{prime}: {prime}");
     }
 
     run(input_string.as_bytes(), output_string.as_bytes());
@@ -313,7 +316,7 @@ fn run(input_string: &[u8], output_string: &[u8]) {
     new_ucmd!()
         .timeout(Duration::from_secs(240))
         .pipe_in(input_string)
-        .run()
+        .succeeds()
         .stdout_is(String::from_utf8(output_string.to_owned()).unwrap());
 }
 
@@ -323,8 +326,8 @@ fn test_primes_with_exponents() {
     let mut output_string = String::new();
     for primes in PRIMES_BY_BITS {
         for &prime in *primes {
-            input_string.push_str(&(format!("{prime} "))[..]);
-            output_string.push_str(&(format!("{prime}: {prime}\n"))[..]);
+            let _ = write!(input_string, "{prime} ");
+            let _ = writeln!(output_string, "{prime}: {prime}");
         }
     }
 
@@ -342,7 +345,7 @@ fn test_primes_with_exponents() {
         .timeout(Duration::from_secs(240))
         .arg("--exponents")
         .pipe_in(input_string)
-        .run()
+        .succeeds()
         .stdout_is(String::from_utf8(output_string.as_bytes().to_owned()).unwrap());
 }
 

@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
@@ -13,10 +13,9 @@ use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, sho
 
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::error::Error;
 use std::ffi::OsString;
-use std::fmt::Display;
 use std::fs;
+use thiserror::Error;
 
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
@@ -24,7 +23,7 @@ use std::os::unix::fs::symlink;
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
-use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 
 pub struct Settings {
     overwrite: OverwriteMode,
@@ -46,37 +45,24 @@ pub enum OverwriteMode {
     Force,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 enum LnError {
+    #[error("target {} is not a directory", _0.quote())]
     TargetIsDirectory(PathBuf),
+
+    #[error("")]
     SomeLinksFailed,
+
+    #[error("{} and {} are the same file", _0.quote(), _1.quote())]
     SameFile(PathBuf, PathBuf),
+
+    #[error("missing destination file operand after {}", _0.quote())]
     MissingDestination(PathBuf),
-    ExtraOperand(OsString),
-}
 
-impl Display for LnError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
-            Self::SameFile(s, d) => {
-                write!(f, "{} and {} are the same file", s.quote(), d.quote())
-            }
-            Self::SomeLinksFailed => Ok(()),
-            Self::MissingDestination(s) => {
-                write!(f, "missing destination file operand after {}", s.quote())
-            }
-            Self::ExtraOperand(s) => write!(
-                f,
-                "extra operand {}\nTry '{} --help' for more information.",
-                s.quote(),
-                uucore::execution_phrase()
-            ),
-        }
-    }
+    #[error("extra operand {}\nTry '{} --help' for more information.",
+    format!("{_0:?}").trim_matches('"'), _1)]
+    ExtraOperand(OsString, String),
 }
-
-impl Error for LnError {}
 
 impl UError for LnError {
     fn code(&self) -> i32 {
@@ -107,8 +93,7 @@ static ARG_FILES: &str = "files";
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = format!(
-        "{}\n\n{}",
-        AFTER_HELP,
+        "{AFTER_HELP}\n\n{}",
         backup_control::BACKUP_CONTROL_LONG_HELP
     );
 
@@ -158,7 +143,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -284,7 +269,11 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
         return Err(LnError::MissingDestination(files[0].clone()).into());
     }
     if files.len() > 2 {
-        return Err(LnError::ExtraOperand(files[2].clone().into()).into());
+        return Err(LnError::ExtraOperand(
+            files[2].clone().into(),
+            uucore::execution_phrase().to_string(),
+        )
+        .into());
     }
     assert!(!files.is_empty());
 
@@ -309,7 +298,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             // We need to clean the target
             if target_dir.is_file() {
                 if let Err(e) = fs::remove_file(target_dir) {
-                    show_error!("Could not update {}: {}", target_dir.quote(), e);
+                    show_error!("Could not update {}: {e}", target_dir.quote());
                 };
             }
             if target_dir.is_dir() {
@@ -317,7 +306,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 // considered as a dir
                 // See test_ln::test_symlink_no_deref_dir
                 if let Err(e) = fs::remove_dir(target_dir) {
-                    show_error!("Could not update {}: {}", target_dir.quote(), e);
+                    show_error!("Could not update {}: {e}", target_dir.quote());
                 };
             }
             target_dir.to_path_buf()
@@ -350,7 +339,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             );
             all_successful = false;
         } else if let Err(e) = link(srcpath, &targetpath, settings) {
-            show_error!("{}", e);
+            show_error!("{e}");
             all_successful = false;
         }
 
@@ -387,12 +376,12 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
 
     if dst.is_symlink() || dst.exists() {
         backup_path = match settings.backup {
-            BackupMode::NoBackup => None,
-            BackupMode::SimpleBackup => Some(simple_backup_path(dst, &settings.suffix)),
-            BackupMode::NumberedBackup => Some(numbered_backup_path(dst)),
-            BackupMode::ExistingBackup => Some(existing_backup_path(dst, &settings.suffix)),
+            BackupMode::None => None,
+            BackupMode::Simple => Some(simple_backup_path(dst, &settings.suffix)),
+            BackupMode::Numbered => Some(numbered_backup_path(dst)),
+            BackupMode::Existing => Some(existing_backup_path(dst, &settings.suffix)),
         };
-        if settings.backup == BackupMode::ExistingBackup && !settings.symbolic {
+        if settings.backup == BackupMode::Existing && !settings.symbolic {
             // when ln --backup f f, it should detect that it is the same file
             if paths_refer_to_same_file(src, dst, true) {
                 return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());

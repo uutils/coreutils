@@ -13,8 +13,8 @@ use chrono::{
     TimeZone, Timelike,
 };
 use clap::builder::{PossibleValue, ValueParser};
-use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{set_file_times, set_symlink_file_times, FileTime};
+use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
+use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fs::{self, File};
@@ -22,7 +22,7 @@ use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_usage, show};
 
 use crate::error::TouchError;
@@ -135,12 +135,62 @@ fn filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
     Some(DateTime::from_timestamp(ft.unix_seconds(), ft.nanoseconds())?.into())
 }
 
+/// Whether all characters in the string are digits.
+fn all_digits(s: &str) -> bool {
+    s.as_bytes().iter().all(u8::is_ascii_digit)
+}
+
+/// Convert a two-digit year string to the corresponding number.
+///
+/// `s` must be of length two or more. The last two bytes of `s` are
+/// assumed to be the two digits of the year.
+fn get_year(s: &str) -> u8 {
+    let bytes = s.as_bytes();
+    let n = bytes.len();
+    let y1 = bytes[n - 2] - b'0';
+    let y2 = bytes[n - 1] - b'0';
+    10 * y1 + y2
+}
+
+/// Whether the first filename should be interpreted as a timestamp.
+fn is_first_filename_timestamp(
+    reference: Option<&OsString>,
+    date: Option<&str>,
+    timestamp: Option<&str>,
+    files: &[&String],
+) -> bool {
+    if timestamp.is_none()
+        && reference.is_none()
+        && date.is_none()
+        && files.len() >= 2
+        // env check is last as the slowest op
+        && matches!(std::env::var("_POSIX2_VERSION").as_deref(), Ok("199209"))
+    {
+        let s = files[0];
+        all_digits(s) && (s.len() == 8 || (s.len() == 10 && (69..=99).contains(&get_year(s))))
+    } else {
+        false
+    }
+}
+
+/// Cycle the last two characters to the beginning of the string.
+///
+/// `s` must have length at least two.
+fn shr2(s: &str) -> String {
+    let n = s.len();
+    let (a, b) = s.split_at(n - 2);
+    let mut result = String::with_capacity(n);
+    result.push_str(b);
+    result.push_str(a);
+    result
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let files: Vec<InputFile> = matches
-        .get_many::<OsString>(ARG_FILES)
+    let mut filenames: Vec<&String> = matches
+        .get_many::<String>(ARG_FILES)
         .ok_or_else(|| {
             USimpleError::new(
                 1,
@@ -150,6 +200,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             )
         })?
+        .collect();
+
+    let no_deref = matches.get_flag(options::NO_DEREF);
+
+    let reference = matches.get_one::<OsString>(options::sources::REFERENCE);
+    let date = matches
+        .get_one::<String>(options::sources::DATE)
+        .map(|date| date.to_owned());
+
+    let mut timestamp = matches
+        .get_one::<String>(options::sources::TIMESTAMP)
+        .map(|t| t.to_owned());
+
+    if is_first_filename_timestamp(reference, date.as_deref(), timestamp.as_deref(), &filenames) {
+        timestamp = if filenames[0].len() == 10 {
+            Some(shr2(filenames[0]))
+        } else {
+            Some(filenames[0].to_string())
+        };
+        filenames = filenames[1..].to_vec();
+    }
+
+    let source = if let Some(reference) = reference {
+        Source::Reference(PathBuf::from(reference))
+    } else if let Some(ts) = timestamp {
+        Source::Timestamp(parse_timestamp(&ts)?)
+    } else {
+        Source::Now
+    };
+
+    let files: Vec<InputFile> = filenames
+        .into_iter()
         .map(|filename| {
             if filename == "-" {
                 InputFile::Stdout
@@ -158,23 +240,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         })
         .collect();
-
-    let no_deref = matches.get_flag(options::NO_DEREF);
-
-    let reference = matches.get_one::<OsString>(options::sources::REFERENCE);
-    let timestamp = matches.get_one::<String>(options::sources::TIMESTAMP);
-
-    let source = if let Some(reference) = reference {
-        Source::Reference(PathBuf::from(reference))
-    } else if let Some(ts) = timestamp {
-        Source::Timestamp(parse_timestamp(ts)?)
-    } else {
-        Source::Now
-    };
-
-    let date = matches
-        .get_one::<String>(options::sources::DATE)
-        .map(|date| date.to_owned());
 
     let opts = Options {
         no_create: matches.get_flag(options::NO_CREATE),
@@ -192,7 +257,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -275,7 +340,6 @@ pub fn uu_app() -> Command {
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
-                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .group(
@@ -379,7 +443,7 @@ fn touch_file(
     };
 
     if let Err(e) = metadata_result {
-        if e.kind() != std::io::ErrorKind::NotFound {
+        if e.kind() != ErrorKind::NotFound {
             return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
         }
 
@@ -413,7 +477,7 @@ fn touch_file(
                 false
             };
             if is_directory {
-                let custom_err = Error::new(ErrorKind::Other, "No such file or directory");
+                let custom_err = Error::other("No such file or directory");
                 return Err(
                     custom_err.map_err_context(|| format!("cannot touch {}", filename.quote()))
                 );
@@ -576,6 +640,30 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError
     Err(TouchError::InvalidDateFormat(s.to_owned()))
 }
 
+/// Prepends 19 or 20 to the year if it is a 2 digit year
+///
+/// GNU `touch` behavior:
+///
+/// - 68 and before is interpreted as 20xx
+/// - 69 and after is interpreted as 19xx
+fn prepend_century(s: &str) -> UResult<String> {
+    let first_two_digits = s[..2]
+        .parse::<u32>()
+        .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", s.quote())))?;
+    Ok(format!(
+        "{}{s}",
+        if first_two_digits > 68 { 19 } else { 20 }
+    ))
+}
+
+/// Parses a timestamp string into a FileTime.
+///
+/// This function attempts to parse a string into a FileTime
+/// As expected by gnu touch -t : `[[cc]yy]mmddhhmm[.ss]`
+///
+/// Note that  If the year is specified with only two digits,
+/// then cc is 20 for years in the range 0 … 68, and 19 for years in 69 … 99.
+/// in order to be compatible with GNU `touch`.
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
     use format::*;
 
@@ -584,22 +672,22 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     let (format, ts) = match s.chars().count() {
         15 => (YYYYMMDDHHMM_DOT_SS, s.to_owned()),
         12 => (YYYYMMDDHHMM, s.to_owned()),
-        // If we don't add "20", we have insufficient information to parse
-        13 => (YYYYMMDDHHMM_DOT_SS, format!("20{s}")),
-        10 => (YYYYMMDDHHMM, format!("20{s}")),
-        11 => (YYYYMMDDHHMM_DOT_SS, format!("{}{}", current_year(), s)),
-        8 => (YYYYMMDDHHMM, format!("{}{}", current_year(), s)),
+        // If we don't add "19" or "20", we have insufficient information to parse
+        13 => (YYYYMMDDHHMM_DOT_SS, prepend_century(s)?),
+        10 => (YYYYMMDDHHMM, prepend_century(s)?),
+        11 => (YYYYMMDDHHMM_DOT_SS, format!("{}{s}", current_year())),
+        8 => (YYYYMMDDHHMM, format!("{}{s}", current_year())),
         _ => {
             return Err(USimpleError::new(
                 1,
                 format!("invalid date format {}", s.quote()),
-            ))
+            ));
         }
     };
 
     let local = NaiveDateTime::parse_from_str(&ts, format)
         .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
-    let LocalResult::Single(mut local) = chrono::Local.from_local_datetime(&local) else {
+    let LocalResult::Single(mut local) = Local.from_local_datetime(&local) else {
         return Err(USimpleError::new(
             1,
             format!("invalid date ts format {}", ts.quote()),
@@ -648,11 +736,11 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     {
         use std::os::windows::prelude::AsRawHandle;
         use windows_sys::Win32::Foundation::{
-            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, GetLastError,
             HANDLE, MAX_PATH,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            GetFinalPathNameByHandleW, FILE_NAME_OPENED,
+            FILE_NAME_OPENED, GetFinalPathNameByHandleW,
         };
 
         let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
@@ -679,7 +767,7 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
             ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
                 return Err(TouchError::WindowsStdoutPathError(format!(
                     "GetFinalPathNameByHandleW failed with code {ret}"
-                )))
+                )));
             }
             0 => {
                 return Err(TouchError::WindowsStdoutPathError(format!(
@@ -703,8 +791,8 @@ mod tests {
     use filetime::FileTime;
 
     use crate::{
-        determine_atime_mtime_change, error::TouchError, touch, uu_app, ChangeTimes, Options,
-        Source,
+        ChangeTimes, Options, Source, determine_atime_mtime_change, error::TouchError, touch,
+        uu_app,
     };
 
     #[cfg(windows)]
@@ -712,10 +800,12 @@ mod tests {
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
         // We can trigger an error by not setting stdout to anything (will
         // fail with code 1)
-        assert!(super::pathbuf_from_stdout()
-            .expect_err("pathbuf_from_stdout should have failed")
-            .to_string()
-            .contains("GetFinalPathNameByHandleW failed with code 1"));
+        assert!(
+            super::pathbuf_from_stdout()
+                .expect_err("pathbuf_from_stdout should have failed")
+                .to_string()
+                .contains("GetFinalPathNameByHandleW failed with code 1")
+        );
     }
 
     #[test]

@@ -18,7 +18,7 @@ use indicatif::ProgressBar;
 use uucore::display::Quotable;
 use uucore::error::UIoError;
 use uucore::fs::{
-    canonicalize, path_ends_with_terminator, FileInformation, MissingHandling, ResolveMode,
+    FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
 use uucore::show;
 use uucore::show_error;
@@ -26,8 +26,8 @@ use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, CopyResult, Error,
-    Options,
+    CopyResult, Error, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
+    copy_link,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -42,8 +42,9 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
         .components()
         .next()
         .and_then(|comp| comp.as_os_str().to_str())
-        .map(|p_str| p_str.starts_with(VERBATIM_PREFIX) || p_str.starts_with(DEVICE_NS_PREFIX))
-        .unwrap_or_default();
+        .is_some_and(|p_str| {
+            p_str.starts_with(VERBATIM_PREFIX) || p_str.starts_with(DEVICE_NS_PREFIX)
+        });
 
     if has_prefix {
         p.into()
@@ -82,7 +83,7 @@ fn get_local_to_root_parent(
 /// Given an iterator, return all its items except the last.
 fn skip_last<T>(mut iter: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
     let last = iter.next();
-    iter.scan(last, |state, item| std::mem::replace(state, Some(item)))
+    iter.scan(last, |state, item| state.replace(item))
 }
 
 /// Paths that are invariant throughout the traversal when copying a directory.
@@ -101,7 +102,7 @@ struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    fn new(root: &'a Path, target: &'a Path) -> std::io::Result<Self> {
+    fn new(root: &'a Path, target: &'a Path) -> io::Result<Self> {
         let current_dir = env::current_dir()?;
         let root_path = current_dir.join(root);
         let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
@@ -181,7 +182,7 @@ impl Entry {
         if no_target_dir {
             let source_is_dir = source.is_dir();
             if path_ends_with_terminator(context.target) && source_is_dir {
-                if let Err(e) = std::fs::create_dir_all(context.target) {
+                if let Err(e) = fs::create_dir_all(context.target) {
                     eprintln!("Failed to create directory: {e}");
                 }
             } else {
@@ -224,7 +225,7 @@ where
 #[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
-    progress_bar: &Option<ProgressBar>,
+    progress_bar: Option<&ProgressBar>,
     entry: Entry,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
@@ -251,70 +252,53 @@ fn copy_direntry(
         && !ends_with_slash_dot(&source_absolute)
         && !local_to_target.exists()
     {
-        if target_is_file {
-            return Err("cannot overwrite non-directory with directory".into());
+        return if target_is_file {
+            Err("cannot overwrite non-directory with directory".into())
         } else {
             build_dir(&local_to_target, false, options, Some(&source_absolute))?;
             if options.verbose {
                 println!("{}", context_for(&source_relative, &local_to_target));
             }
-            return Ok(());
-        }
+            Ok(())
+        };
     }
 
     // If the source is not a directory, then we need to copy the file.
     if !source_absolute.is_dir() {
-        if preserve_hard_links {
-            match copy_file(
-                progress_bar,
-                &source_absolute,
-                local_to_target.as_path(),
-                options,
-                symlinked_files,
-                copied_destinations,
-                copied_files,
-                false,
-            ) {
-                Ok(_) => Ok(()),
-                Err(err) => {
-                    if source_absolute.is_symlink() {
-                        // silent the error with a symlink
-                        // In case we do --archive, we might copy the symlink
-                        // before the file itself
-                        Ok(())
-                    } else {
-                        Err(err)
+        if let Err(err) = copy_file(
+            progress_bar,
+            &source_absolute,
+            local_to_target.as_path(),
+            options,
+            symlinked_files,
+            copied_destinations,
+            copied_files,
+            false,
+        ) {
+            if preserve_hard_links {
+                if !source_absolute.is_symlink() {
+                    return Err(err);
+                }
+                // silent the error with a symlink
+                // In case we do --archive, we might copy the symlink
+                // before the file itself
+            } else {
+                // At this point, `path` is just a plain old file.
+                // Terminate this function immediately if there is any
+                // kind of error *except* a "permission denied" error.
+                //
+                // TODO What other kinds of errors, if any, should
+                // cause us to continue walking the directory?
+                match err {
+                    Error::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                        show!(uio_error!(
+                            e,
+                            "cannot open {} for reading",
+                            source_relative.quote(),
+                        ));
                     }
+                    e => return Err(e),
                 }
-            }?;
-        } else {
-            // At this point, `path` is just a plain old file.
-            // Terminate this function immediately if there is any
-            // kind of error *except* a "permission denied" error.
-            //
-            // TODO What other kinds of errors, if any, should
-            // cause us to continue walking the directory?
-            match copy_file(
-                progress_bar,
-                &source_absolute,
-                local_to_target.as_path(),
-                options,
-                symlinked_files,
-                copied_destinations,
-                copied_files,
-                false,
-            ) {
-                Ok(_) => {}
-                Err(Error::IoErrContext(e, _))
-                    if e.kind() == std::io::ErrorKind::PermissionDenied =>
-                {
-                    show!(uio_error!(
-                        e,
-                        "cannot open {} for reading",
-                        source_relative.quote(),
-                    ));
-                }
-                Err(e) => return Err(e),
             }
         }
     }
@@ -331,7 +315,7 @@ fn copy_direntry(
 /// will not cause a short-circuit.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn copy_directory(
-    progress_bar: &Option<ProgressBar>,
+    progress_bar: Option<&ProgressBar>,
     root: &Path,
     target: &Path,
     options: &Options,
@@ -485,7 +469,7 @@ pub(crate) fn copy_directory(
             }
 
             // Print an error message, but continue traversing the directory.
-            Err(e) => show_error!("{}", e),
+            Err(e) => show_error!("{e}"),
         }
     }
 
@@ -580,14 +564,13 @@ fn build_dir(
         // we need to allow trivial casts here because some systems like linux have u32 constants in
         // in libc while others don't.
         #[allow(clippy::unnecessary_cast)]
-        let mut excluded_perms =
-            if matches!(options.attributes.ownership, crate::Preserve::Yes { .. }) {
-                libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
-            } else if matches!(options.attributes.mode, crate::Preserve::Yes { .. }) {
-                libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
-            } else {
-                0
-            } as u32;
+        let mut excluded_perms = if matches!(options.attributes.ownership, Preserve::Yes { .. }) {
+            libc::S_IRWXG | libc::S_IRWXO // exclude rwx for group and other
+        } else if matches!(options.attributes.mode, Preserve::Yes { .. }) {
+            libc::S_IWGRP | libc::S_IWOTH //exclude w for group and other
+        } else {
+            0
+        } as u32;
 
         let umask = if copy_attributes_from.is_some()
             && matches!(options.attributes.mode, Preserve::Yes { .. })

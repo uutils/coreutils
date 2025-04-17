@@ -3,9 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore winsize Openpty openpty xpixel ypixel ptyprocess
-use crate::common::util::TestScenario;
 #[cfg(not(target_os = "openbsd"))]
 use std::thread::sleep;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 // General observation: nohup.out will not be created in tests run by cargo test
 // because stdin/stdout is not attached to a TTY.
@@ -13,7 +16,7 @@ use std::thread::sleep;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(125);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
 
 #[test]

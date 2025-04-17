@@ -19,7 +19,6 @@ This file documents why some tests are failing:
 * gnu/tests/fmt/non-space.sh
 * gnu/tests/head/head-elide-tail.pl
 * gnu/tests/head/head-pos.sh
-* gnu/tests/head/head-write-error.sh
 * gnu/tests/help/help-version-getopt.sh
 * gnu/tests/help/help-version.sh
 * gnu/tests/install/install-C.sh - https://github.com/uutils/coreutils/pull/7215

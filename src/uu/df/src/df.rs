@@ -13,18 +13,17 @@ use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
-use uucore::fsext::{read_fs_list, MountInfo};
-use uucore::parse_size::ParseSizeError;
+use uucore::fsext::{MountInfo, read_fs_list};
+use uucore::parser::parse_size::ParseSizeError;
 use uucore::{format_usage, help_about, help_section, help_usage, show};
 
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
-use std::error::Error;
 use std::ffi::OsString;
-use std::fmt;
 use std::path::Path;
+use thiserror::Error;
 
-use crate::blocks::{read_block_size, BlockSize};
+use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
@@ -114,50 +113,30 @@ impl Default for Options {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum OptionsError {
+    // TODO This needs to vary based on whether `--block-size`
+    // or `-B` were provided.
+    #[error("--block-size argument '{0}' too large")]
     BlockSizeTooLarge(String),
+    // TODO This needs to vary based on whether `--block-size`
+    // or `-B` were provided.,
+    #[error("invalid --block-size argument {0}")]
     InvalidBlockSize(String),
+    // TODO This needs to vary based on whether `--block-size`
+    // or `-B` were provided.
+    #[error("invalid suffix in --block-size argument {0}")]
     InvalidSuffix(String),
 
     /// An error getting the columns to display in the output table.
+    #[error("option --output: field {0} used more than once")]
     ColumnError(ColumnError),
 
+    #[error("{}", .0.iter()
+            .map(|t| format!("file system type {} both selected and excluded", t.quote()))
+            .collect::<Vec<_>>()
+            .join(format!("\n{}: ", uucore::util_name()).as_str()))]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
-}
-
-impl fmt::Display for OptionsError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            // TODO This needs to vary based on whether `--block-size`
-            // or `-B` were provided.
-            Self::BlockSizeTooLarge(s) => {
-                write!(f, "--block-size argument {} too large", s.quote())
-            }
-            // TODO This needs to vary based on whether `--block-size`
-            // or `-B` were provided.
-            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {s}"),
-            // TODO This needs to vary based on whether `--block-size`
-            // or `-B` were provided.
-            Self::InvalidSuffix(s) => write!(f, "invalid suffix in --block-size argument {s}"),
-            Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
-                f,
-                "option --output: field {} used more than once",
-                s.quote()
-            ),
-            #[allow(clippy::print_in_format_impl)]
-            Self::FilesystemTypeBothSelectedAndExcluded(types) => {
-                for t in types {
-                    eprintln!(
-                        "{}: file system type {} both selected and excluded",
-                        uucore::util_name(),
-                        t.quote()
-                    );
-                }
-                Ok(())
-            }
-        }
-    }
 }
 
 impl Options {
@@ -426,25 +405,16 @@ where
     Ok(result)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum DfError {
     /// A problem while parsing command-line options.
+    #[error("{}", .0)]
     OptionsError(OptionsError),
 }
-
-impl Error for DfError {}
 
 impl UError for DfError {
     fn usage(&self) -> bool {
         matches!(self, Self::OptionsError(OptionsError::ColumnError(_)))
-    }
-}
-
-impl fmt::Display for DfError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::OptionsError(e) => e.fmt(f),
-        }
     }
 }
 
@@ -499,7 +469,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
@@ -749,7 +719,7 @@ mod tests {
 
     mod is_included {
 
-        use crate::{is_included, Options};
+        use crate::{Options, is_included};
         use uucore::fsext::MountInfo;
 
         /// Instantiate a [`MountInfo`] with the given fields.
@@ -886,7 +856,7 @@ mod tests {
 
     mod filter_mount_list {
 
-        use crate::{filter_mount_list, Options};
+        use crate::{Options, filter_mount_list};
 
         #[test]
         fn test_empty() {

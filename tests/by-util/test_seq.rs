@@ -3,20 +3,28 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
-use crate::common::util::TestScenario;
-use std::process::Stdio;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_no_args() {
     new_ucmd!()
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("missing operand");
+}
+
+#[test]
+fn test_format_and_equal_width() {
+    new_ucmd!()
+        .args(&["-w", "-f", "%f", "1"])
+        .fails_with_code(1)
+        .stderr_contains("format string may not be specified");
 }
 
 #[test]
@@ -182,7 +190,7 @@ fn test_width_invalid_float() {
 fn test_count_up() {
     new_ucmd!()
         .args(&["10"])
-        .run()
+        .succeeds()
         .stdout_is("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
 }
 
@@ -190,11 +198,11 @@ fn test_count_up() {
 fn test_count_down() {
     new_ucmd!()
         .args(&["--", "5", "-1", "1"])
-        .run()
+        .succeeds()
         .stdout_is("5\n4\n3\n2\n1\n");
     new_ucmd!()
         .args(&["5", "-1", "1"])
-        .run()
+        .succeeds()
         .stdout_is("5\n4\n3\n2\n1\n");
 }
 
@@ -202,19 +210,19 @@ fn test_count_down() {
 fn test_separator_and_terminator() {
     new_ucmd!()
         .args(&["-s", ",", "-t", "!", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2,3,4,5,6!");
     new_ucmd!()
         .args(&["-s", ",", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2,3,4,5,6\n");
     new_ucmd!()
         .args(&["-s", "\n", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2\n3\n4\n5\n6\n");
     new_ucmd!()
         .args(&["-s", "\\n", "2", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2\\n3\\n4\\n5\\n6\n");
 }
 
@@ -224,7 +232,7 @@ fn test_equalize_widths() {
     for arg in args {
         new_ucmd!()
             .args(&[arg, "5", "10"])
-            .run()
+            .succeeds()
             .stdout_is("05\n06\n07\n08\n09\n10\n");
     }
 }
@@ -256,7 +264,7 @@ fn test_big_numbers() {
 fn test_count_up_floats() {
     new_ucmd!()
         .args(&["10.0"])
-        .run()
+        .succeeds()
         .stdout_is("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
 }
 
@@ -264,11 +272,11 @@ fn test_count_up_floats() {
 fn test_count_down_floats() {
     new_ucmd!()
         .args(&["--", "5", "-1.0", "1"])
-        .run()
+        .succeeds()
         .stdout_is("5.0\n4.0\n3.0\n2.0\n1.0\n");
     new_ucmd!()
         .args(&["5", "-1", "1.0"])
-        .run()
+        .succeeds()
         .stdout_is("5\n4\n3\n2\n1\n");
 }
 
@@ -276,7 +284,7 @@ fn test_count_down_floats() {
 fn test_separator_and_terminator_floats() {
     new_ucmd!()
         .args(&["-s", ",", "-t", "!", "2.0", "6"])
-        .run()
+        .succeeds()
         .stdout_is("2.0,3.0,4.0,5.0,6.0!");
 }
 
@@ -284,7 +292,7 @@ fn test_separator_and_terminator_floats() {
 fn test_equalize_widths_floats() {
     new_ucmd!()
         .args(&["-w", "5", "10.0"])
-        .run()
+        .succeeds()
         .stdout_is("05\n06\n07\n08\n09\n10\n");
 }
 
@@ -567,51 +575,52 @@ fn test_width_floats() {
         .stdout_only("09.0\n10.0\n");
 }
 
-// TODO This is duplicated from `test_yes.rs`; refactor them.
-/// Run `seq`, capture some of the output, close the pipe, and verify it.
-fn run(args: &[&str], expected: &[u8]) {
-    let mut cmd = new_ucmd!();
-    let mut child = cmd.args(args).set_stdout(Stdio::piped()).run_no_wait();
-    let buf = child.stdout_exact_bytes(expected.len());
-    child.close_stdout();
-    child.wait().unwrap().success();
-    assert_eq!(buf.as_slice(), expected);
-}
-
 #[test]
 fn test_neg_inf() {
-    run(&["--", "-inf", "0"], b"-inf\n-inf\n-inf\n");
+    new_ucmd!()
+        .args(&["--", "-inf", "0"])
+        .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
+        .success();
 }
 
 #[test]
 fn test_neg_infinity() {
-    run(&["--", "-infinity", "0"], b"-inf\n-inf\n-inf\n");
+    new_ucmd!()
+        .args(&["--", "-infinity", "0"])
+        .run_stdout_starts_with(b"-inf\n-inf\n-inf\n")
+        .success();
 }
 
 #[test]
 fn test_inf() {
-    run(&["inf"], b"1\n2\n3\n");
+    new_ucmd!()
+        .args(&["inf"])
+        .run_stdout_starts_with(b"1\n2\n3\n")
+        .success();
 }
 
 #[test]
 fn test_infinity() {
-    run(&["infinity"], b"1\n2\n3\n");
+    new_ucmd!()
+        .args(&["infinity"])
+        .run_stdout_starts_with(b"1\n2\n3\n")
+        .success();
 }
 
 #[test]
 fn test_inf_width() {
-    run(
-        &["-w", "1.000", "inf", "inf"],
-        b"1.000\n  inf\n  inf\n  inf\n",
-    );
+    new_ucmd!()
+        .args(&["-w", "1.000", "inf", "inf"])
+        .run_stdout_starts_with(b"1.000\n  inf\n  inf\n  inf\n")
+        .success();
 }
 
 #[test]
 fn test_neg_inf_width() {
-    run(
-        &["-w", "1.000", "-inf", "-inf"],
-        b"1.000\n -inf\n -inf\n -inf\n",
-    );
+    new_ucmd!()
+        .args(&["-w", "1.000", "-inf", "-inf"])
+        .run_stdout_starts_with(b"1.000\n -inf\n -inf\n -inf\n")
+        .success();
 }
 
 #[test]
@@ -710,7 +719,30 @@ fn test_format_option() {
 }
 
 #[test]
-#[ignore = "Need issue #2660 to be fixed"]
+fn test_format_option_default_precision() {
+    new_ucmd!()
+        .args(&["-f", "%f", "0", "0.7", "2"])
+        .succeeds()
+        .stdout_only("0.000000\n0.700000\n1.400000\n");
+}
+
+#[test]
+fn test_format_option_default_precision_short() {
+    new_ucmd!()
+        .args(&["-f", "%g", "0", "0.987654321", "2"])
+        .succeeds()
+        .stdout_only("0\n0.987654\n1.97531\n");
+}
+
+#[test]
+fn test_format_option_default_precision_scientific() {
+    new_ucmd!()
+        .args(&["-f", "%E", "0", "0.7", "2"])
+        .succeeds()
+        .stdout_only("0.000000E+00\n7.000000E-01\n1.400000E+00\n");
+}
+
+#[test]
 fn test_auto_precision() {
     new_ucmd!()
         .args(&["1", "0x1p-1", "2"])
@@ -719,7 +751,6 @@ fn test_auto_precision() {
 }
 
 #[test]
-#[ignore = "Need issue #3318 to be fixed"]
 fn test_undefined() {
     new_ucmd!()
         .args(&["1e-9223372036854775808"])
@@ -729,21 +760,23 @@ fn test_undefined() {
 
 #[test]
 fn test_invalid_float_point_fail_properly() {
+    // Note that we support arguments that are much bigger than what GNU coreutils supports.
+    // Tests below use exponents larger than we support (i64)
     new_ucmd!()
-        .args(&["66000e000000000000000000000000000000000000000000000000000009223372036854775807"])
+        .args(&["66000e0000000000000000000000000000000000000000000000000000092233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '66000e000000000000000000000000000000000000000000000000000009223372036854775807'");
+        .usage_error("invalid floating point argument: '66000e0000000000000000000000000000000000000000000000000000092233720368547758070'");
     new_ucmd!()
-        .args(&["-1.1e9223372036854775807"])
+        .args(&["-1.1e92233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '-1.1e9223372036854775807'");
+        .usage_error("invalid floating point argument: '-1.1e92233720368547758070'");
     new_ucmd!()
-        .args(&["-.1e9223372036854775807"])
+        .args(&["-.1e92233720368547758070"])
         .fails()
         .no_stdout()
-        .usage_error("invalid floating point argument: '-.1e9223372036854775807'");
+        .usage_error("invalid floating point argument: '-.1e92233720368547758070'");
 }
 
 #[test]
@@ -836,6 +869,8 @@ fn test_parse_valid_hexadecimal_float_two_args() {
         (["0xA.A9p-1", "6"], "5.33008\n"),
         (["0xa.a9p-1", "6"], "5.33008\n"),
         (["0xffffffffffp-30", "1024"], "1024\n"), // spell-checker:disable-line
+        (["  0XA.A9P-1", "6"], "5.33008\n"),
+        (["  0xee.", "  0xef."], "238\n239\n"),
     ];
 
     for (input_arguments, expected_output) in &test_cases {
@@ -886,6 +921,18 @@ fn test_parse_out_of_bounds_exponents() {
         .args(&["1e-9223372036854775808"])
         .succeeds()
         .stdout_only("");
+
+    // GNU seq supports arbitrarily small exponents (and treats the value as 0).
+    new_ucmd!()
+        .args(&["1e-922337203685477580800000000", "1"])
+        .succeeds()
+        .stdout_only("0\n1\n");
+
+    // Check we can also underflow to -0.0.
+    new_ucmd!()
+        .args(&["-1e-922337203685477580800000000", "1"])
+        .succeeds()
+        .stdout_only("-0\n1\n");
 }
 
 #[ignore]
@@ -914,4 +961,112 @@ fn test_parse_valid_hexadecimal_float_format_issues() {
         .args(&["0xa.a9p-30", "1"])
         .succeeds()
         .stdout_only("9.92804e-09\n1\n");
+}
+
+// GNU `seq` manual states that, when the parameters "all use a fixed point
+// decimal representation", the format should be `%.pf`, where the precision
+// is inferred from parameters. Else, `%g` is used.
+//
+// This is understandable, as translating hexadecimal precision to decimal precision
+// is not straightforward or intuitive to the user. There are some exceptions though,
+// if a mix of hexadecimal _integers_ and decimal floats are provided.
+//
+// The way precision is inferred is said to be able to "represent the output numbers
+// exactly". In practice, this means that trailing zeros in first/increment number are
+// considered, but not in the last number. This makes sense if we take that last number
+// as a "bound", and not really part of input/output.
+#[test]
+fn test_precision_corner_cases() {
+    // Mixed input with integer hex still uses precision in decimal float
+    new_ucmd!()
+        .args(&["0x1", "0.90", "3"])
+        .succeeds()
+        .stdout_is("1.00\n1.90\n2.80\n");
+
+    // Mixed input with hex float reverts to %g
+    new_ucmd!()
+        .args(&["0x1.00", "0.90", "3"])
+        .succeeds()
+        .stdout_is("1\n1.9\n2.8\n");
+
+    // Even if it's the last number.
+    new_ucmd!()
+        .args(&["1", "1.20", "0x3.000000"])
+        .succeeds()
+        .stdout_is("1\n2.2\n");
+
+    // Otherwise, precision in last number is ignored.
+    new_ucmd!()
+        .args(&["1", "1.20", "3.000000"])
+        .succeeds()
+        .stdout_is("1.00\n2.20\n");
+
+    // Infinity is ignored
+    new_ucmd!()
+        .args(&["1", "1.2", "inf"])
+        .run_stdout_starts_with(b"1.0\n2.2\n3.4\n")
+        .success();
+}
+
+// GNU `seq` manual only makes guarantees about `-w` working if the
+// provided numbers "all use a fixed point decimal representation",
+// and guides the user to use `-f` for other cases.
+#[test]
+fn test_equalize_widths_corner_cases() {
+    // Mixed input with hexadecimal does behave as expected
+    new_ucmd!()
+        .args(&["-w", "0x1", "5.2", "9"])
+        .succeeds()
+        .stdout_is("1.0\n6.2\n");
+
+    // Confusingly, the number of integral digits in the last number is
+    // used to pad the output numbers, while it is ignored for precision
+    // computation.
+    //
+    // This problem has been reported on list here:
+    // "bug#77179: seq incorrectly(?) pads output when last parameter magnitude"
+    // https://lists.gnu.org/archive/html/bug-coreutils/2025-03/msg00028.html
+    //
+    // TODO: This case could be handled correctly, consider fixing this in
+    // `uutils` implementation. Output should probably be "1.0\n6.2\n".
+    new_ucmd!()
+        .args(&["-w", "0x1", "5.2", "10.0000"])
+        .succeeds()
+        .stdout_is("01.0\n06.2\n");
+
+    // But if we fixed the case above, we need to make sure we still pad
+    // if the last number in the output requires an extra digit.
+    new_ucmd!()
+        .args(&["-w", "0x1", "5.2", "15.0000"])
+        .succeeds()
+        .stdout_is("01.0\n06.2\n11.4\n");
+
+    // GNU `seq` bails out if any hex float is in the output.
+    // Unlike the precision corner cases above, it is harder to justify
+    // this behavior for hexadecimal float inputs, as it is always be
+    // possible to output numbers with a fixed width.
+    //
+    // This problem has been reported on list here:
+    // "bug#76070: Subject: seq, hexadecimal args and equal width"
+    // https://lists.gnu.org/archive/html/bug-coreutils/2025-02/msg00007.html
+    //
+    // TODO: These cases could be handled correctly, consider fixing this in
+    // `uutils` implementation.
+    // If we ignore hexadecimal precision, the output should be "1.0\n6.2\n".
+    new_ucmd!()
+        .args(&["-w", "0x1.0000", "5.2", "10"])
+        .succeeds()
+        .stdout_is("1\n6.2\n");
+    // The equivalent `seq -w 1.0625 1.00002 3` correctly pads the first number: "1.06250\n2.06252\n"
+    new_ucmd!()
+        .args(&["-w", "0x1.1", "1.00002", "3"])
+        .succeeds()
+        .stdout_is("1.0625\n2.06252\n");
+
+    // We can't really pad with infinite number of zeros, so `-w` is ignored.
+    // (there is another test with infinity as an increment above)
+    new_ucmd!()
+        .args(&["-w", "1", "1.2", "inf"])
+        .run_stdout_starts_with(b"1.0\n2.2\n3.4\n")
+        .success();
 }

@@ -5,18 +5,17 @@
 
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag Preprocess
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use std::error::Error;
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-use std::fmt;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
+use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::{format_usage, help_about, help_usage, show_error};
 
 const ABOUT: &str = help_about!("expand.md");
@@ -61,42 +60,23 @@ fn is_digit_or_comma(c: char) -> bool {
 }
 
 /// Errors that can occur when parsing a `--tabs` argument.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum ParseError {
+    #[error("tab size contains invalid character(s): {}", .0.quote())]
     InvalidCharacter(String),
+    #[error("{} specifier not at start of number: {}", .0.quote(), .1.quote())]
     SpecifierNotAtStartOfNumber(String, String),
+    #[error("{} specifier only allowed with the last value", .0.quote())]
     SpecifierOnlyAllowedWithLastValue(String),
+    #[error("tab size cannot be 0")]
     TabSizeCannotBeZero,
+    #[error("tab stop is too large {}", .0.quote())]
     TabSizeTooLarge(String),
+    #[error("tab sizes must be ascending")]
     TabSizesMustBeAscending,
 }
 
-impl Error for ParseError {}
 impl UError for ParseError {}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidCharacter(s) => {
-                write!(f, "tab size contains invalid character(s): {}", s.quote())
-            }
-            Self::SpecifierNotAtStartOfNumber(specifier, s) => write!(
-                f,
-                "{} specifier not at start of number: {}",
-                specifier.quote(),
-                s.quote(),
-            ),
-            Self::SpecifierOnlyAllowedWithLastValue(specifier) => write!(
-                f,
-                "{} specifier only allowed with the last value",
-                specifier.quote()
-            ),
-            Self::TabSizeCannotBeZero => write!(f, "tab size cannot be 0"),
-            Self::TabSizeTooLarge(s) => write!(f, "tab stop is too large {}", s.quote()),
-            Self::TabSizesMustBeAscending => write!(f, "tab sizes must be ascending"),
-        }
-    }
-}
 
 /// Parse a list of tabstops from a `--tabs` argument.
 ///
@@ -165,14 +145,14 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                             }
 
                             let s = s.trim_start_matches(char::is_numeric);
-                            if s.starts_with('/') || s.starts_with('+') {
-                                return Err(ParseError::SpecifierNotAtStartOfNumber(
+                            return if s.starts_with('/') || s.starts_with('+') {
+                                Err(ParseError::SpecifierNotAtStartOfNumber(
                                     s[0..1].to_string(),
                                     s.to_string(),
-                                ));
+                                ))
                             } else {
-                                return Err(ParseError::InvalidCharacter(s.to_string()));
-                            }
+                                Err(ParseError::InvalidCharacter(s.to_string()))
+                            };
                         }
                     }
                 }
@@ -272,7 +252,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
@@ -376,7 +356,7 @@ fn expand_line(
     tabstops: &[usize],
     options: &Options,
 ) -> std::io::Result<()> {
-    use self::CharType::*;
+    use self::CharType::{Backspace, Other, Tab};
 
     let mut col = 0;
     let mut byte = 0;
@@ -425,7 +405,7 @@ fn expand_line(
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
                 if init || !options.iflag {
                     if nts <= options.tspaces.len() {
-                        output.write_all(options.tspaces[..nts].as_bytes())?;
+                        output.write_all(&options.tspaces.as_bytes()[..nts])?;
                     } else {
                         output.write_all(" ".repeat(nts).as_bytes())?;
                     };
@@ -468,7 +448,7 @@ fn expand(options: &Options) -> UResult<()> {
 
     for file in &options.files {
         if Path::new(file).is_dir() {
-            show_error!("{}: Is a directory", file);
+            show_error!("{file}: Is a directory");
             set_exit_code(1);
             continue;
         }
@@ -483,7 +463,7 @@ fn expand(options: &Options) -> UResult<()> {
                 }
             }
             Err(e) => {
-                show_error!("{}", e);
+                show_error!("{e}");
                 set_exit_code(1);
                 continue;
             }
@@ -496,8 +476,8 @@ fn expand(options: &Options) -> UResult<()> {
 mod tests {
     use crate::is_digit_or_comma;
 
-    use super::next_tabstop;
     use super::RemainingMode;
+    use super::next_tabstop;
 
     #[test]
     fn test_next_tabstop_remaining_mode_none() {

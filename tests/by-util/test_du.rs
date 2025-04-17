@@ -7,9 +7,14 @@
 #[cfg(not(windows))]
 use regex::Regex;
 
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
 #[cfg(not(target_os = "windows"))]
-use crate::common::util::expected_result;
-use crate::common::util::TestScenario;
+use uutests::unwrap_or_return;
+use uutests::util::TestScenario;
+#[cfg(not(target_os = "windows"))]
+use uutests::util::expected_result;
+use uutests::util_name;
 
 #[cfg(not(target_os = "openbsd"))]
 const SUB_DIR: &str = "subdir/deeper";
@@ -63,7 +68,7 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows"),))]
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn du_basics(s: &str) {
     let answer = concat!(
         "8\t./subdir/deeper/deeper_dir\n",
@@ -77,7 +82,7 @@ fn du_basics(s: &str) {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -132,20 +137,17 @@ fn test_du_invalid_size() {
         ts.ucmd()
             .arg(format!("--{s}=1fb4t"))
             .arg("/tmp")
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_only(format!("du: invalid suffix in --{s} argument '1fb4t'\n"));
         ts.ucmd()
             .arg(format!("--{s}=x"))
             .arg("/tmp")
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_only(format!("du: invalid --{s} argument 'x'\n"));
         ts.ucmd()
             .arg(format!("--{s}=1Y"))
             .arg("/tmp")
-            .fails()
-            .code_is(1)
+            .fails_with_code(1)
             .stderr_only(format!("du: --{s} argument '1Y' too large\n"));
     }
 }
@@ -583,11 +585,7 @@ fn test_du_h_precision() {
             .arg("--apparent-size")
             .arg(&fpath)
             .succeeds()
-            .stdout_only(format!(
-                "{}\t{}\n",
-                expected_output,
-                &fpath.to_string_lossy()
-            ));
+            .stdout_only(format!("{expected_output}\t{}\n", fpath.to_string_lossy()));
     }
 }
 
@@ -657,7 +655,7 @@ fn birth_supported() -> bool {
     let ts = TestScenario::new(util_name!());
     let m = match std::fs::metadata(&ts.fixtures.subdir) {
         Ok(m) => m,
-        Err(e) => panic!("{}", e),
+        Err(e) => panic!("{e}"),
     };
     m.created().is_ok()
 }
@@ -1019,7 +1017,7 @@ fn test_du_symlink_fail() {
 
     at.symlink_file("non-existing.txt", "target.txt");
 
-    ts.ucmd().arg("-L").arg("target.txt").fails().code_is(1);
+    ts.ucmd().arg("-L").arg("target.txt").fails_with_code(1);
 }
 
 #[cfg(not(windows))]
@@ -1086,8 +1084,7 @@ fn test_du_files0_from_with_invalid_zero_length_file_names() {
 
     ts.ucmd()
         .arg("--files0-from=filelist")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_contains("testfile")
         .stderr_contains("filelist:1: invalid zero-length file name")
         .stderr_contains("filelist:3: invalid zero-length file name");
@@ -1133,8 +1130,7 @@ fn test_du_files0_from_stdin_with_invalid_zero_length_file_names() {
     new_ucmd!()
         .arg("--files0-from=-")
         .pipe_in("\0\0")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("-:1: invalid zero-length file name")
         .stderr_contains("-:2: invalid zero-length file name");
 }
@@ -1251,4 +1247,20 @@ fn test_du_no_deduplicated_input_args() {
         .map(|x| x.parse().unwrap())
         .collect();
     assert_eq!(result_seq, ["2\td", "2\td", "2\td"]);
+}
+
+#[test]
+fn test_du_blocksize_zero_do_not_panic() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("foo", "some content");
+    for block_size in ["0", "00", "000", "0x0"] {
+        ts.ucmd()
+            .arg(format!("-B{block_size}"))
+            .arg("foo")
+            .fails()
+            .stderr_only(format!(
+                "du: invalid --block-size argument '{block_size}'\n"
+            ));
+    }
 }

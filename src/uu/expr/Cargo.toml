@@ -1,17 +1,18 @@
 [package]
 name = "uu_expr"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "expr ~ (uutils) display the value of EXPRESSION"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/expr"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/expr.rs"
@@ -22,6 +23,7 @@ num-bigint = { workspace = true }
 num-traits = { workspace = true }
 onig = { workspace = true }
 uucore = { workspace = true }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "expr"

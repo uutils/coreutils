@@ -6,11 +6,14 @@
 
 use std::path::PathBuf;
 
-use crate::common::util::{TestScenario, UCommand};
+use uutests::new_ucmd;
+use uutests::util::{TestScenario, UCommand};
+//use uutests::at_and_ucmd;
+use uutests::{at_and_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]

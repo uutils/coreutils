@@ -5,11 +5,11 @@
 
 // spell-checker:ignore (ToDO) getlogin userlogin
 
-use clap::{crate_version, Command};
+use clap::Command;
 use std::ffi::CStr;
 use uucore::{error::UResult, format_usage, help_about, help_usage, show_error};
 
-extern "C" {
+unsafe extern "C" {
     // POSIX requires using getlogin (or equivalent code)
     pub fn getlogin() -> *const libc::c_char;
 }
@@ -42,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)

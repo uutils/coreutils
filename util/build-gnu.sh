@@ -2,7 +2,7 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo
 
 set -e
 
@@ -60,7 +60,7 @@ fi
 
 ###
 
-release_tag_GNU="v9.6"
+release_tag_GNU="v9.7"
 
 if test ! -d "${path_GNU}"; then
     echo "Could not find GNU coreutils (expected at '${path_GNU}')"
@@ -84,7 +84,11 @@ echo "path_GNU='${path_GNU}'"
 
 ###
 
+if [[ ! -z  "$CARGO_TARGET_DIR" ]]; then
+UU_BUILD_DIR="${CARGO_TARGET_DIR}/${UU_MAKE_PROFILE}"
+else
 UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
+fi
 echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
@@ -199,14 +203,6 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r sed -Ei
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
 
-sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-eacces.sh
-
-sed -i -e "s|rm: cannot remove 'a/b/file'|rm: cannot remove 'a'|g" tests/rm/cycle.sh
-
-sed -i -e "s|rm: cannot remove directory 'b/a/p'|rm: cannot remove 'b'|g" tests/rm/rm1.sh
-
-sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
-
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
@@ -244,6 +240,10 @@ sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]
 
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
 sed -i "s|require_built_ |# require_built_ |g" init.cfg
+
+# exit early for the selinux check. The first is enough for us.
+sed -i "s|# Independent of whether SELinux|return 0\n  #|g" init.cfg
+
 # Some tests are executed with the "nobody" user.
 # The check to verify if it works is based on the GNU coreutils version
 # making it too restrictive for us
@@ -263,9 +263,6 @@ sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc
 
 # Update the GNU error message to match ours
 sed -i -e "s/link-to-dir: hard link not allowed for directory/failed to create hard link 'link-to-dir' =>/" -e "s|link-to-dir/: hard link not allowed for directory|failed to create hard link 'link-to-dir/' =>|" tests/ln/hard-to-sym.sh
-
-# GNU sleep accepts some crazy string, not sure we should match this behavior
-sed -i -e "s/timeout 10 sleep 0x.002p1/#timeout 10 sleep 0x.002p1/" tests/misc/sleep.sh
 
 # install verbose messages shows ginstall as command
 sed -i -e "s/ginstall: creating directory/install: creating directory/g" tests/install/basic-1.sh
@@ -345,3 +342,8 @@ sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/quote-align.sh
 
 # Slightly different error message
 sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
+# Most tests check that `/usr/bin/tr` is working correctly before running.
+# However in NixOS/Nix-based distros, the tr util is located somewhere in
+# /nix/store/xxxxxxxxxxxx...xxxx/bin/tr
+# We just replace the references to `/usr/bin/tr` with the result of `$(which tr)`
+sed -i  's/\/usr\/bin\/tr/$(which tr)/' tests/init.sh

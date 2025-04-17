@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore extendedbigdecimal
 
 //! `printf`-style formatting
 //!
@@ -34,15 +35,16 @@ mod argument;
 mod escape;
 pub mod human;
 pub mod num_format;
-pub mod num_parser;
 mod spec;
 
+use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub use argument::*;
 pub use spec::Spec;
 use std::{
     error::Error,
     fmt::Display,
-    io::{stdout, Write},
+    io::{Write, stdout},
+    marker::PhantomData,
     ops::ControlFlow,
 };
 
@@ -51,7 +53,7 @@ use os_display::Quotable;
 use crate::error::UError;
 
 pub use self::{
-    escape::{parse_escape_code, EscapedChar},
+    escape::{EscapedChar, OctalParsing, parse_escape_code},
     num_format::Formatter,
 };
 
@@ -67,6 +69,11 @@ pub enum FormatError {
     InvalidPrecision(String),
     /// The format specifier ends with a %, as in `%f%`.
     EndsWithPercent(Vec<u8>),
+    /// The escape sequence `\x` appears without a literal hexadecimal value.
+    MissingHex,
+    /// The hexadecimal characters represent a code point that cannot represent a
+    /// Unicode character (e.g., a surrogate code point)
+    InvalidCharacter(char, Vec<u8>),
 }
 
 impl Error for FormatError {}
@@ -105,6 +112,13 @@ impl Display for FormatError {
             Self::IoError(_) => write!(f, "io error"),
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
+            Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
+            Self::InvalidCharacter(escape_char, digits) => write!(
+                f,
+                "invalid universal character name \\{}{}",
+                escape_char,
+                String::from_utf8_lossy(digits)
+            ),
         }
     }
 }
@@ -181,7 +195,7 @@ pub fn parse_spec_and_escape(
         }
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(Ok(FormatItem::Char(parse_escape_code(&mut current))))
+            Some(parse_escape_code(&mut current, OctalParsing::default()).map(FormatItem::Char))
         }
         [c, rest @ ..] => {
             current = rest;
@@ -218,13 +232,19 @@ pub fn parse_spec_only(
 }
 
 /// Parse a format string containing escape sequences
-pub fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
+pub fn parse_escape_only(
+    fmt: &[u8],
+    zero_octal_parsing: OctalParsing,
+) -> impl Iterator<Item = EscapedChar> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(parse_escape_code(&mut current))
+            Some(
+                parse_escape_code(&mut current, zero_octal_parsing)
+                    .unwrap_or(EscapedChar::Backslash(b'x')),
+            )
         }
         [c, rest @ ..] => {
             current = rest;
@@ -292,20 +312,30 @@ pub fn sprintf<'a>(
     Ok(writer)
 }
 
-/// A parsed format for a single float value
+/// A format for a single numerical value of type T
 ///
-/// This is used by `seq`. It can be constructed with [`Format::parse`]
-/// and can write a value with [`Format::fmt`].
+/// This is used by `seq` and `csplit`. It can be constructed with [`Format::from_formatter`]
+/// or [`Format::parse`] and can write a value with [`Format::fmt`].
 ///
-/// It can only accept a single specification without any asterisk parameters.
+/// [`Format::parse`] can only accept a single specification without any asterisk parameters.
 /// If it does get more specifications, it will return an error.
-pub struct Format<F: Formatter> {
+pub struct Format<F: Formatter<T>, T> {
     prefix: Vec<u8>,
     suffix: Vec<u8>,
     formatter: F,
+    _marker: PhantomData<T>,
 }
 
-impl<F: Formatter> Format<F> {
+impl<F: Formatter<T>, T> Format<F, T> {
+    pub fn from_formatter(formatter: F) -> Self {
+        Self {
+            prefix: Vec::<u8>::new(),
+            suffix: Vec::<u8>::new(),
+            formatter,
+            _marker: PhantomData,
+        }
+    }
+
     pub fn parse(format_string: impl AsRef<[u8]>) -> Result<Self, FormatError> {
         let mut iter = parse_spec_only(format_string.as_ref());
 
@@ -346,10 +376,11 @@ impl<F: Formatter> Format<F> {
             prefix,
             suffix,
             formatter,
+            _marker: PhantomData,
         })
     }
 
-    pub fn fmt(&self, mut w: impl Write, f: F::Input) -> std::io::Result<()> {
+    pub fn fmt(&self, mut w: impl Write, f: T) -> std::io::Result<()> {
         w.write_all(&self.prefix)?;
         self.formatter.fmt(&mut w, f)?;
         w.write_all(&self.suffix)?;

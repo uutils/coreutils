@@ -2,13 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
 use uucore::display::Quotable;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 // spell-checker:ignore (ToDO) taaaa tbbbb tcccc
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -397,7 +399,7 @@ fn test_comma_with_plus_4() {
 fn test_args_override() {
     new_ucmd!()
         .args(&["-i", "-i", "with-trailing-tab.txt"])
-        .run()
+        .succeeds()
         .stdout_is(
             "// !note: file contains significant whitespace
 // * indentation uses <TAB> characters
