@@ -5,7 +5,7 @@
 
 use std::{
     fs::File,
-    io::{BufReader, Read, Stdout, Write, stdin, stdout},
+    io::{BufRead, BufReader, Cursor, Read, Seek, SeekFrom, Stdout, Write, stdin, stdout},
     panic::set_hook,
     path::Path,
     time::Duration,
@@ -21,8 +21,6 @@ use crossterm::{
     terminal::{self, Clear, ClearType},
 };
 
-use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{display::Quotable, show};
 use uucore::{format_usage, help_about, help_usage};
@@ -89,8 +87,18 @@ impl Options {
     }
 }
 
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        reset_term(&mut stdout());
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let _guard = TerminalGuard;
+
     // Disable raw mode before exiting if a panic occurs
     set_hook(Box::new(|panic_info| {
         terminal::disable_raw_mode().unwrap();
@@ -102,67 +110,63 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut options = Options::from(&matches);
 
-    let mut buff = String::new();
+    let mut stdout = setup_term()?;
 
     if let Some(files) = matches.get_many::<String>(options::FILES) {
-        let mut stdout = setup_term();
         let length = files.len();
 
         let mut files_iter = files.map(|s| s.as_str()).peekable();
         while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
             let file = Path::new(file);
             if file.is_dir() {
-                terminal::disable_raw_mode().unwrap();
+                terminal::disable_raw_mode()?;
                 show!(UUsageError::new(
                     0,
                     format!("{} is a directory.", file.quote()),
                 ));
-                terminal::enable_raw_mode().unwrap();
+                terminal::enable_raw_mode()?;
                 continue;
             }
             if !file.exists() {
-                terminal::disable_raw_mode().unwrap();
+                terminal::disable_raw_mode()?;
                 show!(USimpleError::new(
                     0,
                     format!("cannot open {}: No such file or directory", file.quote()),
                 ));
-                terminal::enable_raw_mode().unwrap();
+                terminal::enable_raw_mode()?;
                 continue;
             }
             let opened_file = match File::open(file) {
                 Err(why) => {
-                    terminal::disable_raw_mode().unwrap();
+                    terminal::disable_raw_mode()?;
                     show!(USimpleError::new(
                         0,
                         format!("cannot open {}: {}", file.quote(), why.kind()),
                     ));
-                    terminal::enable_raw_mode().unwrap();
+                    terminal::enable_raw_mode()?;
                     continue;
                 }
                 Ok(opened_file) => opened_file,
             };
-            let mut reader = BufReader::new(opened_file);
-            reader.read_to_string(&mut buff).unwrap();
             more(
-                &buff,
+                opened_file,
                 &mut stdout,
                 length > 1,
                 file.to_str(),
                 next_file.copied(),
                 &mut options,
             )?;
-            buff.clear();
         }
-        reset_term(&mut stdout);
     } else {
-        stdin().read_to_string(&mut buff).unwrap();
+        let mut buff = String::new();
+        stdin().read_to_string(&mut buff)?;
         if buff.is_empty() {
             return Err(UUsageError::new(1, "bad usage"));
         }
-        let mut stdout = setup_term();
-        more(&buff, &mut stdout, false, None, None, &mut options)?;
-        reset_term(&mut stdout);
+        let cursor = Cursor::new(buff);
+        more(cursor, &mut stdout, false, None, None, &mut options)?;
     }
+
     Ok(())
 }
 
@@ -266,16 +270,16 @@ pub fn uu_app() -> Command {
 }
 
 #[cfg(not(target_os = "fuchsia"))]
-fn setup_term() -> Stdout {
+fn setup_term() -> UResult<Stdout> {
     let stdout = stdout();
-    terminal::enable_raw_mode().unwrap();
-    stdout
+    terminal::enable_raw_mode()?;
+    Ok(stdout)
 }
 
 #[cfg(target_os = "fuchsia")]
 #[inline(always)]
-fn setup_term() -> usize {
-    0
+fn setup_term() -> UResult<usize> {
+    Ok(0)
 }
 
 #[cfg(not(target_os = "fuchsia"))]
@@ -293,25 +297,23 @@ fn reset_term(stdout: &mut Stdout) {
 fn reset_term(_: &mut usize) {}
 
 fn more(
-    buff: &str,
+    file: impl Read + Seek + 'static,
     stdout: &mut Stdout,
     multiple_file: bool,
-    file: Option<&str>,
+    file_name: Option<&str>,
     next_file: Option<&str>,
     options: &mut Options,
 ) -> UResult<()> {
-    let (cols, mut rows) = terminal::size().unwrap();
+    let (_cols, mut rows) = terminal::size()?;
     if let Some(number) = options.lines {
         rows = number;
     }
 
-    let lines = break_buff(buff, cols as usize);
+    let mut pager = Pager::new(file, rows, next_file, options)?;
 
-    let mut pager = Pager::new(rows, lines, next_file, options);
-
-    if let Some(pat) = options.pattern.as_ref() {
-        match search_pattern_in_file(&pager.lines, pat) {
-            Some(number) => pager.upper_mark = number,
+    if options.pattern.is_some() {
+        match pager.pattern_line {
+            Some(line) => pager.upper_mark = line,
             None => {
                 execute!(stdout, Clear(ClearType::CurrentLine))?;
                 stdout.write_all("\rPattern not found\n".as_bytes())?;
@@ -321,15 +323,15 @@ fn more(
     }
 
     if multiple_file {
-        execute!(stdout, Clear(ClearType::CurrentLine)).unwrap();
+        execute!(stdout, Clear(ClearType::CurrentLine))?;
         stdout.write_all(
             MULTI_FILE_TOP_PROMPT
-                .replace("{}", file.unwrap_or_default())
+                .replace("{}", file_name.unwrap_or_default())
                 .as_bytes(),
         )?;
         pager.content_rows -= 3;
     }
-    pager.draw(stdout, None);
+    pager.draw(stdout, None)?;
     if multiple_file {
         options.from_line = 0;
         pager.content_rows += 3;
@@ -341,8 +343,8 @@ fn more(
 
     loop {
         let mut wrong_key = None;
-        if event::poll(Duration::from_millis(10)).unwrap() {
-            match event::read().unwrap() {
+        if event::poll(Duration::from_millis(10))? {
+            match event::read()? {
                 Event::Key(KeyEvent {
                     kind: KeyEventKind::Release,
                     ..
@@ -360,10 +362,7 @@ fn more(
                         kind: KeyEventKind::Press,
                         ..
                     },
-                ) => {
-                    reset_term(stdout);
-                    std::process::exit(0);
-                }
+                ) => return Ok(()),
                 Event::Key(KeyEvent {
                     code: KeyCode::Down | KeyCode::PageDown | KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
@@ -380,7 +379,7 @@ fn more(
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
-                    pager.page_up();
+                    pager.page_up()?;
                     paging_add_back_message(options, stdout)?;
                 }
                 Event::Key(KeyEvent {
@@ -412,46 +411,95 @@ fn more(
             }
 
             if options.print_over {
-                execute!(
-                    std::io::stdout(),
-                    MoveTo(0, 0),
-                    Clear(ClearType::FromCursorDown)
-                )
-                .unwrap();
+                execute!(stdout, MoveTo(0, 0), Clear(ClearType::FromCursorDown))?;
             } else if options.clean_print {
-                execute!(std::io::stdout(), Clear(ClearType::All), MoveTo(0, 0)).unwrap();
+                execute!(stdout, Clear(ClearType::All), MoveTo(0, 0))?;
             }
-            pager.draw(stdout, wrong_key);
+            pager.draw(stdout, wrong_key)?;
         }
     }
 }
 
+trait BufReadSeek: BufRead + Seek {}
+
+impl<R: BufRead + Seek> BufReadSeek for R {}
+
 struct Pager<'a> {
+    reader: Box<dyn BufReadSeek>,
     // The current line at the top of the screen
     upper_mark: usize,
     // The number of rows that fit on the screen
     content_rows: usize,
-    lines: Vec<&'a str>,
+    lines: Vec<String>,
+    // Cache of line byte positions for faster seeking
+    line_positions: Vec<u64>,
     next_file: Option<&'a str>,
     line_count: usize,
     silent: bool,
     squeeze: bool,
-    line_squeezed: usize,
+    lines_squeezed: usize,
+    pattern_line: Option<usize>,
 }
 
 impl<'a> Pager<'a> {
-    fn new(rows: u16, lines: Vec<&'a str>, next_file: Option<&'a str>, options: &Options) -> Self {
-        let line_count = lines.len();
-        Self {
+    fn new(
+        file: impl Read + Seek + 'static,
+        rows: u16,
+        next_file: Option<&'a str>,
+        options: &Options,
+    ) -> UResult<Self> {
+        // Create buffered reader
+        let mut reader = Box::new(BufReader::new(file));
+
+        // Initialize file scanning variables
+        let mut line_positions = vec![0]; // Position of first line
+        let mut line_count = 0;
+        let mut current_position = 0;
+        let mut pattern_line = None;
+        let mut line = String::new();
+
+        // Scan file to record line positions and find pattern if specified
+        loop {
+            let bytes = reader.read_line(&mut line)?;
+            if bytes == 0 {
+                break; // EOF
+            }
+
+            line_count += 1;
+            current_position += bytes as u64;
+            line_positions.push(current_position);
+
+            // Check for pattern match if a pattern was provided
+            if pattern_line.is_none() {
+                if let Some(ref pattern) = options.pattern {
+                    if !pattern.is_empty() && line.contains(pattern) {
+                        pattern_line = Some(line_count - 1);
+                    }
+                }
+            }
+
+            line.clear();
+        }
+
+        // Reset file position to beginning
+        reader.rewind()?;
+
+        // Reserve one line for the status bar
+        let content_rows = rows.saturating_sub(1) as usize;
+
+        Ok(Self {
+            reader,
             upper_mark: options.from_line,
-            content_rows: rows.saturating_sub(1) as usize,
-            lines,
+            content_rows,
+            lines: Vec::with_capacity(content_rows),
+            line_positions,
             next_file,
             line_count,
             silent: options.silent,
             squeeze: options.squeeze,
-            line_squeezed: 0,
-        }
+            lines_squeezed: 0,
+            pattern_line,
+        })
     }
 
     fn should_close(&mut self) -> bool {
@@ -471,28 +519,48 @@ impl<'a> Pager<'a> {
         self.upper_mark = self.upper_mark.saturating_add(self.content_rows);
     }
 
-    fn page_up(&mut self) {
+    fn page_up(&mut self) -> UResult<()> {
         self.upper_mark = self
             .upper_mark
-            .saturating_sub(self.content_rows.saturating_add(self.line_squeezed));
+            .saturating_sub(self.content_rows.saturating_add(self.lines_squeezed));
 
         if self.squeeze {
-            let iter = self.lines.iter().take(self.upper_mark).rev();
-            for line in iter {
-                if line.is_empty() {
-                    self.upper_mark = self.upper_mark.saturating_sub(1);
-                } else {
+            let mut line = String::new();
+            while self.upper_mark > 0 {
+                self.seek_to_line(self.upper_mark)?;
+
+                line.clear();
+                self.reader.read_line(&mut line)?;
+
+                // Stop if we find a non-empty line
+                if line != "\n" {
                     break;
                 }
+
+                self.upper_mark = self.upper_mark.saturating_sub(1);
             }
         }
+
+        Ok(())
     }
 
     fn next_line(&mut self) {
+        // Don't proceed if we're already at the last line
+        if self.upper_mark >= self.line_count.saturating_sub(1) {
+            return;
+        }
+
+        // Move the viewing window down by one line
         self.upper_mark = self.upper_mark.saturating_add(1);
     }
 
     fn prev_line(&mut self) {
+        // Don't proceed if we're already at the first line
+        if self.upper_mark == 0 {
+            return;
+        }
+
+        // Move the viewing window up by one line
         self.upper_mark = self.upper_mark.saturating_sub(1);
     }
 
@@ -503,57 +571,24 @@ impl<'a> Pager<'a> {
         };
     }
 
-    fn draw(&mut self, stdout: &mut Stdout, wrong_key: Option<char>) {
-        self.draw_lines(stdout);
+    fn draw(&mut self, stdout: &mut Stdout, wrong_key: Option<char>) -> UResult<()> {
+        self.draw_lines(stdout)?;
         let lower_mark = self
             .line_count
             .min(self.upper_mark.saturating_add(self.content_rows));
         self.draw_prompt(stdout, lower_mark, wrong_key);
-        stdout.flush().unwrap();
+        stdout.flush()?;
+        Ok(())
     }
 
-    fn draw_lines(&mut self, stdout: &mut Stdout) {
-        execute!(stdout, Clear(ClearType::CurrentLine)).unwrap();
+    fn draw_lines(&mut self, stdout: &mut Stdout) -> UResult<()> {
+        execute!(stdout, Clear(ClearType::CurrentLine))?;
 
-        self.line_squeezed = 0;
-        let mut previous_line_blank = false;
-        let mut displayed_lines = Vec::new();
-        let mut iter = self.lines.iter().skip(self.upper_mark);
-
-        while displayed_lines.len() < self.content_rows {
-            match iter.next() {
-                Some(line) => {
-                    if self.squeeze {
-                        match (line.is_empty(), previous_line_blank) {
-                            (true, false) => {
-                                previous_line_blank = true;
-                                displayed_lines.push(line);
-                            }
-                            (false, true) => {
-                                previous_line_blank = false;
-                                displayed_lines.push(line);
-                            }
-                            (false, false) => displayed_lines.push(line),
-                            (true, true) => {
-                                self.line_squeezed += 1;
-                                self.upper_mark += 1;
-                            }
-                        }
-                    } else {
-                        displayed_lines.push(line);
-                    }
-                }
-                // if none the end of the file is reached
-                None => {
-                    self.upper_mark = self.line_count;
-                    break;
-                }
-            }
+        self.load_visible_lines()?;
+        for line in &self.lines {
+            stdout.write_all(format!("\r{line}").as_bytes())?;
         }
-
-        for line in displayed_lines {
-            stdout.write_all(format!("\r{line}\n").as_bytes()).unwrap();
-        }
+        Ok(())
     }
 
     fn draw_prompt(&self, stdout: &mut Stdout, lower_mark: usize, wrong_key: Option<char>) {
@@ -584,18 +619,52 @@ impl<'a> Pager<'a> {
         )
         .unwrap();
     }
-}
 
-fn search_pattern_in_file(lines: &[&str], pattern: &str) -> Option<usize> {
-    if lines.is_empty() || pattern.is_empty() {
-        return None;
-    }
-    for (line_number, line) in lines.iter().enumerate() {
-        if line.contains(pattern) {
-            return Some(line_number);
+    fn load_visible_lines(&mut self) -> UResult<()> {
+        self.lines.clear();
+
+        self.lines_squeezed = 0;
+
+        self.seek_to_line(self.upper_mark)?;
+
+        let mut line = String::new();
+        while self.lines.len() < self.content_rows {
+            line.clear();
+            if self.reader.read_line(&mut line)? == 0 {
+                break; // EOF
+            }
+
+            if self.should_squeeze_line(&line) {
+                self.lines_squeezed += 1;
+            } else {
+                self.lines.push(std::mem::take(&mut line));
+            }
         }
+
+        Ok(())
     }
-    None
+
+    fn seek_to_line(&mut self, line_number: usize) -> UResult<()> {
+        let line_number = line_number.min(self.line_count);
+        let pos = self.line_positions[line_number];
+        self.reader.seek(SeekFrom::Start(pos))?;
+        Ok(())
+    }
+
+    fn should_squeeze_line(&self, line: &str) -> bool {
+        if !self.squeeze {
+            return false;
+        }
+
+        let is_empty = line.trim().is_empty();
+        let prev_empty = self
+            .lines
+            .last()
+            .map(|l| l.trim().is_empty())
+            .unwrap_or(false);
+
+        is_empty && prev_empty
+    }
 }
 
 fn paging_add_back_message(options: &Options, stdout: &mut Stdout) -> UResult<()> {
@@ -606,126 +675,158 @@ fn paging_add_back_message(options: &Options, stdout: &mut Stdout) -> UResult<()
     Ok(())
 }
 
-// Break the lines on the cols of the terminal
-fn break_buff(buff: &str, cols: usize) -> Vec<&str> {
-    // We _could_ do a precise with_capacity here, but that would require scanning the
-    // whole buffer. Just guess a value instead.
-    let mut lines = Vec::with_capacity(2048);
-
-    for l in buff.lines() {
-        lines.append(&mut break_line(l, cols));
-    }
-    lines
-}
-
-fn break_line(line: &str, cols: usize) -> Vec<&str> {
-    let width = UnicodeWidthStr::width(line);
-    let mut lines = Vec::new();
-    if width < cols {
-        lines.push(line);
-        return lines;
-    }
-
-    let gr_idx = UnicodeSegmentation::grapheme_indices(line, true);
-    let mut last_index = 0;
-    let mut total_width = 0;
-    for (index, grapheme) in gr_idx {
-        let width = UnicodeWidthStr::width(grapheme);
-        total_width += width;
-
-        if total_width > cols {
-            lines.push(&line[last_index..index]);
-            last_index = index;
-            total_width = width;
-        }
-    }
-
-    if last_index != line.len() {
-        lines.push(&line[last_index..]);
-    }
-    lines
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{break_line, search_pattern_in_file};
-    use unicode_width::UnicodeWidthStr;
+    use super::*;
 
-    #[test]
-    fn test_break_lines_long() {
-        let mut test_string = String::with_capacity(100);
-        for _ in 0..200 {
-            test_string.push('#');
+    struct TestPagerBuilder {
+        content: String,
+        options: Options,
+        rows: u16,
+        next_file: Option<&'static str>,
+    }
+
+    #[allow(dead_code)]
+    impl TestPagerBuilder {
+        fn new(content: &str) -> Self {
+            Self {
+                content: content.to_string(),
+                options: Options {
+                    clean_print: false,
+                    from_line: 0,
+                    lines: None,
+                    pattern: None,
+                    print_over: false,
+                    silent: false,
+                    squeeze: false,
+                },
+                rows: 24,
+                next_file: None,
+            }
         }
 
-        let lines = break_line(&test_string, 80);
-        let widths: Vec<usize> = lines
-            .iter()
-            .map(|s| UnicodeWidthStr::width(&s[..]))
-            .collect();
-
-        assert_eq!((80, 80, 40), (widths[0], widths[1], widths[2]));
-    }
-
-    #[test]
-    fn test_break_lines_short() {
-        let mut test_string = String::with_capacity(100);
-        for _ in 0..20 {
-            test_string.push('#');
+        fn build(self) -> Pager<'static> {
+            let cursor = Cursor::new(self.content);
+            Pager::new(cursor, self.rows, self.next_file, &self.options).unwrap()
         }
 
-        let lines = break_line(&test_string, 80);
-
-        assert_eq!(20, lines[0].len());
-    }
-
-    #[test]
-    fn test_break_line_zwj() {
-        let mut test_string = String::with_capacity(1100);
-        for _ in 0..20 {
-            test_string.push_str("👩🏻‍🔬");
+        fn pattern(mut self, pattern: &str) -> Self {
+            self.options.pattern = Some(pattern.to_owned());
+            self
         }
 
-        let lines = break_line(&test_string, 31);
+        fn clean_print(mut self, clean_print: bool) -> Self {
+            self.options.clean_print = clean_print;
+            self
+        }
 
-        let widths: Vec<usize> = lines
-            .iter()
-            .map(|s| UnicodeWidthStr::width(&s[..]))
-            .collect();
+        #[allow(clippy::wrong_self_convention)]
+        fn from_line(mut self, from_line: usize) -> Self {
+            self.options.from_line = from_line;
+            self
+        }
 
-        // Each 👩🏻‍🔬 is 2 character width, break line to the closest even number to 31
-        assert_eq!((30, 10), (widths[0], widths[1]));
+        fn lines(mut self, lines: u16) -> Self {
+            self.options.lines = Some(lines);
+            self
+        }
+
+        fn print_over(mut self, print_over: bool) -> Self {
+            self.options.print_over = print_over;
+            self
+        }
+
+        fn silent(mut self, silent: bool) -> Self {
+            self.options.silent = silent;
+            self
+        }
+
+        fn squeeze(mut self, squeeze: bool) -> Self {
+            self.options.squeeze = squeeze;
+            self
+        }
+
+        fn rows(mut self, rows: u16) -> Self {
+            self.rows = rows;
+            self
+        }
+
+        fn next_file(mut self, next_file: &'static str) -> Self {
+            self.next_file = Some(next_file);
+            self
+        }
     }
 
-    #[test]
-    fn test_search_pattern_empty_lines() {
-        let lines = vec![];
-        let pattern = "pattern";
-        assert_eq!(None, search_pattern_in_file(&lines, pattern));
+    mod pattern_search {
+        use super::*;
+
+        #[test]
+        fn test_empty_file() {
+            let pager = TestPagerBuilder::new("").pattern("pattern").build();
+            assert_eq!(None, pager.pattern_line);
+        }
+
+        #[test]
+        fn test_empty_pattern() {
+            let pager = TestPagerBuilder::new("line1\nline2\nline3\n")
+                .pattern("")
+                .build();
+            assert_eq!(None, pager.pattern_line);
+        }
+
+        #[test]
+        fn test_pattern_found() {
+            let pager = TestPagerBuilder::new("line1\nline2\npattern\n")
+                .pattern("pattern")
+                .build();
+            assert_eq!(Some(2), pager.pattern_line);
+
+            let pager = TestPagerBuilder::new("line1\nline2\npattern\npattern2\n")
+                .pattern("pattern")
+                .build();
+            assert_eq!(Some(2), pager.pattern_line);
+
+            let pager = TestPagerBuilder::new("line1\nline2\nother_pattern\n")
+                .pattern("pattern")
+                .build();
+            assert_eq!(Some(2), pager.pattern_line);
+        }
+
+        #[test]
+        fn test_pattern_not_found() {
+            let pager = TestPagerBuilder::new("line1\nline2\nsomething\n")
+                .pattern("pattern")
+                .build();
+            assert_eq!(None, pager.pattern_line);
+        }
     }
 
-    #[test]
-    fn test_search_pattern_empty_pattern() {
-        let lines = vec!["line1", "line2"];
-        let pattern = "";
-        assert_eq!(None, search_pattern_in_file(&lines, pattern));
+    mod pager_initialization {
+        use super::*;
+
+        #[test]
+        fn test_init_preserves_position() {
+            let mut pager = TestPagerBuilder::new("line1\nline2\npattern\n")
+                .pattern("pattern")
+                .build();
+            assert_eq!(Some(2), pager.pattern_line);
+            assert_eq!(0, pager.reader.stream_position().unwrap());
+        }
     }
 
-    #[test]
-    fn test_search_pattern_found_pattern() {
-        let lines = vec!["line1", "line2", "pattern"];
-        let lines2 = vec!["line1", "line2", "pattern", "pattern2"];
-        let lines3 = vec!["line1", "line2", "other_pattern"];
-        let pattern = "pattern";
-        assert_eq!(2, search_pattern_in_file(&lines, pattern).unwrap());
-        assert_eq!(2, search_pattern_in_file(&lines2, pattern).unwrap());
-        assert_eq!(2, search_pattern_in_file(&lines3, pattern).unwrap());
-    }
+    mod seeking {
+        use super::*;
 
-    #[test]
-    fn test_search_pattern_not_found_pattern() {
-        let lines = vec!["line1", "line2", "something"];
-        let pattern = "pattern";
-        assert_eq!(None, search_pattern_in_file(&lines, pattern));
+        #[test]
+        fn test_seek_past_end() {
+            let mut pager = TestPagerBuilder::new("just one line").build();
+            assert!(pager.seek_to_line(100).is_ok());
+        }
+
+        #[test]
+        fn test_seek_in_empty_file() {
+            let mut empty_pager = TestPagerBuilder::new("").build();
+            assert!(empty_pager.seek_to_line(5).is_ok());
+        }
     }
 }
