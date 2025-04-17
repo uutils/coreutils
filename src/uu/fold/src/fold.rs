@@ -5,9 +5,9 @@
 
 // spell-checker:ignore (ToDOs) ncount routput
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(inp_width) => inp_width.parse::<usize>().map_err(|e| {
             USimpleError::new(
                 1,
-                format!("illegal width value ({}): {}", inp_width.quote(), e),
+                format!("illegal width value ({}): {e}", inp_width.quote()),
             )
         })?,
         None => 80,
@@ -59,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)

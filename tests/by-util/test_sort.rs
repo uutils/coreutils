@@ -8,7 +8,10 @@
 
 use std::time::Duration;
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -66,15 +69,13 @@ fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
         .arg("asd")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("sort: invalid --buffer-size argument 'asd'\n");
 
     new_ucmd!()
         .arg("-S")
         .arg("100f")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("sort: invalid suffix in --buffer-size argument '100f'\n");
 
     // TODO Percentage sizes are not yet supported beyond Linux.
@@ -82,8 +83,7 @@ fn test_invalid_buffer_size() {
     new_ucmd!()
         .arg("-S")
         .arg("0x123%")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("sort: invalid --buffer-size argument '0x123%'\n");
 
     new_ucmd!()
@@ -91,8 +91,7 @@ fn test_invalid_buffer_size() {
         .arg("-S")
         .arg("1Y")
         .arg("ext_sort.txt")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("sort: --buffer-size argument '1Y' too large\n");
 
     #[cfg(target_pointer_width = "32")]
@@ -104,11 +103,9 @@ fn test_invalid_buffer_size() {
                 .arg("-S")
                 .arg(buffer_size)
                 .arg("ext_sort.txt")
-                .fails()
-                .code_is(2)
+                .fails_with_code(2)
                 .stderr_only(format!(
-                    "sort: --buffer-size argument '{}' too large\n",
-                    buffer_size
+                    "sort: --buffer-size argument '{buffer_size}' too large\n"
                 ));
         }
     }
@@ -267,7 +264,7 @@ fn test_random_shuffle_len() {
     // check whether output is the same length as the input
     const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
-    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
+    let result = new_ucmd!().arg("-R").arg(FILE).succeeds().stdout_move_str();
     let expected = at.read(FILE);
 
     assert_ne!(result, expected);
@@ -279,9 +276,12 @@ fn test_random_shuffle_contains_all_lines() {
     // check whether lines of input are all in output
     const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
-    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
+    let result = new_ucmd!().arg("-R").arg(FILE).succeeds().stdout_move_str();
     let expected = at.read(FILE);
-    let result_sorted = new_ucmd!().pipe_in(result.clone()).run().stdout_move_str();
+    let result_sorted = new_ucmd!()
+        .pipe_in(result.clone())
+        .succeeds()
+        .stdout_move_str();
 
     assert_ne!(result, expected);
     assert_eq!(result_sorted, expected);
@@ -295,9 +295,9 @@ fn test_random_shuffle_two_runs_not_the_same() {
         // as the starting order, or if both random sorts end up having the same order.
         const FILE: &str = "default_unsorted_ints.expected";
         let (at, _ucmd) = at_and_ucmd!();
-        let result = new_ucmd!().arg(arg).arg(FILE).run().stdout_move_str();
+        let result = new_ucmd!().arg(arg).arg(FILE).succeeds().stdout_move_str();
         let expected = at.read(FILE);
-        let unexpected = new_ucmd!().arg(arg).arg(FILE).run().stdout_move_str();
+        let unexpected = new_ucmd!().arg(arg).arg(FILE).succeeds().stdout_move_str();
 
         assert_ne!(result, expected);
         assert_ne!(result, unexpected);
@@ -881,8 +881,7 @@ fn test_check_unique() {
     new_ucmd!()
         .args(&["-c", "-u"])
         .pipe_in("A\nA\n")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("sort: -:2: disorder: A\n");
 }
 
@@ -891,8 +890,7 @@ fn test_check_unique_combined() {
     new_ucmd!()
         .args(&["-cu"])
         .pipe_in("A\nA\n")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("sort: -:2: disorder: A\n");
 }
 
@@ -935,8 +933,7 @@ fn test_trailing_separator() {
 fn test_nonexistent_file() {
     new_ucmd!()
         .arg("nonexistent.txt")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only(
             #[cfg(not(windows))]
             "sort: cannot read: nonexistent.txt: No such file or directory\n",
@@ -1054,8 +1051,7 @@ fn test_batch_size_invalid() {
     TestScenario::new(util_name!())
         .ucmd()
         .arg("--batch-size=0")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("sort: invalid --batch-size argument '0'")
         .stderr_contains("sort: minimum --batch-size argument is '2'");
 }
@@ -1066,8 +1062,7 @@ fn test_batch_size_too_large() {
     TestScenario::new(util_name!())
         .ucmd()
         .arg(format!("--batch-size={large_batch_size}"))
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains(format!(
             "--batch-size argument '{large_batch_size}' too large"
         ));
@@ -1075,8 +1070,7 @@ fn test_batch_size_too_large() {
     TestScenario::new(util_name!())
         .ucmd()
         .arg(format!("--batch-size={large_batch_size}"))
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("maximum --batch-size argument with current rlimit is");
 }
 
@@ -1098,7 +1092,9 @@ fn test_merge_batch_size() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+// TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
+// #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_merge_batch_size_with_limit() {
     use rlimit::Resource;
     // Currently need...
@@ -1163,8 +1159,7 @@ fn test_verifies_out_file() {
             .args(&["-o", "nonexistent_dir/nonexistent_file"])
             .pipe_in(input)
             .ignore_stdin_write_error()
-            .fails()
-            .code_is(2)
+            .fails_with_code(2)
             .stderr_only(
                 #[cfg(not(windows))]
                 "sort: open failed: nonexistent_dir/nonexistent_file: No such file or directory\n",
@@ -1184,8 +1179,7 @@ fn test_verifies_files_after_keys() {
             "0",
             "nonexistent_dir/input_file",
         ])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("failed to parse key");
 }
 
@@ -1194,8 +1188,7 @@ fn test_verifies_files_after_keys() {
 fn test_verifies_input_files() {
     new_ucmd!()
         .args(&["/dev/random", "nonexistent_file"])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_is("sort: cannot read: nonexistent_file: No such file or directory\n");
 }
 
@@ -1252,8 +1245,7 @@ fn test_no_error_for_version() {
 fn test_wrong_args_exit_code() {
     new_ucmd!()
         .arg("--misspelled")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_contains("--misspelled");
 }
 
@@ -1342,4 +1334,14 @@ fn test_human_blocks_r_and_q() {
 #[test]
 fn test_args_check_conflict() {
     new_ucmd!().arg("-c").arg("-C").fails();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .pipe_in("hello")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("sort: write failed: 'standard output': No space left on device\n");
 }

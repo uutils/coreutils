@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore exitstatus cmdline kworker pgrep pwait snice procps
+// spell-checker:ignore egid euid gettid ppid
 
 //! Set of functions to manage IDs
 //!
@@ -129,6 +130,14 @@ pub struct ProcessInformation {
     cached_stat: Option<Rc<Vec<String>>>,
 
     cached_start_time: Option<u64>,
+
+    cached_thread_ids: Option<Rc<Vec<usize>>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum UidGid {
+    Uid,
+    Gid,
 }
 
 impl ProcessInformation {
@@ -237,6 +246,43 @@ impl ProcessInformation {
         Ok(time)
     }
 
+    pub fn ppid(&mut self) -> Result<u64, io::Error> {
+        // the PPID is the fourth field in /proc/<PID>/stat
+        // (https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10)
+        self.stat()
+            .get(3)
+            .ok_or(io::ErrorKind::InvalidData)?
+            .parse::<u64>()
+            .map_err(|_| io::ErrorKind::InvalidData.into())
+    }
+
+    fn get_uid_or_gid_field(&mut self, field: UidGid, index: usize) -> Result<u32, io::Error> {
+        self.status()
+            .get(&format!("{field:?}"))
+            .ok_or(io::ErrorKind::InvalidData)?
+            .split_whitespace()
+            .nth(index)
+            .ok_or(io::ErrorKind::InvalidData)?
+            .parse::<u32>()
+            .map_err(|_| io::ErrorKind::InvalidData.into())
+    }
+
+    pub fn uid(&mut self) -> Result<u32, io::Error> {
+        self.get_uid_or_gid_field(UidGid::Uid, 0)
+    }
+
+    pub fn euid(&mut self) -> Result<u32, io::Error> {
+        self.get_uid_or_gid_field(UidGid::Uid, 1)
+    }
+
+    pub fn gid(&mut self) -> Result<u32, io::Error> {
+        self.get_uid_or_gid_field(UidGid::Gid, 0)
+    }
+
+    pub fn egid(&mut self) -> Result<u32, io::Error> {
+        self.get_uid_or_gid_field(UidGid::Gid, 1)
+    }
+
     /// Fetch run state from [ProcessInformation::cached_stat]
     ///
     /// - [The /proc Filesystem: Table 1-4](https://docs.kernel.org/filesystems/proc.html#id10)
@@ -271,8 +317,33 @@ impl ProcessInformation {
 
         Teletype::Unknown
     }
-}
 
+    pub fn thread_ids(&mut self) -> Rc<Vec<usize>> {
+        if let Some(c) = &self.cached_thread_ids {
+            return Rc::clone(c);
+        }
+
+        let thread_ids_dir = format!("/proc/{}/task", self.pid);
+        let result = Rc::new(
+            WalkDir::new(thread_ids_dir)
+                .min_depth(1)
+                .max_depth(1)
+                .follow_links(false)
+                .into_iter()
+                .flatten()
+                .flat_map(|it| {
+                    it.path()
+                        .file_name()
+                        .and_then(|it| it.to_str())
+                        .and_then(|it| it.parse::<usize>().ok())
+                })
+                .collect::<Vec<_>>(),
+        );
+
+        self.cached_thread_ids = Some(Rc::clone(&result));
+        Rc::clone(&result)
+    }
+}
 impl TryFrom<DirEntry> for ProcessInformation {
     type Error = io::Error;
 
@@ -380,11 +451,11 @@ mod tests {
         let current_pid = current_pid();
 
         let pid_entry = ProcessInformation::try_new(
-            PathBuf::from_str(&format!("/proc/{}", current_pid)).unwrap(),
+            PathBuf::from_str(&format!("/proc/{current_pid}")).unwrap(),
         )
         .unwrap();
 
-        let result = WalkDir::new(format!("/proc/{}/fd", current_pid))
+        let result = WalkDir::new(format!("/proc/{current_pid}/fd"))
             .into_iter()
             .flatten()
             .map(DirEntry::into_path)
@@ -400,14 +471,45 @@ mod tests {
     }
 
     #[test]
+    fn test_thread_ids() {
+        let main_tid = unsafe { crate::libc::gettid() };
+        std::thread::spawn(move || {
+            let mut pid_entry = ProcessInformation::try_new(
+                PathBuf::from_str(&format!("/proc/{}", current_pid())).unwrap(),
+            )
+            .unwrap();
+            let thread_ids = pid_entry.thread_ids();
+
+            assert!(thread_ids.contains(&(main_tid as usize)));
+
+            let new_thread_tid = unsafe { crate::libc::gettid() };
+            assert!(thread_ids.contains(&(new_thread_tid as usize)));
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
     fn test_stat_split() {
         let case = "32 (idle_inject/3) S 2 0 0 0 -1 69238848 0 0 0 0 0 0 0 0 -51 0 1 0 34 0 0 18446744073709551615 0 0 0 0 0 0 0 2147483647 0 0 0 0 17 3 50 1 0 0 0 0 0 0 0 0 0 0 0";
-        assert!(stat_split(case)[1] == "idle_inject/3");
+        assert_eq!(stat_split(case)[1], "idle_inject/3");
 
         let case = "3508 (sh) S 3478 3478 3478 0 -1 4194304 67 0 0 0 0 0 0 0 20 0 1 0 11911 2961408 238 18446744073709551615 94340156948480 94340157028757 140736274114368 0 0 0 0 4096 65538 1 0 0 17 8 0 0 0 0 0 94340157054704 94340157059616 94340163108864 140736274122780 140736274122976 140736274122976 140736274124784 0";
-        assert!(stat_split(case)[1] == "sh");
+        assert_eq!(stat_split(case)[1], "sh");
 
         let case = "47246 (kworker /10:1-events) I 2 0 0 0 -1 69238880 0 0 0 0 17 29 0 0 20 0 1 0 1396260 0 0 18446744073709551615 0 0 0 0 0 0 0 2147483647 0 0 0 0 17 10 0 0 0 0 0 0 0 0 0 0 0 0 0";
-        assert!(stat_split(case)[1] == "kworker /10:1-events");
+        assert_eq!(stat_split(case)[1], "kworker /10:1-events");
+    }
+
+    #[test]
+    fn test_uid_gid() {
+        let mut pid_entry = ProcessInformation::try_new(
+            PathBuf::from_str(&format!("/proc/{}", current_pid())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(pid_entry.uid().unwrap(), crate::process::getuid());
+        assert_eq!(pid_entry.euid().unwrap(), crate::process::geteuid());
+        assert_eq!(pid_entry.gid().unwrap(), crate::process::getgid());
+        assert_eq!(pid_entry.egid().unwrap(), crate::process::getegid());
     }
 }

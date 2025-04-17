@@ -4,8 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
-use std::fs::{metadata, File};
-use std::io::{self, IsTerminal, Read, Write};
+use std::fs::{File, metadata};
+use std::io::{self, BufWriter, IsTerminal, Read, Write};
 /// Unix domain socket support
 #[cfg(unix)]
 use std::net::Shutdown;
@@ -16,9 +16,10 @@ use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
+use memchr::memchr2;
 #[cfg(unix)]
-use nix::fcntl::{fcntl, FcntlArg};
+use nix::fcntl::{FcntlArg, fcntl};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -32,6 +33,64 @@ mod splice;
 const USAGE: &str = help_usage!("cat.md");
 const ABOUT: &str = help_about!("cat.md");
 
+struct LineNumber {
+    buf: Vec<u8>,
+}
+
+// Logic to store a string for the line number. Manually incrementing the value
+// represented in a buffer like this is significantly faster than storing
+// a `usize` and using the standard Rust formatting macros to format a `usize`
+// to a string each time it's needed.
+// String is initialized to "     1\t" and incremented each time `increment` is
+// called. When the value overflows the range storable in the buffer, a b'1' is
+// prepended and the counting continues.
+impl LineNumber {
+    fn new() -> Self {
+        LineNumber {
+            // Initialize buf to b"     1\t"
+            buf: Vec::from(b"     1\t"),
+        }
+    }
+
+    fn increment(&mut self) {
+        // skip(1) to avoid the \t in the last byte.
+        for ascii_digit in self.buf.iter_mut().rev().skip(1) {
+            // Working from the least-significant digit, increment the number in the buffer.
+            // If we hit anything other than a b'9' we can break since the next digit is
+            // unaffected.
+            // Also note that if we hit a b' ', we can think of that as a 0 and increment to b'1'.
+            // If/else here is faster than match (as measured with some benchmarking Apr-2025),
+            // probably since we can prioritize most likely digits first.
+            if (b'0'..=b'8').contains(ascii_digit) {
+                *ascii_digit += 1;
+                break;
+            } else if b'9' == *ascii_digit {
+                *ascii_digit = b'0';
+            } else {
+                assert_eq!(*ascii_digit, b' ');
+                *ascii_digit = b'1';
+                break;
+            }
+        }
+        if self.buf[0] == b'0' {
+            // This implies we've overflowed. In this case the buffer will be
+            // [b'0', b'0', ..., b'0', b'\t'].
+            // For debugging, the following logic would assert that to be the case.
+            // assert_eq!(*self.buf.last().unwrap(), b'\t');
+            // for ascii_digit in self.buf.iter_mut().rev().skip(1) {
+            //     assert_eq!(*ascii_digit, b'0');
+            // }
+
+            // All we need to do is prepend a b'1' and we're good.
+            self.buf.insert(0, b'1');
+        }
+    }
+
+    fn write(&self, writer: &mut impl Write) -> io::Result<()> {
+        writer.write_all(&self.buf)
+    }
+}
+
 #[derive(Error, Debug)]
 enum CatError {
     /// Wrapper around `io::Error`
@@ -42,7 +101,7 @@ enum CatError {
     #[error("{0}")]
     Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
-    #[error("unknown filetype: {}", ft_debug)]
+    #[error("unknown filetype: {ft_debug}")]
     UnknownFiletype {
         /// A debug print of the file type
         ft_debug: String,
@@ -83,19 +142,11 @@ struct OutputOptions {
 
 impl OutputOptions {
     fn tab(&self) -> &'static str {
-        if self.show_tabs {
-            "^I"
-        } else {
-            "\t"
-        }
+        if self.show_tabs { "^I" } else { "\t" }
     }
 
     fn end_of_line(&self) -> &'static str {
-        if self.show_ends {
-            "$\n"
-        } else {
-            "\n"
-        }
+        if self.show_ends { "$\n" } else { "\n" }
     }
 
     /// We can write fast if we can simply copy the contents of the file to
@@ -113,7 +164,7 @@ impl OutputOptions {
 /// when we can't write fast.
 struct OutputState {
     /// The current line number
-    line_number: usize,
+    line_number: LineNumber,
 
     /// Whether the output cursor is at the beginning of a new line
     at_line_start: bool,
@@ -126,12 +177,12 @@ struct OutputState {
 }
 
 #[cfg(unix)]
-trait FdReadable: Read + AsFd + AsRawFd {}
+trait FdReadable: Read + AsFd {}
 #[cfg(not(unix))]
 trait FdReadable: Read {}
 
 #[cfg(unix)]
-impl<T> FdReadable for T where T: Read + AsFd + AsRawFd {}
+impl<T> FdReadable for T where T: Read + AsFd {}
 #[cfg(not(unix))]
 impl<T> FdReadable for T where T: Read {}
 
@@ -229,7 +280,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)
@@ -237,7 +288,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -326,10 +377,9 @@ fn cat_handle<R: FdReadable>(
 /// Whether this process is appending to stdout.
 #[cfg(unix)]
 fn is_appending() -> bool {
-    let stdout = std::io::stdout();
-    let flags = match fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL) {
-        Ok(flags) => flags,
-        Err(_) => return false,
+    let stdout = io::stdout();
+    let Ok(flags) = fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL) else {
+        return false;
     };
     // TODO Replace `1 << 10` with `nix::fcntl::Oflag::O_APPEND`.
     let o_append = 1 << 10;
@@ -353,7 +403,7 @@ fn cat_path(
             let in_info = FileInformation::from_file(&stdin)?;
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: std::io::stdin().is_terminal(),
+                is_interactive: io::stdin().is_terminal(),
             };
             if let Some(out_info) = out_info {
                 if in_info == *out_info && is_appending() {
@@ -394,10 +444,10 @@ fn cat_path(
 }
 
 fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
-    let out_info = FileInformation::from_file(&std::io::stdout()).ok();
+    let out_info = FileInformation::from_file(&io::stdout()).ok();
 
     let mut state = OutputState {
-        line_number: 1,
+        line_number: LineNumber::new(),
         at_line_start: true,
         skipped_carriage_return: false,
         one_blank_kept: false,
@@ -406,7 +456,7 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
 
     for path in files {
         if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
-            error_messages.push(format!("{}: {}", path.maybe_quote(), err));
+            error_messages.push(format!("{}: {err}", path.maybe_quote()));
         }
     }
     if state.skipped_carriage_return {
@@ -511,7 +561,9 @@ fn write_lines<R: FdReadable>(
 ) -> CatResult<()> {
     let mut in_buf = [0; 1024 * 31];
     let stdout = io::stdout();
-    let mut writer = stdout.lock();
+    let stdout = stdout.lock();
+    // Add a 32K buffer for stdout - this greatly improves performance.
+    let mut writer = BufWriter::with_capacity(32 * 1024, stdout);
 
     while let Ok(n) = handle.reader.read(&mut in_buf) {
         if n == 0 {
@@ -534,8 +586,8 @@ fn write_lines<R: FdReadable>(
             }
             state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
-                write!(writer, "{0:6}\t", state.line_number)?;
-                state.line_number += 1;
+                state.line_number.write(&mut writer)?;
+                state.line_number.increment();
             }
 
             // print to end of line or end of buffer
@@ -560,6 +612,14 @@ fn write_lines<R: FdReadable>(
             }
             pos += offset + 1;
         }
+        // We need to flush the buffer each time around the loop in order to pass GNU tests.
+        // When we are reading the input from a pipe, the `handle.reader.read` call at the top
+        // of this loop will block (indefinitely) whist waiting for more data. The expectation
+        // however is that anything that's ready for output should show up in the meantime,
+        // and not be buffered internally to the `cat` process.
+        // Hence it's necessary to flush our buffer before every time we could potentially block
+        // on a `std::io::Read::read` call.
+        writer.flush()?;
     }
 
     Ok(())
@@ -586,8 +646,8 @@ fn write_new_line<W: Write>(
     if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
         state.one_blank_kept = true;
         if state.at_line_start && options.number == NumberingMode::All {
-            write!(writer, "{0:6}\t", state.line_number)?;
-            state.line_number += 1;
+            state.line_number.write(writer)?;
+            state.line_number.increment();
         }
         write_end_of_line(writer, options.end_of_line().as_bytes(), is_interactive)?;
     }
@@ -610,7 +670,8 @@ fn write_end<W: Write>(writer: &mut W, in_buf: &[u8], options: &OutputOptions) -
 // however, write_nonprint_to_end doesn't need to stop at \r because it will always write \r as ^M.
 // Return the number of written symbols
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
-    match in_buf.iter().position(|c| *c == b'\n' || *c == b'\r') {
+    // using memchr2 significantly improves performances
+    match memchr2(b'\n', b'\r', in_buf) {
         Some(p) => {
             writer.write_all(&in_buf[..p]).unwrap();
             p
@@ -642,7 +703,7 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
             }
             None => {
                 writer.write_all(in_buf).unwrap();
-                return in_buf.len();
+                return in_buf.len() + count;
             }
         };
     }
@@ -684,7 +745,21 @@ fn write_end_of_line<W: Write>(
 
 #[cfg(test)]
 mod tests {
-    use std::io::{stdout, BufWriter};
+    use std::io::{BufWriter, stdout};
+
+    #[test]
+    fn test_write_tab_to_end_with_newline() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = b"a\tb\tc\n";
+        assert_eq!(super::write_tab_to_end(in_buf, &mut writer), 5);
+    }
+
+    #[test]
+    fn test_write_tab_to_end_no_newline() {
+        let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+        let in_buf = b"a\tb\tc";
+        assert_eq!(super::write_tab_to_end(in_buf, &mut writer), 5);
+    }
 
     #[test]
     fn test_write_nonprint_to_end_new_line() {
@@ -724,5 +799,26 @@ mod tests {
             super::write_nonprint_to_end(in_buf, &mut writer, tab);
             assert_eq!(writer.buffer(), [b'^', byte + 64]);
         }
+    }
+
+    #[test]
+    fn test_incrementing_string() {
+        let mut incrementing_string = super::LineNumber::new();
+        assert_eq!(b"     1\t", incrementing_string.buf.as_slice());
+        incrementing_string.increment();
+        assert_eq!(b"     2\t", incrementing_string.buf.as_slice());
+        // Run through to 100
+        for _ in 3..=100 {
+            incrementing_string.increment();
+        }
+        assert_eq!(b"   100\t", incrementing_string.buf.as_slice());
+        // Run through until we overflow the original size.
+        for _ in 101..=1_000_000 {
+            incrementing_string.increment();
+        }
+        // Confirm that the buffer expands when we overflow the original size.
+        assert_eq!(b"1000000\t", incrementing_string.buf.as_slice());
+        incrementing_string.increment();
+        assert_eq!(b"1000001\t", incrementing_string.buf.as_slice());
     }
 }

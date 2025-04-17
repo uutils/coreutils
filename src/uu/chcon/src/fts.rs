@@ -2,11 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#![cfg(target_os = "linux")]
+
 use std::ffi::{CStr, CString, OsStr};
 use std::marker::PhantomData;
 use std::os::raw::{c_int, c_long, c_short};
 use std::path::Path;
-use std::ptr::NonNull;
 use std::{io, iter, ptr, slice};
 
 use crate::errors::{Error, Result};
@@ -69,7 +70,7 @@ impl FTS {
         // pointer assumed to be valid.
         let new_entry = unsafe { fts_sys::fts_read(self.fts.as_ptr()) };
 
-        self.entry = NonNull::new(new_entry);
+        self.entry = ptr::NonNull::new(new_entry);
         if self.entry.is_none() {
             let r = io::Error::last_os_error();
             if let Some(0) = r.raw_os_error() {
@@ -159,7 +160,7 @@ impl<'fts> EntryRef<'fts> {
             return None;
         }
 
-        NonNull::new(entry.fts_path)
+        ptr::NonNull::new(entry.fts_path)
             .map(|path_ptr| {
                 let path_size = usize::from(entry.fts_pathlen).saturating_add(1);
 

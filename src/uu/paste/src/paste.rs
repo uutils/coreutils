@@ -3,10 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, Stdin, Write};
+use std::io::{BufRead, BufReader, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
 use std::rc::Rc;
 use std::slice::Iter;
@@ -42,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -254,7 +254,7 @@ fn parse_delimiters(delimiters: &str) -> UResult<Box<[Box<[u8]>]>> {
 fn remove_trailing_line_ending_byte(line_ending_byte: u8, output: &mut Vec<u8>) {
     if let Some(&byte) = output.last() {
         if byte == line_ending_byte {
-            assert!(output.pop() == Some(line_ending_byte));
+            assert_eq!(output.pop(), Some(line_ending_byte));
         }
     }
 }
@@ -326,7 +326,7 @@ impl<'a> DelimiterState<'a> {
             } else {
                 // This branch is NOT unreachable, must be skipped
                 // `output` should be empty in this case
-                assert!(output_len == 0);
+                assert_eq!(output_len, 0);
             }
         }
     }

@@ -136,6 +136,7 @@ vmsplice
 
 # * vars/libc
 COMFOLLOW
+EXDEV
 FILENO
 FTSENT
 HOSTSIZE
@@ -324,6 +325,7 @@ libc
 libstdbuf
 musl
 tmpd
+uchild
 ucmd
 ucommand
 utmpx
@@ -332,6 +334,7 @@ uucore_procs
 uudoc
 uumain
 uutil
+uutests
 uutils
 
 # * function names

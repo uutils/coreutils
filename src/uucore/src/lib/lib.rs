@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -18,7 +18,6 @@ pub extern crate windows_sys;
 mod features; // feature-gated code modules
 mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
-mod parser; // string parsing modules
 
 pub use uucore_procs::*;
 
@@ -30,12 +29,6 @@ pub use crate::mods::line_ending;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::posix;
-
-// * string parsing modules
-pub use crate::parser::parse_glob;
-pub use crate::parser::parse_size;
-pub use crate::parser::parse_time;
-pub use crate::parser::shortcut_value_parser;
 
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
@@ -50,12 +43,16 @@ pub use crate::features::colors;
 pub use crate::features::custom_tz_fmt;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
+#[cfg(feature = "extendedbigdecimal")]
+pub use crate::features::extendedbigdecimal;
 #[cfg(feature = "format")]
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
+#[cfg(feature = "parser")]
+pub use crate::features::parser;
 #[cfg(feature = "quoting-style")]
 pub use crate::features::quoting_style;
 #[cfg(feature = "ranges")]
@@ -66,6 +63,8 @@ pub use crate::features::ringbuffer;
 pub use crate::features::sum;
 #[cfg(feature = "update-control")]
 pub use crate::features::update_control;
+#[cfg(feature = "uptime")]
+pub use crate::features::uptime;
 #[cfg(feature = "version-cmp")]
 pub use crate::features::version_cmp;
 
@@ -104,25 +103,25 @@ pub use crate::features::fsext;
 #[cfg(all(unix, feature = "fsxattr"))]
 pub use crate::features::fsxattr;
 
+#[cfg(all(target_os = "linux", feature = "selinux"))]
+pub use crate::features::selinux;
+
 //## core functions
 
 #[cfg(unix)]
 use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{
-    sigaction, SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV,
+    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
 };
 use std::borrow::Cow;
-use std::ffi::OsStr;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
 use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::str;
-use std::sync::atomic::Ordering;
-
-use once_cell::sync::Lazy;
+use std::sync::{LazyLock, atomic::Ordering};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
@@ -158,11 +157,30 @@ macro_rules! bin {
             let code = $util::uumain(uucore::args_os());
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             if let Err(e) = std::io::stdout().flush() {
-                eprintln!("Error flushing stdout: {}", e);
+                eprintln!("Error flushing stdout: {e}");
             }
 
             std::process::exit(code);
         }
+    };
+}
+
+/// Generate the version string for clap.
+///
+/// The generated string has the format `(<project name>) <version>`, for
+/// example: "(uutils coreutils) 0.30.0". clap will then prefix it with the util name.
+///
+/// To use this macro, you have to add `PROJECT_NAME_FOR_VERSION_STRING = "<project name>"` to the
+/// `[env]` section in `.cargo/config.toml`.
+#[macro_export]
+macro_rules! crate_version {
+    () => {
+        concat!(
+            "(",
+            env!("PROJECT_NAME_FOR_VERSION_STRING"),
+            ") ",
+            env!("CARGO_PKG_VERSION")
+        )
     };
 }
 
@@ -192,9 +210,9 @@ pub fn set_utility_is_second_arg() {
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
 // So if we want only the first arg or so it's overkill. We cache it.
-static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
+static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect());
 
-static UTIL_NAME: Lazy<String> = Lazy::new(|| {
+static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let base_index = usize::from(get_utility_is_second_arg());
     let is_man = usize::from(ARGV[base_index].eq("manpage"));
     let argv_index = base_index + is_man;
@@ -207,7 +225,7 @@ pub fn util_name() -> &'static str {
     &UTIL_NAME
 }
 
-static EXECUTION_PHRASE: Lazy<String> = Lazy::new(|| {
+static EXECUTION_PHRASE: LazyLock<String> = LazyLock::new(|| {
     if get_utility_is_second_arg() {
         ARGV.iter()
             .take(2)
@@ -368,7 +386,7 @@ pub fn read_os_string_lines<R: std::io::Read>(
 /// ```
 /// use uucore::prompt_yes;
 /// let file = "foo.rs";
-/// prompt_yes!("Do you want to delete '{}'?", file);
+/// prompt_yes!("Do you want to delete '{file}'?");
 /// ```
 /// will print something like below to `stderr` (with `util_name` substituted by the actual
 /// util name) and will wait for user input.

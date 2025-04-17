@@ -3,30 +3,31 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[cfg(unix)]
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_invalid_input() {
     new_ucmd!()
         .args(&["1", "1", "<", "."])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("tr: extra operand '<'");
     #[cfg(unix)]
     new_ucmd!()
         .args(&["1", "1"])
         // will test "tr 1 1 < ."
         .set_stdin(std::process::Stdio::from(std::fs::File::open(".").unwrap()))
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("tr: read error: Is a directory");
 }
 
@@ -35,7 +36,7 @@ fn test_to_upper() {
     new_ucmd!()
         .args(&["a-z", "A-Z"])
         .pipe_in("!abcd!")
-        .run()
+        .succeeds()
         .stdout_is("!ABCD!");
 }
 
@@ -44,7 +45,7 @@ fn test_small_set2() {
     new_ucmd!()
         .args(&["0-9", "X"])
         .pipe_in("@0123456789")
-        .run()
+        .succeeds()
         .stdout_is("@XXXXXXXXXX");
 }
 
@@ -62,7 +63,7 @@ fn test_delete() {
     new_ucmd!()
         .args(&["-d", "a-z"])
         .pipe_in("aBcD")
-        .run()
+        .succeeds()
         .stdout_is("BD");
 }
 
@@ -97,7 +98,7 @@ fn test_delete_complement() {
     new_ucmd!()
         .args(&["-d", "-c", "a-z"])
         .pipe_in("aBcD")
-        .run()
+        .succeeds()
         .stdout_is("ac");
 }
 
@@ -120,7 +121,7 @@ fn test_complement1() {
     new_ucmd!()
         .args(&["-c", "a", "X"])
         .pipe_in("ab")
-        .run()
+        .succeeds()
         .stdout_is("aX");
 }
 
@@ -137,7 +138,7 @@ fn test_complement2() {
     new_ucmd!()
         .args(&["-c", "0-9", "x"])
         .pipe_in("Phone: 01234 567890")
-        .run()
+        .succeeds()
         .stdout_is("xxxxxxx01234x567890");
 }
 
@@ -146,7 +147,7 @@ fn test_complement3() {
     new_ucmd!()
         .args(&["-c", "abcdefgh", "123"])
         .pipe_in("the cat and the bat")
-        .run()
+        .succeeds()
         .stdout_is("3he3ca33a3d33he3ba3");
 }
 
@@ -157,7 +158,7 @@ fn test_complement4() {
     new_ucmd!()
         .args(&["-c", "0-@", "*-~"])
         .pipe_in("0x1y2z3")
-        .run()
+        .succeeds()
         .stdout_is("0~1~2~3");
 }
 
@@ -168,7 +169,7 @@ fn test_complement5() {
     new_ucmd!()
         .args(&["-c", r"\0-@", "*-~"])
         .pipe_in("0x1y2z3")
-        .run()
+        .succeeds()
         .stdout_is("0a1b2c3");
 }
 
@@ -238,7 +239,7 @@ fn test_squeeze_complement_two_sets() {
     new_ucmd!()
         .args(&["-sc", "a", "_"])
         .pipe_in("test a aa with 3 ___ spaaaces +++") // spell-checker:disable-line
-        .run()
+        .succeeds()
         .stdout_is("_a_aa_aaa_");
 }
 
@@ -247,7 +248,7 @@ fn test_translate_and_squeeze() {
     new_ucmd!()
         .args(&["-s", "x", "y"])
         .pipe_in("xx")
-        .run()
+        .succeeds()
         .stdout_is("y");
 }
 
@@ -256,7 +257,7 @@ fn test_translate_and_squeeze_multiple_lines() {
     new_ucmd!()
         .args(&["-s", "x", "y"])
         .pipe_in("xxaax\nxaaxx") // spell-checker:disable-line
-        .run()
+        .succeeds()
         .stdout_is("yaay\nyaay"); // spell-checker:disable-line
 }
 
@@ -274,7 +275,7 @@ fn test_delete_and_squeeze() {
     new_ucmd!()
         .args(&["-ds", "a-z", "A-Z"])
         .pipe_in("abBcB")
-        .run()
+        .succeeds()
         .stdout_is("B");
 }
 
@@ -283,7 +284,7 @@ fn test_delete_and_squeeze_complement() {
     new_ucmd!()
         .args(&["-dsc", "a-z", "A-Z"])
         .pipe_in("abBcB")
-        .run()
+        .succeeds()
         .stdout_is("abc");
 }
 
@@ -301,7 +302,7 @@ fn test_set1_longer_than_set2() {
     new_ucmd!()
         .args(&["abc", "xy"])
         .pipe_in("abcde")
-        .run()
+        .succeeds()
         .stdout_is("xyyde"); // spell-checker:disable-line
 }
 
@@ -310,7 +311,7 @@ fn test_set1_shorter_than_set2() {
     new_ucmd!()
         .args(&["ab", "xyz"])
         .pipe_in("abcde")
-        .run()
+        .succeeds()
         .stdout_is("xycde");
 }
 
@@ -338,7 +339,7 @@ fn test_truncate_with_set1_shorter_than_set2() {
     new_ucmd!()
         .args(&["-t", "ab", "xyz"])
         .pipe_in("abcde")
-        .run()
+        .succeeds()
         .stdout_is("xycde");
 }
 
@@ -1167,6 +1168,15 @@ fn check_against_gnu_tr_tests_empty_eq() {
 }
 
 #[test]
+fn check_too_many_chars_in_eq() {
+    new_ucmd!()
+        .args(&["-d", "[=aa=]"])
+        .pipe_in("")
+        .fails()
+        .stderr_contains("aa: equivalence class operand must be a single character\n");
+}
+
+#[test]
 fn check_against_gnu_tr_tests_empty_cc() {
     // ['empty-cc', qw('[::]' x), {IN=>''}, {OUT=>''}, {EXIT=>1},
     //  {ERR=>"$prog: missing character class name '[::]'\n"}],
@@ -1534,4 +1544,15 @@ fn test_non_digit_repeat() {
         .pipe_in("")
         .fails()
         .stderr_only("tr: invalid repeat count 'c' in [c*n] construct\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .pipe_in("hello")
+        .args(&["e", "a"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("tr: write error: No space left on device\n");
 }

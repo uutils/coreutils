@@ -7,13 +7,13 @@
 
 use std::collections::BTreeMap;
 use std::io::BufRead;
-use std::io::{self, stdin, stdout, Write};
+use std::io::{self, Write, stdin, stdout};
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::{format_usage, help_about, help_usage, show_error, show_warning};
 
 const ABOUT: &str = help_about!("factor.md");
@@ -27,10 +27,10 @@ mod options {
 
 fn print_factors_str(
     num_str: &str,
-    w: &mut io::BufWriter<impl io::Write>,
+    w: &mut io::BufWriter<impl Write>,
     print_exponents: bool,
 ) -> UResult<()> {
-    let rx = num_str.trim().parse::<num_bigint::BigUint>();
+    let rx = num_str.trim().parse::<BigUint>();
     let Ok(x) = rx else {
         // return Ok(). it's non-fatal and we should try the next number.
         show_warning!("{}: {}", num_str.maybe_quote(), rx.unwrap_err());
@@ -105,7 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 Err(e) => {
                     set_exit_code(1);
-                    show_error!("error reading input: {}", e);
+                    show_error!("error reading input: {e}");
                     return Ok(());
                 }
             }
@@ -113,7 +113,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if let Err(e) = w.flush() {
-        show_error!("{}", e);
+        show_error!("{e}");
     }
 
     Ok(())
@@ -121,7 +121,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

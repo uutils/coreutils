@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use std::env;
 use std::io::Write;
-use std::io::{BufWriter, Error, ErrorKind, Result};
+use std::io::{BufWriter, Error, Result};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use uucore::error::USimpleError;
@@ -49,7 +49,9 @@ impl WithEnvVarSet {
     /// Save previous value assigned to key, set key=value
     fn new(key: &str, value: &str) -> Self {
         let previous_env_value = env::var(key);
-        env::set_var(key, value);
+        unsafe {
+            env::set_var(key, value);
+        }
         Self {
             _previous_var_key: String::from(key),
             _previous_var_value: previous_env_value,
@@ -61,9 +63,13 @@ impl Drop for WithEnvVarSet {
     /// Restore previous value now that this is being dropped by context
     fn drop(&mut self) {
         if let Ok(ref prev_value) = self._previous_var_value {
-            env::set_var(&self._previous_var_key, prev_value);
+            unsafe {
+                env::set_var(&self._previous_var_key, prev_value);
+            }
         } else {
-            env::remove_var(&self._previous_var_key);
+            unsafe {
+                env::remove_var(&self._previous_var_key);
+            }
         }
     }
 }
@@ -115,7 +121,7 @@ impl Drop for FilterWriter {
 
 /// Instantiate either a file writer or a "write to shell process's stdin" writer
 pub fn instantiate_current_writer(
-    filter: &Option<String>,
+    filter: Option<&str>,
     filename: &str,
     is_new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {
@@ -127,28 +133,20 @@ pub fn instantiate_current_writer(
                     .write(true)
                     .create(true)
                     .truncate(true)
-                    .open(std::path::Path::new(&filename))
-                    .map_err(|_| {
-                        Error::new(
-                            ErrorKind::Other,
-                            format!("unable to open '{filename}'; aborting"),
-                        )
-                    })?
+                    .open(Path::new(&filename))
+                    .map_err(|_| Error::other(format!("unable to open '{filename}'; aborting")))?
             } else {
                 // re-open file that we previously created to append to it
                 std::fs::OpenOptions::new()
                     .append(true)
-                    .open(std::path::Path::new(&filename))
+                    .open(Path::new(&filename))
                     .map_err(|_| {
-                        Error::new(
-                            ErrorKind::Other,
-                            format!("unable to re-open '{filename}'; aborting"),
-                        )
+                        Error::other(format!("unable to re-open '{filename}'; aborting"))
                     })?
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
         }
-        Some(ref filter_command) => Ok(BufWriter::new(Box::new(
+        Some(filter_command) => Ok(BufWriter::new(Box::new(
             // spawn a shell command and write to it
             FilterWriter::new(filter_command, filename)?,
         ) as Box<dyn Write>)),

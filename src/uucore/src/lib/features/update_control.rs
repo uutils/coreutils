@@ -39,7 +39,7 @@
 //!     let update_mode = update_control::determine_update_mode(&matches);
 //!
 //!     // handle cases
-//!     if update_mode == UpdateMode::ReplaceIfOlder {
+//!     if update_mode == UpdateMode::IfOlder {
 //!         // do
 //!     } else {
 //!         unreachable!()
@@ -49,22 +49,23 @@
 use clap::ArgMatches;
 
 /// Available update mode
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub enum UpdateMode {
     /// --update=`all`, ``
-    ReplaceAll,
+    #[default]
+    All,
     /// --update=`none`
-    ReplaceNone,
+    None,
 
     /// --update=`older`
     /// -u
-    ReplaceIfOlder,
-    ReplaceNoneFail,
+    IfOlder,
+    NoneFail,
 }
 
 pub mod arguments {
     //! Pre-defined arguments for update functionality.
-    use crate::shortcut_value_parser::ShortcutValueParser;
+    use crate::parser::shortcut_value_parser::ShortcutValueParser;
     use clap::ArgAction;
 
     /// `--update` argument
@@ -123,22 +124,22 @@ pub mod arguments {
 ///         ]);
 ///
 ///     let update_mode = update_control::determine_update_mode(&matches);
-///     assert_eq!(update_mode, UpdateMode::ReplaceAll)
+///     assert_eq!(update_mode, UpdateMode::All)
 /// }
 pub fn determine_update_mode(matches: &ArgMatches) -> UpdateMode {
     if let Some(mode) = matches.get_one::<String>(arguments::OPT_UPDATE) {
         match mode.as_str() {
-            "all" => UpdateMode::ReplaceAll,
-            "none" => UpdateMode::ReplaceNone,
-            "older" => UpdateMode::ReplaceIfOlder,
-            "none-fail" => UpdateMode::ReplaceNoneFail,
+            "all" => UpdateMode::All,
+            "none" => UpdateMode::None,
+            "older" => UpdateMode::IfOlder,
+            "none-fail" => UpdateMode::NoneFail,
             _ => unreachable!("other args restricted by clap"),
         }
     } else if matches.get_flag(arguments::OPT_UPDATE_NO_ARG) {
         // short form of this option is equivalent to using --update=older
-        UpdateMode::ReplaceIfOlder
+        UpdateMode::IfOlder
     } else {
         // no option was present
-        UpdateMode::ReplaceAll
+        UpdateMode::All
     }
 }

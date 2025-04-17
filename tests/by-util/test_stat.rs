@@ -3,11 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use crate::common::util::{expected_result, TestScenario};
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::unwrap_or_return;
+use uutests::util::{TestScenario, expected_result};
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -30,7 +34,7 @@ fn test_terse_fs_format() {
     let args = ["-f", "-t", "/proc"];
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
-    ts.ucmd().args(&args).run().stdout_is(expected_stdout);
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
 #[test]
@@ -39,7 +43,7 @@ fn test_fs_format() {
     let args = ["-f", "-c", FS_FORMAT_STR, "/dev/shm"];
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
-    ts.ucmd().args(&args).run().stdout_is(expected_stdout);
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
 #[cfg(unix)]
@@ -244,10 +248,7 @@ fn test_timestamp_format() {
         assert_eq!(
             result,
             format!("{expected}\n"),
-            "Format '{}' failed.\nExpected: '{}'\nGot: '{}'",
-            format_str,
-            expected,
-            result,
+            "Format '{format_str}' failed.\nExpected: '{expected}'\nGot: '{result}'",
         );
     }
 }
@@ -327,10 +328,16 @@ fn test_pipe_fifo() {
         .stdout_contains("File: FIFO");
 }
 
+// TODO(#7583): Re-enable on Mac OS X (and possibly other Unix platforms)
 #[test]
 #[cfg(all(
     unix,
-    not(any(target_os = "android", target_os = "freebsd", target_os = "openbsd"))
+    not(any(
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "macos"
+    ))
 ))]
 fn test_stdin_pipe_fifo1() {
     // $ echo | stat -
@@ -352,8 +359,9 @@ fn test_stdin_pipe_fifo1() {
         .stdout_contains("File: -");
 }
 
+// TODO(#7583): Re-enable on Mac OS X (and maybe Android)
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_stdin_pipe_fifo2() {
     // $ stat -
     // File: -
@@ -375,8 +383,7 @@ fn test_stdin_with_fs_option() {
         .arg("-f")
         .arg("-")
         .set_stdin(std::process::Stdio::null())
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("using '-' to denote standard input does not work in file system mode");
 }
 
@@ -475,13 +482,35 @@ fn test_printf_invalid_directive() {
 
     ts.ucmd()
         .args(&["--printf=%9", "."])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("'%9': invalid directive");
 
     ts.ucmd()
         .args(&["--printf=%9%", "."])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("'%9%': invalid directive");
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_stat_selinux() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+    ts.ucmd()
+        .arg("--printf='%C'")
+        .arg("f")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("unconfined_u");
+    ts.ucmd()
+        .arg("--printf='%C'")
+        .arg("/bin/")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("system_u");
+    // Count that we have 4 fields
+    let result = ts.ucmd().arg("--printf='%C'").arg("/bin/").succeeds();
+    let s: Vec<_> = result.stdout_str().split(":").collect();
+    assert!(s.len() == 4);
 }

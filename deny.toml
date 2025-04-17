@@ -54,11 +54,7 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-  # rustix
-  { name = "linux-raw-sys", version = "0.3.8" },
-  # terminal_size
-  { name = "rustix", version = "0.37.26" },
-  # various crates
+  # dns-lookup
   { name = "windows-sys", version = "0.48.0" },
   # mio, nu-ansi-term, socket2
   { name = "windows-sys", version = "0.52.0" },
@@ -78,11 +74,9 @@ skip = [
   { name = "windows_x86_64_gnullvm", version = "0.48.0" },
   # windows-targets
   { name = "windows_x86_64_msvc", version = "0.48.0" },
-  # kqueue-sys, onig, rustix
+  # kqueue-sys, onig
   { name = "bitflags", version = "1.3.2" },
-  # textwrap
-  { name = "terminal_size", version = "0.2.6" },
-  # ansi-width, console, os_display
+  # ansi-width
   { name = "unicode-width", version = "0.1.13" },
   # filedescriptor, utmp-classic
   { name = "thiserror", version = "1.0.69" },
@@ -90,9 +84,9 @@ skip = [
   { name = "thiserror-impl", version = "1.0.69" },
   # bindgen
   { name = "itertools", version = "0.13.0" },
-  # indexmap
+  # ordered-multimap
   { name = "hashbrown", version = "0.14.5" },
-  # parse_datetime, cexpr (via bindgen)
+  # cexpr (via bindgen)
   { name = "nom", version = "7.1.3" },
   # const-random-macro, rand_core
   { name = "getrandom", version = "0.2.15" },
@@ -104,12 +98,10 @@ skip = [
   { name = "rand_chacha", version = "0.3.1" },
   # rand
   { name = "rand_core", version = "0.6.4" },
-  # ppv-lite86, utmp-classic, utmp-classic-raw
-  { name = "zerocopy", version = "0.7.35" },
-  # selinux-sys
-  { name = "bindgen", version = "0.70.1" },
-  # bindgen
-  { name = "rustc-hash", version = "1.1.0" },
+  # crossterm, procfs, terminal_size
+  { name = "rustix", version = "0.38.43" },
+  # rustix
+  { name = "linux-raw-sys", version = "0.4.15" },
 ]
 # spell-checker: enable
 

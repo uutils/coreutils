@@ -7,13 +7,13 @@
 
 use crate::unicode_table;
 use nom::{
+    IResult, Parser,
     branch::alt,
-    bytes::complete::{tag, take, take_till},
+    bytes::complete::{tag, take, take_till, take_until},
     character::complete::one_of,
     combinator::{map, map_opt, peek, recognize, value},
-    multi::{many0, many_m_n},
-    sequence::{delimited, preceded, separated_pair},
-    IResult, Parser,
+    multi::{many_m_n, many0},
+    sequence::{delimited, preceded, separated_pair, terminated},
 };
 use std::{
     char,
@@ -23,7 +23,7 @@ use std::{
     io::{BufRead, Write},
     ops::Not,
 };
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::show_warning;
 
 #[derive(Debug, Clone)]
@@ -39,6 +39,7 @@ pub enum BadSequence {
     Set1LongerSet2EndsInClass,
     ComplementMoreThanOneUniqueInSet2,
     BackwardsRange { end: u32, start: u32 },
+    MultipleCharInEquivalence(String),
 }
 
 impl Display for BadSequence {
@@ -61,16 +62,28 @@ impl Display for BadSequence {
                 write!(f, "when not truncating set1, string2 must be non-empty")
             }
             Self::ClassExceptLowerUpperInSet2 => {
-                write!(f, "when translating, the only character classes that may appear in set2 are 'upper' and 'lower'")
+                write!(
+                    f,
+                    "when translating, the only character classes that may appear in set2 are 'upper' and 'lower'"
+                )
             }
             Self::ClassInSet2NotMatchedBySet1 => {
-                write!(f, "when translating, every 'upper'/'lower' in set2 must be matched by a 'upper'/'lower' in the same position in set1")
+                write!(
+                    f,
+                    "when translating, every 'upper'/'lower' in set2 must be matched by a 'upper'/'lower' in the same position in set1"
+                )
             }
             Self::Set1LongerSet2EndsInClass => {
-                write!(f, "when translating with string1 longer than string2,\nthe latter string must not end with a character class")
+                write!(
+                    f,
+                    "when translating with string1 longer than string2,\nthe latter string must not end with a character class"
+                )
             }
             Self::ComplementMoreThanOneUniqueInSet2 => {
-                write!(f, "when translating with complemented character classes,\nstring2 must map all characters in the domain to one")
+                write!(
+                    f,
+                    "when translating with complemented character classes,\nstring2 must map all characters in the domain to one"
+                )
             }
             Self::BackwardsRange { end, start } => {
                 fn end_or_start_to_string(ut: &u32) -> String {
@@ -89,6 +102,10 @@ impl Display for BadSequence {
                     end_or_start_to_string(end)
                 )
             }
+            Self::MultipleCharInEquivalence(s) => write!(
+                f,
+                "{s}: equivalence class operand must be a single character"
+            ),
         }
     }
 }
@@ -127,7 +144,7 @@ impl Sequence {
             Self::Char(c) => Box::new(std::iter::once(*c)),
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
-            Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
+            Self::CharRepeat(c, n) => Box::new(std::iter::repeat_n(*c, *n)),
             Self::Class(class) => match class {
                 Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
                 Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
@@ -187,7 +204,7 @@ impl Sequence {
         if translating
             && set2.iter().any(|&x| {
                 matches!(x, Self::Class(_))
-                    && !matches!(x, Self::Class(Class::Upper) | Self::Class(Class::Lower))
+                    && !matches!(x, Self::Class(Class::Upper | Class::Lower))
             })
         {
             return Err(BadSequence::ClassExceptLowerUpperInSet2);
@@ -254,7 +271,7 @@ impl Sequence {
 
         // Calculate the set of unique characters in set2
         let mut set2_uniques = set2_solved.clone();
-        set2_uniques.sort();
+        set2_uniques.sort_unstable();
         set2_uniques.dedup();
 
         // If the complement flag is used in translate mode, only one unique
@@ -273,7 +290,7 @@ impl Sequence {
             && !truncate_set1_flag
             && matches!(
                 set2.last().copied(),
-                Some(Self::Class(Class::Upper)) | Some(Self::Class(Class::Lower))
+                Some(Self::Class(Class::Upper | Class::Lower))
             )
         {
             return Err(BadSequence::Set1LongerSet2EndsInClass);
@@ -347,12 +364,7 @@ impl Sequence {
                     let origin_octal: &str = std::str::from_utf8(input).unwrap();
                     let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
                     let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
-                    show_warning!(
-                        "the ambiguous octal escape \\{} is being\n        interpreted as the 2-byte sequence \\0{}, {}",
-                        origin_octal,
-                        actual_octal_tail,
-                        outstand_char
-                    );
+                    show_warning!("the ambiguous octal escape \\{origin_octal} is being\n        interpreted as the 2-byte sequence \\0{actual_octal_tail}, {outstand_char}");
                 }
                 result
             },
@@ -492,18 +504,33 @@ impl Sequence {
     }
 
     fn parse_char_equal(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
-        delimited(
+        preceded(
             tag("[="),
-            alt((
-                value(
-                    Err(BadSequence::MissingEquivalentClassChar),
-                    peek(tag("=]")),
-                ),
-                map(Self::parse_backslash_or_char, |c| Ok(Self::Char(c))),
-            )),
-            tag("=]"),
+            (
+                alt((
+                    value(Err(()), peek(tag("=]"))),
+                    map(Self::parse_backslash_or_char, Ok),
+                )),
+                map(terminated(take_until("=]"), tag("=]")), |v: &[u8]| {
+                    if v.is_empty() { Ok(()) } else { Err(v) }
+                }),
+            ),
         )
         .parse(input)
+        .map(|(l, (a, b))| {
+            (
+                l,
+                match (a, b) {
+                    (Err(()), _) => Err(BadSequence::MissingEquivalentClassChar),
+                    (Ok(c), Ok(())) => Ok(Self::Char(c)),
+                    (Ok(c), Err(v)) => Err(BadSequence::MultipleCharInEquivalence(format!(
+                        "{}{}",
+                        String::from_utf8_lossy(&[c]).into_owned(),
+                        String::from_utf8_lossy(v).into_owned()
+                    ))),
+                },
+            )
+        })
     }
 }
 
@@ -637,12 +664,9 @@ where
         let filtered = buf.iter().filter_map(|&c| translator.translate(c));
         output_buf.extend(filtered);
 
-        if let Err(e) = output.write_all(&output_buf) {
-            return Err(USimpleError::new(
-                1,
-                format!("{}: write error: {}", uucore::util_name(), e),
-            ));
-        }
+        output
+            .write_all(&output_buf)
+            .map_err_context(|| "write error".into())?;
 
         buf.clear();
         output_buf.clear();

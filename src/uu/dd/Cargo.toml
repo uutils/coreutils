@@ -1,17 +1,18 @@
 [package]
 name = "uu_dd"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "dd ~ (uutils) copy and convert files"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/dd"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/dd.rs"
@@ -20,7 +21,8 @@ path = "src/dd.rs"
 clap = { workspace = true }
 gcd = { workspace = true }
 libc = { workspace = true }
-uucore = { workspace = true, features = ["format", "quoting-style"] }
+uucore = { workspace = true, features = ["format", "parser", "quoting-style"] }
+thiserror = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 signal-hook = { workspace = true }

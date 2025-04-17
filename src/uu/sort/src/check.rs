@@ -6,8 +6,9 @@
 //! Check if a file is ordered
 
 use crate::{
+    GlobalSettings, SortError,
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, open, GlobalSettings, SortError,
+    compare_by, open,
 };
 use itertools::Itertools;
 use std::{
@@ -15,7 +16,7 @@ use std::{
     ffi::OsStr,
     io::Read,
     iter,
-    sync::mpsc::{sync_channel, Receiver, SyncSender},
+    sync::mpsc::{Receiver, SyncSender, sync_channel},
     thread,
 };
 use uucore::error::UResult;

@@ -10,8 +10,8 @@ use crate::uu_app;
 
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
-use uucore::utmpx::{self, time, Utmpx};
+use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
+use uucore::utmpx::{self, Utmpx, time};
 
 use std::borrow::Cow;
 use std::ffi::CStr;
@@ -178,7 +178,7 @@ fn current_tty() -> String {
         if res.is_null() {
             String::new()
         } else {
-            CStr::from_ptr(res as *const _)
+            CStr::from_ptr(res.cast_const())
                 .to_string_lossy()
                 .trim_start_matches("/dev/")
                 .to_owned()

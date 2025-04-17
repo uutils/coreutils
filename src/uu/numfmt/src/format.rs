@@ -6,7 +6,7 @@
 use uucore::display::Quotable;
 
 use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
-use crate::units::{DisplayableSuffix, RawSuffix, Result, Suffix, Unit, IEC_BASES, SI_BASES};
+use crate::units::{DisplayableSuffix, IEC_BASES, RawSuffix, Result, SI_BASES, Suffix, Unit};
 
 /// Iterate over a line's fields, where each field is a contiguous sequence of
 /// non-whitespace, optionally prefixed with one or more characters of leading
@@ -111,21 +111,18 @@ fn parse_implicit_precision(s: &str) -> usize {
 
 fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     match (s, u) {
-        (Some((raw_suffix, false)), &Unit::Auto) | (Some((raw_suffix, false)), &Unit::Si) => {
-            match raw_suffix {
-                RawSuffix::K => Ok(i * 1e3),
-                RawSuffix::M => Ok(i * 1e6),
-                RawSuffix::G => Ok(i * 1e9),
-                RawSuffix::T => Ok(i * 1e12),
-                RawSuffix::P => Ok(i * 1e15),
-                RawSuffix::E => Ok(i * 1e18),
-                RawSuffix::Z => Ok(i * 1e21),
-                RawSuffix::Y => Ok(i * 1e24),
-            }
-        }
+        (Some((raw_suffix, false)), &Unit::Auto | &Unit::Si) => match raw_suffix {
+            RawSuffix::K => Ok(i * 1e3),
+            RawSuffix::M => Ok(i * 1e6),
+            RawSuffix::G => Ok(i * 1e9),
+            RawSuffix::T => Ok(i * 1e12),
+            RawSuffix::P => Ok(i * 1e15),
+            RawSuffix::E => Ok(i * 1e18),
+            RawSuffix::Z => Ok(i * 1e21),
+            RawSuffix::Y => Ok(i * 1e24),
+        },
         (Some((raw_suffix, false)), &Unit::Iec(false))
-        | (Some((raw_suffix, true)), &Unit::Auto)
-        | (Some((raw_suffix, true)), &Unit::Iec(true)) => match raw_suffix {
+        | (Some((raw_suffix, true)), &Unit::Auto | &Unit::Iec(true)) => match raw_suffix {
             RawSuffix::K => Ok(i * IEC_BASES[1]),
             RawSuffix::M => Ok(i * IEC_BASES[2]),
             RawSuffix::G => Ok(i * IEC_BASES[3]),
@@ -135,16 +132,11 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
             RawSuffix::Z => Ok(i * IEC_BASES[7]),
             RawSuffix::Y => Ok(i * IEC_BASES[8]),
         },
-        (None, &Unit::Iec(true)) => {
-            Err(format!("missing 'i' suffix in input: '{i}' (e.g Ki/Mi/Gi)"))
-        }
         (Some((raw_suffix, false)), &Unit::Iec(true)) => Err(format!(
             "missing 'i' suffix in input: '{i}{raw_suffix:?}' (e.g Ki/Mi/Gi)"
         )),
         (Some((raw_suffix, with_i)), &Unit::None) => Err(format!(
-            "rejecting suffix in input: '{}{:?}{}' (consider using --from)",
-            i,
-            raw_suffix,
+            "rejecting suffix in input: '{i}{raw_suffix:?}{}' (consider using --from)",
             if with_i { "i" } else { "" }
         )),
         (None, _) => Ok(i),
@@ -159,11 +151,7 @@ fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
     remove_suffix(i, suffix, &opts.from).map(|n| {
         // GNU numfmt doesn't round values if no --from argument is provided by the user
         if opts.from == Unit::None {
-            if n == -0.0 {
-                0.0
-            } else {
-                n
-            }
+            if n == -0.0 { 0.0 } else { n }
         } else if n < 0.0 {
             -n.abs().ceil()
         } else {
@@ -222,7 +210,7 @@ fn consider_suffix(
     round_method: RoundMethod,
     precision: usize,
 ) -> Result<(f64, Option<Suffix>)> {
-    use crate::units::RawSuffix::*;
+    use crate::units::RawSuffix::{E, G, K, M, P, T, Y, Z};
 
     let abs_n = n.abs();
     let suffixes = [K, M, G, T, P, E, Z, Y];
@@ -274,19 +262,13 @@ fn transform_to(
             format!(
                 "{:.precision$}",
                 round_with_precision(i2, round_method, precision),
-                precision = precision
             )
         }
         Some(s) if precision > 0 => {
-            format!(
-                "{:.precision$}{}",
-                i2,
-                DisplayableSuffix(s),
-                precision = precision
-            )
+            format!("{i2:.precision$}{}", DisplayableSuffix(s, opts.to),)
         }
-        Some(s) if i2.abs() < 10.0 => format!("{:.1}{}", i2, DisplayableSuffix(s)),
-        Some(s) => format!("{:.0}{}", i2, DisplayableSuffix(s)),
+        Some(s) if i2.abs() < 10.0 => format!("{i2:.1}{}", DisplayableSuffix(s, opts.to)),
+        Some(s) => format!("{i2:.0}{}", DisplayableSuffix(s, opts.to)),
     })
 }
 
@@ -330,25 +312,21 @@ fn format_string(
     let padded_number = match padding {
         0 => number_with_suffix,
         p if p > 0 && options.format.zero_padding => {
-            let zero_padded = format!("{:0>padding$}", number_with_suffix, padding = p as usize);
+            let zero_padded = format!("{number_with_suffix:0>padding$}", padding = p as usize);
 
             match implicit_padding.unwrap_or(options.padding) {
                 0 => zero_padded,
-                p if p > 0 => format!("{:>padding$}", zero_padded, padding = p as usize),
-                p => format!("{:<padding$}", zero_padded, padding = p.unsigned_abs()),
+                p if p > 0 => format!("{zero_padded:>padding$}", padding = p as usize),
+                p => format!("{zero_padded:<padding$}", padding = p.unsigned_abs()),
             }
         }
-        p if p > 0 => format!("{:>padding$}", number_with_suffix, padding = p as usize),
-        p => format!(
-            "{:<padding$}",
-            number_with_suffix,
-            padding = p.unsigned_abs()
-        ),
+        p if p > 0 => format!("{number_with_suffix:>padding$}", padding = p as usize),
+        p => format!("{number_with_suffix:<padding$}", padding = p.unsigned_abs()),
     };
 
     Ok(format!(
-        "{}{}{}",
-        options.format.prefix, padded_number, options.format.suffix
+        "{}{padded_number}{}",
+        options.format.prefix, options.format.suffix
     ))
 }
 
@@ -399,12 +377,20 @@ fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
 
             print!("{}", format_string(field, options, implicit_padding)?);
         } else {
+            // the -z option converts an initial \n into a space
+            let prefix = if options.zero_terminated && prefix.starts_with('\n') {
+                print!(" ");
+                &prefix[1..]
+            } else {
+                prefix
+            };
             // print unselected field without conversion
             print!("{prefix}{field}");
         }
     }
 
-    println!();
+    let eol = if options.zero_terminated { '\0' } else { '\n' };
+    print!("{}", eol);
 
     Ok(())
 }

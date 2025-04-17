@@ -5,10 +5,10 @@
 
 // spell-checker:ignore (words) wipesync prefill
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
 use libc::S_IWUSR;
-use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Seek, Write};
 #[cfg(unix)]
@@ -16,8 +16,8 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::parse_size::parse_size_u64;
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_size::parse_size_u64;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
 
 const ABOUT: &str = help_about!("shred.md");
@@ -229,7 +229,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(USimpleError::new(
                     1,
                     format!("invalid number of passes: {}", s.quote()),
-                ))
+                ));
             }
         },
         None => unreachable!(),
@@ -279,7 +279,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
@@ -456,7 +456,7 @@ fn wipe_file(
             pass_sequence.shuffle(&mut rng); // randomize the order of application
 
             let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
-                                              // Evenly space random passes; ensures one at the beginning and end
+            // Evenly space random passes; ensures one at the beginning and end
             for i in 0..n_random {
                 pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
             }
@@ -484,17 +484,17 @@ fn wipe_file(
         if verbose {
             let pass_name = pass_name(&pass_type);
             show_error!(
-                "{}: pass {:2}/{} ({})...",
+                "{}: pass {:2}/{total_passes} ({pass_name})...",
                 path.maybe_quote(),
                 i + 1,
-                total_passes,
-                pass_name
             );
         }
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
-        show_if_err!(do_pass(&mut file, &pass_type, exact, size)
-            .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
+        show_if_err!(
+            do_pass(&mut file, &pass_type, exact, size)
+                .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))
+        );
     }
 
     if remove_method != RemoveMethod::None {
@@ -576,10 +576,9 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
                 }
                 Err(e) => {
                     show_error!(
-                        "{}: Couldn't rename to {}: {}",
+                        "{}: Couldn't rename to {}: {e}",
                         last_path.maybe_quote(),
                         new_path.quote(),
-                        e
                     );
                     // TODO: replace with our error management
                     std::process::exit(1);

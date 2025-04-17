@@ -3,26 +3,29 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use uutests::new_ucmd;
 #[cfg(unix)]
-use crate::common::util::expected_result;
-use crate::common::util::{is_ci, whoami, TestScenario};
+use uutests::unwrap_or_return;
+#[cfg(unix)]
+use uutests::util::expected_result;
+use uutests::util::{TestScenario, is_ci, whoami};
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 #[cfg(unix)]
 fn test_normal() {
     let ts = TestScenario::new(util_name!());
-    let result = ts.ucmd().run();
     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
+    let result = ts.ucmd().succeeds();
 
     result
         .stdout_is(exp_result.stdout_str())
-        .stderr_is(exp_result.stderr_str())
-        .code_is(exp_result.code());
+        .stderr_is(exp_result.stderr_str());
 }
 
 #[test]

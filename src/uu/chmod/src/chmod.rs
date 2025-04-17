@@ -5,18 +5,18 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, ExitCode, UResult, USimpleError, UUsageError};
+use uucore::error::{ExitCode, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::perms::{configure_symlink_and_recursion, TraverseSymlinks};
+use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
 const ABOUT: &str = help_about!("chmod.md");
@@ -106,8 +106,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Err(err) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("cannot stat attributes of {}: {}", fref.quote(), err),
-                ))
+                    format!("cannot stat attributes of {}: {err}", fref.quote()),
+                ));
             }
         },
         None => None,
@@ -138,7 +138,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
-    let (recursive, dereference, traverse_symlinks) = configure_symlink_and_recursion(&matches)?;
+    let (recursive, dereference, traverse_symlinks) =
+        configure_symlink_and_recursion(&matches, TraverseSymlinks::First)?;
 
     let chmoder = Chmoder {
         changes,
@@ -157,7 +158,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .args_override_self(true)
@@ -259,6 +260,10 @@ impl Chmoder {
                         // Don't try to change the mode of the symlink itself
                         continue;
                     }
+                    if self.recursive && self.traverse_symlinks == TraverseSymlinks::None {
+                        continue;
+                    }
+
                     if !self.quiet {
                         show!(USimpleError::new(
                             1,
@@ -298,7 +303,7 @@ impl Chmoder {
                     format!(
                         "it is dangerous to operate recursively on {}\nchmod: use --no-preserve-root to override this failsafe",
                         filename.quote()
-                    )
+                    ),
                 ));
             }
             if self.recursive {
@@ -352,24 +357,24 @@ impl Chmoder {
             Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
                 // Handle dangling symlinks or other errors
-                if file.is_symlink() && !self.dereference {
+                return if file.is_symlink() && !self.dereference {
                     if self.verbose {
                         println!(
                             "neither symbolic link {} nor referent has been changed",
                             file.quote()
                         );
                     }
-                    return Ok(()); // Skip dangling symlinks
+                    Ok(()) // Skip dangling symlinks
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
                     // These two filenames would normally be conditionally
                     // quoted, but GNU's tests expect them to always be quoted
-                    return Err(USimpleError::new(
+                    Err(USimpleError::new(
                         1,
                         format!("{}: Permission denied", file.quote()),
-                    ));
+                    ))
                 } else {
-                    return Err(USimpleError::new(1, format!("{}: {}", file.quote(), err)));
-                }
+                    Err(USimpleError::new(1, format!("{}: {err}", file.quote())))
+                };
             }
         };
 
@@ -436,24 +441,21 @@ impl Chmoder {
         if fperm == mode {
             if self.verbose && !self.changes {
                 println!(
-                    "mode of {} retained as {:04o} ({})",
+                    "mode of {} retained as {fperm:04o} ({})",
                     file.quote(),
-                    fperm,
                     display_permissions_unix(fperm as mode_t, false),
                 );
             }
             Ok(())
         } else if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
             if !self.quiet {
-                show_error!("{}", err);
+                show_error!("{err}");
             }
             if self.verbose {
                 println!(
-                    "failed to change mode of file {} from {:04o} ({}) to {:04o} ({})",
+                    "failed to change mode of file {} from {fperm:04o} ({}) to {mode:04o} ({})",
                     file.quote(),
-                    fperm,
                     display_permissions_unix(fperm as mode_t, false),
-                    mode,
                     display_permissions_unix(mode as mode_t, false)
                 );
             }
@@ -461,11 +463,9 @@ impl Chmoder {
         } else {
             if self.verbose || self.changes {
                 println!(
-                    "mode of {} changed from {:04o} ({}) to {:04o} ({})",
+                    "mode of {} changed from {fperm:04o} ({}) to {mode:04o} ({})",
                     file.quote(),
-                    fperm,
                     display_permissions_unix(fperm as mode_t, false),
-                    mode,
                     display_permissions_unix(mode as mode_t, false)
                 );
             }

@@ -5,7 +5,10 @@
 
 // spell-checker:ignore defg
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 static INPUT: &str = "lists.txt";
 
@@ -55,7 +58,7 @@ fn test_no_args() {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -107,24 +110,21 @@ fn test_whitespace_delimited() {
 fn test_whitespace_with_explicit_delimiter() {
     new_ucmd!()
         .args(&["-w", "-f", COMPLEX_SEQUENCE.sequence, "-d:"])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
 fn test_whitespace_with_byte() {
     new_ucmd!()
         .args(&["-w", "-b", COMPLEX_SEQUENCE.sequence])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
 fn test_whitespace_with_char() {
     new_ucmd!()
         .args(&["-c", COMPLEX_SEQUENCE.sequence, "-w"])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -132,9 +132,9 @@ fn test_delimiter_with_byte_and_char() {
     for conflicting_arg in ["-c", "-b"] {
         new_ucmd!()
             .args(&[conflicting_arg, COMPLEX_SEQUENCE.sequence, "-d="])
-            .fails()
+            .fails_with_code(1)
             .stderr_is("cut: invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields\n")
-            .code_is(1);
+;
     }
 }
 
@@ -142,8 +142,7 @@ fn test_delimiter_with_byte_and_char() {
 fn test_too_large() {
     new_ucmd!()
         .args(&["-b1-18446744073709551615", "/dev/null"])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -240,8 +239,7 @@ fn test_is_a_directory() {
 
     ucmd.arg("-b1")
         .arg("some")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_is("cut: some: Is a directory\n");
 }
 
@@ -250,8 +248,7 @@ fn test_no_such_file() {
     new_ucmd!()
         .arg("-b1")
         .arg("some")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_is("cut: some: No such file or directory\n");
 }
 
@@ -377,4 +374,16 @@ fn test_output_delimiter_with_adjacent_ranges() {
         .pipe_in("abcd\n")
         .succeeds()
         .stdout_only("ab:cd\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .arg("-d=")
+        .arg("-f1")
+        .pipe_in("key=value")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("cut: write error: No space left on device\n");
 }

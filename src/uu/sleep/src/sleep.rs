@@ -8,11 +8,12 @@ use std::time::Duration;
 
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
-    format_usage, help_about, help_section, help_usage, show_error,
+    format_usage, help_about, help_section, help_usage,
+    parser::parse_time,
+    show_error,
 };
 
-use clap::{crate_version, Arg, ArgAction, Command};
-use fundu::{DurationParser, ParseError, SaturatingInto};
+use clap::{Arg, ArgAction, Command};
 
 static ABOUT: &str = help_about!("sleep.md");
 const USAGE: &str = help_usage!("sleep.md");
@@ -45,7 +46,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
@@ -61,37 +62,17 @@ pub fn uu_app() -> Command {
 fn sleep(args: &[&str]) -> UResult<()> {
     let mut arg_error = false;
 
-    use fundu::TimeUnit::{Day, Hour, Minute, Second};
-    let parser = DurationParser::with_time_units(&[Second, Minute, Hour, Day]);
-
     let sleep_dur = args
         .iter()
-        .filter_map(|input| match parser.parse(input.trim()) {
+        .filter_map(|input| match parse_time::from_str(input) {
             Ok(duration) => Some(duration),
             Err(error) => {
                 arg_error = true;
-
-                let reason = match error {
-                    ParseError::Empty if input.is_empty() => "Input was empty".to_string(),
-                    ParseError::Empty => "Found only whitespace in input".to_string(),
-                    ParseError::Syntax(pos, description)
-                    | ParseError::TimeUnit(pos, description) => {
-                        format!("{description} at position {}", pos.saturating_add(1))
-                    }
-                    ParseError::NegativeExponentOverflow | ParseError::PositiveExponentOverflow => {
-                        "Exponent was out of bounds".to_string()
-                    }
-                    ParseError::NegativeNumber => "Number was negative".to_string(),
-                    error => error.to_string(),
-                };
-                show_error!("invalid time interval '{input}': {reason}");
-
+                show_error!("{error}");
                 None
             }
         })
-        .fold(Duration::ZERO, |acc, n| {
-            acc.saturating_add(SaturatingInto::<std::time::Duration>::saturating_into(n))
-        });
+        .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
 
     if arg_error {
         return Err(UUsageError::new(1, ""));

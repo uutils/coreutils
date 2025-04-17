@@ -2,8 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::TestScenario;
 use glob::glob;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 /// Returns a string of numbers with the given range, each on a new line.
 /// The upper bound is not included.
@@ -13,7 +16,7 @@ fn generate(from: u32, to: u32) -> String {
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -1412,9 +1415,8 @@ fn repeat_everything() {
         "9",
         "{5}",
     ])
-    .fails()
+    .fails_with_code(1)
     .no_stdout()
-    .code_is(1)
     .stderr_only("csplit: '9': line number out of range on repetition 5\n");
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be some splits created")
@@ -1455,7 +1457,7 @@ fn create_named_pipe_with_writer(path: &str, data: &str) -> std::process::Child 
     nix::unistd::mkfifo(path, nix::sys::stat::Mode::S_IRWXU).unwrap();
     std::process::Command::new("sh")
         .arg("-c")
-        .arg(format!("printf '{}' > {path}", data))
+        .arg(format!("printf '{data}' > {path}"))
         .spawn()
         .unwrap()
 }
@@ -1467,12 +1469,10 @@ fn test_directory_input_file() {
 
     #[cfg(unix)]
     ucmd.args(&["test_directory", "1"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("csplit: read error: Is a directory\n");
     #[cfg(windows)]
     ucmd.args(&["test_directory", "1"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("csplit: cannot open 'test_directory' for reading: Permission denied\n");
 }

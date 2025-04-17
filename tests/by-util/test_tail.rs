@@ -13,12 +13,6 @@
     clippy::cast_possible_truncation
 )]
 
-use crate::common::random::{AlphanumericNewline, RandomizedString};
-#[cfg(unix)]
-use crate::common::util::expected_result;
-#[cfg(not(windows))]
-use crate::common::util::is_ci;
-use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
@@ -45,6 +39,18 @@ use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
     not(target_os = "openbsd")
 ))]
 use tail::text;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::random::{AlphanumericNewline, RandomizedString};
+#[cfg(unix)]
+use uutests::unwrap_or_return;
+use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::expected_result;
+#[cfg(unix)]
+#[cfg(not(windows))]
+use uutests::util::is_ci;
+use uutests::util_name;
 
 const FOOBAR_TXT: &str = "foobar.txt";
 const FOOBAR_2_TXT: &str = "foobar2.txt";
@@ -67,14 +73,14 @@ const INVALID_UTF16: u16 = 0xD800;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_stdin_default.expected")
         .no_stderr();
 }
@@ -84,7 +90,7 @@ fn test_stdin_explicit() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)
         .arg("-")
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_stdin_default.expected")
         .no_stderr();
 }
@@ -109,16 +115,13 @@ fn test_stdin_redirect_file() {
 
     ts.ucmd()
         .set_stdin(File::open(at.plus("f")).unwrap())
-        .run()
-        .stdout_is("foo")
-        .succeeded();
+        .succeeds()
+        .stdout_is("foo");
     ts.ucmd()
         .set_stdin(File::open(at.plus("f")).unwrap())
         .arg("-v")
-        .run()
-        .no_stderr()
-        .stdout_is("==> standard input <==\nfoo")
-        .succeeded();
+        .succeeds()
+        .stdout_only("==> standard input <==\nfoo");
 
     let mut p = ts
         .ucmd()
@@ -145,12 +148,7 @@ fn test_stdin_redirect_offset() {
     let mut fh = File::open(at.plus("k")).unwrap();
     fh.seek(SeekFrom::Start(2)).unwrap();
 
-    ts.ucmd()
-        .set_stdin(fh)
-        .run()
-        .no_stderr()
-        .stdout_is("2\n")
-        .succeeded();
+    ts.ucmd().set_stdin(fh).succeeds().stdout_only("2\n");
 }
 
 #[test]
@@ -170,12 +168,10 @@ fn test_stdin_redirect_offset2() {
     ts.ucmd()
         .set_stdin(fh)
         .args(&["k", "-", "l", "m"])
-        .run()
-        .no_stderr()
-        .stdout_is(
+        .succeeds()
+        .stdout_only(
             "==> k <==\n1\n2\n\n==> standard input <==\n2\n\n==> l <==\n3\n4\n\n==> m <==\n5\n6\n",
-        )
-        .succeeded();
+        );
 }
 
 #[test]
@@ -183,18 +179,8 @@ fn test_nc_0_wo_follow() {
     // verify that -[nc]0 without -f, exit without reading
 
     let ts = TestScenario::new(util_name!());
-    ts.ucmd()
-        .args(&["-n0", "missing"])
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .succeeded();
-    ts.ucmd()
-        .args(&["-c0", "missing"])
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .succeeded();
+    ts.ucmd().args(&["-n0", "missing"]).succeeds().no_output();
+    ts.ucmd().args(&["-c0", "missing"]).succeeds().no_output();
 }
 
 #[test]
@@ -212,16 +198,12 @@ fn test_nc_0_wo_follow2() {
 
     ts.ucmd()
         .args(&["-n0", "unreadable"])
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .succeeded();
+        .succeeds()
+        .no_output();
     ts.ucmd()
         .args(&["-c0", "unreadable"])
-        .run()
-        .no_stderr()
-        .no_stdout()
-        .succeeded();
+        .succeeds()
+        .no_output();
 }
 
 // TODO: Add similar test for windows
@@ -239,10 +221,9 @@ fn test_permission_denied() {
 
     ts.ucmd()
         .arg("unreadable")
-        .fails()
+        .fails_with_code(1)
         .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
-        .no_stdout()
-        .code_is(1);
+        .no_stdout();
 }
 
 // TODO: Add similar test for windows
@@ -263,10 +244,9 @@ fn test_permission_denied_multiple() {
 
     ts.ucmd()
         .args(&["file1", "unreadable", "file2"])
-        .fails()
+        .fails_with_code(1)
         .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
-        .stdout_is("==> file1 <==\n\n==> file2 <==\n")
-        .code_is(1);
+        .stdout_is("==> file1 <==\n\n==> file2 <==\n");
 }
 
 #[test]
@@ -284,10 +264,9 @@ fn test_follow_redirect_stdin_name_retry() {
         ts.ucmd()
             .set_stdin(File::open(at.plus("f")).unwrap())
             .args(&args)
-            .fails()
+            .fails_with_code(1)
             .no_stdout()
-            .stderr_is("tail: cannot follow '-' by name\n")
-            .code_is(1);
+            .stderr_is("tail: cannot follow '-' by name\n");
         args.pop();
     }
 }
@@ -311,17 +290,15 @@ fn test_stdin_redirect_dir() {
 
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory\n")
-        .code_is(1);
+        .stderr_is("tail: error reading 'standard input': Is a directory\n");
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory\n")
-        .code_is(1);
+        .stderr_is("tail: error reading 'standard input': Is a directory\n");
 }
 
 // On macOS path.is_dir() can be false for directories if it was a redirect,
@@ -344,17 +321,15 @@ fn test_stdin_redirect_dir_when_target_os_is_macos() {
 
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n")
-        .code_is(1);
+        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n");
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n")
-        .code_is(1);
+        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n");
 }
 
 #[test]
@@ -387,10 +362,9 @@ fn test_follow_stdin_name_retry() {
     for _ in 0..2 {
         new_ucmd!()
             .args(&args)
-            .run()
+            .fails_with_code(1)
             .no_stdout()
-            .stderr_is("tail: cannot follow '-' by name\n")
-            .code_is(1);
+            .stderr_is("tail: cannot follow '-' by name\n");
         args.pop();
     }
 }
@@ -418,7 +392,7 @@ fn test_follow_bad_fd() {
 fn test_single_default() {
     new_ucmd!()
         .arg(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_single_default.expected");
 }
 
@@ -428,7 +402,7 @@ fn test_n_greater_than_number_of_lines() {
         .arg("-n")
         .arg("99999999")
         .arg(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture(FOOBAR_TXT);
 }
 
@@ -437,7 +411,7 @@ fn test_null_default() {
     new_ucmd!()
         .arg("-z")
         .arg(FOOBAR_WITH_NULL_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_with_null_default.expected");
 }
 
@@ -604,10 +578,9 @@ fn test_follow_multiple_untailable() {
     ucmd.arg("-f")
         .arg("DIR1")
         .arg("DIR2")
-        .fails()
+        .fails_with_code(1)
         .stderr_is(expected_stderr)
-        .stdout_is(expected_stdout)
-        .code_is(1);
+        .stdout_is(expected_stdout);
 }
 
 #[test]
@@ -615,7 +588,7 @@ fn test_follow_stdin_pipe() {
     new_ucmd!()
         .arg("-f")
         .pipe_in_fixture(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("follow_stdin.expected")
         .no_stderr();
 }
@@ -625,7 +598,7 @@ fn test_follow_stdin_pipe() {
 fn test_follow_invalid_pid() {
     new_ucmd!()
         .args(&["-f", "--pid=-1234"])
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: invalid PID: '-1234'\n");
     new_ucmd!()
@@ -736,7 +709,7 @@ fn test_single_big_args() {
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
-    ucmd.arg(FILE).arg("-n").arg(format!("{N_ARG}")).run();
+    ucmd.arg(FILE).arg("-n").arg(format!("{N_ARG}")).succeeds();
     // .stdout_is(at.read(EXPECTED_FILE));
 }
 
@@ -746,7 +719,7 @@ fn test_bytes_single() {
         .arg("-c")
         .arg("10")
         .arg(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_bytes_single.expected");
 }
 
@@ -756,7 +729,7 @@ fn test_bytes_stdin() {
         .pipe_in_fixture(FOOBAR_TXT)
         .arg("-c")
         .arg("13")
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_bytes_stdin.expected")
         .no_stderr();
 }
@@ -822,7 +795,7 @@ fn test_lines_with_size_suffix() {
     ucmd.arg(FILE)
         .arg("-n")
         .arg("2K")
-        .run()
+        .succeeds()
         .stdout_is_fixture(EXPECTED_FILE);
 }
 
@@ -831,7 +804,7 @@ fn test_multiple_input_files() {
     new_ucmd!()
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
-        .run()
+        .succeeds()
         .no_stderr()
         .stdout_is_fixture("foobar_follow_multiple.expected");
 }
@@ -843,13 +816,12 @@ fn test_multiple_input_files_missing() {
         .arg("missing1")
         .arg(FOOBAR_2_TXT)
         .arg("missing2")
-        .run()
+        .fails()
         .stdout_is_fixture("foobar_follow_multiple.expected")
         .stderr_is(
             "tail: cannot open 'missing1' for reading: No such file or directory\n\
                 tail: cannot open 'missing2' for reading: No such file or directory\n",
-        )
-        .code_is(1);
+        );
 }
 
 #[test]
@@ -861,13 +833,12 @@ fn test_follow_missing() {
         new_ucmd!()
             .arg(follow_mode)
             .arg("missing")
-            .run()
+            .fails_with_code(1)
             .no_stdout()
             .stderr_is(
                 "tail: cannot open 'missing' for reading: No such file or directory\n\
                     tail: no files remaining\n",
-            )
-            .code_is(1);
+            );
     }
 }
 
@@ -880,17 +851,15 @@ fn test_follow_name_stdin() {
     ts.ucmd()
         .arg("--follow=name")
         .arg("-")
-        .run()
-        .stderr_is("tail: cannot follow '-' by name\n")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_is("tail: cannot follow '-' by name\n");
     ts.ucmd()
         .arg("--follow=name")
         .arg("FILE1")
         .arg("-")
         .arg("FILE2")
-        .run()
-        .stderr_is("tail: cannot follow '-' by name\n")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_is("tail: cannot follow '-' by name\n");
 }
 
 #[test]
@@ -899,7 +868,7 @@ fn test_multiple_input_files_with_suppressed_headers() {
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
         .arg("-q")
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_multiple_quiet.expected");
 }
 
@@ -910,7 +879,7 @@ fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers
         .arg(FOOBAR_2_TXT)
         .arg("-v")
         .arg("-q")
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_multiple_quiet.expected");
 }
 
@@ -919,9 +888,8 @@ fn test_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("DIR");
     ucmd.arg("DIR")
-        .run()
-        .stderr_is("tail: error reading 'DIR': Is a directory\n")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_is("tail: error reading 'DIR': Is a directory\n");
 }
 
 #[test]
@@ -933,14 +901,13 @@ fn test_dir_follow() {
         ts.ucmd()
             .arg(mode)
             .arg("DIR")
-            .run()
+            .fails_with_code(1)
             .no_stdout()
             .stderr_is(
                 "tail: error reading 'DIR': Is a directory\n\
                     tail: DIR: cannot follow end of this type of file; giving up on this name\n\
                     tail: no files remaining\n",
-            )
-            .code_is(1);
+            );
     }
 }
 
@@ -953,25 +920,24 @@ fn test_dir_follow_retry() {
         .arg("--follow=descriptor")
         .arg("--retry")
         .arg("DIR")
-        .run()
+        .fails_with_code(1)
         .stderr_is(
             "tail: warning: --retry only effective for the initial open\n\
                 tail: error reading 'DIR': Is a directory\n\
                 tail: DIR: cannot follow end of this type of file\n\
                 tail: no files remaining\n",
-        )
-        .code_is(1);
+        );
 }
 
 #[test]
 fn test_negative_indexing() {
-    let positive_lines_index = new_ucmd!().arg("-n").arg("5").arg(FOOBAR_TXT).run();
+    let positive_lines_index = new_ucmd!().arg("-n").arg("5").arg(FOOBAR_TXT).succeeds();
 
-    let negative_lines_index = new_ucmd!().arg("-n").arg("-5").arg(FOOBAR_TXT).run();
+    let negative_lines_index = new_ucmd!().arg("-n").arg("-5").arg(FOOBAR_TXT).succeeds();
 
-    let positive_bytes_index = new_ucmd!().arg("-c").arg("20").arg(FOOBAR_TXT).run();
+    let positive_bytes_index = new_ucmd!().arg("-c").arg("20").arg(FOOBAR_TXT).succeeds();
 
-    let negative_bytes_index = new_ucmd!().arg("-c").arg("-20").arg(FOOBAR_TXT).run();
+    let negative_bytes_index = new_ucmd!().arg("-c").arg("-20").arg(FOOBAR_TXT).succeeds();
 
     assert_eq!(positive_lines_index.stdout(), negative_lines_index.stdout());
     assert_eq!(positive_bytes_index.stdout(), negative_bytes_index.stdout());
@@ -987,9 +953,8 @@ fn test_sleep_interval() {
         .arg("-s")
         .arg("1..1")
         .arg(FOOBAR_TXT)
-        .fails()
-        .stderr_contains("invalid number of seconds: '1..1'")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_contains("invalid number of seconds: '1..1'");
 }
 
 /// Test for reading all but the first NUM bytes: `tail -c +3`.
@@ -1171,12 +1136,11 @@ fn test_bytes_for_funny_unix_files() {
             continue;
         }
         let args = ["--bytes", "1", file];
-        let result = ts.ucmd().args(&args).run();
         let exp_result = unwrap_or_return!(expected_result(&ts, &args));
+        let result = ts.ucmd().args(&args).succeeds();
         result
             .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str())
-            .code_is(exp_result.code());
+            .stderr_is(exp_result.stderr_str());
     }
 }
 
@@ -1190,8 +1154,10 @@ fn test_retry1() {
     let file_name = "FILE";
     at.touch(file_name);
 
-    let result = ts.ucmd().arg(file_name).arg("--retry").run();
-    result
+    ts.ucmd()
+        .arg(file_name)
+        .arg("--retry")
+        .succeeds()
         .stderr_is("tail: warning: --retry ignored; --retry is useful only when following\n")
         .code_is(0);
 }
@@ -1204,13 +1170,14 @@ fn test_retry2() {
     let ts = TestScenario::new(util_name!());
     let missing = "missing";
 
-    let result = ts.ucmd().arg(missing).arg("--retry").run();
-    result
+    ts.ucmd()
+        .arg(missing)
+        .arg("--retry")
+        .fails_with_code(1)
         .stderr_is(
             "tail: warning: --retry ignored; --retry is useful only when following\n\
                 tail: cannot open 'missing' for reading: No such file or directory\n",
-        )
-        .code_is(1);
+        );
 }
 
 #[test]
@@ -1834,12 +1801,12 @@ fn test_follow_name_remove() {
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
     let expected_stderr = [
         format!(
-            "{}: {}: No such file or directory\n{0}: no files remaining\n",
-            ts.util_name, source_copy
+            "{}: {source_copy}: No such file or directory\n{0}: no files remaining\n",
+            ts.util_name,
         ),
         format!(
-            "{}: {}: No such file or directory\n",
-            ts.util_name, source_copy
+            "{}: {source_copy}: No such file or directory\n",
+            ts.util_name,
         ),
     ];
 
@@ -1895,7 +1862,7 @@ fn test_follow_name_truncate1() {
     let backup = "backup";
 
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
-    let expected_stderr = format!("{}: {}: file truncated\n", ts.util_name, source);
+    let expected_stderr = format!("{}: {source}: file truncated\n", ts.util_name);
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
@@ -1937,7 +1904,7 @@ fn test_follow_name_truncate2() {
     at.touch(source);
 
     let expected_stdout = "x\nx\nx\nx\n";
-    let expected_stderr = format!("{}: {}: file truncated\n", ts.util_name, source);
+    let expected_stderr = format!("{}: {source}: file truncated\n", ts.util_name);
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
@@ -1999,7 +1966,11 @@ fn test_follow_name_truncate3() {
 }
 
 #[test]
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))] // FIXME: for currently not working platforms
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(feature = "feat_selinux") // flaky
+))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate4() {
     // Truncating a file with the same content it already has should not trigger a truncate event
 
@@ -2104,8 +2075,8 @@ fn test_follow_name_move_create1() {
 
     #[cfg(target_os = "linux")]
     let expected_stderr = format!(
-        "{}: {}: No such file or directory\n{0}: '{1}' has appeared;  following new file\n",
-        ts.util_name, source
+        "{}: {source}: No such file or directory\n{0}: '{source}' has appeared;  following new file\n",
+        ts.util_name,
     );
 
     // NOTE: We are less strict if not on Linux (inotify backend).
@@ -2114,7 +2085,7 @@ fn test_follow_name_move_create1() {
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
 
     #[cfg(not(target_os = "linux"))]
-    let expected_stderr = format!("{}: {}: No such file or directory\n", ts.util_name, source);
+    let expected_stderr = format!("{}: {source}: No such file or directory\n", ts.util_name);
 
     let delay = 500;
     let args = ["--follow=name", source];
@@ -2238,10 +2209,10 @@ fn test_follow_name_move1() {
 
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
     let expected_stderr = [
-        format!("{}: {}: No such file or directory\n", ts.util_name, source),
+        format!("{}: {source}: No such file or directory\n", ts.util_name),
         format!(
-            "{}: {}: No such file or directory\n{0}: no files remaining\n",
-            ts.util_name, source
+            "{}: {source}: No such file or directory\n{0}: no files remaining\n",
+            ts.util_name,
         ),
     ];
 
@@ -2556,10 +2527,9 @@ fn test_follow_inotify_only_regular() {
 fn test_no_such_file() {
     new_ucmd!()
         .arg("missing")
-        .fails()
+        .fails_with_code(1)
         .stderr_is("tail: cannot open 'missing' for reading: No such file or directory\n")
-        .no_stdout()
-        .code_is(1);
+        .no_stdout();
 }
 
 #[test]
@@ -2586,7 +2556,7 @@ fn test_presume_input_pipe_default() {
     new_ucmd!()
         .arg("---presume-input-pipe")
         .pipe_in_fixture(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("foobar_stdin_default.expected")
         .no_stderr();
 }
@@ -3370,7 +3340,7 @@ fn test_seek_bytes_backward_outside_file() {
         .arg("-c")
         .arg("100")
         .arg(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is_fixture(FOOBAR_TXT);
 }
 
@@ -3380,7 +3350,7 @@ fn test_seek_bytes_forward_outside_file() {
         .arg("-c")
         .arg("+100")
         .arg(FOOBAR_TXT)
-        .run()
+        .succeeds()
         .stdout_is("");
 }
 
@@ -3471,9 +3441,8 @@ fn test_when_follow_retry_given_redirected_stdin_from_directory_then_correct_err
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .args(&["-f", "--retry"])
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 #[test]
@@ -3485,9 +3454,8 @@ fn test_when_argument_file_is_a_directory() {
     let expected = "tail: error reading 'dir': Is a directory\n";
     ts.ucmd()
         .arg("dir")
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 // TODO: make this work on windows
@@ -3523,9 +3491,8 @@ fn test_when_argument_file_is_a_symlink() {
     let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 // TODO: make this work on windows
@@ -3541,9 +3508,8 @@ fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
     let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 // TODO: make this work on windows
@@ -3565,18 +3531,16 @@ fn test_when_argument_file_is_a_faulty_symlink_then_error() {
 
     ts.ucmd()
         .arg("self")
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 
     at.symlink_file("missing", "broken");
 
     let expected = "tail: cannot open 'broken' for reading: No such file or directory";
     ts.ucmd()
         .arg("broken")
-        .fails()
-        .stderr_only(expected)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(expected);
 }
 
 #[test]
@@ -3598,21 +3562,16 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     let expected_stderr =
         format!("tail: cannot open '{socket}' for reading: No such device or address\n");
     #[cfg(target_os = "freebsd")]
-    let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: Operation not supported\n",
-        socket
-    );
+    let expected_stderr =
+        format!("tail: cannot open '{socket}' for reading: Operation not supported\n",);
     #[cfg(target_os = "macos")]
-    let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: Operation not supported on socket\n",
-        socket
-    );
+    let expected_stderr =
+        format!("tail: cannot open '{socket}' for reading: Operation not supported on socket\n",);
 
     ts.ucmd()
         .arg(socket)
-        .fails()
-        .stderr_only(&expected_stderr)
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_only(&expected_stderr);
 
     let path = "file";
     let mut file = at.make_file(path);
@@ -3624,7 +3583,7 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     let expected_stdout = [format!("==> {path} <=="), random_string].join("\n");
     ts.ucmd()
         .args(&["-c", "+0", path, socket])
-        .fails()
+        .fails_with_code(1)
         .stdout_is(&expected_stdout)
         .stderr_is(&expected_stderr);
 
@@ -3654,8 +3613,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "-", "empty"])
         .set_stdin(File::open(at.plus("fifo")).unwrap())
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
@@ -3665,8 +3623,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "-", "empty"])
         .pipe_in("")
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> empty <==\n\
@@ -3676,8 +3633,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "empty", "-"])
         .pipe_in("")
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> empty <==\n\
@@ -3688,8 +3644,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "empty", "-"])
         .set_stdin(File::open(at.plus("fifo")).unwrap())
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
@@ -3700,8 +3655,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "-", "data"])
         .pipe_in("pipe data")
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> data <==\n\
@@ -3712,8 +3666,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "data", "-"])
         .pipe_in("pipe data")
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
@@ -3723,8 +3676,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "-", "-"])
         .pipe_in("pipe data")
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
@@ -3734,8 +3686,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
         .ucmd()
         .args(&["-c", "+0", "-", "-"])
         .set_stdin(File::open(at.plus("fifo")).unwrap())
-        .run()
-        .success()
+        .succeeds()
         .stdout_only(expected);
 }
 
@@ -3759,9 +3710,8 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .ucmd()
         .args(&["-c", "+0", "-", "empty", "-"])
         .set_stdin(File::open(at.plus("empty")).unwrap())
-        .run()
-        .stdout_only(expected)
-        .success();
+        .succeeds()
+        .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
                 \n\
@@ -3773,9 +3723,8 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .args(&["-c", "+0", "-", "empty", "-"])
         .pipe_in("")
         .stderr_to_stdout()
-        .run()
-        .stdout_only(expected)
-        .success();
+        .succeeds()
+        .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
                 pipe data\n\
@@ -3786,9 +3735,8 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .ucmd()
         .args(&["-c", "+0", "-", "data", "-"])
         .pipe_in("pipe data")
-        .run()
-        .stdout_only(expected)
-        .success();
+        .succeeds()
+        .stdout_only(expected);
 
     // Correct behavior in a sh shell is to remember the file pointer for the fifo, so we don't
     // print the fifo twice. This matches the behavior, if only the pipe is present without fifo
@@ -3826,9 +3774,8 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
             "echo pipe data | {} tail -c +0  - data - < fifo",
             scene.bin_path.display(),
         ))
-        .run()
-        .stdout_only(expected)
-        .success();
+        .succeeds()
+        .stdout_only(expected);
 
     let expected = "==> standard input <==\n\
                 fifo data\n\
@@ -3839,9 +3786,8 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
         .ucmd()
         .args(&["-c", "+0", "-", "data", "-"])
         .set_stdin(File::open(at.plus("fifo")).unwrap())
-        .run()
-        .stdout_only(expected)
-        .success();
+        .succeeds()
+        .stdout_only(expected);
 }
 
 // Bug description: The content of a file is not printed to stdout if the output data does not
@@ -3889,9 +3835,8 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .ucmd()
         .args(&["--retry", "data"])
         .stderr_to_stdout()
-        .run()
-        .stdout_only(expected_stdout)
-        .success();
+        .succeeds()
+        .stdout_only(expected_stdout);
 
     let expected_stdout = format!(
         "tail: warning: --retry only effective for the initial open\n\
@@ -3918,9 +3863,8 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .ucmd()
         .args(&["--pid=1000", "data"])
         .stderr_to_stdout()
-        .run()
-        .stdout_only(expected_stdout)
-        .success();
+        .succeeds()
+        .stdout_only(expected_stdout);
 
     let expected_stdout = format!(
         "tail: warning: --retry ignored; --retry is useful only when following\n\
@@ -3931,16 +3875,14 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .ucmd()
         .args(&["--pid=1000", "--retry", "data"])
         .stderr_to_stdout()
-        .run()
-        .stdout_only(&expected_stdout)
-        .success();
+        .succeeds()
+        .stdout_only(&expected_stdout);
     scene
         .ucmd()
         .args(&["--pid=1000", "--pid=1000", "--retry", "data"])
         .stderr_to_stdout()
-        .run()
-        .stdout_only(expected_stdout)
-        .success();
+        .succeeds()
+        .stdout_only(expected_stdout);
 }
 
 /// TODO: Write similar tests for windows
@@ -4441,7 +4383,8 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     not(target_vendor = "apple"),
     not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(feature = "feat_selinux") // flaky
 ))]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same_size() {
     let scene = TestScenario::new(util_name!());
@@ -4503,9 +4446,8 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same
 fn test_args_sleep_interval_when_illegal_argument_then_usage_error(#[case] sleep_interval: &str) {
     new_ucmd!()
         .args(&["--sleep-interval", sleep_interval])
-        .run()
-        .usage_error(format!("invalid number of seconds: '{sleep_interval}'"))
-        .code_is(1);
+        .fails_with_code(1)
+        .usage_error(format!("invalid number of seconds: '{sleep_interval}'"));
 }
 
 #[test]
@@ -4691,73 +4633,64 @@ fn test_gnu_args_err() {
     scene
         .ucmd()
         .arg("+cl")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: cannot open '+cl' for reading: No such file or directory\n")
-        .code_is(1);
+        .stderr_is("tail: cannot open '+cl' for reading: No such file or directory\n");
     // err-2
     scene
         .ucmd()
         .arg("-cl")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: invalid number of bytes: 'l'\n")
-        .code_is(1);
+        .stderr_is("tail: invalid number of bytes: 'l'\n");
     // err-3
     scene
         .ucmd()
         .arg("+2cz")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: cannot open '+2cz' for reading: No such file or directory\n")
-        .code_is(1);
+        .stderr_is("tail: cannot open '+2cz' for reading: No such file or directory\n");
     // err-4
     scene
         .ucmd()
         .arg("-2cX")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: option used in invalid context -- 2\n")
-        .code_is(1);
+        .stderr_is("tail: option used in invalid context -- 2\n");
     // err-5
     scene
         .ucmd()
         .arg("-c99999999999999999999")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: invalid number of bytes: '99999999999999999999'\n")
-        .code_is(1);
+        .stderr_is("tail: invalid number of bytes: '99999999999999999999'\n");
     // err-6
     scene
         .ucmd()
         .arg("-c --")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: invalid number of bytes: '-'\n")
-        .code_is(1);
+        .stderr_is("tail: invalid number of bytes: '-'\n");
     scene
         .ucmd()
         .arg("-5cz")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: option used in invalid context -- 5\n")
-        .code_is(1);
+        .stderr_is("tail: option used in invalid context -- 5\n");
     scene
         .ucmd()
         .arg("-9999999999999999999b")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: invalid number: '-9999999999999999999b'\n")
-        .code_is(1);
+        .stderr_is("tail: invalid number: '-9999999999999999999b'\n");
     scene
         .ucmd()
         .arg("-999999999999999999999b")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is(
             "tail: invalid number: '-999999999999999999999b': Numerical result out of range\n",
-        )
-        .code_is(1);
+        );
 }
 
 #[test]
@@ -4800,10 +4733,9 @@ fn test_obsolete_encoding_unix() {
     scene
         .ucmd()
         .arg(invalid_utf8_arg)
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: bad argument encoding: '-�b'\n")
-        .code_is(1);
+        .stderr_is("tail: bad argument encoding: '-�b'\n");
 }
 
 #[test]
@@ -4818,10 +4750,9 @@ fn test_obsolete_encoding_windows() {
     scene
         .ucmd()
         .arg(&invalid_utf16_arg)
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: bad argument encoding: '-�b'\n")
-        .code_is(1);
+        .stderr_is("tail: bad argument encoding: '-�b'\n");
 }
 
 #[test]
@@ -4880,4 +4811,50 @@ fn test_following_with_pid() {
     child.make_assertion_with_delay(2000).is_not_alive();
 
     child.kill();
+}
+
+// This error was first detected when running tail so tail is used here but
+// should fail with any command that takes piped input.
+// See also https://github.com/uutils/coreutils/issues/3895
+#[test]
+#[cfg_attr(not(feature = "expensive_tests"), ignore)]
+fn test_when_piped_input_then_no_broken_pipe() {
+    let ts = TestScenario::new("tail");
+    for i in 0..10000 {
+        dbg!(i);
+        let test_string = "a\nb\n";
+        ts.ucmd()
+            .args(&["-n", "0"])
+            .pipe_in(test_string)
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+    }
+}
+
+#[test]
+fn test_child_when_run_with_stderr_to_stdout() {
+    let ts = TestScenario::new("tail");
+    let at = &ts.fixtures;
+
+    at.write("data", "file data\n");
+
+    let expected_stdout = "==> data <==\n\
+                                file data\n\
+                                tail: cannot open 'missing' for reading: No such file or directory\n";
+    ts.ucmd()
+        .args(&["data", "missing"])
+        .stderr_to_stdout()
+        .fails()
+        .stdout_only(expected_stdout);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported() {
+    new_ucmd!()
+        .pipe_in("hello")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("tail: No space left on device\n");
 }

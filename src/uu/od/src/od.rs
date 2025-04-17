@@ -33,18 +33,18 @@ use crate::inputdecoder::{InputDecoder, MemoryDecoder};
 use crate::inputoffset::{InputOffset, Radix};
 use crate::multifilereader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
-use crate::parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
-use crate::parse_inputs::{parse_inputs, CommandLineInputs};
+use crate::parse_formats::{ParsedFormatterItemInfo, parse_format_flags};
+use crate::parse_inputs::{CommandLineInputs, parse_inputs};
 use crate::parse_nrofbytes::parse_number_of_bytes;
 use crate::partialreader::PartialReader;
 use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
 use clap::ArgAction;
-use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command, parser::ValueSource};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::parse_size::ParseSizeError;
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_size::ParseSizeError;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_warning};
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
@@ -89,7 +89,7 @@ impl OdOptions {
                     return Err(USimpleError::new(
                         1,
                         format!("Invalid argument --endian={s}"),
-                    ))
+                    ));
                 }
             }
         } else {
@@ -104,7 +104,7 @@ impl OdOptions {
                     return Err(USimpleError::new(
                         1,
                         format_error_message(&e, s, options::SKIP_BYTES),
-                    ))
+                    ));
                 }
             },
         };
@@ -135,7 +135,7 @@ impl OdOptions {
                             return Err(USimpleError::new(
                                 1,
                                 format_error_message(&e, s, options::WIDTH),
-                            ))
+                            ));
                         }
                     }
                 } else {
@@ -148,7 +148,7 @@ impl OdOptions {
             cmp::max(max, next.formatter_item_info.byte_size)
         });
         if line_bytes == 0 || line_bytes % min_bytes != 0 {
-            show_warning!("invalid width {}; using {} instead", line_bytes, min_bytes);
+            show_warning!("invalid width {line_bytes}; using {min_bytes} instead");
             line_bytes = min_bytes;
         }
 
@@ -162,7 +162,7 @@ impl OdOptions {
                     return Err(USimpleError::new(
                         1,
                         format_error_message(&e, s, options::READ_BYTES),
-                    ))
+                    ));
                 }
             },
         };
@@ -251,7 +251,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
@@ -522,7 +522,7 @@ where
                 input_offset.increase_position(length as u64);
             }
             Err(e) => {
-                show_error!("{}", e);
+                show_error!("{e}");
                 input_offset.print_final_offset();
                 return Err(1.into());
             }
@@ -575,17 +575,16 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
                 .saturating_sub(output_text.chars().count());
             write!(
                 output_text,
-                "{:>width$}  {}",
+                "{:>missing_spacing$}  {}",
                 "",
                 format_ascii_dump(input_decoder.get_buffer(0)),
-                width = missing_spacing
             )
             .unwrap();
         }
 
         if first {
             print!("{prefix}"); // print offset
-                                // if printing in multiple formats offset is printed only once
+            // if printing in multiple formats offset is printed only once
             first = false;
         } else {
             // this takes the space of the file offset on subsequent
@@ -624,11 +623,11 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
     // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{} argument {}", option, s.quote())
+            format!("invalid suffix in --{option} argument {}", s.quote())
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{} argument {}", option, s.quote())
+            format!("invalid --{option} argument {}", s.quote())
         }
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
     }
 }

@@ -8,7 +8,7 @@
 // spell-checker:ignore (jargon) TOCTOU
 
 use crate::display::Quotable;
-use crate::error::{strip_errno, UResult, USimpleError};
+use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
 use crate::show_error;
 use clap::{Arg, ArgMatches, Command};
@@ -24,7 +24,7 @@ use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, MAIN_SEPARATOR};
+use std::path::{MAIN_SEPARATOR, Path};
 
 /// The various level of verbosity
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -80,21 +80,19 @@ pub fn wrap_chown<P: AsRef<Path>>(
             VerbosityLevel::Silent => (),
             level => {
                 out = format!(
-                    "changing {} of {}: {}",
+                    "changing {} of {}: {e}",
                     if verbosity.groups_only {
                         "group"
                     } else {
                         "ownership"
                     },
                     path.quote(),
-                    e
                 );
                 if level == VerbosityLevel::Verbose {
                     out = if verbosity.groups_only {
                         let gid = meta.gid();
                         format!(
-                            "{}\nfailed to change group of {} from {} to {}",
-                            out,
+                            "{out}\nfailed to change group of {} from {} to {}",
                             path.quote(),
                             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
                             entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
@@ -103,8 +101,7 @@ pub fn wrap_chown<P: AsRef<Path>>(
                         let uid = meta.uid();
                         let gid = meta.gid();
                         format!(
-                            "{}\nfailed to change ownership of {} from {}:{} to {}:{}",
-                            out,
+                            "{out}\nfailed to change ownership of {} from {}:{} to {}:{}",
                             path.quote(),
                             entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
                             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
@@ -303,13 +300,13 @@ impl ChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{}", n);
+                        show_error!("{n}");
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("{}", e);
+                        show_error!("{e}");
                     }
                     1
                 }
@@ -360,7 +357,7 @@ impl ChownExecutor {
                             }
                         );
                     } else {
-                        show_error!("{}", e);
+                        show_error!("{e}");
                     }
                     continue;
                 }
@@ -403,13 +400,13 @@ impl ChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{}", n);
+                        show_error!("{n}");
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("{}", e);
+                        show_error!("{e}");
                     }
                     1
                 }
@@ -458,9 +455,9 @@ impl ChownExecutor {
                 _ => entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
             };
             if self.verbosity.groups_only {
-                println!("group of {} retained as {}", path.quote(), ownership);
+                println!("group of {} retained as {ownership}", path.quote());
             } else {
-                println!("ownership of {} retained as {}", path.quote(), ownership);
+                println!("ownership of {} retained as {ownership}", path.quote());
             }
         }
     }
@@ -507,6 +504,7 @@ type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 /// Returns the updated `dereference` and `traverse_symlinks` values.
 pub fn configure_symlink_and_recursion(
     matches: &ArgMatches,
+    default_traverse_symlinks: TraverseSymlinks,
 ) -> Result<(bool, bool, TraverseSymlinks), Box<dyn crate::error::UError>> {
     let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
         Some(true) // Follow symlinks
@@ -516,12 +514,13 @@ pub fn configure_symlink_and_recursion(
         None // Default behavior
     };
 
-    let mut traverse_symlinks = if matches.get_flag("L") {
-        TraverseSymlinks::All
+    let mut traverse_symlinks = default_traverse_symlinks;
+    if matches.get_flag("L") {
+        traverse_symlinks = TraverseSymlinks::All
     } else if matches.get_flag("H") {
-        TraverseSymlinks::First
-    } else {
-        TraverseSymlinks::None
+        traverse_symlinks = TraverseSymlinks::First
+    } else if matches.get_flag("P") {
+        traverse_symlinks = TraverseSymlinks::None
     };
 
     let recursive = matches.get_flag(options::RECURSIVE);
@@ -597,7 +596,8 @@ pub fn chown_base(
         .unwrap_or_default();
 
     let preserve_root = matches.get_flag(options::preserve_root::PRESERVE);
-    let (recursive, dereference, traverse_symlinks) = configure_symlink_and_recursion(&matches)?;
+    let (recursive, dereference, traverse_symlinks) =
+        configure_symlink_and_recursion(&matches, TraverseSymlinks::None)?;
 
     let verbosity_level = if matches.get_flag(options::verbosity::CHANGES) {
         VerbosityLevel::Changes

@@ -3,17 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::fmt::Display;
-
-use clap::{crate_version, Arg, ArgAction, Command};
-use syntax_tree::AstNode;
+use clap::{Arg, ArgAction, Command};
+use syntax_tree::{AstNode, is_truthy};
+use thiserror::Error;
 use uucore::{
     display::Quotable,
     error::{UError, UResult},
     format_usage, help_about, help_section, help_usage,
 };
-
-use crate::syntax_tree::is_truthy;
 
 mod syntax_tree;
 
@@ -25,62 +22,35 @@ mod options {
 
 pub type ExprResult<T> = Result<T, ExprError>;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Error, Clone, Debug, PartialEq, Eq)]
 pub enum ExprError {
+    #[error("syntax error: unexpected argument {}", .0.quote())]
     UnexpectedArgument(String),
+    #[error("syntax error: missing argument after {}", .0.quote())]
     MissingArgument(String),
+    #[error("non-integer argument")]
     NonIntegerArgument,
+    #[error("missing operand")]
     MissingOperand,
+    #[error("division by zero")]
     DivisionByZero,
+    #[error("Invalid regex expression")]
     InvalidRegexExpression,
+    #[error("syntax error: expecting ')' after {}", .0.quote())]
     ExpectedClosingBraceAfter(String),
+    #[error("syntax error: expecting ')' instead of {}", .0.quote())]
     ExpectedClosingBraceInsteadOf(String),
+    #[error("Unmatched ( or \\(")]
     UnmatchedOpeningParenthesis,
+    #[error("Unmatched ) or \\)")]
     UnmatchedClosingParenthesis,
+    #[error("Unmatched \\{{")]
     UnmatchedOpeningBrace,
+    #[error("Unmatched ) or \\}}")]
     UnmatchedClosingBrace,
-    InvalidContent(String),
+    #[error("Invalid content of \\{{\\}}")]
+    InvalidBracketContent,
 }
-
-impl Display for ExprError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnexpectedArgument(s) => {
-                write!(f, "syntax error: unexpected argument {}", s.quote())
-            }
-            Self::MissingArgument(s) => {
-                write!(f, "syntax error: missing argument after {}", s.quote())
-            }
-            Self::NonIntegerArgument => write!(f, "non-integer argument"),
-            Self::MissingOperand => write!(f, "missing operand"),
-            Self::DivisionByZero => write!(f, "division by zero"),
-            Self::InvalidRegexExpression => write!(f, "Invalid regex expression"),
-            Self::ExpectedClosingBraceAfter(s) => {
-                write!(f, "syntax error: expecting ')' after {}", s.quote())
-            }
-            Self::ExpectedClosingBraceInsteadOf(s) => {
-                write!(f, "syntax error: expecting ')' instead of {}", s.quote())
-            }
-            Self::UnmatchedOpeningParenthesis => {
-                write!(f, "Unmatched ( or \\(")
-            }
-            Self::UnmatchedClosingParenthesis => {
-                write!(f, "Unmatched ) or \\)")
-            }
-            Self::UnmatchedOpeningBrace => {
-                write!(f, "Unmatched \\{{")
-            }
-            Self::UnmatchedClosingBrace => {
-                write!(f, "Unmatched ) or \\}}")
-            }
-            Self::InvalidContent(s) => {
-                write!(f, "Invalid content of {}", s)
-            }
-        }
-    }
-}
-
-impl std::error::Error for ExprError {}
 
 impl UError for ExprError {
     fn code(&self) -> i32 {
@@ -94,7 +64,7 @@ impl UError for ExprError {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(help_about!("expr.md"))
         .override_usage(format_usage(help_usage!("expr.md")))
         .after_help(help_section!("after help", "expr.md"))
@@ -124,16 +94,29 @@ pub fn uu_app() -> Command {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // For expr utility we do not want getopts.
     // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`
-    let matches = uu_app().try_get_matches_from(args)?;
-    let token_strings: Vec<&str> = matches
-        .get_many::<String>(options::EXPRESSION)
-        .map(|v| v.into_iter().map(|s| s.as_ref()).collect::<Vec<_>>())
-        .unwrap_or_default();
+    let args: Vec<String> = args
+        .skip(1) // Skip binary name
+        .map(|a| a.to_string_lossy().to_string())
+        .collect();
 
-    let res: String = AstNode::parse(&token_strings)?.eval()?.eval_as_string();
-    println!("{res}");
-    if !is_truthy(&res.into()) {
-        return Err(1.into());
+    if args.len() == 1 && args[0] == "--help" {
+        let _ = uu_app().print_help();
+    } else if args.len() == 1 && args[0] == "--version" {
+        println!("{} {}", uucore::util_name(), uucore::crate_version!());
+    } else {
+        // The first argument may be "--" and should be be ignored.
+        let args = if !args.is_empty() && args[0] == "--" {
+            &args[1..]
+        } else {
+            &args
+        };
+
+        let res: String = AstNode::parse(args)?.eval()?.eval_as_string();
+        println!("{res}");
+        if !is_truthy(&res.into()) {
+            return Err(1.into());
+        }
     }
+
     Ok(())
 }

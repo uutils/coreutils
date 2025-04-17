@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore libc's
-use crate::common::util::TestScenario;
+// spell-checker:ignore libc's setpriority
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 #[cfg(not(target_os = "android"))]
@@ -11,7 +13,7 @@ fn test_get_current_niceness() {
     // Test that the nice command with no arguments returns the default nice
     // value, which we determine by querying libc's `nice` in our own process.
     new_ucmd!()
-        .run()
+        .succeeds()
         .stdout_is(format!("{}\n", unsafe { libc::nice(0) }));
 }
 
@@ -23,10 +25,11 @@ fn test_negative_adjustment() {
     // the OS.  If it gets denied, then we know a negative value was parsed
     // correctly.
 
-    let res = new_ucmd!().args(&["-n", "-1", "true"]).run();
-    assert!(res
-        .stderr_str()
-        .starts_with("nice: warning: setpriority: Permission denied")); // spell-checker:disable-line
+    let res = new_ucmd!().args(&["-n", "-1", "true"]).succeeds();
+    assert!(
+        res.stderr_str()
+            .starts_with("nice: warning: setpriority: Permission denied")
+    ); // spell-checker:disable-line
 }
 
 #[test]
@@ -39,14 +42,14 @@ fn test_adjustment_with_no_command_should_error() {
 
 #[test]
 fn test_command_with_no_adjustment() {
-    new_ucmd!().args(&["echo", "a"]).run().stdout_is("a\n");
+    new_ucmd!().args(&["echo", "a"]).succeeds().stdout_is("a\n");
 }
 
 #[test]
 fn test_command_with_no_args() {
     new_ucmd!()
         .args(&["-n", "19", "echo"])
-        .run()
+        .succeeds()
         .stdout_is("\n");
 }
 
@@ -54,7 +57,7 @@ fn test_command_with_no_args() {
 fn test_command_with_args() {
     new_ucmd!()
         .args(&["-n", "19", "echo", "a", "b", "c"])
-        .run()
+        .succeeds()
         .stdout_is("a b c\n");
 }
 
@@ -62,20 +65,20 @@ fn test_command_with_args() {
 fn test_command_where_command_takes_n_flag() {
     new_ucmd!()
         .args(&["-n", "19", "echo", "-n", "a"])
-        .run()
+        .succeeds()
         .stdout_is("a");
 }
 
 #[test]
 fn test_invalid_argument() {
-    new_ucmd!().arg("--invalid").fails().code_is(125);
+    new_ucmd!().arg("--invalid").fails_with_code(125);
 }
 
 #[test]
 fn test_bare_adjustment() {
     new_ucmd!()
         .args(&["-1", "echo", "-n", "a"])
-        .run()
+        .succeeds()
         .stdout_is("a");
 }
 

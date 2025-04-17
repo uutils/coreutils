@@ -8,12 +8,12 @@
 use thiserror::Error;
 use uucore::{
     display::Quotable,
-    entries::{get_groups_gnu, gid2grp, Locate, Passwd},
+    entries::{Locate, Passwd, get_groups_gnu, gid2grp},
     error::{UError, UResult},
     format_usage, help_about, help_usage, show,
 };
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 
 mod options {
     pub const USERS: &str = "USERNAME";
@@ -56,9 +56,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     if users.is_empty() {
-        let gids = match get_groups_gnu(None) {
-            Ok(v) => v,
-            Err(_) => return Err(GroupsError::GetGroupsFailed.into()),
+        let Ok(gids) = get_groups_gnu(None) else {
+            return Err(GroupsError::GetGroupsFailed.into());
         };
         let groups: Vec<String> = gids.iter().map(infallible_gid2grp).collect();
         println!("{}", groups.join(" "));
@@ -69,7 +68,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match Passwd::locate(user.as_str()) {
             Ok(p) => {
                 let groups: Vec<String> = p.belongs_to().iter().map(infallible_gid2grp).collect();
-                println!("{} : {}", user, groups.join(" "));
+                println!("{user} : {}", groups.join(" "));
             }
             Err(_) => {
                 // The `show!()` macro sets the global exit code for the program.
@@ -82,7 +81,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

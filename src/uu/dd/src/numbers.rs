@@ -83,14 +83,14 @@ pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> Strin
     if quotient < 10.0 {
         format!("{quotient:.1} {suffix}")
     } else {
-        format!("{} {}", quotient.round(), suffix)
+        format!("{} {suffix}", quotient.round())
     }
 }
 
 #[cfg(test)]
 mod tests {
 
-    use crate::numbers::{to_magnitude_and_suffix, SuffixType};
+    use crate::numbers::{SuffixType, to_magnitude_and_suffix};
 
     #[test]
     fn test_to_magnitude_and_suffix_powers_of_1024() {

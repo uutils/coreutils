@@ -3,12 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use std::ffi::OsStr;
-use std::process::{ExitStatus, Stdio};
+use std::process::ExitStatus;
 
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[cfg(unix)]
 fn check_termination(result: ExitStatus) {
@@ -22,21 +24,15 @@ fn check_termination(result: ExitStatus) {
 
 const NO_ARGS: &[&str] = &[];
 
-/// Run `yes`, capture some of the output, close the pipe, and verify it.
+/// Run `yes`, capture some of the output, then check exit status.
 fn run(args: &[impl AsRef<OsStr>], expected: &[u8]) {
-    let mut cmd = new_ucmd!();
-    let mut child = cmd.args(args).set_stdout(Stdio::piped()).run_no_wait();
-    let buf = child.stdout_exact_bytes(expected.len());
-    child.close_stdout();
-
-    #[allow(deprecated)]
-    check_termination(child.wait_with_output().unwrap().status);
-    assert_eq!(buf.as_slice(), expected);
+    let result = new_ucmd!().args(args).run_stdout_starts_with(expected);
+    check_termination(result.exit_status());
 }
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]

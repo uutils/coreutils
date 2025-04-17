@@ -12,9 +12,9 @@ use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, channel, Receiver};
+use std::sync::mpsc::{self, Receiver, channel};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, set_exit_code};
 use uucore::show_error;
 
 pub struct WatcherRx {
@@ -229,7 +229,7 @@ impl Observer {
             watcher = Box::new(notify::PollWatcher::new(tx, watcher_config).unwrap());
         } else {
             let tx_clone = tx.clone();
-            match notify::RecommendedWatcher::new(tx, notify::Config::default()) {
+            match RecommendedWatcher::new(tx, notify::Config::default()) {
                 Ok(w) => watcher = Box::new(w),
                 Err(e) if e.to_string().starts_with("Too many open files") => {
                     /*
@@ -318,12 +318,10 @@ impl Observer {
         let display_name = self.files.get(event_path).display_name.clone();
 
         match event.kind {
-            EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime))
-
-                // | EventKind::Access(AccessKind::Close(AccessMode::Write))
-                | EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any)
-                | EventKind::Modify(ModifyKind::Data(DataChange::Any))
-                | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+            EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any |
+MetadataKind::WriteTime) | ModifyKind::Data(DataChange::Any) |
+ModifyKind::Name(RenameMode::To)) |
+EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any) => {
                     if let Ok(new_md) = event_path.metadata() {
 
                         let is_tailable = new_md.is_tailable();
@@ -345,7 +343,7 @@ impl Observer {
                                     show_error!( "{} has been replaced;  following new file", display_name.quote());
                                     self.files.update_reader(event_path)?;
                                 } else if old_md.got_truncated(&new_md)? {
-                                    show_error!("{}: file truncated", display_name);
+                                    show_error!("{display_name}: file truncated");
                                     self.files.update_reader(event_path)?;
                                 }
                                 paths.push(event_path.clone());
@@ -410,7 +408,7 @@ impl Observer {
                                 let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                             }
                         } else {
-                            show_error!("{}: {}", display_name, text::NO_SUCH_FILE);
+                            show_error!("{display_name}: {}", text::NO_SUCH_FILE);
                             if !self.files.files_remaining() && self.use_polling {
                                 // NOTE: GNU's tail exits here for `---disable-inotify`
                                 return Err(USimpleError::new(1, text::NO_FILES_REMAINING));
@@ -566,7 +564,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 return Err(USimpleError::new(
                     1,
                     format!("{} resources exhausted", text::BACKEND),
-                ))
+                ));
             }
             Ok(Err(e)) => return Err(USimpleError::new(1, format!("NotifyError: {e}"))),
             Err(mpsc::RecvTimeoutError::Timeout) => {

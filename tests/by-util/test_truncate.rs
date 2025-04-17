@@ -5,8 +5,11 @@
 
 // spell-checker:ignore (words) RFILE
 
-use crate::common::util::TestScenario;
 use std::io::{Seek, SeekFrom, Write};
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 static FILE1: &str = "truncate_test_1";
 static FILE2: &str = "truncate_test_2";
@@ -20,7 +23,7 @@ fn test_increase_file_size() {
 
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -32,7 +35,7 @@ fn test_increase_file_size_kb() {
 
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -54,7 +57,7 @@ fn test_reference() {
 
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -66,7 +69,7 @@ fn test_decrease_file_size() {
     ucmd.args(&["--size=-4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -78,7 +81,7 @@ fn test_space_in_size() {
     ucmd.args(&["--size", " 4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -107,7 +110,7 @@ fn test_at_most_shrinks() {
     ucmd.args(&["--size", "<4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -119,7 +122,7 @@ fn test_at_most_no_change() {
     ucmd.args(&["--size", "<40", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -131,7 +134,7 @@ fn test_at_least_grows() {
     ucmd.args(&["--size", ">15", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -143,7 +146,7 @@ fn test_at_least_no_change() {
     ucmd.args(&["--size", ">4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -155,7 +158,7 @@ fn test_round_down() {
     ucmd.args(&["--size", "/4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -167,7 +170,7 @@ fn test_round_up() {
     ucmd.args(&["--size", "%4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -181,7 +184,7 @@ fn test_size_and_reference() {
         .succeeds();
     file2.seek(SeekFrom::End(0)).unwrap();
     let actual = file2.stream_position().unwrap();
-    assert!(expected == actual, "expected '{expected}' got '{actual}'");
+    assert_eq!(expected, actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -189,8 +192,7 @@ fn test_error_filename_only() {
     // truncate: you must specify either '--size' or '--reference'
     new_ucmd!()
         .args(&["file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("error: the following required arguments were not provided:");
 }
 
@@ -199,8 +201,7 @@ fn test_invalid_option() {
     // truncate: cli parsing error returns 1
     new_ucmd!()
         .args(&["--this-arg-does-not-exist"])
-        .fails()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -242,13 +243,11 @@ fn test_truncate_bytes_size() {
         .succeeds();
     new_ucmd!()
         .args(&["--size", "1024R", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("truncate: Invalid number: '1024R': Value too large for defined data type\n");
     new_ucmd!()
         .args(&["--size", "1Y", "file"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type\n");
 }
 

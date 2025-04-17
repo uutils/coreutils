@@ -4,11 +4,13 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) defaultcheck nocheck helpb helpz nwordb nwordwordz wordtotal
 
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -459,8 +461,7 @@ fn test_sorted() {
     scene
         .ucmd()
         .args(&["comm1", "comm2"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("1\n\t\t3\n\t2\n")
         .stderr_is(expected_stderr);
 }
@@ -477,8 +478,7 @@ fn test_sorted_check_order() {
         .ucmd()
         .arg("--check-order")
         .args(&["comm1", "comm2"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("1\n\t\t3\n")
         .stderr_is(expected_stderr);
 }
@@ -493,8 +493,7 @@ fn test_both_inputs_out_of_order() {
     scene
         .ucmd()
         .args(&["file_a", "file_b"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("\t\t3\n1\n0\n\t2\n\t0\n")
         .stderr_is(
             "comm: file 1 is not in sorted order\n\
@@ -513,8 +512,7 @@ fn test_both_inputs_out_of_order_last_pair() {
     scene
         .ucmd()
         .args(&["file_a", "file_b"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("\t\t3\n1\n\t2\n")
         .stderr_is(
             "comm: file 1 is not in sorted order\n\
@@ -533,8 +531,7 @@ fn test_first_input_out_of_order_extended() {
     scene
         .ucmd()
         .args(&["file_a", "file_b"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_is("0\n\t2\n\t\t3\n1\n")
         .stderr_is(
             "comm: file 1 is not in sorted order\n\

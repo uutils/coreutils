@@ -3,11 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore dont
-use crate::common::util::TestScenario;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(125);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(125);
 }
 
 // FIXME: this depends on the system having true and false in PATH
@@ -17,15 +19,14 @@ fn test_invalid_arg() {
 fn test_subcommand_return_code() {
     new_ucmd!().arg("1").arg("true").succeeds();
 
-    new_ucmd!().arg("1").arg("false").run().code_is(1);
+    new_ucmd!().arg("1").arg("false").fails_with_code(1);
 }
 
 #[test]
 fn test_invalid_time_interval() {
     new_ucmd!()
         .args(&["xyz", "sleep", "0"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .usage_error("invalid time interval 'xyz'");
 }
 
@@ -33,8 +34,7 @@ fn test_invalid_time_interval() {
 fn test_invalid_kill_after() {
     new_ucmd!()
         .args(&["-k", "xyz", "1", "sleep", "0"])
-        .fails()
-        .code_is(125)
+        .fails_with_code(125)
         .usage_error("invalid time interval 'xyz'");
 }
 
@@ -77,7 +77,7 @@ fn test_command_empty_args() {
     new_ucmd!()
         .args(&["", ""])
         .fails()
-        .stderr_contains("timeout: empty string");
+        .stderr_contains("timeout: invalid time interval ''");
 }
 
 #[test]
@@ -85,8 +85,7 @@ fn test_foreground() {
     for arg in ["-f", "--foreground"] {
         new_ucmd!()
             .args(&[arg, ".1", "sleep", "10"])
-            .fails()
-            .code_is(124)
+            .fails_with_code(124)
             .no_output();
     }
 }
@@ -96,9 +95,8 @@ fn test_preserve_status() {
     for arg in ["-p", "--preserve-status"] {
         new_ucmd!()
             .args(&[arg, ".1", "sleep", "10"])
-            .fails()
             // 128 + SIGTERM = 128 + 15
-            .code_is(128 + 15)
+            .fails_with_code(128 + 15)
             .no_output();
     }
 }
@@ -111,7 +109,6 @@ fn test_preserve_status_even_when_send_signal() {
         new_ucmd!()
             .args(&["-s", cont_spelling, "--preserve-status", ".1", "sleep", "2"])
             .succeeds()
-            .code_is(0)
             .no_output();
     }
 }
@@ -121,12 +118,28 @@ fn test_dont_overflow() {
     new_ucmd!()
         .args(&["9223372036854775808d", "sleep", "0"])
         .succeeds()
-        .code_is(0)
         .no_output();
     new_ucmd!()
         .args(&["-k", "9223372036854775808d", "10", "sleep", "0"])
         .succeeds()
-        .code_is(0)
+        .no_output();
+}
+
+#[test]
+fn test_dont_underflow() {
+    new_ucmd!()
+        .args(&[".0000000001", "sleep", "1"])
+        .fails_with_code(124)
+        .no_output();
+    new_ucmd!()
+        .args(&["1e-100", "sleep", "1"])
+        .fails_with_code(124)
+        .no_output();
+    // Unlike GNU coreutils, we underflow to 1ns for very short timeouts.
+    // https://debbugs.gnu.org/cgi/bugreport.cgi?bug=77535
+    new_ucmd!()
+        .args(&["1e-18172487393827593258", "sleep", "1"])
+        .fails_with_code(124)
         .no_output();
 }
 
@@ -173,8 +186,7 @@ fn test_kill_subprocess() {
             "-c",
             "trap 'echo inside_trap' TERM; sleep 30",
         ])
-        .fails()
-        .code_is(124)
+        .fails_with_code(124)
         .stdout_contains("inside_trap")
         .stderr_contains("Terminated");
 }

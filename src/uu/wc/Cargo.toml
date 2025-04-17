@@ -1,25 +1,26 @@
 [package]
 name = "uu_wc"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "wc ~ (uutils) display newline, word, and byte counts for input"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/wc"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/wc.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["pipes", "quoting-style"] }
-bytecount = { workspace = true }
+uucore = { workspace = true, features = ["parser", "pipes", "quoting-style"] }
+bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
 

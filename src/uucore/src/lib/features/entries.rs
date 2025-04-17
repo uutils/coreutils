@@ -43,11 +43,9 @@ use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;
 use std::ptr;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
-use once_cell::sync::Lazy;
-
-extern "C" {
+unsafe extern "C" {
     /// From: `<https://man7.org/linux/man-pages/man3/getgrouplist.3.html>`
     /// > The getgrouplist() function scans the group database to obtain
     /// > the list of groups that user belongs to.
@@ -166,11 +164,11 @@ pub struct Passwd {
 /// ptr must point to a valid C string.
 ///
 /// Returns None if ptr is null.
-unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
+fn cstr2string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         None
     } else {
-        Some(CStr::from_ptr(ptr).to_string_lossy().into_owned())
+        Some(unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() })
     }
 }
 
@@ -276,7 +274,7 @@ pub trait Locate<K> {
 // to, so we must copy all the data we want before releasing the lock.
 // (Technically we must also ensure that the raw functions aren't being called
 // anywhere else in the program.)
-static PW_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static PW_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 macro_rules! f {
     ($fnam:ident, $fid:ident, $t:ident, $st:ident) => {
@@ -296,7 +294,7 @@ macro_rules! f {
                         // The same applies for the two cases below.
                         Err(IOError::new(
                             ErrorKind::NotFound,
-                            format!("No such id: {}", k),
+                            format!("No such id: {k}"),
                         ))
                     }
                 }
@@ -315,7 +313,7 @@ macro_rules! f {
                         } else {
                             Err(IOError::new(
                                 ErrorKind::NotFound,
-                                format!("No such id: {}", id),
+                                format!("No such id: {id}"),
                             ))
                         }
                     }
@@ -327,10 +325,7 @@ macro_rules! f {
                         if !data.is_null() {
                             Ok($st::from_raw(ptr::read(data as *const _)))
                         } else {
-                            Err(IOError::new(
-                                ErrorKind::NotFound,
-                                format!("Not found: {}", k),
-                            ))
+                            Err(IOError::new(ErrorKind::NotFound, format!("Not found: {k}")))
                         }
                     }
                 }

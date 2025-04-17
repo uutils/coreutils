@@ -19,21 +19,21 @@ mod tmp_dir;
 
 use chunks::LineData;
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
-use nix::libc::{getrlimit, rlimit, RLIMIT_NOFILE};
-use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
-use rand::{rng, Rng};
+use nix::libc::{RLIMIT_NOFILE, getrlimit, rlimit};
+use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
+use rand::{Rng, rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::Range;
 use std::path::Path;
@@ -42,11 +42,11 @@ use std::str::Utf8Error;
 use thiserror::Error;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
-use uucore::error::strip_errno;
-use uucore::error::{set_exit_code, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, strip_errno};
+use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::line_ending::LineEnding;
-use uucore::parse_size::{ParseSizeError, Parser};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_size::{ParseSizeError, Parser};
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::version_cmp::version_cmp;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
@@ -171,7 +171,7 @@ fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: 
     if *silent {
         String::new()
     } else {
-        format!("{}:{}: disorder: {}", file.maybe_quote(), line_number, line)
+        format!("{}:{}: disorder: {line}", file.maybe_quote(), line_number)
     }
 }
 
@@ -460,6 +460,13 @@ impl<'a> Line<'a> {
         if settings.precomputed.needs_tokens {
             tokenize(line, settings.separator, token_buffer);
         }
+        if settings.mode == SortMode::Numeric {
+            // exclude inf, nan, scientific notation
+            let line_num_float = (!line.contains(char::is_alphabetic))
+                .then(|| line.parse::<f64>().ok())
+                .flatten();
+            line_data.line_num_floats.push(line_num_float);
+        }
         for (selector, selection) in settings
             .selectors
             .iter()
@@ -481,13 +488,14 @@ impl<'a> Line<'a> {
         Self { line, index }
     }
 
-    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) {
+    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
-            self.print_debug(settings, writer).unwrap();
+            self.print_debug(settings, writer)?;
         } else {
-            writer.write_all(self.line.as_bytes()).unwrap();
-            writer.write_all(&[settings.line_ending.into()]).unwrap();
+            writer.write_all(self.line.as_bytes())?;
+            writer.write_all(&[settings.line_ending.into()])?;
         }
+        Ok(())
     }
 
     /// Writes indicators for the selections this line matched. The original line content is NOT expected
@@ -605,6 +613,7 @@ impl<'a> Line<'a> {
                 )?;
             }
         }
+
         if settings.mode != SortMode::Random
             && !settings.stable
             && !settings.unique
@@ -616,7 +625,7 @@ impl<'a> Line<'a> {
                 || settings
                     .selectors
                     .last()
-                    .map_or(true, |selector| selector != &FieldSelector::default()))
+                    .is_none_or(|selector| selector != &FieldSelector::default()))
         {
             // A last resort comparator is in use, underline the whole line.
             if self.line.is_empty() {
@@ -667,9 +676,9 @@ fn tokenize_default(line: &str, token_buffer: &mut Vec<Field>) {
 /// Split between separators. These separators are not included in fields.
 /// The result is stored into `token_buffer`.
 fn tokenize_with_separator(line: &str, separator: char, token_buffer: &mut Vec<Field>) {
-    let separator_indices =
-        line.char_indices()
-            .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
+    let separator_indices = line
+        .char_indices()
+        .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
     let mut start = 0;
     for sep_idx in separator_indices {
         token_buffer.push(start..sep_idx);
@@ -702,11 +711,7 @@ impl KeyPosition {
             Ok(f) => f,
             Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
             Err(e) => {
-                return Err(format!(
-                    "failed to parse field index {} {}",
-                    field.quote(),
-                    e
-                ))
+                return Err(format!("failed to parse field index {} {e}", field.quote(),));
             }
         };
         if field == 0 {
@@ -715,7 +720,7 @@ impl KeyPosition {
 
         let char = char.map_or(Ok(default_char_index), |char| {
             char.parse()
-                .map_err(|e| format!("failed to parse character index {}: {}", char.quote(), e))
+                .map_err(|e| format!("failed to parse character index {}: {e}", char.quote()))
         })?;
 
         Ok(Self {
@@ -970,7 +975,9 @@ impl FieldSelector {
                 range
             }
             Resolution::TooLow | Resolution::EndOfChar(_) => {
-                unreachable!("This should only happen if the field start index is 0, but that should already have caused an error.")
+                unreachable!(
+                    "This should only happen if the field start index is 0, but that should already have caused an error."
+                )
             }
             // While for comparisons it's only important that this is an empty slice,
             // to produce accurate debug output we need to match an empty slice at the end of the line.
@@ -1110,7 +1117,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .get_one::<String>(options::PARALLEL)
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
-        env::set_var("RAYON_NUM_THREADS", &settings.threads);
+        unsafe {
+            env::set_var("RAYON_NUM_THREADS", &settings.threads);
+        }
     }
 
     settings.buffer_size =
@@ -1137,13 +1146,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match n_merge.parse::<usize>() {
             Ok(parsed_value) => {
                 if parsed_value < 2 {
-                    show_error!("invalid --batch-size argument '{}'", n_merge);
+                    show_error!("invalid --batch-size argument '{n_merge}'");
                     return Err(UUsageError::new(2, "minimum --batch-size argument is '2'"));
                 }
                 settings.merge_batch_size = parsed_value;
             }
             Err(e) => {
-                let error_message = if *e.kind() == std::num::IntErrorKind::PosOverflow {
+                let error_message = if *e.kind() == IntErrorKind::PosOverflow {
                     #[cfg(target_os = "linux")]
                     {
                         show_error!("--batch-size argument {} too large", n_merge.quote());
@@ -1277,7 +1286,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
@@ -1558,6 +1567,24 @@ fn compare_by<'a>(
     let mut selection_index = 0;
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
+
+    if let (Some(Some(a_f64)), Some(Some(b_f64))) = (
+        a_line_data.line_num_floats.get(a.index),
+        b_line_data.line_num_floats.get(b.index),
+    ) {
+        // we don't use total_cmp() because it always sorts -0 before 0
+        if let Some(cmp) = a_f64.partial_cmp(b_f64) {
+            // don't trust `Ordering::Equal` if lines are not fully equal
+            if cmp != Ordering::Equal || a.line == b.line {
+                return if global_settings.reverse {
+                    cmp.reverse()
+                } else {
+                    cmp
+                };
+            }
+        }
+    }
+
     for selector in &global_settings.selectors {
         let (a_str, b_str) = if selector.needs_selection {
             let selections = (
@@ -1670,7 +1697,7 @@ fn get_leading_gen(input: &str) -> Range<usize> {
 
     let first = char_indices.peek();
 
-    if matches!(first, Some((_, NEGATIVE) | (_, POSITIVE))) {
+    if matches!(first, Some((_, NEGATIVE | POSITIVE))) {
         char_indices.next();
     }
 
@@ -1822,11 +1849,19 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     iter: T,
     settings: &GlobalSettings,
     output: Output,
-) {
+) -> UResult<()> {
+    let output_name = output
+        .as_output_name()
+        .unwrap_or("standard output")
+        .to_owned();
+    let ctx = || format!("write failed: {}", output_name.maybe_quote());
+
     let mut writer = output.into_write();
     for line in iter {
-        line.print(&mut writer, settings);
+        line.print(&mut writer, settings).map_err_context(ctx)?;
     }
+    writer.flush().map_err_context(ctx)?;
+    Ok(())
 }
 
 fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
@@ -1850,15 +1885,15 @@ fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
 
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
-    // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
+    // GNU's sort echos affected flag, -S or --buffer-size, depending on user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{} argument {}", option, s.quote())
+            format!("invalid suffix in --{option} argument {}", s.quote())
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{} argument {}", option, s.quote())
+            format!("invalid --{option} argument {}", s.quote())
         }
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
     }
 }
 
@@ -1916,7 +1951,7 @@ mod tests {
     #[test]
     fn test_tokenize_fields() {
         let line = "foo bar b    x";
-        assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14,],);
+        assert_eq!(tokenize_helper(line, None), vec![0..3, 3..7, 7..9, 9..14]);
     }
 
     #[test]
@@ -1924,7 +1959,7 @@ mod tests {
         let line = "    foo bar b    x";
         assert_eq!(
             tokenize_helper(line, None),
-            vec![0..7, 7..11, 11..13, 13..18,]
+            vec![0..7, 7..11, 11..13, 13..18]
         );
     }
 
@@ -1933,7 +1968,7 @@ mod tests {
         let line = "aaa foo bar b    x";
         assert_eq!(
             tokenize_helper(line, Some('a')),
-            vec![0..0, 1..1, 2..2, 3..9, 10..18,]
+            vec![0..0, 1..1, 2..2, 3..9, 10..18]
         );
     }
 
@@ -1952,7 +1987,7 @@ mod tests {
     fn test_line_size() {
         // We should make sure to not regress the size of the Line struct because
         // it is unconditional overhead for every line we sort.
-        assert_eq!(std::mem::size_of::<Line>(), 24);
+        assert_eq!(size_of::<Line>(), 24);
     }
 
     #[test]

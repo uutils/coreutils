@@ -5,17 +5,17 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 use clap::builder::ValueParser;
-use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufReader, Read, Write};
+use std::io::{self, BufReader, Read, Write, stdin, stdout};
 use std::iter;
 use std::path::Path;
 use uucore::checksum::{
-    calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
-    ChecksumError, ChecksumOptions, ChecksumVerbose, ALGORITHM_OPTIONS_BLAKE2B,
-    ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC, ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV,
-    SUPPORTED_ALGORITHMS,
+    ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
+    ALGORITHM_OPTIONS_CRC32B, ALGORITHM_OPTIONS_SYSV, ChecksumError, ChecksumOptions,
+    ChecksumVerbose, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
+    perform_checksum_validation,
 };
 use uucore::{
     encoding,
@@ -342,7 +342,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -350,7 +350,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .action(clap::ArgAction::Append)
+                .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )

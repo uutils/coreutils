@@ -6,14 +6,14 @@
 // spell-checker:ignore (ToDO) delim mkdelim pairable
 
 use std::cmp::Ordering;
-use std::fs::{metadata, File};
-use std::io::{self, stdin, BufRead, BufReader, Read, Stdin};
+use std::fs::{File, metadata};
+use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::fs::paths_refer_to_same_file;
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 
 const ABOUT: &str = help_about!("comm.md");
 const USAGE: &str = help_usage!("comm.md");
@@ -118,8 +118,8 @@ impl OrderChecker {
 // Check if two files are identical by comparing their contents
 pub fn are_files_identical(path1: &str, path2: &str) -> io::Result<bool> {
     // First compare file sizes
-    let metadata1 = std::fs::metadata(path1)?;
-    let metadata2 = std::fs::metadata(path2)?;
+    let metadata1 = metadata(path1)?;
+    let metadata2 = metadata(path2)?;
 
     if metadata1.len() != metadata2.len() {
         return Ok(false);
@@ -267,7 +267,7 @@ fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
         Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
     } else {
         if metadata(name)?.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::Other, "Is a directory"));
+            return Err(io::Error::other("Is a directory"));
         }
         let f = File::open(name)?;
         Ok(LineReader::new(
@@ -313,7 +313,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

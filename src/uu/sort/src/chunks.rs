@@ -17,7 +17,7 @@ use memchr::memchr_iter;
 use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError};
 
-use crate::{numeric_str_cmp::NumInfo, GeneralF64ParseResult, GlobalSettings, Line, SortError};
+use crate::{GeneralF64ParseResult, GlobalSettings, Line, SortError, numeric_str_cmp::NumInfo};
 
 self_cell!(
     /// The chunk that is passed around between threads.
@@ -42,6 +42,7 @@ pub struct LineData<'a> {
     pub selections: Vec<&'a str>,
     pub num_infos: Vec<NumInfo>,
     pub parsed_floats: Vec<GeneralF64ParseResult>,
+    pub line_num_floats: Vec<Option<f64>>,
 }
 
 impl Chunk {
@@ -52,6 +53,7 @@ impl Chunk {
             contents.line_data.selections.clear();
             contents.line_data.num_infos.clear();
             contents.line_data.parsed_floats.clear();
+            contents.line_data.line_num_floats.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
                 // because the vector is empty.
@@ -73,6 +75,7 @@ impl Chunk {
                 selections,
                 std::mem::take(&mut contents.line_data.num_infos),
                 std::mem::take(&mut contents.line_data.parsed_floats),
+                std::mem::take(&mut contents.line_data.line_num_floats),
             )
         });
         RecycledChunk {
@@ -80,6 +83,7 @@ impl Chunk {
             selections: recycled_contents.1,
             num_infos: recycled_contents.2,
             parsed_floats: recycled_contents.3,
+            line_num_floats: recycled_contents.4,
             buffer: self.into_owner(),
         }
     }
@@ -97,6 +101,7 @@ pub struct RecycledChunk {
     selections: Vec<&'static str>,
     num_infos: Vec<NumInfo>,
     parsed_floats: Vec<GeneralF64ParseResult>,
+    line_num_floats: Vec<Option<f64>>,
     buffer: Vec<u8>,
 }
 
@@ -107,6 +112,7 @@ impl RecycledChunk {
             selections: Vec::new(),
             num_infos: Vec::new(),
             parsed_floats: Vec::new(),
+            line_num_floats: Vec::new(),
             buffer: vec![0; capacity],
         }
     }
@@ -149,6 +155,7 @@ pub fn read<T: Read>(
         selections,
         num_infos,
         parsed_floats,
+        line_num_floats,
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
@@ -184,6 +191,7 @@ pub fn read<T: Read>(
                 selections,
                 num_infos,
                 parsed_floats,
+                line_num_floats,
             };
             parse_lines(read, &mut lines, &mut line_data, separator, settings);
             Ok(ChunkContents { lines, line_data })
@@ -207,6 +215,7 @@ fn parse_lines<'a>(
     assert!(line_data.selections.is_empty());
     assert!(line_data.num_infos.is_empty());
     assert!(line_data.parsed_floats.is_empty());
+    assert!(line_data.line_num_floats.is_empty());
     let mut token_buffer = vec![];
     lines.extend(
         read.split(separator as char)
@@ -227,12 +236,12 @@ fn parse_lines<'a>(
 ///
 /// * `file`: The file to start reading from.
 /// * `next_files`: When `file` reaches EOF, it is updated to `next_files.next()` if that is `Some`,
-///    and this function continues reading.
+///   and this function continues reading.
 /// * `buffer`: The buffer that is filled with bytes. Its contents will mostly be overwritten (see `start_offset`
 ///   as well). It will be grown up to `max_buffer_size` if necessary, but it will always grow to read at least two lines.
 /// * `max_buffer_size`: Grow the buffer to at most this length. If None, the buffer will not grow, unless needed to read at least two lines.
 /// * `start_offset`: The amount of bytes at the start of `buffer` that were carried over
-///    from the previous read and should not be overwritten.
+///   from the previous read and should not be overwritten.
 /// * `separator`: The byte that separates lines.
 ///
 /// # Returns

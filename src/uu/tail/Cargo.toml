@@ -1,18 +1,19 @@
 # spell-checker:ignore (libs) kqueue fundu
 [package]
 name = "uu_tail"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "tail ~ (uutils) display the last lines of input"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tail"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/tail.rs"
@@ -22,7 +23,7 @@ clap = { workspace = true }
 libc = { workspace = true }
 memchr = { workspace = true }
 notify = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
 same-file = { workspace = true }
 fundu = { workspace = true }
 

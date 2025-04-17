@@ -3,6 +3,6 @@ udev                           8.2G            0         8.2G   0% /dev
 tmpfs                          1.7G         2.1M         1.7G   1% /run
 /dev/nvme0n1p2                 1.1T         433G         523G  46% /
 tmpfs                          8.3G         145M         8.1G   2% /dev/shm
-tmpfs                          5.3M         4.1K         5.3M   1% /run/lock
+tmpfs                          5.3M         4.1k         5.3M   1% /run/lock
 tmpfs                          8.3G            0         8.3G   0% /sys/fs/cgroup
 /dev/nvme0n1p1                 536M         8.2M         528M   2% /boot/efi

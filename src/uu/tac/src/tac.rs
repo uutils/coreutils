@@ -6,12 +6,12 @@
 // spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
 mod error;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
-use std::io::{stdin, stdout, BufWriter, Read, Write};
+use std::io::{BufWriter, Read, Write, stdin, stdout};
 use std::{
-    fs::{read, File},
+    fs::{File, read},
     path::Path,
 };
 use uucore::display::Quotable;
@@ -57,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)
@@ -164,6 +164,7 @@ fn buffer_tac_regex(
     // After the loop terminates, write whatever bytes are remaining at
     // the beginning of the buffer.
     out.write_all(&data[0..following_line_start])?;
+    out.flush()?;
     Ok(())
 }
 
@@ -215,6 +216,7 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     // After the loop terminates, write whatever bytes are remaining at
     // the beginning of the buffer.
     out.write_all(&data[0..following_line_start])?;
+    out.flush()?;
     Ok(())
 }
 

@@ -1,8 +1,8 @@
 name: GnuTests
 
 # spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
-# spell-checker:ignore (jargon) submodules
-# spell-checker:ignore (libs/utils) autopoint chksum gperf lcov libexpect pyinotify shopt texinfo valgrind libattr libcap taiki-e
+# spell-checker:ignore (jargon) submodules devel
+# spell-checker:ignore (libs/utils) autopoint chksum getenforce gperf lcov libexpect limactl pyinotify setenforce shopt texinfo valgrind libattr libcap taiki-e
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
@@ -13,7 +13,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - '*'
 
 permissions:
   contents: read
@@ -49,18 +49,25 @@ jobs:
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="$DEFAULT_BRANCH"
-        repo_GNU_ref="v9.6"
+        repo_GNU_ref="v9.7"
         repo_reference_branch="$DEFAULT_BRANCH"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
         SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
         ROOT_SUITE_LOG_FILE="${path_GNU_tests}/test-suite-root.log"
+        SELINUX_SUITE_LOG_FILE="${path_GNU_tests}/selinux-test-suite.log"
+        SELINUX_ROOT_SUITE_LOG_FILE="${path_GNU_tests}/selinux-test-suite-root.log"
         TEST_LOGS_GLOB="${path_GNU_tests}/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
         TEST_FILESET_PREFIX='test-fileset-IDs.sha1#'
         TEST_FILESET_SUFFIX='.txt'
         TEST_SUMMARY_FILE='gnu-result.json'
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
-        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
+        TEST_ROOT_FULL_SUMMARY_FILE='gnu-root-full-result.json'
+        TEST_SELINUX_FULL_SUMMARY_FILE='selinux-gnu-full-result.json'
+        TEST_SELINUX_ROOT_FULL_SUMMARY_FILE='selinux-root-gnu-full-result.json'
+        AGGREGATED_SUMMARY_FILE='aggregated-result.json'
+
+        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE SELINUX_SUITE_LOG_FILE SELINUX_ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE TEST_ROOT_FULL_SUMMARY_FILE TEST_SELINUX_FULL_SUMMARY_FILE TEST_SELINUX_ROOT_FULL_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
     - name: Checkout code (uutil)
       uses: actions/checkout@v4
       with:
@@ -82,6 +89,44 @@ jobs:
         submodules: false
         persist-credentials: false
 
+    - name: Selinux - Setup Lima
+      uses: lima-vm/lima-actions/setup@v1
+      id: lima-actions-setup
+
+    - name: Selinux - Cache ~/.cache/lima
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/lima
+        key: lima-${{ steps.lima-actions-setup.outputs.version }}
+
+    - name: Selinux - Start Fedora VM with SELinux
+      run: limactl start --plain --name=default --cpus=4 --disk=40 --memory=8 --network=lima:user-v2 template://fedora
+
+    - name: Selinux - Setup SSH
+      uses: lima-vm/lima-actions/ssh@v1
+
+    - name: Selinux - Verify SELinux Status and Configuration
+      run: |
+        lima getenforce
+        lima ls -laZ /etc/selinux
+        lima sudo sestatus
+
+        # Ensure we're running in enforcing mode
+        lima sudo setenforce 1
+        lima getenforce
+
+        # Create test files with SELinux contexts for testing
+        lima sudo mkdir -p /var/test_selinux
+        lima sudo touch /var/test_selinux/test_file
+        lima sudo chcon -t etc_t /var/test_selinux/test_file
+        lima ls -Z /var/test_selinux/test_file  # Verify context
+
+    - name: Selinux - Install dependencies in VM
+      run: |
+        lima sudo dnf -y update
+        lima sudo dnf -y install git autoconf autopoint bison texinfo gperf gcc g++ gdb jq libacl-devel libattr-devel libcap-devel libselinux-devel attr rustup clang-devel texinfo-tex wget automake patch quilt
+        lima rustup-init -y --default-toolchain stable
+
     - name: Override submodule URL and initialize submodules
       # Use github instead of upstream git server
       run: |
@@ -91,7 +136,7 @@ jobs:
       working-directory: ${{ steps.vars.outputs.path_GNU }}
 
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v8
+      uses: dawidd6/action-download-artifact@v9
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
@@ -125,12 +170,68 @@ jobs:
         sudo update-locale
         echo "After:"
         locale -a
+
+    - name: Selinux - Copy the sources to VM
+      run: |
+        rsync -a -e ssh . lima-default:~/work/
+
     - name: Build binaries
       shell: bash
       run: |
         ## Build binaries
         cd '${{ steps.vars.outputs.path_UUTILS }}'
         bash util/build-gnu.sh --release-build
+
+    - name: Selinux - Generate selinux tests list
+      run: |
+        # Find and list all tests that require SELinux
+        lima bash -c "cd ~/work/gnu/ && grep -l 'require_selinux_' -r tests/ > ~/work/uutils/selinux-tests.txt"
+        lima bash -c "cd ~/work/uutils/ && cat selinux-tests.txt"
+
+        # Count the tests
+        lima bash -c "cd ~/work/uutils/ && echo 'Found SELinux tests:'; wc -l selinux-tests.txt"
+
+    - name: Selinux - Build for selinux tests
+      run: |
+        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh"
+        lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
+
+    - name: Selinux - Run selinux tests
+      run: |
+        lima sudo setenforce 1
+        lima getenforce
+        lima cat /proc/filesystems
+        lima bash -c "cd ~/work/uutils/ && bash util/run-gnu-test.sh \$(cat selinux-tests.txt)"
+
+    - name: Selinux - Extract testing info from individual logs into JSON
+      shell: bash
+      run : |
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }}"
+
+    - name: Selinux/root - Run selinux tests
+      run: |
+        lima bash -c "cd ~/work/uutils/ && CI=1 bash util/run-gnu-test.sh run-root \$(cat selinux-tests.txt)"
+
+    - name: Selinux/root - Extract testing info from individual logs into JSON
+      shell: bash
+      run : |
+        lima bash -c "cd ~/work/gnu/ && python3 ../uutils/util/gnu-json-result.py tests > ~/work/gnu/tests-selinux/${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}"
+
+    - name: Selinux - Collect test logs and test results
+      run: |
+        mkdir -p ${{ steps.vars.outputs.path_GNU_tests }}-selinux
+
+        # Copy the test logs from the Lima VM to the host
+        lima bash -c "cp ~/work/gnu/tests/test-suite.log ~/work/gnu/tests-selinux/ || echo 'No test-suite.log found'"
+        lima bash -c "cp ~/work/gnu/tests/test-suite-root.log ~/work/gnu/tests-selinux/ || echo 'No test-suite-root.log found'"
+        rsync -v -a -e ssh lima-default:~/work/gnu/tests-selinux/ ./${{ steps.vars.outputs.path_GNU_tests }}-selinux/
+
+        # Copy SELinux logs to the main test directory for integrated processing
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite.log
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/test-suite-root.log ${{ steps.vars.outputs.path_GNU_tests }}/selinux-test-suite-root.log
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }} .
+        cp -f ${{ steps.vars.outputs.path_GNU_tests }}-selinux/${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }} .
+
     - name: Run GNU tests
       shell: bash
       run: |
@@ -138,6 +239,13 @@ jobs:
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh"
+
+    - name: Extract testing info from individual logs into JSON
+      shell: bash
+      run : |
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+
     - name: Run GNU root tests
       shell: bash
       run: |
@@ -145,35 +253,40 @@ jobs:
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh" run-root
-    - name: Extract testing info into JSON
+
+    - name: Extract testing info from individual logs (run as root) into JSON
       shell: bash
       run : |
-        ## Extract testing info into JSON
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }}
+
     - name: Extract/summarize testing info
       id: summary
       shell: bash
       run: |
         ## Extract/summarize testing info
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        #
-        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        #
-        SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
-        ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.ROOT_SUITE_LOG_FILE }}'
-        ls -al ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
 
-        if test -f "${SUITE_LOG_FILE}"
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+
+        # Check if the file exists
+        if test -f "${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}"
         then
-            source ${path_UUTILS}/util/analyze-gnu-results.sh ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
+            # Look at all individual results and summarize
+            eval $(python3 ${path_UUTILS}/util/analyze-gnu-results.py -o=${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }} ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }})
+
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
-              echo "::error ::Failed to parse test results from '${SUITE_LOG_FILE}'; failing early"
+              echo "::error ::Failed to parse test results from '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}'; failing early"
               exit 1
             fi
+
             output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR / SKIP: $SKIP"
             echo "${output}"
-            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
+
+            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then
+              echo "::warning ::${output}"
+            fi
+
             jq -n \
                   --arg date "$(date --rfc-email)" \
                   --arg sha "$GITHUB_SHA" \
@@ -187,9 +300,10 @@ jobs:
             HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
             outputs HASH
           else
-            echo "::error ::Failed to find summary of test results (missing '${SUITE_LOG_FILE}'); failing early"
+            echo "::error ::Failed to find summary of test results (missing '${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}'); failing early"
             exit 1
           fi
+
           # Compress logs before upload (fails otherwise)
           gzip ${{ steps.vars.outputs.TEST_LOGS_GLOB }}
     - name: Reserve SHA1/ID of 'test-summary'
@@ -210,139 +324,73 @@ jobs:
     - name: Upload full json results
       uses: actions/upload-artifact@v4
       with:
-        name: gnu-full-result.json
+        name: gnu-full-result
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+    - name: Upload root json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: gnu-root-full-result
+        path: ${{ steps.vars.outputs.TEST_ROOT_FULL_SUMMARY_FILE }}
+    - name: Upload selinux json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: selinux-gnu-full-result
+        path: ${{ steps.vars.outputs.TEST_SELINUX_FULL_SUMMARY_FILE }}
+    - name: Upload selinux root json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: selinux-root-gnu-full-result.json
+        path: ${{ steps.vars.outputs.TEST_SELINUX_ROOT_FULL_SUMMARY_FILE }}
+    - name: Upload aggregated json results
+      uses: actions/upload-artifact@v4
+      with:
+        name: aggregated-result
+        path: ${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}
     - name: Compare test failures VS reference
       shell: bash
       run: |
-        ## Compare test failures VS reference
-        have_new_failures=""
-        REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
-        ROOT_REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite-root.log'
-        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
+        ## Compare test failures VS reference using JSON files
+        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/aggregated-result/aggregated-result.json'
+        CURRENT_SUMMARY_FILE='${{ steps.vars.outputs.AGGREGATED_SUMMARY_FILE }}'
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
-        # https://github.com/uutils/coreutils/issues/4294
-        # https://github.com/uutils/coreutils/issues/4295
+
+        # Path to ignore file for intermittent issues
         IGNORE_INTERMITTENT="${path_UUTILS}/.github/workflows/ignore-intermittent.txt"
 
-        mkdir -p ${{ steps.vars.outputs.path_reference }}
-
+        # Set up comment directory
         COMMENT_DIR="${{ steps.vars.outputs.path_reference }}/comment"
         mkdir -p ${COMMENT_DIR}
         echo ${{ github.event.number }} > ${COMMENT_DIR}/NR
         COMMENT_LOG="${COMMENT_DIR}/result.txt"
 
-        # The comment log might be downloaded from a previous run
-        # We only want the new changes, so remove it if it exists.
-        rm -f ${COMMENT_LOG}
-        touch ${COMMENT_LOG}
+        COMPARISON_RESULT=0
+        if test -f "${CURRENT_SUMMARY_FILE}"; then
+          if test -f "${REF_SUMMARY_FILE}"; then
+            echo "Reference summary SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
+            echo "Current summary SHA1/ID: $(sha1sum -- "${CURRENT_SUMMARY_FILE}")"
 
-        compare_tests() {
-          local new_log_file=$1
-          local ref_log_file=$2
-          local test_type=$3  # "standard" or "root"
+            python3 ${path_UUTILS}/util/compare_test_results.py \
+              --ignore-file "${IGNORE_INTERMITTENT}" \
+              --output "${COMMENT_LOG}" \
+              "${CURRENT_SUMMARY_FILE}" "${REF_SUMMARY_FILE}"
 
-          if test -f "${ref_log_file}"; then
-            echo "Reference ${test_type} test log SHA1/ID: $(sha1sum -- "${ref_log_file}") - ${test_type}"
-            REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
-            CURRENT_RUN_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
-            REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
-            CURRENT_RUN_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
-            REF_SKIP=$(sed -n "s/^SKIP: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
-            CURRENT_RUN_SKIP=$(sed -n "s/^SKIP: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
-
-            echo "Detailed information:"
-            echo "REF_ERROR = ${REF_ERROR}"
-            echo "CURRENT_RUN_ERROR = ${CURRENT_RUN_ERROR}"
-            echo "REF_FAILING = ${REF_FAILING}"
-            echo "CURRENT_RUN_FAILING = ${CURRENT_RUN_FAILING}"
-            echo "REF_SKIP_PASS = ${REF_SKIP}"
-            echo "CURRENT_RUN_SKIP = ${CURRENT_RUN_SKIP}"
-
-            # Compare failing and error tests
-            for LINE in ${CURRENT_RUN_FAILING}
-            do
-              if ! grep -Fxq ${LINE}<<<"${REF_FAILING}"
-              then
-                if ! grep ${LINE} ${IGNORE_INTERMITTENT}
-                then
-                  MSG="GNU test failed: ${LINE}. ${LINE} is passing on '${REPO_DEFAULT_BRANCH}'. Maybe you have to rebase?"
-                  echo "::error ::$MSG"
-                  echo $MSG >> ${COMMENT_LOG}
-                  have_new_failures="true"
-                else
-                  MSG="Skip an intermittent issue ${LINE} (fails in this run but passes in the 'main' branch)"
-                  echo "::notice ::$MSG"
-                  echo $MSG >> ${COMMENT_LOG}
-                  echo ""
-                fi
-              fi
-            done
-
-            for LINE in ${REF_FAILING}
-            do
-              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_FAILING}"
-              then
-                if ! grep ${LINE} ${IGNORE_INTERMITTENT}
-                then
-                  MSG="Congrats! The gnu test ${LINE} is no longer failing!"
-                  echo "::warning ::$MSG"
-                  echo $MSG >> ${COMMENT_LOG}
-                else
-                  MSG="Skipping an intermittent issue ${LINE} (passes in this run but fails in the 'main' branch)"
-                  echo "::notice ::$MSG"
-                  echo $MSG >> ${COMMENT_LOG}
-                  echo ""
-                fi
-              fi
-            done
-
-            for LINE in ${CURRENT_RUN_ERROR}
-            do
-              if ! grep -Fxq ${LINE}<<<"${REF_ERROR}"
-              then
-                MSG="GNU test error: ${LINE}. ${LINE} is passing on '${REPO_DEFAULT_BRANCH}'. Maybe you have to rebase?"
-                echo "::error ::$MSG"
-                echo $MSG >> ${COMMENT_LOG}
-                have_new_failures="true"
-              fi
-            done
-
-            for LINE in ${REF_ERROR}
-            do
-              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_ERROR}"
-              then
-                MSG="Congrats! The gnu test ${LINE} is no longer ERROR! (might be PASS or FAIL)"
-                echo "::warning ::$MSG"
-                echo $MSG >> ${COMMENT_LOG}
-              fi
-            done
-
-            for LINE in ${REF_SKIP}
-            do
-              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_SKIP}"
-              then
-                MSG="Congrats! The gnu test ${LINE} is no longer SKIP! (might be PASS, ERROR or FAIL)"
-                echo "::warning ::$MSG"
-                echo $MSG >> ${COMMENT_LOG}
-              fi
-            done
-
+            COMPARISON_RESULT=$?
           else
-            echo "::warning ::Skipping ${test_type} test failure comparison; no prior reference test logs are available."
+            echo "::warning ::Skipping test comparison; no prior reference summary is available at '${REF_SUMMARY_FILE}'."
           fi
-        }
-
-        # Compare standard tests
-        compare_tests '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' "${REF_LOG_FILE}" "standard"
-
-        # Compare root tests
-        compare_tests '${{ steps.vars.outputs.path_GNU_tests }}/test-suite-root.log' "${ROOT_REF_LOG_FILE}" "root"
-
-        if [ -n "${have_new_failures}" ]; then
-          echo "::error ::Found new test failures"
+        else
+          echo "::error ::Failed to find summary of test results (missing '${CURRENT_SUMMARY_FILE}'); failing early"
           exit 1
+        fi
+
+        if [ ${COMPARISON_RESULT} -eq 1 ]; then
+          echo "ONLY_INTERMITTENT=false" >> $GITHUB_ENV
+          echo "::error ::Found new non-intermittent test failures"
+          exit 1
+        else
+          echo "ONLY_INTERMITTENT=true" >> $GITHUB_ENV
+          echo "::notice ::No new test failures detected"
         fi
     - name: Upload comparison log (for GnuComment workflow)
       if: success() || failure() # run regardless of prior step success/failure

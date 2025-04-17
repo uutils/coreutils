@@ -1,17 +1,18 @@
 [package]
 name = "uu_head"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "head ~ (uutils) display the first lines of input"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/head"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/head.rs"
@@ -20,7 +21,12 @@ path = "src/head.rs"
 clap = { workspace = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["ringbuffer", "lines", "fs"] }
+uucore = { workspace = true, features = [
+  "parser",
+  "ringbuffer",
+  "lines",
+  "fs",
+] }
 
 [[bin]]
 name = "head"

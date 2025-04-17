@@ -4,16 +4,18 @@
 // file that was distributed with this source code.
 // spell-checker:ignore NOFILE nonewline cmdline
 
-#[cfg(not(windows))]
-use crate::common::util::vec_of_size;
-use crate::common::util::TestScenario;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use std::fs::File;
 use std::fs::OpenOptions;
-#[cfg(not(windows))]
 use std::process::Stdio;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+#[cfg(not(windows))]
+use uutests::util::vec_of_size;
+use uutests::util_name;
 
 #[test]
 fn test_output_simple() {
@@ -98,7 +100,9 @@ fn test_fifo_symlink() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+// TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
+// #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_closes_file_descriptors() {
     // Each file creates a pipe, which has two file descriptors.
     // If they are not closed then five is certainly too many.
@@ -411,6 +415,15 @@ fn test_stdin_nonprinting_and_tabs_repeated() {
 }
 
 #[test]
+fn test_stdin_tabs_no_newline() {
+    new_ucmd!()
+        .args(&["-T"])
+        .pipe_in("\ta")
+        .succeeds()
+        .stdout_only("^Ia");
+}
+
+#[test]
 fn test_stdin_squeeze_blank() {
     for same_param in ["-s", "--squeeze-blank", "--squeeze"] {
         new_ucmd!()
@@ -615,8 +628,7 @@ fn test_write_to_self() {
         .arg("first_file")
         .arg("first_file")
         .arg("second_file")
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only("cat: first_file: input file is output file\ncat: first_file: input file is output file\n");
 
     assert_eq!(
@@ -663,8 +675,44 @@ fn test_appending_same_input_output() {
     ucmd.set_stdin(file_read);
     ucmd.set_stdout(file_write);
 
-    ucmd.run()
-        .failure()
+    ucmd.fails()
         .no_stdout()
         .stderr_contains("input file is output file");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_uchild_when_no_capture_reading_from_infinite_source() {
+    use regex::Regex;
+
+    let ts = TestScenario::new("cat");
+
+    let expected_stdout = b"\0".repeat(12345);
+    let mut child = ts
+        .ucmd()
+        .set_stdin(Stdio::from(File::open("/dev/zero").unwrap()))
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    child
+        .make_assertion()
+        .with_exact_output(12345, 0)
+        .stdout_only_bytes(expected_stdout);
+
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_matches(&Regex::new("[\0].*").unwrap())
+        .no_stderr();
+}
+
+#[test]
+fn test_child_when_pipe_in() {
+    let ts = TestScenario::new("cat");
+    let mut child = ts.ucmd().set_stdin(Stdio::piped()).run_no_wait();
+    child.pipe_in("content");
+    child.wait().unwrap().stdout_only("content").success();
+
+    ts.ucmd().pipe_in("content").run().stdout_is("content");
 }

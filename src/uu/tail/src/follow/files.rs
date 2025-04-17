@@ -9,10 +9,10 @@ use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
 use crate::paths::{HeaderPrinter, PathExtTail};
 use crate::text;
-use std::collections::hash_map::Keys;
 use std::collections::HashMap;
+use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
-use std::io::{stdout, BufRead, BufReader, BufWriter};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
@@ -146,9 +146,9 @@ impl FileHandling {
                 self.header_printer.print(display_name.as_str());
             }
 
-            let stdout = stdout();
-            let writer = BufWriter::new(stdout.lock());
-            chunks.print(writer)?;
+            let mut writer = BufWriter::new(stdout().lock());
+            chunks.print(&mut writer)?;
+            writer.flush()?;
 
             self.last.replace(path.to_owned());
             self.update_metadata(path, None);
@@ -162,12 +162,13 @@ impl FileHandling {
     pub fn needs_header(&self, path: &Path, verbose: bool) -> bool {
         if verbose {
             if let Some(ref last) = self.last {
-                return !last.eq(&path);
+                !last.eq(&path)
             } else {
-                return true;
+                true
             }
+        } else {
+            false
         }
-        false
     }
 }
 

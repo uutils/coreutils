@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::ArgAction;
-use clap::{crate_version, Arg, Command};
+use clap::{Arg, Command};
 use std::env;
 use std::io;
 use std::path::PathBuf;
@@ -140,7 +140,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

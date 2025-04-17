@@ -20,18 +20,18 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
-    sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
+    sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel},
     thread::{self, JoinHandle},
 };
 
 use compare::Compare;
-use uucore::error::UResult;
+use uucore::error::{FromIo, UResult};
 
 use crate::{
+    GlobalSettings, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
     compare_by, open,
     tmp_dir::TmpDirWrapper,
-    GlobalSettings, Output, SortError,
 };
 
 /// If the output file occurs in the input files as well, copy the contents of the output file
@@ -50,7 +50,7 @@ fn replace_output_file_in_input_files(
                         *file = copy.clone().into_os_string();
                     } else {
                         let (_file, copy_path) = tmp_dir.next_file()?;
-                        std::fs::copy(file_path, &copy_path)
+                        fs::copy(file_path, &copy_path)
                             .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                         *file = copy_path.clone().into_os_string();
                         copy = Some(copy_path);
@@ -278,12 +278,19 @@ impl FileMerger<'_> {
     }
 
     fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
-        while self.write_next(settings, out) {}
+        while self
+            .write_next(settings, out)
+            .map_err_context(|| "write failed".into())?
+        {}
         drop(self.request_sender);
         self.reader_join_handle.join().unwrap()
     }
 
-    fn write_next(&mut self, settings: &GlobalSettings, out: &mut impl Write) -> bool {
+    fn write_next(
+        &mut self,
+        settings: &GlobalSettings,
+        out: &mut impl Write,
+    ) -> std::io::Result<bool> {
         if let Some(file) = self.heap.peek() {
             let prev = self.prev.replace(PreviousLine {
                 chunk: file.current_chunk.clone(),
@@ -303,12 +310,12 @@ impl FileMerger<'_> {
                             file.current_chunk.line_data(),
                         );
                         if cmp == Ordering::Equal {
-                            return;
+                            return Ok(());
                         }
                     }
                 }
-                current_line.print(out, settings);
-            });
+                current_line.print(out, settings)
+            })?;
 
             let was_last_line_for_file = file.current_chunk.lines().len() == file.line_idx + 1;
 
@@ -335,7 +342,7 @@ impl FileMerger<'_> {
                 }
             }
         }
-        !self.heap.is_empty()
+        Ok(!self.heap.is_empty())
     }
 }
 
@@ -365,10 +372,7 @@ impl Compare<MergeableFile> for FileComparator<'_> {
 
 // Wait for the child to exit and check its exit code.
 fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
-    if matches!(
-        child.wait().map(|e| e.code()),
-        Ok(Some(0)) | Ok(None) | Err(_)
-    ) {
+    if matches!(child.wait().map(|e| e.code()), Ok(Some(0) | None) | Err(_)) {
         Ok(())
     } else {
         Err(SortError::CompressProgTerminatedAbnormally {

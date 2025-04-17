@@ -1,12 +1,13 @@
 name: Code Quality
 
-# spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader dtolnay juliangruber
+# spell-checker:ignore (people) reactivecircus Swatinem dtolnay juliangruber pell taplo
+# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote
 
 on:
   pull_request:
   push:
     branches:
-      - main
+      - '*'
 
 env:
   # * style job configuration
@@ -85,7 +86,7 @@ jobs:
         components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.7
+      uses: mozilla-actions/sccache-action@v0.0.9
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -108,11 +109,10 @@ jobs:
         command: |
           ## `cargo clippy` lint testing
           unset fault
-          CLIPPY_FLAGS="-W clippy::default_trait_access -W clippy::manual_string_new -W clippy::cognitive_complexity -W clippy::implicit_clone -W clippy::range-plus-one -W clippy::redundant-clone -W clippy::match_bool"
           fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
           fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
           # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-          S=$(cargo clippy --all-targets --features ${{ matrix.job.features }} --tests -pcoreutils -- ${CLIPPY_FLAGS} -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
+          S=$(cargo clippy --all-targets --features ${{ matrix.job.features }} --tests -pcoreutils -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
           if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   style_spellcheck:
@@ -153,7 +153,7 @@ jobs:
         cfg_files=($(shopt -s nullglob ; echo {.vscode,.}/{,.}c[sS]pell{.json,.config{.js,.cjs,.json,.yaml,.yml},.yaml,.yml} ;))
         cfg_file=${cfg_files[0]}
         unset CSPELL_CFG_OPTION ; if [ -n "$cfg_file" ]; then CSPELL_CFG_OPTION="--config $cfg_file" ; fi
-        S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
+        S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress .) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   toml_format:
@@ -167,3 +167,27 @@ jobs:
 
       - name: Check
         run: npx --yes @taplo/cli fmt --check
+
+  python:
+    name: Style/Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: ruff
+        uses: astral-sh/ruff-action@v3
+        with:
+          src: "./util"
+
+      - name: ruff - format
+        uses: astral-sh/ruff-action@v3
+        with:
+          src: "./util"
+          args: format --check
+      - name: Run Python unit tests
+        shell: bash
+        run: |
+          python3 -m unittest util/test_compare_test_results.py

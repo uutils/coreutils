@@ -10,11 +10,10 @@ use std::os::windows::fs::MetadataExt;
 use std::{cell::OnceCell, num::IntErrorKind};
 use std::{
     cmp::Reverse,
-    error::Error,
     ffi::{OsStr, OsString},
-    fmt::{Display, Write as FmtWrite},
+    fmt::Write as FmtWrite,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    io::{stdout, BufWriter, ErrorKind, Stdout, Write},
+    io::{BufWriter, ErrorKind, Stdout, Write, stdout},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -29,17 +28,19 @@ use std::{collections::HashSet, io::IsTerminal};
 use ansi_width::ansi_width;
 use chrono::{DateTime, Local, TimeDelta};
 use clap::{
+    Arg, ArgAction, Command,
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
-    crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
-use term_grid::{Direction, Filling, Grid, GridOptions};
-
+use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
+use thiserror::Error;
 use uucore::error::USimpleError;
-use uucore::format::human::{human_readable, SizeFormat};
+use uucore::format::human::{SizeFormat, human_readable};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
+#[cfg(unix)]
+use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -53,27 +54,27 @@ use uucore::fsxattr::has_acl;
     target_os = "solaris"
 ))]
 use uucore::libc::{dev_t, major, minor};
-#[cfg(unix)]
-use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
-use uucore::quoting_style::{self, escape_name, QuotingStyle};
+use uucore::quoting_style::{self, QuotingStyle, escape_name};
 use uucore::{
     custom_tz_fmt,
     display::Quotable,
-    error::{set_exit_code, UError, UResult},
+    error::{UError, UResult, set_exit_code},
     format_usage,
     fs::display_permissions,
     os_str_as_bytes_lossy,
-    parse_size::parse_size_u64,
-    shortcut_value_parser::ShortcutValueParser,
+    parser::parse_size::parse_size_u64,
+    parser::shortcut_value_parser::ShortcutValueParser,
     version_cmp::version_cmp,
 };
-use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
+use uucore::{
+    help_about, help_section, help_usage, parser::parse_glob, show, show_error, show_warning,
+};
 
 mod dired;
-use dired::{is_dired_arg_present, DiredOutput};
+use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
-use colors::{color_name, StyleManager};
+use colors::{StyleManager, color_name};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
@@ -90,7 +91,7 @@ pub mod options {
         pub static LONG: &str = "long";
         pub static COLUMNS: &str = "C";
         pub static ACROSS: &str = "x";
-        pub static TAB_SIZE: &str = "tabsize"; // silently ignored (see #3624)
+        pub static TAB_SIZE: &str = "tabsize";
         pub static COMMAS: &str = "m";
         pub static LONG_NO_OWNER: &str = "g";
         pub static LONG_NO_GROUP: &str = "o";
@@ -175,14 +176,41 @@ const POSIXLY_CORRECT_BLOCK_SIZE: u64 = 512;
 const DEFAULT_BLOCK_SIZE: u64 = 1024;
 const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 enum LsError {
+    #[error("invalid line width: '{0}'")]
     InvalidLineWidth(String),
-    IOError(std::io::Error),
-    IOErrorContext(std::io::Error, PathBuf, bool),
+
+    #[error("general io error: {0}")]
+    IOError(#[from] std::io::Error),
+
+    #[error("{}", match .1.kind() {
+        ErrorKind::NotFound => format!("cannot access '{}': No such file or directory", .0.to_string_lossy()),
+        ErrorKind::PermissionDenied => match .1.raw_os_error().unwrap_or(1) {
+            1 => format!("cannot access '{}': Operation not permitted", .0.to_string_lossy()),
+            _ => if .0.is_dir() {
+                format!("cannot open directory '{}': Permission denied", .0.to_string_lossy())
+            } else {
+                format!("cannot open file '{}': Permission denied", .0.to_string_lossy())
+            },
+        },
+        _ => match .1.raw_os_error().unwrap_or(1) {
+            9 => format!("cannot open directory '{}': Bad file descriptor", .0.to_string_lossy()),
+            _ => format!("unknown io error: '{:?}', '{:?}'", .0.to_string_lossy(), .1),
+        },
+    })]
+    IOErrorContext(PathBuf, std::io::Error, bool),
+
+    #[error("invalid --block-size argument '{0}'")]
     BlockSizeParseError(String),
+
+    #[error("--dired and --zero are incompatible")]
     DiredAndZeroAreIncompatible,
+
+    #[error("{}: not listing already-listed directory", .0.to_string_lossy())]
     AlreadyListedError(PathBuf),
+
+    #[error("invalid --time-style argument {}\nPossible values are: {:?}\n\nFor more information try --help", .0.quote(), .1)]
     TimeStyleParseError(String, Vec<String>),
 }
 
@@ -197,100 +225,6 @@ impl UError for LsError {
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_, _) => 2,
-        }
-    }
-}
-
-impl Error for LsError {}
-
-impl Display for LsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::BlockSizeParseError(s) => {
-                write!(f, "invalid --block-size argument {}", s.quote())
-            }
-            Self::DiredAndZeroAreIncompatible => {
-                write!(f, "--dired and --zero are incompatible")
-            }
-            Self::TimeStyleParseError(s, possible_time_styles) => {
-                write!(
-                    f,
-                    "invalid --time-style argument {}\nPossible values are: {:?}\n\nFor more information try --help",
-                    s.quote(),
-                    possible_time_styles
-                )
-            }
-            Self::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
-            Self::IOError(e) => write!(f, "general io error: {e}"),
-            Self::IOErrorContext(e, p, _) => {
-                let error_kind = e.kind();
-                let errno = e.raw_os_error().unwrap_or(1i32);
-
-                match error_kind {
-                    // No such file or directory
-                    ErrorKind::NotFound => {
-                        write!(
-                            f,
-                            "cannot access '{}': No such file or directory",
-                            p.to_string_lossy(),
-                        )
-                    }
-                    // Permission denied and Operation not permitted
-                    ErrorKind::PermissionDenied =>
-                    {
-                        #[allow(clippy::wildcard_in_or_patterns)]
-                        match errno {
-                            1i32 => {
-                                write!(
-                                    f,
-                                    "cannot access '{}': Operation not permitted",
-                                    p.to_string_lossy(),
-                                )
-                            }
-                            13i32 | _ => {
-                                if p.is_dir() {
-                                    write!(
-                                        f,
-                                        "cannot open directory '{}': Permission denied",
-                                        p.to_string_lossy(),
-                                    )
-                                } else {
-                                    write!(
-                                        f,
-                                        "cannot open file '{}': Permission denied",
-                                        p.to_string_lossy(),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    _ => match errno {
-                        9i32 => {
-                            // only should ever occur on a read_dir on a bad fd
-                            write!(
-                                f,
-                                "cannot open directory '{}': Bad file descriptor",
-                                p.to_string_lossy(),
-                            )
-                        }
-                        _ => {
-                            write!(
-                                f,
-                                "unknown io error: '{:?}', '{:?}'",
-                                p.to_string_lossy(),
-                                e
-                            )
-                        }
-                    },
-                }
-            }
-            Self::AlreadyListedError(path) => {
-                write!(
-                    f,
-                    "{}: not listing already-listed directory",
-                    path.to_string_lossy()
-                )
-            }
         }
     }
 }
@@ -451,6 +385,7 @@ pub struct Config {
     line_ending: LineEnding,
     dired: bool,
     hyperlink: bool,
+    tab_size: usize,
 }
 
 // Fields that can be removed or added to the long format
@@ -505,7 +440,7 @@ fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) 
         (Format::Commas, Some(options::format::COMMAS))
     } else if options.get_flag(options::format::COLUMNS) {
         (Format::Columns, Some(options::format::COLUMNS))
-    } else if std::io::stdout().is_terminal() {
+    } else if stdout().is_terminal() {
         (Format::Columns, None)
     } else {
         (Format::OneLine, None)
@@ -625,7 +560,7 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
         None => options.contains_id(options::COLOR),
         Some(val) => match val.as_str() {
             "" | "always" | "yes" | "force" => true,
-            "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
+            "auto" | "tty" | "if-tty" => stdout().is_terminal(),
             /* "never" | "no" | "none" | */ _ => false,
         },
     }
@@ -644,7 +579,7 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
 
     match hyperlink {
         "always" | "yes" | "force" => true,
-        "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
+        "auto" | "tty" | "if-tty" => stdout().is_terminal(),
         "never" | "no" | "none" => false,
         _ => unreachable!("should be handled by clap"),
     }
@@ -731,16 +666,15 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
             match match_quoting_style_name(style.as_str(), show_control) {
                 Some(qs) => return qs,
                 None => eprintln!(
-                    "{}: Ignoring invalid value of environment variable QUOTING_STYLE: '{}'",
+                    "{}: Ignoring invalid value of environment variable QUOTING_STYLE: '{style}'",
                     std::env::args().next().unwrap_or_else(|| "ls".to_string()),
-                    style
                 ),
             }
         }
 
         // By default, `ls` uses Shell escape quoting style when writing to a terminal file
         // descriptor and Literal otherwise.
-        if std::io::stdout().is_terminal() {
+        if stdout().is_terminal() {
             QuotingStyle::Shell {
                 escape: true,
                 always_quote: false,
@@ -771,7 +705,7 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
             "never" | "no" | "none" => IndicatorStyle::None,
             "always" | "yes" | "force" => IndicatorStyle::Classify,
             "auto" | "tty" | "if-tty" => {
-                if std::io::stdout().is_terminal() {
+                if stdout().is_terminal() {
                     IndicatorStyle::Classify
                 } else {
                     IndicatorStyle::None
@@ -1000,7 +934,7 @@ impl Config {
         } else if options.get_flag(options::SHOW_CONTROL_CHARS) {
             true
         } else {
-            !std::io::stdout().is_terminal()
+            !stdout().is_terminal()
         };
 
         let mut quoting_style = extract_quoting_style(options, show_control);
@@ -1153,6 +1087,16 @@ impl Config {
             Dereference::DirArgs
         };
 
+        let tab_size = if !needs_color {
+            options
+                .get_one::<String>(options::format::TAB_SIZE)
+                .and_then(|size| size.parse::<usize>().ok())
+                .or_else(|| std::env::var("TABSIZE").ok().and_then(|s| s.parse().ok()))
+        } else {
+            Some(0)
+        }
+        .unwrap_or(SPACES_IN_TAB);
+
         Ok(Self {
             format,
             files,
@@ -1190,6 +1134,7 @@ impl Config {
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
             hyperlink,
+            tab_size,
         })
     }
 }
@@ -1227,7 +1172,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)
@@ -1306,13 +1251,12 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // silently ignored (see #3624)
             Arg::new(options::format::TAB_SIZE)
                 .short('T')
                 .long(options::format::TAB_SIZE)
                 .env("TABSIZE")
                 .value_name("COLS")
-                .help("Assume tab stops at each COLS instead of 8 (unimplemented)"),
+                .help("Assume tab stops at each COLS instead of 8"),
         )
         .arg(
             Arg::new(options::format::COMMAS)
@@ -2054,8 +1998,8 @@ impl PathData {
                             }
                         }
                         show!(LsError::IOErrorContext(
-                            err,
                             self.p_buf.clone(),
+                            err,
                             self.command_line
                         ));
                         None
@@ -2161,8 +2105,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 // flush stdout buffer before the error to preserve formatting and order
                 out.flush()?;
                 show!(LsError::IOErrorContext(
-                    err,
                     path_data.p_buf.clone(),
+                    err,
                     path_data.command_line
                 ));
                 continue;
@@ -2255,11 +2199,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             let md = {
                 // We will always try to deref symlinks to group directories, so PathData.md
                 // is not always useful.
-                if p.must_dereference {
-                    p.md.get()
-                } else {
-                    None
-                }
+                if p.must_dereference { p.md.get() } else { None }
             };
 
             !match md {
@@ -2396,8 +2336,8 @@ fn enter_directory(
                 Err(err) => {
                     out.flush()?;
                     show!(LsError::IOErrorContext(
-                        err,
                         e.p_buf.clone(),
+                        err,
                         e.command_line
                     ));
                     continue;
@@ -2457,16 +2397,14 @@ fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Resu
 fn display_dir_entry_size(
     entry: &PathData,
     config: &Config,
-    out: &mut BufWriter<std::io::Stdout>,
+    out: &mut BufWriter<Stdout>,
 ) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.get_metadata(out) {
         let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
-            SizeOrDeviceId::Device(major, minor) => (
-                (major.len() + minor.len() + 2usize),
-                major.len(),
-                minor.len(),
-            ),
+            SizeOrDeviceId::Device(major, minor) => {
+                (major.len() + minor.len() + 2usize, major.len(), minor.len())
+            }
             SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
         };
         (
@@ -2627,10 +2565,24 @@ fn display_items(
 
         match config.format {
             Format::Columns => {
-                display_grid(names, config.width, Direction::TopToBottom, out, quoted)?;
+                display_grid(
+                    names,
+                    config.width,
+                    Direction::TopToBottom,
+                    out,
+                    quoted,
+                    config.tab_size,
+                )?;
             }
             Format::Across => {
-                display_grid(names, config.width, Direction::LeftToRight, out, quoted)?;
+                display_grid(
+                    names,
+                    config.width,
+                    Direction::LeftToRight,
+                    out,
+                    quoted,
+                    config.tab_size,
+                )?;
             }
             Format::Commas => {
                 let mut current_col = 0;
@@ -2698,6 +2650,7 @@ fn display_grid(
     direction: Direction,
     out: &mut BufWriter<Stdout>,
     quoted: bool,
+    tab_size: usize,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -2747,14 +2700,13 @@ fn display_grid(
             .map(|s| s.to_string_lossy().into_owned())
             .collect();
 
-        // Determine whether to use tabs for separation based on whether any entry ends with '/'.
-        // If any entry ends with '/', it indicates that the -F flag is likely used to classify directories.
-        let use_tabs = names.iter().any(|name| name.ends_with('/'));
-
-        let filling = if use_tabs {
-            Filling::Text("\t".to_string())
-        } else {
-            Filling::Spaces(2)
+        // Since tab_size=0 means no \t, use Spaces separator for optimization.
+        let filling = match tab_size {
+            0 => Filling::Spaces(DEFAULT_SEPARATOR_SIZE),
+            _ => Filling::Tabs {
+                spaces: DEFAULT_SEPARATOR_SIZE,
+                tab_size,
+            },
         };
 
         let grid = Grid::new(
@@ -3057,7 +3009,7 @@ fn get_inode(metadata: &Metadata) -> String {
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 #[cfg(unix)]
 use std::sync::Mutex;
 #[cfg(unix)]
@@ -3066,7 +3018,8 @@ use uucore::fs::FileInformation;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {
-    static UID_CACHE: Lazy<Mutex<HashMap<u32, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+    static UID_CACHE: LazyLock<Mutex<HashMap<u32, String>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
 
     let mut uid_cache = UID_CACHE.lock().unwrap();
     uid_cache
@@ -3086,7 +3039,8 @@ fn display_uname(metadata: &Metadata, config: &Config) -> String {
 
 #[cfg(all(unix, not(target_os = "redox")))]
 fn cached_gid2grp(gid: u32) -> String {
-    static GID_CACHE: Lazy<Mutex<HashMap<u32, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+    static GID_CACHE: LazyLock<Mutex<HashMap<u32, String>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
 
     let mut gid_cache = GID_CACHE.lock().unwrap();
     gid_cache
@@ -3137,11 +3091,11 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
         Time::Modification => md.modified().ok(),
         Time::Access => md.accessed().ok(),
         Time::Birth => md.created().ok(),
-        _ => None,
+        Time::Change => None,
     }
 }
 
-fn get_time(md: &Metadata, config: &Config) -> Option<chrono::DateTime<chrono::Local>> {
+fn get_time(md: &Metadata, config: &Config) -> Option<DateTime<Local>> {
     let time = get_system_time(md, config)?;
     Some(time.into())
 }
@@ -3177,19 +3131,15 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
         if ft.is_char_device() || ft.is_block_device() {
             // A type cast is needed here as the `dev_t` type varies across OSes.
             let dev = metadata.rdev() as dev_t;
-            let major = unsafe { major(dev) };
-            let minor = unsafe { minor(dev) };
+            let major = major(dev);
+            let minor = minor(dev);
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
     let len_adjusted = {
         let d = metadata.len() / config.file_size_block_size;
         let r = metadata.len() % config.file_size_block_size;
-        if r == 0 {
-            d
-        } else {
-            d + 1
-        }
+        if r == 0 { d } else { d + 1 }
     };
     SizeOrDeviceId::Size(display_size(len_adjusted, config))
 }
@@ -3226,7 +3176,7 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
             } else if file_type.is_file()
                 // Safe unwrapping if the file was removed between listing and display
                 // See https://github.com/uutils/coreutils/issues/5371
-                && path.get_metadata(out).map(file_is_executable).unwrap_or_default()
+                && path.get_metadata(out).is_some_and(file_is_executable)
             {
                 Some('*')
             } else {
@@ -3363,7 +3313,7 @@ fn display_item_name(
                 }
             }
             Err(err) => {
-                show!(LsError::IOErrorContext(err, path.p_buf.clone(), false));
+                show!(LsError::IOErrorContext(path.p_buf.clone(), err, false));
             }
         }
     }
@@ -3446,7 +3396,7 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
             Err(err) => {
                 // The Path couldn't be dereferenced, so return early and set exit code 1
                 // to indicate a minor error
-                show!(LsError::IOErrorContext(err, p_buf.to_path_buf(), false));
+                show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
                 return substitute_string;
             }
             Ok(_md) => (),

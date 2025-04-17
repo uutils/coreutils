@@ -4,7 +4,12 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG getfattr
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::path_concat;
+use uutests::util::TestScenario;
+use uutests::util_name;
+
 #[cfg(not(windows))]
 use std::fs::set_permissions;
 
@@ -34,7 +39,7 @@ use std::time::Duration;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(feature = "truncate")]
-use crate::common::util::PATH;
+use uutests::util::PATH;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
@@ -60,7 +65,7 @@ static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
     unix,
     not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
 ))]
-use crate::common::util::compare_xattrs;
+use uutests::util::compare_xattrs;
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
 #[cfg(all(not(windows), not(target_os = "freebsd")))]
@@ -185,8 +190,7 @@ fn test_cp_same_file() {
 
     ucmd.arg(file)
         .arg(file)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains(format!("'{file}' and '{file}' are the same file"));
 }
 
@@ -350,11 +354,38 @@ fn test_cp_arg_no_target_directory_with_recursive() {
     at.touch("dir/a");
     at.touch("dir/b");
 
-    ucmd.arg("-rT").arg("dir").arg("dir2").succeeds();
+    ucmd.arg("-rT")
+        .arg("dir")
+        .arg("dir2")
+        .succeeds()
+        .no_output();
 
     assert!(at.plus("dir2").join("a").exists());
     assert!(at.plus("dir2").join("b").exists());
     assert!(!at.plus("dir2").join("dir").exists());
+}
+
+#[test]
+#[ignore = "disabled until https://github.com/uutils/coreutils/issues/7455 is fixed"]
+fn test_cp_arg_no_target_directory_with_recursive_target_does_not_exists() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.touch("dir/a");
+    at.touch("dir/b");
+
+    let target = "create_me";
+    assert!(!at.plus(target).exists());
+
+    ucmd.arg("-rT")
+        .arg("dir")
+        .arg(target)
+        .succeeds()
+        .no_output();
+
+    assert!(at.plus(target).join("a").exists());
+    assert!(at.plus(target).join("b").exists());
+    assert!(!at.plus(target).join("dir").exists());
 }
 
 #[test]
@@ -440,6 +471,29 @@ fn test_cp_arg_update_older_dest_not_older_than_src() {
 }
 
 #[test]
+fn test_cp_arg_update_older_dest_not_older_than_src_no_verbose_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_dest_not_older_file1";
+    let new = "test_cp_arg_update_dest_not_older_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
+
+    at.write(old, old_content);
+    at.write(new, new_content);
+
+    ucmd.arg(old)
+        .arg(new)
+        .arg("--verbose")
+        .arg("--update=older")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), "new content\n");
+}
+
+#[test]
 fn test_cp_arg_update_older_dest_older_than_src() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -460,6 +514,32 @@ fn test_cp_arg_update_older_dest_older_than_src() {
         .succeeds()
         .no_stderr()
         .no_stdout();
+
+    assert_eq!(at.read(old), "new content\n");
+}
+
+#[test]
+fn test_cp_arg_update_older_dest_older_than_src_with_verbose_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_dest_older_file1";
+    let new = "test_cp_arg_update_dest_older_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
+
+    let mut f = at.make_file(old);
+    f.write_all(old_content.as_bytes()).unwrap();
+    f.set_modified(std::time::UNIX_EPOCH).unwrap();
+
+    at.write(new, new_content);
+
+    ucmd.arg(new)
+        .arg(old)
+        .arg("--verbose")
+        .arg("--update=older")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("'{new}' -> '{old}'\n"));
 
     assert_eq!(at.read(old), "new content\n");
 }
@@ -615,8 +695,7 @@ fn test_cp_arg_interactive_update_overwrite_older() {
     at.touch("a");
     ucmd.args(&["-i", "-u", "a", "b"])
         .pipe_in("N\n")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is("cp: overwrite 'b'? ");
 
@@ -1263,13 +1342,15 @@ fn test_cp_deref() {
         .join(TEST_COPY_TO_FOLDER)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
     // unlike -P/--no-deref, we expect a file, not a link
-    assert!(at.file_exists(
-        path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.file_exists(
+            path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
@@ -1300,13 +1381,15 @@ fn test_cp_no_deref() {
         .subdir
         .join(TEST_COPY_TO_FOLDER)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    assert!(at.is_symlink(
-        &path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.is_symlink(
+            &path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
@@ -1347,14 +1430,16 @@ fn test_cp_no_deref_link_onto_link() {
         .succeeds();
 
     // Ensure that the target of the destination was not modified.
-    assert!(!at
-        .symlink_metadata(TEST_HELLO_WORLD_DEST)
-        .file_type()
-        .is_symlink());
-    assert!(at
-        .symlink_metadata(TEST_HELLO_WORLD_DEST_SYMLINK)
-        .file_type()
-        .is_symlink());
+    assert!(
+        !at.symlink_metadata(TEST_HELLO_WORLD_DEST)
+            .file_type()
+            .is_symlink()
+    );
+    assert!(
+        at.symlink_metadata(TEST_HELLO_WORLD_DEST_SYMLINK)
+            .file_type()
+            .is_symlink()
+    );
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST_SYMLINK), "Hello, World!\n");
 }
 
@@ -1671,8 +1756,7 @@ fn test_cp_preserve_invalid_rejected() {
         .arg("--preserve=invalid-value")
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_HELLO_WORLD_DEST)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stdout();
 }
 
@@ -1956,44 +2040,46 @@ fn test_cp_deref_folder_to_folder() {
         // No action as this test is disabled but kept in case we want to
         // try to make it work in the future.
         let a = Command::new("cmd").args(&["/C", "dir"]).output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", &at.as_string()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_FROM_FOLDER);
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_TO_FOLDER_NEW);
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
     }
 
     let path_to_new_symlink = at
         .subdir
         .join(TEST_COPY_TO_FOLDER_NEW)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    assert!(at.file_exists(
-        path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.file_exists(
+            path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
 
     let path_to_new = at.subdir.join(TEST_COPY_TO_FOLDER_NEW_FILE);
 
@@ -2052,44 +2138,46 @@ fn test_cp_no_deref_folder_to_folder() {
         // No action as this test is disabled but kept in case we want to
         // try to make it work in the future.
         let a = Command::new("cmd").args(&["/C", "dir"]).output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", &at.as_string()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_FROM_FOLDER);
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_TO_FOLDER_NEW);
 
         let a = Command::new("cmd")
             .args(&["/C", "dir", path_to_new_symlink.to_str().unwrap()])
             .output();
-        println!("output {:#?}", a);
+        println!("output {a:#?}");
     }
 
     let path_to_new_symlink = at
         .subdir
         .join(TEST_COPY_TO_FOLDER_NEW)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    assert!(at.is_symlink(
-        &path_to_new_symlink
-            .clone()
-            .into_os_string()
-            .into_string()
-            .unwrap()
-    ));
+    assert!(
+        at.is_symlink(
+            &path_to_new_symlink
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap()
+        )
+    );
 
     let path_to_new = at.subdir.join(TEST_COPY_TO_FOLDER_NEW_FILE);
 
@@ -2181,18 +2269,22 @@ fn test_cp_archive_recursive() {
     assert!(at.file_exists(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("1")));
     assert!(at.file_exists(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("2")));
 
-    assert!(at.is_symlink(
-        &at.subdir
-            .join(TEST_COPY_TO_FOLDER_NEW)
-            .join("1.link")
-            .to_string_lossy()
-    ));
-    assert!(at.is_symlink(
-        &at.subdir
-            .join(TEST_COPY_TO_FOLDER_NEW)
-            .join("2.link")
-            .to_string_lossy()
-    ));
+    assert!(
+        at.is_symlink(
+            &at.subdir
+                .join(TEST_COPY_TO_FOLDER_NEW)
+                .join("1.link")
+                .to_string_lossy()
+        )
+    );
+    assert!(
+        at.is_symlink(
+            &at.subdir
+                .join(TEST_COPY_TO_FOLDER_NEW)
+                .join("2.link")
+                .to_string_lossy()
+        )
+    );
 }
 
 #[test]
@@ -2285,7 +2377,7 @@ fn test_cp_target_file_dev_null() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 fn test_cp_one_file_system() {
-    use crate::common::util::AtPath;
+    use uutests::util::AtPath;
     use walkdir::WalkDir;
 
     let mut scene = TestScenario::new(util_name!());
@@ -2460,7 +2552,7 @@ fn test_closes_file_descriptors() {
     // For debugging purposes:
     for f in me.fd().unwrap() {
         let fd = f.unwrap();
-        println!("{:?} {:?}", fd, fd.mode());
+        println!("{fd:?} {:?}", fd.mode());
     }
 
     new_ucmd!()
@@ -3416,8 +3508,7 @@ fn test_copy_dir_preserve_permissions_inaccessible_file() {
     //            |      |    |     |
     //            V      V    V     V
     ucmd.args(&["-p", "-R", "d1", "d2"])
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_only("cp: cannot open 'd1/f' for reading: permission denied\n");
     assert!(at.dir_exists("d2"));
     assert!(!at.file_exists("d2/f"));
@@ -3902,13 +3993,17 @@ fn test_cp_seen_file() {
 
     let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
     #[cfg(not(unix))]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c\\f' with 'b/f'")
+    );
     #[cfg(unix)]
-    assert!(result
-        .stderr_str()
-        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("will not overwrite just-created 'c/f' with 'b/f'")
+    );
 
     assert!(at.plus("c").join("f").exists());
 
@@ -3960,11 +4055,11 @@ fn test_acl_preserve() {
     at.mkdir(path2);
     at.touch(file);
 
-    let path = at.plus_as_string(file);
+    let path1 = at.plus_as_string(path1);
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     match Command::new("setfacl")
-        .args(["-m", "group::rwx", path1])
+        .args(["-m", "group::rwx", &path1])
         .status()
         .map(|status| status.code())
     {
@@ -3979,6 +4074,7 @@ fn test_acl_preserve() {
         }
     }
 
+    let path = at.plus_as_string(file);
     scene.ucmd().args(&["-p", &path, path2]).succeeds();
 
     assert!(compare_xattrs(&file, &file_target));
@@ -4579,7 +4675,9 @@ fn test_cp_no_dereference_attributes_only_with_symlink() {
 /// contains the test for cp when the source and destination points to the same file
 mod same_file {
 
-    use crate::common::util::TestScenario;
+    use std::os::unix::fs::MetadataExt;
+    use uutests::util::TestScenario;
+    use uutests::util_name;
 
     const FILE_NAME: &str = "foo";
     const SYMLINK_NAME: &str = "symlink";
@@ -4602,7 +4700,7 @@ mod same_file {
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4617,9 +4715,9 @@ mod same_file {
             .args(&["--rem", FILE_NAME, SYMLINK_NAME])
             .succeeds();
         assert!(at.file_exists(SYMLINK_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -4637,9 +4735,9 @@ mod same_file {
             assert!(at.symlink_exists(backup));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
             assert!(at.file_exists(SYMLINK_NAME));
-            assert_eq!(at.read(SYMLINK_NAME), CONTENTS,);
+            assert_eq!(at.read(SYMLINK_NAME), CONTENTS);
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4658,7 +4756,7 @@ mod same_file {
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4675,7 +4773,7 @@ mod same_file {
                 .succeeds();
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(SYMLINK_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4695,7 +4793,7 @@ mod same_file {
             assert!(at.file_exists(SYMLINK_NAME));
             assert!(at.symlink_exists(backup));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4713,7 +4811,7 @@ mod same_file {
         assert!(at.file_exists(FILE_NAME));
         assert!(at.symlink_exists(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -4729,7 +4827,7 @@ mod same_file {
         assert!(at.file_exists(FILE_NAME));
         assert!(at.symlink_exists(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
     // the following tests tries to copy a symlink to the file that symlink points to with
     // various options
@@ -4748,7 +4846,7 @@ mod same_file {
             assert!(at.file_exists(FILE_NAME));
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4767,7 +4865,7 @@ mod same_file {
             assert!(at.file_exists(FILE_NAME));
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
     #[test]
@@ -4787,7 +4885,7 @@ mod same_file {
             // this doesn't makes sense but this is how gnu does it
             assert_eq!(FILE_NAME, at.resolve_link(FILE_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-            assert_eq!(at.read(backup), CONTENTS,);
+            assert_eq!(at.read(backup), CONTENTS);
         }
     }
 
@@ -4805,7 +4903,7 @@ mod same_file {
             assert!(at.file_exists(FILE_NAME));
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4824,7 +4922,7 @@ mod same_file {
             assert!(at.file_exists(FILE_NAME));
             assert!(at.symlink_exists(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4841,7 +4939,7 @@ mod same_file {
                 .fails()
                 .stderr_contains("'foo' and 'foo' are the same file");
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
     #[test]
@@ -4856,7 +4954,7 @@ mod same_file {
                 .fails()
                 .stderr_contains("'foo' and 'foo' are the same file");
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4873,8 +4971,8 @@ mod same_file {
                 .succeeds();
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
-            assert_eq!(at.read(backup), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
+            assert_eq!(at.read(backup), CONTENTS);
         }
     }
 
@@ -4891,7 +4989,7 @@ mod same_file {
                 .succeeds();
             assert!(at.file_exists(FILE_NAME));
             assert!(!at.file_exists(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4908,8 +5006,8 @@ mod same_file {
                 .succeeds();
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
-            assert_eq!(at.read(backup), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
+            assert_eq!(at.read(backup), CONTENTS);
         }
     }
 
@@ -4925,7 +5023,7 @@ mod same_file {
                 .fails()
                 .stderr_contains("'foo' and 'foo' are the same file");
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -4943,7 +5041,7 @@ mod same_file {
             at.symlink_file(FILE_NAME, symlink2);
             scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(symlink1));
             assert_eq!(FILE_NAME, at.resolve_link(symlink2));
         }
@@ -4964,7 +5062,7 @@ mod same_file {
             .fails()
             .stderr_contains("'sl1' and 'sl2' are the same file");
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert_eq!(FILE_NAME, at.resolve_link(symlink2));
     }
@@ -4980,10 +5078,10 @@ mod same_file {
         at.symlink_file(FILE_NAME, symlink2);
         scene.ucmd().args(&["--rem", symlink1, symlink2]).succeeds();
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert!(at.file_exists(symlink2));
-        assert_eq!(at.read(symlink2), CONTENTS,);
+        assert_eq!(at.read(symlink2), CONTENTS);
     }
 
     #[test]
@@ -4999,10 +5097,10 @@ mod same_file {
             at.symlink_file(FILE_NAME, symlink2);
             scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(symlink1));
             assert!(at.file_exists(symlink2));
-            assert_eq!(at.read(symlink2), CONTENTS,);
+            assert_eq!(at.read(symlink2), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(backup));
         }
     }
@@ -5020,7 +5118,7 @@ mod same_file {
             at.symlink_file(FILE_NAME, symlink2);
             scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(symlink1));
             assert_eq!(FILE_NAME, at.resolve_link(symlink2));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
@@ -5041,7 +5139,7 @@ mod same_file {
             .fails()
             .stderr_contains("cannot create hard link 'sl2' to 'sl1'");
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert_eq!(FILE_NAME, at.resolve_link(symlink2));
     }
@@ -5057,10 +5155,10 @@ mod same_file {
         at.symlink_file(FILE_NAME, symlink2);
         scene.ucmd().args(&["-fl", symlink1, symlink2]).succeeds();
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert!(at.file_exists(symlink2));
-        assert_eq!(at.read(symlink2), CONTENTS,);
+        assert_eq!(at.read(symlink2), CONTENTS);
     }
 
     #[test]
@@ -5076,10 +5174,10 @@ mod same_file {
             at.symlink_file(FILE_NAME, symlink2);
             scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
             assert!(at.file_exists(FILE_NAME));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(symlink1));
             assert!(at.file_exists(symlink2));
-            assert_eq!(at.read(symlink2), CONTENTS,);
+            assert_eq!(at.read(symlink2), CONTENTS);
             assert_eq!(FILE_NAME, at.resolve_link(backup));
         }
     }
@@ -5099,7 +5197,7 @@ mod same_file {
             .fails()
             .stderr_contains("cannot create symlink 'sl2' to 'sl1'");
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert_eq!(FILE_NAME, at.resolve_link(symlink2));
     }
@@ -5115,7 +5213,7 @@ mod same_file {
         at.symlink_file(FILE_NAME, symlink2);
         scene.ucmd().args(&["-sf", symlink1, symlink2]).succeeds();
         assert!(at.file_exists(FILE_NAME));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
         assert_eq!(FILE_NAME, at.resolve_link(symlink1));
         assert_eq!(symlink1, at.resolve_link(symlink2));
     }
@@ -5138,7 +5236,7 @@ mod same_file {
                 .stderr_contains("'foo' and 'hardlink' are the same file");
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(hardlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5155,7 +5253,7 @@ mod same_file {
             .succeeds();
         assert!(at.file_exists(FILE_NAME));
         assert!(at.file_exists(hardlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5171,7 +5269,7 @@ mod same_file {
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(hardlink));
             assert!(at.file_exists(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5186,7 +5284,7 @@ mod same_file {
             scene.ucmd().args(&[option, FILE_NAME, hardlink]).succeeds();
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(hardlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5205,7 +5303,7 @@ mod same_file {
                 .stderr_contains("'foo' and 'hardlink' are the same file");
             assert!(at.file_exists(FILE_NAME));
             assert!(at.file_exists(hardlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5229,7 +5327,7 @@ mod same_file {
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5250,7 +5348,7 @@ mod same_file {
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5271,7 +5369,7 @@ mod same_file {
             assert!(at.symlink_exists(hardlink_to_symlink));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5292,8 +5390,8 @@ mod same_file {
         assert!(!at.symlink_exists(SYMLINK_NAME));
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
-        assert_eq!(at.read(SYMLINK_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
+        assert_eq!(at.read(SYMLINK_NAME), CONTENTS);
     }
 
     #[test]
@@ -5317,8 +5415,8 @@ mod same_file {
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
             assert!(at.symlink_exists(backup));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
-            assert_eq!(at.read(SYMLINK_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
+            assert_eq!(at.read(SYMLINK_NAME), CONTENTS);
         }
     }
 
@@ -5343,7 +5441,7 @@ mod same_file {
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
             assert!(at.symlink_exists(backup));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5365,7 +5463,7 @@ mod same_file {
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5386,7 +5484,7 @@ mod same_file {
             assert!(at.symlink_exists(hardlink_to_symlink));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5407,7 +5505,7 @@ mod same_file {
         assert!(!at.symlink_exists(SYMLINK_NAME));
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5431,7 +5529,7 @@ mod same_file {
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
             assert!(at.symlink_exists(backup));
             assert_eq!(FILE_NAME, at.resolve_link(backup));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5453,7 +5551,7 @@ mod same_file {
             assert!(at.symlink_exists(hardlink_to_symlink));
             assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
             assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(FILE_NAME), CONTENTS);
         }
     }
 
@@ -5475,7 +5573,7 @@ mod same_file {
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
     }
 
     #[test]
@@ -5495,7 +5593,27 @@ mod same_file {
         assert!(at.symlink_exists(hardlink_to_symlink));
         assert_eq!(hardlink_to_symlink, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
-        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(FILE_NAME), CONTENTS);
+    }
+
+    #[test]
+    fn test_hardlink_of_symlink_to_hardlink_of_same_symlink_with_option_no_deref() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let hardlink1 = "hardlink_to_symlink_1";
+        let hardlink2 = "hardlink_to_symlink_2";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        at.hard_link(SYMLINK_NAME, hardlink1);
+        at.hard_link(SYMLINK_NAME, hardlink2);
+        let ino = at.symlink_metadata(hardlink1).ino();
+        assert_eq!(ino, at.symlink_metadata(hardlink2).ino()); // Sanity check
+        scene.ucmd().args(&["-P", hardlink1, hardlink2]).succeeds();
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.symlink_exists(SYMLINK_NAME));
+        // If hardlink a and b point to the same symlink, then cp a b doesn't create a new file
+        assert_eq!(ino, at.symlink_metadata(hardlink1).ino());
+        assert_eq!(ino, at.symlink_metadata(hardlink2).ino());
     }
 }
 
@@ -5504,8 +5622,9 @@ mod same_file {
 #[cfg(all(unix, not(target_os = "android")))]
 mod link_deref {
 
-    use crate::common::util::{AtPath, TestScenario};
     use std::os::unix::fs::MetadataExt;
+    use uutests::util::{AtPath, TestScenario};
+    use uutests::util_name;
 
     const FILE: &str = "file";
     const FILE_LINK: &str = "file_link";
@@ -5540,7 +5659,7 @@ mod link_deref {
                 let mut args = vec!["--link", "-P", src, DST];
                 if r {
                     args.push("-R");
-                };
+                }
                 scene.ucmd().args(&args).succeeds().no_stderr();
                 at.is_symlink(DST);
                 let src_ino = at.symlink_metadata(src).ino();
@@ -5561,7 +5680,7 @@ mod link_deref {
                 let mut args = vec!["--link", DANG_LINK, DST];
                 if r {
                     args.push("-R");
-                };
+                }
                 if !option.is_empty() {
                     args.push(option);
                 }
@@ -5689,11 +5808,7 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         } else {
             libc::S_IRWXG | libc::S_IRWXO
         } as u32;
-        assert_eq!(
-            (mode & mask),
-            0,
-            "unwanted permissions are present - {attr}"
-        );
+        assert_eq!(mode & mask, 0, "unwanted permissions are present - {attr}");
         at.write(FIFO, "done");
         child.wait().unwrap().succeeded();
     }
@@ -5930,16 +6045,14 @@ fn test_cp_with_options_backup_and_rem_when_dest_is_symlink() {
 fn test_cp_single_file() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_contains("missing destination file");
 }
 
 #[test]
 fn test_cp_no_file() {
     let (_at, mut ucmd) = at_and_ucmd!();
-    ucmd.fails()
-        .code_is(1)
+    ucmd.fails_with_code(1)
         .stderr_contains("error: the following required arguments were not provided:");
 }
 
@@ -5949,8 +6062,8 @@ fn test_cp_no_file() {
     not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
 ))]
 fn test_cp_preserve_xattr_readonly_source() {
-    use crate::common::util::compare_xattrs;
     use std::process::Command;
+    use uutests::util::compare_xattrs;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5997,17 +6110,17 @@ fn test_cp_preserve_xattr_readonly_source() {
     let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
     assert!(
         stdout.contains(xattr_key),
-        "Expected '{}' not found in getfattr output:\n{}",
-        xattr_key,
-        stdout
+        "Expected '{xattr_key}' not found in getfattr output:\n{stdout}"
     );
 
     at.set_readonly(source_file);
-    assert!(scene
-        .fixtures
-        .metadata(source_file)
-        .permissions()
-        .readonly());
+    assert!(
+        scene
+            .fixtures
+            .metadata(source_file)
+            .permissions()
+            .readonly()
+    );
 
     scene
         .ucmd()
@@ -6074,4 +6187,21 @@ fn test_cp_update_older_interactive_prompt_no() {
         .stderr_to_stdout()
         .fails()
         .stdout_is("cp: overwrite 'old'? ");
+}
+
+#[test]
+fn test_cp_update_none_interactive_prompt_no() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let old_file = "old";
+    let new_file = "new";
+
+    at.write(old_file, "old content");
+    at.write(new_file, "new content");
+
+    ucmd.args(&["-i", "--update=none", new_file, old_file])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read(old_file), "old content");
+    assert_eq!(at.read(new_file), "new content");
 }

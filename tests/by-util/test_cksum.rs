@@ -4,7 +4,10 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont
 
-use crate::common::util::TestScenario;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 const ALGOS: [&str; 11] = [
     "sysv", "bsd", "crc", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "sm3",
@@ -12,7 +15,7 @@ const ALGOS: [&str; 11] = [
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -75,7 +78,7 @@ fn test_nonexisting_file() {
 
     new_ucmd!()
         .arg(file_name)
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_contains(format!("cksum: {file_name}: No such file or directory"));
 }
@@ -301,32 +304,28 @@ fn test_check_algo() {
         .arg("lorem_ipsum.txt")
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
-        .code_is(1);
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
     new_ucmd!()
         .arg("-a=sysv")
         .arg("--check")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
-        .code_is(1);
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
     new_ucmd!()
         .arg("-a=crc")
         .arg("--check")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
-        .code_is(1);
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
     new_ucmd!()
         .arg("-a=crc32b")
         .arg("--check")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}")
-        .code_is(1);
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc,crc32b}");
 }
 
 #[test]
@@ -335,20 +334,18 @@ fn test_length_with_wrong_algorithm() {
         .arg("--length=16")
         .arg("--algorithm=md5")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b")
-        .code_is(1);
+        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b");
 
     new_ucmd!()
         .arg("--length=16")
         .arg("--algorithm=md5")
         .arg("-c")
         .arg("foo.sums")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b")
-        .code_is(1);
+        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b");
 }
 
 #[test]
@@ -356,10 +353,9 @@ fn test_length_not_supported() {
     new_ucmd!()
         .arg("--length=15")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("--length is only supported with --algorithm=blake2b")
-        .code_is(1);
+        .stderr_contains("--length is only supported with --algorithm=blake2b");
 
     new_ucmd!()
         .arg("-l")
@@ -368,10 +364,9 @@ fn test_length_not_supported() {
         .arg("-a")
         .arg("crc")
         .arg("/tmp/xxx")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("--length is only supported with --algorithm=blake2b")
-        .code_is(1);
+        .stderr_contains("--length is only supported with --algorithm=blake2b");
 }
 
 #[test]
@@ -394,7 +389,7 @@ fn test_length_greater_than_512() {
         .arg("--algorithm=blake2b")
         .arg("lorem_ipsum.txt")
         .arg("alice_in_wonderland.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_is_fixture("length_larger_than_512.expected");
 }
@@ -443,10 +438,9 @@ fn test_raw_multiple_files() {
         .arg("--raw")
         .arg("lorem_ipsum.txt")
         .arg("alice_in_wonderland.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: the --raw option is not supported with multiple files")
-        .code_is(1);
+        .stderr_contains("cksum: the --raw option is not supported with multiple files");
 }
 
 #[test]
@@ -455,7 +449,7 @@ fn test_base64_raw_conflicts() {
         .arg("--base64")
         .arg("--raw")
         .arg("lorem_ipsum.txt")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_contains("--base64")
         .stderr_contains("cannot be used with")
@@ -749,12 +743,11 @@ fn test_conflicting_options() {
         .arg("--binary")
         .arg("--check")
         .arg("f")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_contains(
             "cksum: the --binary and --text options are meaningless when verifying checksums",
-        )
-        .code_is(1);
+        );
 
     scene
         .ucmd()
@@ -762,12 +755,11 @@ fn test_conflicting_options() {
         .arg("-c")
         .arg("-a")
         .arg("md5")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
         .stderr_contains(
             "cksum: the --binary and --text options are meaningless when verifying checksums",
-        )
-        .code_is(1);
+        );
 }
 
 #[test]
@@ -784,10 +776,9 @@ fn test_check_algo_err() {
         .arg("sm3")
         .arg("--check")
         .arg("f")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: f: no properly formatted checksum lines found")
-        .code_is(1);
+        .stderr_contains("cksum: f: no properly formatted checksum lines found");
 }
 
 #[test]
@@ -803,10 +794,9 @@ fn test_check_pipe() {
         .arg("--check")
         .arg("-")
         .pipe_in("f")
-        .fails()
+        .fails_with_code(1)
         .no_stdout()
-        .stderr_contains("cksum: 'standard input': no properly formatted checksum lines found")
-        .code_is(1);
+        .stderr_contains("cksum: 'standard input': no properly formatted checksum lines found");
 }
 
 #[test]
@@ -979,29 +969,41 @@ fn test_cksum_check_failed() {
         .arg("CHECKSUM")
         .fails();
 
-    assert!(result
-        .stderr_str()
-        .contains("input: No such file or directory"));
-    assert!(result
-        .stderr_str()
-        .contains("2 lines are improperly formatted\n"));
-    assert!(result
-        .stderr_str()
-        .contains("1 listed file could not be read\n"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("input: No such file or directory")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("2 lines are improperly formatted\n")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("1 listed file could not be read\n")
+    );
     assert!(result.stdout_str().contains("f: OK\n"));
 
     // without strict
     let result = scene.ucmd().arg("--check").arg("CHECKSUM").fails();
 
-    assert!(result
-        .stderr_str()
-        .contains("input: No such file or directory"));
-    assert!(result
-        .stderr_str()
-        .contains("2 lines are improperly formatted\n"));
-    assert!(result
-        .stderr_str()
-        .contains("1 listed file could not be read\n"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("input: No such file or directory")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("2 lines are improperly formatted\n")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("1 listed file could not be read\n")
+    );
     assert!(result.stdout_str().contains("f: OK\n"));
 
     // tests with two files
@@ -1023,15 +1025,21 @@ fn test_cksum_check_failed() {
         .fails();
     println!("result.stderr_str() {}", result.stderr_str());
     println!("result.stdout_str() {}", result.stdout_str());
-    assert!(result
-        .stderr_str()
-        .contains("input2: No such file or directory"));
-    assert!(result
-        .stderr_str()
-        .contains("4 lines are improperly formatted\n"));
-    assert!(result
-        .stderr_str()
-        .contains("2 listed files could not be read\n"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("input2: No such file or directory")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("4 lines are improperly formatted\n")
+    );
+    assert!(
+        result
+            .stderr_str()
+            .contains("2 listed files could not be read\n")
+    );
     assert!(result.stdout_str().contains("f: OK\n"));
     assert!(result.stdout_str().contains("2: OK\n"));
 }
@@ -1101,9 +1109,11 @@ fn test_cksum_mixed() {
     println!("result.stderr_str() {}", result.stderr_str());
     println!("result.stdout_str() {}", result.stdout_str());
     assert!(result.stdout_str().contains("f: OK"));
-    assert!(result
-        .stderr_str()
-        .contains("3 lines are improperly formatted"));
+    assert!(
+        result
+            .stderr_str()
+            .contains("3 lines are improperly formatted")
+    );
 }
 
 #[test]
@@ -1234,9 +1244,7 @@ fn test_check_directory_error() {
 
 #[test]
 fn test_check_base64_hashes() {
-    let hashes =
-        "MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\nSHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\nBLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n"
-    ;
+    let hashes = "MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\nSHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\nBLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n";
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1676,7 +1684,7 @@ fn test_check_incorrectly_formatted_checksum_keeps_processing_hex() {
 /// This module reimplements the cksum-base64.pl GNU test.
 mod gnu_cksum_base64 {
     use super::*;
-    use crate::common::util::log_info;
+    use uutests::util::log_info;
 
     const PAIRS: [(&str, &str); 12] = [
         ("sysv", "0 0 f"),
@@ -1693,11 +1701,11 @@ mod gnu_cksum_base64 {
         ),
         (
             "sha512",
-            "z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg=="
+            "z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg==",
         ),
         (
             "blake2b",
-            "eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg=="
+            "eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==",
         ),
         ("sm3", "GrIdg1XPoX+OYRlIMegajyK+yMco/vt0ftA161CCqis="),
     ];
@@ -1714,7 +1722,7 @@ mod gnu_cksum_base64 {
         if ["sysv", "bsd", "crc", "crc32b"].contains(&algo) {
             digest.to_string()
         } else {
-            format!("{} (f) = {}", algo.to_uppercase(), digest).replace("BLAKE2B", "BLAKE2b")
+            format!("{} (f) = {digest}", algo.to_uppercase()).replace("BLAKE2B", "BLAKE2b")
         }
     }
 
@@ -2066,7 +2074,7 @@ mod gnu_cksum_c {
             .arg("--warn")
             .arg("--check")
             .arg("CHECKSUMS")
-            .run()
+            .fails()
             .stderr_contains("CHECKSUMS: 6: improperly formatted SM3 checksum line")
             .stderr_contains("CHECKSUMS: 9: improperly formatted BLAKE2b checksum line");
     }

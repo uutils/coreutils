@@ -5,13 +5,16 @@
 
 // spell-checker:ignore (ToDO) coreutil
 
-use crate::common::util::{check_coreutil_version, expected_result, is_ci, whoami, TestScenario};
+use uutests::new_ucmd;
+use uutests::unwrap_or_return;
+use uutests::util::{TestScenario, check_coreutil_version, expected_result, is_ci, whoami};
+use uutests::util_name;
 
 const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced in GNU's coreutils 8.31
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -380,7 +383,7 @@ fn test_id_zero() {
 fn test_id_context() {
     use selinux::{self, KernelSupport};
     if selinux::kernel_support() == KernelSupport::Unsupported {
-        println!("test skipped: Kernel has no support for SElinux context",);
+        println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
     let ts = TestScenario::new(util_name!());
@@ -455,7 +458,7 @@ fn test_id_no_specified_user_posixly() {
     {
         use selinux::{self, KernelSupport};
         if selinux::kernel_support() == KernelSupport::Unsupported {
-            println!("test skipped: Kernel has no support for SElinux context",);
+            println!("test skipped: Kernel has no support for SElinux context");
         } else {
             let result = ts.ucmd().succeeds();
             assert!(result.stdout_str().contains("context="));

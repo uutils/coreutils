@@ -1,17 +1,18 @@
 [package]
 name = "uu_mv"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mv"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/mv.rs"
@@ -27,6 +28,16 @@ uucore = { workspace = true, features = [
   "update-control",
 ] }
 thiserror = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
 
 [[bin]]
 name = "mv"

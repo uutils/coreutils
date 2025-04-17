@@ -3,9 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use crate::common::util::{AtPath, TestScenario, UCommand};
-use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
+use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use uutests::at_and_ucmd;
+use uutests::util::{AtPath, TestScenario, UCommand};
+
+use uutests::new_ucmd;
+use uutests::util_name;
 
 static TEST_FILE: &str = "file";
 static REFERENCE_FILE: &str = "reference";
@@ -34,12 +38,10 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     make_file(&at.plus_as_string(TEST_FILE), test.before);
     let perms = at.metadata(TEST_FILE).permissions().mode();
 
-    assert!(
-        perms == test.before,
-        "{}: expected: {:o} got: {:o}",
-        "setting permissions on test files before actual test run failed",
-        test.after,
-        perms
+    assert_eq!(
+        perms, test.before,
+        "{}: expected: {:o} got: {perms:o}",
+        "setting permissions on test files before actual test run failed", test.after
     );
 
     for arg in &test.args {
@@ -55,12 +57,10 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     }
 
     let perms = at.metadata(TEST_FILE).permissions().mode();
-    assert!(
-        perms == test.after,
-        "{}: expected: {:o} got: {:o}",
-        ucmd,
-        test.after,
-        perms
+    assert_eq!(
+        perms, test.after,
+        "{ucmd}: expected: {:o} got: {perms:o}",
+        test.after
     );
 }
 
@@ -238,10 +238,8 @@ fn test_chmod_ugoa() {
 fn test_chmod_umask_expected() {
     let current_umask = uucore::mode::get_umask();
     assert_eq!(
-        current_umask,
-        0o022,
-        "Unexpected umask value: expected 022 (octal), but got {:03o}. Please adjust the test environment.",
-        current_umask
+        current_umask, 0o022,
+        "Unexpected umask value: expected 022 (octal), but got {current_umask:03o}. Please adjust the test environment.",
     );
 }
 
@@ -266,8 +264,7 @@ fn test_chmod_error_permissions() {
 
     ucmd.args(&["-w", "file"])
         .umask(0o022)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stderr_is(
             // spell-checker:disable-next-line
             "chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x\n",
@@ -442,9 +439,8 @@ fn test_chmod_non_existing_file_silent() {
         .arg("--quiet")
         .arg("-r,a+w")
         .arg("does-not-exist")
-        .fails()
-        .no_stderr()
-        .code_is(1);
+        .fails_with_code(1)
+        .no_stderr();
 }
 
 #[test]
@@ -454,7 +450,7 @@ fn test_chmod_preserve_root() {
         .arg("--preserve-root")
         .arg("755")
         .arg("/")
-        .fails()
+        .fails_with_code(1)
         .stderr_contains("chmod: it is dangerous to operate recursively on '/'");
 }
 
@@ -478,8 +474,7 @@ fn test_chmod_symlink_non_existing_file() {
         .arg("755")
         .arg("-v")
         .arg(test_symlink)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_contains(expected_stdout)
         .stderr_contains(expected_stderr);
 
@@ -490,8 +485,7 @@ fn test_chmod_symlink_non_existing_file() {
         .arg("-v")
         .arg("-f")
         .arg(test_symlink)
-        .run()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stderr()
         .stdout_contains(expected_stdout);
 
@@ -501,8 +495,7 @@ fn test_chmod_symlink_non_existing_file() {
         .ucmd()
         .arg("755")
         .arg(test_symlink)
-        .run()
-        .code_is(1)
+        .fails_with_code(1)
         .no_stdout()
         .stderr_contains(expected_stderr);
 }
@@ -585,14 +578,13 @@ fn test_chmod_keep_setgid() {
 fn test_no_operands() {
     new_ucmd!()
         .arg("777")
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .usage_error("missing operand");
 }
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -624,9 +616,8 @@ fn test_chmod_file_after_non_existing_file() {
         .arg("u+x")
         .arg("does-not-exist")
         .arg(TEST_FILE)
-        .fails()
-        .stderr_contains("chmod: cannot access 'does-not-exist': No such file or directory")
-        .code_is(1);
+        .fails_with_code(1)
+        .stderr_contains("chmod: cannot access 'does-not-exist': No such file or directory");
 
     assert_eq!(at.metadata(TEST_FILE).permissions().mode(), 0o100_764);
 
@@ -636,9 +627,8 @@ fn test_chmod_file_after_non_existing_file() {
         .arg("--q")
         .arg("does-not-exist")
         .arg("file2")
-        .fails()
-        .no_stderr()
-        .code_is(1);
+        .fails_with_code(1)
+        .no_stderr();
     assert_eq!(at.metadata("file2").permissions().mode(), 0o100_764);
 }
 
@@ -669,8 +659,7 @@ fn test_chmod_file_symlink_after_non_existing_file() {
         .arg("-v")
         .arg(test_dangling_symlink)
         .arg(test_existing_symlink)
-        .fails()
-        .code_is(1)
+        .fails_with_code(1)
         .stdout_contains(expected_stdout)
         .stderr_contains(expected_stderr);
     assert_eq!(
@@ -853,7 +842,7 @@ fn test_chmod_symlink_to_dangling_target_dereference() {
         .arg("u+x")
         .arg(symlink)
         .fails()
-        .stderr_contains(format!("cannot operate on dangling symlink '{}'", symlink));
+        .stderr_contains(format!("cannot operate on dangling symlink '{symlink}'"));
 }
 
 #[test]
@@ -884,7 +873,7 @@ fn test_chmod_symlink_target_no_dereference() {
 }
 
 #[test]
-fn test_chmod_symlink_to_dangling_recursive() {
+fn test_chmod_symlink_recursive_final_traversal_flag() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -897,9 +886,14 @@ fn test_chmod_symlink_to_dangling_recursive() {
         .ucmd()
         .arg("755")
         .arg("-R")
+        .arg("-H")
+        .arg("-L")
+        .arg("-H")
+        .arg("-L")
+        .arg("-P")
         .arg(symlink)
-        .fails()
-        .stderr_is("chmod: cannot operate on dangling symlink 'symlink'\n");
+        .succeeds()
+        .no_output();
     assert_eq!(
         at.symlink_metadata(symlink).permissions().mode(),
         get_expected_symlink_permissions(),
@@ -910,8 +904,72 @@ fn test_chmod_symlink_to_dangling_recursive() {
 }
 
 #[test]
+fn test_chmod_symlink_to_dangling_recursive_no_traverse() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dangling_target = "nonexistent_file";
+    let symlink = "symlink";
+
+    at.symlink_file(dangling_target, symlink);
+
+    scene
+        .ucmd()
+        .arg("755")
+        .arg("-R")
+        .arg("-P")
+        .arg(symlink)
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        at.symlink_metadata(symlink).permissions().mode(),
+        get_expected_symlink_permissions(),
+        "Expected symlink permissions: {:o}, but got: {:o}",
+        get_expected_symlink_permissions(),
+        at.symlink_metadata(symlink).permissions().mode()
+    );
+}
+
+#[test]
+fn test_chmod_dangling_symlink_recursive_combos() {
+    let error_scenarios = [vec!["-R"], vec!["-R", "-H"], vec!["-R", "-L"]];
+
+    for flags in error_scenarios {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let dangling_target = "nonexistent_file";
+        let symlink = "symlink";
+
+        at.symlink_file(dangling_target, symlink);
+
+        let mut ucmd = scene.ucmd();
+        for f in &flags {
+            ucmd.arg(f);
+        }
+        ucmd.arg("u+x")
+            .umask(0o022)
+            .arg(symlink)
+            .fails()
+            .stderr_is("chmod: cannot operate on dangling symlink 'symlink'\n");
+        assert_eq!(
+            at.symlink_metadata(symlink).permissions().mode(),
+            get_expected_symlink_permissions(),
+            "Expected symlink permissions: {:o}, but got: {:o}",
+            get_expected_symlink_permissions(),
+            at.symlink_metadata(symlink).permissions().mode()
+        );
+    }
+}
+
+#[test]
 fn test_chmod_traverse_symlink_combo() {
     let scenarios = [
+        (
+            vec!["-R"], // Should default to "-H"
+            0o100_664,
+            get_expected_symlink_permissions(),
+        ),
         (
             vec!["-R", "-H"],
             0o100_664,
@@ -956,8 +1014,7 @@ fn test_chmod_traverse_symlink_combo() {
         let actual_target = at.metadata(target).permissions().mode();
         assert_eq!(
             actual_target, expected_target_perms,
-            "For flags {:?}, expected target perms = {:o}, got = {:o}",
-            flags, expected_target_perms, actual_target
+            "For flags {flags:?}, expected target perms = {expected_target_perms:o}, got = {actual_target:o}",
         );
 
         let actual_symlink = at
@@ -966,8 +1023,7 @@ fn test_chmod_traverse_symlink_combo() {
             .mode();
         assert_eq!(
             actual_symlink, expected_symlink_perms,
-            "For flags {:?}, expected symlink perms = {:o}, got = {:o}",
-            flags, expected_symlink_perms, actual_symlink
+            "For flags {flags:?}, expected symlink perms = {expected_symlink_perms:o}, got = {actual_symlink:o}",
         );
     }
 }

@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains gsed -->
+<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Cinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains gsed -->
 
 # Setting up your local development environment
 
@@ -253,13 +253,11 @@ pkg install coreutils gsed
 
 Code coverage report can be generated using [grcov](https://github.com/mozilla/grcov).
 
-### Using Nightly Rust
-
 To generate [gcov-based](https://github.com/mozilla/grcov#example-how-to-generate-gcda-files-for-a-rust-project) coverage report
 
 ```shell
 export CARGO_INCREMENTAL=0
-export RUSTFLAGS="-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+export RUSTFLAGS="-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
 export RUSTDOCFLAGS="-Cpanic=abort"
 cargo build <options...> # e.g., --features feat_os_unix
 cargo test <options...> # e.g., --features feat_os_unix test_pathchk
@@ -268,11 +266,6 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 ```
 
 if changes are not reflected in the report then run `cargo clean` and run the above commands.
-
-### Using Stable Rust
-
-If you are using stable version of Rust that doesn't enable code coverage instrumentation by default
-then add `-Z-Zinstrument-coverage` flag to `RUSTFLAGS` env variable specified above.
 
 ## Tips for setting up on Mac
 
@@ -337,3 +330,13 @@ Otherwise please follow [this guide](https://learn.microsoft.com/en-us/windows/d
 If you have used [Git for Windows](https://gitforwindows.org) to install `git` on you Windows system you might already have some GNU core utilities installed as part of "GNU Bash" included in Git for Windows package, but it is not a complete package. [This article](https://gist.github.com/evanwill/0207876c3243bbb6863e65ec5dc3f058) provides instruction on how to add more to it.
 
 Alternatively you can install [Cygwin](https://www.cygwin.com) and/or use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/compare-versions#whats-new-in-wsl-2) to get access to all GNU core utilities on Windows.
+
+# Preparing a new release
+
+1. Modify `util/update-version.sh` (FROM & TO) and run it
+1. Submit a new PR with these changes and wait for it to be merged
+1. Tag the new release `git tag -a X.Y.Z` and `git push --tags`
+1. Once the CI is green, a new release will be automatically created in draft mode. 
+   Reuse this release and make sure that assets have been added.
+1. Write the release notes (it takes time) following previous examples
+1. Run `util/publish.sh --do-it` to publish the new release to crates.io

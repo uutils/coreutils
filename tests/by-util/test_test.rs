@@ -5,17 +5,19 @@
 
 // spell-checker:ignore (words) egid euid pseudofloat
 
-use crate::common::util::TestScenario;
-use std::thread::sleep;
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_empty_test_equivalent_to_false() {
-    new_ucmd!().run().code_is(1);
+    new_ucmd!().fails_with_code(1);
 }
 
 #[test]
 fn test_empty_string_is_false() {
-    new_ucmd!().arg("").run().code_is(1);
+    new_ucmd!().arg("").fails_with_code(1);
 }
 
 #[test]
@@ -56,24 +58,24 @@ fn test_some_literals() {
 
     // run the inverse of all these tests
     for test in &tests {
-        scenario.ucmd().arg("!").arg(test).run().code_is(1);
+        scenario.ucmd().arg("!").arg(test).fails_with_code(1);
     }
 }
 
 #[test]
 fn test_double_not_is_false() {
-    new_ucmd!().args(&["!", "!"]).run().code_is(1);
+    new_ucmd!().args(&["!", "!"]).fails_with_code(1);
 }
 
 #[test]
 fn test_and_not_is_false() {
-    new_ucmd!().args(&["-a", "!"]).run().code_is(2);
+    new_ucmd!().args(&["-a", "!"]).fails_with_code(2);
 }
 
 #[test]
 fn test_not_and_is_false() {
     // `-a` is a literal here & has nonzero length
-    new_ucmd!().args(&["!", "-a"]).run().code_is(1);
+    new_ucmd!().args(&["!", "-a"]).fails_with_code(1);
 }
 
 #[test]
@@ -90,7 +92,7 @@ fn test_simple_or() {
 fn test_errors_miss_and_or() {
     new_ucmd!()
         .args(&["-o", "arg"])
-        .fails()
+        .fails_with_code(2)
         .stderr_contains("'-o': unary operator expected");
     new_ucmd!()
         .args(&["-a", "arg"])
@@ -102,13 +104,11 @@ fn test_errors_miss_and_or() {
 fn test_negated_or() {
     new_ucmd!()
         .args(&["!", "foo", "-o", "bar"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
     new_ucmd!().args(&["foo", "-o", "!", "bar"]).succeeds();
     new_ucmd!()
         .args(&["!", "foo", "-o", "!", "bar"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -119,10 +119,10 @@ fn test_string_length_of_nothing() {
 
 #[test]
 fn test_string_length_of_empty() {
-    new_ucmd!().args(&["-n", ""]).run().code_is(1);
+    new_ucmd!().args(&["-n", ""]).fails_with_code(1);
 
     // STRING equivalent to -n STRING
-    new_ucmd!().arg("").run().code_is(1);
+    new_ucmd!().arg("").fails_with_code(1);
 }
 
 #[test]
@@ -143,14 +143,14 @@ fn test_zero_len_equals_zero_len() {
 
 #[test]
 fn test_zero_len_not_equals_zero_len_is_false() {
-    new_ucmd!().args(&["", "!=", ""]).run().code_is(1);
+    new_ucmd!().args(&["", "!=", ""]).fails_with_code(1);
 }
 
 #[test]
 fn test_double_equal_is_string_comparison_op() {
     // undocumented but part of the GNU test suite
     new_ucmd!().args(&["t", "==", "t"]).succeeds();
-    new_ucmd!().args(&["t", "==", "f"]).run().code_is(1);
+    new_ucmd!().args(&["t", "==", "f"]).fails_with_code(1);
 }
 
 #[test]
@@ -172,7 +172,7 @@ fn test_string_comparison() {
 
     // run the inverse of all these tests
     for test in &tests {
-        scenario.ucmd().arg("!").args(&test[..]).run().code_is(1);
+        scenario.ucmd().arg("!").args(&test[..]).fails_with_code(1);
     }
 }
 
@@ -181,8 +181,7 @@ fn test_string_comparison() {
 fn test_dangling_string_comparison_is_error() {
     new_ucmd!()
         .args(&["missing_something", "="])
-        .run()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_is("test: missing argument after '='");
 }
 
@@ -204,7 +203,7 @@ fn test_string_operator_is_literal_after_bang() {
     ];
 
     for test in &tests {
-        scenario.ucmd().args(&test[..]).run().code_is(1);
+        scenario.ucmd().args(&test[..]).fails_with_code(1);
     }
 }
 
@@ -253,7 +252,7 @@ fn test_some_int_compares() {
 
     // run the inverse of all these tests
     for test in &tests {
-        scenario.ucmd().arg("!").args(&test[..]).run().code_is(1);
+        scenario.ucmd().arg("!").args(&test[..]).fails_with_code(1);
     }
 }
 
@@ -285,7 +284,7 @@ fn test_negative_int_compare() {
 
     // run the inverse of all these tests
     for test in &tests {
-        scenario.ucmd().arg("!").args(&test[..]).run().code_is(1);
+        scenario.ucmd().arg("!").args(&test[..]).fails_with_code(1);
     }
 }
 
@@ -293,8 +292,7 @@ fn test_negative_int_compare() {
 fn test_float_inequality_is_error() {
     new_ucmd!()
         .args(&["123.45", "-ge", "6"])
-        .run()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_is("test: invalid integer '123.45'\n");
 }
 
@@ -309,14 +307,12 @@ fn test_invalid_utf8_integer_compare() {
 
     new_ucmd!()
         .args(&[OsStr::new("123"), OsStr::new("-ne"), arg])
-        .run()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_is("test: invalid integer $'fo\\x80o'\n");
 
     new_ucmd!()
         .args(&[arg, OsStr::new("-eq"), OsStr::new("456")])
-        .run()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_is("test: invalid integer $'fo\\x80o'\n");
 }
 
@@ -334,12 +330,10 @@ fn test_file_is_newer_than_and_older_than_itself() {
     // odd but matches GNU
     new_ucmd!()
         .args(&["regular_file", "-nt", "regular_file"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
     new_ucmd!()
         .args(&["regular_file", "-ot", "regular_file"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -349,7 +343,7 @@ fn test_non_existing_files() {
     let result = scenario
         .ucmd()
         .args(&["newer_file", "-nt", "regular_file"])
-        .fails();
+        .fails_with_code(1);
     assert!(result.stderr().is_empty());
 }
 
@@ -380,28 +374,28 @@ fn test_same_device_inode() {
 fn test_newer_file() {
     let scenario = TestScenario::new(util_name!());
 
-    scenario.fixtures.touch("regular_file");
-    sleep(std::time::Duration::from_millis(100));
+    let older_file = scenario.fixtures.make_file("older_file");
+    older_file.set_modified(std::time::UNIX_EPOCH).unwrap();
     scenario.fixtures.touch("newer_file");
 
     scenario
         .ucmd()
-        .args(&["newer_file", "-nt", "regular_file"])
+        .args(&["newer_file", "-nt", "older_file"])
         .succeeds();
 
     scenario
         .ucmd()
-        .args(&["regular_file", "-nt", "newer_file"])
+        .args(&["older_file", "-nt", "newer_file"])
         .fails();
 
     scenario
         .ucmd()
-        .args(&["regular_file", "-ot", "newer_file"])
+        .args(&["older_file", "-ot", "newer_file"])
         .succeeds();
 
     scenario
         .ucmd()
-        .args(&["newer_file", "-ot", "regular_file"])
+        .args(&["newer_file", "-ot", "older_file"])
         .fails();
 }
 
@@ -414,16 +408,14 @@ fn test_file_exists() {
 fn test_nonexistent_file_does_not_exist() {
     new_ucmd!()
         .args(&["-e", "nonexistent_file"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
 fn test_nonexistent_file_is_not_regular() {
     new_ucmd!()
         .args(&["-f", "nonexistent_file"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -514,8 +506,7 @@ fn test_is_not_empty() {
 fn test_nonexistent_file_size_test_is_false() {
     new_ucmd!()
         .args(&["-s", "nonexistent_file"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -581,12 +572,12 @@ fn test_file_is_sticky() {
 
 #[test]
 fn test_file_is_not_sticky() {
-    new_ucmd!().args(&["-k", "regular_file"]).run().code_is(1);
+    new_ucmd!().args(&["-k", "regular_file"]).fails_with_code(1);
 }
 
 #[test]
 fn test_solo_empty_parenthetical_is_error() {
-    new_ucmd!().args(&["(", ")"]).run().code_is(2);
+    new_ucmd!().args(&["(", ")"]).fails_with_code(2);
 }
 
 #[test]
@@ -624,8 +615,7 @@ fn test_parenthesized_literal() {
             .arg("(")
             .arg(test)
             .arg(")")
-            .run()
-            .code_is(1);
+            .fails_with_code(1);
     }
 }
 
@@ -633,7 +623,7 @@ fn test_parenthesized_literal() {
 fn test_parenthesized_op_compares_literal_parenthesis() {
     // ensure we aren’t treating this case as “string length of literal equal
     // sign”
-    new_ucmd!().args(&["(", "=", ")"]).run().code_is(1);
+    new_ucmd!().args(&["(", "=", ")"]).fails_with_code(1);
 }
 
 #[test]
@@ -654,13 +644,13 @@ fn test_parenthesized_string_comparison() {
 
     // run the inverse of all these tests
     for test in &tests {
-        scenario.ucmd().arg("!").args(&test[..]).run().code_is(1);
+        scenario.ucmd().arg("!").args(&test[..]).fails_with_code(1);
     }
 }
 
 #[test]
 fn test_parenthesized_right_parenthesis_as_literal() {
-    new_ucmd!().args(&["(", "-f", ")", ")"]).run().code_is(1);
+    new_ucmd!().args(&["(", "-f", ")", ")"]).fails_with_code(1);
 }
 
 #[test]
@@ -674,8 +664,7 @@ fn test_file_owned_by_euid() {
 fn test_nonexistent_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-O", "nonexistent_file"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -719,8 +708,7 @@ fn test_file_owned_by_egid() {
 fn test_nonexistent_file_not_owned_by_egid() {
     new_ucmd!()
         .args(&["-G", "nonexistent_file"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -749,8 +737,7 @@ fn test_op_precedence_and_or_1() {
 fn test_op_precedence_and_or_1_overridden_by_parentheses() {
     new_ucmd!()
         .args(&["(", " ", "-o", "", ")", "-a", ""])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -764,8 +751,7 @@ fn test_op_precedence_and_or_2() {
 fn test_op_precedence_and_or_2_overridden_by_parentheses() {
     new_ucmd!()
         .args(&["", "-a", "(", "", "-o", " ", ")", "-a", " "])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 }
 
 #[test]
@@ -790,7 +776,7 @@ fn test_negated_boolean_precedence() {
     ];
 
     for test in &negative_tests {
-        scenario.ucmd().args(&test[..]).run().code_is(1);
+        scenario.ucmd().args(&test[..]).fails_with_code(1);
     }
 }
 
@@ -802,26 +788,22 @@ fn test_bang_bool_op_precedence() {
 
     new_ucmd!()
         .args(&["!", "a value", "-o", "another value"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 
     // Introducing a UOP — even one that is equivalent to a bare string — causes
     // bang to invert only the first term
     new_ucmd!()
         .args(&["!", "-n", "", "-a", ""])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
     new_ucmd!()
         .args(&["!", "", "-a", "-n", ""])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 
     // for compound Boolean expressions, bang inverts the _next_ expression
     // only, not the entire compound expression
     new_ucmd!()
         .args(&["!", "", "-a", "", "-a", ""])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 
     // parentheses can override this
     new_ucmd!()
@@ -834,8 +816,7 @@ fn test_inverted_parenthetical_bool_op_precedence() {
     // For a Boolean combination of two literals, bang inverts the entire expression
     new_ucmd!()
         .args(&["!", "a value", "-o", "another value"])
-        .run()
-        .code_is(1);
+        .fails_with_code(1);
 
     // only the parenthetical is inverted, not the entire expression
     new_ucmd!()
@@ -848,8 +829,7 @@ fn test_inverted_parenthetical_bool_op_precedence() {
 fn test_dangling_parenthesis() {
     new_ucmd!()
         .args(&["(", "(", "a", "!=", "b", ")", "-o", "-n", "c"])
-        .run()
-        .code_is(2);
+        .fails_with_code(2);
     new_ucmd!()
         .args(&["(", "(", "a", "!=", "b", ")", "-o", "-n", "c", ")"])
         .succeeds();
@@ -869,29 +849,27 @@ fn test_complicated_parenthesized_expression() {
 fn test_erroneous_parenthesized_expression() {
     new_ucmd!()
         .args(&["a", "!=", "(", "b", "-a", "b", ")", "!=", "c"])
-        .run()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_is("test: extra argument 'b'\n");
 }
 
 #[test]
 fn test_or_as_filename() {
-    new_ucmd!().args(&["x", "-a", "-z", "-o"]).run().code_is(1);
+    new_ucmd!()
+        .args(&["x", "-a", "-z", "-o"])
+        .fails_with_code(1);
 }
 
 #[test]
 #[ignore = "TODO: Busybox has this working"]
 fn test_filename_or_with_equal() {
-    new_ucmd!()
-        .args(&["-f", "=", "a", "-o", "b"])
-        .run()
-        .code_is(0);
+    new_ucmd!().args(&["-f", "=", "a", "-o", "b"]).succeeds();
 }
 
 #[test]
 #[ignore = "GNU considers this an error"]
 fn test_string_length_and_nothing() {
-    new_ucmd!().args(&["-n", "a", "-a"]).run().code_is(2);
+    new_ucmd!().args(&["-n", "a", "-a"]).fails_with_code(2);
 }
 
 #[test]
@@ -907,7 +885,7 @@ fn test_bracket_syntax_failure() {
     let scenario = TestScenario::new("[");
     let mut ucmd = scenario.ucmd();
 
-    ucmd.args(&["1", "-eq", "2", "]"]).run().code_is(1);
+    ucmd.args(&["1", "-eq", "2", "]"]).fails_with_code(1);
 }
 
 #[test]
@@ -917,8 +895,7 @@ fn test_bracket_syntax_missing_right_bracket() {
 
     // Missing closing bracket takes precedence over other possible errors.
     ucmd.args(&["1", "-eq"])
-        .run()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_is("[: missing ']'\n");
 }
 
@@ -937,21 +914,39 @@ fn test_bracket_syntax_version() {
 
     ucmd.arg("--version")
         .succeeds()
-        .stdout_matches(&r"\[ \d+\.\d+\.\d+".parse().unwrap());
+        .stdout_matches(&r"\[ \(uutils coreutils\) \d+\.\d+\.\d+".parse().unwrap());
 }
 
 #[test]
 #[allow(non_snake_case)]
 #[cfg(unix)]
 fn test_file_N() {
+    use std::{fs::FileTimes, time::Duration};
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    scene.ucmd().args(&["-N", "regular_file"]).fails();
-    // The file will have different create/modified data
-    // so, test -N will return 0
-    sleep(std::time::Duration::from_millis(100));
-    at.touch("regular_file");
-    scene.ucmd().args(&["-N", "regular_file"]).succeeds();
+
+    let f = at.make_file("file");
+
+    // Set the times so that the file is accessed _after_ being modified
+    // => test -N return false.
+    let times = FileTimes::new()
+        .set_accessed(std::time::UNIX_EPOCH + Duration::from_secs(123))
+        .set_modified(std::time::UNIX_EPOCH);
+    f.set_times(times).unwrap();
+    // TODO: stat call for debugging #7570, remove?
+    println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
+    scene.ucmd().args(&["-N", "file"]).fails();
+
+    // Set the times so that the file is modified _after_ being accessed
+    // => test -N return true.
+    let times = FileTimes::new()
+        .set_accessed(std::time::UNIX_EPOCH)
+        .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(123));
+    f.set_times(times).unwrap();
+    // TODO: stat call for debugging #7570, remove?
+    println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
+    scene.ucmd().args(&["-N", "file"]).succeeds();
 }
 
 #[test]
@@ -988,4 +983,37 @@ fn test_missing_argument_after() {
         result.stderr_str().trim(),
         "test: missing argument after 'foo'"
     );
+}
+
+#[test]
+fn test_string_lt_gt_operator() {
+    let items = [
+        ("a", "b"),
+        ("a", "aa"),
+        ("a", "a "),
+        ("a", "a b"),
+        ("", "b"),
+        ("a", "ä"),
+    ];
+    for (left, right) in items {
+        new_ucmd!().args(&[left, "<", right]).succeeds().no_output();
+        new_ucmd!()
+            .args(&[right, "<", left])
+            .fails_with_code(1)
+            .no_output();
+
+        new_ucmd!().args(&[right, ">", left]).succeeds().no_output();
+        new_ucmd!()
+            .args(&[left, ">", right])
+            .fails_with_code(1)
+            .no_output();
+    }
+    new_ucmd!()
+        .args(&["", "<", ""])
+        .fails_with_code(1)
+        .no_output();
+    new_ucmd!()
+        .args(&["", ">", ""])
+        .fails_with_code(1)
+        .no_output();
 }

@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
@@ -28,8 +28,8 @@ use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::{
     error::{FromIo, UError, UResult},
     format_usage, help_about, help_usage,
+    parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
-    shortcut_value_parser::ShortcutValueParser,
     show,
 };
 
@@ -396,7 +396,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
@@ -794,8 +794,7 @@ fn files0_iter<'a>(
                     // ...Windows does not, we must go through Strings.
                     #[cfg(not(unix))]
                     {
-                        let s = String::from_utf8(p)
-                            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                        let s = String::from_utf8(p).map_err(io::Error::other)?;
                         Ok(Input::Path(PathBuf::from(s).into()))
                     }
                 }
@@ -805,7 +804,7 @@ fn files0_iter<'a>(
             }),
     );
     // Loop until there is an error; yield that error and then nothing else.
-    std::iter::from_fn(move || {
+    iter::from_fn(move || {
         let next = i.as_mut().and_then(Iterator::next);
         if matches!(next, Some(Err(_)) | None) {
             i = None;

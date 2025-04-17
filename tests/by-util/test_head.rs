@@ -4,21 +4,31 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
+// spell-checker:ignore (words) seekable
 
-use crate::common::util::TestScenario;
-
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+use std::io::Read;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 static INPUT: &str = "lorem_ipsum.txt";
 
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_default.expected");
 }
 
@@ -27,7 +37,7 @@ fn test_stdin_1_line_obsolete() {
     new_ucmd!()
         .args(&["-1"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
@@ -36,7 +46,7 @@ fn test_stdin_1_line() {
     new_ucmd!()
         .args(&["-n", "1"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
@@ -45,7 +55,7 @@ fn test_stdin_negative_23_line() {
     new_ucmd!()
         .args(&["-n", "-23"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
@@ -54,7 +64,7 @@ fn test_stdin_5_chars() {
     new_ucmd!()
         .args(&["-c", "5"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
@@ -62,7 +72,7 @@ fn test_stdin_5_chars() {
 fn test_single_default() {
     new_ucmd!()
         .arg(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_default.expected");
 }
 
@@ -70,7 +80,7 @@ fn test_single_default() {
 fn test_single_1_line_obsolete() {
     new_ucmd!()
         .args(&["-1", INPUT])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
@@ -78,7 +88,7 @@ fn test_single_1_line_obsolete() {
 fn test_single_1_line() {
     new_ucmd!()
         .args(&["-n", "1", INPUT])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_1_line.expected");
 }
 
@@ -86,7 +96,7 @@ fn test_single_1_line() {
 fn test_single_5_chars() {
     new_ucmd!()
         .args(&["-c", "5", INPUT])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
@@ -94,7 +104,7 @@ fn test_single_5_chars() {
 fn test_verbose() {
     new_ucmd!()
         .args(&["-v", INPUT])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_verbose.expected");
 }
 
@@ -108,7 +118,7 @@ fn test_byte_syntax() {
     new_ucmd!()
         .args(&["-1c"])
         .pipe_in("abc")
-        .run()
+        .succeeds()
         .stdout_is("a");
 }
 
@@ -117,7 +127,7 @@ fn test_line_syntax() {
     new_ucmd!()
         .args(&["-n", "2048m"])
         .pipe_in("a\n")
-        .run()
+        .succeeds()
         .stdout_is("a\n");
 }
 
@@ -126,7 +136,7 @@ fn test_zero_terminated_syntax() {
     new_ucmd!()
         .args(&["-z", "-n", "1"])
         .pipe_in("x\0y")
-        .run()
+        .succeeds()
         .stdout_is("x\0");
 }
 
@@ -135,7 +145,7 @@ fn test_zero_terminated_syntax_2() {
     new_ucmd!()
         .args(&["-z", "-n", "2"])
         .pipe_in("x\0y")
-        .run()
+        .succeeds()
         .stdout_is("x\0y");
 }
 
@@ -144,7 +154,7 @@ fn test_zero_terminated_negative_lines() {
     new_ucmd!()
         .args(&["-z", "-n", "-1"])
         .pipe_in("x\0y\0z\0")
-        .run()
+        .succeeds()
         .stdout_is("x\0y\0");
 }
 
@@ -153,7 +163,7 @@ fn test_negative_byte_syntax() {
     new_ucmd!()
         .args(&["--bytes=-2"])
         .pipe_in("a\n")
-        .run()
+        .succeeds()
         .stdout_is("");
 }
 
@@ -232,14 +242,14 @@ fn test_multiple_nonexistent_files() {
 fn test_sequence_fixture() {
     new_ucmd!()
         .args(&["-n", "-10", "sequence"])
-        .run()
+        .succeeds()
         .stdout_is_fixture("sequence.expected");
 }
 #[test]
 fn test_file_backwards() {
     new_ucmd!()
         .args(&["-c", "-10", "lorem_ipsum.txt"])
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_backwards_file.expected");
 }
 
@@ -247,7 +257,7 @@ fn test_file_backwards() {
 fn test_zero_terminated() {
     new_ucmd!()
         .args(&["-z", "zero_terminated.txt"])
-        .run()
+        .succeeds()
         .stdout_is_fixture("zero_terminated.expected");
 }
 
@@ -311,24 +321,20 @@ fn test_bad_utf8_lines() {
 fn test_head_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1024R", "emptyfile.txt"])
-        .fails()
-        .stderr_is(
-            "head: invalid number of bytes: '1024R': Value too large for defined data type\n",
-        );
+        .succeeds()
+        .no_output();
     new_ucmd!()
         .args(&["-n", "1024R", "emptyfile.txt"])
-        .fails()
-        .stderr_is(
-            "head: invalid number of lines: '1024R': Value too large for defined data type\n",
-        );
+        .succeeds()
+        .no_output();
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_is("head: invalid number of bytes: '1Y': Value too large for defined data type\n");
+        .succeeds()
+        .no_output();
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
-        .fails()
-        .stderr_is("head: invalid number of lines: '1Y': Value too large for defined data type\n");
+        .succeeds()
+        .no_output();
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];
@@ -340,10 +346,7 @@ fn test_head_invalid_num() {
     {
         let sizes = ["-1000G", "-10T"];
         for size in &sizes {
-            new_ucmd!()
-                .args(&["-c", size])
-                .fails()
-                .stderr_is("head: out of range integral type conversion attempted: number of -bytes or -lines is too large\n");
+            new_ucmd!().args(&["-c", size]).succeeds().no_output();
         }
     }
     new_ucmd!()
@@ -379,7 +382,7 @@ fn test_presume_input_pipe_default() {
     new_ucmd!()
         .args(&["---presume-input-pipe"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_default.expected");
 }
 
@@ -388,23 +391,62 @@ fn test_presume_input_pipe_5_chars() {
     new_ucmd!()
         .args(&["-c", "5", "---presume-input-pipe"])
         .pipe_in_fixture(INPUT)
-        .run()
+        .succeeds()
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
 #[test]
-fn test_read_backwards_lines_large_file() {
+fn test_all_but_last_bytes_large_file_piped() {
+    // Validate print-all-but-last-n-bytes with a large piped-in (i.e. non-seekable) file.
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    // First, create all our fixtures.
+    let seq_20000_file_name = "seq_20000";
+    let seq_19000_file_name = "seq_19000";
+    let seq_19001_20000_file_name = "seq_19001_20000";
+    scene
+        .cmd("seq")
+        .arg("20000")
+        .set_stdout(fixtures.make_file(seq_20000_file_name))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .arg("19000")
+        .set_stdout(fixtures.make_file(seq_19000_file_name))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .args(&["19001", "20000"])
+        .set_stdout(fixtures.make_file(seq_19001_20000_file_name))
+        .succeeds();
+
+    let seq_19001_20000_file_length = fixtures
+        .open(seq_19001_20000_file_name)
+        .metadata()
+        .unwrap()
+        .len();
+    scene
+        .ucmd()
+        .args(&["-c", &format!("-{seq_19001_20000_file_length}")])
+        .pipe_in_fixture(seq_20000_file_name)
+        .succeeds()
+        .stdout_only_fixture(seq_19000_file_name);
+}
+
+#[test]
+fn test_all_but_last_lines_large_file() {
     // Create our fixtures on the fly. We need the input file to be at least double
     // the size of BUF_SIZE as specified in head.rs. Go for something a bit bigger
     // than that.
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
-    let seq_30000_file_name = "seq_30000";
+    let seq_20000_file_name = "seq_20000";
     let seq_1000_file_name = "seq_1000";
     scene
         .cmd("seq")
-        .arg("30000")
-        .set_stdout(fixtures.make_file(seq_30000_file_name))
+        .arg("20000")
+        .set_stdout(fixtures.make_file(seq_20000_file_name))
         .succeeds();
     scene
         .cmd("seq")
@@ -415,21 +457,246 @@ fn test_read_backwards_lines_large_file() {
     // Now run our tests.
     scene
         .ucmd()
-        .args(&["-n", "-29000", "seq_30000"])
+        .args(&["-n", "-19000", seq_20000_file_name])
         .succeeds()
-        .stdout_is_fixture("seq_1000");
+        .stdout_only_fixture("seq_1000");
 
     scene
         .ucmd()
-        .args(&["-n", "-30000", "seq_30000"])
-        .run()
-        .stdout_is_fixture("emptyfile.txt");
+        .args(&["-n", "-20000", seq_20000_file_name])
+        .succeeds()
+        .stdout_only_fixture("emptyfile.txt");
 
     scene
         .ucmd()
-        .args(&["-n", "-30001", "seq_30000"])
-        .run()
-        .stdout_is_fixture("emptyfile.txt");
+        .args(&["-n", "-20001", seq_20000_file_name])
+        .succeeds()
+        .stdout_only_fixture("emptyfile.txt");
+}
+
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+#[test]
+fn test_validate_stdin_offset_lines() {
+    // A handful of unix-only tests to validate behavior when reading from stdin on a seekable
+    // file. GNU-compatibility requires that the stdin file be left such that if another
+    // process is invoked on the same stdin file after head has run, the subsequent file should
+    // start reading from the byte after the last byte printed by head.
+    // Since this is unix-only requirement, keep this as a separate test rather than adding a
+    // conditionally-compiled segment to multiple tests.
+    //
+    // Test scenarios...
+    // 1 - Print the first n lines
+    // 2 - Print all-but the last n lines
+    // 3 - Print all but the last n lines, large file.
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    // Test 1 - Print the first n lines
+    fixtures.write("f1", "a\nb\nc\n");
+    let file = fixtures.open("f1");
+    let mut file_shadow = file.try_clone().unwrap();
+    scene
+        .ucmd()
+        .args(&["-n", "1"])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only("a\n");
+    let mut bytes_remaining_in_stdin = vec![];
+    assert_eq!(
+        file_shadow
+            .read_to_end(&mut bytes_remaining_in_stdin)
+            .unwrap(),
+        4
+    );
+    assert_eq!(
+        String::from_utf8(bytes_remaining_in_stdin).unwrap(),
+        "b\nc\n"
+    );
+
+    // Test 2 - Print all-but the last n lines
+    fixtures.write("f2", "a\nb\nc\n");
+    let file = fixtures.open("f2");
+    let mut file_shadow = file.try_clone().unwrap();
+    scene
+        .ucmd()
+        .args(&["-n", "-1"])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only("a\nb\n");
+    let mut bytes_remaining_in_stdin = vec![];
+    assert_eq!(
+        file_shadow
+            .read_to_end(&mut bytes_remaining_in_stdin)
+            .unwrap(),
+        2
+    );
+    assert_eq!(String::from_utf8(bytes_remaining_in_stdin).unwrap(), "c\n");
+
+    // Test 3 - Print all but the last n lines, large input file.
+    // First, create all our fixtures.
+    let seq_20000_file_name = "seq_20000";
+    let seq_1000_file_name = "seq_1000";
+    let seq_1001_20000_file_name = "seq_1001_20000";
+    scene
+        .cmd("seq")
+        .arg("20000")
+        .set_stdout(fixtures.make_file(seq_20000_file_name))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .arg("1000")
+        .set_stdout(fixtures.make_file(seq_1000_file_name))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .args(&["1001", "20000"])
+        .set_stdout(fixtures.make_file(seq_1001_20000_file_name))
+        .succeeds();
+
+    let file = fixtures.open(seq_20000_file_name);
+    let file_shadow = file.try_clone().unwrap();
+    scene
+        .ucmd()
+        .args(&["-n", "-19000"])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only_fixture(seq_1000_file_name);
+    scene
+        .cmd("cat")
+        .set_stdin(file_shadow)
+        .succeeds()
+        .stdout_only_fixture(seq_1001_20000_file_name);
+}
+
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "android"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd")
+))]
+#[test]
+fn test_validate_stdin_offset_bytes() {
+    // A handful of unix-only tests to validate behavior when reading from stdin on a seekable
+    // file. GNU-compatibility requires that the stdin file be left such that if another
+    // process is invoked on the same stdin file after head has run, the subsequent file should
+    // start reading from the byte after the last byte printed by head.
+    // Since this is unix-only requirement, keep this as a separate test rather than adding a
+    // conditionally-compiled segment to multiple tests.
+    //
+    // Test scenarios...
+    // 1 - Print the first n bytes
+    // 2 - Print all-but the last n bytes
+    // 3 - Print all-but the last n bytes, with n=0 (i.e. print everything)
+    // 4 - Print all but the last n bytes, large file.
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    // Test 1 - Print the first n bytes
+    fixtures.write("f1", "abc\ndef\n");
+    let file = fixtures.open("f1");
+    let mut file_shadow = file.try_clone().unwrap();
+    scene
+        .ucmd()
+        .args(&["-c", "2"])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only("ab");
+    let mut bytes_remaining_in_stdin = vec![];
+    assert_eq!(
+        file_shadow
+            .read_to_end(&mut bytes_remaining_in_stdin)
+            .unwrap(),
+        6
+    );
+    assert_eq!(
+        String::from_utf8(bytes_remaining_in_stdin).unwrap(),
+        "c\ndef\n"
+    );
+
+    // Test 2 - Print all-but the last n bytes
+    fixtures.write("f2", "abc\ndef\n");
+    let file = fixtures.open("f2");
+    let mut file_shadow = file.try_clone().unwrap();
+    scene
+        .ucmd()
+        .args(&["-c", "-3"])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only("abc\nd");
+    let mut bytes_remaining_in_stdin = vec![];
+    assert_eq!(
+        file_shadow
+            .read_to_end(&mut bytes_remaining_in_stdin)
+            .unwrap(),
+        3
+    );
+    assert_eq!(String::from_utf8(bytes_remaining_in_stdin).unwrap(), "ef\n");
+
+    // Test 3 - Print all-but the last n bytes, n=0 (i.e. print everything)
+    fixtures.write("f3", "abc\ndef\n");
+    let file = fixtures.open("f3");
+    let mut file_shadow = file.try_clone().unwrap();
+    scene
+        .ucmd()
+        .args(&["-c", "-0"])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only("abc\ndef\n");
+    let mut bytes_remaining_in_stdin = vec![];
+    assert_eq!(
+        file_shadow
+            .read_to_end(&mut bytes_remaining_in_stdin)
+            .unwrap(),
+        0
+    );
+    assert_eq!(String::from_utf8(bytes_remaining_in_stdin).unwrap(), "");
+
+    // Test 4 - Print all but the last n bytes, large input file.
+    // First, create all our fixtures.
+    let seq_20000_file_name = "seq_20000";
+    let seq_19000_file_name = "seq_19000";
+    let seq_19001_20000_file_name = "seq_19001_20000";
+    scene
+        .cmd("seq")
+        .arg("20000")
+        .set_stdout(fixtures.make_file(seq_20000_file_name))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .arg("19000")
+        .set_stdout(fixtures.make_file(seq_19000_file_name))
+        .succeeds();
+    scene
+        .cmd("seq")
+        .args(&["19001", "20000"])
+        .set_stdout(fixtures.make_file(seq_19001_20000_file_name))
+        .succeeds();
+
+    let file = fixtures.open(seq_20000_file_name);
+    let file_shadow = file.try_clone().unwrap();
+    let seq_19001_20000_file_length = fixtures
+        .open(seq_19001_20000_file_name)
+        .metadata()
+        .unwrap()
+        .len();
+    scene
+        .ucmd()
+        .args(&["-c", &format!("-{seq_19001_20000_file_length}")])
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only_fixture(seq_19000_file_name);
+    scene
+        .cmd("cat")
+        .set_stdin(file_shadow)
+        .succeeds()
+        .stdout_only_fixture(seq_19001_20000_file_name);
 }
 
 #[cfg(all(
@@ -504,8 +771,7 @@ fn test_value_too_large() {
 
     new_ucmd!()
         .args(&["-n", format!("{MAX}0").as_str(), "lorem_ipsum.txt"])
-        .fails()
-        .stderr_contains("Value too large for defined data type");
+        .succeeds();
 }
 
 #[test]
@@ -532,8 +798,8 @@ fn test_write_to_dev_full() {
             new_ucmd!()
                 .pipe_in_fixture(INPUT)
                 .set_stdout(dev_full)
-                .run()
-                .stderr_contains("No space left on device");
+                .fails()
+                .stderr_contains("error writing 'standard output': No space left on device");
         }
     }
 }

@@ -20,15 +20,6 @@ use uucore::mode::get_umask;
 
 use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
 
-// From /usr/include/linux/fs.h:
-// #define FICLONE		_IOW(0x94, 9, int)
-// Use a macro as libc::ioctl expects u32 or u64 depending on the arch
-macro_rules! FICLONE {
-    () => {
-        0x40049409
-    };
-}
-
 /// The fallback behavior for [`clone`] on failed system call.
 #[derive(Clone, Copy)]
 enum CloneFallback {
@@ -70,7 +61,15 @@ where
     let dst_file = File::create(&dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
-    let result = unsafe { libc::ioctl(dst_fd, FICLONE!(), src_fd) };
+    // Using .try_into().unwrap() is required as glibc, musl & android all have different type for ioctl()
+    #[allow(clippy::unnecessary_fallible_conversions)]
+    let result = unsafe {
+        libc::ioctl(
+            dst_fd,
+            linux_raw_sys::ioctl::FICLONE.try_into().unwrap(),
+            src_fd,
+        )
+    };
     if result == 0 {
         return Ok(());
     }
@@ -341,7 +340,7 @@ pub(crate) fn copy_on_write(
         }
         (ReflinkMode::Auto, SparseMode::Always) => {
             copy_debug.sparse_detection = SparseDebug::Zeros; // Default SparseDebug val for
-                                                              // SparseMode::Always
+            // SparseMode::Always
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
                 copy_stream(source, dest, source_is_fifo).map(|_| ())
@@ -402,7 +401,7 @@ pub(crate) fn copy_on_write(
             clone(source, dest, CloneFallback::Error)
         }
         (ReflinkMode::Always, _) => {
-            return Err("`--reflink=always` can be used only with --sparse=auto".into())
+            return Err("`--reflink=always` can be used only with --sparse=auto".into());
         }
     };
     result.context(context)?;
@@ -525,7 +524,7 @@ fn handle_reflink_auto_sparse_auto(
         } else {
             copy_method = CopyMethod::SparseCopyWithoutHole;
         } // Since sparse_flag is true, sparse_detection shall be SeekHole for any non virtual
-          // regular sparse file and the file will be sparsely copied
+        // regular sparse file and the file will be sparsely copied
         copy_debug.sparse_detection = SparseDebug::SeekHole;
     }
 
@@ -558,7 +557,7 @@ fn handle_reflink_never_sparse_auto(
     if sparse_flag {
         if blocks == 0 && data_flag {
             copy_method = CopyMethod::FSCopy; // Handles virtual files which have size > 0 but no
-                                              // disk allocation
+        // disk allocation
         } else {
             copy_method = CopyMethod::SparseCopyWithoutHole; // Handles regular sparse-files
         }

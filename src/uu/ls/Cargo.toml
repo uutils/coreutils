@@ -1,17 +1,18 @@
 [package]
 name = "uu_ls"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "ls ~ (uutils) display directory contents"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ls"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/ls.rs"
@@ -24,9 +25,9 @@ glob = { workspace = true }
 hostname = { workspace = true }
 lscolors = { workspace = true }
 number_prefix = { workspace = true }
-once_cell = { workspace = true }
 selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "colors",
   "custom-tz-fmt",
@@ -34,6 +35,7 @@ uucore = { workspace = true, features = [
   "format",
   "fs",
   "fsxattr",
+  "parser",
   "quoting-style",
   "version-cmp",
 ] }

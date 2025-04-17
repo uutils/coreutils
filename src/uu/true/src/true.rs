@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::{ffi::OsString, io::Write};
-use uucore::error::{set_exit_code, UResult};
+use uucore::error::{UResult, set_exit_code};
 use uucore::help_about;
 
 const ABOUT: &str = help_about!("true.md");
@@ -22,14 +22,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let error = match e.kind() {
             clap::error::ErrorKind::DisplayHelp => command.print_help(),
             clap::error::ErrorKind::DisplayVersion => {
-                writeln!(std::io::stdout(), "{}", command.render_version())
+                write!(std::io::stdout(), "{}", command.render_version())
             }
             _ => Ok(()),
         };
 
         if let Err(print_fail) = error {
             // Try to display this error.
-            let _ = writeln!(std::io::stderr(), "{}: {}", uucore::util_name(), print_fail);
+            let _ = writeln!(std::io::stderr(), "{}: {print_fail}", uucore::util_name());
             // Mirror GNU options. When failing to print warnings or version flags, then we exit
             // with FAIL. This avoids allocation some error information which may result in yet
             // other types of failure.
@@ -42,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(clap::crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)

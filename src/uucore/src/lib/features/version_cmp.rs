@@ -22,10 +22,10 @@ fn version_non_digit_cmp(a: &str, b: &str) -> Ordering {
             (None, Some(_)) => return Ordering::Less,
             (Some(_), None) => return Ordering::Greater,
             (Some(c1), Some(c2)) if c1.is_ascii_alphabetic() && !c2.is_ascii_alphabetic() => {
-                return Ordering::Less
+                return Ordering::Less;
             }
             (Some(c1), Some(c2)) if !c1.is_ascii_alphabetic() && c2.is_ascii_alphabetic() => {
-                return Ordering::Greater
+                return Ordering::Greater;
             }
             (Some(c1), Some(c2)) => return c1.cmp(&c2),
         }
@@ -174,12 +174,12 @@ mod tests {
         );
 
         // Shortened names
-        assert_eq!(version_cmp("world", "wo"), Ordering::Greater,);
+        assert_eq!(version_cmp("world", "wo"), Ordering::Greater);
 
-        assert_eq!(version_cmp("hello10wo", "hello10world"), Ordering::Less,);
+        assert_eq!(version_cmp("hello10wo", "hello10world"), Ordering::Less);
 
         // Simple names
-        assert_eq!(version_cmp("world", "hello"), Ordering::Greater,);
+        assert_eq!(version_cmp("world", "hello"), Ordering::Greater);
 
         assert_eq!(version_cmp("hello", "world"), Ordering::Less);
 

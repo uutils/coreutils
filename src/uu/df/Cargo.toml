@@ -1,25 +1,27 @@
 [package]
 name = "uu_df"
-version = "0.0.29"
-authors = ["uutils developers"]
-license = "MIT"
 description = "df ~ (uutils) display file system information"
-
-homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/df"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
-categories = ["command-line-utilities"]
-edition = "2021"
-
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
 readme.workspace = true
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/df.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["libc", "fsext"] }
+uucore = { workspace = true, features = ["libc", "fsext", "parser"] }
 unicode-width = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

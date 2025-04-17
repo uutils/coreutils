@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use chrono::{DateTime, Local};
-use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
@@ -24,19 +24,19 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use thiserror::Error;
-use uucore::display::{print_verbatim, Quotable};
-use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
+use uucore::display::{Quotable, print_verbatim};
+use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::line_ending::LineEnding;
-use uucore::parse_glob;
-use uucore::parse_size::{parse_size_u64, ParseSizeError};
-use uucore::shortcut_value_parser::ShortcutValueParser;
+use uucore::parser::parse_glob;
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
-    FILE_STANDARD_INFO,
+    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
+    GetFileInformationByHandleEx,
 };
 
 mod options {
@@ -242,9 +242,8 @@ fn get_size_on_disk(path: &Path) -> u64 {
 
     // bind file so it stays in scope until end of function
     // if it goes out of scope the handle below becomes invalid
-    let file = match fs::File::open(path) {
-        Ok(file) => file,
-        Err(_) => return size_on_disk, // opening directories will fail
+    let Ok(file) = File::open(path) else {
+        return size_on_disk; // opening directories will fail
     };
 
     unsafe {
@@ -254,8 +253,8 @@ fn get_size_on_disk(path: &Path) -> u64 {
         let success = GetFileInformationByHandleEx(
             file.as_raw_handle() as HANDLE,
             FileStandardInfo,
-            file_info_ptr as _,
-            std::mem::size_of::<FILE_STANDARD_INFO>() as u32,
+            file_info_ptr.cast(),
+            size_of::<FILE_STANDARD_INFO>() as u32,
         );
 
         if success != 0 {
@@ -270,9 +269,8 @@ fn get_size_on_disk(path: &Path) -> u64 {
 fn get_file_info(path: &Path) -> Option<FileInfo> {
     let mut result = None;
 
-    let file = match fs::File::open(path) {
-        Ok(file) => file,
-        Err(_) => return result,
+    let Ok(file) = File::open(path) else {
+        return result;
     };
 
     unsafe {
@@ -282,8 +280,8 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
         let success = GetFileInformationByHandleEx(
             file.as_raw_handle() as HANDLE,
             FileIdInfo,
-            file_info_ptr as _,
-            std::mem::size_of::<FILE_ID_INFO>() as u32,
+            file_info_ptr.cast(),
+            size_of::<FILE_ID_INFO>() as u32,
         );
 
         if success != 0 {
@@ -479,7 +477,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let mut exclude_patterns = Vec::new();
     for f in excludes_iterator.chain(exclude_from_iterator) {
         if matches.get_flag(options::VERBOSE) {
-            println!("adding {:?} to the exclude list ", &f);
+            println!("adding {f:?} to the exclude list ");
         }
         match parse_glob::from_str(&f) {
             Ok(glob) => exclude_patterns.push(glob),
@@ -522,7 +520,7 @@ impl StatPrinter {
                             .is_some_and(|threshold| threshold.should_exclude(size))
                             && self
                                 .max_depth
-                                .map_or(true, |max_depth| stat_info.depth <= max_depth)
+                                .is_none_or(|max_depth| stat_info.depth <= max_depth)
                             && (!self.summarize || stat_info.depth == 0)
                         {
                             self.print_stat(&stat_info.stat, size)?;
@@ -568,7 +566,7 @@ impl StatPrinter {
             let secs = get_time_secs(time, stat)?;
             let tm = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs));
             let time_str = tm.format(&self.time_format).to_string();
-            print!("{}\t{}\t", self.convert_size(size), time_str);
+            print!("{}\t{time_str}\t", self.convert_size(size));
         } else {
             print!("{}\t", self.convert_size(size));
         }
@@ -589,20 +587,18 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
         // First, check if the file_name is a directory
         let path = PathBuf::from(file_name);
         if path.is_dir() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("{file_name}: read error: Is a directory"),
-            ));
+            return Err(std::io::Error::other(format!(
+                "{file_name}: read error: Is a directory"
+            )));
         }
 
         // Attempt to open the file and handle the error if it does not exist
         match File::open(file_name) {
             Ok(file) => Box::new(BufReader::new(file)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("cannot open '{file_name}' for reading: No such file or directory"),
-                ))
+                return Err(std::io::Error::other(format!(
+                    "cannot open '{file_name}' for reading: No such file or directory"
+                )));
             }
             Err(e) => return Err(e),
         }
@@ -646,13 +642,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let files = if let Some(file_from) = matches.get_one::<String>(options::FILES0_FROM) {
         if file_from == "-" && matches.get_one::<String>(options::FILE).is_some() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "extra operand {}\nfile operands cannot be combined with --files0-from",
-                    matches.get_one::<String>(options::FILE).unwrap().quote()
-                ),
-            )
+            return Err(std::io::Error::other(format!(
+                "extra operand {}\nfile operands cannot be combined with --files0-from",
+                matches.get_one::<String>(options::FILE).unwrap().quote()
+            ))
             .into());
         }
 
@@ -663,7 +656,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             files.collect()
         } else {
             // Deduplicate while preserving order
-            let mut seen = std::collections::HashSet::new();
+            let mut seen = HashSet::new();
             files
                 .filter(|path| seen.insert(path.clone()))
                 .collect::<Vec<_>>()
@@ -692,11 +685,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if matches.get_flag(options::BLOCK_SIZE_1M) {
         SizeFormat::BlockSize(1024 * 1024)
     } else {
-        SizeFormat::BlockSize(read_block_size(
-            matches
-                .get_one::<String>(options::BLOCK_SIZE)
-                .map(AsRef::as_ref),
-        )?)
+        let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
+        let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
+        if block_size == 0 {
+            return Err(std::io::Error::other(format!(
+                "invalid --{} argument {}",
+                options::BLOCK_SIZE,
+                block_size_str.map_or("???BUG", |v| v).quote()
+            ))
+            .into());
+        }
+        SizeFormat::BlockSize(block_size)
     };
 
     let traversal_options = TraversalOptions {
@@ -833,7 +832,7 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
@@ -1104,12 +1103,12 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{} argument {}", option, s.quote())
+            format!("invalid suffix in --{option} argument {}", s.quote())
         }
         ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{} argument {}", option, s.quote())
+            format!("invalid --{option} argument {}", s.quote())
         }
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
     }
 }
 

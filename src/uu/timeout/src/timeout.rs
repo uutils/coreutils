@@ -7,13 +7,14 @@
 mod status;
 
 use crate::status::ExitStatus;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command};
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
+use uucore::parser::parse_time;
 use uucore::process::ChildExt;
 
 #[cfg(unix)]
@@ -60,28 +61,27 @@ impl Config {
                         return Err(UUsageError::new(
                             ExitStatus::TimeoutFailed.into(),
                             format!("{}: invalid signal", signal_.quote()),
-                        ))
+                        ));
                     }
                     Some(signal_value) => signal_value,
                 }
             }
-            _ => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
+            _ => signal_by_name_or_value("TERM").unwrap(),
         };
 
         let kill_after = match options.get_one::<String>(options::KILL_AFTER) {
             None => None,
-            Some(kill_after) => match uucore::parse_time::from_str(kill_after) {
+            Some(kill_after) => match parse_time::from_str(kill_after) {
                 Ok(k) => Some(k),
                 Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
             },
         };
 
-        let duration = match uucore::parse_time::from_str(
-            options.get_one::<String>(options::DURATION).unwrap(),
-        ) {
-            Ok(duration) => duration,
-            Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
-        };
+        let duration =
+            match parse_time::from_str(options.get_one::<String>(options::DURATION).unwrap()) {
+                Ok(duration) => duration,
+                Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
+            };
 
         let preserve_status: bool = options.get_flag(options::PRESERVE_STATUS);
         let foreground = options.get_flag(options::FOREGROUND);
@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new("timeout")
-        .version(crate_version!())
+        .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .arg(
@@ -196,7 +196,7 @@ fn unblock_sigchld() {
 fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     if verbose {
         let s = signal_name_by_value(signal).unwrap();
-        show_error!("sending signal {} to command {}", s, cmd.quote());
+        show_error!("sending signal {s} to command {}", cmd.quote());
     }
 }
 

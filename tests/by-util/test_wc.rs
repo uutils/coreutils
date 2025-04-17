@@ -3,12 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use crate::common::util::{vec_of_size, TestScenario};
+#[cfg(target_os = "linux")]
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::{TestScenario, vec_of_size};
+use uutests::util_name;
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
 #[test]
 fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
 #[test]
@@ -43,7 +47,7 @@ fn test_count_bytes_large_stdin() {
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture("lorem_ipsum.txt")
-        .run()
+        .succeeds()
         .stdout_is("     13     109     772\n");
 }
 
@@ -52,7 +56,7 @@ fn test_stdin_explicit() {
     new_ucmd!()
         .pipe_in_fixture("lorem_ipsum.txt")
         .arg("-")
-        .run()
+        .succeeds()
         .stdout_is("     13     109     772 -\n");
 }
 
@@ -61,7 +65,7 @@ fn test_utf8() {
     new_ucmd!()
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
-        .run()
+        .succeeds()
         .stdout_is("    303    2119   22457   23025      79\n");
 }
 
@@ -70,7 +74,7 @@ fn test_utf8_words() {
     new_ucmd!()
         .arg("-w")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("89\n");
 }
 
@@ -79,7 +83,7 @@ fn test_utf8_line_length_words() {
     new_ucmd!()
         .arg("-Lw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     89      48\n");
 }
 
@@ -88,7 +92,7 @@ fn test_utf8_line_length_chars() {
     new_ucmd!()
         .arg("-Lm")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("    442      48\n");
 }
 
@@ -97,7 +101,7 @@ fn test_utf8_line_length_chars_words() {
     new_ucmd!()
         .arg("-Lmw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     89     442      48\n");
 }
 
@@ -106,7 +110,7 @@ fn test_utf8_chars() {
     new_ucmd!()
         .arg("-m")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("442\n");
 }
 
@@ -115,7 +119,7 @@ fn test_utf8_bytes_chars() {
     new_ucmd!()
         .arg("-cm")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("    442     513\n");
 }
 
@@ -124,7 +128,7 @@ fn test_utf8_bytes_lines() {
     new_ucmd!()
         .arg("-cl")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     25     513\n");
 }
 
@@ -133,7 +137,7 @@ fn test_utf8_bytes_chars_lines() {
     new_ucmd!()
         .arg("-cml")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     25     442     513\n");
 }
 
@@ -142,7 +146,7 @@ fn test_utf8_chars_words() {
     new_ucmd!()
         .arg("-mw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     89     442\n");
 }
 
@@ -151,7 +155,7 @@ fn test_utf8_line_length_lines() {
     new_ucmd!()
         .arg("-Ll")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     25      48\n");
 }
 
@@ -160,7 +164,7 @@ fn test_utf8_line_length_lines_words() {
     new_ucmd!()
         .arg("-Llw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     25      89      48\n");
 }
 
@@ -169,7 +173,7 @@ fn test_utf8_lines_chars() {
     new_ucmd!()
         .arg("-ml")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     25     442\n");
 }
 
@@ -178,7 +182,7 @@ fn test_utf8_lines_words_chars() {
     new_ucmd!()
         .arg("-mlw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     25      89     442\n");
 }
 
@@ -187,7 +191,7 @@ fn test_utf8_line_length_lines_chars() {
     new_ucmd!()
         .arg("-Llm")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     25     442      48\n");
 }
 
@@ -196,7 +200,7 @@ fn test_utf8_all() {
     new_ucmd!()
         .arg("-lwmcL")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
-        .run()
+        .succeeds()
         .stdout_is("     25      89     442     513      48\n");
 }
 
@@ -206,7 +210,7 @@ fn test_ascii_control() {
     new_ucmd!()
         .arg("-w")
         .pipe_in(*b"\x01\n")
-        .run()
+        .succeeds()
         .stdout_is("1\n");
 }
 
@@ -215,7 +219,7 @@ fn test_stdin_line_len_regression() {
     new_ucmd!()
         .args(&["-L"])
         .pipe_in("\n123456")
-        .run()
+        .succeeds()
         .stdout_is("6\n");
 }
 
@@ -224,7 +228,7 @@ fn test_stdin_only_bytes() {
     new_ucmd!()
         .args(&["-c"])
         .pipe_in_fixture("lorem_ipsum.txt")
-        .run()
+        .succeeds()
         .stdout_is("772\n");
 }
 
@@ -233,7 +237,7 @@ fn test_stdin_all_counts() {
     new_ucmd!()
         .args(&["-c", "-m", "-l", "-L", "-w"])
         .pipe_in_fixture("alice_in_wonderland.txt")
-        .run()
+        .succeeds()
         .stdout_is("      5      57     302     302      66\n");
 }
 
@@ -241,7 +245,7 @@ fn test_stdin_all_counts() {
 fn test_single_default() {
     new_ucmd!()
         .arg("moby_dick.txt")
-        .run()
+        .succeeds()
         .stdout_is("  18  204 1115 moby_dick.txt\n");
 }
 
@@ -249,7 +253,7 @@ fn test_single_default() {
 fn test_single_only_lines() {
     new_ucmd!()
         .args(&["-l", "moby_dick.txt"])
-        .run()
+        .succeeds()
         .stdout_is("18 moby_dick.txt\n");
 }
 
@@ -257,7 +261,7 @@ fn test_single_only_lines() {
 fn test_single_only_bytes() {
     new_ucmd!()
         .args(&["-c", "lorem_ipsum.txt"])
-        .run()
+        .succeeds()
         .stdout_is("772 lorem_ipsum.txt\n");
 }
 
@@ -265,7 +269,7 @@ fn test_single_only_bytes() {
 fn test_single_all_counts() {
     new_ucmd!()
         .args(&["-c", "-l", "-L", "-m", "-w", "alice_in_wonderland.txt"])
-        .run()
+        .succeeds()
         .stdout_is("  5  57 302 302  66 alice_in_wonderland.txt\n");
 }
 
@@ -279,7 +283,7 @@ fn test_gnu_compatible_quotation() {
     scene
         .ucmd()
         .args(&["some-dir1/12\n34.txt"])
-        .run()
+        .succeeds()
         .stdout_is("0 0 0 'some-dir1/12'$'\\n''34.txt'\n");
 }
 
@@ -298,7 +302,7 @@ fn test_non_unicode_names() {
     scene
         .ucmd()
         .args(&[target1, target2])
-        .run()
+        .succeeds()
         .stdout_is_bytes(
             [
                 b"0 0 0 'some-dir1/1'$'\\300\\n''.txt'\n".to_vec(),
@@ -318,7 +322,7 @@ fn test_multiple_default() {
             "alice_in_wonderland.txt",
             "alice in wonderland.txt",
         ])
-        .run()
+        .succeeds()
         .stdout_is(concat!(
             "  13  109  772 lorem_ipsum.txt\n",
             "  18  204 1115 moby_dick.txt\n",
@@ -333,7 +337,7 @@ fn test_multiple_default() {
 fn test_file_empty() {
     new_ucmd!()
         .args(&["-clmwL", "emptyfile.txt"])
-        .run()
+        .succeeds()
         .stdout_is("0 0 0 0 0 emptyfile.txt\n");
 }
 
@@ -343,7 +347,7 @@ fn test_file_empty() {
 fn test_file_single_line_no_trailing_newline() {
     new_ucmd!()
         .args(&["-clmwL", "notrailingnewline.txt"])
-        .run()
+        .succeeds()
         .stdout_is("1 1 2 2 1 notrailingnewline.txt\n");
 }
 
@@ -353,7 +357,7 @@ fn test_file_single_line_no_trailing_newline() {
 fn test_file_many_empty_lines() {
     new_ucmd!()
         .args(&["-clmwL", "manyemptylines.txt"])
-        .run()
+        .succeeds()
         .stdout_is("100   0 100 100   0 manyemptylines.txt\n");
 }
 
@@ -362,7 +366,7 @@ fn test_file_many_empty_lines() {
 fn test_file_one_long_line_only_spaces() {
     new_ucmd!()
         .args(&["-clmwL", "onelongemptyline.txt"])
-        .run()
+        .succeeds()
         .stdout_is("    1     0 10001 10001 10000 onelongemptyline.txt\n");
 }
 
@@ -371,7 +375,7 @@ fn test_file_one_long_line_only_spaces() {
 fn test_file_one_long_word() {
     new_ucmd!()
         .args(&["-clmwL", "onelongword.txt"])
-        .run()
+        .succeeds()
         .stdout_is("    1     1 10001 10001 10000 onelongword.txt\n");
 }
 
@@ -402,21 +406,21 @@ fn test_file_bytes_dictate_width() {
     // five characters, filled with whitespace.
     new_ucmd!()
         .args(&["-lw", "onelongemptyline.txt"])
-        .run()
+        .succeeds()
         .stdout_is("    1     0 onelongemptyline.txt\n");
 
     // This file has zero bytes. Only one digit is required to
     // represent that.
     new_ucmd!()
         .args(&["-lw", "emptyfile.txt"])
-        .run()
+        .succeeds()
         .stdout_is("0 0 emptyfile.txt\n");
 
     // lorem_ipsum.txt contains 772 bytes, and alice_in_wonderland.txt contains
     // 302 bytes. The total is 1074 bytes, which has a width of 4
     new_ucmd!()
         .args(&["-lwc", "alice_in_wonderland.txt", "lorem_ipsum.txt"])
-        .run()
+        .succeeds()
         .stdout_is(concat!(
             "   5   57  302 alice_in_wonderland.txt\n",
             "  13  109  772 lorem_ipsum.txt\n",
@@ -425,7 +429,7 @@ fn test_file_bytes_dictate_width() {
 
     new_ucmd!()
         .args(&["-lwc", "emptyfile.txt", "."])
-        .run()
+        .fails()
         .stdout_is(STDOUT);
 }
 
@@ -495,8 +499,7 @@ fn test_files0_from() {
     // file
     new_ucmd!()
         .args(&["--files0-from=files0_list.txt"])
-        .run()
-        .success()
+        .succeeds()
         .stdout_is(concat!(
             "  13  109  772 lorem_ipsum.txt\n",
             "  18  204 1115 moby_dick.txt\n",
@@ -508,8 +511,7 @@ fn test_files0_from() {
     new_ucmd!()
         .args(&["--files0-from=-"])
         .pipe_in_fixture("files0_list.txt")
-        .run()
-        .success()
+        .succeeds()
         .stdout_is(concat!(
             "13 109 772 lorem_ipsum.txt\n",
             "18 204 1115 moby_dick.txt\n",
@@ -523,7 +525,7 @@ fn test_files0_from_with_stdin() {
     new_ucmd!()
         .args(&["--files0-from=-"])
         .pipe_in("lorem_ipsum.txt")
-        .run()
+        .succeeds()
         .stdout_is("13 109 772 lorem_ipsum.txt\n");
 }
 
@@ -532,7 +534,7 @@ fn test_files0_from_with_stdin_in_file() {
     new_ucmd!()
         .args(&["--files0-from=files0_list_with_stdin.txt"])
         .pipe_in_fixture("alice_in_wonderland.txt")
-        .run()
+        .succeeds()
         .stdout_is(concat!(
             "     13     109     772 lorem_ipsum.txt\n",
             "     18     204    1115 moby_dick.txt\n",
@@ -556,16 +558,16 @@ fn test_files0_from_with_stdin_try_read_from_stdin() {
 fn test_total_auto() {
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "--total=auto"])
-        .run()
+        .succeeds()
         .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "--tot=au"])
-        .run()
+        .succeeds()
         .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
 
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=auto"])
-        .run()
+        .succeeds()
         .stdout_is(concat!(
             "  13  109  772 lorem_ipsum.txt\n",
             "  18  204 1115 moby_dick.txt\n",
@@ -577,14 +579,14 @@ fn test_total_auto() {
 fn test_total_always() {
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "--total=always"])
-        .run()
+        .succeeds()
         .stdout_is(concat!(
             " 13 109 772 lorem_ipsum.txt\n",
             " 13 109 772 total\n",
         ));
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "--total=al"])
-        .run()
+        .succeeds()
         .stdout_is(concat!(
             " 13 109 772 lorem_ipsum.txt\n",
             " 13 109 772 total\n",
@@ -592,7 +594,7 @@ fn test_total_always() {
 
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=always"])
-        .run()
+        .succeeds()
         .stdout_is(concat!(
             "  13  109  772 lorem_ipsum.txt\n",
             "  18  204 1115 moby_dick.txt\n",
@@ -604,19 +606,19 @@ fn test_total_always() {
 fn test_total_never() {
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "--total=never"])
-        .run()
+        .succeeds()
         .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
 
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=never"])
-        .run()
+        .succeeds()
         .stdout_is(concat!(
             "  13  109  772 lorem_ipsum.txt\n",
             "  18  204 1115 moby_dick.txt\n",
         ));
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=n"])
-        .run()
+        .succeeds()
         .stdout_is(concat!(
             "  13  109  772 lorem_ipsum.txt\n",
             "  18  204 1115 moby_dick.txt\n",
@@ -627,16 +629,16 @@ fn test_total_never() {
 fn test_total_only() {
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "--total=only"])
-        .run()
+        .succeeds()
         .stdout_is("13 109 772\n");
 
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=only"])
-        .run()
+        .succeeds()
         .stdout_is("31 313 1887\n");
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "moby_dick.txt", "--t=o"])
-        .run()
+        .succeeds()
         .stdout_is("31 313 1887\n");
 }
 
@@ -650,8 +652,7 @@ fn test_zero_length_files() {
         new_ucmd!()
             .args(&["--files0-from=-"])
             .pipe_in(&LIST[..l])
-            .run()
-            .failure()
+            .fails()
             .stdout_is(concat!(
                 "18 204 1115 moby_dick.txt\n",
                 "5 57 302 alice_in_wonderland.txt\n",
@@ -675,8 +676,7 @@ fn test_zero_length_files() {
                 .copied()
                 .collect::<Vec<_>>(),
         )
-        .run()
-        .failure()
+        .fails()
         .stdout_is(concat!(
             "18 204 1115 moby_dick.txt\n",
             "5 57 302 alice_in_wonderland.txt\n",
@@ -695,8 +695,7 @@ fn test_zero_length_files() {
 fn test_files0_errors_quoting() {
     new_ucmd!()
         .args(&["--files0-from=files0 with nonexistent.txt"])
-        .run()
-        .failure()
+        .fails()
         .stderr_is(concat!(
             "wc: this_file_does_not_exist.txt: No such file or directory\n",
             "wc: 'files0 with nonexistent.txt':2: invalid zero-length file name\n",
@@ -793,11 +792,11 @@ fn files0_from_dir() {
 fn test_args_override() {
     new_ucmd!()
         .args(&["-ll", "-l", "alice_in_wonderland.txt"])
-        .run()
+        .succeeds()
         .stdout_is("5 alice_in_wonderland.txt\n");
 
     new_ucmd!()
         .args(&["--total=always", "--total=never", "alice_in_wonderland.txt"])
-        .run()
+        .succeeds()
         .stdout_is("  5  57 302 alice_in_wonderland.txt\n");
 }

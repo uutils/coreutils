@@ -2,8 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use super::get_metadata_with_deref_opt;
 use super::PathData;
+use super::get_metadata_with_deref_opt;
 use lscolors::{Indicator, LsColors, Style};
 use std::ffi::OsString;
 use std::fs::{DirEntry, Metadata};
@@ -80,7 +80,7 @@ impl<'a> StyleManager<'a> {
     /// Resets the current style and returns the default ANSI reset code to
     /// reset all text formatting attributes. If `force` is true, the reset is
     /// done even if the reset has been applied before.
-    pub(crate) fn reset(&mut self, force: bool) -> &str {
+    pub(crate) fn reset(&mut self, force: bool) -> &'static str {
         // todo:
         // We need to use style from `Indicator::Reset` but as of now ls colors
         // uses a fallback mechanism and because of that if `Indicator::Reset`
@@ -104,11 +104,11 @@ impl<'a> StyleManager<'a> {
         ret
     }
 
-    pub(crate) fn is_current_style(&mut self, new_style: &Style) -> bool {
-        matches!(&self.current_style,Some(style) if style == new_style )
+    pub(crate) fn is_current_style(&self, new_style: &Style) -> bool {
+        matches!(&self.current_style, Some(style) if style == new_style)
     }
 
-    pub(crate) fn is_reset(&mut self) -> bool {
+    pub(crate) fn is_reset(&self) -> bool {
         self.current_style.is_none()
     }
 

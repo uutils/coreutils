@@ -8,8 +8,8 @@
 use libfuzzer_sys::fuzz_target;
 use uu_expr::uumain;
 
-use rand::prelude::IndexedRandom;
 use rand::Rng;
+use rand::prelude::IndexedRandom;
 use std::{env, ffi::OsString};
 
 mod fuzz_common;
@@ -39,7 +39,7 @@ fn generate_expr(max_depth: u32) -> String {
             // 90% chance to add an operator followed by a number
             if rng.random_bool(0.9) {
                 let op = *ops.choose(&mut rng).unwrap();
-                expr.push_str(&format!(" {} ", op));
+                expr.push_str(&format!(" {op} "));
                 last_was_operator = true;
             }
             // 10% chance to add a random string (potentially invalid syntax)
@@ -69,7 +69,9 @@ fuzz_target!(|_data: &[u8]| {
     // Use C locale to avoid false positives, like in https://github.com/uutils/coreutils/issues/5378,
     // because uutils expr doesn't support localization yet
     // TODO remove once uutils expr supports localization
-    env::set_var("LC_COLLATE", "C");
+    unsafe {
+        env::set_var("LC_COLLATE", "C");
+    }
     let rust_result = generate_and_run_uumain(&args, uumain, None);
 
     let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false, None) {
