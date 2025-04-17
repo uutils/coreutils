@@ -479,7 +479,7 @@ dependencies = [
  "phf_codegen",
  "pretty_assertions",
  "procfs",
- "rand 0.9.0",
+ "rand 0.9.1",
  "regex",
  "rlimit",
  "rstest",
@@ -1344,7 +1344,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -1791,7 +1791,7 @@ version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77957b295656769bb8ad2b6a6b09d897d94f05c41b069aede1fcdaa675eaea04"
 dependencies = [
- "zerocopy 0.7.35",
+ "zerocopy",
 ]
 
 [[package]]
@@ -1888,13 +1888,12 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3779b94aeb87e8bd4e834cee3650289ee9e0d5677f976ecdb6d219e5f4f6cd94"
+checksum = "9fbfd9d094a40bf3ae768db9361049ace4c0e04a4fd6b359518bd7b73a73dd97"
 dependencies = [
  "rand_chacha 0.9.0",
  "rand_core 0.9.3",
- "zerocopy 0.8.23",
 ]
 
 [[package]]
@@ -2538,7 +2537,7 @@ dependencies = [
  "thiserror 1.0.69",
  "time",
  "utmp-classic-raw",
- "zerocopy 0.7.35",
+ "zerocopy",
 ]
 
 [[package]]
@@ -2548,7 +2547,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22c226537a3d6e01c440c1926ca0256dbee2d19b2229ede6fc4863a6493dd831"
 dependencies = [
  "cfg-if",
- "zerocopy 0.7.35",
+ "zerocopy",
 ]
 
 [[package]]
@@ -2829,7 +2828,7 @@ dependencies = [
  "num-bigint",
  "num-prime",
  "num-traits",
- "rand 0.9.0",
+ "rand 0.9.1",
  "smallvec",
  "uucore",
 ]
@@ -3024,7 +3023,7 @@ name = "uu_mktemp"
 version = "0.0.30"
 dependencies = [
  "clap",
- "rand 0.9.0",
+ "rand 0.9.1",
  "tempfile",
  "thiserror 2.0.12",
  "uucore",
@@ -3247,7 +3246,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "libc",
- "rand 0.9.0",
+ "rand 0.9.1",
  "uucore",
 ]
 
@@ -3256,7 +3255,7 @@ name = "uu_shuf"
 version = "0.0.30"
 dependencies = [
  "clap",
- "rand 0.9.0",
+ "rand 0.9.1",
  "rand_core 0.9.3",
  "uucore",
 ]
@@ -3281,7 +3280,7 @@ dependencies = [
  "itertools 0.14.0",
  "memchr",
  "nix",
- "rand 0.9.0",
+ "rand 0.9.1",
  "rayon",
  "self_cell",
  "tempfile",
@@ -3647,7 +3646,7 @@ dependencies = [
  "libc",
  "nix",
  "pretty_assertions",
- "rand 0.9.0",
+ "rand 0.9.1",
  "regex",
  "rlimit",
  "tempfile",
@@ -4073,16 +4072,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b9b4fd18abc82b8136838da5d50bae7bdea537c574d8dc1a34ed098d6c166f0"
 dependencies = [
  "byteorder",
- "zerocopy-derive 0.7.35",
-]
-
-[[package]]
-name = "zerocopy"
-version = "0.8.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd97444d05a4328b90e75e503a34bad781f14e28a823ad3557f0750df1ebcbc6"
-dependencies = [
- "zerocopy-derive 0.8.23",
+ "zerocopy-derive",
 ]
 
 [[package]]
@@ -4090,17 +4080,6 @@ name = "zerocopy-derive"
 version = "0.7.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "zerocopy-derive"
-version = "0.8.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6352c01d0edd5db859a63e2605f4ea3183ddbd15e2c4a9e7d32184df75e4f154"
 dependencies = [
  "proc-macro2",
  "quote",
