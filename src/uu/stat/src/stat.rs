@@ -906,7 +906,7 @@ impl Stater {
                     'C' => {
                         #[cfg(feature = "selinux")]
                         {
-                            if uucore::selinux::check_selinux_enabled().is_ok() {
+                            if uucore::selinux::is_selinux_enabled() {
                                 match uucore::selinux::get_selinux_security_context(Path::new(file))
                                 {
                                     Ok(ctx) => OutputType::Str(ctx),

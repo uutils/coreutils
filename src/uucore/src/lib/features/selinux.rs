@@ -29,28 +29,8 @@ impl From<Error> for i32 {
 /// Checks if SELinux is enabled on the system.
 ///
 /// This function verifies whether the kernel has SELinux support enabled.
-///
-/// # Returns
-///
-/// * `Ok(())` - If SELinux is enabled on the system.
-/// * `Err(Error::SELinuxNotEnabled)` - If SELinux is not enabled.
-///
-/// # Examples
-///
-/// ```
-/// use uucore::selinux::check_selinux_enabled;
-///
-/// match check_selinux_enabled() {
-///     Ok(_) => println!("SELinux is enabled"),
-///     Err(_) => println!("SELinux is not enabled"),
-/// }
-/// ```
-pub fn check_selinux_enabled() -> Result<(), Error> {
-    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
-        Err(Error::SELinuxNotEnabled)
-    } else {
-        Ok(())
-    }
+pub fn is_selinux_enabled() -> bool {
+    selinux::kernel_support() != selinux::KernelSupport::Unsupported
 }
 
 /// Sets the SELinux security context for the given filesystem path.
@@ -97,8 +77,9 @@ pub fn check_selinux_enabled() -> Result<(), Error> {
 /// }
 /// ```
 pub fn set_selinux_security_context(path: &Path, context: Option<&String>) -> Result<(), String> {
-    // Check if SELinux is enabled on the system
-    check_selinux_enabled().map_err(|e| format!("{:?}", e))?;
+    if !is_selinux_enabled() {
+        return Err("SELinux is not enabled on this system".to_string());
+    }
 
     if let Some(ctx_str) = context {
         // Create a CString from the provided context string
@@ -165,7 +146,7 @@ pub fn set_selinux_security_context(path: &Path, context: Option<&String>) -> Re
 /// ```
 
 pub fn get_selinux_security_context(path: &Path) -> Result<String, Error> {
-    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+    if !is_selinux_enabled() {
         return Err(Error::SELinuxNotEnabled);
     }
 
@@ -240,15 +221,15 @@ mod tests {
     }
 
     #[test]
-    fn test_check_selinux_enabled_runtime_behavior() {
-        let result = check_selinux_enabled();
+    fn test_is_selinux_enabled_runtime_behavior() {
+        let result = is_selinux_enabled();
 
         match selinux::kernel_support() {
             selinux::KernelSupport::Unsupported => {
-                assert!(matches!(result, Err(Error::SELinuxNotEnabled)));
+                assert!(!result, "Expected false when SELinux is not supported");
             }
             _ => {
-                assert!(result.is_ok(), "Expected Ok(()) when SELinux is supported");
+                assert!(result, "Expected true when SELinux is supported");
             }
         }
     }
