@@ -23,7 +23,17 @@ use uucore::{format_usage, help_about, help_usage};
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::*;
 
+#[cfg(target_env = "musl")]
+const ABOUT: &str = concat!(
+    help_about!("uptime.md"),
+    "\n\nWarning: When built with musl libc, the `uptime` utility may show '0 users' \n",
+    "due to musl's stub implementation of utmpx functions. Boot time and load averages \n",
+    "are still calculated using alternative mechanisms."
+);
+
+#[cfg(not(target_env = "musl"))]
 const ABOUT: &str = help_about!("uptime.md");
+
 const USAGE: &str = help_usage!("uptime.md");
 pub mod options {
     pub static SINCE: &str = "since";

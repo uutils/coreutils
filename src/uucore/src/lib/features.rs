@@ -76,7 +76,6 @@ pub mod signals;
     not(target_os = "fuchsia"),
     not(target_os = "openbsd"),
     not(target_os = "redox"),
-    not(target_env = "musl"),
     feature = "utmpx"
 ))]
 pub mod utmpx;

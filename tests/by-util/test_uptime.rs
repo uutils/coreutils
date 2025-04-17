@@ -103,6 +103,7 @@ fn test_uptime_with_non_existent_file() {
 // This will pass
 #[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "macos")))]
+#[cfg(not(target_env = "musl"))]
 #[cfg_attr(
     all(target_arch = "aarch64", target_os = "linux"),
     ignore = "Issue #7159 - Test not supported on ARM64 Linux"

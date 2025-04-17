@@ -18,7 +18,16 @@ use utmp_classic::{UtmpEntry, parse_from_path};
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::{self, Utmpx};
 
+#[cfg(target_env = "musl")]
+const ABOUT: &str = concat!(
+    help_about!("users.md"),
+    "\n\nWarning: When built with musl libc, the `users` utility may show '0 users' \n",
+    "due to musl's stub implementation of utmpx functions."
+);
+
+#[cfg(not(target_env = "musl"))]
 const ABOUT: &str = help_about!("users.md");
+
 const USAGE: &str = help_usage!("users.md");
 
 #[cfg(target_os = "openbsd")]

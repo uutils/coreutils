@@ -28,7 +28,17 @@ mod options {
     pub const FILE: &str = "FILE"; // if length=1: FILE, if length=2: ARG1 ARG2
 }
 
+#[cfg(target_env = "musl")]
+const ABOUT: &str = concat!(
+    help_about!("who.md"),
+    "\n\nNote: When built with musl libc, the `who` utility will not display any \n",
+    "information about logged-in users. This is due to musl's stub implementation \n",
+    "of `utmpx` functions, which prevents access to the necessary data."
+);
+
+#[cfg(not(target_env = "musl"))]
 const ABOUT: &str = help_about!("who.md");
+
 const USAGE: &str = help_usage!("who.md");
 
 #[cfg(target_os = "linux")]
