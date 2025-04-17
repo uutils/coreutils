@@ -396,6 +396,7 @@ fn more(
 
     loop {
         let mut wrong_key = None;
+
         if event::poll(Duration::from_millis(100))? {
             match event::read()? {
                 // --- Quit ---
@@ -422,7 +423,12 @@ fn more(
                     if pager.eof_reached {
                         return Ok(());
                     }
-                    pager.page_down();
+                    if pager.is_seekable() {
+                        pager.page_down();
+                    } else {
+                        pager.read_and_print_next(pager.content_rows, stdout)?;
+                        continue;
+                    }
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Enter | KeyCode::Char('j'),
@@ -432,7 +438,12 @@ fn more(
                     if pager.eof_reached {
                         return Ok(());
                     }
-                    pager.next_line();
+                    if pager.is_seekable() {
+                        pager.next_line();
+                    } else {
+                        pager.read_and_print_next(1, stdout)?;
+                        continue;
+                    }
                 }
 
                 // --- Backward Navigation (Files Only) ---
@@ -666,6 +677,22 @@ impl<'a> Pager<'a> {
         .unwrap();
     }
 
+    fn read_and_print_next(&mut self, lines: usize, stdout: &mut Stdout) -> UResult<()> {
+        queue!(stdout, Clear(ClearType::CurrentLine))?; // Clear prompt
+        let mut line = String::new();
+        for _ in 0..lines {
+            line.clear();
+            if self.reader.read_line(&mut line)? == 0 {
+                self.eof_reached = true;
+                break;
+            }
+            stdout.write_all(format!("\r{}", line).as_bytes())?;
+        }
+        self.draw_prompt(stdout, None);
+        stdout.flush()?;
+        Ok(())
+    }
+
     fn load_visible_lines(&mut self) -> UResult<()> {
         self.lines.clear();
         self.lines_squeezed = 0;
@@ -679,7 +706,7 @@ impl<'a> Pager<'a> {
             line.clear();
             if self.reader.read_line(&mut line)? == 0 {
                 self.eof_reached = true;
-                break; // EOF
+                break;
             }
 
             if self.should_squeeze_line(&line) {
@@ -743,7 +770,7 @@ impl<'a> Pager<'a> {
             let bytes_read = self.reader.read_line(&mut line)?;
             if bytes_read == 0 {
                 self.eof_reached = true;
-                break; // EOF
+                break;
             }
 
             byte_position += bytes_read as u64;
