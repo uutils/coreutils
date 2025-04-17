@@ -579,6 +579,50 @@ fn test_rm_prompts() {
     assert!(!at.dir_exists("a"));
 }
 
+#[cfg(feature = "chmod")]
+#[test]
+fn test_rm_prompts_no_tty() {
+    // This test ensures InteractiveMode.PromptProtected proceeds silently with non-interactive stdin
+
+    use std::io::Write;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("a/");
+
+    let file_1 = "a/empty";
+    let file_2 = "a/empty-no-write";
+    let file_3 = "a/f-no-write";
+
+    at.touch(file_1);
+    at.touch(file_2);
+    at.make_file(file_3)
+        .write_all(b"not-empty")
+        .expect("Couldn't write to a/f-no-write");
+
+    at.symlink_dir("a/empty-f", "a/slink");
+    at.symlink_dir(".", "a/slink-dot");
+
+    let dir_1 = "a/b/";
+    let dir_2 = "a/b-no-write/";
+
+    at.mkdir(dir_1);
+    at.mkdir(dir_2);
+
+    scene
+        .ccmd("chmod")
+        .arg("u-w")
+        .arg(file_3)
+        .arg(dir_2)
+        .arg(file_2)
+        .succeeds();
+
+    scene.ucmd().arg("-r").arg("a").succeeds().no_output();
+
+    assert!(!at.dir_exists("a"));
+}
+
 #[test]
 fn test_rm_force_prompts_order() {
     // Needed for talking with stdin on platforms where CRLF or LF matters
@@ -646,7 +690,13 @@ fn test_prompt_write_protected_yes() {
 
     scene.ccmd("chmod").arg("0").arg(file_1).succeeds();
 
-    scene.ucmd().arg(file_1).pipe_in("y").succeeds();
+    scene
+        .ucmd()
+        .arg("---presume-input-tty")
+        .arg(file_1)
+        .pipe_in("y")
+        .succeeds()
+        .stderr_contains("rm: remove write-protected regular empty file");
     assert!(!at.file_exists(file_1));
 }
 
@@ -661,7 +711,13 @@ fn test_prompt_write_protected_no() {
 
     scene.ccmd("chmod").arg("0").arg(file_2).succeeds();
 
-    scene.ucmd().arg(file_2).pipe_in("n").succeeds();
+    scene
+        .ucmd()
+        .arg("---presume-input-tty")
+        .arg(file_2)
+        .pipe_in("n")
+        .succeeds()
+        .stderr_contains("rm: remove write-protected regular empty file");
     assert!(at.file_exists(file_2));
 }
 
