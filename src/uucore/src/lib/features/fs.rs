@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Set of functions to manage files and symlinks
+//! Set of functions to manage regular files, special files, and links.
 
 // spell-checker:ignore backport
 
@@ -11,11 +11,13 @@
 use libc::{
     S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH,
     S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
-    mode_t,
+    mkfifo, mode_t,
 };
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::read_dir;
@@ -796,6 +798,20 @@ pub mod sane_blksize {
 /// * `None`: If the `file` path does not contain a valid filename or if the filename is not valid UTF-8.
 pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
+}
+
+/// Make a FIFO, also known as a named pipe.
+///
+/// This is a safe wrapper for the `mkfifo` function from `libc`.
+#[cfg(unix)]
+pub fn make_fifo(path: &Path) -> std::io::Result<()> {
+    let name = CString::new(path.to_str().unwrap()).unwrap();
+    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
+    if err == -1 {
+        Err(std::io::Error::from_raw_os_error(err))
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
