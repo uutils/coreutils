@@ -1264,3 +1264,32 @@ fn test_du_blocksize_zero_do_not_panic() {
             ));
     }
 }
+
+#[test]
+fn test_du_inodes_blocksize_ineffective() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let fpath = at.plus("test.txt");
+    at.touch(fpath);
+    for method in ["-B3", "--block-size=3"] {
+        // No warning
+        ts.ucmd()
+            .arg(method)
+            .arg("--inodes")
+            .arg("test.txt")
+            .succeeds()
+            .stdout_only("1\ttest.txt\n");
+    }
+    for method in ["--apparent-size", "-b"] {
+        // A warning appears!
+        ts.ucmd()
+            .arg(method)
+            .arg("--inodes")
+            .arg("test.txt")
+            .succeeds()
+            .stdout_is("1\ttest.txt\n")
+            .stderr_is(
+                "du: warning: options --apparent-size and -b are ineffective with --inodes\n",
+            );
+    }
+}
