@@ -3,6 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore dont
+use rstest::rstest;
+
+use uucore::display::Quotable;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -22,12 +25,14 @@ fn test_subcommand_return_code() {
     new_ucmd!().arg("1").arg("false").fails_with_code(1);
 }
 
-#[test]
-fn test_invalid_time_interval() {
+#[rstest]
+#[case::alphabetic("xyz")]
+#[case::single_quote("'1")]
+fn test_invalid_time_interval(#[case] input: &str) {
     new_ucmd!()
-        .args(&["xyz", "sleep", "0"])
+        .args(&[input, "sleep", "0"])
         .fails_with_code(125)
-        .usage_error("invalid time interval 'xyz'");
+        .usage_error(format!("invalid time interval {}", input.quote()));
 }
 
 #[test]
