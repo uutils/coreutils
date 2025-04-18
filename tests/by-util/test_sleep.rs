@@ -305,7 +305,8 @@ fn test_valid_hex_duration(#[case] input: &str) {
 #[case::wrong_capitalization("infD")]
 #[case::wrong_capitalization("INFD")]
 #[case::wrong_capitalization("iNfD")]
-fn test_invalid_hex_duration(#[case] input: &str) {
+#[case::single_quote("'1")]
+fn test_invalid_duration(#[case] input: &str) {
     new_ucmd!()
         .args(&["--", input])
         .fails()
