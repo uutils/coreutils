@@ -67,6 +67,61 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
+fn test_flags_after_command() {
+    new_ucmd!()
+        // This would cause an error if -u=v were processed because it's malformed
+        .args(&["echo", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+
+    new_ucmd!()
+        // Ensure the string isn't split
+        // cSpell:disable
+        .args(&["printf", "%s-%s", "-Sfoo bar"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-Sfoo bar-");
+    // cSpell:enable
+
+    new_ucmd!()
+        // Ensure -- is recognized
+        .args(&["-i", "--", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+
+    new_ucmd!()
+        // Recognize echo as the command after a flag that takes a value
+        .args(&["-C", "..", "echo", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+
+    new_ucmd!()
+        // Recognize echo as the command after a flag that takes an inline value
+        .args(&["-C..", "echo", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+
+    new_ucmd!()
+        // Recognize echo as the command after a flag that takes a value after another flag
+        .args(&["-iC", "..", "echo", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+
+    new_ucmd!()
+        // Similar to the last two combined
+        .args(&["-iC..", "echo", "-u=v"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is("-u=v\n");
+}
+
+#[test]
 fn test_env_help() {
     new_ucmd!()
         .arg("--help")
