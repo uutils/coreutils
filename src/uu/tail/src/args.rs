@@ -228,15 +228,9 @@ impl Settings {
         };
 
         if let Some(source) = matches.get_one::<String>(options::SLEEP_INT) {
-            settings.sleep_sec = match parse_time::from_str(source, false) {
-                Ok(duration) => duration,
-                Err(_) => {
-                    return Err(UUsageError::new(
-                        1,
-                        format!("invalid number of seconds: '{source}'"),
-                    ));
-                }
-            };
+            settings.sleep_sec = parse_time::from_str(source, false).map_err(|_| {
+                UUsageError::new(1, format!("invalid number of seconds: '{source}'"))
+            })?;
         }
 
         if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {

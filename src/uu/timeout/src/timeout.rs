@@ -78,11 +78,8 @@ impl Config {
         };
 
         let duration =
-            match parse_time::from_str(options.get_one::<String>(options::DURATION).unwrap(), true)
-            {
-                Ok(duration) => duration,
-                Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
-            };
+            parse_time::from_str(options.get_one::<String>(options::DURATION).unwrap(), true)
+                .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?;
 
         let preserve_status: bool = options.get_flag(options::PRESERVE_STATUS);
         let foreground = options.get_flag(options::FOREGROUND);
