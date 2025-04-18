@@ -5,6 +5,9 @@
 
 // spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone
 
+#[cfg(unix)]
+use std::io::Read;
+
 use unindent::unindent;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -660,14 +663,40 @@ fn test_skip_bytes_error() {
 
 #[test]
 fn test_read_bytes() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
     let input = "abcdefghijklmnopqrstuvwxyz\n12345678";
-    new_ucmd!()
+
+    fixtures.write("f1", input);
+    let file = fixtures.open("f1");
+    #[cfg(unix)]
+    let mut file_shadow = file.try_clone().unwrap();
+
+    scene
+        .ucmd()
         .arg("--endian=little")
         .arg("--read-bytes=27")
-        .run_piped_stdin(input.as_bytes())
-        .no_stderr()
-        .success()
-        .stdout_is(unindent(ALPHA_OUT));
+        .set_stdin(file)
+        .succeeds()
+        .stdout_only(unindent(ALPHA_OUT));
+
+    // On unix platforms, confirm that only 27 bytes and strictly no more were read from stdin.
+    // Leaving stdin in the correct state is required for GNU compatibility.
+    #[cfg(unix)]
+    {
+        // skip(27) to skip the 27 bytes that should have been consumed with the
+        // --read-bytes flag.
+        let expected_bytes_remaining_in_stdin: Vec<_> = input.bytes().skip(27).collect();
+        let mut bytes_remaining_in_stdin = vec![];
+        assert_eq!(
+            file_shadow
+                .read_to_end(&mut bytes_remaining_in_stdin)
+                .unwrap(),
+            expected_bytes_remaining_in_stdin.len()
+        );
+        assert_eq!(expected_bytes_remaining_in_stdin, bytes_remaining_in_stdin);
+    }
 }
 
 #[test]

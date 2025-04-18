@@ -26,6 +26,7 @@ mod prn_int;
 
 use std::cmp;
 use std::fmt::Write;
+use std::io::BufReader;
 
 use crate::byteorder_io::ByteOrder;
 use crate::formatteriteminfo::FormatWriter;
@@ -603,7 +604,7 @@ fn open_input_peek_reader(
     input_strings: &[String],
     skip_bytes: u64,
     read_bytes: Option<u64>,
-) -> PeekReader<PartialReader<MultifileReader>> {
+) -> PeekReader<BufReader<PartialReader<MultifileReader>>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = input_strings
         .iter()
@@ -615,7 +616,18 @@ fn open_input_peek_reader(
 
     let mf = MultifileReader::new(inputs);
     let pr = PartialReader::new(mf, skip_bytes, read_bytes);
-    PeekReader::new(pr)
+    // Add a BufReader over the top of the PartialReader. This will have the
+    // effect of generating buffered reads to files/stdin, but since these reads
+    // go through MultifileReader (which limits the maximum number of bytes read)
+    // we won't ever read more bytes than were specified with the `-N` flag.
+    let buf_pr = BufReader::new(pr);
+    PeekReader::new(buf_pr)
+}
+
+impl<R: HasError> HasError for BufReader<R> {
+    fn has_error(&self) -> bool {
+        self.get_ref().has_error()
+    }
 }
 
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
