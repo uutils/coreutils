@@ -12,7 +12,7 @@ use uucore::error::UError;
 #[derive(Debug, Error)]
 pub enum CsplitError {
     #[error("IO error: {}", _0)]
-    IoError(io::Error),
+    IoError(#[from] io::Error),
     #[error("{}: line number out of range", ._0.quote())]
     LineOutOfRange(String),
     #[error("{}: line number out of range on repetition {}", ._0.quote(), _1)]
@@ -37,12 +37,6 @@ pub enum CsplitError {
     NotRegularFile(String),
     #[error("{}", _0)]
     UError(Box<dyn UError>),
-}
-
-impl From<io::Error> for CsplitError {
-    fn from(error: io::Error) -> Self {
-        Self::IoError(error)
-    }
 }
 
 impl From<Box<dyn UError>> for CsplitError {
