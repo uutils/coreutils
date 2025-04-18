@@ -511,6 +511,6 @@ fn test_stat_selinux() {
         .stdout_contains("system_u");
     // Count that we have 4 fields
     let result = ts.ucmd().arg("--printf='%C'").arg("/bin/").succeeds();
-    let s: Vec<_> = result.stdout_str().split(":").collect();
+    let s: Vec<_> = result.stdout_str().split(':').collect();
     assert!(s.len() == 4);
 }

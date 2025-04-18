@@ -4193,10 +4193,10 @@ fn test_ls_context_long() {
     for c_flag in ["-Zl", "-Zal"] {
         let result = scene.ucmd().args(&[c_flag, "foo"]).succeeds();
 
-        let line: Vec<_> = result.stdout_str().split(" ").collect();
-        assert!(line[0].ends_with("."));
+        let line: Vec<_> = result.stdout_str().split(' ').collect();
+        assert!(line[0].ends_with('.'));
         assert!(line[4].starts_with("unconfined_u"));
-        let s: Vec<_> = line[4].split(":").collect();
+        let s: Vec<_> = line[4].split(':').collect();
         assert!(s.len() == 4);
     }
 }
