@@ -4153,8 +4153,7 @@ fn test_ls_dangling_symlinks() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_ls_context1() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
+    if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
@@ -4169,8 +4168,7 @@ fn test_ls_context1() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_ls_context2() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
+    if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
@@ -4185,9 +4183,28 @@ fn test_ls_context2() {
 
 #[test]
 #[cfg(feature = "feat_selinux")]
+fn test_ls_context_long() {
+    if !uucore::selinux::is_selinux_enabled() {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("foo");
+    for c_flag in ["-Zl", "-Zal"] {
+        let result = scene.ucmd().args(&[c_flag, "foo"]).succeeds();
+
+        let line: Vec<_> = result.stdout_str().split(" ").collect();
+        assert!(line[0].ends_with("."));
+        assert!(line[4].starts_with("unconfined_u"));
+        let s: Vec<_> = line[4].split(":").collect();
+        assert!(s.len() == 4);
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
 fn test_ls_context_format() {
-    use selinux::{self, KernelSupport};
-    if selinux::kernel_support() == KernelSupport::Unsupported {
+    if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
         return;
     }
