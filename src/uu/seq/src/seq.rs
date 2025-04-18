@@ -15,7 +15,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::{fast_inc::fast_inc, format_usage, help_about, help_usage};
 
 mod error;
 
@@ -259,71 +259,6 @@ pub fn uu_app() -> Command {
         )
 }
 
-/// Fast code path increment function.
-///
-/// Add inc to the string val[start..end]. This operates on ASCII digits, assuming
-/// val and inc are well formed.
-///
-/// Returns the new value for start (can be less that the original value if we
-/// have a carry or if inc > start).
-///
-/// We also assume that there is enough space in val to expand if start needs
-/// to be updated.
-#[inline]
-fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
-    // To avoid a lot of casts to signed integers, we make sure to decrement pos
-    // as late as possible, so that it does not ever go negative.
-    let mut pos = end;
-    let mut carry = 0u8;
-
-    // First loop, add all digits of inc into val.
-    for inc_pos in (0..inc.len()).rev() {
-        pos -= 1;
-
-        let mut new_val = inc[inc_pos] + carry;
-        // Be careful here, only add existing digit of val.
-        if pos >= start {
-            new_val += val[pos] - b'0';
-        }
-        if new_val > b'9' {
-            carry = 1;
-            new_val -= 10;
-        } else {
-            carry = 0;
-        }
-        val[pos] = new_val;
-    }
-
-    // Done, now, if we have a carry, add that to the upper digits of val.
-    if carry == 0 {
-        return start.min(pos);
-    }
-
-    return fast_inc_one(val, start, pos);
-}
-
-#[inline]
-fn fast_inc_one(val: &mut [u8], start: usize, end: usize) -> usize {
-    let mut pos = end;
-
-    while pos > start {
-        pos -= 1;
-
-        if val[pos] == b'9' {
-            // 9+1 = 10. Carry propagating, keep going.
-            val[pos] = b'0';
-        } else {
-            // Carry stopped propagating, return unchanged start.
-            val[pos] += 1;
-            return start;
-        }
-    }
-
-    // The carry propagated so far that a new digit was added.
-    val[start - 1] = b'1';
-    start - 1
-}
-
 /// Integer print, default format, positive increment: fast code path
 /// that avoids reformating digit at all iterations.
 fn fast_print_seq(
@@ -451,59 +386,4 @@ fn print_seq(
     }
     stdout.flush()?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_fast_inc_simple() {
-        use crate::fast_inc;
-
-        let mut val = [b'.', b'.', b'.', b'0', b'_'];
-        let inc = [b'4'].as_ref();
-        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 3);
-        assert_eq!(val, "...4_".as_bytes());
-        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 3);
-        assert_eq!(val, "...8_".as_bytes());
-        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 2); // carried 1 more digit
-        assert_eq!(val, "..12_".as_bytes());
-
-        let mut val = [b'0', b'_'];
-        let inc = [b'2'].as_ref();
-        assert_eq!(fast_inc(val.as_mut(), 0, 1, inc), 0);
-        assert_eq!(val, "2_".as_bytes());
-        assert_eq!(fast_inc(val.as_mut(), 0, 1, inc), 0);
-        assert_eq!(val, "4_".as_bytes());
-        assert_eq!(fast_inc(val.as_mut(), 0, 1, inc), 0);
-        assert_eq!(val, "6_".as_bytes());
-    }
-
-    // Check that we handle increment > val correctly.
-    #[test]
-    fn test_fast_inc_large_inc() {
-        use crate::fast_inc;
-
-        let mut val = [b'.', b'.', b'.', b'7', b'_'];
-        let inc = "543".as_bytes();
-        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 1); // carried 2 more digits
-        assert_eq!(val, ".550_".as_bytes());
-        assert_eq!(fast_inc(val.as_mut(), 1, 4, inc), 0); // carried 1 more digit
-        assert_eq!(val, "1093_".as_bytes());
-    }
-
-    // Check that we handle longer carries
-    #[test]
-    fn test_fast_inc_carry() {
-        use crate::fast_inc;
-
-        let mut val = [b'.', b'9', b'9', b'9', b'_'];
-        let inc = "1".as_bytes();
-        assert_eq!(fast_inc(val.as_mut(), 1, 4, inc), 0);
-        assert_eq!(val, "1000_".as_bytes());
-
-        let mut val = [b'.', b'9', b'9', b'9', b'_'];
-        let inc = "11".as_bytes();
-        assert_eq!(fast_inc(val.as_mut(), 1, 4, inc), 0);
-        assert_eq!(val, "1010_".as_bytes());
-    }
 }
