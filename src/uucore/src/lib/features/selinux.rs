@@ -144,7 +144,6 @@ pub fn set_selinux_security_context(path: &Path, context: Option<&String>) -> Re
 ///     Err(Error::ContextConversionFailure) => println!("Failed to convert the security context to a string"),
 /// }
 /// ```
-
 pub fn get_selinux_security_context(path: &Path) -> Result<String, Error> {
     if !is_selinux_enabled() {
         return Err(Error::SELinuxNotEnabled);

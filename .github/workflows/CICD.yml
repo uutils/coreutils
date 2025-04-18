@@ -1198,3 +1198,5 @@ jobs:
       run: |
         lima ls
         lima bash -c "cd work && cargo test --features 'feat_selinux'"
+    - name: Lint with SELinux
+      run: lima bash -c "cd work && cargo clippy --all-targets --features 'feat_selinux' -- -D warnings"
