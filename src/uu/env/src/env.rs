@@ -78,6 +78,18 @@ const ABOUT: &str = help_about!("env.md");
 const USAGE: &str = help_usage!("env.md");
 const AFTER_HELP: &str = help_section!("after help", "env.md");
 
+mod options {
+    pub const IGNORE_ENVIRONMENT: &str = "ignore-environment";
+    pub const CHDIR: &str = "chdir";
+    pub const NULL: &str = "null";
+    pub const FILE: &str = "file";
+    pub const UNSET: &str = "unset";
+    pub const DEBUG: &str = "debug";
+    pub const SPLIT_STRING: &str = "split-string";
+    pub const ARGV0: &str = "argv0";
+    pub const IGNORE_SIGNAL: &str = "ignore-signal";
+}
+
 const ERROR_MSG_S_SHEBANG: &str = "use -[v]S to pass options in shebang lines";
 
 struct Options<'a> {
@@ -216,16 +228,16 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(
-            Arg::new("ignore-environment")
+            Arg::new(options::IGNORE_ENVIRONMENT)
                 .short('i')
-                .long("ignore-environment")
+                .long(options::IGNORE_ENVIRONMENT)
                 .help("start with an empty environment")
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("chdir")
+            Arg::new(options::CHDIR)
                 .short('C') // GNU env compatibility
-                .long("chdir")
+                .long(options::CHDIR)
                 .number_of_values(1)
                 .value_name("DIR")
                 .value_parser(ValueParser::os_string())
@@ -233,9 +245,9 @@ pub fn uu_app() -> Command {
                 .help("change working directory to DIR"),
         )
         .arg(
-            Arg::new("null")
+            Arg::new(options::NULL)
                 .short('0')
-                .long("null")
+                .long(options::NULL)
                 .help(
                     "end each output line with a 0 byte rather than a newline (only \
                 valid when printing the environment)",
@@ -243,9 +255,9 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("file")
+            Arg::new(options::FILE)
                 .short('f')
-                .long("file")
+                .long(options::FILE)
                 .value_name("PATH")
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(ValueParser::os_string())
@@ -256,34 +268,34 @@ pub fn uu_app() -> Command {
                 ),
         )
         .arg(
-            Arg::new("unset")
+            Arg::new(options::UNSET)
                 .short('u')
-                .long("unset")
+                .long(options::UNSET)
                 .value_name("NAME")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .help("remove variable from the environment"),
         )
         .arg(
-            Arg::new("debug")
+            Arg::new(options::DEBUG)
                 .short('v')
-                .long("debug")
+                .long(options::DEBUG)
                 .action(ArgAction::Count)
                 .help("print verbose information for each processing step"),
         )
         .arg(
-            Arg::new("split-string") // split string handling is implemented directly, not using CLAP. But this entry here is needed for the help information output.
+            Arg::new(options::SPLIT_STRING) // split string handling is implemented directly, not using CLAP. But this entry here is needed for the help information output.
                 .short('S')
-                .long("split-string")
+                .long(options::SPLIT_STRING)
                 .value_name("S")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
                 .help("process and split S into separate arguments; used to pass multiple arguments on shebang lines")
         ).arg(
-            Arg::new("argv0")
-                .overrides_with("argv0")
+            Arg::new(options::ARGV0)
+                .overrides_with(options::ARGV0)
                 .short('a')
-                .long("argv0")
+                .long(options::ARGV0)
                 .value_name("a")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
@@ -296,8 +308,8 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
         )
         .arg(
-            Arg::new("ignore-signal")
-                .long("ignore-signal")
+            Arg::new(options::IGNORE_SIGNAL)
+                .long(options::IGNORE_SIGNAL)
                 .value_name("SIG")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
@@ -387,7 +399,31 @@ impl EnvAppData {
         original_args: &Vec<OsString>,
     ) -> UResult<Vec<OsString>> {
         let mut all_args: Vec<OsString> = Vec::new();
-        for arg in original_args {
+        let mut process_flags = true;
+        let mut expecting_arg = false;
+        // Leave out split-string since it's a special case below
+        let flags_with_args = [
+            options::ARGV0,
+            options::CHDIR,
+            options::FILE,
+            options::IGNORE_SIGNAL,
+            options::UNSET,
+        ];
+        let short_flags_with_args = ['a', 'C', 'f', 'u'];
+        for (n, arg) in original_args.iter().enumerate() {
+            let arg_str = arg.to_string_lossy();
+            // Stop processing env flags once we reach the command or -- argument
+            if 0 < n
+                && !expecting_arg
+                && (arg == "--" || !(arg_str.starts_with('-') || arg_str.contains('=')))
+            {
+                process_flags = false;
+            }
+            if !process_flags {
+                all_args.push(arg.clone());
+                continue;
+            }
+            expecting_arg = false;
             match arg {
                 b if check_and_handle_string_args(b, "--split-string", &mut all_args, None)? => {
                     self.had_string_argument = true;
@@ -411,8 +447,15 @@ impl EnvAppData {
                     self.had_string_argument = true;
                 }
                 _ => {
-                    let arg_str = arg.to_string_lossy();
-
+                    if let Some(flag) = arg_str.strip_prefix("--") {
+                        if flags_with_args.contains(&flag) {
+                            expecting_arg = true;
+                        }
+                    } else if let Some(flag) = arg_str.strip_prefix("-") {
+                        for c in flag.chars() {
+                            expecting_arg = short_flags_with_args.contains(&c);
+                        }
+                    }
                     // Short unset option (-u) is not allowed to contain '='
                     if arg_str.contains('=')
                         && arg_str.starts_with("-u")
