@@ -33,8 +33,13 @@ mod splice;
 const USAGE: &str = help_usage!("cat.md");
 const ABOUT: &str = help_about!("cat.md");
 
+// Allocate 32 digits for the line number.
+// An estimate is that we can print about 1e8 lines/seconds, so 32 digits
+// would be enough for billions of universe lifetimes.
+const LINE_NUMBER_BUF_SIZE: usize = 32;
+
 struct LineNumber {
-    buf: Vec<u8>,
+    buf: [u8; LINE_NUMBER_BUF_SIZE],
     print_start: usize,
     num_start: usize,
     num_end: usize,
@@ -48,9 +53,7 @@ struct LineNumber {
 // called, using uucore's fast_inc function that operates on strings.
 impl LineNumber {
     fn new() -> Self {
-        // 1024-digit long line number should be enough to run `cat` for the lifetime of the universe.
-        let size = 1024;
-        let mut buf = vec![b'0'; size];
+        let mut buf = [b'0'; LINE_NUMBER_BUF_SIZE];
 
         let init_str = "     1\t";
         let print_start = buf.len() - init_str.len();
@@ -68,12 +71,17 @@ impl LineNumber {
     }
 
     fn increment(&mut self) {
-        fast_inc_one(self.buf.as_mut_slice(), &mut self.num_start, self.num_end);
+        fast_inc_one(&mut self.buf, &mut self.num_start, self.num_end);
         self.print_start = self.print_start.min(self.num_start);
     }
 
+    #[inline]
+    fn to_str(&self) -> &[u8] {
+        &self.buf[self.print_start..]
+    }
+
     fn write(&self, writer: &mut impl Write) -> io::Result<()> {
-        writer.write_all(&self.buf[self.print_start..])
+        writer.write_all(self.to_str())
     }
 }
 
@@ -790,36 +798,21 @@ mod tests {
     #[test]
     fn test_incrementing_string() {
         let mut incrementing_string = super::LineNumber::new();
-        assert_eq!(
-            b"     1\t",
-            &incrementing_string.buf[incrementing_string.print_start..]
-        );
+        assert_eq!(b"     1\t", incrementing_string.to_str());
         incrementing_string.increment();
-        assert_eq!(
-            b"     2\t",
-            &incrementing_string.buf[incrementing_string.print_start..]
-        );
+        assert_eq!(b"     2\t", incrementing_string.to_str());
         // Run through to 100
         for _ in 3..=100 {
             incrementing_string.increment();
         }
-        assert_eq!(
-            b"   100\t",
-            &incrementing_string.buf[incrementing_string.print_start..]
-        );
+        assert_eq!(b"   100\t", incrementing_string.to_str());
         // Run through until we overflow the original size.
         for _ in 101..=1_000_000 {
             incrementing_string.increment();
         }
         // Confirm that the start position moves when we overflow the original size.
-        assert_eq!(
-            b"1000000\t",
-            &incrementing_string.buf[incrementing_string.print_start..]
-        );
+        assert_eq!(b"1000000\t", incrementing_string.to_str());
         incrementing_string.increment();
-        assert_eq!(
-            b"1000001\t",
-            &incrementing_string.buf[incrementing_string.print_start..]
-        );
+        assert_eq!(b"1000001\t", incrementing_string.to_str());
     }
 }
