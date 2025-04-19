@@ -2760,11 +2760,11 @@ fn display_item_long(
     style_manager: &mut Option<StyleManager>,
     quoted: bool,
 ) -> UResult<()> {
-    let mut output_display: Vec<u8> = vec![];
+    let mut output_display: Vec<u8> = Vec::with_capacity(128);
 
     // apply normal color to non filename outputs
     if let Some(style_manager) = style_manager {
-        write!(output_display, "{}", style_manager.apply_normal()).unwrap();
+        output_display.extend(style_manager.apply_normal().as_bytes());
     }
     if config.dired {
         output_display.extend(b"  ");
@@ -2775,69 +2775,47 @@ fn display_item_long(
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
         let is_acl_set = has_acl(item.display_name.as_os_str());
-        write!(
-            output_display,
-            "{}{} {}",
-            display_permissions(md, true),
-            if item.security_context.len() > 1 {
-                // GNU `ls` uses a "." character to indicate a file with a security context,
-                // but not other alternate access method.
-                "."
-            } else if is_acl_set {
-                "+"
-            } else {
-                ""
-            },
-            pad_left(&display_symlink_count(md), padding.link_count)
-        )
-        .unwrap();
+        output_display.extend(display_permissions(md, true).as_bytes());
+        if item.security_context.len() > 1 {
+            // GNU `ls` uses a "." character to indicate a file with a security context,
+            // but not other alternate access method.
+            output_display.extend(b".");
+        } else if is_acl_set {
+            output_display.extend(b"+");
+        }
+        output_display.extend(b" ");
+        output_display.extend(pad_left(&display_symlink_count(md), padding.link_count).as_bytes());
 
         if config.long.owner {
-            write!(
-                output_display,
-                " {}",
-                pad_right(&display_uname(md, config), padding.uname)
-            )
-            .unwrap();
+            output_display.extend(b" ");
+            output_display.extend(pad_right(&display_uname(md, config), padding.uname).as_bytes());
         }
 
         if config.long.group {
-            write!(
-                output_display,
-                " {}",
-                pad_right(&display_group(md, config), padding.group)
-            )
-            .unwrap();
+            output_display.extend(b" ");
+            output_display.extend(pad_right(&display_group(md, config), padding.group).as_bytes());
         }
 
         if config.context {
-            write!(
-                output_display,
-                " {}",
-                pad_right(&item.security_context, padding.context)
-            )
-            .unwrap();
+            output_display.extend(b" ");
+            output_display.extend(pad_right(&item.security_context, padding.context).as_bytes());
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            write!(
-                output_display,
-                " {}",
-                pad_right(&display_uname(md, config), padding.uname)
-            )
-            .unwrap();
+            output_display.extend(b" ");
+            output_display.extend(pad_right(&display_uname(md, config), padding.uname).as_bytes());
         }
 
         match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Size(size) => {
-                write!(output_display, " {}", pad_left(&size, padding.size)).unwrap();
+                output_display.extend(b" ");
+                output_display.extend(pad_left(&size, padding.size).as_bytes());
             }
             SizeOrDeviceId::Device(major, minor) => {
-                write!(
-                    output_display,
-                    " {}, {}",
+                output_display.extend(b" ");
+                output_display.extend(
                     pad_left(
                         &major,
                         #[cfg(not(unix))]
@@ -2846,22 +2824,28 @@ fn display_item_long(
                         padding.major.max(
                             padding
                                 .size
-                                .saturating_sub(padding.minor.saturating_add(2usize))
+                                .saturating_sub(padding.minor.saturating_add(2usize)),
                         ),
-                    ),
+                    )
+                    .as_bytes(),
+                );
+                output_display.extend(b", ");
+                output_display.extend(
                     pad_left(
                         &minor,
                         #[cfg(not(unix))]
                         0usize,
                         #[cfg(unix)]
                         padding.minor,
-                    ),
-                )
-                .unwrap();
+                    )
+                    .as_bytes(),
+                );
             }
         };
 
-        write!(output_display, " {} ", display_date(md, config)).unwrap();
+        output_display.extend(b" ");
+        output_display.extend(display_date(md, config).as_bytes());
+        output_display.extend(b" ");
 
         let item_name = display_item_name(
             item,
@@ -2890,7 +2874,7 @@ fn display_item_long(
             dired::update_positions(dired, start, end);
         }
         write_os_str(&mut output_display, &displayed_item)?;
-        write!(output_display, "{}", config.line_ending)?;
+        output_display.extend(config.line_ending.to_string().as_bytes());
     } else {
         #[cfg(unix)]
         let leading_char = {
@@ -2925,42 +2909,36 @@ fn display_item_long(
             }
         };
 
-        write!(
-            output_display,
-            "{}{} {}",
-            format_args!("{leading_char}?????????"),
-            if item.security_context.len() > 1 {
-                // GNU `ls` uses a "." character to indicate a file with a security context,
-                // but not other alternate access method.
-                "."
-            } else {
-                ""
-            },
-            pad_left("?", padding.link_count)
-        )
-        .unwrap();
+        output_display.extend(leading_char.as_bytes());
+        output_display.extend(b"?????????");
+        if item.security_context.len() > 1 {
+            // GNU `ls` uses a "." character to indicate a file with a security context,
+            // but not other alternate access method.
+            output_display.extend(b".");
+        }
+        output_display.extend(b" ");
+        output_display.extend(pad_left("?", padding.link_count).as_bytes());
 
         if config.long.owner {
-            write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
+            output_display.extend(b" ");
+            output_display.extend(pad_right("?", padding.uname).as_bytes());
         }
 
         if config.long.group {
-            write!(output_display, " {}", pad_right("?", padding.group)).unwrap();
+            output_display.extend(b" ");
+            output_display.extend(pad_right("?", padding.group).as_bytes());
         }
 
         if config.context {
-            write!(
-                output_display,
-                " {}",
-                pad_right(&item.security_context, padding.context)
-            )
-            .unwrap();
+            output_display.extend(b" ");
+            output_display.extend(pad_right(&item.security_context, padding.context).as_bytes());
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
+            output_display.extend(b" ");
+            output_display.extend(pad_right("?", padding.uname).as_bytes());
         }
 
         let displayed_item = display_item_name(
@@ -2974,13 +2952,11 @@ fn display_item_long(
         );
         let date_len = 12;
 
-        write!(
-            output_display,
-            " {} {} ",
-            pad_left("?", padding.size),
-            pad_left("?", date_len),
-        )
-        .unwrap();
+        output_display.extend(b" ");
+        output_display.extend(pad_left("?", padding.size).as_bytes());
+        output_display.extend(b" ");
+        output_display.extend(pad_left("?", date_len).as_bytes());
+        output_display.extend(b" ");
 
         if config.dired {
             dired::calculate_and_update_positions(
@@ -2990,7 +2966,7 @@ fn display_item_long(
             );
         }
         write_os_str(&mut output_display, &displayed_item)?;
-        write!(output_display, "{}", config.line_ending)?;
+        output_display.extend(config.line_ending.to_string().as_bytes());
     }
     out.write_all(&output_display)?;
 
