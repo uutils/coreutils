@@ -3,18 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) kqueue Signum fundu
+// spell-checker:ignore (ToDO) kqueue Signum
 
 use crate::paths::Input;
 use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
-use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_usage, show_warning};
 
@@ -228,22 +228,9 @@ impl Settings {
         };
 
         if let Some(source) = matches.get_one::<String>(options::SLEEP_INT) {
-            // Advantage of `fundu` over `Duration::(try_)from_secs_f64(source.parse().unwrap())`:
-            // * doesn't panic on errors like `Duration::from_secs_f64` would.
-            // * no precision loss, rounding errors or other floating point problems.
-            // * evaluates to `Duration::MAX` if the parsed number would have exceeded
-            //   `DURATION::MAX` or `infinity` was given
-            // * not applied here but it supports customizable time units and provides better error
-            //   messages
-            settings.sleep_sec = match DurationParser::without_time_units().parse(source) {
-                Ok(duration) => SaturatingInto::<Duration>::saturating_into(duration),
-                Err(_) => {
-                    return Err(UUsageError::new(
-                        1,
-                        format!("invalid number of seconds: '{source}'"),
-                    ));
-                }
-            }
+            settings.sleep_sec = parse_time::from_str(source, false).map_err(|_| {
+                UUsageError::new(1, format!("invalid number of seconds: '{source}'"))
+            })?;
         }
 
         if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {

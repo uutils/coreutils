@@ -1031,21 +1031,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fundu"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ce12752fc64f35be3d53e0a57017cd30970f0cffd73f62c791837d8845badbd"
-dependencies = [
- "fundu-core",
-]
-
-[[package]]
-name = "fundu-core"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e463452e2d8b7600d38dcea1ed819773a57f0d710691bfc78db3961bd3f4c3ba"
-
-[[package]]
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3372,7 +3357,6 @@ name = "uu_tail"
 version = "0.0.30"
 dependencies = [
  "clap",
- "fundu",
  "libc",
  "memchr",
  "notify",

@@ -20,7 +20,6 @@ exacl
 filetime
 formatteriteminfo
 fsext
-fundu
 getopts
 getrandom
 globset
