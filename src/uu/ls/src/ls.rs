@@ -27,6 +27,7 @@ use std::{
 use std::{collections::HashSet, io::IsTerminal};
 
 use ansi_width::ansi_width;
+use chrono::format::{Item, StrftimeItems};
 use chrono::{DateTime, Local, TimeDelta};
 use clap::{
     Arg, ArgAction, Command,
@@ -273,32 +274,64 @@ enum TimeStyle {
     Format(String),
 }
 
-/// Whether the given date is considered recent (i.e., in the last 6 months).
-fn is_recent(time: DateTime<Local>) -> bool {
-    // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-    time + TimeDelta::try_seconds(31_556_952 / 2).unwrap() > Local::now()
+/// A struct/impl used to format a file DateTime, precomputing the format for performance reasons.
+struct TimeStyler {
+    // default format, always specified.
+    default: Vec<Item<'static>>,
+    // format for a recent time, only specified it is is different from the default
+    recent: Option<Vec<Item<'static>>>,
+    // If `recent` is set, cache the threshold time when we switch from recent to default format.
+    recent_time_threshold: Option<DateTime<Local>>,
 }
 
-impl TimeStyle {
-    /// Format the given time according to this time format style.
-    fn format(&self, time: DateTime<Local>) -> String {
-        let recent = is_recent(time);
-        match (self, recent) {
-            (Self::FullIso, _) => time.format("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
-            (Self::LongIso, _) => time.format("%Y-%m-%d %H:%M").to_string(),
-            (Self::Iso, true) => time.format("%m-%d %H:%M").to_string(),
-            (Self::Iso, false) => time.format("%Y-%m-%d ").to_string(),
-            // spell-checker:ignore (word) datetime
-            //In this version of chrono translating can be done
-            //The function is chrono::datetime::DateTime::format_localized
-            //However it's currently still hard to get the current pure-rust-locale
-            //So it's not yet implemented
-            (Self::Locale, true) => time.format("%b %e %H:%M").to_string(),
-            (Self::Locale, false) => time.format("%b %e  %Y").to_string(),
-            (Self::Format(fmt), _) => time
-                .format(custom_tz_fmt::custom_time_format(fmt).as_str())
-                .to_string(),
+impl TimeStyler {
+    /// Create a TimeStyler based on a TimeStyle specification.
+    fn new(style: &TimeStyle) -> TimeStyler {
+        let default: Vec<Item<'static>> = match style {
+            TimeStyle::FullIso => StrftimeItems::new("%Y-%m-%d %H:%M:%S.%f %z").parse(),
+            TimeStyle::LongIso => StrftimeItems::new("%Y-%m-%d %H:%M").parse(),
+            TimeStyle::Iso => StrftimeItems::new("%Y-%m-%d ").parse(),
+            // In this version of chrono translating can be done
+            // The function is chrono::datetime::DateTime::format_localized
+            // However it's currently still hard to get the current pure-rust-locale
+            // So it's not yet implemented
+            TimeStyle::Locale => StrftimeItems::new("%b %e  %Y").parse(),
+            TimeStyle::Format(fmt) => {
+                // TODO (#7802): Replace with new_lenient
+                StrftimeItems::new(custom_tz_fmt::custom_time_format(fmt).as_str()).parse_to_owned()
+            }
         }
+        .unwrap();
+        let recent = match style {
+            TimeStyle::Iso => Some(StrftimeItems::new("%m-%d %H:%M")),
+            // See comment above about locale
+            TimeStyle::Locale => Some(StrftimeItems::new("%b %e %H:%M")),
+            _ => None,
+        }
+        .map(|x| x.collect());
+        let recent_time_threshold = if recent.is_some() {
+            // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
+            Some(Local::now() - TimeDelta::try_seconds(31_556_952 / 2).unwrap())
+        } else {
+            None
+        };
+
+        TimeStyler {
+            default,
+            recent,
+            recent_time_threshold,
+        }
+    }
+
+    /// Format a DateTime, using `recent` format if available, and the DateTime
+    /// is recent enough.
+    fn format(&self, time: DateTime<Local>) -> String {
+        if self.recent.is_none() || time <= self.recent_time_threshold.unwrap() {
+            time.format_with_items(self.default.iter())
+        } else {
+            time.format_with_items(self.recent.as_ref().unwrap().iter())
+        }
+        .to_string()
     }
 }
 
@@ -2060,6 +2093,8 @@ struct ListState<'a> {
     uid_cache: HashMap<u32, String>,
     #[cfg(unix)]
     gid_cache: HashMap<u32, String>,
+
+    time_styler: TimeStyler,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2076,6 +2111,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         uid_cache: HashMap::new(),
         #[cfg(unix)]
         gid_cache: HashMap::new(),
+        time_styler: TimeStyler::new(&config.time_style),
     };
 
     for loc in locs {
@@ -2876,7 +2912,7 @@ fn display_item_long(
         };
 
         output_display.extend(b" ");
-        output_display.extend(display_date(md, config).as_bytes());
+        output_display.extend(display_date(md, config, state).as_bytes());
         output_display.extend(b" ");
 
         let item_name = display_item_name(
@@ -3080,9 +3116,9 @@ fn get_time(md: &Metadata, config: &Config) -> Option<DateTime<Local>> {
     Some(time.into())
 }
 
-fn display_date(metadata: &Metadata, config: &Config) -> String {
+fn display_date(metadata: &Metadata, config: &Config, state: &mut ListState) -> String {
     match get_time(metadata, config) {
-        Some(time) => config.time_style.format(time),
+        Some(time) => state.time_styler.format(time),
         None => "???".into(),
     }
 }
