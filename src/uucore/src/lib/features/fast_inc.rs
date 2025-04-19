@@ -8,8 +8,7 @@
 /// Add inc to the string val[start..end]. This operates on ASCII digits, assuming
 /// val and inc are well formed.
 ///
-/// Returns the new value for start (can be less that the original value if we
-/// have a carry or if inc > start).
+/// Updates `start` if we have a carry, or if inc > start.
 ///
 /// We also assume that there is enough space in val to expand if start needs
 /// to be updated.
@@ -22,13 +21,13 @@
 /// let end = val.len();
 /// let inc = "6".as_bytes();
 /// assert_eq!(&val[start..end], "0".as_bytes());
-/// start = fast_inc(val.as_mut(), start, end, inc);
+/// fast_inc(val.as_mut(), &mut start, end, inc);
 /// assert_eq!(&val[start..end], "6".as_bytes());
-/// start = fast_inc(val.as_mut(), start, end, inc);
+/// fast_inc(val.as_mut(), &mut start, end, inc);
 /// assert_eq!(&val[start..end], "12".as_bytes());
 /// ```
 #[inline]
-pub fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
+pub fn fast_inc(val: &mut [u8], start: &mut usize, end: usize, inc: &[u8]) {
     // To avoid a lot of casts to signed integers, we make sure to decrement pos
     // as late as possible, so that it does not ever go negative.
     let mut pos = end;
@@ -40,7 +39,7 @@ pub fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
 
         let mut new_val = inc[inc_pos] + carry;
         // Be careful here, only add existing digit of val.
-        if pos >= start {
+        if pos >= *start {
             new_val += val[pos] - b'0';
         }
         if new_val > b'9' {
@@ -54,7 +53,8 @@ pub fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
 
     // Done, now, if we have a carry, add that to the upper digits of val.
     if carry == 0 {
-        return start.min(pos);
+        *start = (*start).min(pos);
+        return;
     }
 
     fast_inc_one(val, start, pos)
@@ -65,8 +65,7 @@ pub fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
 /// Add 1 to the string val[start..end]. This operates on ASCII digits, assuming
 /// val is well formed.
 ///
-/// Returns the new value for start (can be less that the original value if we
-/// have a carry).
+/// Updates `start` if we have a carry, or if inc > start.
 ///
 /// We also assume that there is enough space in val to expand if start needs
 /// to be updated.
@@ -78,16 +77,16 @@ pub fn fast_inc(val: &mut [u8], start: usize, end: usize, inc: &[u8]) -> usize {
 /// let mut start = val.len()-1;
 /// let end = val.len();
 /// assert_eq!(&val[start..end], "8".as_bytes());
-/// start = fast_inc_one(val.as_mut(), start, end);
+/// fast_inc_one(val.as_mut(), &mut start, end);
 /// assert_eq!(&val[start..end], "9".as_bytes());
-/// start = fast_inc_one(val.as_mut(), start, end);
+/// fast_inc_one(val.as_mut(), &mut start, end);
 /// assert_eq!(&val[start..end], "10".as_bytes());
 /// ```
 #[inline]
-pub fn fast_inc_one(val: &mut [u8], start: usize, end: usize) -> usize {
+pub fn fast_inc_one(val: &mut [u8], start: &mut usize, end: usize) {
     let mut pos = end;
 
-    while pos > start {
+    while pos > *start {
         pos -= 1;
 
         if val[pos] == b'9' {
@@ -96,13 +95,13 @@ pub fn fast_inc_one(val: &mut [u8], start: usize, end: usize) -> usize {
         } else {
             // Carry stopped propagating, return unchanged start.
             val[pos] += 1;
-            return start;
+            return;
         }
     }
 
     // The carry propagated so far that a new digit was added.
-    val[start - 1] = b'1';
-    start - 1
+    val[*start - 1] = b'1';
+    *start -= 1;
 }
 
 #[cfg(test)]
@@ -113,21 +112,29 @@ mod tests {
     #[test]
     fn test_fast_inc_simple() {
         let mut val = Vec::from("...0_".as_bytes());
+        let mut start: usize = 3;
         let inc = "4".as_bytes();
-        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 3);
+        fast_inc(val.as_mut(), &mut start, 4, inc);
+        assert_eq!(start, 3);
         assert_eq!(val, "...4_".as_bytes());
-        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 3);
+        fast_inc(val.as_mut(), &mut start, 4, inc);
+        assert_eq!(start, 3);
         assert_eq!(val, "...8_".as_bytes());
-        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 2); // carried 1 more digit
+        fast_inc(val.as_mut(), &mut start, 4, inc);
+        assert_eq!(start, 2); // carried 1 more digit
         assert_eq!(val, "..12_".as_bytes());
 
         let mut val = Vec::from("0_".as_bytes());
+        let mut start: usize = 0;
         let inc = "2".as_bytes();
-        assert_eq!(fast_inc(val.as_mut(), 0, 1, inc), 0);
+        fast_inc(val.as_mut(), &mut start, 1, inc);
+        assert_eq!(start, 0);
         assert_eq!(val, "2_".as_bytes());
-        assert_eq!(fast_inc(val.as_mut(), 0, 1, inc), 0);
+        fast_inc(val.as_mut(), &mut start, 1, inc);
+        assert_eq!(start, 0);
         assert_eq!(val, "4_".as_bytes());
-        assert_eq!(fast_inc(val.as_mut(), 0, 1, inc), 0);
+        fast_inc(val.as_mut(), &mut start, 1, inc);
+        assert_eq!(start, 0);
         assert_eq!(val, "6_".as_bytes());
     }
 
@@ -135,10 +142,13 @@ mod tests {
     #[test]
     fn test_fast_inc_large_inc() {
         let mut val = Vec::from("...7_".as_bytes());
+        let mut start: usize = 3;
         let inc = "543".as_bytes();
-        assert_eq!(fast_inc(val.as_mut(), 3, 4, inc), 1); // carried 2 more digits
+        fast_inc(val.as_mut(), &mut start, 4, inc);
+        assert_eq!(start, 1); // carried 2 more digits
         assert_eq!(val, ".550_".as_bytes());
-        assert_eq!(fast_inc(val.as_mut(), 1, 4, inc), 0); // carried 1 more digit
+        fast_inc(val.as_mut(), &mut start, 4, inc);
+        assert_eq!(start, 0); // carried 1 more digit
         assert_eq!(val, "1093_".as_bytes());
     }
 
@@ -146,32 +156,44 @@ mod tests {
     #[test]
     fn test_fast_inc_carry() {
         let mut val = Vec::from(".999_".as_bytes());
+        let mut start: usize = 1;
         let inc = "1".as_bytes();
-        assert_eq!(fast_inc(val.as_mut(), 1, 4, inc), 0);
+        fast_inc(val.as_mut(), &mut start, 4, inc);
+        assert_eq!(start, 0);
         assert_eq!(val, "1000_".as_bytes());
 
         let mut val = Vec::from(".999_".as_bytes());
+        let mut start: usize = 1;
         let inc = "11".as_bytes();
-        assert_eq!(fast_inc(val.as_mut(), 1, 4, inc), 0);
+        fast_inc(val.as_mut(), &mut start, 4, inc);
+        assert_eq!(start, 0);
         assert_eq!(val, "1010_".as_bytes());
     }
 
     #[test]
     fn test_fast_inc_one_simple() {
         let mut val = Vec::from("...8_".as_bytes());
-        assert_eq!(fast_inc_one(val.as_mut(), 3, 4), 3);
+        let mut start: usize = 3;
+        fast_inc_one(val.as_mut(), &mut start, 4);
+        assert_eq!(start, 3);
         assert_eq!(val, "...9_".as_bytes());
-        assert_eq!(fast_inc_one(val.as_mut(), 3, 4), 2); // carried 1 more digit
+        fast_inc_one(val.as_mut(), &mut start, 4);
+        assert_eq!(start, 2); // carried 1 more digit
         assert_eq!(val, "..10_".as_bytes());
-        assert_eq!(fast_inc_one(val.as_mut(), 2, 4), 2);
+        fast_inc_one(val.as_mut(), &mut start, 4);
+        assert_eq!(start, 2);
         assert_eq!(val, "..11_".as_bytes());
 
         let mut val = Vec::from("0_".as_bytes());
-        assert_eq!(fast_inc_one(val.as_mut(), 0, 1), 0);
+        let mut start: usize = 0;
+        fast_inc_one(val.as_mut(), &mut start, 1);
+        assert_eq!(start, 0);
         assert_eq!(val, "1_".as_bytes());
-        assert_eq!(fast_inc_one(val.as_mut(), 0, 1), 0);
+        fast_inc_one(val.as_mut(), &mut start, 1);
+        assert_eq!(start, 0);
         assert_eq!(val, "2_".as_bytes());
-        assert_eq!(fast_inc_one(val.as_mut(), 0, 1), 0);
+        fast_inc_one(val.as_mut(), &mut start, 1);
+        assert_eq!(start, 0);
         assert_eq!(val, "3_".as_bytes());
     }
 }
