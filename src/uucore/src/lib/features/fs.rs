@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Set of functions to manage files and symlinks
+//! Set of functions to manage regular files, special files, and links.
 
 // spell-checker:ignore backport
 
@@ -11,11 +11,13 @@
 use libc::{
     S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH,
     S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
-    mode_t,
+    mkfifo, mode_t,
 };
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
+#[cfg(unix)]
+use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::read_dir;
@@ -798,6 +800,37 @@ pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
 }
 
+/// Make a FIFO, also known as a named pipe.
+///
+/// This is a safe wrapper for the unsafe [`libc::mkfifo`] function,
+/// which makes a [named
+/// pipe](https://en.wikipedia.org/wiki/Named_pipe) on Unix systems.
+///
+/// # Errors
+///
+/// If the named pipe cannot be created.
+///
+/// # Examples
+///
+/// ```ignore
+/// use uucore::fs::make_fifo;
+///
+/// make_fifo("my-pipe").expect("failed to create the named pipe");
+///
+/// std::thread::spawn(|| { std::fs::write("my-pipe", b"hello").unwrap(); });
+/// assert_eq!(std::fs::read("my-pipe").unwrap(), b"hello");
+/// ```
+#[cfg(unix)]
+pub fn make_fifo(path: &Path) -> std::io::Result<()> {
+    let name = CString::new(path.to_str().unwrap()).unwrap();
+    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
+    if err == -1 {
+        Err(std::io::Error::from_raw_os_error(err))
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -806,6 +839,8 @@ mod tests {
     use std::io::Write;
     #[cfg(unix)]
     use std::os::unix;
+    #[cfg(unix)]
+    use std::os::unix::fs::FileTypeExt;
     #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 
@@ -1038,5 +1073,26 @@ mod tests {
     fn test_get_file_name() {
         let file_path = PathBuf::from("~/foo.txt");
         assert!(matches!(get_filename(&file_path), Some("foo.txt")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_make_fifo() {
+        // Create the FIFO in a temporary directory.
+        let tempdir = tempdir().unwrap();
+        let path = tempdir.path().join("f");
+        assert!(make_fifo(&path).is_ok());
+
+        // Check that it is indeed a FIFO.
+        assert!(std::fs::metadata(&path).unwrap().file_type().is_fifo());
+
+        // Check that we can write to it and read from it.
+        //
+        // Write and read need to happen in different threads,
+        // otherwise `write` would block indefinitely while waiting
+        // for the `read`.
+        let path2 = path.clone();
+        std::thread::spawn(move || assert!(std::fs::write(&path2, b"foo").is_ok()));
+        assert_eq!(std::fs::read(&path).unwrap(), b"foo");
     }
 }
