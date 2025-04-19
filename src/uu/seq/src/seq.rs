@@ -316,7 +316,7 @@ fn fast_print_seq(
 
     for _ in 0..loop_cnt {
         stdout.write_all(&buf[start..])?;
-        start = fast_inc(buf, start, num_end, inc_str);
+        fast_inc(buf, &mut start, num_end, inc_str);
     }
     // Write the last number without separator, but with terminator.
     stdout.write_all(&buf[start..num_end])?;

@@ -68,7 +68,7 @@ impl LineNumber {
     }
 
     fn increment(&mut self) {
-        self.num_start = fast_inc_one(self.buf.as_mut_slice(), self.num_start, self.num_end);
+        fast_inc_one(self.buf.as_mut_slice(), &mut self.num_start, self.num_end);
         self.print_start = self.print_start.min(self.num_start);
     }
 
