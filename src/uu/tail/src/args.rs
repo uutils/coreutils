@@ -290,8 +290,9 @@ impl Settings {
             .map(|v| v.map(Input::from).collect())
             .unwrap_or_else(|| vec![Input::default()]);
 
-        settings.verbose =
-            settings.inputs.len() > 1 && !matches.get_flag(options::verbosity::QUIET);
+        settings.verbose = (matches.get_flag(options::verbosity::VERBOSE)
+            || settings.inputs.len() > 1)
+            && !matches.get_flag(options::verbosity::QUIET);
 
         Ok(settings)
     }

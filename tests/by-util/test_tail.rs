@@ -96,8 +96,6 @@ fn test_stdin_explicit() {
 }
 
 #[test]
-// FIXME: the -f test fails with: Assertion failed. Expected 'tail' to be running but exited with status=exit status: 0
-#[ignore = "disabled until fixed"]
 #[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file() {
     // $ echo foo > f
@@ -105,7 +103,7 @@ fn test_stdin_redirect_file() {
     // $ tail < f
     // foo
 
-    // $ tail -f < f
+    // $ tail -v < f
     // foo
     //
 
@@ -122,6 +120,22 @@ fn test_stdin_redirect_file() {
         .arg("-v")
         .succeeds()
         .stdout_only("==> standard input <==\nfoo");
+}
+
+#[test]
+// FIXME: the -f test fails with: Assertion failed. Expected 'tail' to be running but exited with status=exit status: 0
+#[ignore = "disabled until fixed"]
+#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
+fn test_stdin_redirect_file_follow() {
+    // $ echo foo > f
+
+    // $ tail -f < f
+    // foo
+    //
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("f", "foo");
 
     let mut p = ts
         .ucmd()
