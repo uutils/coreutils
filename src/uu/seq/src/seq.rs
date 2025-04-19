@@ -2,18 +2,20 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat
+// spell-checker:ignore (ToDO) bigdecimal extendedbigdecimal numberparse hexadecimalfloat biguint
 use std::ffi::OsString;
 use std::io::{BufWriter, ErrorKind, Write, stdout};
 
 use clap::{Arg, ArgAction, Command};
+use num_bigint::BigUint;
+use num_traits::ToPrimitive;
 use num_traits::Zero;
 
 use uucore::error::{FromIo, UResult};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::{fast_inc::fast_inc, format_usage, help_about, help_usage};
 
 mod error;
 
@@ -149,13 +151,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let precision = select_precision(&first, &increment, &last);
-
     // If a format was passed on the command line, use that.
     // If not, use some default format based on parameters precision.
-    let format = match options.format {
-        Some(str) => Format::<num_format::Float, &ExtendedBigDecimal>::parse(str)?,
+    let (format, padding, fast_allowed) = match options.format {
+        Some(str) => (
+            Format::<num_format::Float, &ExtendedBigDecimal>::parse(str)?,
+            0,
+            false,
+        ),
         None => {
+            let precision = select_precision(&first, &increment, &last);
+
             let padding = if options.equal_width {
                 let precision_value = precision.unwrap_or(0);
                 first
@@ -186,7 +192,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     ..Default::default()
                 },
             };
-            Format::from_formatter(formatter)
+            // Allow fast printing if precision is 0 (integer inputs), `print_seq` will do further checks.
+            (
+                Format::from_formatter(formatter),
+                padding,
+                precision == Some(0),
+            )
         }
     };
 
@@ -195,7 +206,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         &options.separator,
         &options.terminator,
         &format,
+        fast_allowed,
+        padding,
     );
+
     match result {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
@@ -245,6 +259,72 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Integer print, default format, positive increment: fast code path
+/// that avoids reformating digit at all iterations.
+fn fast_print_seq(
+    mut stdout: impl Write,
+    first: &BigUint,
+    increment: u64,
+    last: &BigUint,
+    separator: &str,
+    terminator: &str,
+    padding: usize,
+) -> std::io::Result<()> {
+    // Nothing to do, just return.
+    if last < first {
+        return Ok(());
+    }
+
+    // Do at most u64::MAX loops. We can print in the order of 1e8 digits per second,
+    // u64::MAX is 1e19, so it'd take hundreds of years for this to complete anyway.
+    // TODO: we can move this test to `print_seq` if we care about this case.
+    let loop_cnt = ((last - first) / increment).to_u64().unwrap_or(u64::MAX);
+
+    // Format the first number.
+    let first_str = first.to_string();
+
+    // Makeshift log10.ceil
+    let last_length = last.to_string().len();
+
+    // Allocate a large u8 buffer, that contains a preformatted string
+    // of the number followed by the `separator`.
+    //
+    // | ... head space ... | number | separator |
+    // ^0                   ^ start  ^ num_end   ^ size (==buf.len())
+    //
+    // We keep track of start in this buffer, as the number grows.
+    // When printing, we take a slice between start and end.
+    let size = last_length.max(padding) + separator.len();
+    // Fill with '0', this is needed for equal_width, and harmless otherwise.
+    let mut buf = vec![b'0'; size];
+    let buf = buf.as_mut_slice();
+
+    let num_end = buf.len() - separator.len();
+    let mut start = num_end - first_str.len();
+
+    // Initialize buf with first and separator.
+    buf[start..num_end].copy_from_slice(first_str.as_bytes());
+    buf[num_end..].copy_from_slice(separator.as_bytes());
+
+    // Normally, if padding is > 0, it should be equal to last_length,
+    // so start would be == 0, but there are corner cases.
+    start = start.min(num_end - padding);
+
+    // Prepare the number to increment with as a string
+    let inc_str = increment.to_string();
+    let inc_str = inc_str.as_bytes();
+
+    for _ in 0..loop_cnt {
+        stdout.write_all(&buf[start..])?;
+        fast_inc(buf, &mut start, num_end, inc_str);
+    }
+    // Write the last number without separator, but with terminator.
+    stdout.write_all(&buf[start..num_end])?;
+    write!(stdout, "{terminator}")?;
+    stdout.flush()?;
+    Ok(())
+}
+
 fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {
     if increment >= &T::zero() {
         next > last
@@ -253,16 +333,42 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
     }
 }
 
-/// Floating point based code path
+/// Arbitrary precision decimal number code path ("slow" path)
 fn print_seq(
     range: RangeFloat,
     separator: &str,
     terminator: &str,
     format: &Format<num_format::Float, &ExtendedBigDecimal>,
+    fast_allowed: bool,
+    padding: usize, // Used by fast path only
 ) -> std::io::Result<()> {
     let stdout = stdout().lock();
     let mut stdout = BufWriter::new(stdout);
     let (first, increment, last) = range;
+
+    if fast_allowed {
+        // Test if we can use fast code path.
+        // First try to convert the range to BigUint (u64 for the increment).
+        let (first_bui, increment_u64, last_bui) = (
+            first.to_biguint(),
+            increment.to_biguint().and_then(|x| x.to_u64()),
+            last.to_biguint(),
+        );
+        if let (Some(first_bui), Some(increment_u64), Some(last_bui)) =
+            (first_bui, increment_u64, last_bui)
+        {
+            return fast_print_seq(
+                stdout,
+                &first_bui,
+                increment_u64,
+                &last_bui,
+                separator,
+                terminator,
+                padding,
+            );
+        }
+    }
+
     let mut value = first;
 
     let mut is_first_iteration = true;

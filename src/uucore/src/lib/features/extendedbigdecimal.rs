@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore bigdecimal extendedbigdecimal
+// spell-checker:ignore bigdecimal extendedbigdecimal biguint
 //! An arbitrary precision float that can also represent infinity, NaN, etc.
 //!
 //! The finite values are stored as [`BigDecimal`] instances. Because
@@ -25,7 +25,9 @@ use std::ops::Add;
 use std::ops::Neg;
 
 use bigdecimal::BigDecimal;
+use bigdecimal::num_bigint::BigUint;
 use num_traits::FromPrimitive;
+use num_traits::Signed;
 use num_traits::Zero;
 
 #[derive(Debug, Clone)]
@@ -106,6 +108,20 @@ impl ExtendedBigDecimal {
 
     pub fn one() -> Self {
         Self::BigDecimal(1.into())
+    }
+
+    pub fn to_biguint(&self) -> Option<BigUint> {
+        match self {
+            ExtendedBigDecimal::BigDecimal(big_decimal) => {
+                let (bi, scale) = big_decimal.as_bigint_and_scale();
+                if bi.is_negative() || scale > 0 || scale < -(u32::MAX as i64) {
+                    return None;
+                }
+                bi.to_biguint()
+                    .map(|bi| bi * BigUint::from(10u32).pow(-scale as u32))
+            }
+            _ => None,
+        }
     }
 }
 

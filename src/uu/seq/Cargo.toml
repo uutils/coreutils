@@ -23,6 +23,7 @@ num-traits = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "extendedbigdecimal",
+  "fast-inc",
   "format",
   "parser",
   "quoting-style",
