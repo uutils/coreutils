@@ -611,7 +611,6 @@ missing_panics_doc = "allow"                 # 946
 must_use_candidate = "allow"                 # 322
 doc_markdown = "allow"                       # 267
 match_same_arms = "allow"                    # 212
-unnecessary_semicolon = "allow"              # 156
 redundant_closure_for_method_calls = "allow" # 133
 cast_possible_truncation = "allow"           # 118
 too_many_lines = "allow"                     # 81
