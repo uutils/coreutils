@@ -802,7 +802,24 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 
 /// Make a FIFO, also known as a named pipe.
 ///
-/// This is a safe wrapper for the `mkfifo` function from `libc`.
+/// This is a safe wrapper for the unsafe [`libc::mkfifo`] function,
+/// which makes a [named
+/// pipe](https://en.wikipedia.org/wiki/Named_pipe) on Unix systems.
+///
+/// # Errors
+///
+/// If the named pipe cannot be created.
+///
+/// # Examples
+///
+/// ```ignore
+/// use uucore::fs::make_fifo;
+///
+/// make_fifo("my-pipe").expect("failed to create the named pipe");
+///
+/// std::thread::spawn(|| { std::fs::write("my-pipe", b"hello").unwrap(); });
+/// assert_eq!(std::fs::read("my-pipe").unwrap(), b"hello");
+/// ```
 #[cfg(unix)]
 pub fn make_fifo(path: &Path) -> std::io::Result<()> {
     let name = CString::new(path.to_str().unwrap()).unwrap();
