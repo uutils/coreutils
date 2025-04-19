@@ -10,6 +10,7 @@ mod error;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
@@ -17,12 +18,17 @@ use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf, absolute};
+
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
+#[cfg(unix)]
+use uucore::fs::make_fifo;
 use uucore::fs::{
     MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
     are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
@@ -665,6 +671,16 @@ fn rename(
     Ok(())
 }
 
+#[cfg(unix)]
+fn is_fifo(filetype: fs::FileType) -> bool {
+    filetype.is_fifo()
+}
+
+#[cfg(not(unix))]
+fn is_fifo(_filetype: fs::FileType) -> bool {
+    false
+}
+
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
 fn rename_with_fallback(
@@ -694,10 +710,26 @@ fn rename_with_fallback(
             rename_symlink_fallback(from, to)
         } else if file_type.is_dir() {
             rename_dir_fallback(from, to, multi_progress)
+        } else if is_fifo(file_type) {
+            rename_fifo_fallback(from, to)
         } else {
             rename_file_fallback(from, to)
         }
     })
+}
+
+/// Replace the destination with a new pipe with the same name as the source.
+#[cfg(unix)]
+fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
+    if to.try_exists()? {
+        fs::remove_file(to)?;
+    }
+    make_fifo(to).and_then(|_| fs::remove_file(from))
+}
+
+#[cfg(not(unix))]
+fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+    Ok(())
 }
 
 /// Move the given symlink to the given destination. On Windows, dangling
