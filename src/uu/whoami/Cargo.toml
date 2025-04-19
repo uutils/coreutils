@@ -28,9 +28,6 @@ windows-sys = { workspace = true, features = [
   "Win32_Foundation",
 ] }
 
-[target.'cfg(unix)'.dependencies]
-libc = { workspace = true }
-
 [[bin]]
 name = "whoami"
 path = "src/main.rs"
