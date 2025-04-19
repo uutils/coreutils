@@ -7,6 +7,7 @@
 #[cfg(not(windows))]
 use regex::Regex;
 
+use rstest::rstest;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(not(target_os = "windows"))]
@@ -1167,6 +1168,53 @@ fn test_invalid_time_style() {
         .arg("--time-style=banana")
         .succeeds()
         .stdout_does_not_contain("du: invalid argument 'banana' for 'time style'");
+}
+
+#[rstest]
+#[case::full_iso("+%Y-%m-%d %H:%M:%S.%f %z")]
+#[case::long_iso("+%Y-%m-%d %H:%M")]
+#[case::iso("+%Y-%m-%d")]
+#[case::seconds("+%S")]
+fn test_valid_time_style(#[case] input: &str) {
+    new_ucmd!()
+        .args(&["--time", "--time-style", input])
+        .succeeds();
+}
+
+#[test]
+fn test_time_style_escaping() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("date_test");
+
+    // printable characters (a little overkill, but better than missing something)
+    for c in '!'..='~' {
+        let f = format!("+%{c}");
+        ts.ucmd()
+            .arg("--time")
+            .arg("--time-style")
+            .arg(f)
+            .arg("date_test")
+            .succeeds();
+        for prefix in ".:#0-_".chars() {
+            let f = format!("+%{prefix}{c}");
+            ts.ucmd()
+                .arg("--time")
+                .arg("--time-style")
+                .arg(f)
+                .arg("date_test")
+                .succeeds();
+        }
+    }
+
+    let f = "+%%%";
+    ts.ucmd()
+        .arg("--time")
+        .arg("--time-style")
+        .arg(f)
+        .arg("date_test")
+        .succeeds();
 }
 
 #[test]
