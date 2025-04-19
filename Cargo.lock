@@ -3557,7 +3557,6 @@ name = "uu_whoami"
 version = "0.0.30"
 dependencies = [
  "clap",
- "libc",
  "uucore",
  "windows-sys 0.59.0",
 ]
