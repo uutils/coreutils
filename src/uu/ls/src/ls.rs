@@ -8,7 +8,7 @@
 use std::iter;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-use std::{cell::OnceCell, num::IntErrorKind};
+use std::{cell::LazyCell, cell::OnceCell, num::IntErrorKind};
 use std::{
     cmp::Reverse,
     ffi::{OsStr, OsString},
@@ -2577,8 +2577,15 @@ fn display_items(
             // whether text will wrap or not, because when format is grid or
             // column ls will try to place the item name in a new line if it
             // wraps.
-            let cell =
-                display_item_name(i, config, prefix_context, more_info, out, style_manager, 0);
+            let cell = display_item_name(
+                i,
+                config,
+                prefix_context,
+                more_info,
+                out,
+                style_manager,
+                LazyCell::new(Box::new(|| 0)),
+            );
 
             names_vec.push(cell);
         }
@@ -2870,7 +2877,9 @@ fn display_item_long(
             String::new(),
             out,
             style_manager,
-            ansi_width(&String::from_utf8_lossy(&output_display)),
+            LazyCell::new(Box::new(|| {
+                ansi_width(&String::from_utf8_lossy(&output_display))
+            })),
         );
 
         let displayed_item = if quoted && !os_str_starts_with(&item_name, b"'") {
@@ -2964,7 +2973,9 @@ fn display_item_long(
             String::new(),
             out,
             style_manager,
-            ansi_width(&String::from_utf8_lossy(&output_display)),
+            LazyCell::new(Box::new(|| {
+                ansi_width(&String::from_utf8_lossy(&output_display))
+            })),
         );
         let date_len = 12;
 
@@ -3198,13 +3209,13 @@ fn display_item_name(
     more_info: String,
     out: &mut BufWriter<Stdout>,
     style_manager: &mut Option<StyleManager>,
-    current_column: usize,
+    current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
 
     let is_wrap =
-        |namelen: usize| config.width != 0 && current_column + namelen > config.width.into();
+        |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
 
     if config.hyperlink {
         name = create_hyperlink(&name, path);
