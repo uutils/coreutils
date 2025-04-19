@@ -840,6 +840,8 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix;
     #[cfg(unix)]
+    use std::os::unix::fs::FileTypeExt;
+    #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 
     struct NormalizePathTestCase<'a> {
@@ -1071,5 +1073,26 @@ mod tests {
     fn test_get_file_name() {
         let file_path = PathBuf::from("~/foo.txt");
         assert!(matches!(get_filename(&file_path), Some("foo.txt")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_make_fifo() {
+        // Create the FIFO in a temporary directory.
+        let tempdir = tempdir().unwrap();
+        let path = tempdir.path().join("f");
+        assert!(make_fifo(&path).is_ok());
+
+        // Check that it is indeed a FIFO.
+        assert!(std::fs::metadata(&path).unwrap().file_type().is_fifo());
+
+        // Check that we can write to it and read from it.
+        //
+        // Write and read need to happen in different threads,
+        // otherwise `write` would block indefinitely while waiting
+        // for the `read`.
+        let path2 = path.clone();
+        std::thread::spawn(move || assert!(std::fs::write(&path2, b"foo").is_ok()));
+        assert_eq!(std::fs::read(&path).unwrap(), b"foo");
     }
 }
