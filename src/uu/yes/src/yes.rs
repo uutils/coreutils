@@ -9,14 +9,10 @@ use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::fd::AsFd;
 use uucore::error::{UResult, USimpleError};
 #[cfg(unix)]
 use uucore::signals::enable_pipe_errors;
 use uucore::{format_usage, help_about, help_usage};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
 
 const ABOUT: &str = help_about!("yes.md");
 const USAGE: &str = help_usage!("yes.md");
@@ -117,15 +113,6 @@ pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let mut stdout = stdout.lock();
     #[cfg(unix)]
     enable_pipe_errors()?;
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        match splice::splice_data(bytes, &stdout.as_fd()) {
-            Ok(_) => return Ok(()),
-            Err(splice::Error::Io(err)) => return Err(err),
-            Err(splice::Error::Unsupported) => (),
-        }
-    }
 
     loop {
         stdout.write_all(bytes)?;
