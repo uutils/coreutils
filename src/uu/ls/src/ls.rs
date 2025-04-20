@@ -2051,6 +2051,8 @@ fn show_dir_name(
 struct ListState<'a> {
     out: BufWriter<Stdout>,
     style_manager: Option<StyleManager<'a>>,
+    uid_cache: HashMap<u32, String>,
+    gid_cache: HashMap<u32, String>,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2063,6 +2065,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut state = ListState {
         out: BufWriter::new(stdout()),
         style_manager: config.color.as_ref().map(StyleManager::new),
+        uid_cache: HashMap::new(),
+        gid_cache: HashMap::new(),
     };
 
     for loc in locs {
@@ -2397,10 +2401,10 @@ fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Resu
 fn display_dir_entry_size(
     entry: &PathData,
     config: &Config,
-    out: &mut BufWriter<Stdout>,
+    state: &mut ListState,
 ) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
-    if let Some(md) = entry.get_metadata(out) {
+    if let Some(md) = entry.get_metadata(&mut state.out) {
         let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Device(major, minor) => {
                 (major.len() + minor.len() + 2usize, major.len(), minor.len())
@@ -2409,8 +2413,8 @@ fn display_dir_entry_size(
         };
         (
             display_symlink_count(md).len(),
-            display_uname(md, config).len(),
-            display_group(md, config).len(),
+            display_uname(md, config, state).len(),
+            display_group(md, config, state).len(),
             size_len,
             major_len,
             minor_len,
@@ -2523,7 +2527,7 @@ fn display_items(
     });
 
     if config.format == Format::Long {
-        let padding_collection = calculate_padding_collection(items, config, &mut state.out);
+        let padding_collection = calculate_padding_collection(items, config, state);
 
         for item in items {
             #[cfg(unix)]
@@ -2561,7 +2565,7 @@ fn display_items(
             None
         };
 
-        let padding = calculate_padding_collection(items, config, &mut state.out);
+        let padding = calculate_padding_collection(items, config, state);
 
         // we need to apply normal color to non filename output
         if let Some(style_manager) = &mut state.style_manager {
@@ -2813,12 +2817,12 @@ fn display_item_long(
 
         if config.long.owner {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&display_uname(md, config), padding.uname);
+            output_display.extend_pad_right(&display_uname(md, config, state), padding.uname);
         }
 
         if config.long.group {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&display_group(md, config), padding.group);
+            output_display.extend_pad_right(&display_group(md, config, state), padding.group);
         }
 
         if config.context {
@@ -2830,7 +2834,7 @@ fn display_item_long(
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&display_uname(md, config), padding.uname);
+            output_display.extend_pad_right(&display_uname(md, config, state), padding.uname);
         }
 
         match display_len_or_rdev(md, config) {
@@ -3002,67 +3006,49 @@ fn get_inode(metadata: &Metadata) -> String {
 // Currently getpwuid is `linux` target only. If it's broken state.out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
-use std::sync::LazyLock;
-#[cfg(unix)]
-use std::sync::Mutex;
-#[cfg(unix)]
 use uucore::entries;
 use uucore::fs::FileInformation;
 
 #[cfg(unix)]
-fn cached_uid2usr(uid: u32) -> String {
-    static UID_CACHE: LazyLock<Mutex<HashMap<u32, String>>> =
-        LazyLock::new(|| Mutex::new(HashMap::new()));
-
-    let mut uid_cache = UID_CACHE.lock().unwrap();
-    uid_cache
-        .entry(uid)
-        .or_insert_with(|| entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()))
-        .clone()
-}
-
-#[cfg(unix)]
-fn display_uname(metadata: &Metadata, config: &Config) -> String {
+fn display_uname(metadata: &Metadata, config: &Config, state: &mut ListState) -> String {
+    let uid = metadata.uid();
     if config.long.numeric_uid_gid {
-        metadata.uid().to_string()
+        uid.to_string()
     } else {
-        cached_uid2usr(metadata.uid())
+        state
+            .uid_cache
+            .entry(uid)
+            .or_insert_with(|| entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()))
+            .clone()
     }
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
-fn cached_gid2grp(gid: u32) -> String {
-    static GID_CACHE: LazyLock<Mutex<HashMap<u32, String>>> =
-        LazyLock::new(|| Mutex::new(HashMap::new()));
-
-    let mut gid_cache = GID_CACHE.lock().unwrap();
-    gid_cache
-        .entry(gid)
-        .or_insert_with(|| entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
-        .clone()
-}
-
-#[cfg(all(unix, not(target_os = "redox")))]
-fn display_group(metadata: &Metadata, config: &Config) -> String {
+fn display_group(metadata: &Metadata, config: &Config, state: &mut ListState) -> String {
+    let gid = metadata.gid();
     if config.long.numeric_uid_gid {
-        metadata.gid().to_string()
+        gid.to_string()
     } else {
-        cached_gid2grp(metadata.gid())
+        state
+            .gid_cache
+            .entry(gid)
+            .or_insert_with(|| entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
+            .clone()
     }
 }
 
 #[cfg(target_os = "redox")]
-fn display_group(metadata: &Metadata, _config: &Config) -> String {
+fn display_group(metadata: &Metadata, _config: &Config, _state: &mut ListState) -> String {
     metadata.gid().to_string()
 }
 
 #[cfg(not(unix))]
-fn display_uname(_metadata: &Metadata, _config: &Config) -> String {
+fn display_uname(_metadata: &Metadata, _config: &Config, _state: &mut ListState) -> String {
     "somebody".to_string()
 }
 
 #[cfg(not(unix))]
-fn display_group(_metadata: &Metadata, _config: &Config) -> String {
+fn display_group(_metadata: &Metadata, _config: &Config, _state: &mut ListState) -> String {
     "somegroup".to_string()
 }
 
@@ -3439,7 +3425,7 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
 fn calculate_padding_collection(
     items: &[PathData],
     config: &Config,
-    out: &mut BufWriter<Stdout>,
+    state: &mut ListState,
 ) -> PaddingCollection {
     let mut padding_collections = PaddingCollection {
         inode: 1,
@@ -3456,7 +3442,7 @@ fn calculate_padding_collection(
     for item in items {
         #[cfg(unix)]
         if config.inode {
-            let inode_len = if let Some(md) = item.get_metadata(out) {
+            let inode_len = if let Some(md) = item.get_metadata(&mut state.out) {
                 display_inode(md).len()
             } else {
                 continue;
@@ -3465,7 +3451,7 @@ fn calculate_padding_collection(
         }
 
         if config.alloc_size {
-            if let Some(md) = item.get_metadata(out) {
+            if let Some(md) = item.get_metadata(&mut state.out) {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
@@ -3474,7 +3460,7 @@ fn calculate_padding_collection(
         if config.format == Format::Long {
             let context_len = item.security_context.len();
             let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
-                display_dir_entry_size(item, config, out);
+                display_dir_entry_size(item, config, state);
             padding_collections.link_count = link_count_len.max(padding_collections.link_count);
             padding_collections.uname = uname_len.max(padding_collections.uname);
             padding_collections.group = group_len.max(padding_collections.group);
