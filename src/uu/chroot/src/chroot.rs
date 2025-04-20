@@ -448,7 +448,7 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
 
     if err == 0 {
         if !skip_chdir {
-            std::env::set_current_dir(root).unwrap();
+            std::env::set_current_dir("/").unwrap();
         }
         Ok(())
     } else {
