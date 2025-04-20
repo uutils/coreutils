@@ -8,7 +8,7 @@
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, check_coreutil_version, expected_result, is_ci, whoami};
-use uutests::util_name;
+use uutests::{at_and_ucmd, util_name};
 
 const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced in GNU's coreutils 8.31
 
@@ -477,4 +477,47 @@ fn test_id_pretty_print_password_record() {
         .arg("-P")
         .fails()
         .stderr_contains("the argument '-p' cannot be used with '-P'");
+}
+
+enum CompilationResult {
+    CompilerNotInstalled,
+    Error,
+    Success,
+}
+
+fn compile_preload_file_with_gcc(c_file: &str, so_file: &str) -> CompilationResult {
+    let result = std::process::Command::new("gcc")
+        .args(["-fPIC", "-shared", "-o", &so_file, &c_file])
+        .status();
+
+    match result {
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            CompilationResult::CompilerNotInstalled
+        }
+        Ok(status) if status.success() => CompilationResult::Success,
+        _ => CompilationResult::Error,
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_id_different_uid_and_euid() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Compile the preload file required for mocking different UID and EUID.
+    // The UID should be 1000, whereas the EUID should be 0.
+    let c_file = at.as_string() + "/different_uid_and_euid.c";
+    let so_file = at.as_string() + "/different_uid_and_euid.so";
+    let compilation_result = compile_preload_file_with_gcc(&c_file, &so_file);
+    match compilation_result {
+        CompilationResult::CompilerNotInstalled => {
+            println!("test skipped: `gcc` compiler is not installed");
+            return;
+        }
+        CompilationResult::Error => panic!("Preload file compilation failed"),
+        CompilationResult::Success => {}
+    }
+
+    let result = ucmd.env("LD_PRELOAD", so_file).run();
+    result.stdout_contains("uid=1000").stdout_contains("euid=0");
 }
