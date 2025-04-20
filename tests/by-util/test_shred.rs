@@ -208,3 +208,14 @@ fn test_shred_fail_no_perm() {
         .fails()
         .stderr_contains("Couldn't rename to");
 }
+
+#[test]
+fn test_shred_verbose_pass_single_0_byte_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "foo";
+    at.write(file, "non-empty");
+    ucmd.arg("-vn200")
+        .arg(file)
+        .succeeds()
+        .stderr_contains("/200 (000000)...\n");
+}
