@@ -2047,14 +2047,23 @@ fn show_dir_name(
     write!(out, ":")
 }
 
+// A struct to encapsulate state that is passed around from `list` functions.
+struct ListState<'a> {
+    out: BufWriter<Stdout>,
+    style_manager: Option<StyleManager<'a>>,
+}
+
 #[allow(clippy::cognitive_complexity)]
 pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
-    let mut out = BufWriter::new(stdout());
     let mut dired = DiredOutput::default();
-    let mut style_manager = config.color.as_ref().map(StyleManager::new);
     let initial_locs_len = locs.len();
+
+    let mut state = ListState {
+        out: BufWriter::new(stdout()),
+        style_manager: config.color.as_ref().map(StyleManager::new),
+    };
 
     for loc in locs {
         let path_data = PathData::new(PathBuf::from(loc), None, None, config, true);
@@ -2065,11 +2074,11 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Proper GNU handling is don't show if dereferenced symlink DNE
         // but only for the base dir, for a child dir show, and print ?s
         // in long format
-        if path_data.get_metadata(&mut out).is_none() {
+        if path_data.get_metadata(&mut state.out).is_none() {
             continue;
         }
 
-        let show_dir_contents = match path_data.file_type(&mut out) {
+        let show_dir_contents = match path_data.file_type(&mut state.out) {
             Some(ft) => !config.directory && ft.is_dir(),
             None => {
                 set_exit_code(1);
@@ -2084,19 +2093,19 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         }
     }
 
-    sort_entries(&mut files, config, &mut out);
-    sort_entries(&mut dirs, config, &mut out);
+    sort_entries(&mut files, config, &mut state.out);
+    sort_entries(&mut dirs, config, &mut state.out);
 
-    if let Some(style_manager) = style_manager.as_mut() {
+    if let Some(style_manager) = state.style_manager.as_mut() {
         // ls will try to write a reset before anything is written if normal
         // color is given
         if style_manager.get_normal_style().is_some() {
             let to_write = style_manager.reset(true);
-            write!(out, "{to_write}")?;
+            write!(state.out, "{to_write}")?;
         }
     }
 
-    display_items(&files, config, &mut out, &mut dired, &mut style_manager)?;
+    display_items(&files, config, &mut state, &mut dired)?;
 
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
@@ -2104,7 +2113,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         let read_dir = match fs::read_dir(&path_data.p_buf) {
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
-                out.flush()?;
+                state.out.flush()?;
                 show!(LsError::IOErrorContext(
                     path_data.p_buf.clone(),
                     err,
@@ -2119,10 +2128,10 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         if initial_locs_len > 1 || config.recursive {
             if pos.eq(&0usize) && files.is_empty() {
                 if config.dired {
-                    dired::indent(&mut out)?;
+                    dired::indent(&mut state.out)?;
                 }
-                show_dir_name(path_data, &mut out, config)?;
-                writeln!(out)?;
+                show_dir_name(path_data, &mut state.out, config)?;
+                writeln!(state.out)?;
                 if config.dired {
                     // First directory displayed
                     let dir_len = path_data.display_name.len();
@@ -2132,9 +2141,9 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                     dired::add_dir_name(&mut dired, dir_len);
                 }
             } else {
-                writeln!(out)?;
-                show_dir_name(path_data, &mut out, config)?;
-                writeln!(out)?;
+                writeln!(state.out)?;
+                show_dir_name(path_data, &mut state.out, config)?;
+                writeln!(state.out)?;
             }
         }
         let mut listed_ancestors = HashSet::new();
@@ -2146,14 +2155,13 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             path_data,
             read_dir,
             config,
-            &mut out,
+            &mut state,
             &mut listed_ancestors,
             &mut dired,
-            &mut style_manager,
         )?;
     }
     if config.dired && !config.hyperlink {
-        dired::print_dired_output(config, &dired, &mut out)?;
+        dired::print_dired_output(config, &dired, &mut state.out)?;
     }
     Ok(())
 }
@@ -2266,10 +2274,9 @@ fn enter_directory(
     path_data: &PathData,
     read_dir: ReadDir,
     config: &Config,
-    out: &mut BufWriter<Stdout>,
+    state: &mut ListState,
     listed_ancestors: &mut HashSet<FileInformation>,
     dired: &mut DiredOutput,
-    style_manager: &mut Option<StyleManager>,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
@@ -2298,7 +2305,7 @@ fn enter_directory(
         let dir_entry = match raw_entry {
             Ok(path) => path,
             Err(err) => {
-                out.flush()?;
+                state.out.flush()?;
                 show!(LsError::IOError(err));
                 continue;
             }
@@ -2311,18 +2318,18 @@ fn enter_directory(
         };
     }
 
-    sort_entries(&mut entries, config, out);
+    sort_entries(&mut entries, config, &mut state.out);
 
     // Print total after any error display
     if config.format == Format::Long || config.alloc_size {
-        let total = return_total(&entries, config, out)?;
-        write!(out, "{}", total.as_str())?;
+        let total = return_total(&entries, config, &mut state.out)?;
+        write!(state.out, "{}", total.as_str())?;
         if config.dired {
             dired::add_total(dired, total.len());
         }
     }
 
-    display_items(&entries, config, out, dired, style_manager)?;
+    display_items(&entries, config, state, dired)?;
 
     if config.recursive {
         for e in entries
@@ -2335,7 +2342,7 @@ fn enter_directory(
         {
             match fs::read_dir(&e.p_buf) {
                 Err(err) => {
-                    out.flush()?;
+                    state.out.flush()?;
                     show!(LsError::IOErrorContext(
                         e.p_buf.clone(),
                         err,
@@ -2349,34 +2356,26 @@ fn enter_directory(
                     {
                         // when listing several directories in recursive mode, we show
                         // "dirname:" at the beginning of the file list
-                        writeln!(out)?;
+                        writeln!(state.out)?;
                         if config.dired {
                             // We already injected the first dir
                             // Continue with the others
                             // 2 = \n + \n
                             dired.padding = 2;
-                            dired::indent(out)?;
+                            dired::indent(&mut state.out)?;
                             let dir_name_size = e.p_buf.to_string_lossy().len();
                             dired::calculate_subdired(dired, dir_name_size);
                             // inject dir name
                             dired::add_dir_name(dired, dir_name_size);
                         }
 
-                        show_dir_name(e, out, config)?;
-                        writeln!(out)?;
-                        enter_directory(
-                            e,
-                            rd,
-                            config,
-                            out,
-                            listed_ancestors,
-                            dired,
-                            style_manager,
-                        )?;
+                        show_dir_name(e, &mut state.out, config)?;
+                        writeln!(state.out)?;
+                        enter_directory(e, rd, config, state, listed_ancestors, dired)?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
                     } else {
-                        out.flush()?;
+                        state.out.flush()?;
                         show!(LsError::AlreadyListedError(e.p_buf.clone()));
                     }
                 }
@@ -2511,9 +2510,8 @@ fn display_additional_leading_info(
 fn display_items(
     items: &[PathData],
     config: &Config,
-    out: &mut BufWriter<Stdout>,
+    state: &mut ListState,
     dired: &mut DiredOutput,
-    style_manager: &mut Option<StyleManager>,
 ) -> UResult<()> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
@@ -2525,31 +2523,31 @@ fn display_items(
     });
 
     if config.format == Format::Long {
-        let padding_collection = calculate_padding_collection(items, config, out);
+        let padding_collection = calculate_padding_collection(items, config, &mut state.out);
 
         for item in items {
             #[cfg(unix)]
             if config.inode || config.alloc_size {
-                let more_info =
-                    display_additional_leading_info(item, &padding_collection, config, out)?;
+                let more_info = display_additional_leading_info(
+                    item,
+                    &padding_collection,
+                    config,
+                    &mut state.out,
+                )?;
 
-                write!(out, "{more_info}")?;
+                write!(state.out, "{more_info}")?;
             }
             #[cfg(not(unix))]
             if config.alloc_size {
-                let more_info =
-                    display_additional_leading_info(item, &padding_collection, config, out)?;
-                write!(out, "{more_info}")?;
+                let more_info = display_additional_leading_info(
+                    item,
+                    &padding_collection,
+                    config,
+                    &mut state.out,
+                )?;
+                write!(state.out, "{more_info}")?;
             }
-            display_item_long(
-                item,
-                &padding_collection,
-                config,
-                out,
-                dired,
-                style_manager,
-                quoted,
-            )?;
+            display_item_long(item, &padding_collection, config, state, dired, quoted)?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -2563,16 +2561,16 @@ fn display_items(
             None
         };
 
-        let padding = calculate_padding_collection(items, config, out);
+        let padding = calculate_padding_collection(items, config, &mut state.out);
 
         // we need to apply normal color to non filename output
-        if let Some(style_manager) = style_manager {
-            write!(out, "{}", style_manager.apply_normal())?;
+        if let Some(style_manager) = &mut state.style_manager {
+            write!(state.out, "{}", style_manager.apply_normal())?;
         }
 
         let mut names_vec = Vec::new();
         for i in items {
-            let more_info = display_additional_leading_info(i, &padding, config, out)?;
+            let more_info = display_additional_leading_info(i, &padding, config, &mut state.out)?;
             // it's okay to set current column to zero which is used to decide
             // whether text will wrap or not, because when format is grid or
             // column ls will try to place the item name in a new line if it
@@ -2582,8 +2580,7 @@ fn display_items(
                 config,
                 prefix_context,
                 more_info,
-                out,
-                style_manager,
+                state,
                 LazyCell::new(Box::new(|| 0)),
             );
 
@@ -2598,7 +2595,7 @@ fn display_items(
                     names,
                     config.width,
                     Direction::TopToBottom,
-                    out,
+                    &mut state.out,
                     quoted,
                     config.tab_size,
                 )?;
@@ -2608,7 +2605,7 @@ fn display_items(
                     names,
                     config.width,
                     Direction::LeftToRight,
-                    out,
+                    &mut state.out,
                     quoted,
                     config.tab_size,
                 )?;
@@ -2616,7 +2613,7 @@ fn display_items(
             Format::Commas => {
                 let mut current_col = 0;
                 if let Some(name) = names.next() {
-                    write_os_str(out, &name)?;
+                    write_os_str(&mut state.out, &name)?;
                     current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
                 }
                 for name in names {
@@ -2624,23 +2621,23 @@ fn display_items(
                     // If the width is 0 we print one single line
                     if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
-                        writeln!(out, ",")?;
+                        writeln!(state.out, ",")?;
                     } else {
                         current_col += name_width + 2;
-                        write!(out, ", ")?;
+                        write!(state.out, ", ")?;
                     }
-                    write_os_str(out, &name)?;
+                    write_os_str(&mut state.out, &name)?;
                 }
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
                 if current_col > 0 {
-                    write!(out, "{}", config.line_ending)?;
+                    write!(state.out, "{}", config.line_ending)?;
                 }
             }
             _ => {
                 for name in names {
-                    write_os_str(out, &name)?;
-                    write!(out, "{}", config.line_ending)?;
+                    write_os_str(&mut state.out, &name)?;
+                    write!(state.out, "{}", config.line_ending)?;
                 }
             }
         };
@@ -2751,7 +2748,7 @@ fn display_grid(
     Ok(())
 }
 
-/// This writes to the BufWriter out a single string of the output of `ls -l`.
+/// This writes to the BufWriter state.out a single string of the output of `ls -l`.
 ///
 /// It writes the following keys, in order:
 /// * `inode` ([`get_inode`], config-optional)
@@ -2784,21 +2781,20 @@ fn display_item_long(
     item: &PathData,
     padding: &PaddingCollection,
     config: &Config,
-    out: &mut BufWriter<Stdout>,
+    state: &mut ListState,
     dired: &mut DiredOutput,
-    style_manager: &mut Option<StyleManager>,
     quoted: bool,
 ) -> UResult<()> {
     let mut output_display: Vec<u8> = Vec::with_capacity(128);
 
     // apply normal color to non filename outputs
-    if let Some(style_manager) = style_manager {
+    if let Some(style_manager) = &mut state.style_manager {
         output_display.extend(style_manager.apply_normal().as_bytes());
     }
     if config.dired {
         output_display.extend(b"  ");
     }
-    if let Some(md) = item.get_metadata(out) {
+    if let Some(md) = item.get_metadata(&mut state.out) {
         #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
         // TODO: See how Mac should work here
         let is_acl_set = false;
@@ -2875,8 +2871,7 @@ fn display_item_long(
             config,
             None,
             String::new(),
-            out,
-            style_manager,
+            state,
             LazyCell::new(Box::new(|| {
                 ansi_width(&String::from_utf8_lossy(&output_display))
             })),
@@ -2971,8 +2966,7 @@ fn display_item_long(
             config,
             None,
             String::new(),
-            out,
-            style_manager,
+            state,
             LazyCell::new(Box::new(|| {
                 ansi_width(&String::from_utf8_lossy(&output_display))
             })),
@@ -2995,7 +2989,7 @@ fn display_item_long(
         write_os_str(&mut output_display, &displayed_item)?;
         output_display.extend(config.line_ending.to_string().as_bytes());
     }
-    out.write_all(&output_display)?;
+    state.out.write_all(&output_display)?;
 
     Ok(())
 }
@@ -3005,7 +2999,7 @@ fn get_inode(metadata: &Metadata) -> String {
     format!("{}", metadata.ino())
 }
 
-// Currently getpwuid is `linux` target only. If it's broken out into
+// Currently getpwuid is `linux` target only. If it's broken state.out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
 use std::sync::LazyLock;
@@ -3207,8 +3201,7 @@ fn display_item_name(
     config: &Config,
     prefix_context: Option<usize>,
     more_info: String,
-    out: &mut BufWriter<Stdout>,
-    style_manager: &mut Option<StyleManager>,
+    state: &mut ListState,
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
@@ -3221,9 +3214,16 @@ fn display_item_name(
         name = create_hyperlink(&name, path);
     }
 
-    if let Some(style_manager) = style_manager {
+    if let Some(style_manager) = &mut state.style_manager {
         let len = name.len();
-        name = color_name(name, path, style_manager, out, None, is_wrap(len));
+        name = color_name(
+            name,
+            path,
+            style_manager,
+            &mut state.out,
+            None,
+            is_wrap(len),
+        );
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -3233,7 +3233,7 @@ fn display_item_name(
     }
 
     if config.indicator_style != IndicatorStyle::None {
-        let sym = classify_file(path, out);
+        let sym = classify_file(path, &mut state.out);
 
         let char_opt = match config.indicator_style {
             IndicatorStyle::Classify => sym,
@@ -3260,8 +3260,8 @@ fn display_item_name(
     }
 
     if config.format == Format::Long
-        && path.file_type(out).is_some()
-        && path.file_type(out).unwrap().is_symlink()
+        && path.file_type(&mut state.out).is_some()
+        && path.file_type(&mut state.out).unwrap().is_symlink()
         && !path.must_dereference
     {
         match path.p_buf.read_link() {
@@ -3271,7 +3271,7 @@ fn display_item_name(
                 // We might as well color the symlink output after the arrow.
                 // This makes extra system calls, but provides important information that
                 // people run `ls -l --color` are very interested in.
-                if let Some(style_manager) = style_manager {
+                if let Some(style_manager) = &mut state.style_manager {
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
                     let mut absolute_target = target.clone();
@@ -3287,7 +3287,7 @@ fn display_item_name(
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.get_metadata(out).is_none()
+                    if path.get_metadata(&mut state.out).is_none()
                         && get_metadata_with_deref_opt(
                             target_data.p_buf.as_path(),
                             target_data.must_dereference,
@@ -3300,7 +3300,7 @@ fn display_item_name(
                             escape_name(target.as_os_str(), &config.quoting_style),
                             path,
                             style_manager,
-                            out,
+                            &mut state.out,
                             Some(&target_data),
                             is_wrap(name.len()),
                         ));
@@ -3502,7 +3502,7 @@ fn calculate_padding_collection(
 fn calculate_padding_collection(
     items: &[PathData],
     config: &Config,
-    out: &mut BufWriter<Stdout>,
+    state: &mut ListState,
 ) -> PaddingCollection {
     let mut padding_collections = PaddingCollection {
         link_count: 1,
@@ -3515,7 +3515,7 @@ fn calculate_padding_collection(
 
     for item in items {
         if config.alloc_size {
-            if let Some(md) = item.get_metadata(out) {
+            if let Some(md) = item.get_metadata(&mut state.out) {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
@@ -3523,7 +3523,7 @@ fn calculate_padding_collection(
 
         let context_len = item.security_context.len();
         let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
-            display_dir_entry_size(item, config, out);
+            display_dir_entry_size(item, config, state);
         padding_collections.link_count = link_count_len.max(padding_collections.link_count);
         padding_collections.uname = uname_len.max(padding_collections.uname);
         padding_collections.group = group_len.max(padding_collections.group);
