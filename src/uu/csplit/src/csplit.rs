@@ -5,24 +5,25 @@
 // spell-checker:ignore rustdoc
 #![allow(rustdoc::private_intra_doc_links)]
 
-use std::cmp::Ordering;
+use std::collections::VecDeque;
 use std::io::{self, BufReader};
 use std::{
     fs::{File, remove_file},
-    io::{BufRead, BufWriter, Write},
+    io::{BufRead, Write},
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, show};
 
 mod csplit_error;
 mod patterns;
 mod split_name;
 
 use crate::csplit_error::CsplitError;
+use crate::patterns::{ExecutePattern, Pattern, get_patterns};
 use crate::split_name::SplitName;
 
 const ABOUT: &str = help_about!("csplit.md");
@@ -71,6 +72,940 @@ impl CsplitOptions {
     }
 }
 
+/// Whether to continue the main csplit loop or terminate immediately.
+enum LoopStatus {
+    Continue,
+    Return,
+}
+
+/// The type of line being buffered.
+#[allow(clippy::enum_variant_names)]
+enum LineType {
+    /// A non-matching line that is buffered due to an offset.
+    NonMatch,
+
+    /// A line that matched a regular expression pattern.
+    RegexMatch,
+
+    /// A line that was at a specific line number.
+    LineNumMatch,
+}
+
+/// Object that splits a sequence of lines into chunks.
+///
+/// The `buffer`, `lines_iter`, `current_line`, and `num_chunks` fields
+/// represent the global state of the process across all chunks.
+///
+/// The `total_bytes`, `file_name`, and `file` represent per-chunk
+/// state. At the beginning of each chunk, these are reset.
+struct Splitter<'a, B> {
+    /// Command-line options that control various behaviors.
+    options: &'a CsplitOptions,
+
+    /// Buffer used to store matching lines and offset lines across chunks.
+    buffer: VecDeque<(String, LineType)>,
+
+    /// Iterator over lines of the input.
+    lines_iter: io::Lines<B>,
+
+    /// The current line number, or the number of lines read from the input.
+    current_line: usize,
+
+    /// Total number of chunks that have every been made.
+    num_chunks: usize,
+
+    /// Total bytes written in this chunk.
+    total_bytes: usize,
+
+    /// The name of the file to which lines from this chunk are written.
+    file_name: String,
+
+    /// The file to which lines from this chunk are written.
+    file: File,
+}
+
+impl<'a, B> Splitter<'a, B>
+where
+    B: BufRead,
+{
+    fn new(options: &'a CsplitOptions, input: B) -> io::Result<Self> {
+        let buffer = VecDeque::new();
+        let lines_iter = input.lines();
+        let file_name = options.split_name.get(0);
+        let file = File::create(&file_name)?;
+        Ok(Self {
+            options,
+            buffer,
+            lines_iter,
+            current_line: 0,
+            num_chunks: 0,
+            total_bytes: 0,
+            file_name,
+            file,
+        })
+    }
+
+    /// Print each line from the buffer.
+    ///
+    /// Returns the total bytes written and whether there was a
+    /// matching line in the buffer that was suppressed due to the
+    /// `suppress_matched` flag.
+    fn print_buffer(&mut self) -> io::Result<(usize, bool)> {
+        let mut total = 0;
+        let mut suppressed_match = false;
+        loop {
+            match self.buffer.pop_front() {
+                None => break,
+                Some((_, LineType::LineNumMatch | LineType::RegexMatch))
+                    if self.options.suppress_matched =>
+                {
+                    suppressed_match = true;
+                }
+                Some((line, _)) => {
+                    writeln!(self.file, "{line}")?;
+                    total += line.len() + 1;
+                }
+            }
+        }
+        Ok((total, suppressed_match))
+    }
+
+    /// Print the first `n` lines from the buffer.
+    ///
+    /// Returns the total number of bytes written.
+    fn print_buffer_n(&mut self, n: usize) -> io::Result<usize> {
+        let mut total = 0;
+        for _ in 0..n {
+            match self.buffer.pop_front() {
+                None => break,
+                Some((_, LineType::LineNumMatch | LineType::RegexMatch))
+                    if self.options.suppress_matched =>
+                {
+                    continue;
+                }
+                Some((line, _)) => {
+                    writeln!(self.file, "{line}")?;
+                    total += line.len() + 1;
+                }
+            }
+        }
+        Ok(total)
+    }
+
+    /// Prepare the global and per-chunk state for the next chunk.
+    fn prepare_next_chunk(&mut self) -> io::Result<()> {
+        // Global state.
+        self.num_chunks += 1;
+
+        // Per-chunk state.
+        self.total_bytes = 0;
+        self.file_name = self.options.split_name.get(self.num_chunks);
+        self.file = File::create(&self.file_name)?;
+        Ok(())
+    }
+
+    /// Create a new chunk according to the parameters of the given pattern.
+    ///
+    /// This takes into account the global state, like the current
+    /// state of the iterator over the lines of input, and assumes
+    /// that `prepare_next_chunk()` has just been called immediately
+    /// before.
+    fn handle_pattern(&mut self, pattern: Pattern) -> io::Result<LoopStatus> {
+        // For the sake brevity, import these names.
+        use crate::patterns::ExecutePattern::{Always, Times};
+        use crate::patterns::Pattern::{SkipToMatch, UpToLine, UpToMatch};
+
+        // Positive and negative offsets are split out into their own
+        // arms because their behaviors are so different.
+        match pattern {
+            UpToLine(n, Always) => up_to_line_loop(self, Always, n),
+            UpToLine(n, Times(k)) => up_to_line_loop(self, Times(k), n),
+            UpToMatch(regex, offset @ 0.., Always) => {
+                up_to_match_pos_offset_always(self, regex, offset)
+            }
+            UpToMatch(regex, offset @ ..0, Always) => {
+                up_to_match_neg_offset_always(self, regex, offset)
+            }
+            UpToMatch(regex, offset @ 0.., Times(k)) => {
+                up_to_match_pos_offset_repeat(self, regex, offset, k)
+            }
+            UpToMatch(regex, offset @ ..0, Times(k)) => {
+                up_to_match_neg_offset_repeat(self, regex, offset, k)
+            }
+            SkipToMatch(regex, offset @ 0.., Always) => {
+                skip_to_match_pos_offset_always(self, regex, offset)
+            }
+            SkipToMatch(regex, offset @ ..0, Always) => {
+                skip_to_match_neg_offset_always(self, regex, offset)
+            }
+            SkipToMatch(regex, offset @ 0.., Times(k)) => {
+                skip_to_match_pos_offset_repeat(self, regex, offset, k)
+            }
+            SkipToMatch(regex, offset @ ..0, Times(k)) => {
+                skip_to_match_neg_offset_repeat(self, regex, offset, k)
+            }
+        }
+    }
+}
+
+/// Create chunks with a specified number of lines from the input.
+///
+/// Handles patterns like
+///
+/// ```text
+/// 123
+/// 123 {45}
+/// 123 {*}
+/// ```
+///
+/// `n` is the target line number and `loop_type` indicates whether to
+/// loop a finite or infinite number of times.
+fn up_to_line_loop<B>(
+    splitter: &mut Splitter<B>,
+    loop_type: ExecutePattern,
+    n: usize,
+) -> io::Result<LoopStatus>
+where
+    B: BufRead,
+{
+    let mut i = 0;
+    while loop_type.should_continue(i) {
+        // The target line number for this chunk, relative to the
+        // start of this pattern.
+        let next_target = n * (i + 1);
+
+        // If the target line number is less than the absolute current
+        // line number, then print the buffered lines to get up to the
+        // current line. This can happen with `csplit /15/-3 14`, where
+        // the buffered lines exceed the target line number.
+        if next_target < splitter.current_line {
+            let max =
+                (splitter.buffer.len() - 1).saturating_sub(splitter.current_line - next_target);
+            let num_bytes = splitter.print_buffer_n(max)?;
+            splitter.total_bytes += num_bytes;
+        } else {
+            // If the target line number is beyond the absolute current
+            // line number, then print the contents of the buffer.
+            if splitter.current_line < next_target {
+                let (num_bytes, _) = splitter.print_buffer()?;
+                splitter.total_bytes += num_bytes;
+            }
+
+            let max = next_target.saturating_sub(splitter.current_line);
+            for j in 0..max {
+                splitter.current_line += 1;
+                match splitter.lines_iter.next() {
+                    // If there are no more lines but we expected at least
+                    // one more, that's an error.
+                    None => {
+                        // Print the total number of bytes in this chunk up to this point.
+                        if !splitter.options.quiet {
+                            println!("{}", splitter.total_bytes);
+                        }
+
+                        // Since this is an error situation, remove all files.
+                        if !splitter.options.keep_files {
+                            for i in 0..=splitter.num_chunks {
+                                remove_file(splitter.options.split_name.get(i))?;
+                            }
+                        }
+
+                        if i == 0 {
+                            show!(CsplitError::LineOutOfRange(format!("{n}")));
+                        } else {
+                            show!(CsplitError::LineOutOfRangeOnRepetition(format!("{n}"), i));
+                        }
+                        return Ok(LoopStatus::Return);
+                    }
+                    // Print the current line, if needed.
+                    Some(line) => {
+                        let line = line?;
+                        // The last line is considered the next
+                        // matching line, so we add it to the buffer
+                        // to get carried over to the next chunk.
+                        if j == max - 1 {
+                            splitter.buffer.push_back((line, LineType::LineNumMatch));
+                            continue;
+                        }
+                        writeln!(&mut splitter.file, "{line}")?;
+                        splitter.total_bytes += line.len() + 1;
+                    }
+                };
+            }
+        }
+
+        if !splitter.options.elide_empty_files || splitter.total_bytes > 0 {
+            if !splitter.options.quiet {
+                println!("{}", splitter.total_bytes);
+            }
+            splitter.prepare_next_chunk()?;
+        }
+        i += 1;
+    }
+    Ok(LoopStatus::Continue)
+}
+
+/// Whether to include all lines up to a regular expression or skip them.
+enum PatternType {
+    /// Include all lines up to a regular expression, as in `/abc/`.
+    Keep,
+
+    /// Skip all lines up to a regular expression, as in `%abc%`.
+    Skip,
+}
+
+/// String representation of the given pattern.
+fn to_match_string(pattern_type: PatternType, pattern: Regex, offset: i32) -> String {
+    let s = pattern.as_str();
+    match (pattern_type, offset) {
+        (PatternType::Keep, 0) => format!("/{s}/"),
+        (PatternType::Skip, 0) => format!("%{s}%"),
+        (PatternType::Keep, offset) => format!("/{s}/{offset:+}"),
+        (PatternType::Skip, offset) => format!("%{s}%{offset:+}"),
+    }
+}
+
+/// Create the appropriate error for the given situation.
+///
+/// `pattern_type`, `pattern`, and `offset` together specify the
+/// pattern. `i` is the loop iteration on which the problem
+/// occurred. `offset_remaining` indicates how much of the offset is
+/// remaining to be processed, if any.
+fn to_match_error(
+    pattern: Regex,
+    offset: i32,
+    i: usize,
+    offset_remaining: Option<i32>,
+    pattern_type: PatternType,
+) -> CsplitError {
+    let s = to_match_string(pattern_type, pattern, offset);
+    match (i, offset_remaining) {
+        (0, Some(_)) => CsplitError::LineOutOfRange(s),
+        (0, _) => CsplitError::MatchNotFound(s),
+        (_, Some(_)) => CsplitError::LineOutOfRangeOnRepetition(s, i),
+        (_, _) => CsplitError::MatchNotFoundOnRepetition(s, i),
+    }
+}
+
+/// Create chunks up to a line that matches the given pattern.
+///
+/// Handles patterns like
+///
+/// ```text
+/// /abc/
+/// /abc/ {34}
+/// /abc/+12
+/// /abc/+12 {34}
+/// ```
+fn up_to_match_pos_offset_repeat<B>(
+    splitter: &mut Splitter<B>,
+    pattern: Regex,
+    offset: i32,
+    k: usize,
+) -> io::Result<LoopStatus>
+where
+    B: BufRead,
+{
+    let mut offset_remaining = None;
+
+    for i in 0..k {
+        loop {
+            match splitter.buffer.pop_front() {
+                None => break,
+                Some((_, LineType::LineNumMatch | LineType::RegexMatch))
+                    if splitter.options.suppress_matched =>
+                {
+                    continue;
+                }
+                Some((line, LineType::LineNumMatch)) if pattern.is_match(&line) => {
+                    splitter.buffer.push_front((line, LineType::RegexMatch));
+                    if !splitter.options.quiet {
+                        println!("{}", splitter.total_bytes);
+                    }
+                    splitter.prepare_next_chunk()?;
+                    return Ok(LoopStatus::Continue);
+                }
+                Some((line, _)) => {
+                    writeln!(splitter.file, "{line}")?;
+                    splitter.total_bytes += line.len() + 1;
+                }
+            }
+        }
+
+        loop {
+            splitter.current_line += 1;
+            match splitter.lines_iter.next() {
+                // If there are no more lines but we expected to find
+                // another match (or expected more lines due to a
+                // positive offset), that's an error.
+                None => {
+                    // We were in the middle of a chunk but we ran out of lines.
+                    if splitter.total_bytes > 0 && !splitter.options.quiet {
+                        println!("{}", splitter.total_bytes);
+                    }
+
+                    if !splitter.options.keep_files {
+                        for i in 0..=splitter.num_chunks {
+                            remove_file(splitter.options.split_name.get(i))?;
+                        }
+                    }
+
+                    show!(to_match_error(
+                        pattern,
+                        offset,
+                        i,
+                        offset_remaining,
+                        PatternType::Keep
+                    ));
+                    return Ok(LoopStatus::Return);
+                }
+                Some(line) => {
+                    let line = line?;
+                    if pattern.is_match(&line) {
+                        offset_remaining = Some(offset);
+                    }
+                    if let Some(0) = offset_remaining {
+                        splitter.buffer.push_back((line, LineType::RegexMatch));
+                        break;
+                    }
+                    offset_remaining = offset_remaining.map(|x| x - 1);
+                    writeln!(&mut splitter.file, "{line}")?;
+                    splitter.total_bytes += line.len() + 1;
+                }
+            };
+        }
+        if !splitter.options.quiet {
+            println!("{}", splitter.total_bytes);
+        }
+        offset_remaining = None;
+
+        splitter.prepare_next_chunk()?;
+    }
+    Ok(LoopStatus::Continue)
+}
+
+/// Create chunks up to a line that matches the given pattern.
+///
+/// Handles patterns like
+///
+/// ```text
+/// /abc/ {*}
+/// /abc/+12 {*}
+/// ```
+fn up_to_match_pos_offset_always<B>(
+    splitter: &mut Splitter<B>,
+    pattern: Regex,
+    offset: i32,
+) -> io::Result<LoopStatus>
+where
+    B: BufRead,
+{
+    let mut offset_remaining = None;
+
+    loop {
+        let (num_bytes, suppressed_match) = splitter.print_buffer()?;
+        splitter.total_bytes += num_bytes;
+
+        loop {
+            splitter.current_line += 1;
+            match splitter.lines_iter.next() {
+                // If there are no more lines, then we are done.
+                None => {
+                    // Here we handle two situations,
+                    //
+                    //     seq 10 | csplit - /bogus/ {*}
+                    //     seq 10 | csplit --suppress-matched - /0$/ {*}
+                    //
+                    // In the first, there was no match anywhere. In
+                    // the second, the last match is at the end of the
+                    // file and it was suppressed. In the latter case
+                    // we still need to print the 0 representing the
+                    // total bytes in the last chunk.
+                    if splitter.total_bytes == 0 {
+                        if splitter.options.elide_empty_files {
+                            remove_file(&splitter.file_name)?;
+                        } else if suppressed_match && !splitter.options.quiet {
+                            println!("{}", splitter.total_bytes);
+                        }
+                    } else {
+                        // Otherwise, just write the total number of
+                        // bytes written in this last chunk.
+                        if !splitter.options.quiet {
+                            println!("{}", splitter.total_bytes);
+                        }
+                    }
+                    return Ok(LoopStatus::Return);
+                }
+                Some(line) => {
+                    let line = line?;
+                    if pattern.is_match(&line) {
+                        offset_remaining = Some(offset);
+                    }
+                    if let Some(0) = offset_remaining {
+                        splitter.buffer.push_back((line, LineType::RegexMatch));
+                        break;
+                    }
+                    offset_remaining = offset_remaining.map(|x| x - 1);
+                    writeln!(&mut splitter.file, "{line}")?;
+                    splitter.total_bytes += line.len() + 1;
+                }
+            };
+        }
+        if !splitter.options.quiet {
+            println!("{}", splitter.total_bytes);
+        }
+        offset_remaining = None;
+
+        splitter.prepare_next_chunk()?;
+    }
+}
+
+/// Create chunks up to a line that matches the given pattern.
+///
+/// Handles patterns like
+///
+/// ```text
+/// /abc/-12
+/// /abc/-12 {34}
+/// ```
+fn up_to_match_neg_offset_repeat<B>(
+    splitter: &mut Splitter<B>,
+    pattern: Regex,
+    offset: i32,
+    k: usize,
+) -> io::Result<LoopStatus>
+where
+    B: BufRead,
+{
+    for i in 0..k {
+        loop {
+            splitter.current_line += 1;
+            match splitter.lines_iter.next() {
+                None => {
+                    let (num_bytes, _) = splitter.print_buffer()?;
+                    splitter.total_bytes += num_bytes;
+
+                    // We were in the middle of a chunk but we ran out of lines.
+                    if splitter.total_bytes > 0 && !splitter.options.quiet {
+                        println!("{}", splitter.total_bytes);
+                    }
+
+                    if !splitter.options.keep_files {
+                        for i in 0..=splitter.num_chunks {
+                            remove_file(splitter.options.split_name.get(i))?;
+                        }
+                    }
+
+                    let err = to_match_error(pattern, offset, i, None, PatternType::Keep);
+                    show!(err);
+
+                    return Ok(LoopStatus::Return);
+                }
+                Some(line) => {
+                    let line = line?;
+                    let is_match = pattern.is_match(&line);
+                    if is_match {
+                        if splitter.buffer.len() < -offset as usize {
+                            splitter.total_bytes = 0;
+                            println!("{}", splitter.total_bytes);
+
+                            if !splitter.options.keep_files {
+                                for i in 0..=splitter.num_chunks {
+                                    remove_file(splitter.options.split_name.get(i))?;
+                                }
+                            }
+
+                            let err =
+                                to_match_error(pattern, offset, i, Some(0), PatternType::Keep);
+                            show!(err);
+
+                            return Ok(LoopStatus::Return);
+                        } else {
+                            let num_lines = splitter.buffer.len() - (-offset) as usize;
+                            let num_bytes = splitter.print_buffer_n(num_lines)?;
+                            splitter.total_bytes += num_bytes;
+
+                            splitter.buffer.push_back((line, LineType::NonMatch));
+                            match splitter.buffer.front_mut() {
+                                None => unreachable!(),
+                                Some(x) => *x = (x.0.clone(), LineType::RegexMatch),
+                            }
+                            break;
+                        }
+                    }
+                    if splitter.buffer.len() < -offset as usize {
+                        splitter.buffer.push_back((line, LineType::NonMatch));
+                    } else {
+                        splitter.buffer.push_back((line, LineType::NonMatch));
+                        match splitter.buffer.pop_front() {
+                            None => unreachable!(),
+                            Some((_, LineType::LineNumMatch | LineType::RegexMatch))
+                                if splitter.options.suppress_matched =>
+                            {
+                                continue;
+                            }
+                            Some((line, _)) => {
+                                writeln!(splitter.file, "{line}")?;
+                                splitter.total_bytes += line.len() + 1;
+                            }
+                        }
+                    }
+                }
+            };
+        }
+        if !splitter.options.quiet {
+            println!("{}", splitter.total_bytes);
+        }
+
+        splitter.prepare_next_chunk()?;
+    }
+    Ok(LoopStatus::Continue)
+}
+
+/// Create chunks up to a line that matches the given pattern.
+///
+/// Handles patterns like
+///
+/// ```text
+/// /abc/-12 {*}
+/// ```
+fn up_to_match_neg_offset_always<B>(
+    splitter: &mut Splitter<B>,
+    pattern: Regex,
+    offset: i32,
+) -> io::Result<LoopStatus>
+where
+    B: BufRead,
+{
+    loop {
+        let (num_bytes, _) = splitter.print_buffer()?;
+        splitter.total_bytes += num_bytes;
+
+        loop {
+            splitter.current_line += 1;
+            match splitter.lines_iter.next() {
+                None => {
+                    // For example, if the last match was
+                    // at the end of the file.
+                    if splitter.total_bytes == 0 {
+                        if splitter.options.elide_empty_files {
+                            remove_file(&splitter.file_name)?;
+                        }
+                    } else if !splitter.options.quiet {
+                        println!("{}", splitter.total_bytes);
+                    }
+                    return Ok(LoopStatus::Return);
+                }
+                Some(line) => {
+                    let line = line?;
+                    let is_match = pattern.is_match(&line);
+                    if is_match {
+                        splitter.buffer.push_back((line, LineType::RegexMatch));
+                        break;
+                    }
+                    if splitter.buffer.len() < -offset as usize {
+                        splitter.buffer.push_back((line, LineType::NonMatch));
+                    } else {
+                        splitter.buffer.push_back((line, LineType::NonMatch));
+                        match splitter.buffer.pop_front() {
+                            None => unreachable!(),
+                            Some((_, LineType::LineNumMatch | LineType::RegexMatch))
+                                if splitter.options.suppress_matched =>
+                            {
+                                continue;
+                            }
+                            Some((line, _)) => {
+                                writeln!(splitter.file, "{line}")?;
+                                splitter.total_bytes += line.len() + 1;
+                            }
+                        }
+                    }
+                }
+            };
+        }
+        if !splitter.options.elide_empty_files || !splitter.total_bytes == 0 {
+            if !splitter.options.quiet {
+                println!("{}", splitter.total_bytes);
+            }
+
+            splitter.prepare_next_chunk()?;
+        }
+    }
+}
+
+/// Skip chunks up to a line that matches the given pattern.
+///
+/// Handles patterns like
+///
+/// ```text
+/// %abc%
+/// %abc%+12
+/// %abc% {34}
+/// %abc%+12 {34}
+/// ```
+fn skip_to_match_pos_offset_repeat<B>(
+    splitter: &mut Splitter<B>,
+    pattern: Regex,
+    offset: i32,
+    k: usize,
+) -> io::Result<LoopStatus>
+where
+    B: BufRead,
+{
+    let mut offset_remaining = None;
+
+    for i in 0..k {
+        splitter.buffer.clear();
+
+        loop {
+            splitter.current_line += 1;
+            match splitter.lines_iter.next() {
+                None => {
+                    // This is okay
+                    if offset == 1 {
+                        if !splitter.options.keep_files {
+                            for i in 0..=splitter.num_chunks {
+                                remove_file(splitter.options.split_name.get(i))?;
+                            }
+                        }
+
+                        return Ok(LoopStatus::Return);
+                    }
+
+                    let err =
+                        to_match_error(pattern, offset, i, offset_remaining, PatternType::Skip);
+                    show!(&err);
+
+                    if !splitter.options.keep_files {
+                        for i in 0..splitter.num_chunks {
+                            remove_file(splitter.options.split_name.get(i))?;
+                        }
+                    }
+
+                    // Special case: `seq 50 | csplit -k - %45%+10`:
+                    // don't keep the last chunk.
+                    if !splitter.options.keep_files
+                        || matches!(
+                            err,
+                            CsplitError::LineOutOfRange(_)
+                                | CsplitError::LineOutOfRangeOnRepetition(_, _)
+                        )
+                    {
+                        let i = splitter.num_chunks;
+                        remove_file(splitter.options.split_name.get(i))?;
+                    }
+
+                    return Ok(LoopStatus::Return);
+                }
+                Some(line) => {
+                    let line = line?;
+                    if pattern.is_match(&line) {
+                        offset_remaining = Some(offset);
+                    }
+                    if let Some(0) = offset_remaining {
+                        splitter.buffer.push_back((line, LineType::RegexMatch));
+                        break;
+                    }
+                    offset_remaining = offset_remaining.map(|x| x - 1);
+                }
+            };
+        }
+        offset_remaining = None;
+    }
+    Ok(LoopStatus::Continue)
+}
+
+/// Skip chunks up to a line that matches the given pattern.
+///
+/// Handles patterns like
+///
+/// ```text
+/// %abc%-12
+/// %abc%-12 {34}
+/// ```
+fn skip_to_match_neg_offset_repeat<B>(
+    splitter: &mut Splitter<B>,
+    pattern: Regex,
+    offset: i32,
+    k: usize,
+) -> io::Result<LoopStatus>
+where
+    B: BufRead,
+{
+    for i in 0..k {
+        splitter.buffer.clear();
+
+        loop {
+            splitter.current_line += 1;
+            match splitter.lines_iter.next() {
+                None => {
+                    if !splitter.options.keep_files {
+                        for i in 0..=splitter.num_chunks {
+                            remove_file(splitter.options.split_name.get(i))?;
+                        }
+                    }
+                    let err = to_match_error(pattern, offset, i, None, PatternType::Skip);
+                    show!(err);
+                    return Ok(LoopStatus::Return);
+                }
+                Some(line) => {
+                    let line = line?;
+                    let is_match = pattern.is_match(&line);
+                    if is_match {
+                        if splitter.current_line < -offset as usize {
+                            let s = to_match_string(PatternType::Skip, pattern, offset);
+                            let err = CsplitError::LineOutOfRange(s);
+                            show!(&err);
+
+                            if !splitter.options.keep_files {
+                                for i in 0..splitter.num_chunks {
+                                    remove_file(splitter.options.split_name.get(i))?;
+                                }
+                            }
+
+                            // Special case: `seq 50 | csplit -k - %5%-10`:
+                            // don't keep the last chunk.
+                            let i = splitter.num_chunks;
+                            remove_file(splitter.options.split_name.get(i))?;
+
+                            return Ok(LoopStatus::Return);
+                        }
+                        splitter.buffer.push_back((line, LineType::RegexMatch));
+                        break;
+                    }
+                    if splitter.buffer.len() < -offset as usize {
+                        splitter.buffer.push_back((line, LineType::NonMatch));
+                    } else {
+                        splitter.buffer.push_back((line, LineType::NonMatch));
+                        splitter.buffer.pop_front().unwrap();
+                    }
+                }
+            };
+        }
+    }
+    Ok(LoopStatus::Continue)
+}
+
+/// Skip chunks up to a line that matches the given pattern.
+///
+/// Handles patterns like
+///
+/// ```text
+/// %abc% {*}
+/// %abc%+12 {*}
+/// ```
+fn skip_to_match_pos_offset_always<B>(
+    splitter: &mut Splitter<B>,
+    pattern: Regex,
+    offset: i32,
+) -> io::Result<LoopStatus>
+where
+    B: BufRead,
+{
+    let mut offset_remaining = None;
+    loop {
+        splitter.buffer.clear();
+        loop {
+            splitter.current_line += 1;
+            match splitter.lines_iter.next() {
+                None => {
+                    remove_file(&splitter.file_name)?;
+                    return Ok(LoopStatus::Return);
+                }
+                Some(line) => {
+                    let line = line?;
+                    if pattern.is_match(&line) {
+                        offset_remaining = Some(offset);
+                    }
+                    if let Some(0) = offset_remaining {
+                        splitter.buffer.push_back((line, LineType::RegexMatch));
+                        break;
+                    }
+                    offset_remaining = offset_remaining.map(|x| x - 1);
+                }
+            };
+        }
+        offset_remaining = None;
+    }
+}
+
+/// Skip chunks up to a line that matches the given pattern.
+///
+/// Handles patterns like
+///
+/// ```text
+/// %abc%-12 {*}
+/// ```
+fn skip_to_match_neg_offset_always<B>(
+    splitter: &mut Splitter<B>,
+    pattern: Regex,
+    offset: i32,
+) -> io::Result<LoopStatus>
+where
+    B: BufRead,
+{
+    loop {
+        splitter.buffer.clear();
+
+        loop {
+            splitter.current_line += 1;
+            match splitter.lines_iter.next() {
+                None => {
+                    splitter.buffer.clear();
+                    remove_file(&splitter.file_name)?;
+                    return Ok(LoopStatus::Return);
+                }
+                Some(line) => {
+                    let line = line?;
+                    let is_match = pattern.is_match(&line);
+                    if is_match {
+                        splitter.buffer.push_back((line, LineType::RegexMatch));
+                        break;
+                    }
+                    if splitter.buffer.len() < -offset as usize {
+                        splitter.buffer.push_back((line, LineType::NonMatch));
+                    } else {
+                        splitter.buffer.push_back((line, LineType::NonMatch));
+                        splitter.buffer.pop_front().unwrap();
+                    }
+                }
+            };
+        }
+    }
+}
+
+/// Create the final chunk with any remaining lines of the input.
+///
+/// This is called after all patterns specified on the command line
+/// have been processed if they didn't cover the entire input file.
+fn up_to_end<B>(splitter: &mut Splitter<B>) -> io::Result<()>
+where
+    B: BufRead,
+{
+    // Print the contents of the buffer.
+    // let mut total_bytes = 0;
+    let (num_bytes, _) = splitter.print_buffer()?;
+    splitter.total_bytes += num_bytes;
+
+    loop {
+        splitter.current_line += 1;
+        match splitter.lines_iter.next() {
+            // If there are no more lines, we are done.
+            None => {
+                if !splitter.options.quiet {
+                    println!("{}", splitter.total_bytes);
+                }
+                return Ok(());
+            }
+            Some(line) => {
+                let line = line?;
+                writeln!(&mut splitter.file, "{line}")?;
+                splitter.total_bytes += line.len() + 1;
+            }
+        };
+    }
+}
+
 /// Splits a file into severals according to the command line patterns.
 ///
 /// # Errors
@@ -87,488 +1022,28 @@ pub fn csplit<T>(options: &CsplitOptions, patterns: &[String], input: T) -> Resu
 where
     T: BufRead,
 {
-    let enumerated_input_lines = input
-        .lines()
-        .map(|line| line.map_err_context(|| "read error".to_string()))
-        .enumerate();
-    let mut input_iter = InputSplitter::new(enumerated_input_lines);
-    let mut split_writer = SplitWriter::new(options);
-    let patterns: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
-    let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
-
-    // consume the rest, unless there was an error
-    if ret.is_ok() {
-        input_iter.rewind_buffer();
-        if let Some((_, line)) = input_iter.next() {
-            split_writer.new_writer()?;
-            split_writer.writeln(&line?)?;
-            for (_, line) in input_iter {
-                split_writer.writeln(&line?)?;
+    let mut splitter = Splitter::new(options, input)?;
+    for pattern in get_patterns(patterns)? {
+        match splitter
+            .handle_pattern(pattern)
+            .map_err_context(|| "read error".to_string())
+        {
+            Ok(LoopStatus::Continue) => continue,
+            Ok(LoopStatus::Return) => return Ok(()),
+            Err(e) => {
+                if !splitter.options.quiet {
+                    println!("{}", splitter.total_bytes);
+                }
+                return Err(e.into());
             }
-            split_writer.finish_split();
         }
     }
-    // delete files on error by default
-    if ret.is_err() && !options.keep_files {
-        split_writer.delete_all_splits()?;
-    }
-    ret
-}
 
-fn do_csplit<I>(
-    split_writer: &mut SplitWriter,
-    patterns: Vec<patterns::Pattern>,
-    input_iter: &mut InputSplitter<I>,
-) -> Result<(), CsplitError>
-where
-    I: Iterator<Item = (usize, UResult<String>)>,
-{
-    // split the file based on patterns
-    for pattern in patterns {
-        let pattern_as_str = pattern.to_string();
-        let is_skip = matches!(pattern, patterns::Pattern::SkipToMatch(_, _, _));
-        match pattern {
-            patterns::Pattern::UpToLine(n, ex) => {
-                let mut up_to_line = n;
-                for (_, ith) in ex.iter() {
-                    split_writer.new_writer()?;
-                    match split_writer.do_to_line(&pattern_as_str, up_to_line, input_iter) {
-                        // the error happened when applying the pattern more than once
-                        Err(CsplitError::LineOutOfRange(_)) if ith != 1 => {
-                            return Err(CsplitError::LineOutOfRangeOnRepetition(
-                                pattern_as_str.to_string(),
-                                ith - 1,
-                            ));
-                        }
-                        Err(err) => return Err(err),
-                        // continue the splitting process
-                        Ok(()) => (),
-                    }
-                    up_to_line += n;
-                }
-            }
-            patterns::Pattern::UpToMatch(regex, offset, ex)
-            | patterns::Pattern::SkipToMatch(regex, offset, ex) => {
-                for (max, ith) in ex.iter() {
-                    if is_skip {
-                        // when skipping a part of the input, no writer is created
-                        split_writer.as_dev_null();
-                    } else {
-                        split_writer.new_writer()?;
-                    }
-                    match (
-                        split_writer.do_to_match(&pattern_as_str, &regex, offset, input_iter),
-                        max,
-                    ) {
-                        // in case of ::pattern::ExecutePattern::Always, then it's fine not to find a
-                        // matching line
-                        (Err(CsplitError::MatchNotFound(_)), None) => {
-                            return Ok(());
-                        }
-                        // the error happened when applying the pattern more than once
-                        (Err(CsplitError::MatchNotFound(_)), Some(m)) if m != 1 && ith != 1 => {
-                            return Err(CsplitError::MatchNotFoundOnRepetition(
-                                pattern_as_str.to_string(),
-                                ith - 1,
-                            ));
-                        }
-                        (Err(err), _) => return Err(err),
-                        // continue the splitting process
-                        (Ok(()), _) => (),
-                    };
-                }
-            }
-        };
-    }
+    // Write any remaining lines in the buffer and any remaining lines
+    // from the input to one final chunk.
+    up_to_end(&mut splitter).map_err_context(|| "read error".to_string())?;
+
     Ok(())
-}
-
-/// Write a portion of the input file into a split which filename is based on an incrementing
-/// counter.
-struct SplitWriter<'a> {
-    /// the options set through the command line
-    options: &'a CsplitOptions,
-    /// a split counter
-    counter: usize,
-    /// the writer to the current split
-    current_writer: Option<BufWriter<File>>,
-    /// the size in bytes of the current split
-    size: usize,
-    /// flag to indicate that no content should be written to a split
-    dev_null: bool,
-}
-
-impl Drop for SplitWriter<'_> {
-    fn drop(&mut self) {
-        if self.options.elide_empty_files && self.size == 0 {
-            let file_name = self.options.split_name.get(self.counter);
-            // In the case of `echo a | csplit -z - %a%1`, the file
-            // `xx00` does not exist because the positive offset
-            // advanced past the end of the input. Since there is no
-            // file to remove in that case, `remove_file` would return
-            // an error, so we just ignore it.
-            let _ = remove_file(file_name);
-        }
-    }
-}
-
-impl SplitWriter<'_> {
-    fn new(options: &CsplitOptions) -> SplitWriter {
-        SplitWriter {
-            options,
-            counter: 0,
-            current_writer: None,
-            size: 0,
-            dev_null: false,
-        }
-    }
-
-    /// Creates a new split and returns its filename.
-    ///
-    /// # Errors
-    ///
-    /// The creation of the split file may fail with some [`io::Error`].
-    fn new_writer(&mut self) -> io::Result<()> {
-        let file_name = self.options.split_name.get(self.counter);
-        let file = File::create(file_name)?;
-        self.current_writer = Some(BufWriter::new(file));
-        self.counter += 1;
-        self.size = 0;
-        self.dev_null = false;
-        Ok(())
-    }
-
-    /// The current split will not keep any of the read input lines.
-    fn as_dev_null(&mut self) {
-        self.dev_null = true;
-    }
-
-    /// Writes the line to the current split, appending a newline character.
-    /// If [`self.dev_null`] is true, then the line is discarded.
-    ///
-    /// # Errors
-    ///
-    /// Some [`io::Error`] may occur when attempting to write the line.
-    fn writeln(&mut self, line: &str) -> io::Result<()> {
-        if !self.dev_null {
-            match self.current_writer {
-                Some(ref mut current_writer) => {
-                    let bytes = line.as_bytes();
-                    current_writer.write_all(bytes)?;
-                    current_writer.write_all(b"\n")?;
-                    self.size += bytes.len() + 1;
-                }
-                None => panic!("trying to write to a split that was not created"),
-            }
-        }
-        Ok(())
-    }
-
-    /// Perform some operations after completing a split, i.e., either remove it
-    /// if the [`options::ELIDE_EMPTY_FILES`] option is enabled, or print how much bytes were written
-    /// to it if [`options::QUIET`] is disabled.
-    ///
-    /// # Errors
-    ///
-    /// Some [`io::Error`] if the split could not be removed in case it should be elided.
-    fn finish_split(&mut self) {
-        if !self.dev_null {
-            if self.options.elide_empty_files && self.size == 0 {
-                self.counter -= 1;
-            } else if !self.options.quiet {
-                println!("{}", self.size);
-            }
-        }
-    }
-
-    /// Removes all the split files that were created.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`io::Error`] if there was a problem removing a split.
-    fn delete_all_splits(&self) -> io::Result<()> {
-        let mut ret = Ok(());
-        for ith in 0..self.counter {
-            let file_name = self.options.split_name.get(ith);
-            if let Err(err) = remove_file(file_name) {
-                ret = Err(err);
-            }
-        }
-        ret
-    }
-
-    /// Split the input stream up to the line number `n`.
-    ///
-    /// If the line number `n` is smaller than the current position in the input, then an empty
-    /// split is created.
-    ///
-    /// # Errors
-    ///
-    /// In addition to errors reading/writing from/to a file, if the line number
-    /// `n` is greater than the total available lines, then a
-    /// [`CsplitError::LineOutOfRange`] error is returned.
-    fn do_to_line<I>(
-        &mut self,
-        pattern_as_str: &str,
-        n: usize,
-        input_iter: &mut InputSplitter<I>,
-    ) -> Result<(), CsplitError>
-    where
-        I: Iterator<Item = (usize, UResult<String>)>,
-    {
-        input_iter.rewind_buffer();
-        input_iter.set_size_of_buffer(1);
-
-        let mut ret = Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
-        while let Some((ln, line)) = input_iter.next() {
-            let l = line?;
-            match n.cmp(&(&ln + 1)) {
-                Ordering::Less => {
-                    assert!(
-                        input_iter.add_line_to_buffer(ln, l).is_none(),
-                        "the buffer is big enough to contain 1 line"
-                    );
-                    ret = Ok(());
-                    break;
-                }
-                Ordering::Equal => {
-                    assert!(
-                        self.options.suppress_matched
-                            || input_iter.add_line_to_buffer(ln, l).is_none(),
-                        "the buffer is big enough to contain 1 line"
-                    );
-                    ret = Ok(());
-                    break;
-                }
-                Ordering::Greater => (),
-            }
-            self.writeln(&l)?;
-        }
-        self.finish_split();
-        ret
-    }
-
-    /// Read lines up to the line matching a [`Regex`]. With a non-zero offset,
-    /// the block of relevant lines can be extended (if positive), or reduced
-    /// (if negative).
-    ///
-    /// # Errors
-    ///
-    /// In addition to errors reading/writing from/to a file, the following errors may be returned:
-    /// - if no line matched, an [`CsplitError::MatchNotFound`].
-    /// - if there are not enough lines to accommodate the offset, an
-    ///   [`CsplitError::LineOutOfRange`].
-    #[allow(clippy::cognitive_complexity)]
-    fn do_to_match<I>(
-        &mut self,
-        pattern_as_str: &str,
-        regex: &Regex,
-        mut offset: i32,
-        input_iter: &mut InputSplitter<I>,
-    ) -> Result<(), CsplitError>
-    where
-        I: Iterator<Item = (usize, UResult<String>)>,
-    {
-        if offset >= 0 {
-            // The offset is zero or positive, no need for a buffer on the lines read.
-            // NOTE: drain the buffer of input_iter, no match should be done within.
-            for line in input_iter.drain_buffer() {
-                self.writeln(&line)?;
-            }
-            // retain the matching line
-            input_iter.set_size_of_buffer(1);
-
-            while let Some((ln, line)) = input_iter.next() {
-                let l = line?;
-                if regex.is_match(&l) {
-                    let mut next_line_suppress_matched = false;
-                    match (self.options.suppress_matched, offset) {
-                        // no offset, add the line to the next split
-                        (false, 0) => {
-                            assert!(
-                                input_iter.add_line_to_buffer(ln, l).is_none(),
-                                "the buffer is big enough to contain 1 line"
-                            );
-                        }
-                        // a positive offset, some more lines need to be added to the current split
-                        (false, _) => self.writeln(&l)?,
-                        // suppress matched option true, but there is a positive offset, so the line is printed
-                        (true, 1..) => {
-                            next_line_suppress_matched = true;
-                            self.writeln(&l)?;
-                        }
-                        _ => (),
-                    };
-                    offset -= 1;
-
-                    // write the extra lines required by the offset
-                    while offset > 0 {
-                        match input_iter.next() {
-                            Some((_, line)) => {
-                                self.writeln(&line?)?;
-                            }
-                            None => {
-                                self.finish_split();
-                                return Err(CsplitError::LineOutOfRange(
-                                    pattern_as_str.to_string(),
-                                ));
-                            }
-                        };
-                        offset -= 1;
-                    }
-                    self.finish_split();
-
-                    // if we have to suppress one line after we take the next and do nothing
-                    if next_line_suppress_matched {
-                        input_iter.next();
-                    }
-                    return Ok(());
-                }
-                self.writeln(&l)?;
-            }
-        } else {
-            // With a negative offset we use a buffer to keep the lines within the offset.
-            // NOTE: do not drain the buffer of input_iter, in case of an LineOutOfRange error
-            // but do not rewind it either since no match should be done within.
-            // The consequence is that the buffer may already be full with lines from a previous
-            // split, which is taken care of when calling `shrink_buffer_to_size`.
-            let offset_usize = -offset as usize;
-            input_iter.set_size_of_buffer(offset_usize);
-            while let Some((ln, line)) = input_iter.next() {
-                let l = line?;
-                if regex.is_match(&l) {
-                    for line in input_iter.shrink_buffer_to_size() {
-                        self.writeln(&line)?;
-                    }
-                    if self.options.suppress_matched {
-                        // since offset_usize is for sure greater than 0
-                        // the first element of the buffer should be removed and this
-                        // line inserted to be coherent with GNU implementation
-                        input_iter.add_line_to_buffer(ln, l);
-                    } else {
-                        // add 1 to the buffer size to make place for the matched line
-                        input_iter.set_size_of_buffer(offset_usize + 1);
-                        assert!(
-                            input_iter.add_line_to_buffer(ln, l).is_none(),
-                            "should be big enough to hold every lines"
-                        );
-                    }
-
-                    self.finish_split();
-                    if input_iter.buffer_len() < offset_usize {
-                        return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
-                    }
-                    return Ok(());
-                }
-                if let Some(line) = input_iter.add_line_to_buffer(ln, l) {
-                    self.writeln(&line)?;
-                }
-            }
-            // no match, drain the buffer into the current split
-            for line in input_iter.drain_buffer() {
-                self.writeln(&line)?;
-            }
-        }
-
-        self.finish_split();
-        Err(CsplitError::MatchNotFound(pattern_as_str.to_string()))
-    }
-}
-
-/// An iterator which can output items from a buffer filled externally.
-/// This is used to pass matching lines to the next split and to support patterns with a negative offset.
-struct InputSplitter<I>
-where
-    I: Iterator<Item = (usize, UResult<String>)>,
-{
-    iter: I,
-    buffer: Vec<<I as Iterator>::Item>,
-    /// the number of elements the buffer may hold
-    size: usize,
-    /// flag to indicate content off the buffer should be returned instead of off the wrapped
-    /// iterator
-    rewind: bool,
-}
-
-impl<I> InputSplitter<I>
-where
-    I: Iterator<Item = (usize, UResult<String>)>,
-{
-    fn new(iter: I) -> Self {
-        Self {
-            iter,
-            buffer: Vec::new(),
-            rewind: false,
-            size: 1,
-        }
-    }
-
-    /// Rewind the iteration by outputting the buffer's content.
-    fn rewind_buffer(&mut self) {
-        self.rewind = true;
-    }
-
-    /// Shrink the buffer so that its length is equal to the set size, returning an iterator for
-    /// the elements that were too much.
-    fn shrink_buffer_to_size(&mut self) -> impl Iterator<Item = String> + '_ {
-        let shrink_offset = if self.buffer.len() > self.size {
-            self.buffer.len() - self.size
-        } else {
-            0
-        };
-        self.buffer
-            .drain(..shrink_offset)
-            .map(|(_, line)| line.unwrap())
-    }
-
-    /// Drain the content of the buffer.
-    fn drain_buffer(&mut self) -> impl Iterator<Item = String> + '_ {
-        self.buffer.drain(..).map(|(_, line)| line.unwrap())
-    }
-
-    /// Set the maximum number of lines to keep.
-    fn set_size_of_buffer(&mut self, size: usize) {
-        self.size = size;
-    }
-
-    /// Add a line to the buffer. If the buffer has [`self.size`] elements, then its head is removed and
-    /// the new line is pushed to the buffer. The removed head is then available in the returned
-    /// option.
-    fn add_line_to_buffer(&mut self, ln: usize, line: String) -> Option<String> {
-        if self.rewind {
-            self.buffer.insert(0, (ln, Ok(line)));
-            None
-        } else if self.buffer.len() >= self.size {
-            let (_, head_line) = self.buffer.remove(0);
-            self.buffer.push((ln, Ok(line)));
-            Some(head_line.unwrap())
-        } else {
-            self.buffer.push((ln, Ok(line)));
-            None
-        }
-    }
-
-    /// Returns the number of lines stored in the buffer
-    fn buffer_len(&self) -> usize {
-        self.buffer.len()
-    }
-}
-
-impl<I> Iterator for InputSplitter<I>
-where
-    I: Iterator<Item = (usize, UResult<String>)>,
-{
-    type Item = <I as Iterator>::Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.rewind {
-            if !self.buffer.is_empty() {
-                return Some(self.buffer.remove(0));
-            }
-            self.rewind = false;
-        }
-        self.iter.next()
-    }
 }
 
 #[uucore::main]
@@ -665,169 +1140,4 @@ pub fn uu_app() -> Command {
                 .required(true),
         )
         .after_help(AFTER_HELP)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[allow(clippy::cognitive_complexity)]
-    fn input_splitter() {
-        let input = vec![
-            Ok(String::from("aaa")),
-            Ok(String::from("bbb")),
-            Ok(String::from("ccc")),
-            Ok(String::from("ddd")),
-        ];
-        let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
-
-        input_splitter.set_size_of_buffer(2);
-        assert_eq!(input_splitter.buffer_len(), 0);
-
-        match input_splitter.next() {
-            Some((0, Ok(line))) => {
-                assert_eq!(line, String::from("aaa"));
-                assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
-                assert_eq!(input_splitter.buffer_len(), 1);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        match input_splitter.next() {
-            Some((1, Ok(line))) => {
-                assert_eq!(line, String::from("bbb"));
-                assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
-                assert_eq!(input_splitter.buffer_len(), 2);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        match input_splitter.next() {
-            Some((2, Ok(line))) => {
-                assert_eq!(line, String::from("ccc"));
-                assert_eq!(
-                    input_splitter.add_line_to_buffer(2, line),
-                    Some(String::from("aaa"))
-                );
-                assert_eq!(input_splitter.buffer_len(), 2);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        input_splitter.rewind_buffer();
-
-        match input_splitter.next() {
-            Some((1, Ok(line))) => {
-                assert_eq!(line, String::from("bbb"));
-                assert_eq!(input_splitter.buffer_len(), 1);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        match input_splitter.next() {
-            Some((2, Ok(line))) => {
-                assert_eq!(line, String::from("ccc"));
-                assert_eq!(input_splitter.buffer_len(), 0);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        match input_splitter.next() {
-            Some((3, Ok(line))) => {
-                assert_eq!(line, String::from("ddd"));
-                assert_eq!(input_splitter.buffer_len(), 0);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        assert!(input_splitter.next().is_none());
-    }
-
-    #[test]
-    #[allow(clippy::cognitive_complexity)]
-    fn input_splitter_interrupt_rewind() {
-        let input = vec![
-            Ok(String::from("aaa")),
-            Ok(String::from("bbb")),
-            Ok(String::from("ccc")),
-            Ok(String::from("ddd")),
-        ];
-        let mut input_splitter = InputSplitter::new(input.into_iter().enumerate());
-
-        input_splitter.set_size_of_buffer(3);
-        assert_eq!(input_splitter.buffer_len(), 0);
-
-        match input_splitter.next() {
-            Some((0, Ok(line))) => {
-                assert_eq!(line, String::from("aaa"));
-                assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
-                assert_eq!(input_splitter.buffer_len(), 1);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        match input_splitter.next() {
-            Some((1, Ok(line))) => {
-                assert_eq!(line, String::from("bbb"));
-                assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
-                assert_eq!(input_splitter.buffer_len(), 2);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        match input_splitter.next() {
-            Some((2, Ok(line))) => {
-                assert_eq!(line, String::from("ccc"));
-                assert_eq!(input_splitter.add_line_to_buffer(2, line), None);
-                assert_eq!(input_splitter.buffer_len(), 3);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        input_splitter.rewind_buffer();
-
-        match input_splitter.next() {
-            Some((0, Ok(line))) => {
-                assert_eq!(line, String::from("aaa"));
-                assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
-                assert_eq!(input_splitter.buffer_len(), 3);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        match input_splitter.next() {
-            Some((0, Ok(line))) => {
-                assert_eq!(line, String::from("aaa"));
-                assert_eq!(input_splitter.buffer_len(), 2);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        match input_splitter.next() {
-            Some((1, Ok(line))) => {
-                assert_eq!(line, String::from("bbb"));
-                assert_eq!(input_splitter.buffer_len(), 1);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        match input_splitter.next() {
-            Some((2, Ok(line))) => {
-                assert_eq!(line, String::from("ccc"));
-                assert_eq!(input_splitter.buffer_len(), 0);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        match input_splitter.next() {
-            Some((3, Ok(line))) => {
-                assert_eq!(line, String::from("ddd"));
-                assert_eq!(input_splitter.buffer_len(), 0);
-            }
-            item => panic!("wrong item: {item:?}"),
-        };
-
-        assert!(input_splitter.next().is_none());
-    }
 }
