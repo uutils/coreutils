@@ -479,24 +479,14 @@ fn test_id_pretty_print_password_record() {
         .stderr_contains("the argument '-p' cannot be used with '-P'");
 }
 
-enum CompilationResult {
-    CompilerNotInstalled,
-    Error,
-    Success,
-}
-
-fn compile_preload_file_with_gcc(c_file: &str, so_file: &str) -> CompilationResult {
-    let result = std::process::Command::new("gcc")
+fn compile_preload_file_with_gcc(
+    c_file: &str,
+    so_file: &str,
+) -> Result<std::process::ExitStatus, String> {
+    Ok(std::process::Command::new("gcc")
         .args(["-fPIC", "-shared", "-o", &so_file, &c_file])
-        .status();
-
-    match result {
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            CompilationResult::CompilerNotInstalled
-        }
-        Ok(status) if status.success() => CompilationResult::Success,
-        _ => CompilationResult::Error,
-    }
+        .status()
+        .map_err(|_| "`gcc` is not installed")?)
 }
 
 #[test]
@@ -508,14 +498,9 @@ fn test_id_different_uid_and_euid() {
     // The UID should be 1000, whereas the EUID should be 0.
     let c_file = at.as_string() + "/different_uid_and_euid.c";
     let so_file = at.as_string() + "/different_uid_and_euid.so";
-    let compilation_result = compile_preload_file_with_gcc(&c_file, &so_file);
-    match compilation_result {
-        CompilationResult::CompilerNotInstalled => {
-            println!("test skipped: `gcc` compiler is not installed");
-            return;
-        }
-        CompilationResult::Error => panic!("Preload file compilation failed"),
-        CompilationResult::Success => {}
+    let status = unwrap_or_return!(compile_preload_file_with_gcc(&c_file, &so_file));
+    if !status.success() {
+        panic!("Preload file compilation failed")
     }
 
     let result = ucmd.env("LD_PRELOAD", so_file).run();
