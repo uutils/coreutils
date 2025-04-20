@@ -483,10 +483,10 @@ fn compile_preload_file_with_gcc(
     c_file: &str,
     so_file: &str,
 ) -> Result<std::process::ExitStatus, String> {
-    Ok(std::process::Command::new("gcc")
+    Ok(std::process::Command::new("cc")
         .args(["-fPIC", "-shared", "-o", &so_file, &c_file])
         .status()
-        .map_err(|_| "`gcc` is not installed")?)
+        .map_err(|_| "`cc` command is not available")?)
 }
 
 #[test]
