@@ -1764,3 +1764,17 @@ fn test_install_from_stdin() {
     assert!(at.file_exists(target));
     assert_eq!(at.read(target), test_string);
 }
+
+#[test]
+fn test_install_failing_copy_file_to_target_contain_subdir_with_same_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let dir1 = "dir1";
+
+    at.touch(file);
+    at.mkdir_all(&format!("{dir1}/{file}"));
+    ucmd.arg(file)
+        .arg(dir1)
+        .fails()
+        .stderr_contains("cannot overwrite directory");
+}

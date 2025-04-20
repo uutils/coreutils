@@ -98,6 +98,9 @@ enum InstallError {
 
     #[error("failed to access {}: Not a directory", .0.quote())]
     NotADirectory(PathBuf),
+
+    #[error("cannot overwrite directory {} with non-directory {}", .0.quote(), .1.quote())]
+    OverrideDirectoryFailed(PathBuf, PathBuf),
 }
 
 impl UError for InstallError {
@@ -748,6 +751,13 @@ fn copy_normal_file(from: &Path, to: &Path) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
+    if to.is_dir() && !from.is_dir() {
+        return Err(InstallError::OverrideDirectoryFailed(
+            to.to_path_buf().clone(),
+            from.to_path_buf().clone(),
+        )
+        .into());
+    }
     // fs::copy fails if destination is a invalid symlink.
     // so lets just remove all existing files at destination before copy.
     if let Err(e) = fs::remove_file(to) {
