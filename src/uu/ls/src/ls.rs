@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash
 
 use std::iter;
 #[cfg(windows)]
@@ -2051,7 +2051,14 @@ fn show_dir_name(
 struct ListState<'a> {
     out: BufWriter<Stdout>,
     style_manager: Option<StyleManager<'a>>,
+    // TODO: More benchmarking with different use cases is required here.
+    // From experiments, BTreeMap may be faster than HashMap, especially as the
+    // number of users/groups is very limited. It seems like nohash::IntMap
+    // performance was equivalent to BTreeMap.
+    // It's possible a simple vector linear(binary?) search implementation would be even faster.
+    #[cfg(unix)]
     uid_cache: HashMap<u32, String>,
+    #[cfg(unix)]
     gid_cache: HashMap<u32, String>,
 }
 
@@ -2065,7 +2072,9 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut state = ListState {
         out: BufWriter::new(stdout()),
         style_manager: config.color.as_ref().map(StyleManager::new),
+        #[cfg(unix)]
         uid_cache: HashMap::new(),
+        #[cfg(unix)]
         gid_cache: HashMap::new(),
     };
 
@@ -2817,12 +2826,12 @@ fn display_item_long(
 
         if config.long.owner {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&display_uname(md, config, state), padding.uname);
+            output_display.extend_pad_right(display_uname(md, config, state), padding.uname);
         }
 
         if config.long.group {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&display_group(md, config, state), padding.group);
+            output_display.extend_pad_right(display_group(md, config, state), padding.group);
         }
 
         if config.context {
@@ -2834,7 +2843,7 @@ fn display_item_long(
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
             output_display.extend(b" ");
-            output_display.extend_pad_right(&display_uname(md, config, state), padding.uname);
+            output_display.extend_pad_right(display_uname(md, config, state), padding.uname);
         }
 
         match display_len_or_rdev(md, config) {
@@ -3010,46 +3019,38 @@ use uucore::entries;
 use uucore::fs::FileInformation;
 
 #[cfg(unix)]
-fn display_uname(metadata: &Metadata, config: &Config, state: &mut ListState) -> String {
+fn display_uname<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListState) -> &'a String {
     let uid = metadata.uid();
-    if config.long.numeric_uid_gid {
-        uid.to_string()
-    } else {
-        state
-            .uid_cache
-            .entry(uid)
-            .or_insert_with(|| entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()))
-            .clone()
-    }
+
+    state.uid_cache.entry(uid).or_insert_with(|| {
+        if config.long.numeric_uid_gid {
+            uid.to_string()
+        } else {
+            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string())
+        }
+    })
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
-fn display_group(metadata: &Metadata, config: &Config, state: &mut ListState) -> String {
+#[cfg(unix)]
+fn display_group<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListState) -> &'a String {
     let gid = metadata.gid();
-    if config.long.numeric_uid_gid {
-        gid.to_string()
-    } else {
-        state
-            .gid_cache
-            .entry(gid)
-            .or_insert_with(|| entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
-            .clone()
-    }
-}
-
-#[cfg(target_os = "redox")]
-fn display_group(metadata: &Metadata, _config: &Config, _state: &mut ListState) -> String {
-    metadata.gid().to_string()
+    state.gid_cache.entry(gid).or_insert_with(|| {
+        if cfg!(target_os = "redox") || config.long.numeric_uid_gid {
+            gid.to_string()
+        } else {
+            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
+        }
+    })
 }
 
 #[cfg(not(unix))]
-fn display_uname(_metadata: &Metadata, _config: &Config, _state: &mut ListState) -> String {
-    "somebody".to_string()
+fn display_uname(_metadata: &Metadata, _config: &Config, _state: &mut ListState) -> &'static str {
+    "somebody"
 }
 
 #[cfg(not(unix))]
-fn display_group(_metadata: &Metadata, _config: &Config, _state: &mut ListState) -> String {
-    "somegroup".to_string()
+fn display_group(_metadata: &Metadata, _config: &Config, _state: &mut ListState) -> &'static str {
+    "somegroup"
 }
 
 // The implementations for get_time are separated because some options, such
