@@ -23,6 +23,9 @@ clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["mode"] }
 
+[features]
+selinux = ["uucore/selinux"]
+
 [[bin]]
 name = "mknod"
 path = "src/main.rs"

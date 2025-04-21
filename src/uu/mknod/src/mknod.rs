@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO
 
-use clap::{Arg, ArgMatches, Command, value_parser};
+use clap::{Arg, ArgAction, Command, value_parser};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use libc::{dev_t, mode_t};
 use std::ffi::CString;
@@ -20,6 +20,15 @@ const AFTER_HELP: &str = help_section!("after help", "mknod.md");
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
+mod options {
+    pub const MODE: &str = "mode";
+    pub const TYPE: &str = "type";
+    pub const MAJOR: &str = "major";
+    pub const MINOR: &str = "minor";
+    pub const SELINUX: &str = "z";
+    pub const CONTEXT: &str = "context";
+}
+
 #[inline(always)]
 fn makedev(maj: u64, min: u64) -> dev_t {
     // pick up from <sys/sysmacros.h>
@@ -33,17 +42,30 @@ enum FileType {
     Fifo,
 }
 
-fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
+/// Configuration for directory creation.
+pub struct Config<'a> {
+    pub mode: mode_t,
+
+    pub dev: dev_t,
+
+    /// Set SELinux security context.
+    pub set_selinux_context: bool,
+
+    /// Specific SELinux context.
+    pub context: Option<&'a String>,
+}
+
+fn _mknod(file_name: &str, config: Config) -> i32 {
     let c_str = CString::new(file_name).expect("Failed to convert to CString");
 
     // the user supplied a mode
-    let set_umask = mode & MODE_RW_UGO != MODE_RW_UGO;
+    let set_umask = config.mode & MODE_RW_UGO != MODE_RW_UGO;
 
     unsafe {
         // store prev umask
         let last_umask = if set_umask { libc::umask(0) } else { 0 };
 
-        let errno = libc::mknod(c_str.as_ptr(), mode, dev);
+        let errno = libc::mknod(c_str.as_ptr(), config.mode, config.dev);
 
         // set umask back to original value
         if set_umask {
@@ -56,16 +78,27 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
             // shows the error from the mknod syscall
             libc::perror(c_str.as_ptr());
         }
+
+        // Apply SELinux context if requested
+        #[cfg(feature = "selinux")]
+        if config.set_selinux_context {
+            if let Err(e) = uucore::selinux::set_selinux_security_context(
+                std::path::Path::new(file_name),
+                config.context,
+            ) {
+                // if it fails, delete the file
+                let _ = std::fs::remove_dir(file_name);
+                eprintln!("failed to set SELinux security context: {}", e);
+                return 1;
+            }
+        }
+
         errno
     }
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // Linux-specific options, not implemented
-    // opts.optflag("Z", "", "set the SELinux security context to default type");
-    // opts.optopt("", "context", "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX");
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     let mode = get_mode(&matches).map_err(|e| USimpleError::new(1, e))?;
@@ -75,22 +108,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .expect("Missing argument 'NAME'");
 
     let file_type = matches.get_one::<FileType>("type").unwrap();
+    // Extract the SELinux related flags and options
+    let set_selinux_context = matches.get_flag(options::SELINUX);
+    let context = matches.get_one::<String>(options::CONTEXT);
+
+    let mut config = Config {
+        mode,
+        dev: 0,
+        set_selinux_context: set_selinux_context || context.is_some(),
+        context,
+    };
 
     if *file_type == FileType::Fifo {
-        if matches.contains_id("major") || matches.contains_id("minor") {
+        if matches.contains_id(options::MAJOR) || matches.contains_id(options::MINOR) {
             Err(UUsageError::new(
                 1,
                 "Fifos do not have major and minor device numbers.",
             ))
         } else {
-            let exit_code = _mknod(file_name, S_IFIFO | mode, 0);
+            config.mode = S_IFIFO | mode;
+            let exit_code = _mknod(file_name, config);
             set_exit_code(exit_code);
             Ok(())
         }
     } else {
         match (
-            matches.get_one::<u64>("major"),
-            matches.get_one::<u64>("minor"),
+            matches.get_one::<u64>(options::MAJOR),
+            matches.get_one::<u64>(options::MINOR),
         ) {
             (_, None) | (None, _) => Err(UUsageError::new(
                 1,
@@ -98,9 +142,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             )),
             (Some(&major), Some(&minor)) => {
                 let dev = makedev(major, minor);
+                config.dev = dev;
                 let exit_code = match file_type {
-                    FileType::Block => _mknod(file_name, S_IFBLK | mode, dev),
-                    FileType::Character => _mknod(file_name, S_IFCHR | mode, dev),
+                    FileType::Block => {
+                        config.mode |= S_IFBLK;
+                        _mknod(file_name, config)
+                    }
+                    FileType::Character => {
+                        config.mode |= S_IFCHR;
+                        _mknod(file_name, config)
+                    }
                     FileType::Fifo => {
                         unreachable!("file_type was validated to be only block or character")
                     }
@@ -120,7 +171,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .infer_long_args(true)
         .arg(
-            Arg::new("mode")
+            Arg::new(options::MODE)
                 .short('m')
                 .long("mode")
                 .value_name("MODE")
@@ -134,23 +185,38 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .arg(
-            Arg::new("type")
+            Arg::new(options::TYPE)
                 .value_name("TYPE")
                 .help("type of the new file (b, c, u or p)")
                 .required(true)
                 .value_parser(parse_type),
         )
         .arg(
-            Arg::new("major")
-                .value_name("MAJOR")
+            Arg::new(options::MAJOR)
+                .value_name(options::MAJOR)
                 .help("major file type")
                 .value_parser(value_parser!(u64)),
         )
         .arg(
-            Arg::new("minor")
-                .value_name("MINOR")
+            Arg::new(options::MINOR)
+                .value_name(options::MINOR)
                 .help("minor file type")
                 .value_parser(value_parser!(u64)),
+        )
+        .arg(
+            Arg::new(options::SELINUX)
+                .short('Z')
+                .help("set SELinux security context of each created directory to the default type")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::CONTEXT)
+                .long(options::CONTEXT)
+                .value_name("CTX")
+                .value_parser(value_parser!(String))
+                .num_args(0..=1)
+                .require_equals(true)
+                .help("like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX")
         )
 }
 
