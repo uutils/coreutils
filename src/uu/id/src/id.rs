@@ -52,7 +52,7 @@ macro_rules! cstr2cow {
             if ptr.is_null() {
                 None
             } else {
-                Some({ std::ffi::CStr::from_ptr(ptr) }.to_string_lossy())
+                Some({ CStr::from_ptr(ptr) }.to_string_lossy())
             }
         }
     };
