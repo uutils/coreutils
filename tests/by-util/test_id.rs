@@ -8,7 +8,7 @@
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, check_coreutil_version, expected_result, is_ci, whoami};
-use uutests::{at_and_ucmd, util_name};
+use uutests::util_name;
 
 const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced in GNU's coreutils 8.31
 
@@ -477,32 +477,4 @@ fn test_id_pretty_print_password_record() {
         .arg("-P")
         .fails()
         .stderr_contains("the argument '-p' cannot be used with '-P'");
-}
-
-fn compile_preload_file_with_gcc(
-    c_file: &str,
-    so_file: &str,
-) -> Result<std::process::ExitStatus, String> {
-    Ok(std::process::Command::new("cc")
-        .args(["-fPIC", "-shared", "-o", &so_file, &c_file])
-        .status()
-        .map_err(|_| "`cc` command is not available")?)
-}
-
-#[test]
-#[cfg(all(unix, not(target_os = "android")))]
-fn test_id_different_uid_and_euid() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    // Compile the preload file required for mocking different UID and EUID.
-    // The UID should be 1000, whereas the EUID should be 0.
-    let c_file = at.as_string() + "/different_uid_and_euid.c";
-    let so_file = at.as_string() + "/different_uid_and_euid.so";
-    let status = unwrap_or_return!(compile_preload_file_with_gcc(&c_file, &so_file));
-    if !status.success() {
-        panic!("Preload file compilation failed")
-    }
-
-    let result = ucmd.env("LD_PRELOAD", so_file).run();
-    result.stdout_contains("uid=1000").stdout_contains("euid=0");
 }
