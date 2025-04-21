@@ -474,6 +474,16 @@ fn pretty(possible_pw: Option<Passwd>) {
             }
         }
 
+        let rgid = getgid();
+        let egid = getegid();
+        if egid != rgid {
+            if let Ok(g) = Group::locate(rgid) {
+                println!("rgid\t{}", g.name);
+            } else {
+                println!("rgid\t{rgid}");
+            }
+        }
+
         println!(
             "groups\t{}",
             entries::get_groups_gnu(None)
