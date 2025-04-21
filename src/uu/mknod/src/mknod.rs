@@ -101,7 +101,7 @@ fn _mknod(file_name: &str, config: Config) -> i32 {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let mode = get_mode(&matches).map_err(|e| USimpleError::new(1, e))?;
+    let mode = get_mode(matches.get_one::<String>("mode")).map_err(|e| USimpleError::new(1, e))?;
 
     let file_name = matches
         .get_one::<String>("name")
@@ -220,8 +220,8 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
-    match matches.get_one::<String>("mode") {
+fn get_mode(str_mode: Option<&String>) -> Result<mode_t, String> {
+    match str_mode {
         None => Ok(MODE_RW_UGO),
         Some(str_mode) => uucore::mode::parse_mode(str_mode)
             .map_err(|e| format!("invalid mode ({e})"))
