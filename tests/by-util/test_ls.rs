@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
-// spell-checker:ignore (words) fakeroot setcap
+// spell-checker:ignore (words) fakeroot setcap drwxr
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -5317,14 +5317,15 @@ fn test_acl_display() {
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let path = "a42";
-    at.mkdir(path);
 
-    let path = at.plus_as_string(path);
+    at.mkdir("with_acl");
+    let path_with_acl = at.plus_as_string("with_acl");
+    at.mkdir("without_acl");
+
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     match Command::new("setfacl")
-        .args(["-d", "-m", "group::rwx", &path])
+        .args(["-d", "-m", "group::rwx", &path_with_acl])
         .status()
         .map(|status| status.code())
     {
@@ -5339,11 +5340,19 @@ fn test_acl_display() {
         }
     }
 
+    // Expected output (we just look for `+` presence and absence in the first column):
+    // ...
+    // drwxr-xr-x+  2 user group   40 Apr 21 12:44 with_acl
+    // drwxr-xr-x  2 user group   40 Apr 21 12:44 without_acl
+    let re_with_acl = Regex::new(r"[a-z-]*\+ .*with_acl").unwrap();
+    let re_without_acl = Regex::new(r"[a-z-]* .*without_acl").unwrap();
+
     scene
         .ucmd()
-        .args(&["-lda", &path])
+        .args(&["-la", &at.as_string()])
         .succeeds()
-        .stdout_contains("+");
+        .stdout_matches(&re_with_acl)
+        .stdout_matches(&re_without_acl);
 }
 
 // Make sure that "ls --color" correctly applies color "normal" to text and
