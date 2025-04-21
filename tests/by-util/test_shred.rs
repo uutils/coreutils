@@ -208,3 +208,25 @@ fn test_shred_fail_no_perm() {
         .fails()
         .stderr_contains("Couldn't rename to");
 }
+
+#[test]
+fn test_shred_verbose_no_padding_1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "foo";
+    at.write(file, "non-empty");
+    ucmd.arg("-vn1")
+        .arg(file)
+        .succeeds()
+        .stderr_only("shred: foo: pass 1/1 (random)...\n");
+}
+
+#[test]
+fn test_shred_verbose_no_padding_10() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "foo";
+    at.write(file, "non-empty");
+    ucmd.arg("-vn10")
+        .arg(file)
+        .succeeds()
+        .stderr_contains("shred: foo: pass 1/10 (random)...\n");
+}
