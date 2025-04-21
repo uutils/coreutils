@@ -21,13 +21,14 @@ path = "src/mv.rs"
 clap = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
+libc = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
   "fs",
   "fsxattr",
   "update-control",
 ] }
-thiserror = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
