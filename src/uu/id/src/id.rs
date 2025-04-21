@@ -465,8 +465,8 @@ fn pretty(possible_pw: Option<Passwd>) {
             println!("uid\t{rid}");
         }
 
-        let eid = getegid();
-        if eid == rid {
+        let eid = geteuid();
+        if eid != rid {
             if let Ok(p) = Passwd::locate(eid) {
                 println!("euid\t{}", p.name);
             } else {
