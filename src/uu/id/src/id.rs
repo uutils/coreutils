@@ -47,7 +47,14 @@ use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 macro_rules! cstr2cow {
     ($v:expr) => {
-        unsafe { CStr::from_ptr($v).to_string_lossy() }
+        unsafe {
+            let ptr = $v;
+            if ptr.is_null() {
+                None
+            } else {
+                Some({ std::ffi::CStr::from_ptr(ptr) }.to_string_lossy())
+            }
+        }
     };
 }
 
@@ -451,8 +458,8 @@ fn pretty(possible_pw: Option<Passwd>) {
         let login = cstr2cow!(getlogin().cast_const());
         let rid = getuid();
         if let Ok(p) = Passwd::locate(rid) {
-            if login == p.name {
-                println!("login\t{login}");
+            if let Some(user_name) = login {
+                println!("login\t{user_name}");
             }
             println!("uid\t{}", p.name);
         } else {
