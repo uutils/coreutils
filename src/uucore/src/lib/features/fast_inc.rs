@@ -35,6 +35,11 @@ pub fn fast_inc(val: &mut [u8], start: &mut usize, end: usize, inc: &[u8]) {
 
     // First loop, add all digits of inc into val.
     for inc_pos in (0..inc.len()).rev() {
+        // The decrement operation would also panic in debug mode, print a message for developer convenience.
+        debug_assert!(
+            pos > 0,
+            "Buffer overflowed, make sure you allocate val with enough headroom."
+        );
         pos -= 1;
 
         let mut new_val = inc[inc_pos] + carry;
@@ -99,6 +104,11 @@ pub fn fast_inc_one(val: &mut [u8], start: &mut usize, end: usize) {
         }
     }
 
+    // The following decrement operation would also panic in debug mode, print a message for developer convenience.
+    debug_assert!(
+        *start > 0,
+        "Buffer overflowed, make sure you allocate val with enough headroom."
+    );
     // The carry propagated so far that a new digit was added.
     val[*start - 1] = b'1';
     *start -= 1;
