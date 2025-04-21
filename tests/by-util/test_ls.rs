@@ -4489,6 +4489,7 @@ fn test_ls_perm_io_errors() {
     let at = &scene.fixtures;
     at.mkdir("d");
     at.symlink_file("/", "d/s");
+    at.touch("d/f");
 
     scene.ccmd("chmod").arg("600").arg("d").succeeds();
 
@@ -4497,7 +4498,10 @@ fn test_ls_perm_io_errors() {
         .arg("-l")
         .arg("d")
         .fails_with_code(1)
-        .stderr_contains("Permission denied");
+        .stderr_contains("Permission denied")
+        .stdout_contains("total 0")
+        .stdout_contains("l????????? ? ? ? ?            ? s")
+        .stdout_contains("-????????? ? ? ? ?            ? f");
 }
 
 #[test]
