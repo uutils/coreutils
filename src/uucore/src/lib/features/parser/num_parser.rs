@@ -5,7 +5,7 @@
 
 //! Utilities for parsing numbers in various formats
 
-// spell-checker:ignore powf copysign prec inity infinit bigdecimal extendedbigdecimal biguint underflowed
+// spell-checker:ignore powf copysign prec inity infinit infs bigdecimal extendedbigdecimal biguint underflowed
 
 use bigdecimal::{
     BigDecimal, Context,
@@ -35,7 +35,7 @@ enum Base {
 
 impl Base {
     /// Return the digit value of a character in the given base
-    pub fn digit(&self, c: char) -> Option<u64> {
+    fn digit(&self, c: char) -> Option<u64> {
         fn from_decimal(c: char) -> u64 {
             u64::from(c) - u64::from('0')
         }
@@ -49,6 +49,34 @@ impl Base {
                 _ => None,
             },
         }
+    }
+
+    /// Greedily parse as many digits as possible from the string
+    /// Returns parsed digits (if any), and the rest of the string.
+    fn parse_digits<'a>(&self, str: &'a str) -> (Option<BigUint>, &'a str) {
+        let (digits, _, rest) = self.parse_digits_count(str, None);
+        (digits, rest)
+    }
+
+    /// Greedily parse as many digits as possible from the string, adding to already parsed digits.
+    /// This is meant to be used (directly) for the part after a decimal point.
+    /// Returns parsed digits (if any), the number of parsed digits, and the rest of the string.
+    fn parse_digits_count<'a>(
+        &self,
+        str: &'a str,
+        digits: Option<BigUint>,
+    ) -> (Option<BigUint>, u64, &'a str) {
+        let mut digits: Option<BigUint> = digits;
+        let mut count: u64 = 0;
+        let mut rest = str;
+        while let Some(d) = rest.chars().next().and_then(|c| self.digit(c)) {
+            (digits, count) = (
+                Some(digits.unwrap_or_default() * *self as u8 + d),
+                count + 1,
+            );
+            rest = &rest[1..];
+        }
+        (digits, count, rest)
     }
 }
 
@@ -235,10 +263,69 @@ impl ExtendedParser for ExtendedBigDecimal {
     }
 }
 
+fn parse_digits(base: Base, str: &str, fractional: bool) -> (Option<BigUint>, u64, &str) {
+    // Parse the integral part of the number
+    let (digits, rest) = base.parse_digits(str);
+
+    // If allowed, parse the fractional part of the number if there can be one and the
+    // input contains a '.' decimal separator.
+    if fractional {
+        if let Some(rest) = rest.strip_prefix('.') {
+            return base.parse_digits_count(rest, digits);
+        }
+    }
+
+    (digits, 0, rest)
+}
+
+fn parse_exponent(base: Base, str: &str) -> (Option<BigInt>, &str) {
+    let exp_chars = match base {
+        Base::Decimal => ['e', 'E'],
+        Base::Hexadecimal => ['p', 'P'],
+        _ => unreachable!(),
+    };
+
+    // Parse the exponent part, only decimal numbers are allowed.
+    // We only update `rest` if an exponent is actually parsed.
+    if let Some(rest) = str.strip_prefix(exp_chars) {
+        let (sign, rest) = if let Some(rest) = rest.strip_prefix('-') {
+            (Sign::Minus, rest)
+        } else if let Some(rest) = rest.strip_prefix('+') {
+            (Sign::Plus, rest)
+        } else {
+            // Something else, or nothing at all: keep going.
+            (Sign::Plus, rest) // No explicit sign is equivalent to `+`.
+        };
+
+        let (exp_uint, rest) = Base::Decimal.parse_digits(rest);
+        if let Some(exp_uint) = exp_uint {
+            return (Some(BigInt::from_biguint(sign, exp_uint)), rest);
+        }
+    }
+
+    // Nothing parsed
+    (None, str)
+}
+
+// Parse a multiplier from allowed suffixes (e.g. s/m/h).
+fn parse_suffix_multiplier<'a>(str: &'a str, allowed_suffixes: &[(char, u32)]) -> (u32, &'a str) {
+    if let Some(ch) = str.chars().next() {
+        if let Some(mul) = allowed_suffixes
+            .iter()
+            .find_map(|(c, t)| (ch == *c).then_some(*t))
+        {
+            return (mul, &str[1..]);
+        }
+    }
+
+    // No suffix, just return 1 and intact string
+    (1, str)
+}
+
 fn parse_special_value<'a>(
     input: &'a str,
     negative: bool,
-    allowed_suffixes: &'a [(char, u32)],
+    allowed_suffixes: &[(char, u32)],
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
     let input_lc = input.to_ascii_lowercase();
 
@@ -255,21 +342,14 @@ fn parse_special_value<'a>(
             if negative {
                 special = -special;
             }
-            let mut match_len = str.len();
-            if let Some(ch) = input.chars().nth(str.chars().count()) {
-                if allowed_suffixes.iter().any(|(c, _)| ch == *c) {
-                    // multiplying is unnecessary for these special values, but we have to note that
-                    // we processed the character to avoid a partial match error
-                    match_len += 1;
-                }
-            }
-            return if input.len() == match_len {
+
+            // "infs" is a valid duration, so parse suffix multiplier in the original input string, but ignore the multiplier.
+            let (_, rest) = parse_suffix_multiplier(&input[str.len()..], allowed_suffixes);
+
+            return if rest.is_empty() {
                 Ok(special)
             } else {
-                Err(ExtendedParserError::PartialMatch(
-                    special,
-                    &input[match_len..],
-                ))
+                Err(ExtendedParserError::PartialMatch(special, rest))
             };
         }
     }
@@ -396,13 +476,10 @@ pub(crate) enum ParseTarget {
     Duration,
 }
 
-// TODO: As highlighted by clippy, this function _is_ high cognitive complexity, jumps
-// around between integer and float parsing, and should be split in multiple parts.
-#[allow(clippy::cognitive_complexity)]
 pub(crate) fn parse<'a>(
     input: &'a str,
     target: ParseTarget,
-    allowed_suffixes: &'a [(char, u32)],
+    allowed_suffixes: &[(char, u32)],
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
     // Parse the " and ' prefixes separately
     if target != ParseTarget::Duration {
@@ -451,78 +528,30 @@ pub(crate) fn parse<'a>(
         (Base::Decimal, unsigned)
     };
 
-    // Parse the integral part of the number
-    let mut chars = rest.chars().enumerate().fuse().peekable();
-    let mut digits: Option<BigUint> = None;
-    let mut scale = 0u64;
-    let mut exponent: Option<BigInt> = None;
-    while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
-        chars.next();
-        digits = Some(digits.unwrap_or_default() * base as u8 + d);
-    }
+    // We only parse fractional and exponent part of the number in base 10/16 floating point numbers.
+    let parse_frac_exp =
+        matches!(base, Base::Decimal | Base::Hexadecimal) && target != ParseTarget::Integral;
 
-    // Parse fractional/exponent part of the number for supported bases.
-    if matches!(base, Base::Decimal | Base::Hexadecimal) && target != ParseTarget::Integral {
-        // Parse the fractional part of the number if there can be one and the input contains
-        // a '.' decimal separator.
-        if matches!(chars.peek(), Some(&(_, '.'))) {
-            chars.next();
-            while let Some(d) = chars.peek().and_then(|&(_, c)| base.digit(c)) {
-                chars.next();
-                (digits, scale) = (Some(digits.unwrap_or_default() * base as u8 + d), scale + 1);
-            }
-        }
+    // Parse the integral and fractional (if supported) part of the number
+    let (digits, scale, rest) = parse_digits(base, rest, parse_frac_exp);
 
-        let exp_char = match base {
-            Base::Decimal => 'e',
-            Base::Hexadecimal => 'p',
-            _ => unreachable!(),
-        };
-
-        // Parse the exponent part, only decimal numbers are allowed.
-        if chars
-            .peek()
-            .is_some_and(|&(_, c)| c.to_ascii_lowercase() == exp_char)
-        {
-            // Save the iterator position in case we do not parse any exponent.
-            let save_chars = chars.clone();
-            chars.next();
-            let exp_negative = match chars.peek() {
-                Some((_, '-')) => {
-                    chars.next();
-                    true
-                }
-                Some((_, '+')) => {
-                    chars.next();
-                    false
-                }
-                _ => false, // Something else, or nothing at all: keep going.
-            };
-            while let Some(d) = chars.peek().and_then(|&(_, c)| Base::Decimal.digit(c)) {
-                chars.next();
-                exponent = Some(exponent.unwrap_or_default() * 10 + d as i64);
-            }
-            if let Some(exp) = &exponent {
-                if exp_negative {
-                    exponent = Some(-exp);
-                }
-            } else {
-                // No exponent actually parsed, reset iterator to return partial match.
-                chars = save_chars;
-            }
-        }
-    }
+    // Parse exponent part of the number for supported bases.
+    let (exponent, rest) = if parse_frac_exp {
+        parse_exponent(base, rest)
+    } else {
+        (None, rest)
+    };
 
     // If no digit has been parsed, check if this is a special value, or declare the parsing unsuccessful
     if digits.is_none() {
         // If we trimmed an initial `0x`/`0b`, return a partial match.
-        if rest != unsigned {
+        if let Some(partial) = unsigned.strip_prefix("0") {
             let ebd = if negative {
                 ExtendedBigDecimal::MinusZero
             } else {
                 ExtendedBigDecimal::zero()
             };
-            return Err(ExtendedParserError::PartialMatch(ebd, &unsigned[1..]));
+            return Err(ExtendedParserError::PartialMatch(ebd, partial));
         }
 
         return if target == ParseTarget::Integral {
@@ -532,28 +561,19 @@ pub(crate) fn parse<'a>(
         };
     }
 
-    let mut digits = digits.unwrap();
+    let (mul, rest) = parse_suffix_multiplier(rest, allowed_suffixes);
 
-    if let Some((_, ch)) = chars.peek() {
-        if let Some(times) = allowed_suffixes
-            .iter()
-            .find(|(c, _)| ch == c)
-            .map(|&(_, t)| t)
-        {
-            chars.next();
-            digits *= times;
-        }
-    }
+    let digits = digits.unwrap() * mul;
 
     let ebd_result =
         construct_extended_big_decimal(digits, negative, base, scale, exponent.unwrap_or_default());
 
     // Return what has been parsed so far. If there are extra characters, mark the
     // parsing as a partial match.
-    if let Some((first_unparsed, _)) = chars.next() {
+    if !rest.is_empty() {
         Err(ExtendedParserError::PartialMatch(
             ebd_result.unwrap_or_else(|e| e.extract()),
-            &rest[first_unparsed..],
+            rest,
         ))
     } else {
         ebd_result
