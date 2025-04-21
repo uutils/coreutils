@@ -474,15 +474,6 @@ fn pretty(possible_pw: Option<Passwd>) {
             }
         }
 
-        let rid = getgid();
-        if rid != eid {
-            if let Ok(g) = Group::locate(rid) {
-                println!("euid\t{}", g.name);
-            } else {
-                println!("euid\t{rid}");
-            }
-        }
-
         println!(
             "groups\t{}",
             entries::get_groups_gnu(None)
