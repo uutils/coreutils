@@ -484,7 +484,7 @@ fn wipe_file(
         if verbose {
             let pass_name = pass_name(&pass_type);
             show_error!(
-                "{}: pass {:2}/{total_passes} ({pass_name})...",
+                "{}: pass {}/{total_passes} ({pass_name})...",
                 path.maybe_quote(),
                 i + 1,
             );
