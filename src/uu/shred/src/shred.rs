@@ -51,8 +51,7 @@ const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
 
 /// Patterns that appear in order for the passes
 ///
-/// They are all extended to 3 bytes for consistency, even though some could be
-/// expressed as single bytes.
+/// A single-byte pattern is equivalent to a multi-byte pattern of that byte three times.
 const PATTERNS: [Pattern; 22] = [
     Pattern::Single(b'\x00'),
     Pattern::Single(b'\xFF'),
@@ -440,9 +439,13 @@ fn wipe_file(
                 pass_sequence.push(PassType::Random);
             }
         } else {
-            // First fill it with Patterns, shuffle it, then evenly distribute Random
-            let n_full_arrays = n_passes / PATTERNS.len(); // How many times can we go through all the patterns?
-            let remainder = n_passes % PATTERNS.len(); // How many do we get through on our last time through?
+            // Add initial random to avoid O(n) operation later
+            pass_sequence.push(PassType::Random);
+            let n_random = (n_passes / 10).max(3); // Minimum 3 random passes; ratio of 10 after
+            let n_fixed = n_passes - n_random;
+            // Fill it with Patterns and all but the first and last random, then shuffle it
+            let n_full_arrays = n_fixed / PATTERNS.len(); // How many times can we go through all the patterns?
+            let remainder = n_fixed % PATTERNS.len(); // How many do we get through on our last time through, excluding randoms?
 
             for _ in 0..n_full_arrays {
                 for p in PATTERNS {
@@ -452,14 +455,14 @@ fn wipe_file(
             for pattern in PATTERNS.into_iter().take(remainder) {
                 pass_sequence.push(PassType::Pattern(pattern));
             }
-            let mut rng = rand::rng();
-            pass_sequence.shuffle(&mut rng); // randomize the order of application
-
-            let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
-            // Evenly space random passes; ensures one at the beginning and end
-            for i in 0..n_random {
-                pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
+            // add random passes except one each at the beginning and end
+            for _ in 0..n_random - 2 {
+                pass_sequence.push(PassType::Random);
             }
+
+            let mut rng = rand::rng();
+            pass_sequence[1..].shuffle(&mut rng); // randomize the order of application
+            pass_sequence.push(PassType::Random); // add the last random pass
         }
 
         // --zero specifies whether we want one final pass of 0x00 on our file
