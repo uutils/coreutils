@@ -750,9 +750,9 @@ dependencies = [
 
 [[package]]
 name = "ctor"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07e9666f4a9a948d4f1dff0c08a4512b0f7c86414b23960104c243c10d79f4c3"
+checksum = "a4735f265ba6a1188052ca32d461028a7d1125868be18e287e756019da7607b5"
 dependencies = [
  "ctor-proc-macro",
  "dtor",
@@ -889,9 +889,9 @@ dependencies = [
 
 [[package]]
 name = "dtor"
-version = "0.0.5"
+version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "222ef136a1c687d4aa0395c175f2c4586e379924c352fd02f7870cf7de783c23"
+checksum = "97cbdf2ad6846025e8e25df05171abfb30e3ababa12ee0a0e44b9bbe570633a8"
 dependencies = [
  "dtor-proc-macro",
 ]

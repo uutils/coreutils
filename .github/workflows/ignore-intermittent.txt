@@ -3,3 +3,4 @@ tests/timeout/timeout
 tests/rm/rm1
 tests/misc/stdbuf
 tests/misc/usage_vs_getopt
+tests/misc/tee

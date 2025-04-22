@@ -20,6 +20,8 @@ pub mod custom_tz_fmt;
 pub mod encoding;
 #[cfg(feature = "extendedbigdecimal")]
 pub mod extendedbigdecimal;
+#[cfg(feature = "fast-inc")]
+pub mod fast_inc;
 #[cfg(feature = "format")]
 pub mod format;
 #[cfg(feature = "fs")]

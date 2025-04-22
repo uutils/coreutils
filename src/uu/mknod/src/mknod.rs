@@ -26,11 +26,6 @@ fn makedev(maj: u64, min: u64) -> dev_t {
     ((min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)) as dev_t
 }
 
-#[cfg(windows)]
-fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
-    panic!("Unsupported for windows platform")
-}
-
 #[derive(Clone, PartialEq)]
 enum FileType {
     Block,
@@ -38,7 +33,6 @@ enum FileType {
     Fifo,
 }
 
-#[cfg(unix)]
 fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     let c_str = CString::new(file_name).expect("Failed to convert to CString");
 
