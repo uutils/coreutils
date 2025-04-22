@@ -3,13 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
+// spell-checker:ignore NOREPLACE TOCTOU canonicalized nushell renameat sourcepath targetpath
 
 mod error;
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, error::ErrorKind};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+use nix::{errno::Errno, fcntl};
 
 use std::collections::HashSet;
 use std::env;
@@ -596,23 +598,42 @@ fn rename(
 ) -> io::Result<()> {
     let mut backup_path = None;
 
-    if to.exists() {
-        if opts.update == UpdateMode::None {
-            if opts.debug {
-                println!("skipped {}", to.quote());
+    let already_exists = if opts.overwrite == OverwriteMode::Force
+        && opts.update == UpdateMode::All
+        && opts.backup == BackupMode::None
+    {
+        // fast path, no need to check for overwrites
+        rename_with_fallback(from, to, multi_progress)?;
+        false
+    } else {
+        // try to move without overwriting
+        match rename_no_replace(from, to, multi_progress) {
+            Ok(()) => false,
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => true,
+            Err(e) => Err(e)?,
+        }
+    };
+
+    if already_exists {
+        match opts.update {
+            UpdateMode::None => {
+                if opts.debug {
+                    println!("skipped {}", to.quote());
+                }
+                return Ok(());
             }
-            return Ok(());
-        }
-
-        if (opts.update == UpdateMode::IfOlder)
-            && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
-        {
-            return Ok(());
-        }
-
-        if opts.update == UpdateMode::NoneFail {
-            let err_msg = format!("not replacing {}", to.quote());
-            return Err(io::Error::other(err_msg));
+            UpdateMode::IfOlder => {
+                if fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()? {
+                    return Ok(());
+                }
+                // There's a TOCTOU here, if `to` gets replaced with a newer version.
+                // I don't think there's a way to fix it.
+            }
+            UpdateMode::NoneFail => {
+                let err_msg = format!("not replacing {}", to.quote());
+                return Err(io::Error::other(err_msg));
+            }
+            UpdateMode::All => {}
         }
 
         match opts.overwrite {
@@ -634,21 +655,17 @@ fn rename(
         if let Some(ref backup_path) = backup_path {
             rename_with_fallback(to, backup_path, multi_progress)?;
         }
-    }
 
-    // "to" may no longer exist if it was backed up
-    if to.exists() && to.is_dir() {
-        // normalize behavior between *nix and windows
-        if from.is_dir() {
-            if is_empty_dir(to) {
-                fs::remove_dir(to)?;
-            } else {
-                return Err(io::Error::other("Directory not empty"));
-            }
+        #[cfg(windows)]
+        // older versions of windows don't handle this automatically,
+        // see std::fs::rename docs
+        if to.is_dir() && from.is_dir() {
+            // this checks if dir is empty for us, and returns the appropriate error if not
+            fs::remove_dir(to)?;
         }
-    }
 
-    rename_with_fallback(from, to, multi_progress)?;
+        rename_with_fallback(from, to, multi_progress)?;
+    }
 
     if opts.verbose {
         let message = match backup_path {
@@ -679,6 +696,28 @@ fn is_fifo(filetype: fs::FileType) -> bool {
 #[cfg(not(unix))]
 fn is_fifo(_filetype: fs::FileType) -> bool {
     false
+}
+
+/// Attempts to use atomic renaming that avoids overwriting files, if available from the OS,
+/// otherwise checks if `to` exists and calls `rename_with_fallback` (allowing races).
+/// In either case, returns `io::ErrorKind::AlreadyExists` kind if `to` exists.
+fn rename_no_replace(
+    from: &Path,
+    to: &Path,
+    multi_progress: Option<&MultiProgress>,
+) -> io::Result<()> {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    match fcntl::renameat2(None, from, None, to, fcntl::RenameFlags::RENAME_NOREPLACE) {
+        Ok(()) => return Ok(()),
+        Err(Errno::EINVAL) => {} // could be unsupported on platform, continue
+        Err(e) => Err(e)?,
+    }
+
+    if to.exists() {
+        Err(io::Error::from(io::ErrorKind::AlreadyExists))
+    } else {
+        rename_with_fallback(from, to, multi_progress)
+    }
 }
 
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
@@ -853,13 +892,6 @@ fn rename_file_fallback(from: &Path, to: &Path) -> io::Result<()> {
     #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
     fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
     Ok(())
-}
-
-fn is_empty_dir(path: &Path) -> bool {
-    match fs::read_dir(path) {
-        Ok(contents) => contents.peekable().peek().is_none(),
-        Err(_e) => false,
-    }
 }
 
 /// Checks if a file can be deleted by attempting to open it with delete permissions.
