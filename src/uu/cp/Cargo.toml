@@ -51,5 +51,5 @@ name = "cp"
 path = "src/main.rs"
 
 [features]
-feat_selinux = ["selinux"]
+feat_selinux = ["selinux", "uucore/selinux"]
 feat_acl = ["exacl"]

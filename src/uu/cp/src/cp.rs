@@ -311,6 +311,8 @@ pub struct Options {
     pub verbose: bool,
     /// `-g`, `--progress`
     pub progress_bar: bool,
+    /// `-Z`
+    pub set_selinux_context: bool,
 }
 
 impl Default for Options {
@@ -337,6 +339,7 @@ impl Default for Options {
             debug: false,
             verbose: false,
             progress_bar: false,
+            set_selinux_context: false,
         }
     }
 }
@@ -454,6 +457,7 @@ mod options {
     pub const TARGET_DIRECTORY: &str = "target-directory";
     pub const DEBUG: &str = "debug";
     pub const VERBOSE: &str = "verbose";
+    pub const SELINUX_CONTEXT: &str = "selinux-context";
 }
 
 #[cfg(unix)]
@@ -708,6 +712,12 @@ pub fn uu_app() -> Command {
                 .value_name("WHEN")
                 .value_parser(ShortcutValueParser::new(["never", "auto", "always"]))
                 .help("control creation of sparse files. See below"),
+        )
+        .arg(
+            Arg::new(options::SELINUX_CONTEXT)
+                .short('Z')
+                .help("set SELinux security context of destination file to default type")
+                .action(ArgAction::SetTrue),
         )
         // TODO: implement the following args
         .arg(
@@ -1172,6 +1182,7 @@ impl Options {
             recursive,
             target_dir,
             progress_bar: matches.get_flag(options::PROGRESS_BAR),
+            set_selinux_context: matches.get_flag(options::SELINUX_CONTEXT),
         };
 
         Ok(options)
@@ -1465,7 +1476,7 @@ fn copy_source(
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
                 if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                    copy_attributes(&src, y, &options.attributes)?;
+                    copy_attributes(&src, y, &options.attributes, options)?;
                 }
             }
         }
@@ -1613,10 +1624,12 @@ fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
 }
 
 /// Copy the specified attributes from one path to another.
+#[allow(unused_variables)]
 pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
     attributes: &Attributes,
+    options: &Options,
 ) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata = fs::symlink_metadata(source).context(context)?;
@@ -1677,21 +1690,32 @@ pub(crate) fn copy_attributes(
     })?;
 
     #[cfg(feature = "feat_selinux")]
-    handle_preserve(&attributes.context, || -> CopyResult<()> {
-        let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
-            format!(
-                "failed to get security context of {}: {e}",
-                source.display(),
-            )
-        })?;
-        if let Some(context) = context {
-            context.set_for_path(dest, false, false).map_err(|e| {
-                format!("failed to set security context for {}: {e}", dest.display(),)
+    {
+        if options.set_selinux_context {
+            // -Z flag takes precedence over --preserve=context
+            uucore::selinux::set_selinux_security_context(dest, None).map_err(|e| {
+                Error::Error(format!("failed to set SELinux security context: {}", e))
+            })?;
+        } else {
+            // Existing context preservation code
+            handle_preserve(&attributes.context, || -> CopyResult<()> {
+                let context =
+                    selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
+                        format!(
+                            "failed to get security context of {}: {e}",
+                            source.display(),
+                        )
+                    })?;
+                if let Some(context) = context {
+                    context.set_for_path(dest, false, false).map_err(|e| {
+                        format!("failed to set security context for {}: {e}", dest.display(),)
+                    })?;
+                }
+
+                Ok(())
             })?;
         }
-
-        Ok(())
-    })?;
+    }
 
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
         #[cfg(all(unix, not(target_os = "android")))]
@@ -2409,7 +2433,7 @@ fn copy_file(
     if options.dereference(source_in_command_line) {
         if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
             if src.exists() {
-                copy_attributes(&src, dest, &options.attributes)?;
+                copy_attributes(&src, dest, &options.attributes, options)?;
             }
         }
     } else if source_is_stream && source.exists() {
@@ -2417,9 +2441,9 @@ fn copy_file(
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
         // copy function (see `copy_stream` under platform/linux.rs).
-        copy_attributes(source, dest, &options.attributes)?;
+        copy_attributes(source, dest, &options.attributes, options)?;
     } else {
-        copy_attributes(source, dest, &options.attributes)?;
+        copy_attributes(source, dest, &options.attributes, options)?;
     }
 
     copied_files.insert(
