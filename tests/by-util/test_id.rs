@@ -152,19 +152,8 @@ fn test_id_real() {
 fn test_id_pretty_print() {
     // `-p` is BSD only and not supported on GNU's `id`
     let username = whoami();
-
     let result = new_ucmd!().arg("-p").run();
-    if result.stdout_str().trim().is_empty() {
-        // this fails only on: "MinRustV (ubuntu-latest, feat_os_unix)"
-        // `rustc 1.40.0 (73528e339 2019-12-16)`
-        // run: /home/runner/work/coreutils/coreutils/target/debug/coreutils id -p
-        // thread 'test_id::test_id_pretty_print' panicked at 'Command was expected to succeed.
-        // stdout =
-        // stderr = ', tests/common/util.rs:157:13
-        println!("test skipped:");
-    } else {
-        result.success().stdout_contains(username);
-    }
+    result.success().stdout_contains(username);
 }
 
 #[test]
