@@ -45,6 +45,8 @@ pub use crate::features::custom_tz_fmt;
 pub use crate::features::encoding;
 #[cfg(feature = "extendedbigdecimal")]
 pub use crate::features::extendedbigdecimal;
+#[cfg(feature = "fast-inc")]
+pub use crate::features::fast_inc;
 #[cfg(feature = "format")]
 pub use crate::features::format;
 #[cfg(feature = "fs")]

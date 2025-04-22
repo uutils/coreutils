@@ -21,7 +21,7 @@ path = "src/cat.rs"
 clap = { workspace = true }
 memchr = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["fs", "pipes"] }
+uucore = { workspace = true, features = ["fast-inc", "fs", "pipes"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }

@@ -217,6 +217,10 @@ fn test_separator_and_terminator() {
         .succeeds()
         .stdout_is("2,3,4,5,6\n");
     new_ucmd!()
+        .args(&["-s", "", "2", "6"])
+        .succeeds()
+        .stdout_is("23456\n");
+    new_ucmd!()
         .args(&["-s", "\n", "2", "6"])
         .succeeds()
         .stdout_is("2\n3\n4\n5\n6\n");
@@ -286,6 +290,10 @@ fn test_separator_and_terminator_floats() {
         .args(&["-s", ",", "-t", "!", "2.0", "6"])
         .succeeds()
         .stdout_is("2.0,3.0,4.0,5.0,6.0!");
+    new_ucmd!()
+        .args(&["-s", "", "-t", "!", "2.0", "6"])
+        .succeeds()
+        .stdout_is("2.03.04.05.06.0!");
 }
 
 #[test]
