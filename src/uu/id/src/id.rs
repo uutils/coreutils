@@ -49,6 +49,7 @@ macro_rules! cstr2cow {
     ($v:expr) => {
         unsafe {
             let ptr = $v;
+            // Must be not null to call cstr2cow
             if ptr.is_null() {
                 None
             } else {
