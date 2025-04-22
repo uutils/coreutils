@@ -7,12 +7,10 @@ use uutests::util::TestScenario;
 use uutests::util_name;
 
 #[test]
-#[cfg(not(windows))]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
-#[cfg(not(windows))]
 #[test]
 fn test_mknod_help() {
     new_ucmd!()
@@ -23,7 +21,6 @@ fn test_mknod_help() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_mknod_version() {
     assert!(
         new_ucmd!()
@@ -36,7 +33,6 @@ fn test_mknod_version() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_mknod_fifo_default_writable() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd().arg("test_file").arg("p").succeeds();
@@ -45,7 +41,6 @@ fn test_mknod_fifo_default_writable() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_mknod_fifo_mnemonic_usage() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd().arg("test_file").arg("pipe").succeeds();
@@ -53,7 +48,6 @@ fn test_mknod_fifo_mnemonic_usage() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_mknod_fifo_read_only() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()
@@ -67,7 +61,6 @@ fn test_mknod_fifo_read_only() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_mknod_fifo_invalid_extra_operand() {
     new_ucmd!()
         .arg("test_file")
@@ -79,7 +72,6 @@ fn test_mknod_fifo_invalid_extra_operand() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_mknod_character_device_requires_major_and_minor() {
     new_ucmd!()
         .arg("test_file")
@@ -109,7 +101,6 @@ fn test_mknod_character_device_requires_major_and_minor() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_mknod_invalid_arg() {
     new_ucmd!()
         .arg("--foo")
@@ -119,7 +110,6 @@ fn test_mknod_invalid_arg() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_mknod_invalid_mode() {
     new_ucmd!()
         .arg("--mode")
