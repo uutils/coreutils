@@ -4444,7 +4444,6 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same
 }
 
 #[rstest]
-#[case::exponent_exceed_float_max("1.0e100000")]
 #[case::underscore_delimiter("1_000")]
 #[case::only_point(".")]
 #[case::space_in_primes("' '")]

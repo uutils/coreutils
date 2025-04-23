@@ -25,7 +25,7 @@ use std::time::Duration;
 /// one hundred twenty three seconds or "4.5d" meaning four and a half
 /// days. If no unit is specified, the unit is assumed to be seconds.
 ///
-/// The only allowed suffixes are
+/// If `allow_suffixes` is true, the allowed suffixes are
 ///
 /// * "s" for seconds,
 /// * "m" for minutes,
@@ -48,10 +48,12 @@ use std::time::Duration;
 /// ```rust
 /// use std::time::Duration;
 /// use uucore::parser::parse_time::from_str;
-/// assert_eq!(from_str("123"), Ok(Duration::from_secs(123)));
-/// assert_eq!(from_str("2d"), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
+/// assert_eq!(from_str("123", true), Ok(Duration::from_secs(123)));
+/// assert_eq!(from_str("123", false), Ok(Duration::from_secs(123)));
+/// assert_eq!(from_str("2d", true), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
+/// assert!(from_str("2d", false).is_err());
 /// ```
-pub fn from_str(string: &str) -> Result<Duration, String> {
+pub fn from_str(string: &str, allow_suffixes: bool) -> Result<Duration, String> {
     // TODO: Switch to Duration::NANOSECOND if that ever becomes stable
     // https://github.com/rust-lang/rust/issues/57391
     const NANOSECOND_DURATION: Duration = Duration::from_nanos(1);
@@ -63,7 +65,11 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
     let num = match num_parser::parse(
         string,
         ParseTarget::Duration,
-        &[('s', 1), ('m', 60), ('h', 60 * 60), ('d', 60 * 60 * 24)],
+        if allow_suffixes {
+            &[('s', 1), ('m', 60), ('h', 60 * 60), ('d', 60 * 60 * 24)]
+        } else {
+            &[]
+        },
     ) {
         Ok(ebd) | Err(ExtendedParserError::Overflow(ebd)) => ebd,
         Err(ExtendedParserError::Underflow(_)) => return Ok(NANOSECOND_DURATION),
@@ -105,20 +111,26 @@ mod tests {
 
     #[test]
     fn test_no_units() {
-        assert_eq!(from_str("123"), Ok(Duration::from_secs(123)));
+        assert_eq!(from_str("123", true), Ok(Duration::from_secs(123)));
+        assert_eq!(from_str("123", false), Ok(Duration::from_secs(123)));
     }
 
     #[test]
     fn test_units() {
-        assert_eq!(from_str("2d"), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
+        assert_eq!(
+            from_str("2d", true),
+            Ok(Duration::from_secs(60 * 60 * 24 * 2))
+        );
+        assert!(from_str("2d", false).is_err());
     }
 
     #[test]
     fn test_overflow() {
         // u64 seconds overflow (in Duration)
-        assert_eq!(from_str("9223372036854775808d"), Ok(Duration::MAX));
+        assert_eq!(from_str("9223372036854775808d", true), Ok(Duration::MAX));
         // ExtendedBigDecimal overflow
-        assert_eq!(from_str("1e92233720368547758080"), Ok(Duration::MAX));
+        assert_eq!(from_str("1e92233720368547758080", false), Ok(Duration::MAX));
+        assert_eq!(from_str("1e92233720368547758080", false), Ok(Duration::MAX));
     }
 
     #[test]
@@ -128,87 +140,143 @@ mod tests {
         const NANOSECOND_DURATION: Duration = Duration::from_nanos(1);
 
         // ExtendedBigDecimal underflow
-        assert_eq!(from_str("1e-92233720368547758080"), Ok(NANOSECOND_DURATION));
-        // nanoseconds underflow (in Duration)
-        assert_eq!(from_str("0.0000000001"), Ok(NANOSECOND_DURATION));
-        assert_eq!(from_str("1e-10"), Ok(NANOSECOND_DURATION));
-        assert_eq!(from_str("9e-10"), Ok(NANOSECOND_DURATION));
-        assert_eq!(from_str("1e-9"), Ok(NANOSECOND_DURATION));
-        assert_eq!(from_str("1.9e-9"), Ok(NANOSECOND_DURATION));
-        assert_eq!(from_str("2e-9"), Ok(Duration::from_nanos(2)));
+        assert_eq!(
+            from_str("1e-92233720368547758080", true),
+            Ok(NANOSECOND_DURATION)
+        );
+        // nanoseconds underflow (in Duration, true)
+        assert_eq!(from_str("0.0000000001", true), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("1e-10", true), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("9e-10", true), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("1e-9", true), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("1.9e-9", true), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("2e-9", true), Ok(Duration::from_nanos(2)));
+
+        // ExtendedBigDecimal underflow
+        assert_eq!(
+            from_str("1e-92233720368547758080", false),
+            Ok(NANOSECOND_DURATION)
+        );
+        // nanoseconds underflow (in Duration, false)
+        assert_eq!(from_str("0.0000000001", false), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("1e-10", false), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("9e-10", false), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("1e-9", false), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("1.9e-9", false), Ok(NANOSECOND_DURATION));
+        assert_eq!(from_str("2e-9", false), Ok(Duration::from_nanos(2)));
     }
 
     #[test]
     fn test_zero() {
-        assert_eq!(from_str("0e-9"), Ok(Duration::ZERO));
-        assert_eq!(from_str("0e-100"), Ok(Duration::ZERO));
-        assert_eq!(from_str("0e-92233720368547758080"), Ok(Duration::ZERO));
-        assert_eq!(from_str("0.000000000000000000000"), Ok(Duration::ZERO));
+        assert_eq!(from_str("0e-9", true), Ok(Duration::ZERO));
+        assert_eq!(from_str("0e-100", true), Ok(Duration::ZERO));
+        assert_eq!(
+            from_str("0e-92233720368547758080", true),
+            Ok(Duration::ZERO)
+        );
+        assert_eq!(
+            from_str("0.000000000000000000000", true),
+            Ok(Duration::ZERO)
+        );
+
+        assert_eq!(from_str("0e-9", false), Ok(Duration::ZERO));
+        assert_eq!(from_str("0e-100", false), Ok(Duration::ZERO));
+        assert_eq!(
+            from_str("0e-92233720368547758080", false),
+            Ok(Duration::ZERO)
+        );
+        assert_eq!(
+            from_str("0.000000000000000000000", false),
+            Ok(Duration::ZERO)
+        );
     }
 
     #[test]
     fn test_hex_float() {
         assert_eq!(
-            from_str("0x1.1p-1"),
+            from_str("0x1.1p-1", true),
             Ok(Duration::from_secs_f64(0.53125f64))
         );
         assert_eq!(
-            from_str("0x1.1p-1d"),
+            from_str("0x1.1p-1", false),
+            Ok(Duration::from_secs_f64(0.53125f64))
+        );
+        assert_eq!(
+            from_str("0x1.1p-1d", true),
             Ok(Duration::from_secs_f64(0.53125f64 * 3600.0 * 24.0))
         );
-        assert_eq!(from_str("0xfh"), Ok(Duration::from_secs(15 * 3600)));
+        assert_eq!(from_str("0xfh", true), Ok(Duration::from_secs(15 * 3600)));
     }
 
     #[test]
     fn test_error_empty() {
-        assert!(from_str("").is_err());
+        assert!(from_str("", true).is_err());
+        assert!(from_str("", false).is_err());
     }
 
     #[test]
     fn test_error_invalid_unit() {
-        assert!(from_str("123X").is_err());
+        assert!(from_str("123X", true).is_err());
+        assert!(from_str("123X", false).is_err());
     }
 
     #[test]
     fn test_error_multi_bytes_characters() {
-        assert!(from_str("10€").is_err());
+        assert!(from_str("10€", true).is_err());
+        assert!(from_str("10€", false).is_err());
     }
 
     #[test]
     fn test_error_invalid_magnitude() {
-        assert!(from_str("12abc3s").is_err());
+        assert!(from_str("12abc3s", true).is_err());
+        assert!(from_str("12abc3s", false).is_err());
+    }
+
+    #[test]
+    fn test_error_only_point() {
+        assert!(from_str(".", true).is_err());
+        assert!(from_str(".", false).is_err());
     }
 
     #[test]
     fn test_negative() {
-        assert!(from_str("-1").is_err());
+        assert!(from_str("-1", true).is_err());
+        assert!(from_str("-1", false).is_err());
     }
 
     #[test]
     fn test_infinity() {
-        assert_eq!(from_str("inf"), Ok(Duration::MAX));
-        assert_eq!(from_str("infinity"), Ok(Duration::MAX));
-        assert_eq!(from_str("infinityh"), Ok(Duration::MAX));
-        assert_eq!(from_str("INF"), Ok(Duration::MAX));
-        assert_eq!(from_str("INFs"), Ok(Duration::MAX));
+        assert_eq!(from_str("inf", true), Ok(Duration::MAX));
+        assert_eq!(from_str("infinity", true), Ok(Duration::MAX));
+        assert_eq!(from_str("infinityh", true), Ok(Duration::MAX));
+        assert_eq!(from_str("INF", true), Ok(Duration::MAX));
+        assert_eq!(from_str("INFs", true), Ok(Duration::MAX));
+
+        assert_eq!(from_str("inf", false), Ok(Duration::MAX));
+        assert_eq!(from_str("infinity", false), Ok(Duration::MAX));
+        assert_eq!(from_str("INF", false), Ok(Duration::MAX));
     }
 
     #[test]
     fn test_nan() {
-        assert!(from_str("nan").is_err());
-        assert!(from_str("nans").is_err());
-        assert!(from_str("-nanh").is_err());
-        assert!(from_str("NAN").is_err());
-        assert!(from_str("-NAN").is_err());
+        assert!(from_str("nan", true).is_err());
+        assert!(from_str("nans", true).is_err());
+        assert!(from_str("-nanh", true).is_err());
+        assert!(from_str("NAN", true).is_err());
+        assert!(from_str("-NAN", true).is_err());
+
+        assert!(from_str("nan", false).is_err());
+        assert!(from_str("NAN", false).is_err());
+        assert!(from_str("-NAN", false).is_err());
     }
 
     /// Test that capital letters are not allowed in suffixes.
     #[test]
     fn test_no_capital_letters() {
-        assert!(from_str("1S").is_err());
-        assert!(from_str("1M").is_err());
-        assert!(from_str("1H").is_err());
-        assert!(from_str("1D").is_err());
-        assert!(from_str("INFD").is_err());
+        assert!(from_str("1S", true).is_err());
+        assert!(from_str("1M", true).is_err());
+        assert!(from_str("1H", true).is_err());
+        assert!(from_str("1D", true).is_err());
+        assert!(from_str("INFD", true).is_err());
     }
 }

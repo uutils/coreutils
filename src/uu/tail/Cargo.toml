@@ -1,4 +1,4 @@
-# spell-checker:ignore (libs) kqueue fundu
+# spell-checker:ignore (libs) kqueue
 [package]
 name = "uu_tail"
 description = "tail ~ (uutils) display the last lines of input"
@@ -25,7 +25,6 @@ memchr = { workspace = true }
 notify = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 same-file = { workspace = true }
-fundu = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
