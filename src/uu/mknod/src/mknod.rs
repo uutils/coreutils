@@ -123,42 +123,37 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let set_selinux_context = matches.get_flag(options::SELINUX);
     let context = matches.get_one::<String>(options::CONTEXT);
 
-    let mut config = Config {
+    let dev = match (
+        file_type,
+        matches.get_one::<u64>(options::MAJOR),
+        matches.get_one::<u64>(options::MINOR),
+    ) {
+        (FileType::Fifo, None, None) => 0,
+        (FileType::Fifo, _, _) => {
+            return Err(UUsageError::new(
+                1,
+                "Fifos do not have major and minor device numbers.",
+            ));
+        }
+        (_, Some(&major), Some(&minor)) => makedev(major, minor),
+        _ => {
+            return Err(UUsageError::new(
+                1,
+                "Special files require major and minor device numbers.",
+            ));
+        }
+    };
+
+    let config = Config {
         mode,
-        dev: 0,
+        dev,
         set_selinux_context: set_selinux_context || context.is_some(),
         context,
     };
 
-    if *file_type == FileType::Fifo {
-        if matches.contains_id(options::MAJOR) || matches.contains_id(options::MINOR) {
-            Err(UUsageError::new(
-                1,
-                "Fifos do not have major and minor device numbers.",
-            ))
-        } else {
-            let exit_code = mknod(file_name, config);
-            set_exit_code(exit_code);
-            Ok(())
-        }
-    } else {
-        match (
-            matches.get_one::<u64>(options::MAJOR),
-            matches.get_one::<u64>(options::MINOR),
-        ) {
-            (_, None) | (None, _) => Err(UUsageError::new(
-                1,
-                "Special files require major and minor device numbers.",
-            )),
-            (Some(&major), Some(&minor)) => {
-                let dev = makedev(major, minor);
-                config.dev = dev;
-                let exit_code = mknod(file_name, config);
-                set_exit_code(exit_code);
-                Ok(())
-            }
-        }
-    }
+    let exit_code = mknod(file_name, config);
+    set_exit_code(exit_code);
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
