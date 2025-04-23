@@ -55,7 +55,7 @@ pub struct Config<'a> {
     pub context: Option<&'a String>,
 }
 
-fn _mknod(file_name: &str, config: Config) -> i32 {
+fn mknod(file_name: &str, config: Config) -> i32 {
     let c_str = CString::new(file_name).expect("Failed to convert to CString");
 
     // the user supplied a mode
@@ -127,7 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ))
         } else {
             config.mode = S_IFIFO | mode;
-            let exit_code = _mknod(file_name, config);
+            let exit_code = mknod(file_name, config);
             set_exit_code(exit_code);
             Ok(())
         }
@@ -146,11 +146,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let exit_code = match file_type {
                     FileType::Block => {
                         config.mode |= S_IFBLK;
-                        _mknod(file_name, config)
+                        mknod(file_name, config)
                     }
                     FileType::Character => {
                         config.mode |= S_IFCHR;
-                        _mknod(file_name, config)
+                        mknod(file_name, config)
                     }
                     FileType::Fifo => {
                         unreachable!("file_type was validated to be only block or character")
