@@ -42,6 +42,16 @@ enum FileType {
     Fifo,
 }
 
+impl FileType {
+    fn as_mode(&self) -> mode_t {
+        match self {
+            Self::Block => S_IFBLK,
+            Self::Character => S_IFCHR,
+            Self::Fifo => S_IFIFO,
+        }
+    }
+}
+
 /// Configuration for directory creation.
 pub struct Config<'a> {
     pub mode: mode_t,
@@ -101,66 +111,49 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let mode = get_mode(matches.get_one::<String>("mode")).map_err(|e| USimpleError::new(1, e))?;
+    let file_type = matches.get_one::<FileType>("type").unwrap();
+    let mode = get_mode(matches.get_one::<String>("mode")).map_err(|e| USimpleError::new(1, e))?
+        | file_type.as_mode();
 
     let file_name = matches
         .get_one::<String>("name")
         .expect("Missing argument 'NAME'");
 
-    let file_type = matches.get_one::<FileType>("type").unwrap();
     // Extract the SELinux related flags and options
     let set_selinux_context = matches.get_flag(options::SELINUX);
     let context = matches.get_one::<String>(options::CONTEXT);
 
-    let mut config = Config {
+    let dev = match (
+        file_type,
+        matches.get_one::<u64>(options::MAJOR),
+        matches.get_one::<u64>(options::MINOR),
+    ) {
+        (FileType::Fifo, None, None) => 0,
+        (FileType::Fifo, _, _) => {
+            return Err(UUsageError::new(
+                1,
+                "Fifos do not have major and minor device numbers.",
+            ));
+        }
+        (_, Some(&major), Some(&minor)) => makedev(major, minor),
+        _ => {
+            return Err(UUsageError::new(
+                1,
+                "Special files require major and minor device numbers.",
+            ));
+        }
+    };
+
+    let config = Config {
         mode,
-        dev: 0,
+        dev,
         set_selinux_context: set_selinux_context || context.is_some(),
         context,
     };
 
-    if *file_type == FileType::Fifo {
-        if matches.contains_id(options::MAJOR) || matches.contains_id(options::MINOR) {
-            Err(UUsageError::new(
-                1,
-                "Fifos do not have major and minor device numbers.",
-            ))
-        } else {
-            config.mode = S_IFIFO | mode;
-            let exit_code = mknod(file_name, config);
-            set_exit_code(exit_code);
-            Ok(())
-        }
-    } else {
-        match (
-            matches.get_one::<u64>(options::MAJOR),
-            matches.get_one::<u64>(options::MINOR),
-        ) {
-            (_, None) | (None, _) => Err(UUsageError::new(
-                1,
-                "Special files require major and minor device numbers.",
-            )),
-            (Some(&major), Some(&minor)) => {
-                let dev = makedev(major, minor);
-                config.dev = dev;
-                let exit_code = match file_type {
-                    FileType::Block => {
-                        config.mode |= S_IFBLK;
-                        mknod(file_name, config)
-                    }
-                    FileType::Character => {
-                        config.mode |= S_IFCHR;
-                        mknod(file_name, config)
-                    }
-                    FileType::Fifo => {
-                        unreachable!("file_type was validated to be only block or character")
-                    }
-                };
-                set_exit_code(exit_code);
-                Ok(())
-            }
-        }
-    }
+    let exit_code = mknod(file_name, config);
+    set_exit_code(exit_code);
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
