@@ -51,6 +51,7 @@ feat_selinux = [
   "id/selinux",
   "ls/selinux",
   "mkdir/selinux",
+  "mknod/selinux",
   "stat/selinux",
   "selinux",
   "feat_require_selinux",
