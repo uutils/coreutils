@@ -10,6 +10,12 @@ use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
 
+const PATTERNS: [&str; 22] = [
+    "000000", "ffffff", "555555", "aaaaaa", "249249", "492492", "6db6db", "924924", "b6db6d",
+    "db6db6", "111111", "222222", "333333", "444444", "666666", "777777", "888888", "999999",
+    "bbbbbb", "cccccc", "dddddd", "eeeeee",
+];
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -240,4 +246,19 @@ fn test_shred_verbose_no_padding_10() {
         .arg(file)
         .succeeds()
         .stderr_contains("shred: foo: pass 1/10 (random)...\n");
+}
+
+#[test]
+fn test_all_patterns_present() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "foo.txt";
+    at.write(file, "bar");
+
+    let result = scene.ucmd().arg("-vn25").arg(file).succeeds();
+
+    for pat in PATTERNS {
+        result.stderr_contains(pat);
+    }
 }
