@@ -292,16 +292,20 @@ fn test_id_multiple_users_non_existing() {
 }
 
 #[test]
+fn test_id_name_or_real_with_default_format() {
+    for flag in ["-n", "--name", "-r", "--real"] {
+        new_ucmd!()
+            .arg(flag)
+            .fails()
+            .stderr_only("id: printing only names or real IDs requires -u, -g, or -G\n");
+    }
+}
+
+#[test]
 #[cfg(unix)]
 fn test_id_default_format() {
     let ts = TestScenario::new(util_name!());
     for opt1 in ["--name", "--real"] {
-        // id: cannot print only names or real IDs in default format
-        let args = [opt1];
-        ts.ucmd()
-            .args(&args)
-            .fails()
-            .stderr_only(unwrap_or_return!(expected_result(&ts, &args)).stderr_str());
         for opt2 in ["--user", "--group", "--groups"] {
             // u/g/G n/r
             let args = [opt2, opt1];
@@ -329,22 +333,33 @@ fn test_id_default_format() {
 }
 
 #[test]
+fn test_id_zero_with_default_format() {
+    for z_flag in ["-z", "--zero"] {
+        new_ucmd!()
+            .arg(z_flag)
+            .fails()
+            .stderr_only("id: option --zero not permitted in default format\n");
+    }
+}
+
+#[test]
+fn test_id_zero_with_name_or_real() {
+    for z_flag in ["-z", "--zero"] {
+        for flag in ["-n", "--name", "-r", "--real"] {
+            new_ucmd!()
+                .args(&[z_flag, flag])
+                .fails()
+                .stderr_only("id: printing only names or real IDs requires -u, -g, or -G\n");
+        }
+    }
+}
+
+#[test]
 #[cfg(unix)]
 fn test_id_zero() {
     let ts = TestScenario::new(util_name!());
     for z_flag in ["-z", "--zero"] {
-        // id: option --zero not permitted in default format
-        ts.ucmd()
-            .args(&[z_flag])
-            .fails()
-            .stderr_only(unwrap_or_return!(expected_result(&ts, &[z_flag])).stderr_str());
         for opt1 in ["--name", "--real"] {
-            // id: cannot print only names or real IDs in default format
-            let args = [opt1, z_flag];
-            ts.ucmd()
-                .args(&args)
-                .fails()
-                .stderr_only(unwrap_or_return!(expected_result(&ts, &args)).stderr_str());
             for opt2 in ["--user", "--group", "--groups"] {
                 // u/g/G n/r z
                 let args = [opt2, z_flag, opt1];

@@ -157,7 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if (state.nflag || state.rflag) && default_format && !state.cflag {
         return Err(USimpleError::new(
             1,
-            "cannot print only names or real IDs in default format",
+            "printing only names or real IDs requires -u, -g, or -G",
         ));
     }
     if state.zflag && default_format && !state.cflag {
