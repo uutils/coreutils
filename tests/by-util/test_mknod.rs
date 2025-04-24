@@ -10,8 +10,12 @@ use uutests::util::TestScenario;
 use uutests::util_name;
 
 #[test]
-fn test_invalid_arg() {
-    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+fn test_mknod_invalid_arg() {
+    new_ucmd!()
+        .arg("--foo")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("unexpected argument '--foo' found");
 }
 
 #[test]
@@ -101,15 +105,6 @@ fn test_mknod_character_device_requires_major_and_minor() {
         .arg("1")
         .fails()
         .stderr_contains("invalid value 'c'");
-}
-
-#[test]
-fn test_mknod_invalid_arg() {
-    new_ucmd!()
-        .arg("--foo")
-        .fails()
-        .no_stdout()
-        .stderr_contains("unexpected argument '--foo' found");
 }
 
 #[test]
