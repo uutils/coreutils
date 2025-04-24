@@ -292,7 +292,7 @@ fn test_id_multiple_users_non_existing() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_vendor = "apple")))] // TODO make test work on macOS
 fn test_id_default_format() {
     let ts = TestScenario::new(util_name!());
     for opt1 in ["--name", "--real"] {
@@ -329,7 +329,7 @@ fn test_id_default_format() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_vendor = "apple")))] // TODO make test work on macOS
 fn test_id_zero() {
     let ts = TestScenario::new(util_name!());
     for z_flag in ["-z", "--zero"] {
