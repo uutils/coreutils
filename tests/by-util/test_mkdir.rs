@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore bindgen getfattr testtest
+// spell-checker:ignore bindgen testtest
 
 #![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 

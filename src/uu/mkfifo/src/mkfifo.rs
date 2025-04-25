@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use libc::mkfifo;
 use std::ffi::CString;
 use std::fs;
@@ -17,7 +17,7 @@ static ABOUT: &str = help_about!("mkfifo.md");
 
 mod options {
     pub static MODE: &str = "mode";
-    pub static SE_LINUX_SECURITY_CONTEXT: &str = "Z";
+    pub static SELINUX: &str = "Z";
     pub static CONTEXT: &str = "context";
     pub static FIFO: &str = "fifo";
 }
@@ -25,13 +25,6 @@ mod options {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
-
-    if matches.contains_id(options::CONTEXT) {
-        return Err(USimpleError::new(1, "--context is not implemented"));
-    }
-    if matches.get_flag(options::SE_LINUX_SECURITY_CONTEXT) {
-        return Err(USimpleError::new(1, "-Z is not implemented"));
-    }
 
     let mode = match matches.get_one::<String>(options::MODE) {
         // if mode is passed, ignore umask
@@ -67,6 +60,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 format!("cannot set permissions on {}: {e}", f.quote()),
             ));
         }
+
+        // Apply SELinux context if requested
+        #[cfg(feature = "selinux")]
+        {
+            // Extract the SELinux related flags and options
+            let set_selinux_context = matches.get_flag(options::SELINUX);
+            let context = matches.get_one::<String>(options::CONTEXT);
+
+            if set_selinux_context || context.is_some() {
+                use std::path::Path;
+                if let Err(e) =
+                    uucore::selinux::set_selinux_security_context(Path::new(&f), context)
+                {
+                    let _ = fs::remove_file(f);
+                    return Err(USimpleError::new(
+                        1,
+                        format!("failed to set SELinux security context: {e}"),
+                    ));
+                }
+            }
+        }
     }
 
     Ok(())
@@ -86,7 +100,7 @@ pub fn uu_app() -> Command {
                 .value_name("MODE"),
         )
         .arg(
-            Arg::new(options::SE_LINUX_SECURITY_CONTEXT)
+            Arg::new(options::SELINUX)
                 .short('Z')
                 .help("set the SELinux security context to default type")
                 .action(ArgAction::SetTrue),
@@ -95,6 +109,9 @@ pub fn uu_app() -> Command {
             Arg::new(options::CONTEXT)
                 .long(options::CONTEXT)
                 .value_name("CTX")
+                .value_parser(value_parser!(String))
+                .num_args(0..=1)
+                .require_equals(true)
                 .help(
                     "like -Z, or if CTX is specified then set the SELinux \
                     or SMACK security context to CTX",

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getfattr nconfined
+// spell-checker:ignore nconfined
 
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
