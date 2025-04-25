@@ -932,6 +932,12 @@ mod test {
             .unwrap();
         assert_eq!(result.eval_as_string(), "2");
 
+        let result = AstNode::parse(&["a^b", ":", "a^b"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "3");
+
         let result = AstNode::parse(&["^cats$", ":", "^^cats$$"])
             .unwrap()
             .eval()
