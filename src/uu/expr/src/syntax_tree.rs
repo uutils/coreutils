@@ -151,16 +151,12 @@ impl StringOp {
                 let right = right?.eval_as_string();
                 check_posix_regex_errors(&right)?;
 
-                // Parse core pattern from between the possible anchor characters
-                // - Start of string => ^
-                // - End of string   => $
+                // Escape start of string anchor characters when they are not the first character
                 let mut core_pattern = right.to_string();
                 if let Some(stripped) = right.strip_prefix('^') {
                     core_pattern = stripped.to_string()
                 };
-
-                // Escape anchor characters
-                core_pattern = core_pattern.replace('^', r"\^").replace('$', r"\$");
+                core_pattern = core_pattern.replace('^', r"\^");
 
                 // Escape asterisk if it is the first character
                 if core_pattern.starts_with('*') {
