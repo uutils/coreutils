@@ -883,6 +883,27 @@ mod test {
     }
 
     #[test]
+    fn starting_caret_is_not_escaped() {
+        let result = AstNode::parse(&["cats", ":", "^cats"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "4");
+
+        let result = AstNode::parse(&["^cats", ":", "^^cats"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "5");
+
+        let result = AstNode::parse(&["^cats", ":", "^cats"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "0");
+    }
+
+    #[test]
     fn only_match_in_beginning() {
         let result = AstNode::parse(&["budget", ":", r"get"])
             .unwrap()
