@@ -158,9 +158,6 @@ impl StringOp {
                 if let Some(stripped) = right.strip_prefix('^') {
                     core_pattern = stripped.to_string()
                 };
-                if let Some(stripped) = core_pattern.strip_suffix('$') {
-                    core_pattern = stripped.to_string();
-                }
 
                 // Escape anchor characters
                 core_pattern = core_pattern.replace('^', r"\^").replace('$', r"\$");
@@ -170,11 +167,8 @@ impl StringOp {
                     core_pattern = format!(r"\{}", core_pattern);
                 }
 
-                // Add anchor characters around the core pattern.
-                // All patterns should have the start of string anchor '^'.
-                let has_end_anchor = right.ends_with('$');
-                let re_string =
-                    format!("^{}{}", core_pattern, if has_end_anchor { "$" } else { "" });
+                // All patterns should have the start of string anchor '^'
+                let re_string = format!("^{}", core_pattern);
 
                 let re = Regex::with_options(
                     &re_string,
@@ -904,45 +898,18 @@ mod test {
     }
 
     #[test]
-    fn ending_dollar_is_not_escaped() {
-        let result = AstNode::parse(&["cats", ":", "cats$"])
-            .unwrap()
-            .eval()
-            .unwrap();
-        assert_eq!(result.eval_as_string(), "4");
-
-        let result = AstNode::parse(&["cats$", ":", "cats$$"])
-            .unwrap()
-            .eval()
-            .unwrap();
-        assert_eq!(result.eval_as_string(), "5");
-
-        let result = AstNode::parse(&["cats$", ":", "cats$"])
-            .unwrap()
-            .eval()
-            .unwrap();
-        assert_eq!(result.eval_as_string(), "0");
-    }
-
-    #[test]
-    fn anchor_characters_are_escaped() {
-        let result = AstNode::parse(&["^$", ":", "^^$$"])
-            .unwrap()
-            .eval()
-            .unwrap();
-        assert_eq!(result.eval_as_string(), "2");
-
+    fn non_starting_carets_become_escaped() {
         let result = AstNode::parse(&["a^b", ":", "a^b"])
             .unwrap()
             .eval()
             .unwrap();
         assert_eq!(result.eval_as_string(), "3");
 
-        let result = AstNode::parse(&["^cats$", ":", "^^cats$$"])
+        let result = AstNode::parse(&["^cats", ":", "^^cats"])
             .unwrap()
             .eval()
             .unwrap();
-        assert_eq!(result.eval_as_string(), "6");
+        assert_eq!(result.eval_as_string(), "5");
 
         let result = AstNode::parse(&["b^$ic", ":", "b^$ic"])
             .unwrap()
@@ -950,11 +917,11 @@ mod test {
             .unwrap();
         assert_eq!(result.eval_as_string(), "5");
 
-        let result = AstNode::parse(&["$^$^", ":", "$^$^"])
+        let result = AstNode::parse(&["^^^^^^^^^", ":", "^^^"])
             .unwrap()
             .eval()
             .unwrap();
-        assert_eq!(result.eval_as_string(), "4");
+        assert_eq!(result.eval_as_string(), "2");
     }
 
     #[test]
