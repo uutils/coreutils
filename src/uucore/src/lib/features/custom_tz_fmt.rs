@@ -10,12 +10,27 @@ use iana_time_zone::get_timezone;
 /// Get the alphabetic abbreviation of the current timezone.
 ///
 /// For example, "UTC" or "CET" or "PDT"
+//
+/// We need this function even for local dates as chrono(_tz) does not provide a
+/// way to convert Local to a fully specified timezone with abbreviation
+/// (<https://github.com/chronotope/chrono-tz/issues/13>).
+//
+// TODO(#7659): This should take into account the date to be printed.
+// - Timezone abbreviation depends on daylight savings.
+// - We should do no special conversion for UTC dates.
+// - If our custom logic fails, but chrono obtained a non-UTC local timezone
+//   from the system, we should not just return UTC.
 fn timezone_abbreviation() -> String {
+    // We need this logic as `iana_time_zone::get_timezone` does not look
+    // at TZ variable: https://github.com/strawlab/iana-time-zone/issues/118.
     let tz = match std::env::var("TZ") {
-        // TODO Support other time zones...
+        // TODO: This is not fully exhaustive, we should understand how to handle
+        // invalid TZ values and more complex POSIX-specified values:
+        // https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
         Ok(s) if s == "UTC0" || s.is_empty() => Tz::Etc__UTC,
+        Ok(s) => s.parse().unwrap_or(Tz::Etc__UTC),
         _ => match get_timezone() {
-            Ok(tz_str) => tz_str.parse().unwrap(),
+            Ok(tz_str) => tz_str.parse().unwrap_or(Tz::Etc__UTC),
             Err(_) => Tz::Etc__UTC,
         },
     };
