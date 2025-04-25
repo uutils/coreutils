@@ -6,7 +6,7 @@ use clap::{Arg, ArgAction, Command};
 use std::io::stdout;
 use std::ops::ControlFlow;
 use uucore::error::{UResult, UUsageError};
-use uucore::format::{FormatArgument, FormatItem, parse_spec_and_escape};
+use uucore::format::{FormatArgument, FormatArguments, FormatItem, parse_spec_and_escape};
 use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show_warning};
 
 const VERSION: &str = "version";
@@ -39,9 +39,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let mut format_seen = false;
-    let mut args = values.iter().peekable();
-
     // Parse and process the format string
+    let mut args = FormatArguments::new(&values);
     for item in parse_spec_and_escape(format) {
         if let Ok(FormatItem::Spec(_)) = item {
             format_seen = true;
@@ -51,12 +50,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ControlFlow::Break(()) => return Ok(()),
         };
     }
+    args.start_next_batch();
 
     // Without format specs in the string, the iter would not consume any args,
     // leading to an infinite loop. Thus, we exit early.
     if !format_seen {
-        if let Some(arg) = args.next() {
-            let FormatArgument::Unparsed(arg_str) = arg else {
+        if !args.is_exhausted() {
+            let Some(FormatArgument::Unparsed(arg_str)) = args.peek_arg() else {
                 unreachable!("All args are transformed to Unparsed")
             };
             show_warning!("ignoring excess arguments, starting with '{arg_str}'");
@@ -64,13 +64,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     }
 
-    while args.peek().is_some() {
+    while !args.is_exhausted() {
         for item in parse_spec_and_escape(format) {
             match item?.write(stdout(), &mut args)? {
                 ControlFlow::Continue(()) => {}
                 ControlFlow::Break(()) => return Ok(()),
             };
         }
+        args.start_next_batch();
     }
 
     Ok(())
