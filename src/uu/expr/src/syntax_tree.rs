@@ -150,8 +150,32 @@ impl StringOp {
                 let left = left?.eval_as_string();
                 let right = right?.eval_as_string();
                 check_posix_regex_errors(&right)?;
-                let prefix = if right.starts_with('*') { r"^\" } else { "^" };
-                let re_string = format!("{prefix}{right}");
+
+                // Parse core pattern from between the possible anchor characters
+                // - Start of string => ^
+                // - End of string   => $
+                let mut core_pattern = right.to_string();
+                if let Some(stripped) = right.strip_prefix('^') {
+                    core_pattern = stripped.to_string()
+                };
+                if let Some(stripped) = core_pattern.strip_suffix('$') {
+                    core_pattern = stripped.to_string();
+                }
+
+                // Escape anchor characters
+                core_pattern = core_pattern.replace('^', r"\^").replace('$', r"\$");
+
+                // Escape asterisk if it is the first character
+                if core_pattern.starts_with('*') {
+                    core_pattern = format!(r"\{}", core_pattern);
+                }
+
+                // Add anchor characters around the core pattern.
+                // All patterns should have the start of string anchor '^'.
+                let has_end_anchor = right.ends_with('$');
+                let re_string =
+                    format!("^{}{}", core_pattern, if has_end_anchor { "$" } else { "" });
+
                 let re = Regex::with_options(
                     &re_string,
                     RegexOptions::REGEX_OPTION_NONE,
