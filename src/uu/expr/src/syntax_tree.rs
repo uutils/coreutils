@@ -156,7 +156,8 @@ impl StringOp {
                 if let Some(stripped) = right.strip_prefix('^') {
                     core_pattern = stripped.to_string();
                 };
-                core_pattern = core_pattern.replace('^', r"\^");
+                let unescaped_anchor_re = Regex::new(r"(?<!\\)\^").unwrap();
+                core_pattern = unescaped_anchor_re.replace_all(&core_pattern, r"\^");
 
                 // Escape asterisk if it is the first character
                 if core_pattern.starts_with('*') {
