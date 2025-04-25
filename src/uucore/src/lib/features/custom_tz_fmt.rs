@@ -5,8 +5,8 @@
 
 // spell-checker:ignore (misc) WARST zoneinfo
 
-use chrono::{TimeZone, Utc};
-use chrono_tz::{OffsetName, Tz};
+use chrono::Local;
+use chrono_tz::Tz;
 use iana_time_zone::get_timezone;
 
 /// Get the alphabetic abbreviation of the current timezone.
@@ -37,8 +37,12 @@ fn timezone_abbreviation() -> String {
         },
     };
 
-    let offset = tz.offset_from_utc_date(&Utc::now().date_naive());
-    offset.abbreviation().unwrap_or("UTC").to_string()
+    // TODO: It looks a bit absurd to use `%Z` here and manually expand it
+    // in `custom_time_format`, instead of directly modifying the date to be
+    // formatted. We should create another function that returns
+    // `localtime.with_timezone(&tz)` (a local time with fully specified
+    // timezone abbreviation).
+    Local::now().with_timezone(&tz).format("%Z").to_string()
 }
 
 /// Adapt the given string to be accepted by the chrono library crate.
