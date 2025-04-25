@@ -907,7 +907,7 @@ mod test {
             .unwrap();
         assert_eq!(result.eval_as_string(), "5");
 
-        let result = AstNode::parse(&["b^$ic", ":", "b^$ic"])
+        let result = AstNode::parse(&["b^$ic", ":", r"b^\$ic"])
             .unwrap()
             .eval()
             .unwrap();
