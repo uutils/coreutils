@@ -6,6 +6,7 @@
 
 pub mod display;
 pub mod error;
+#[cfg(feature = "fs")]
 pub mod io;
 pub mod line_ending;
 pub mod os;
