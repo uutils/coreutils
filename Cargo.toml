@@ -47,138 +47,138 @@ feat_acl = ["cp/feat_acl"]
 # * The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
 # * Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
 feat_selinux = [
-    "cp/selinux",
-    "id/selinux",
-    "ls/selinux",
-    "mkdir/selinux",
-    "mkfifo/selinux",
-    "mknod/selinux",
-    "stat/selinux",
-    "selinux",
-    "feat_require_selinux",
+  "cp/selinux",
+  "id/selinux",
+  "ls/selinux",
+  "mkdir/selinux",
+  "mkfifo/selinux",
+  "mknod/selinux",
+  "stat/selinux",
+  "selinux",
+  "feat_require_selinux",
 ]
 ##
 ## feature sets
 ## (common/core and Tier1) feature sets
 # "feat_common_core" == baseline core set of utilities which can be built/run on most targets
 feat_common_core = [
-    "base32",
-    "base64",
-    "basename",
-    "basenc",
-    "cat",
-    "cksum",
-    "comm",
-    "cp",
-    "csplit",
-    "cut",
-    "date",
-    "df",
-    "dir",
-    "dircolors",
-    "dirname",
-    "dd",
-    "du",
-    "echo",
-    "env",
-    "expand",
-    "expr",
-    "factor",
-    "false",
-    "fmt",
-    "fold",
-    "hashsum",
-    "head",
-    "join",
-    "link",
-    "ln",
-    "ls",
-    "mkdir",
-    "mktemp",
-    "more",
-    "mv",
-    "nl",
-    "numfmt",
-    "od",
-    "paste",
-    "pr",
-    "printenv",
-    "printf",
-    "ptx",
-    "pwd",
-    "readlink",
-    "realpath",
-    "rm",
-    "rmdir",
-    "seq",
-    "shred",
-    "shuf",
-    "sleep",
-    "sort",
-    "split",
-    "sum",
-    "tac",
-    "tail",
-    "tee",
-    "test",
-    "tr",
-    "true",
-    "truncate",
-    "tsort",
-    "touch",
-    "unexpand",
-    "uniq",
-    "unlink",
-    "vdir",
-    "wc",
-    "yes",
+  "base32",
+  "base64",
+  "basename",
+  "basenc",
+  "cat",
+  "cksum",
+  "comm",
+  "cp",
+  "csplit",
+  "cut",
+  "date",
+  "df",
+  "dir",
+  "dircolors",
+  "dirname",
+  "dd",
+  "du",
+  "echo",
+  "env",
+  "expand",
+  "expr",
+  "factor",
+  "false",
+  "fmt",
+  "fold",
+  "hashsum",
+  "head",
+  "join",
+  "link",
+  "ln",
+  "ls",
+  "mkdir",
+  "mktemp",
+  "more",
+  "mv",
+  "nl",
+  "numfmt",
+  "od",
+  "paste",
+  "pr",
+  "printenv",
+  "printf",
+  "ptx",
+  "pwd",
+  "readlink",
+  "realpath",
+  "rm",
+  "rmdir",
+  "seq",
+  "shred",
+  "shuf",
+  "sleep",
+  "sort",
+  "split",
+  "sum",
+  "tac",
+  "tail",
+  "tee",
+  "test",
+  "tr",
+  "true",
+  "truncate",
+  "tsort",
+  "touch",
+  "unexpand",
+  "uniq",
+  "unlink",
+  "vdir",
+  "wc",
+  "yes",
 ]
 # "feat_Tier1" == expanded set of utilities which can be built/run on the usual rust "Tier 1" target platforms (ref: <https://forge.rust-lang.org/release/platform-support.html>)
 feat_Tier1 = [
-    "feat_common_core",
-    #
-    "arch",
-    "hostname",
-    "nproc",
-    "sync",
-    "touch",
-    "uname",
-    "whoami",
+  "feat_common_core",
+  #
+  "arch",
+  "hostname",
+  "nproc",
+  "sync",
+  "touch",
+  "uname",
+  "whoami",
 ]
 ## (primary platforms) feature sets
 # "feat_os_macos" == set of utilities which can be built/run on the MacOS platform
 feat_os_macos = [
-    "feat_os_unix", ## == a modern/usual *nix platform
-    #
-    "feat_require_unix_hostid",
+  "feat_os_unix", ## == a modern/usual *nix platform
+  #
+  "feat_require_unix_hostid",
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms.
 # Also used for targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
 feat_os_unix = [
-    "feat_Tier1",
-    #
-    "feat_require_crate_cpp",
-    "feat_require_unix",
-    "feat_require_unix_utmpx",
-    "feat_require_unix_hostid",
+  "feat_Tier1",
+  #
+  "feat_require_crate_cpp",
+  "feat_require_unix",
+  "feat_require_unix_utmpx",
+  "feat_require_unix_hostid",
 ]
 # "feat_os_windows" == set of utilities which can be built/run on modern/usual windows platforms
 feat_os_windows = [
-    "feat_Tier1", ## == "feat_os_windows_legacy" + "hostname"
+  "feat_Tier1", ## == "feat_os_windows_legacy" + "hostname"
 ]
 ## (secondary platforms) feature sets
 # "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
 feat_os_unix_gnueabihf = [
-    "feat_Tier1",
-    #
-    "feat_require_unix",
-    "feat_require_unix_hostid",
-    "feat_require_unix_utmpx",
+  "feat_Tier1",
+  #
+  "feat_require_unix",
+  "feat_require_unix_hostid",
+  "feat_require_unix_utmpx",
 ]
 feat_os_unix_android = [
-    "feat_Tier1",
-    #
-    "feat_require_unix",
+  "feat_Tier1",
+  #
+  "feat_require_unix",
 ]
 ## feature sets with requirements (restricting cross-platform availability)
 #
@@ -188,24 +188,24 @@ feat_os_unix_android = [
 feat_require_crate_cpp = ["stdbuf"]
 # "feat_require_unix" == set of utilities requiring support which is only available on unix platforms (as of 2020-04-23)
 feat_require_unix = [
-    "chgrp",
-    "chmod",
-    "chown",
-    "chroot",
-    "groups",
-    "id",
-    "install",
-    "kill",
-    "logname",
-    "mkfifo",
-    "mknod",
-    "nice",
-    "nohup",
-    "pathchk",
-    "stat",
-    "stty",
-    "timeout",
-    "tty",
+  "chgrp",
+  "chmod",
+  "chown",
+  "chroot",
+  "groups",
+  "id",
+  "install",
+  "kill",
+  "logname",
+  "mkfifo",
+  "mknod",
+  "nice",
+  "nohup",
+  "pathchk",
+  "stat",
+  "stty",
+  "timeout",
+  "tty",
 ]
 # "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
@@ -217,43 +217,43 @@ feat_require_selinux = ["chcon", "runcon"]
 ## (alternate/newer/smaller platforms) feature sets
 # "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
 feat_os_unix_fuchsia = [
-    "feat_common_core",
-    #
-    "feat_require_crate_cpp",
-    #
-    "chgrp",
-    "chmod",
-    "chown",
-    "du",
-    "groups",
-    "hostid",
-    "install",
-    "logname",
-    "mkfifo",
-    "mknod",
-    "nice",
-    "pathchk",
-    "tty",
-    "uname",
-    "unlink",
+  "feat_common_core",
+  #
+  "feat_require_crate_cpp",
+  #
+  "chgrp",
+  "chmod",
+  "chown",
+  "du",
+  "groups",
+  "hostid",
+  "install",
+  "logname",
+  "mkfifo",
+  "mknod",
+  "nice",
+  "pathchk",
+  "tty",
+  "uname",
+  "unlink",
 ]
 # "feat_os_unix_redox" == set of utilities which can be built/run on "Redox OS" (refs: <https://www.redox-os.org>; <https://en.wikipedia.org/wiki/Redox_(operating_system)>)
 feat_os_unix_redox = [
-    "feat_common_core",
-    #
-    "chmod",
-    "stat",
-    "uname",
+  "feat_common_core",
+  #
+  "chmod",
+  "stat",
+  "uname",
 ]
 # "feat_os_windows_legacy" == slightly restricted set of utilities which can be built/run on early windows platforms (eg, "WinXP")
 feat_os_windows_legacy = [
-    "feat_common_core",
-    #
-    "arch",
-    "nproc",
-    "sync",
-    "touch",
-    "whoami",
+  "feat_common_core",
+  #
+  "arch",
+  "nproc",
+  "sync",
+  "touch",
+  "whoami",
 ]
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
@@ -277,9 +277,9 @@ bstr = "1.9.1"
 bytecount = "0.6.8"
 byteorder = "1.5.0"
 chrono = { version = "0.4.38", default-features = false, features = [
-    "std",
-    "alloc",
-    "clock",
+  "std",
+  "alloc",
+  "clock",
 ] }
 chrono-tz = "0.10.0"
 clap = { version = "4.5", features = ["wrap_help", "cargo"] }
@@ -306,7 +306,7 @@ itertools = "0.14.0"
 libc = "0.2.172"
 linux-raw-sys = "0.9"
 lscolors = { version = "0.20.0", default-features = false, features = [
-    "gnu_legacy",
+  "gnu_legacy",
 ] }
 memchr = "2.7.2"
 memmap2 = "0.9.4"
@@ -509,11 +509,11 @@ time = { workspace = true, features = ["local-offset"] }
 unindent = "0.2.3"
 uutests = { workspace = true }
 uucore = { workspace = true, features = [
-    "mode",
-    "entries",
-    "process",
-    "signals",
-    "utmpx",
+  "mode",
+  "entries",
+  "process",
+  "signals",
+  "utmpx",
 ] }
 walkdir = { workspace = true }
 hex-literal = "1.0.0"
