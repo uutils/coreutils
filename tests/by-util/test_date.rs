@@ -1,4 +1,6 @@
-use chrono::{DateTime, Duration, Utc};
+// cSpell:disable
+use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc};
+// cSpell:enable
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
@@ -397,10 +399,13 @@ fn test_date_string_human() {
         "30 minutes ago",
         "10 seconds",
         "last day",
+        "last monday",
         "last week",
         "last month",
         "last year",
+        "this monday",
         "next day",
+        "next monday",
         "next week",
         "next month",
         "next year",
@@ -441,10 +446,50 @@ fn test_negative_offset() {
 }
 
 #[test]
+fn test_relative_weekdays() {
+    // Truncate time component to midnight
+    let today = Utc::now().with_time(NaiveTime::MIN).unwrap();
+    // Loop through each day of the week, starting with today
+    for offset in 0..7 {
+        for direction in ["last", "this", "next"] {
+            let weekday = (today + Duration::days(offset))
+                .weekday()
+                .to_string()
+                .to_lowercase();
+            new_ucmd!()
+                .arg("-d")
+                .arg(format!("{} {}", direction, weekday))
+                .arg("--rfc-3339=seconds")
+                .arg("--utc")
+                .succeeds()
+                .stdout_str_check(|out| {
+                    let result = DateTime::parse_from_rfc3339(out.trim()).unwrap().to_utc();
+                    let expected = match (direction, offset) {
+                        ("last", _) => today - Duration::days(7 - offset),
+                        ("this", 0) => today,
+                        ("next", 0) => today + Duration::days(7),
+                        _ => today + Duration::days(offset),
+                    };
+                    result == expected
+                });
+        }
+    }
+}
+
+#[test]
 fn test_invalid_date_string() {
     new_ucmd!()
         .arg("-d")
         .arg("foo")
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid date");
+
+    new_ucmd!()
+        .arg("-d")
+        // cSpell:disable
+        .arg("this fooday")
+        // cSpell:enable
         .fails()
         .no_stdout()
         .stderr_contains("invalid date");
