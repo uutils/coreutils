@@ -1778,3 +1778,33 @@ fn test_install_failing_copy_file_to_target_contain_subdir_with_same_name() {
         .fails()
         .stderr_contains("cannot overwrite directory");
 }
+
+#[test]
+fn test_install_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+
+    at.touch(file);
+    ucmd.arg(file)
+        .arg(".")
+        .fails()
+        .stderr_contains("'file' and './file' are the same file");
+}
+
+#[test]
+fn test_install_symlink_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let target_dir = "target_dir";
+    let target_link = "target_link";
+
+    at.mkdir(target_dir);
+    at.touch(format!("{target_dir}/{file}"));
+    at.symlink_file(target_dir, target_link);
+    ucmd.arg(format!("{target_dir}/{file}"))
+        .arg(target_link)
+        .fails()
+        .stderr_contains(format!(
+            "'{target_dir}/{file}' and '{target_link}/{file}' are the same file"
+        ));
+}
