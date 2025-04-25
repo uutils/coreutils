@@ -101,6 +101,9 @@ enum InstallError {
 
     #[error("cannot overwrite directory {} with non-directory {}", .0.quote(), .1.quote())]
     OverrideDirectoryFailed(PathBuf, PathBuf),
+
+    #[error("'{0}' and '{1}' are the same file")]
+    SameFile(PathBuf, PathBuf),
 }
 
 impl UError for InstallError {
@@ -751,6 +754,12 @@ fn copy_normal_file(from: &Path, to: &Path) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
+    if let Ok(to_abs) = to.canonicalize() {
+        if from.canonicalize()? == to_abs {
+            return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
+        }
+    }
+
     if to.is_dir() && !from.is_dir() {
         return Err(InstallError::OverrideDirectoryFailed(
             to.to_path_buf().clone(),
