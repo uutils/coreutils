@@ -925,6 +925,33 @@ mod test {
     }
 
     #[test]
+    fn anchor_characters_are_escaped() {
+        let result = AstNode::parse(&["^$", ":", "^^$$"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "2");
+
+        let result = AstNode::parse(&["^cats$", ":", "^^cats$$"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "6");
+
+        let result = AstNode::parse(&["b^$ic", ":", "b^$ic"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "5");
+
+        let result = AstNode::parse(&["$^$^", ":", "$^$^"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "4");
+    }
+
+    #[test]
     fn only_match_in_beginning() {
         let result = AstNode::parse(&["budget", ":", r"get"])
             .unwrap()
