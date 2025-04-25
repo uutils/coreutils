@@ -274,11 +274,6 @@ fn test_length_mb() {
 
 #[test]
 fn test_regex() {
-    // FixME: [2022-12-19; rivy] test disabled as it currently fails due to 'oniguruma' bug (see GH:kkos/oniguruma/issues/279)
-    // new_ucmd!()
-    //     .args(&["a^b", ":", "a^b"])
-    //     .succeeds()
-    //     .stdout_only("3\n");
     new_ucmd!()
         .args(&["a^b", ":", "a\\^b"])
         .succeeds()
