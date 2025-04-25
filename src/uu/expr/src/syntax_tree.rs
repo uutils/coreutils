@@ -154,7 +154,7 @@ impl StringOp {
                 // Escape start of string anchor characters when they are not the first character
                 let mut core_pattern = right.to_string();
                 if let Some(stripped) = right.strip_prefix('^') {
-                    core_pattern = stripped.to_string()
+                    core_pattern = stripped.to_string();
                 };
                 core_pattern = core_pattern.replace('^', r"\^");
 
