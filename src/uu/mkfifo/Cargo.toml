@@ -22,6 +22,9 @@ clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode"] }
 
+[features]
+selinux = ["uucore/selinux"]
+
 [[bin]]
 name = "mkfifo"
 path = "src/main.rs"

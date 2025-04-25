@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG getfattr
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::path_concat;
