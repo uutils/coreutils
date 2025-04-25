@@ -99,6 +99,7 @@ impl Formatter<i64> for SignedInt {
             precision,
             positive_sign,
             alignment,
+            position: _position,
         } = s
         else {
             return Err(FormatError::WrongSpecType);
@@ -107,13 +108,13 @@ impl Formatter<i64> for SignedInt {
         let width = match width {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
+            Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
+            Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
         Ok(Self {
@@ -146,7 +147,7 @@ impl Formatter<u64> for UnsignedInt {
         };
 
         // Zeroes do not get a prefix. An octal value does also not get a
-        // prefix if the padded value will not start with a zero.
+        // prefix if the padded value does not start with a zero.
         let prefix = match (x, self.variant) {
             (1.., UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes)) => "0x",
             (1.., UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes)) => "0X",
@@ -170,6 +171,7 @@ impl Formatter<u64> for UnsignedInt {
             precision,
             positive_sign: PositiveSign::None,
             alignment,
+            position,
         } = s
         {
             Spec::UnsignedInt {
@@ -177,6 +179,7 @@ impl Formatter<u64> for UnsignedInt {
                 width,
                 precision,
                 alignment,
+                position,
             }
         } else {
             s
@@ -187,6 +190,7 @@ impl Formatter<u64> for UnsignedInt {
             width,
             precision,
             alignment,
+            position: _position,
         } = s
         else {
             return Err(FormatError::WrongSpecType);
@@ -195,13 +199,13 @@ impl Formatter<u64> for UnsignedInt {
         let width = match width {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
+            Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
+            Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
         Ok(Self {
@@ -300,6 +304,7 @@ impl Formatter<&ExtendedBigDecimal> for Float {
             positive_sign,
             alignment,
             precision,
+            position: _position,
         } = s
         else {
             return Err(FormatError::WrongSpecType);
@@ -308,13 +313,13 @@ impl Formatter<&ExtendedBigDecimal> for Float {
         let width = match width {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
+            Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => Some(x),
             None => None,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
+            Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
         Ok(Self {

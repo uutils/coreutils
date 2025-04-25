@@ -161,10 +161,10 @@ impl FormatChar for EscapedChar {
 }
 
 impl<C: FormatChar> FormatItem<C> {
-    pub fn write<'a>(
+    pub fn write(
         &self,
         writer: impl Write,
-        args: &mut impl Iterator<Item = &'a FormatArgument>,
+        args: &mut FormatArguments,
     ) -> Result<ControlFlow<()>, FormatError> {
         match self {
             Self::Spec(spec) => spec.write(writer, args)?,
@@ -280,7 +280,8 @@ fn printf_writer<'a>(
     format_string: impl AsRef<[u8]>,
     args: impl IntoIterator<Item = &'a FormatArgument>,
 ) -> Result<(), FormatError> {
-    let mut args = args.into_iter();
+    let args = args.into_iter().cloned().collect::<Vec<_>>();
+    let mut args = FormatArguments::new(&args);
     for item in parse_spec_only(format_string.as_ref()) {
         item?.write(&mut writer, &mut args)?;
     }

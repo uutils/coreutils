@@ -1281,7 +1281,7 @@ fn float_arg_with_whitespace() {
         .fails()
         .stderr_contains("expected a numeric value");
 
-    // A input string with a whitespace special character that has
+    // An input string with a whitespace special character that has
     // not already been expanded should fail.
     new_ucmd!()
         .args(&["%f", "\\t0.1"])
@@ -1312,4 +1312,48 @@ fn mb_input() {
             .stdout_is("00e1\n")
             .stderr_is(format!("printf: warning: {expected}: character(s) following character constant have been ignored\n"));
     }
+}
+
+#[test]
+fn positional_format_specifiers() {
+    new_ucmd!()
+        .args(&["%1$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("55-1010-66-2020-");
+
+    new_ucmd!()
+        .args(&["%2$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("105-206-");
+
+    new_ucmd!()
+        .args(&["%3$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("65-020-");
+
+    new_ucmd!()
+        .args(&["%4$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("205-");
+
+    new_ucmd!()
+        .args(&["%5$d%d-", "5", "10", "6", "20"])
+        .succeeds()
+        .stdout_only("05-");
+
+    new_ucmd!()
+        .args(&[
+            "Octal: %6$o, Int: %1$d, Float: %4$f, String: %2$s, Hex: %7$x, Scientific: %5$e, Char: %9$c, Unsigned: %3$u, Integer: %8$i",
+            "42",          // 1$d - Int
+            "hello",       // 2$s - String
+            "100",         // 3$u - Unsigned
+            "3.14159",     // 4$f - Float
+            "0.00001",     // 5$e - Scientific
+            "77",          // 6$o - Octal
+            "255",         // 7$x - Hex
+            "123",         // 8$i - Integer
+            "A",           // 9$c - Char
+        ])
+        .succeeds()
+        .stdout_only("Octal: 115, Int: 42, Float: 3.141590, String: hello, Hex: ff, Scientific: 1.000000e-05, Char: A, Unsigned: 100, Integer: 123");
 }
