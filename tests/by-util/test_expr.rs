@@ -730,7 +730,6 @@ mod gnu_expr {
             .stdout_only("\n");
     }
 
-    #[ignore = "rust-onig bug, see https://github.com/rust-onig/rust-onig/issues/188"]
     #[test]
     fn test_bre10() {
         new_ucmd!()
