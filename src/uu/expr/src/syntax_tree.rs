@@ -151,21 +151,30 @@ impl StringOp {
                 let right = right?.eval_as_string();
                 check_posix_regex_errors(&right)?;
 
-                // Escape start of string anchor characters when they are not the first character
-                let mut core_pattern = right.to_string();
-                if let Some(stripped) = right.strip_prefix('^') {
-                    core_pattern = stripped.to_string();
+                // All patterns are anchored so they begin with a caret (^)
+                let mut re_string = String::with_capacity(right.len() + 1);
+                re_string.push('^');
+
+                // Handle first character from the input pattern
+                let mut pattern_chars = right.chars();
+                let first = pattern_chars.next();
+                match first {
+                    Some('^') => {} // Start of string anchor is already added
+                    Some('*') => re_string.push_str(r"\*"),
+                    Some(char) => re_string.push(char),
+                    None => return Ok(0.into()),
                 };
-                let unescaped_anchor_re = Regex::new(r"(?<!\\)\^").unwrap();
-                core_pattern = unescaped_anchor_re.replace_all(&core_pattern, r"\^");
 
-                // Escape asterisk if it is the first character
-                if core_pattern.starts_with('*') {
-                    core_pattern = format!(r"\{}", core_pattern);
+                // Handle the rest of the input pattern.
+                // Escape characters that should be handled literally within the pattern.
+                let mut prev = first.unwrap_or_default();
+                for curr in pattern_chars {
+                    match curr {
+                        '^' if prev != '\\' => re_string.push_str(r"\^"),
+                        char => re_string.push(char),
+                    }
+                    prev = curr;
                 }
-
-                // All patterns should have the start of string anchor '^'
-                let re_string = format!("^{}", core_pattern);
 
                 let re = Regex::with_options(
                     &re_string,
