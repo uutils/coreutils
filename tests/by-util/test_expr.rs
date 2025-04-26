@@ -307,6 +307,14 @@ fn test_regex() {
         .succeeds()
         .stdout_only("2\n");
     new_ucmd!()
+        .args(&["", ":", ""])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["abc", ":", ""])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
         .args(&["abc", ":", "bc"])
         .fails()
         .stdout_only("0\n");
