@@ -154,7 +154,7 @@ impl StringOp {
                 let re_string = format!("{prefix}{right}");
                 let re = Regex::with_options(
                     &re_string,
-                    RegexOptions::REGEX_OPTION_NONE,
+                    RegexOptions::REGEX_OPTION_SINGLELINE,
                     Syntax::grep(),
                 )
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
