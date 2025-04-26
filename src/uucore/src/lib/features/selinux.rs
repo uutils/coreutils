@@ -16,8 +16,11 @@ pub enum SeLinuxError {
     #[error("Failed to open the file")]
     FileOpenFailure,
 
-    #[error("Failed to retrieve or set the security context")]
+    #[error("Failed to retrieve the security context")]
     ContextRetrievalFailure,
+
+    #[error("Failed to set the security context")]
+    ContextSetFailure,
 
     #[error("Invalid context string or conversion failure")]
     ContextConversionFailure,
@@ -29,7 +32,8 @@ impl From<SeLinuxError> for i32 {
             SeLinuxError::SELinuxNotEnabled => 1,
             SeLinuxError::FileOpenFailure => 2,
             SeLinuxError::ContextRetrievalFailure => 3,
-            SeLinuxError::ContextConversionFailure => 4,
+            SeLinuxError::ContextSetFailure => 4,
+            SeLinuxError::ContextConversionFailure => 5,
         }
     }
 }
@@ -109,11 +113,10 @@ pub fn set_selinux_security_context(
             false,
         )
         .set_for_path(path, false, false)
-        .map_err(|_| SeLinuxError::ContextRetrievalFailure)
+        .map_err(|_| SeLinuxError::ContextSetFailure)
     } else {
         // If no context provided, set the default SELinux context for the path
-        SecurityContext::set_default_for_path(path)
-            .map_err(|_| SeLinuxError::ContextRetrievalFailure)
+        SecurityContext::set_default_for_path(path).map_err(|_| SeLinuxError::ContextSetFailure)
     }
 }
 
