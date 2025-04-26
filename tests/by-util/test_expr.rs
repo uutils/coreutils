@@ -306,10 +306,7 @@ fn test_regex() {
         .args(&["-5", ":", "-\\{0,1\\}[0-9]*$"])
         .succeeds()
         .stdout_only("2\n");
-    new_ucmd!()
-        .args(&["", ":", ""])
-        .fails()
-        .stdout_only("0\n");
+    new_ucmd!().args(&["", ":", ""]).fails().stdout_only("0\n");
     new_ucmd!()
         .args(&["abc", ":", ""])
         .fails()
