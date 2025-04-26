@@ -187,7 +187,7 @@ fn test_mknod_selinux_invalid() {
             .arg(dest)
             .arg("p")
             .fails()
-            .stderr_contains("Failed to");
+            .stderr_contains("failed to");
         if at.file_exists(dest) {
             at.remove(dest);
         }
