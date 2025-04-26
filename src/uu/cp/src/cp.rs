@@ -1492,7 +1492,7 @@ fn copy_source(
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
                 if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                    copy_attributes(&src, y, &options.attributes, options)?;
+                    copy_attributes(&src, y, &options.attributes)?;
                 }
             }
         }
@@ -1640,12 +1640,10 @@ fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
 }
 
 /// Copy the specified attributes from one path to another.
-#[allow(unused_variables)]
 pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
     attributes: &Attributes,
-    options: &Options,
 ) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata = fs::symlink_metadata(source).context(context)?;
@@ -2442,7 +2440,7 @@ fn copy_file(
     if options.dereference(source_in_command_line) {
         if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
             if src.exists() {
-                copy_attributes(&src, dest, &options.attributes, options)?;
+                copy_attributes(&src, dest, &options.attributes)?;
             }
         }
     } else if source_is_stream && source.exists() {
@@ -2450,15 +2448,18 @@ fn copy_file(
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
         // copy function (see `copy_stream` under platform/linux.rs).
-        copy_attributes(source, dest, &options.attributes, options)?;
     } else {
-        copy_attributes(source, dest, &options.attributes, options)?;
+        copy_attributes(source, dest, &options.attributes)?;
     }
 
     #[cfg(feature = "selinux")]
     if options.set_selinux_context && uucore::selinux::is_selinux_enabled() {
         // Set the given selinux permissions on the copied file.
-        uucore::selinux::set_selinux_security_context(dest, options.context.as_ref())?;
+        if let Err(e) =
+            uucore::selinux::set_selinux_security_context(dest, options.context.as_ref())
+        {
+            return Err(Error::Error(format!("SELinux error: {}", e)));
+        }
     }
 
     copied_files.insert(

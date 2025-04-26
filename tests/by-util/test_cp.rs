@@ -6292,9 +6292,7 @@ fn test_cp_selinux() {
 
         assert!(
             selinux_perm.contains("unconfined_u"),
-            "Expected '{}' not found in getfattr output:\n{}",
-            "foo",
-            selinux_perm
+            "Expected 'foo' not found in getfattr output:\n{selinux_perm}"
         );
         at.remove(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
     }
@@ -6342,9 +6340,7 @@ fn test_cp_preserve_selinux() {
         let selinux_perm_dest = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
         assert!(
             selinux_perm_dest.contains("unconfined_u"),
-            "Expected '{}' not found in getfattr output:\n{}",
-            "foo",
-            selinux_perm_dest
+            "Expected 'foo' not found in getfattr output:\n{selinux_perm_dest}"
         );
         assert_eq!(
             get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_SOURCE)),
@@ -6373,8 +6369,8 @@ fn test_cp_preserve_selinux_admin_context() {
     at.touch(TEST_HELLO_WORLD_SOURCE);
 
     // Get the default SELinux context for the destination file path
-    // on Debian/Ubuntu, this program is provided by the selinux-utils package
-    // on Fedora/RHEL, this program is provided by the libselinux-devel package
+    // On Debian/Ubuntu, this program is provided by the selinux-utils package
+    // On Fedora/RHEL, this program is provided by the libselinux-devel package
     let output = std::process::Command::new("matchpathcon")
         .arg(at.plus_as_string(TEST_HELLO_WORLD_DEST))
         .output()
@@ -6432,7 +6428,6 @@ fn test_cp_selinux_context_priority() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // Create two different files
     at.write(TEST_HELLO_WORLD_SOURCE, "source content");
 
     // First, set a known context on source file (only if system supports it)
@@ -6642,7 +6637,7 @@ fn test_cp_preserve_context_root() {
     }
 
     // Copy the file with preserved context
-    // Only works at root
+    // Only works as root
     if let Ok(result) = run_ucmd_as_root(&scene, &["--preserve=context", source_file, dest_file]) {
         let src_ctx = get_getfattr_output(&at.plus_as_string(source_file));
         let dest_ctx = get_getfattr_output(&at.plus_as_string(dest_file));
