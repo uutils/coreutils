@@ -13,27 +13,27 @@ pub enum SeLinuxError {
     #[error("SELinux is not enabled on this system")]
     SELinuxNotEnabled,
 
-    #[error("Failed to open the file")]
-    FileOpenFailure,
+    #[error("Failed to open the file: {0}")]
+    FileOpenFailure(String),
 
-    #[error("Failed to retrieve the security context")]
-    ContextRetrievalFailure,
+    #[error("Failed to retrieve the security context: {0}")]
+    ContextRetrievalFailure(String),
 
-    #[error("failed to set default file creation context to {0}")]
-    ContextSetFailure(String),
+    #[error("Failed to set default file creation context to '{0}': {1}")]
+    ContextSetFailure(String, String),
 
-    #[error("Invalid context string or conversion failure")]
-    ContextConversionFailure,
+    #[error("Failed to set default file creation context to '{0}': {1}")]
+    ContextConversionFailure(String, String),
 }
 
 impl From<SeLinuxError> for i32 {
     fn from(error: SeLinuxError) -> i32 {
         match error {
             SeLinuxError::SELinuxNotEnabled => 1,
-            SeLinuxError::FileOpenFailure => 2,
-            SeLinuxError::ContextRetrievalFailure => 3,
-            SeLinuxError::ContextSetFailure(_) => 4,
-            SeLinuxError::ContextConversionFailure => 5,
+            SeLinuxError::FileOpenFailure(_) => 2,
+            SeLinuxError::ContextRetrievalFailure(_) => 3,
+            SeLinuxError::ContextSetFailure(_, _) => 4,
+            SeLinuxError::ContextConversionFailure(_, _) => 5,
         }
     }
 }
@@ -98,26 +98,29 @@ pub fn set_selinux_security_context(
 
     if let Some(ctx_str) = context {
         // Create a CString from the provided context string
-        let c_context = std::ffi::CString::new(ctx_str.as_str())
-            .map_err(|_| SeLinuxError::ContextConversionFailure)?;
+        let c_context = std::ffi::CString::new(ctx_str.as_str()).map_err(|e| {
+            SeLinuxError::ContextConversionFailure(ctx_str.to_string(), e.to_string())
+        })?;
 
         // Convert the CString into an SELinux security context
-        let security_context = selinux::OpaqueSecurityContext::from_c_str(&c_context)
-            .map_err(|_| SeLinuxError::ContextConversionFailure)?;
+        let security_context =
+            selinux::OpaqueSecurityContext::from_c_str(&c_context).map_err(|e| {
+                SeLinuxError::ContextConversionFailure(ctx_str.to_string(), e.to_string())
+            })?;
 
         // Set the provided security context on the specified path
         SecurityContext::from_c_str(
-            &security_context
-                .to_c_string()
-                .map_err(|_| SeLinuxError::ContextConversionFailure)?,
+            &security_context.to_c_string().map_err(|e| {
+                SeLinuxError::ContextConversionFailure(ctx_str.to_string(), e.to_string())
+            })?,
             false,
         )
         .set_for_path(path, false, false)
-        .map_err(|_| SeLinuxError::ContextSetFailure(ctx_str.to_string()))
+        .map_err(|e| SeLinuxError::ContextSetFailure(ctx_str.to_string(), e.to_string()))
     } else {
         // If no context provided, set the default SELinux context for the path
         SecurityContext::set_default_for_path(path)
-            .map_err(|_| SeLinuxError::ContextSetFailure("".to_string()))
+            .map_err(|e| SeLinuxError::ContextSetFailure(String::new(), e.to_string()))
     }
 }
 
@@ -157,9 +160,10 @@ pub fn set_selinux_security_context(
 ///         }
 ///     },
 ///     Err(SeLinuxError::SELinuxNotEnabled) => println!("SELinux is not enabled on this system"),
-///     Err(SeLinuxError::FileOpenFailure) => println!("Failed to open the file"),
-///     Err(SeLinuxError::ContextRetrievalFailure) => println!("Failed to retrieve the security context"),
-///     Err(SeLinuxError::ContextConversionFailure) => println!("Failed to convert the security context to a string"),
+///     Err(SeLinuxError::FileOpenFailure(e)) => println!("Failed to open the file: {}", e),
+///     Err(SeLinuxError::ContextRetrievalFailure(e)) => println!("Failed to retrieve the security context: {}", e),
+///     Err(SeLinuxError::ContextConversionFailure(ctx, e)) => println!("Failed to convert context '{}': {}", ctx, e),
+///     Err(SeLinuxError::ContextSetFailure(ctx, e)) => println!("Failed to set context '{}': {}", ctx, e),
 /// }
 /// ```
 pub fn get_selinux_security_context(path: &Path) -> Result<String, SeLinuxError> {
@@ -167,18 +171,18 @@ pub fn get_selinux_security_context(path: &Path) -> Result<String, SeLinuxError>
         return Err(SeLinuxError::SELinuxNotEnabled);
     }
 
-    let f = std::fs::File::open(path).map_err(|_| SeLinuxError::FileOpenFailure)?;
+    let f = std::fs::File::open(path).map_err(|e| SeLinuxError::FileOpenFailure(e.to_string()))?;
 
     // Get the security context of the file
     let context = match SecurityContext::of_file(&f, false) {
         Ok(Some(ctx)) => ctx,
         Ok(None) => return Ok(String::new()), // No context found, return empty string
-        Err(_) => return Err(SeLinuxError::ContextRetrievalFailure),
+        Err(e) => return Err(SeLinuxError::ContextRetrievalFailure(e.to_string())),
     };
 
     let context_c_string = context
         .to_c_string()
-        .map_err(|_| SeLinuxError::ContextConversionFailure)?;
+        .map_err(|e| SeLinuxError::ContextConversionFailure(String::new(), e.to_string()))?;
 
     if let Some(c_str) = context_c_string {
         // Convert the C string to a Rust String
@@ -198,29 +202,50 @@ mod tests {
         let tmpfile = NamedTempFile::new().expect("Failed to create tempfile");
         let path = tmpfile.path();
 
-        let result = set_selinux_security_context(path, None);
+        if !is_selinux_enabled() {
+            let result = set_selinux_security_context(path, None);
+            assert!(result.is_err(), "Expected error when SELinux is disabled");
+            match result.unwrap_err() {
+                SeLinuxError::SELinuxNotEnabled => {
+                    // This is the expected error when SELinux is not enabled
+                }
+                err => panic!("Expected SELinuxNotEnabled error but got: {}", err),
+            }
+            return;
+        }
 
-        if result.is_ok() {
-            // SELinux enabled and successfully set default context
-            assert!(true, "Successfully set SELinux context");
-        } else {
-            let err = result.unwrap_err();
-            let valid_errors = [
-                "SELinux is not enabled on this system",
-                &format!(
-                    "Failed to set default context: selinux_lsetfilecon_default() failed on path '{}'",
-                    path.display()
-                ),
-            ];
+        let default_result = set_selinux_security_context(path, None);
+        assert!(
+            default_result.is_ok(),
+            "Failed to set default context: {:?}",
+            default_result.err()
+        );
+
+        let context = get_selinux_security_context(path).expect("Failed to get context");
+        assert!(
+            !context.is_empty(),
+            "Expected non-empty context after setting default context"
+        );
+
+        let test_context = String::from("system_u:object_r:tmp_t:s0");
+        let explicit_result = set_selinux_security_context(path, Some(&test_context));
+
+        if explicit_result.is_ok() {
+            let new_context = get_selinux_security_context(path)
+                .expect("Failed to get context after setting explicit context");
 
             assert!(
-                valid_errors.contains(&err.as_str()),
-                "Unexpected error message: {}",
-                err
+                new_context.contains("tmp_t"),
+                "Expected context to contain 'tmp_t', but got: {}",
+                new_context
+            );
+        } else {
+            println!(
+                "Note: Could not set explicit context {:?}",
+                explicit_result.err()
             );
         }
     }
-
     #[test]
     fn test_invalid_context_string_error() {
         let tmpfile = NamedTempFile::new().expect("Failed to create tempfile");
@@ -231,10 +256,18 @@ mod tests {
         let result = set_selinux_security_context(path, Some(&invalid_context));
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            "Invalid context string (contains null bytes)"
-        );
+        if let Err(err) = result {
+            match err {
+                SeLinuxError::ContextConversionFailure(ctx, msg) => {
+                    assert_eq!(ctx, "invalid\0context");
+                    assert!(
+                        msg.contains("nul byte"),
+                        "Error message should mention nul byte"
+                    );
+                }
+                _ => panic!("Expected ContextConversionFailure error but got: {}", err),
+            }
+        }
     }
 
     #[test]
@@ -261,19 +294,56 @@ mod tests {
         let result = get_selinux_security_context(path);
 
         if result.is_ok() {
-            println!("Retrieved SELinux context: {}", result.unwrap());
+            let context = result.unwrap();
+            println!("Retrieved SELinux context: {}", context);
+
+            assert!(
+                is_selinux_enabled(),
+                "Got a successful context result but SELinux is not enabled"
+            );
+
+            if !context.is_empty() {
+                assert!(
+                    context.contains(':'),
+                    "SELinux context '{}' doesn't match expected format",
+                    context
+                );
+            }
         } else {
             let err = result.unwrap_err();
 
-            // Valid error types
             match err {
-                SeLinuxError::SELinuxNotEnabled => assert!(true, "SELinux not supported"),
-                SeLinuxError::ContextRetrievalFailure => assert!(true, "Context retrieval failure"),
-                SeLinuxError::ContextConversionFailure => {
-                    assert!(true, "Context conversion failure")
+                SeLinuxError::SELinuxNotEnabled => {
+                    assert!(
+                        !is_selinux_enabled(),
+                        "Got SELinuxNotEnabled error, but is_selinux_enabled() returned true"
+                    );
                 }
-                SeLinuxError::FileOpenFailure => {
-                    panic!("File open failure occurred despite file being created")
+                SeLinuxError::ContextRetrievalFailure(e) => {
+                    assert!(
+                        is_selinux_enabled(),
+                        "Got ContextRetrievalFailure when SELinux is not enabled"
+                    );
+                    assert!(!e.is_empty(), "Error message should not be empty");
+                    println!("Context retrieval failure: {}", e);
+                }
+                SeLinuxError::ContextConversionFailure(ctx, e) => {
+                    assert!(
+                        is_selinux_enabled(),
+                        "Got ContextConversionFailure when SELinux is not enabled"
+                    );
+                    assert!(!e.is_empty(), "Error message should not be empty");
+                    println!("Context conversion failure for '{}': {}", ctx, e);
+                }
+                SeLinuxError::ContextSetFailure(ctx, e) => {
+                    assert!(false);
+                }
+                SeLinuxError::FileOpenFailure(e) => {
+                    assert!(
+                        Path::new(path).exists(),
+                        "File open failure occurred despite file being created: {}",
+                        e
+                    );
                 }
             }
         }
@@ -286,9 +356,16 @@ mod tests {
         let result = get_selinux_security_context(path);
 
         assert!(result.is_err());
-        assert!(
-            matches!(result.unwrap_err(), SeLinuxError::FileOpenFailure),
-            "Expected file open error for nonexistent file"
-        );
+        if let Err(err) = result {
+            match err {
+                SeLinuxError::FileOpenFailure(e) => {
+                    assert!(
+                        e.contains("No such file"),
+                        "Error should mention file not found"
+                    );
+                }
+                _ => panic!("Expected FileOpenFailure error but got: {}", err),
+            }
+        }
     }
 }

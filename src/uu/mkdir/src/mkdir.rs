@@ -298,10 +298,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
                 if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
                 {
                     let _ = std::fs::remove_dir(path);
-                    return Err(USimpleError::new(
-                        1,
-                        format!("failed to set SELinux security context: {}", e),
-                    ));
+                    return Err(USimpleError::new(1, e.to_string()));
                 }
             }
 
