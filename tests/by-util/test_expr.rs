@@ -618,7 +618,6 @@ mod gnu_expr {
             .stdout_only("1\n");
     }
 
-    #[ignore]
     #[test]
     fn test_anchor() {
         new_ucmd!()
