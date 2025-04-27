@@ -274,11 +274,10 @@ fn test_length_mb() {
 
 #[test]
 fn test_regex() {
-    // FixME: [2022-12-19; rivy] test disabled as it currently fails due to 'oniguruma' bug (see GH:kkos/oniguruma/issues/279)
-    // new_ucmd!()
-    //     .args(&["a^b", ":", "a^b"])
-    //     .succeeds()
-    //     .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["a^b", ":", "a^b"])
+        .succeeds()
+        .stdout_only("3\n");
     new_ucmd!()
         .args(&["a^b", ":", "a\\^b"])
         .succeeds()
@@ -288,11 +287,36 @@ fn test_regex() {
         .succeeds()
         .stdout_only("3\n");
     new_ucmd!()
-        .args(&["-5", ":", "-\\{0,1\\}[0-9]*$"])
+        .args(&["abc", ":", "^abc"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["^abc", ":", "^^abc"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["b^$ic", ":", "b^\\$ic"])
+        .succeeds()
+        .stdout_only("5\n");
+    new_ucmd!()
+        .args(&["^^^^^^^^^", ":", "^^^"])
         .succeeds()
         .stdout_only("2\n");
     new_ucmd!()
+        .args(&["-5", ":", "-\\{0,1\\}[0-9]*$"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!().args(&["", ":", ""]).fails().stdout_only("0\n");
+    new_ucmd!()
+        .args(&["abc", ":", ""])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
         .args(&["abc", ":", "bc"])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["^abc", ":", "^abc"])
         .fails()
         .stdout_only("0\n");
 }
@@ -711,7 +735,6 @@ mod gnu_expr {
             .stdout_only("\n");
     }
 
-    #[ignore = "rust-onig bug, see https://github.com/rust-onig/rust-onig/issues/188"]
     #[test]
     fn test_bre10() {
         new_ucmd!()

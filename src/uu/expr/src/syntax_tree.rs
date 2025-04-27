@@ -150,8 +150,32 @@ impl StringOp {
                 let left = left?.eval_as_string();
                 let right = right?.eval_as_string();
                 check_posix_regex_errors(&right)?;
-                let prefix = if right.starts_with('*') { r"^\" } else { "^" };
-                let re_string = format!("{prefix}{right}");
+
+                // All patterns are anchored so they begin with a caret (^)
+                let mut re_string = String::with_capacity(right.len() + 1);
+                re_string.push('^');
+
+                // Handle first character from the input pattern
+                let mut pattern_chars = right.chars();
+                let first = pattern_chars.next();
+                match first {
+                    Some('^') => {} // Start of string anchor is already added
+                    Some('*') => re_string.push_str(r"\*"),
+                    Some(char) => re_string.push(char),
+                    None => return Ok(0.into()),
+                };
+
+                // Handle the rest of the input pattern.
+                // Escape characters that should be handled literally within the pattern.
+                let mut prev = first.unwrap_or_default();
+                for curr in pattern_chars {
+                    match curr {
+                        '^' if prev != '\\' => re_string.push_str(r"\^"),
+                        char => re_string.push(char),
+                    }
+                    prev = curr;
+                }
+
                 let re = Regex::with_options(
                     &re_string,
                     RegexOptions::REGEX_OPTION_NONE,
