@@ -839,8 +839,78 @@ jobs:
     strategy:
       matrix:
         job:
+          - { crate: uu_arch }
+          - { crate: uu_base32 }
+          - { crate: uu_base64 }
+          - { crate: uu_basename }
+          - { crate: uu_basenc }
+          - { crate: uu_cksum }
+          - { crate: uu_cut }
+          - { crate: uu_date }
+          - { crate: uu_dircolors }
+          - { crate: uu_dirname }
+          - { crate: uu_echo }
+          - { crate: uu_expand }
+          - { crate: uu_false }
+          - { crate: uu_fmt }
+          - { crate: uu_fold }
+          - { crate: uu_hashsum }
+          - { crate: uu_join }
+          - { crate: uu_link }
+          - { crate: uu_nl }
+          - { crate: uu_numfmt }
+          - { crate: uu_od }
+          - { crate: uu_paste }
+          - { crate: uu_pr }
+          - { crate: uu_printenv }
+          - { crate: uu_printf }
+          - { crate: uu_ptx }
+          - { crate: uu_pwd }
+          - { crate: uu_seq }
+          - { crate: uu_sleep }
+          - { crate: uu_sum }
+          - { crate: uu_tee }
+          - { crate: uu_true }
+          - { crate: uu_truncate }
+          - { crate: uu_tsort }
+          - { crate: uu_uname }
+          - { crate: uu_unexpand }
+          - { crate: uu_uniq }
+          - { crate: uu_unlink }
+          - { crate: uu_wc }
+          - { crate: uu_yes }
           - { crate: uucore }
+          - { crate: uucore, features: [ default ] }
+          - { crate: uucore, features: [ backup-control ] }
+          - { crate: uucore, features: [ buf-copy ] }
+          - { crate: uucore, features: [ checksum ] }
+          - { crate: uucore, features: [ colors ] }
+          - { crate: uucore, features: [ custom-tz-fmt ] }
+          - { crate: uucore, features: [ encoding ] }
+          - { crate: uucore, features: [ entries ] }
+          - { crate: uucore, features: [ extendedbigdecimal ] }
+          - { crate: uucore, features: [ fast-inc ] }
           - { crate: uucore, features: [ format ] }
+          - { crate: uucore, features: [ fsxattr ] }
+          - { crate: uucore, features: [ lines ] }
+          - { crate: uucore, features: [ parser ] }
+          - { crate: uucore, features: [ perms ] }
+          - { crate: uucore, features: [ pipes ] }
+          - { crate: uucore, features: [ proc-info ] }
+          - { crate: uucore, features: [ process ] }
+          - { crate: uucore, features: [ quoting-style ] }
+          - { crate: uucore, features: [ ranges ] }
+          - { crate: uucore, features: [ ringbuffer ] }
+          - { crate: uucore, features: [ selinux ] }
+          - { crate: uucore, features: [ signals ] }
+          - { crate: uucore, features: [ sum ] }
+          - { crate: uucore, features: [ tty ] }
+          - { crate: uucore, features: [ update-control ] }
+          - { crate: uucore, features: [ utf8 ] }
+          - { crate: uucore, features: [ version-cmp ] }
+          - { crate: uucore, features: [ wide ] }
+          - { crate: uucore_procs }
+          - { crate: uuhelp_parser }
     steps:
     - uses: actions/checkout@v4
       with:
