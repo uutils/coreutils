@@ -8,19 +8,17 @@
 use chrono::Local;
 use iana_time_zone::get_timezone;
 
-// TODO: Is there any other case where we'd be interested in using
-// chrono_tz instead of system timezone database?
-#[cfg(windows)]
+#[cfg(embed_tz)]
 use chrono_tz::{ParseError, Tz};
-#[cfg(not(windows))]
+#[cfg(not(embed_tz))]
 use tzfile::Tz;
 
-#[cfg(windows)]
+#[cfg(embed_tz)]
 fn str_to_timezone(str: &str) -> Result<Tz, ParseError> {
     str.parse()
 }
 
-#[cfg(not(windows))]
+#[cfg(not(embed_tz))]
 fn str_to_timezone(str: &str) -> Result<Tz, std::io::Error> {
     Tz::named(str)
 }
@@ -54,7 +52,7 @@ fn timezone_abbreviation() -> String {
         },
     };
 
-    #[cfg(not(windows))]
+    #[cfg(not(embed_tz))]
     let tz = &tz;
 
     // TODO: It looks a bit absurd to use `%Z` here and manually expand it
