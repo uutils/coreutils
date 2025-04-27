@@ -379,8 +379,8 @@ fn test_stdin_via_script_redirection_and_pipe() {
 
     // test with redirection
     scene
-        .cmd("sh")
-        .current_dir(at.plus(""))
+        .ucmd()
+        .arg("sh")
         .arg("-c")
         .arg("./test.sh < file.txt")
         .succeeds()
@@ -388,7 +388,8 @@ fn test_stdin_via_script_redirection_and_pipe() {
 
     // test with pipe
     scene
-        .cmd("sh")
+        .ucmd()
+        .arg("sh")
         .current_dir(at.plus(""))
         .arg("-c")
         .arg("cat file.txt | ./test.sh")
