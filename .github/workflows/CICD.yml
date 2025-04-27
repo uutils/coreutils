@@ -828,6 +828,41 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  build_wasm:
+    name: Build/WASM
+    needs: [ min_version, deps ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    strategy:
+      matrix:
+        job:
+          - { crate: uucore }
+          - { crate: uucore, features: [ format ] }
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ env.RUST_MIN_SRV }}
+        targets: wasm32-unknown-unknown
+    - uses: Swatinem/rust-cache@v2
+      with:
+        key: "${{ matrix.job.crate }} ${{ join(matrix.job.features || '', ' ') }}"
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Build
+      run: | 
+        cargo build \
+        --target wasm32-unknown-unknown \
+        --no-default-features \
+        --lib \
+        --package ${{ matrix.job.crate }} \
+        --features ${{ join(matrix.job.features || '', ',') }}
+
   test_busybox:
     name: Tests/BusyBox test suite
     needs: [ min_version, deps ]
