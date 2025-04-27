@@ -861,7 +861,7 @@ jobs:
         --no-default-features \
         --lib \
         --package ${{ matrix.job.crate }} \
-        --features ${{ join(matrix.job.features || '', ',') }}
+        --features "${{ join(matrix.job.features || '', ',') }}"
 
   test_busybox:
     name: Tests/BusyBox test suite
