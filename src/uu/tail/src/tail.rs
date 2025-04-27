@@ -189,6 +189,23 @@ fn tail_stdin(
     input: &Input,
     observer: &mut Observer,
 ) -> UResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(mut stdin_handle) = Handle::stdin() {
+            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
+                if meta.file_type().is_dir() {
+                    set_exit_code(1);
+                    show_error!(
+                        "cannot open '{}' for reading: {}",
+                        input.display_name,
+                        text::NO_SUCH_FILE
+                    );
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     match input.resolve() {
         // fifo
         Some(path) => {
