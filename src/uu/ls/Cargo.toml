@@ -40,6 +40,7 @@ uucore = { workspace = true, features = [
   "version-cmp",
 ] }
 uutils_term_grid = { workspace = true }
+rayon = { workspace = true }
 
 [[bin]]
 name = "ls"
