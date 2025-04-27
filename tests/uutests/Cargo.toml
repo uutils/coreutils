@@ -3,7 +3,7 @@
 [package]
 name = "uutests"
 description = "uutils ~ 'core' uutils test library (cross-platform)"
-repository = "https://github.com/uutils/coreutils/tree/main/src/tests/common"
+repository = "https://github.com/uutils/coreutils/tree/main/tests/uutests"
 # readme = "README.md"
 authors.workspace = true
 categories.workspace = true
