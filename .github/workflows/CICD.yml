@@ -648,10 +648,6 @@ jobs:
             ;;
         esac
         outputs CARGO_TEST_OPTIONS
-        # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
-        if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
-          printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\", \"CARGO_TERM_COLOR\"]\n" > Cross.toml
-        fi
         # * executable for `strip`?
         STRIP="strip"
         case ${{ matrix.job.target }} in
