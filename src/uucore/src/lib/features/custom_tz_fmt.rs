@@ -26,26 +26,28 @@ fn str_to_timezone(str: &str) -> Result<Tz, std::io::Error> {
 /// Get the alphabetic abbreviation of the current timezone.
 ///
 /// For example, "UTC" or "CET" or "PDT"
-//
+///
 /// We need this function even for local dates as chrono(_tz) does not provide a
 /// way to convert Local to a fully specified timezone with abbreviation
 /// (<https://github.com/chronotope/chrono-tz/issues/13>).
+///
+/// `timezone` is an optional parameter, if None, TZ environment variable is used.
 //
 // TODO(#7659): This should take into account the date to be printed.
 // - Timezone abbreviation depends on daylight savings.
 // - We should do no special conversion for UTC dates.
 // - If our custom logic fails, but chrono obtained a non-UTC local timezone
 //   from the system, we should not just return UTC.
-fn timezone_abbreviation() -> String {
+fn timezone_abbreviation(timezone: Option<&str>) -> String {
     let utc = str_to_timezone("Etc/UTC").unwrap();
     // We need this logic as `iana_time_zone::get_timezone` does not look
     // at TZ variable: https://github.com/strawlab/iana-time-zone/issues/118.
-    let tz = match std::env::var("TZ") {
+    let tz = match timezone.or(std::env::var("TZ").as_deref().ok()) {
         // TODO: This is not fully exhaustive, we should understand how to handle
         // invalid TZ values and more complex POSIX-specified values:
         // https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
-        Ok(s) if s == "UTC0" || s.is_empty() => utc,
-        Ok(s) => str_to_timezone(&s).unwrap_or(utc),
+        Some(s) if s == "UTC0" || s.is_empty() => utc,
+        Some(s) => str_to_timezone(s).unwrap_or(utc),
         _ => match get_timezone() {
             Ok(tz_str) => str_to_timezone(&tz_str).unwrap_or(utc),
             Err(_) => utc,
@@ -76,7 +78,7 @@ pub fn custom_time_format(fmt: &str) -> String {
     // TODO - Revisit when chrono 0.5 is released. https://github.com/chronotope/chrono/issues/970
     // GNU `date` uses `%N` for nano seconds, however the `chrono` crate uses `%f`.
     fmt.replace("%N", "%f")
-        .replace("%Z", timezone_abbreviation().as_ref())
+        .replace("%Z", timezone_abbreviation(None).as_ref())
 }
 
 #[cfg(test)]
@@ -92,7 +94,7 @@ mod tests {
             custom_time_format("%Y-%m-%d %H-%M-%S.%N"),
             "%Y-%m-%d %H-%M-%S.%f"
         );
-        assert_eq!(custom_time_format("%Z"), timezone_abbreviation());
+        assert_eq!(custom_time_format("%Z"), timezone_abbreviation(None));
     }
 
     #[test]
@@ -102,10 +104,7 @@ mod tests {
         // daylight savings, and the other not. But right now the abbreviation depends
         // on the current time.
         fn test_zone(zone: &str, ok_abbr: &[&str]) {
-            unsafe {
-                std::env::set_var("TZ", zone);
-            }
-            let abbr = timezone_abbreviation();
+            let abbr = timezone_abbreviation(Some(zone));
             assert!(
                 ok_abbr.contains(&abbr.as_str()),
                 "Timezone {zone} abbreviation {abbr} is not contained within [{}].",
