@@ -16,23 +16,22 @@ use std::{
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, Stdout, Write, stdout},
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 #[cfg(unix)]
 use std::{
     collections::HashMap,
     os::unix::fs::{FileTypeExt, MetadataExt},
-    time::Duration,
 };
 use std::{collections::HashSet, io::IsTerminal};
 
 use ansi_width::ansi_width;
-use chrono::{DateTime, Local, TimeDelta};
 use clap::{
     Arg, ArgAction, Command,
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
+use jiff::{Timestamp, Zoned};
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
@@ -58,7 +57,6 @@ use uucore::libc::{dev_t, major, minor};
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{self, QuotingStyle, escape_name};
 use uucore::{
-    custom_tz_fmt,
     display::Quotable,
     error::{UError, UResult, set_exit_code},
     format_usage,
@@ -274,30 +272,28 @@ enum TimeStyle {
 }
 
 /// Whether the given date is considered recent (i.e., in the last 6 months).
-fn is_recent(time: DateTime<Local>) -> bool {
+fn is_recent(time: Timestamp) -> bool {
     // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-    time + TimeDelta::try_seconds(31_556_952 / 2).unwrap() > Local::now()
+    time + Duration::new(31_556_952 / 2, 0) > Timestamp::now()
 }
 
 impl TimeStyle {
     /// Format the given time according to this time format style.
-    fn format(&self, time: DateTime<Local>) -> String {
-        let recent = is_recent(time);
+    fn format(&self, date: Zoned) -> String {
+        let recent = is_recent(date.timestamp());
         match (self, recent) {
-            (Self::FullIso, _) => time.format("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
-            (Self::LongIso, _) => time.format("%Y-%m-%d %H:%M").to_string(),
-            (Self::Iso, true) => time.format("%m-%d %H:%M").to_string(),
-            (Self::Iso, false) => time.format("%Y-%m-%d ").to_string(),
+            (Self::FullIso, _) => date.strftime("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
+            (Self::LongIso, _) => date.strftime("%Y-%m-%d %H:%M").to_string(),
+            (Self::Iso, true) => date.strftime("%m-%d %H:%M").to_string(),
+            (Self::Iso, false) => date.strftime("%Y-%m-%d ").to_string(),
             // spell-checker:ignore (word) datetime
             //In this version of chrono translating can be done
             //The function is chrono::datetime::DateTime::format_localized
             //However it's currently still hard to get the current pure-rust-locale
             //So it's not yet implemented
-            (Self::Locale, true) => time.format("%b %e %H:%M").to_string(),
-            (Self::Locale, false) => time.format("%b %e  %Y").to_string(),
-            (Self::Format(fmt), _) => time
-                .format(custom_tz_fmt::custom_time_format(fmt).as_str())
-                .to_string(),
+            (Self::Locale, true) => date.strftime("%b %e %H:%M").to_string(),
+            (Self::Locale, false) => date.strftime("%b %e  %Y").to_string(),
+            (Self::Format(fmt), _) => date.strftime(&fmt).to_string(),
         }
     }
 }
@@ -3075,9 +3071,9 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     }
 }
 
-fn get_time(md: &Metadata, config: &Config) -> Option<DateTime<Local>> {
+fn get_time(md: &Metadata, config: &Config) -> Option<Zoned> {
     let time = get_system_time(md, config)?;
-    Some(time.into())
+    time.try_into().ok()
 }
 
 fn display_date(metadata: &Metadata, config: &Config) -> String {
