@@ -3141,6 +3141,7 @@ dependencies = [
  "clap",
  "glob",
  "hostname",
+ "jiff",
  "lscolors",
  "number_prefix",
  "selinux",
