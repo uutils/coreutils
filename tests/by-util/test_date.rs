@@ -170,6 +170,14 @@ fn test_date_format_y() {
 }
 
 #[test]
+fn test_date_format_q() {
+    let scene = TestScenario::new(util_name!());
+
+    let re = Regex::new(r"^[1-4]\n$").unwrap();
+    scene.ucmd().arg("+%q").succeeds().stdout_matches(&re);
+}
+
+#[test]
 fn test_date_format_m() {
     let scene = TestScenario::new(util_name!());
 
