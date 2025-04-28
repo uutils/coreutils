@@ -12,7 +12,7 @@ use crate::{
     show_error, show_warning,
 };
 use os_display::Quotable;
-use std::ffi::OsStr;
+use std::{ffi::OsStr, num::NonZero};
 
 /// An argument for formatting
 ///
@@ -129,8 +129,9 @@ impl<'a> FormatArguments<'a> {
         }
     }
 
-    fn get_at_relative_position(&mut self, pos: usize) -> Option<&'a FormatArgument> {
-        let pos = pos.saturating_sub(1).saturating_add(self.current_offset);
+    fn get_at_relative_position(&mut self, pos: NonZero<usize>) -> Option<&'a FormatArgument> {
+        let pos: usize = pos.into();
+        let pos = (pos - 1).saturating_add(self.current_offset);
         self.highest_arg_position = Some(self.highest_arg_position.map_or(pos, |x| x.max(pos)));
         self.args.get(pos)
     }
@@ -281,6 +282,10 @@ mod tests {
         assert!(args.is_exhausted());
     }
 
+    fn non_zero_pos(n: usize) -> ArgumentLocation {
+        ArgumentLocation::Position(NonZero::new(n).unwrap())
+    }
+
     #[test]
     fn test_position_access_pattern() {
         // Test with consistent positional access patterns
@@ -297,23 +302,23 @@ mod tests {
         ]);
 
         // First batch - positional access
-        assert_eq!(b'b', args.next_char(&ArgumentLocation::Position(2))); // Position 2
-        assert_eq!(b'a', args.next_char(&ArgumentLocation::Position(1))); // Position 1
-        assert_eq!(b'c', args.next_char(&ArgumentLocation::Position(3))); // Position 3
+        assert_eq!(b'b', args.next_char(&non_zero_pos(2))); // Position 2
+        assert_eq!(b'a', args.next_char(&non_zero_pos(1))); // Position 1
+        assert_eq!(b'c', args.next_char(&non_zero_pos(3))); // Position 3
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch - same positional pattern
-        assert_eq!(b'e', args.next_char(&ArgumentLocation::Position(2))); // Position 2
-        assert_eq!(b'd', args.next_char(&ArgumentLocation::Position(1))); // Position 1
-        assert_eq!(b'f', args.next_char(&ArgumentLocation::Position(3))); // Position 3
+        assert_eq!(b'e', args.next_char(&non_zero_pos(2))); // Position 2
+        assert_eq!(b'd', args.next_char(&non_zero_pos(1))); // Position 1
+        assert_eq!(b'f', args.next_char(&non_zero_pos(3))); // Position 3
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Third batch - same positional pattern (last batch)
-        assert_eq!(b'h', args.next_char(&ArgumentLocation::Position(2))); // Position 2
-        assert_eq!(b'g', args.next_char(&ArgumentLocation::Position(1))); // Position 1
-        assert_eq!(b'i', args.next_char(&ArgumentLocation::Position(3))); // Position 3
+        assert_eq!(b'h', args.next_char(&non_zero_pos(2))); // Position 2
+        assert_eq!(b'g', args.next_char(&non_zero_pos(1))); // Position 1
+        assert_eq!(b'i', args.next_char(&non_zero_pos(3))); // Position 3
         args.start_next_batch();
         assert!(args.is_exhausted());
     }
@@ -334,19 +339,19 @@ mod tests {
 
         // First batch - mix of sequential and positional
         assert_eq!(b'a', args.next_char(&ArgumentLocation::NextArgument)); // Sequential
-        assert_eq!(b'c', args.next_char(&ArgumentLocation::Position(3))); // Positional
+        assert_eq!(b'c', args.next_char(&non_zero_pos(3))); // Positional
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch - same mixed pattern
         assert_eq!(b'd', args.next_char(&ArgumentLocation::NextArgument)); // Sequential
-        assert_eq!(b'f', args.next_char(&ArgumentLocation::Position(3))); // Positional
+        assert_eq!(b'f', args.next_char(&non_zero_pos(3))); // Positional
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Last batch - same mixed pattern
         assert_eq!(b'g', args.next_char(&ArgumentLocation::NextArgument)); // Sequential
-        assert_eq!(b'\0', args.next_char(&ArgumentLocation::Position(3))); // Out of bounds
+        assert_eq!(b'\0', args.next_char(&non_zero_pos(3))); // Out of bounds
         args.start_next_batch();
         assert!(args.is_exhausted());
     }
@@ -419,16 +424,16 @@ mod tests {
         let mut args = FormatArguments::new(&args);
 
         // First batch - positional access of different types
-        assert_eq!(b'a', args.next_char(&ArgumentLocation::Position(1)));
-        assert_eq!("test", args.next_string(&ArgumentLocation::Position(2)));
-        assert_eq!(42, args.next_u64(&ArgumentLocation::Position(3)));
+        assert_eq!(b'a', args.next_char(&non_zero_pos(1)));
+        assert_eq!("test", args.next_string(&non_zero_pos(2)));
+        assert_eq!(42, args.next_u64(&non_zero_pos(3)));
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch - same pattern
-        assert_eq!(b'b', args.next_char(&ArgumentLocation::Position(1)));
-        assert_eq!("more", args.next_string(&ArgumentLocation::Position(2)));
-        assert_eq!(99, args.next_u64(&ArgumentLocation::Position(3)));
+        assert_eq!(b'b', args.next_char(&non_zero_pos(1)));
+        assert_eq!("more", args.next_string(&non_zero_pos(2)));
+        assert_eq!(99, args.next_u64(&non_zero_pos(3)));
         args.start_next_batch();
         assert!(args.is_exhausted());
     }
@@ -446,13 +451,13 @@ mod tests {
 
         // First batch
         assert_eq!(b'a', args.next_char(&ArgumentLocation::NextArgument));
-        assert_eq!(b'c', args.next_char(&ArgumentLocation::Position(3)));
+        assert_eq!(b'c', args.next_char(&non_zero_pos(3)));
         args.start_next_batch();
         assert!(!args.is_exhausted());
 
         // Second batch (partial)
         assert_eq!(b'd', args.next_char(&ArgumentLocation::NextArgument));
-        assert_eq!(b'\0', args.next_char(&ArgumentLocation::Position(3))); // Out of bounds
+        assert_eq!(b'\0', args.next_char(&non_zero_pos(3))); // Out of bounds
         args.start_next_batch();
         assert!(args.is_exhausted());
     }

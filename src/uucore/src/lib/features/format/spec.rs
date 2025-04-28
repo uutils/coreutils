@@ -16,7 +16,7 @@ use super::{
     parse_escape_only,
 };
 use crate::format::FormatArguments;
-use std::{io::Write, ops::ControlFlow};
+use std::{io::Write, num::NonZero, ops::ControlFlow};
 
 /// A parsed specification for formatting a value
 ///
@@ -70,7 +70,7 @@ pub enum Spec {
 #[derive(Clone, Copy, Debug)]
 pub enum ArgumentLocation {
     NextArgument,
-    Position(usize),
+    Position(NonZero<usize>),
 }
 
 /// Precision and width specified might use an asterisk to indicate that they are
@@ -156,7 +156,9 @@ impl Spec {
         let start = *rest;
 
         // Check for a positional specifier (%m$)
-        let position = eat_argument_position(rest, &mut index);
+        let Some(position) = eat_argument_position(rest, &mut index) else {
+            return Err(&start[..index]);
+        };
 
         let flags = Flags::parse(rest, &mut index);
 
@@ -566,19 +568,19 @@ fn write_padded(
 }
 
 // Check for a number ending with a '$'
-fn eat_argument_position(rest: &mut &[u8], index: &mut usize) -> ArgumentLocation {
+fn eat_argument_position(rest: &mut &[u8], index: &mut usize) -> Option<ArgumentLocation> {
     let original_index = *index;
     if let Some(pos) = eat_number(rest, index) {
         if let Some(&b'$') = rest.get(*index) {
             *index += 1;
-            ArgumentLocation::Position(pos)
+            Some(ArgumentLocation::Position(NonZero::new(pos)?))
         } else {
             *index = original_index;
-            ArgumentLocation::NextArgument
+            Some(ArgumentLocation::NextArgument)
         }
     } else {
         *index = original_index;
-        ArgumentLocation::NextArgument
+        Some(ArgumentLocation::NextArgument)
     }
 }
 
@@ -586,7 +588,7 @@ fn eat_asterisk_or_number(rest: &mut &[u8], index: &mut usize) -> Option<CanAste
     if let Some(b'*') = rest.get(*index) {
         *index += 1;
         // Check for a positional specifier (*m$)
-        Some(CanAsterisk::Asterisk(eat_argument_position(rest, index)))
+        Some(CanAsterisk::Asterisk(eat_argument_position(rest, index)?))
     } else {
         eat_number(rest, index).map(CanAsterisk::Fixed)
     }
@@ -670,7 +672,9 @@ mod tests {
             assert_eq!(
                 Some((2, false)),
                 resolve_asterisk_width(
-                    Some(CanAsterisk::Asterisk(ArgumentLocation::Position(2))),
+                    Some(CanAsterisk::Asterisk(ArgumentLocation::Position(
+                        NonZero::new(2).unwrap()
+                    ))),
                     &mut FormatArguments::new(&[
                         FormatArgument::Unparsed("1".to_string()),
                         FormatArgument::Unparsed("2".to_string()),
@@ -738,7 +742,9 @@ mod tests {
             assert_eq!(
                 Some(2),
                 resolve_asterisk_precision(
-                    Some(CanAsterisk::Asterisk(ArgumentLocation::Position(2))),
+                    Some(CanAsterisk::Asterisk(ArgumentLocation::Position(
+                        NonZero::new(2).unwrap()
+                    ))),
                     &mut FormatArguments::new(&[
                         FormatArgument::Unparsed("1".to_string()),
                         FormatArgument::Unparsed("2".to_string()),
