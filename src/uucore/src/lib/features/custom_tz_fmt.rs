@@ -35,8 +35,10 @@ fn timezone_abbreviation() -> String {
 /// A string that can be used as parameter of the chrono functions that use formats
 pub fn custom_time_format(fmt: &str) -> String {
     // TODO - Revisit when chrono 0.5 is released. https://github.com/chronotope/chrono/issues/970
+    // chrono crashes on %#z, but it's the same as %z anyway.
     // GNU `date` uses `%N` for nano seconds, however the `chrono` crate uses `%f`.
-    fmt.replace("%N", "%f")
+    fmt.replace("%#z", "%z")
+        .replace("%N", "%f")
         .replace("%Z", timezone_abbreviation().as_ref())
 }
 

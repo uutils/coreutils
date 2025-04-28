@@ -274,13 +274,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             match date {
                 Ok(date) => {
                     let format_string = custom_time_format(format_string);
-                    // Refuse to pass this string to chrono as it is crashing in this crate
-                    if format_string.contains("%#z") {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid format {}", format_string.replace("%f", "%N")),
-                        ));
-                    }
                     // Hack to work around panic in chrono,
                     // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
                     let format_items = StrftimeItems::new(format_string.as_str());

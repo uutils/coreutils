@@ -381,10 +381,12 @@ fn test_invalid_format_string() {
 }
 
 #[test]
-fn test_unsupported_format() {
-    let result = new_ucmd!().arg("+%#z").fails();
-    result.no_stdout();
-    assert!(result.stderr_str().starts_with("date: invalid format %#z"));
+fn test_capitalized_numeric_time_zone() {
+    // %z     +hhmm numeric time zone (e.g., -0400)
+    // # is supposed to capitalize, which makes little sense here, but chrono crashes
+    // on such format so it's good to test.
+    let re = Regex::new(r"^[+-]\d{4,4}\n$").unwrap();
+    new_ucmd!().arg("+%#z").succeeds().stdout_matches(&re);
 }
 
 #[test]
