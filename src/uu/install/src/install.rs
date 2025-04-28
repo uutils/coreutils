@@ -375,7 +375,10 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     } else {
         match usr2uid(&owner) {
             Ok(u) => Some(u),
-            Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+            Err(_) => match owner.parse::<u32>() {
+                Ok(u) => Some(u),
+                Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+            },
         }
     };
 
