@@ -304,6 +304,11 @@ hostname = "0.4"
 iana-time-zone = "0.1.57"
 indicatif = "0.17.8"
 itertools = "0.14.0"
+jiff = { version = "0.2.10", default-features = false, features = [
+  "std",
+  "alloc",
+  "tz-system",
+] }
 libc = "0.2.172"
 linux-raw-sys = "0.9"
 lscolors = { version = "0.20.0", default-features = false, features = [
