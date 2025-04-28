@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
-use chrono::NaiveDate;
 #[cfg(not(target_os = "freebsd"))]
 use filetime::set_symlink_file_times;
 use filetime::FileTime;
@@ -186,44 +185,60 @@ fn test_touch_2_digit_years_69() {
 }
 
 #[test]
-fn test_y2038_touch() {
+fn test_y2038_touch_last_before() {
     // Jan 19 2038, 03:14:07 UTC is the moment of the Y2038 bug
-    // test 1 second before, at, and 1 second after
-    let year = 2038;
-    let month = 1;
-    let day = 19;
-    let hours = 3;
-    let minutes = 14;
-    let seconds = 7;
-    for deltas in [-1i32, 0, 1] {
-        let (at, mut ucmd) = at_and_ucmd!();
+    let (at, mut ucmd) = at_and_ucmd!();
 
-        let date = NaiveDate::from_ymd_opt(year, month, day).unwrap();
-        let datetime = date
-            .and_hms_opt(hours, minutes, (seconds + deltas).try_into().unwrap())
-            .unwrap();
-        let timestamp = datetime.and_utc().timestamp();
+    let f1 = "Y2038_203801190314.07";
+    ucmd.args(&["-t", "203801190314.07", f1])
+        .succeeds()
+        .no_output();
 
-        let date = format!(
-            "{}{:02}{:02}{:02}{:02}.{:02}",
-            year,
-            month,
-            day,
-            hours,
-            minutes,
-            seconds + deltas
-        );
-        let file = format!("Y2038_{}_{}", date, deltas);
-        ucmd.args(&["-t", &date, &file]).succeeds().no_output();
+    assert!(at.file_exists(f1));
+    //
+    let expected = FileTime::from_unix_time(2i64.pow(31) - 1, 0);
+    let (atime, mtime) = get_file_times(&at, f1);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
 
-        assert!(at.file_exists(&file));
+#[test]
+fn test_y2038_touch_at() {
+    // Jan 19 2038, 03:14:07 UTC is the moment of the Y2038 bug
+    let (at, mut ucmd) = at_and_ucmd!();
 
-        let expected = FileTime::from_unix_time(timestamp, 0);
-        let (atime, mtime) = get_file_times(&at, &file);
-        assert_eq!(atime, mtime);
-        assert_eq!(atime, expected);
-        assert_eq!(mtime, expected);
-    }
+    let f1 = "Y2038_203801190314.08";
+    ucmd.args(&["-t", "203801190314.08", f1])
+        .succeeds()
+        .no_output();
+
+    assert!(at.file_exists(f1));
+    //
+    let expected = FileTime::from_unix_time(2i64.pow(31), 0);
+    let (atime, mtime) = get_file_times(&at, f1);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+fn test_y2038_touch_just_after() {
+    // Jan 19 2038, 03:14:07 UTC is the moment of the Y2038 bug
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let f1 = "Y2038_203801190314.09";
+    ucmd.args(&["-t", "203801190314.09", f1])
+        .succeeds()
+        .no_output();
+
+    assert!(at.file_exists(f1));
+    //
+    let expected = FileTime::from_unix_time(2i64.pow(31) + 1, 0);
+    let (atime, mtime) = get_file_times(&at, f1);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
 }
 
 #[test]
