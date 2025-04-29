@@ -272,15 +272,15 @@ enum TimeStyle {
 }
 
 /// Whether the given date is considered recent (i.e., in the last 6 months).
-fn is_recent(time: Timestamp) -> bool {
+fn is_recent(time: Timestamp, state: &mut ListState) -> bool {
     // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-    time + Duration::new(31_556_952 / 2, 0) > Timestamp::now()
+    time > state.recent_time_threshold
 }
 
 impl TimeStyle {
     /// Format the given time according to this time format style.
-    fn format(&self, date: Zoned) -> String {
-        let recent = is_recent(date.timestamp());
+    fn format(&self, date: Zoned, state: &mut ListState) -> String {
+        let recent = is_recent(date.timestamp(), state);
         match (self, recent) {
             (Self::FullIso, _) => date.strftime("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
             (Self::LongIso, _) => date.strftime("%Y-%m-%d %H:%M").to_string(),
@@ -2056,6 +2056,7 @@ struct ListState<'a> {
     uid_cache: HashMap<u32, String>,
     #[cfg(unix)]
     gid_cache: HashMap<u32, String>,
+    recent_time_threshold: Timestamp,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2072,6 +2073,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         uid_cache: HashMap::new(),
         #[cfg(unix)]
         gid_cache: HashMap::new(),
+        recent_time_threshold: Timestamp::now() - Duration::new(31_556_952 / 2, 0),
     };
 
     for loc in locs {
@@ -2872,7 +2874,7 @@ fn display_item_long(
         };
 
         output_display.extend(b" ");
-        output_display.extend(display_date(md, config).as_bytes());
+        output_display.extend(display_date(md, config, state).as_bytes());
         output_display.extend(b" ");
 
         let item_name = display_item_name(
@@ -3076,9 +3078,9 @@ fn get_time(md: &Metadata, config: &Config) -> Option<Zoned> {
     time.try_into().ok()
 }
 
-fn display_date(metadata: &Metadata, config: &Config) -> String {
+fn display_date(metadata: &Metadata, config: &Config, state: &mut ListState) -> String {
     match get_time(metadata, config) {
-        Some(time) => config.time_style.format(time),
+        Some(time) => config.time_style.format(time, state),
         None => "???".into(),
     }
 }
