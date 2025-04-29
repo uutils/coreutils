@@ -548,9 +548,9 @@ name = "uudoc"
 path = "src/bin/uudoc.rs"
 required-features = ["uudoc"]
 
-# The default release profile. It contains all optimizations, without
-# sacrificing debug info. With this profile (like in the standard
-# release profile), the debug info and the stack traces will still be available.
+# The default release profile. It contains all optimizations.
+# With this profile (like in the standard release profile),
+# the stack traces will still be available.
 [profile.release]
 lto = true
 
@@ -566,6 +566,12 @@ inherits = "release"
 opt-level = "z"
 panic = "abort"
 strip = true
+
+# A release-like profile with debug info, useful for profiling.
+# See https://github.com/mstange/samply .
+[profile.profiling]
+inherits = "release"
+debug = true
 
 [lints.clippy]
 multiple_crate_versions = "allow"

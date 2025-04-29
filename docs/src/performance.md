@@ -70,6 +70,14 @@ samply record ./target/debug/coreutils ls -R
 samply record --rate 1000 ./target/debug/coreutils seq 1 1000
 ```
 
+The output using the `debug` profile might be easier to understand, but the performance characteristics may be somewhat different from `release` profile that we _actually_ care about.
+
+Consider using the `profiling` profile, that compiles in `release` mode but with debug symbols. For example:
+```bash
+cargo build --profile profiling -p uu_ls
+samply record -r 10000 target/profiling/ls -lR /var .git .git .git > /dev/null
+```
+
 ## Workflow: Measuring Performance Improvements
 
 1. **Establish baselines**:
