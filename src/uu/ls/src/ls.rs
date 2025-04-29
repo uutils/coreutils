@@ -297,8 +297,8 @@ impl TimeStyler {
             // So it's not yet implemented
             TimeStyle::Locale => StrftimeItems::new("%b %e  %Y").parse(),
             TimeStyle::Format(fmt) => {
-                // TODO (#7802): Replace with new_lenient
-                StrftimeItems::new(custom_tz_fmt::custom_time_format(fmt).as_str()).parse_to_owned()
+                StrftimeItems::new_lenient(custom_tz_fmt::custom_time_format(fmt).as_str())
+                    .parse_to_owned()
             }
         }
         .unwrap();

@@ -5705,3 +5705,13 @@ fn test_time_style_timezone_name() {
         .succeeds()
         .stdout_matches(&re_custom_format);
 }
+
+#[test]
+fn test_unknown_format_specifier() {
+    let re_custom_format = Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d+ \d{4} %0 \d{9} f\n").unwrap();
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["-l", "--time-style=+%Y %0 %N"])
+        .succeeds()
+        .stdout_matches(&re_custom_format);
+}
