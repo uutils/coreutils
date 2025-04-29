@@ -59,6 +59,7 @@ use uucore::libc::{dev_t, major, minor};
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{self, QuotingStyle, escape_name};
 use uucore::{
+    custom_tz_fmt,
     display::Quotable,
     error::{UError, UResult, set_exit_code},
     format_usage,
@@ -297,7 +298,10 @@ impl TimeStyler {
             TimeStyle::Locale => StrftimeItems::new("%b %e  %Y").parse(),
             TimeStyle::Format(fmt) => {
                 // Box the fmt value to make it static.
-                StrftimeItems::new_lenient(Box::leak(fmt.clone().into_boxed_str())).parse()
+                StrftimeItems::new_lenient(Box::leak(
+                    custom_tz_fmt::custom_time_format(fmt).into_boxed_str(),
+                ))
+                .parse()
             }
         }
         .unwrap();
