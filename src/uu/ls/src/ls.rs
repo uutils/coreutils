@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
 use std::iter;
 #[cfg(windows)]
@@ -31,6 +31,8 @@ use clap::{
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
+use jiff::fmt::StdIoWrite;
+use jiff::fmt::strtime::BrokenDownTime;
 use jiff::{Timestamp, Zoned};
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
@@ -279,21 +281,29 @@ fn is_recent(time: Timestamp, state: &mut ListState) -> bool {
 
 impl TimeStyle {
     /// Format the given time according to this time format style.
-    fn format(&self, date: Zoned, state: &mut ListState) -> String {
+    fn format(
+        &self,
+        date: Zoned,
+        out: &mut Vec<u8>,
+        state: &mut ListState,
+    ) -> Result<(), jiff::Error> {
         let recent = is_recent(date.timestamp(), state);
+        let tm = BrokenDownTime::from(&date);
+        let out = StdIoWrite(out);
+
         match (self, recent) {
-            (Self::FullIso, _) => date.strftime("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
-            (Self::LongIso, _) => date.strftime("%Y-%m-%d %H:%M").to_string(),
-            (Self::Iso, true) => date.strftime("%m-%d %H:%M").to_string(),
-            (Self::Iso, false) => date.strftime("%Y-%m-%d ").to_string(),
+            (Self::FullIso, _) => tm.format("%Y-%m-%d %H:%M:%S.%f %z", out),
+            (Self::LongIso, _) => tm.format("%Y-%m-%d %H:%M", out),
+            (Self::Iso, true) => tm.format("%m-%d %H:%M", out),
+            (Self::Iso, false) => tm.format("%Y-%m-%d ", out),
             // spell-checker:ignore (word) datetime
             //In this version of chrono translating can be done
             //The function is chrono::datetime::DateTime::format_localized
             //However it's currently still hard to get the current pure-rust-locale
             //So it's not yet implemented
-            (Self::Locale, true) => date.strftime("%b %e %H:%M").to_string(),
-            (Self::Locale, false) => date.strftime("%b %e  %Y").to_string(),
-            (Self::Format(fmt), _) => date.strftime(&fmt).to_string(),
+            (Self::Locale, true) => tm.format("%b %e %H:%M", out),
+            (Self::Locale, false) => tm.format("%b %e  %Y", out),
+            (Self::Format(fmt), _) => tm.format(&fmt, out),
         }
     }
 }
@@ -2874,7 +2884,7 @@ fn display_item_long(
         };
 
         output_display.extend(b" ");
-        output_display.extend(display_date(md, config, state).as_bytes());
+        display_date(md, config, state, &mut output_display)?;
         output_display.extend(b" ");
 
         let item_name = display_item_name(
@@ -3078,10 +3088,22 @@ fn get_time(md: &Metadata, config: &Config) -> Option<Zoned> {
     time.try_into().ok()
 }
 
-fn display_date(metadata: &Metadata, config: &Config, state: &mut ListState) -> String {
+fn display_date(
+    metadata: &Metadata,
+    config: &Config,
+    state: &mut ListState,
+    out: &mut Vec<u8>,
+) -> UResult<()> {
     match get_time(metadata, config) {
-        Some(time) => config.time_style.format(time, state),
-        None => "???".into(),
+        // TODO: Some fancier error conversion might be nice.
+        Some(time) => config
+            .time_style
+            .format(time, out, state)
+            .map_err(|x| USimpleError::new(1, x.to_string())),
+        None => {
+            out.extend(b"???");
+            Ok(())
+        }
     }
 }
 
