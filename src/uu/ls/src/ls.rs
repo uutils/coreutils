@@ -297,11 +297,8 @@ impl TimeStyler {
             // So it's not yet implemented
             TimeStyle::Locale => StrftimeItems::new("%b %e  %Y").parse(),
             TimeStyle::Format(fmt) => {
-                // Box the fmt value to make it static.
-                StrftimeItems::new_lenient(Box::leak(
-                    custom_tz_fmt::custom_time_format(fmt).into_boxed_str(),
-                ))
-                .parse()
+                StrftimeItems::new_lenient(custom_tz_fmt::custom_time_format(fmt).as_str())
+                    .parse_to_owned()
             }
         }
         .unwrap();
