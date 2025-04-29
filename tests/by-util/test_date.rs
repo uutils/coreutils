@@ -1,17 +1,14 @@
-// cSpell:disable
-use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc};
-// cSpell:enable
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc}; // spell-checker:disable-line
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use uucore::process::geteuid;
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
