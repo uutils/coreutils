@@ -5,8 +5,11 @@
 
 // spell-checker:ignore (words) RFILE
 
-use crate::common::util::TestScenario;
 use std::io::{Seek, SeekFrom, Write};
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 static FILE1: &str = "truncate_test_1";
 static FILE2: &str = "truncate_test_2";

@@ -4,9 +4,11 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) reallylongexecutable nbaz
 
-use crate::common::util::TestScenario;
 #[cfg(any(unix, target_os = "redox"))]
 use std::ffi::OsStr;
+use uutests::new_ucmd;
+use uutests::util::TestScenario;
+use uutests::util_name;
 
 #[test]
 fn test_help() {

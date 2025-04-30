@@ -212,9 +212,9 @@ dependencies = [
 
 [[package]]
 name = "blake3"
-version = "1.7.0"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b17679a8d69b6d7fd9cd9801a536cec9fa5e5970b69f9d4747f70b39b031f5e7"
+checksum = "34a796731680be7931955498a16a10b2270c7762963d5d570fdbfe02dcbf314f"
 dependencies = [
  "arrayref",
  "arrayvec",
@@ -337,18 +337,18 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.32"
+version = "4.5.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6088f3ae8c3608d19260cd7445411865a485688711b78b5be70d78cd96136f83"
+checksum = "e958897981290da2a852763fe9cdb89cd36977a5d729023127095fa94d95e2ff"
 dependencies = [
  "clap_builder",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.5.32"
+version = "4.5.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22a7ef7f676155edfb82daa97f99441f3ebf4a58d5e32f295a56259f1b6facc8"
+checksum = "83b0f35019843db2160b5bb19ae09b4e6411ac33fc6a712003c33e03090e2489"
 dependencies = [
  "anstream",
  "anstyle",
@@ -448,6 +448,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "clap_mangen",
+ "ctor",
  "filetime",
  "glob",
  "hex-literal",
@@ -574,6 +575,7 @@ dependencies = [
  "uu_yes",
  "uucore",
  "uuhelp_parser",
+ "uutests",
  "walkdir",
  "xattr",
  "zip",
@@ -725,6 +727,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctor"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07e9666f4a9a948d4f1dff0c08a4512b0f7c86414b23960104c243c10d79f4c3"
+dependencies = [
+ "ctor-proc-macro",
+ "dtor",
+]
+
+[[package]]
+name = "ctor-proc-macro"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f211af61d8efdd104f96e57adf5e426ba1bc3ed7a4ead616e15e5881fd79c4d"
+
+[[package]]
 name = "ctrlc"
 version = "3.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -816,6 +834,21 @@ dependencies = [
  "socket2",
  "windows-sys 0.48.0",
 ]
+
+[[package]]
+name = "dtor"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "222ef136a1c687d4aa0395c175f2c4586e379924c352fd02f7870cf7de783c23"
+dependencies = [
+ "dtor-proc-macro",
+]
+
+[[package]]
+name = "dtor-proc-macro"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7454e41ff9012c00d53cf7f475c5e3afa3b91b7c90568495495e8d9bf47a1055"
 
 [[package]]
 name = "dunce"
@@ -1566,11 +1599,11 @@ dependencies = [
 
 [[package]]
 name = "os_display"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a6229bad892b46b0dcfaaeb18ad0d2e56400f5aaea05b768bde96e73676cf75"
+checksum = "ad5fd71b79026fb918650dde6d125000a233764f1c2f1659a1c71118e33ea08f"
 dependencies = [
- "unicode-width 0.1.14",
+ "unicode-width 0.2.0",
 ]
 
 [[package]]
@@ -2629,6 +2662,7 @@ dependencies = [
  "libc",
  "nix",
  "signal-hook",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2694,6 +2728,7 @@ dependencies = [
  "clap",
  "nix",
  "rust-ini",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -2702,6 +2737,7 @@ name = "uu_expand"
 version = "0.0.30"
 dependencies = [
  "clap",
+ "thiserror 2.0.12",
  "unicode-width 0.2.0",
  "uucore",
 ]
@@ -2996,6 +3032,7 @@ name = "uu_numfmt"
 version = "0.0.30"
 dependencies = [
  "clap",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3068,6 +3105,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "regex",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3196,6 +3234,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "memchr",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3263,6 +3302,7 @@ dependencies = [
  "memchr",
  "memmap2",
  "regex",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
@@ -3380,6 +3420,7 @@ name = "uu_unexpand"
 version = "0.0.30"
 dependencies = [
  "clap",
+ "thiserror 2.0.12",
  "unicode-width 0.2.0",
  "uucore",
 ]
@@ -3533,6 +3574,24 @@ name = "uuid"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0f540e3240398cce6128b64ba83fdbdd86129c16a3aa1a3a252efd66eb3d587"
+
+[[package]]
+name = "uutests"
+version = "0.0.30"
+dependencies = [
+ "ctor",
+ "glob",
+ "libc",
+ "nix",
+ "pretty_assertions",
+ "rand 0.9.0",
+ "regex",
+ "rlimit",
+ "tempfile",
+ "time",
+ "uucore",
+ "xattr",
+]
 
 [[package]]
 name = "uutils_term_grid"

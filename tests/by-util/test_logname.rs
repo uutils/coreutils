@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use crate::common::util::{TestScenario, is_ci};
 use std::env;
+use uutests::new_ucmd;
+use uutests::util::{TestScenario, is_ci};
+use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {

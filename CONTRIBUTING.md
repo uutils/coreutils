@@ -36,6 +36,8 @@ parts for getting started:
 - [`src/bin/coreutils.rs`](https://github.com/uutils/coreutils/tree/main/src/bin/coreutils.rs): Code for the multicall
   binary.
 - [`docs`](https://github.com/uutils/coreutils/tree/main/docs/src): the documentation for the website
+- [`tests/uutests/`](https://github.com/uutils/coreutils/tree/main/tests/uutests/):
+  Crate implementing the various functions to test uutils commands.
 
 Each utility is defined as a separate crate. The structure of each of these
 crates is as follows:

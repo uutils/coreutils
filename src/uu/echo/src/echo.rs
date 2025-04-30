@@ -23,18 +23,32 @@ mod options {
     pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
 }
 
+fn is_echo_flag(arg: &OsString) -> bool {
+    matches!(arg.to_str(), Some("-e" | "-E" | "-n"))
+}
+
 // A workaround because clap interprets the first '--' as a marker that a value
 // follows. In order to use '--' as a value, we have to inject an additional '--'
 fn handle_double_hyphens(args: impl uucore::Args) -> impl uucore::Args {
     let mut result = Vec::new();
-    let mut is_first_double_hyphen = true;
+    let mut is_first_argument = true;
+    let mut args_iter = args.into_iter();
 
-    for arg in args {
-        if arg == "--" && is_first_double_hyphen {
-            result.push(OsString::from("--"));
-            is_first_double_hyphen = false;
+    if let Some(first_val) = args_iter.next() {
+        // the first argument ('echo') gets pushed before we start with the checks for flags/'--'
+        result.push(first_val);
+        // We need to skip any possible Flag arguments until we find the first argument to echo that
+        // is not a flag. If the first argument is double hyphen we inject an additional '--'
+        // otherwise we switch is_first_argument boolean to skip the checks for any further arguments
+        for arg in args_iter {
+            if is_first_argument && !is_echo_flag(&arg) {
+                is_first_argument = false;
+                if arg == "--" {
+                    result.push(OsString::from("--"));
+                }
+            }
+            result.push(arg);
         }
-        result.push(arg);
     }
 
     result.into_iter()
