@@ -313,6 +313,8 @@ pub struct Options {
     pub progress_bar: bool,
     /// `-Z`
     pub set_selinux_context: bool,
+    /// `--context[=CTX]`
+    pub context: Option<String>,
 }
 
 impl Default for Options {
@@ -340,6 +342,7 @@ impl Default for Options {
             verbose: false,
             progress_bar: false,
             set_selinux_context: false,
+            context: None,
         }
     }
 }
@@ -719,6 +722,18 @@ pub fn uu_app() -> Command {
                 .help("set SELinux security context of destination file to default type")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(options::CONTEXT)
+                .long(options::CONTEXT)
+                .value_name("CTX")
+                .help(
+                    "like -Z, or if CTX is specified then set the SELinux or SMACK security \
+                    context to CTX",
+                )
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value(""),
+        )
         // TODO: implement the following args
         .arg(
             Arg::new(options::COPY_CONTENTS)
@@ -726,15 +741,6 @@ pub fn uu_app() -> Command {
                 .overrides_with(options::ATTRIBUTES_ONLY)
                 .help("NotImplemented: copy contents of special files when recursive")
                 .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::CONTEXT)
-                .long(options::CONTEXT)
-                .value_name("CTX")
-                .help(
-                    "NotImplemented: set SELinux security context of destination file to \
-                    default type",
-                ),
         )
         // END TODO
         .arg(
@@ -981,7 +987,6 @@ impl Options {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
-            options::CONTEXT,
             #[cfg(windows)]
             options::FORCE,
         ];
@@ -1183,7 +1188,24 @@ impl Options {
             target_dir,
             progress_bar: matches.get_flag(options::PROGRESS_BAR),
             set_selinux_context: matches.get_flag(options::SELINUX_CONTEXT),
+            context: matches.get_one::<String>(options::CONTEXT).cloned(),
         };
+
+        // Check for mutually exclusive options
+        if options.set_selinux_context && matches!(options.attributes.context, Preserve::Yes { .. })
+        {
+            return Err(Error::Error(
+                "cannot use -Z and --preserve=context together".into(),
+            ));
+        }
+        if options.context.is_some() && matches!(options.attributes.context, Preserve::Yes { .. }) {
+            return Err(Error::Error(
+                "cannot use --context and --preserve=context together".into(),
+            ));
+        }
+        if options.set_selinux_context && options.context.is_some() {
+            return Err(Error::Error("cannot use -Z and --context together".into()));
+        }
 
         Ok(options)
     }
@@ -1692,10 +1714,26 @@ pub(crate) fn copy_attributes(
     #[cfg(feature = "feat_selinux")]
     {
         if options.set_selinux_context {
-            // -Z flag takes precedence over --preserve=context
+            // -Z flag takes precedence over --context and --preserve=context
             uucore::selinux::set_selinux_security_context(dest, None).map_err(|e| {
                 Error::Error(format!("failed to set SELinux security context: {}", e))
             })?;
+        } else if let Some(ctx) = &options.context {
+            // --context option takes precedence over --preserve=context
+            if ctx.is_empty() {
+                // --context without a value is equivalent to -Z
+                uucore::selinux::set_selinux_security_context(dest, None).map_err(|e| {
+                    Error::Error(format!("failed to set SELinux security context: {}", e))
+                })?;
+            } else {
+                // --context=CTX sets the specified context
+                uucore::selinux::set_selinux_security_context(dest, Some(ctx)).map_err(|e| {
+                    Error::Error(format!(
+                        "failed to set SELinux security context to {}: {}",
+                        ctx, e
+                    ))
+                })?;
+            }
         } else {
             // Existing context preservation code
             handle_preserve(&attributes.context, || -> CopyResult<()> {
