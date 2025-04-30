@@ -1068,8 +1068,7 @@ fn test_seed_range_no_repeat() {
         .stdout_is("8\n9\n1\n5\n2\n6\n4\n3\n10\n7\n");
 }
 
-// The nonrepeating integer generator has a mode that doesn't kick in below 16 elements.
-// This has no visible effect but it's important that the tests exercise the codepath.
+// Test a longer input to exercise some more code paths in the sparse representation.
 #[test]
 fn test_seed_long_range_no_repeat() {
     new_ucmd!()
