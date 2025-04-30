@@ -1342,6 +1342,11 @@ fn positional_format_specifiers() {
         .stdout_only("05-");
 
     new_ucmd!()
+        .args(&["%0$d%d-", "5", "10", "6", "20"])
+        .fails_with_code(1)
+        .stderr_only("printf: %0$: invalid conversion specification\n");
+
+    new_ucmd!()
         .args(&[
             "Octal: %6$o, Int: %1$d, Float: %4$f, String: %2$s, Hex: %7$x, Scientific: %5$e, Char: %9$c, Unsigned: %3$u, Integer: %8$i",
             "42",          // 1$d - Int
