@@ -6,7 +6,12 @@
 
 use std::ffi::{CStr, CString, OsStr};
 use std::marker::PhantomData;
-use std::os::raw::{c_int, c_long, c_short};
+use std::os::raw::{c_int, c_long};
+// On musl, fts_level is an int, but on glibc it is a short.
+#[cfg(target_env = "musl")]
+use std::os::raw::c_int as fts_level_t;
+#[cfg(target_env = "gnu")]
+use std::os::raw::c_short as fts_level_t;
 use std::path::Path;
 use std::{io, iter, ptr, slice};
 
@@ -142,7 +147,7 @@ impl<'fts> EntryRef<'fts> {
         self.as_ref().fts_errno
     }
 
-    pub(crate) fn level(&self) -> c_short {
+    pub(crate) fn level(&self) -> fts_level_t {
         self.as_ref().fts_level
     }
 
@@ -162,7 +167,8 @@ impl<'fts> EntryRef<'fts> {
 
         ptr::NonNull::new(entry.fts_path)
             .map(|path_ptr| {
-                let path_size = usize::from(entry.fts_pathlen).saturating_add(1);
+                let mut path_size: usize = entry.fts_pathlen as usize;
+                path_size = path_size.saturating_add(1);
 
                 // SAFETY: `entry.fts_path` is a non-null pointer that is assumed to be valid.
                 unsafe { slice::from_raw_parts(path_ptr.as_ptr().cast(), path_size) }
