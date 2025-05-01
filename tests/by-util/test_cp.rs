@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::path_concat;
@@ -908,32 +908,32 @@ fn test_cp_arg_no_clobber_twice() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.touch("source.txt");
+    at.touch(TEST_HELLO_WORLD_SOURCE);
     scene
         .ucmd()
         .arg("--no-clobber")
-        .arg("source.txt")
-        .arg("dest.txt")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_DEST)
         .arg("--debug")
         .succeeds()
         .no_stderr();
 
-    assert_eq!(at.read("source.txt"), "");
+    assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "");
 
-    at.append("source.txt", "some-content");
+    at.append(TEST_HELLO_WORLD_SOURCE, "some-content");
     scene
         .ucmd()
         .arg("--no-clobber")
-        .arg("source.txt")
-        .arg("dest.txt")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_DEST)
         .arg("--debug")
         .succeeds()
-        .stdout_contains("skipped 'dest.txt'");
+        .stdout_contains(format!("skipped '{}'", TEST_HELLO_WORLD_DEST));
 
-    assert_eq!(at.read("source.txt"), "some-content");
+    assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "some-content");
     // Should be empty as the "no-clobber" should keep
     // the previous version
-    assert_eq!(at.read("dest.txt"), "");
+    assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "");
 }
 
 #[test]
@@ -6247,4 +6247,171 @@ fn test_cp_update_none_interactive_prompt_no() {
 
     assert_eq!(at.read(old_file), "old content");
     assert_eq!(at.read(new_file), "new content");
+}
+
+#[cfg(feature = "feat_selinux")]
+fn get_getfattr_output(f: &str) -> String {
+    use std::process::Command;
+
+    let getfattr_output = Command::new("getfattr")
+        .arg(f)
+        .arg("-n")
+        .arg("security.selinux")
+        .output()
+        .expect("Failed to run `getfattr` on the destination file");
+    println!("{:?}", getfattr_output);
+    assert!(
+        getfattr_output.status.success(),
+        "getfattr did not run successfully: {}",
+        String::from_utf8_lossy(&getfattr_output.stderr)
+    );
+
+    String::from_utf8_lossy(&getfattr_output.stdout)
+        .split('"')
+        .nth(1)
+        .unwrap_or("")
+        .to_string()
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_selinux() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let args = ["-Z", "--context=unconfined_u:object_r:user_tmp_t:s0"];
+    at.touch(TEST_HELLO_WORLD_SOURCE);
+    for arg in args {
+        ts.ucmd()
+            .arg(arg)
+            .arg(TEST_HELLO_WORLD_SOURCE)
+            .arg(TEST_HELLO_WORLD_DEST)
+            .succeeds();
+        assert!(at.file_exists(TEST_HELLO_WORLD_DEST));
+
+        let selinux_perm = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+
+        assert!(
+            selinux_perm.contains("unconfined_u"),
+            "Expected '{}' not found in getfattr output:\n{}",
+            "foo",
+            selinux_perm
+        );
+        at.remove(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_selinux_invalid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(TEST_HELLO_WORLD_SOURCE);
+    let args = [
+        "--context=a",
+        "--context=unconfined_u:object_r:user_tmp_t:s0:a",
+        "--context=nconfined_u:object_r:user_tmp_t:s0",
+    ];
+    for arg in args {
+        new_ucmd!()
+            .arg(arg)
+            .arg(TEST_HELLO_WORLD_SOURCE)
+            .arg(TEST_HELLO_WORLD_DEST)
+            .fails()
+            .stderr_contains("Failed to");
+        if at.file_exists(TEST_HELLO_WORLD_DEST) {
+            at.remove(TEST_HELLO_WORLD_DEST);
+        }
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_preserve_selinux() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let args = ["-Z", "--context=unconfined_u:object_r:user_tmp_t:s0"];
+    at.touch(TEST_HELLO_WORLD_SOURCE);
+    for arg in args {
+        ts.ucmd()
+            .arg(arg)
+            .arg(TEST_HELLO_WORLD_SOURCE)
+            .arg(TEST_HELLO_WORLD_DEST)
+            .arg("--preserve=all")
+            .succeeds();
+        assert!(at.file_exists(TEST_HELLO_WORLD_DEST));
+        let selinux_perm_dest = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+        assert!(
+            selinux_perm_dest.contains("unconfined_u"),
+            "Expected '{}' not found in getfattr output:\n{}",
+            "foo",
+            selinux_perm_dest
+        );
+        assert_eq!(
+            get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_SOURCE)),
+            selinux_perm_dest
+        );
+
+        #[cfg(all(unix, not(target_os = "freebsd")))]
+        {
+            // Assert that the mode, ownership, and timestamps are preserved
+            // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+            let metadata_src = at.metadata(TEST_HELLO_WORLD_SOURCE);
+            let metadata_dst = at.metadata(TEST_HELLO_WORLD_DEST);
+            assert_metadata_eq!(metadata_src, metadata_dst);
+        }
+
+        at.remove(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_preserve_selinux_admin_context() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let admin_context = "system_u:object_r:admin_home_t:s0";
+
+    at.touch(TEST_HELLO_WORLD_SOURCE);
+
+    let cmd_result = ts
+        .ucmd()
+        .arg("-Z")
+        .arg(format!("--context={admin_context}"))
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .run();
+
+    if !cmd_result.succeeded() {
+        println!("Skipping test: Cannot set SELinux context, system may not support this context");
+        return;
+    }
+
+    let actual_context = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+
+    at.remove(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+
+    ts.ucmd()
+        .arg("-Z")
+        .arg(format!("--context={}", actual_context))
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .arg("--preserve=all")
+        .succeeds();
+
+    assert!(at.file_exists(TEST_HELLO_WORLD_DEST));
+
+    let selinux_perm_dest = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+    let selinux_perm_src = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_SOURCE));
+
+    // Verify that the SELinux contexts match, whatever they may be
+    assert_eq!(selinux_perm_src, selinux_perm_dest);
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        let metadata_src = at.metadata(TEST_HELLO_WORLD_SOURCE);
+        let metadata_dst = at.metadata(TEST_HELLO_WORLD_DEST);
+        assert_metadata_eq!(metadata_src, metadata_dst);
+    }
+
+    at.remove(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
 }
