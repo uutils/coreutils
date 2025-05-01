@@ -289,21 +289,24 @@ impl TimeStyle {
     ) -> Result<(), jiff::Error> {
         let recent = is_recent(date.timestamp(), state);
         let tm = BrokenDownTime::from(&date);
-        let out = StdIoWrite(out);
+        let mut out = StdIoWrite(out);
+        let config = jiff::fmt::strtime::Config::new().lenient(true);
 
         match (self, recent) {
-            (Self::FullIso, _) => tm.format("%Y-%m-%d %H:%M:%S.%f %z", out),
-            (Self::LongIso, _) => tm.format("%Y-%m-%d %H:%M", out),
-            (Self::Iso, true) => tm.format("%m-%d %H:%M", out),
-            (Self::Iso, false) => tm.format("%Y-%m-%d ", out),
+            (Self::FullIso, _) => {
+                tm.format_with_config(&config, "%Y-%m-%d %H:%M:%S.%f %z", &mut out)
+            }
+            (Self::LongIso, _) => tm.format_with_config(&config, "%Y-%m-%d %H:%M", &mut out),
+            (Self::Iso, true) => tm.format_with_config(&config, "%m-%d %H:%M", &mut out),
+            (Self::Iso, false) => tm.format_with_config(&config, "%Y-%m-%d ", &mut out),
             // spell-checker:ignore (word) datetime
             //In this version of chrono translating can be done
             //The function is chrono::datetime::DateTime::format_localized
             //However it's currently still hard to get the current pure-rust-locale
             //So it's not yet implemented
-            (Self::Locale, true) => tm.format("%b %e %H:%M", out),
-            (Self::Locale, false) => tm.format("%b %e  %Y", out),
-            (Self::Format(fmt), _) => tm.format(&fmt, out),
+            (Self::Locale, true) => tm.format_with_config(&config, "%b %e %H:%M", &mut out),
+            (Self::Locale, false) => tm.format_with_config(&config, "%b %e  %Y", &mut out),
+            (Self::Format(fmt), _) => tm.format_with_config(&config, fmt, &mut out),
         }
     }
 }
