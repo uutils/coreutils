@@ -201,27 +201,6 @@ impl Entry {
     }
 }
 
-/// Decide whether the given path ends with `/.`.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// assert!(ends_with_slash_dot("/."));
-/// assert!(ends_with_slash_dot("./."));
-/// assert!(ends_with_slash_dot("a/."));
-///
-/// assert!(!ends_with_slash_dot("."));
-/// assert!(!ends_with_slash_dot("./"));
-/// assert!(!ends_with_slash_dot("a/.."));
-/// ```
-fn ends_with_slash_dot<P>(path: P) -> bool
-where
-    P: AsRef<Path>,
-{
-    // `path.ends_with(".")` does not seem to work
-    path.as_ref().display().to_string().ends_with("/.")
-}
-
 #[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
@@ -248,10 +227,7 @@ fn copy_direntry(
 
     // If the source is a directory and the destination does not
     // exist, ...
-    if source_absolute.is_dir()
-        && !ends_with_slash_dot(&source_absolute)
-        && !local_to_target.exists()
-    {
+    if source_absolute.is_dir() && !local_to_target.exists() {
         return if target_is_file {
             Err("cannot overwrite non-directory with directory".into())
         } else {
@@ -589,27 +565,4 @@ fn build_dir(
 
     builder.create(path)?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ends_with_slash_dot;
-
-    #[test]
-    #[allow(clippy::cognitive_complexity)]
-    fn test_ends_with_slash_dot() {
-        assert!(ends_with_slash_dot("/."));
-        assert!(ends_with_slash_dot("./."));
-        assert!(ends_with_slash_dot("../."));
-        assert!(ends_with_slash_dot("a/."));
-        assert!(ends_with_slash_dot("/a/."));
-
-        assert!(!ends_with_slash_dot(""));
-        assert!(!ends_with_slash_dot("."));
-        assert!(!ends_with_slash_dot("./"));
-        assert!(!ends_with_slash_dot(".."));
-        assert!(!ends_with_slash_dot("/.."));
-        assert!(!ends_with_slash_dot("a/.."));
-        assert!(!ends_with_slash_dot("/a/.."));
-    }
 }

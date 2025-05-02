@@ -292,6 +292,24 @@ fn test_cp_recurse_several() {
 }
 
 #[test]
+fn test_cp_recurse_source_path_ends_with_slash_dot() {
+    let source_dir = "source_dir";
+    let target_dir = "target_dir";
+    let file = "file";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir(source_dir);
+    at.touch(format!("{source_dir}/{file}"));
+
+    ucmd.arg("-r")
+        .arg(format!("{source_dir}/."))
+        .arg(target_dir)
+        .succeeds()
+        .no_output();
+    assert!(at.file_exists(format!("{target_dir}/{file}")));
+}
+
+#[test]
 fn test_cp_with_dirs_t() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("-t")
