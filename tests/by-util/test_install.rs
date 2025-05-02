@@ -1808,3 +1808,159 @@ fn test_install_symlink_same_file() {
             "'{target_dir}/{file}' and '{target_link}/{file}' are the same file"
         ));
 }
+
+#[test]
+fn test_install_no_target_directory_failing_cannot_overwrite() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "file";
+    let dir = "dir";
+
+    at.touch(file);
+    at.mkdir(dir);
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(file)
+        .arg(dir)
+        .fails()
+        .stderr_contains("cannot overwrite directory 'dir' with non-directory");
+
+    assert!(!at.dir_exists("dir/file"));
+}
+
+#[test]
+fn test_install_no_target_directory_failing_omitting_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir1 = "dir1";
+    let dir2 = "dir2";
+
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(dir1)
+        .arg(dir2)
+        .fails()
+        .stderr_contains("omitting directory 'dir1'");
+}
+
+#[test]
+fn test_install_no_target_directory_creating_leading_dirs_with_single_source_and_target_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source1 = "file";
+    let target_dir = "missing_target_dir/";
+
+    at.touch(source1);
+
+    // installing a single file into a missing directory will fail, when -D is used w/o -t parameter
+    scene
+        .ucmd()
+        .arg("-TD")
+        .arg(source1)
+        .arg(at.plus(target_dir))
+        .fails()
+        .stderr_contains("missing_target_dir/' is not a directory");
+
+    assert!(!at.dir_exists(target_dir));
+}
+
+#[test]
+fn test_install_no_target_directory_failing_combine_with_target_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "file";
+    let dir1 = "dir1";
+
+    at.touch(file);
+    at.mkdir(dir1);
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(file)
+        .arg("-t")
+        .arg(dir1)
+        .fails()
+        .stderr_contains(
+            "Options --target-directory and --no-target-directory are mutually exclusive",
+        );
+}
+
+#[test]
+fn test_install_no_target_directory_failing_usage_with_target_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "file";
+
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(file)
+        .arg("-t")
+        .fails()
+        .stderr_contains(
+            "a value is required for '--target-directory <DIRECTORY>' but none was supplied",
+        )
+        .stderr_contains("For more information, try '--help'");
+}
+
+#[test]
+fn test_install_no_target_multiple_sources_and_target_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file1 = "file1";
+    let file2 = "file2";
+    let dir1 = "dir1";
+    let dir2 = "dir2";
+
+    at.touch(file1);
+    at.touch(file2);
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+
+    // installing multiple files into a missing directory will fail, when -D is used w/o -t parameter
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(file1)
+        .arg(file2)
+        .arg(dir1)
+        .fails()
+        .stderr_contains("extra operand 'dir1'")
+        .stderr_contains("[OPTION]... [FILE]...");
+
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(file1)
+        .arg(file2)
+        .arg(dir1)
+        .arg(dir2)
+        .fails()
+        .stderr_contains("extra operand 'dir1'")
+        .stderr_contains("[OPTION]... [FILE]...");
+}
+
+#[test]
+fn test_install_no_target_basic() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let dir = "dir";
+
+    at.touch(file);
+    at.mkdir(dir);
+    ucmd.arg("-T")
+        .arg(file)
+        .arg(format!("{dir}/{file}"))
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(format!("{dir}/{file}")));
+}
