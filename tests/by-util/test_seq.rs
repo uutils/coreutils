@@ -943,8 +943,8 @@ fn test_parse_out_of_bounds_exponents() {
         .stdout_only("-0\n1\n");
 }
 
-#[ignore]
 #[test]
+#[should_panic]
 fn test_parse_valid_hexadecimal_float_format_issues() {
     // These tests detect differences in the representation of floating-point values with GNU seq.
     // There are two key areas to investigate:

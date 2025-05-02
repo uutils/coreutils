@@ -555,9 +555,9 @@ fn test_ascii_521k_to_file() {
     );
 }
 
-#[ignore]
 #[cfg(unix)]
 #[test]
+#[ignore]
 fn test_ascii_5_gibi_to_file() {
     let tname = "ascii-5G";
     let tmp_fn = format!("TESTFILE-{tname}.tmp");
