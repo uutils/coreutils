@@ -742,8 +742,8 @@ mod gnu_expr {
             .stdout_only("3\n");
     }
 
-    #[ignore]
     #[test]
+    #[should_panic]
     fn test_bre11() {
         new_ucmd!()
             .args(&["a$b", ":", "a$b"])
@@ -791,8 +791,8 @@ mod gnu_expr {
             .stdout_only("\n");
     }
 
-    #[ignore]
     #[test]
+    #[should_panic]
     fn test_bre17() {
         new_ucmd!()
             .args(&["{1}a", ":", "\\(\\{1\\}a\\)"])
@@ -800,8 +800,8 @@ mod gnu_expr {
             .stdout_only("{1}a\n");
     }
 
-    #[ignore]
     #[test]
+    #[should_panic]
     fn test_bre18() {
         new_ucmd!()
             .args(&["X*", ":", "X\\(*\\)", ":", "^*"])
@@ -809,8 +809,8 @@ mod gnu_expr {
             .stdout_only("1\n");
     }
 
-    #[ignore]
     #[test]
+    #[should_panic]
     fn test_bre19() {
         new_ucmd!()
             .args(&["{1}", ":", "\\{1\\}"])
@@ -1021,8 +1021,8 @@ mod gnu_expr {
             .stderr_contains("Invalid content of \\{\\}");
     }
 
-    #[ignore]
     #[test]
+    #[should_panic]
     fn test_bre45() {
         new_ucmd!()
             .args(&["a", ":", "a\\{,2\\}"])
@@ -1030,8 +1030,8 @@ mod gnu_expr {
             .stdout_only("1\n");
     }
 
-    #[ignore]
     #[test]
+    #[should_panic]
     fn test_bre46() {
         new_ucmd!()
             .args(&["a", ":", "a\\{,\\}"])
