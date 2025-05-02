@@ -217,7 +217,6 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // TODO implement flag
             Arg::new(OPT_CREATE_LEADING)
                 .short('D')
                 .help(
@@ -274,7 +273,6 @@ pub fn uu_app() -> Command {
         )
         .arg(backup_control::arguments::suffix())
         .arg(
-            // TODO implement flag
             Arg::new(OPT_TARGET_DIRECTORY)
                 .short('t')
                 .long(OPT_TARGET_DIRECTORY)
@@ -732,7 +730,6 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
         }
         let backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
-            // TODO!!
             if let Err(err) = fs::rename(to, backup_path) {
                 return Err(
                     InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err).into(),
