@@ -730,11 +730,9 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
         }
         let backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
-            if let Err(err) = fs::rename(to, backup_path) {
-                return Err(
-                    InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err).into(),
-                );
-            }
+            fs::rename(to, backup_path).map_err(|err| {
+                InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err)
+            })?;
         }
         Ok(backup_path)
     } else {
