@@ -1705,49 +1705,26 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    #[cfg(feature = "feat_selinux")]
-    {
-        if options.set_selinux_context {
-            // -Z flag takes precedence over --context and --preserve=context
-            uucore::selinux::set_selinux_security_context(dest, None).map_err(|e| {
-                Error::Error(format!("failed to set SELinux security context: {}", e))
-            })?;
-        } else if let Some(ctx) = &options.context {
-            // --context option takes precedence over --preserve=context
-            if ctx.is_empty() {
-                // --context without a value is equivalent to -Z
-                uucore::selinux::set_selinux_security_context(dest, None).map_err(|e| {
-                    Error::Error(format!("failed to set SELinux security context: {}", e))
-                })?;
-            } else {
-                // --context=CTX sets the specified context
-                uucore::selinux::set_selinux_security_context(dest, Some(ctx)).map_err(|e| {
-                    Error::Error(format!(
-                        "failed to set SELinux security context to {}: {}",
-                        ctx, e
-                    ))
-                })?;
+    #[cfg(feature = "selinux")]
+    handle_preserve(&attributes.context, || -> CopyResult<()> {
+        // Get the source context and apply it to the destination
+        if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
+            if let Some(context) = context {
+                if let Err(e) = context.set_for_path(dest, false, false) {
+                    return Err(Error::Error(format!(
+                        "failed to set security context for {}: {e}",
+                        dest.display()
+                    )));
+                }
             }
         } else {
-            // Existing context preservation code
-            handle_preserve(&attributes.context, || -> CopyResult<()> {
-                let context =
-                    selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
-                        format!(
-                            "failed to get security context of {}: {e}",
-                            source.display(),
-                        )
-                    })?;
-                if let Some(context) = context {
-                    context.set_for_path(dest, false, false).map_err(|e| {
-                        format!("failed to set security context for {}: {e}", dest.display(),)
-                    })?;
-                }
-
-                Ok(())
-            })?;
+            return Err(Error::Error(format!(
+                "failed to get security context of {}",
+                source.display()
+            )));
         }
-    }
+        Ok(())
+    })?;
 
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
         #[cfg(all(unix, not(target_os = "android")))]

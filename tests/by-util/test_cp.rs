@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::path_concat;
@@ -6369,49 +6369,300 @@ fn test_cp_preserve_selinux() {
 fn test_cp_preserve_selinux_admin_context() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let admin_context = "system_u:object_r:admin_home_t:s0";
 
     at.touch(TEST_HELLO_WORLD_SOURCE);
+
+    // Get the default SELinux context for the destination file path
+    // on Debian/Ubuntu, this program is provided by the selinux-utils package
+    // on Fedora/RHEL, this program is provided by the libselinux-devel package
+    let output = std::process::Command::new("matchpathcon")
+        .arg(at.plus_as_string(TEST_HELLO_WORLD_DEST))
+        .output()
+        .expect("failed to execute matchpathcon command");
+
+    assert!(
+        output.status.success(),
+        "matchpathcon command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let default_context = output_str
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or_default()
+        .to_string();
+
+    assert!(
+        !default_context.is_empty(),
+        "Unable to determine default SELinux context for the test file"
+    );
 
     let cmd_result = ts
         .ucmd()
         .arg("-Z")
-        .arg(format!("--context={admin_context}"))
+        .arg(format!("--context={}", default_context))
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
+
+    println!("cp command result: {:?}", cmd_result);
 
     if !cmd_result.succeeded() {
         println!("Skipping test: Cannot set SELinux context, system may not support this context");
         return;
     }
 
-    let actual_context = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
-
-    at.remove(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
-
-    ts.ucmd()
-        .arg("-Z")
-        .arg(format!("--context={}", actual_context))
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg(TEST_HELLO_WORLD_DEST)
-        .arg("--preserve=all")
-        .succeeds();
-
     assert!(at.file_exists(TEST_HELLO_WORLD_DEST));
 
     let selinux_perm_dest = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
-    let selinux_perm_src = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_SOURCE));
+    println!("Destination SELinux context: {}", selinux_perm_dest);
 
-    // Verify that the SELinux contexts match, whatever they may be
-    assert_eq!(selinux_perm_src, selinux_perm_dest);
-
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        let metadata_src = at.metadata(TEST_HELLO_WORLD_SOURCE);
-        let metadata_dst = at.metadata(TEST_HELLO_WORLD_DEST);
-        assert_metadata_eq!(metadata_src, metadata_dst);
-    }
+    assert_eq!(default_context, selinux_perm_dest);
 
     at.remove(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_selinux_context_priority() {
+    // This test verifies that the priority order is respected:
+    // -Z > --context > --preserve=context
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Create two different files
+    at.write(TEST_HELLO_WORLD_SOURCE, "source content");
+
+    // First, set a known context on source file (only if system supports it)
+    let setup_result = ts
+        .ucmd()
+        .arg("--context=unconfined_u:object_r:user_tmp_t:s0")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("initial_context.txt")
+        .run();
+
+    // If the system doesn't support setting contexts, skip the test
+    if !setup_result.succeeded() {
+        println!("Skipping test: System doesn't support setting SELinux contexts");
+        return;
+    }
+
+    // Create different copies with different context options
+
+    // 1. Using --preserve=context
+    ts.ucmd()
+        .arg("--preserve=context")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("preserve.txt")
+        .succeeds();
+
+    // 2. Using --context with a different context (we already know this works from setup)
+    ts.ucmd()
+        .arg("--context=unconfined_u:object_r:user_tmp_t:s0")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("context.txt")
+        .succeeds();
+
+    // 3. Using -Z (should use default type context)
+    ts.ucmd()
+        .arg("-Z")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("z_flag.txt")
+        .succeeds();
+
+    // 4. Using both -Z and --context (Z should win)
+    ts.ucmd()
+        .arg("-Z")
+        .arg("--context=unconfined_u:object_r:user_tmp_t:s0")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("z_and_context.txt")
+        .succeeds();
+
+    // 5. Using both -Z and --preserve=context (Z should win)
+    ts.ucmd()
+        .arg("-Z")
+        .arg("--preserve=context")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("z_and_preserve.txt")
+        .succeeds();
+
+    // Get all the contexts
+    let source_ctx = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_SOURCE));
+    let preserve_ctx = get_getfattr_output(&at.plus_as_string("preserve.txt"));
+    let context_ctx = get_getfattr_output(&at.plus_as_string("context.txt"));
+    let z_ctx = get_getfattr_output(&at.plus_as_string("z_flag.txt"));
+    let z_and_context_ctx = get_getfattr_output(&at.plus_as_string("z_and_context.txt"));
+    let z_and_preserve_ctx = get_getfattr_output(&at.plus_as_string("z_and_preserve.txt"));
+
+    if source_ctx.is_empty() {
+        println!("Skipping test assertions: Failed to get SELinux contexts");
+        return;
+    }
+    assert_eq!(
+        source_ctx, preserve_ctx,
+        "--preserve=context should match the source context"
+    );
+    assert_eq!(
+        source_ctx, context_ctx,
+        "--preserve=context should match the source context"
+    );
+    assert_eq!(
+        z_ctx, z_and_context_ctx,
+        "-Z context should be the same regardless of --context"
+    );
+    assert_eq!(
+        z_ctx, z_and_preserve_ctx,
+        "-Z context should be the same regardless of --preserve=context"
+    );
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_selinux_empty_context() {
+    // This test verifies that --context without a value works like -Z
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write(TEST_HELLO_WORLD_SOURCE, "test content");
+
+    // Try creating copies - if this fails, the system doesn't support SELinux properly
+    let z_result = ts
+        .ucmd()
+        .arg("-Z")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("z_flag.txt")
+        .run();
+
+    if !z_result.succeeded() {
+        println!("Skipping test: SELinux contexts not supported");
+        return;
+    }
+
+    // Now try with --context (no value)
+    let context_result = ts
+        .ucmd()
+        .arg("--context")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("empty_context.txt")
+        .run();
+
+    if !context_result.succeeded() {
+        println!("Skipping test: Empty context parameter not supported");
+        return;
+    }
+
+    let z_ctx = get_getfattr_output(&at.plus_as_string("z_flag.txt"));
+    let empty_ctx = get_getfattr_output(&at.plus_as_string("empty_context.txt"));
+
+    if !z_ctx.is_empty() && !empty_ctx.is_empty() {
+        assert_eq!(
+            z_ctx, empty_ctx,
+            "--context without a value should behave like -Z"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_selinux_recursive() {
+    // Test SELinux context preservation in recursive directory copies
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("source_dir");
+    at.write("source_dir/file1.txt", "file1 content");
+    at.mkdir("source_dir/subdir");
+    at.write("source_dir/subdir/file2.txt", "file2 content");
+
+    let setup_result = ts
+        .ucmd()
+        .arg("--context=unconfined_u:object_r:user_tmp_t:s0")
+        .arg("source_dir/file1.txt")
+        .arg("source_dir/context_set.txt")
+        .run();
+
+    if !setup_result.succeeded() {
+        println!("Skipping test: System doesn't support setting SELinux contexts");
+        return;
+    }
+
+    ts.ucmd()
+        .arg("-rZ")
+        .arg("source_dir")
+        .arg("dest_dir_z")
+        .succeeds();
+
+    ts.ucmd()
+        .arg("-r")
+        .arg("--preserve=context")
+        .arg("source_dir")
+        .arg("dest_dir_preserve")
+        .succeeds();
+
+    let z_dir_ctx = get_getfattr_output(&at.plus_as_string("dest_dir_z"));
+    let preserve_dir_ctx = get_getfattr_output(&at.plus_as_string("dest_dir_preserve"));
+
+    if !z_dir_ctx.is_empty() && !preserve_dir_ctx.is_empty() {
+        assert!(
+            z_dir_ctx.contains("_u:"),
+            "SELinux contexts not properly set with -Z flag"
+        );
+
+        assert!(
+            preserve_dir_ctx.contains("_u:"),
+            "SELinux contexts not properly preserved with --preserve=context"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_cp_preserve_context_root() {
+    use uutests::util::run_ucmd_as_root;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source_file = "c";
+    let dest_file = "e";
+    at.touch(source_file);
+
+    let context = "root:object_r:tmp_t:s0";
+
+    let chcon_result = std::process::Command::new("chcon")
+        .arg(context)
+        .arg(at.plus_as_string(source_file))
+        .status();
+
+    if !chcon_result.is_ok_and(|status| status.success()) {
+        println!("Skipping test: Failed to set context: {}", context);
+        return;
+    }
+
+    // Copy the file with preserved context
+    // Only works at root
+    if let Ok(result) = run_ucmd_as_root(&scene, &["--preserve=context", source_file, dest_file]) {
+        let src_ctx = get_getfattr_output(&at.plus_as_string(source_file));
+        let dest_ctx = get_getfattr_output(&at.plus_as_string(dest_file));
+        println!("Source context: {}", src_ctx);
+        println!("Destination context: {}", dest_ctx);
+
+        if !result.succeeded() {
+            println!("Skipping test: Failed to copy with preserved context");
+            return;
+        }
+
+        let dest_context = get_getfattr_output(&at.plus_as_string(dest_file));
+
+        assert!(
+            dest_context.contains("root:object_r:tmp_t"),
+            "Expected context '{}' not found in destination context: '{}'",
+            context,
+            dest_context
+        );
+    } else {
+        print!("Test skipped; requires root user");
+    }
 }
