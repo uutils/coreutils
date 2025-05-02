@@ -1117,7 +1117,7 @@ impl Options {
             }
         }
 
-        #[cfg(not(feature = "feat_selinux"))]
+        #[cfg(not(feature = "selinux"))]
         if let Preserve::Yes { required } = attributes.context {
             let selinux_disabled_error =
                 Error::Error("SELinux was not enabled during the compile time!".to_string());
@@ -1492,7 +1492,7 @@ fn copy_source(
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
                 if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                    copy_attributes(&src, y, &options.attributes)?;
+                    copy_attributes(&src, y, &options.attributes, options)?;
                 }
             }
         }
@@ -1640,10 +1640,12 @@ fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
 }
 
 /// Copy the specified attributes from one path to another.
+#[allow(unused_variables)]
 pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
     attributes: &Attributes,
+    options: &Options,
 ) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata = fs::symlink_metadata(source).context(context)?;
@@ -1704,21 +1706,48 @@ pub(crate) fn copy_attributes(
     })?;
 
     #[cfg(feature = "feat_selinux")]
-    handle_preserve(&attributes.context, || -> CopyResult<()> {
-        let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
-            format!(
-                "failed to get security context of {}: {e}",
-                source.display(),
-            )
-        })?;
-        if let Some(context) = context {
-            context.set_for_path(dest, false, false).map_err(|e| {
-                format!("failed to set security context for {}: {e}", dest.display(),)
+    {
+        if options.set_selinux_context {
+            // -Z flag takes precedence over --context and --preserve=context
+            uucore::selinux::set_selinux_security_context(dest, None).map_err(|e| {
+                Error::Error(format!("failed to set SELinux security context: {}", e))
+            })?;
+        } else if let Some(ctx) = &options.context {
+            // --context option takes precedence over --preserve=context
+            if ctx.is_empty() {
+                // --context without a value is equivalent to -Z
+                uucore::selinux::set_selinux_security_context(dest, None).map_err(|e| {
+                    Error::Error(format!("failed to set SELinux security context: {}", e))
+                })?;
+            } else {
+                // --context=CTX sets the specified context
+                uucore::selinux::set_selinux_security_context(dest, Some(ctx)).map_err(|e| {
+                    Error::Error(format!(
+                        "failed to set SELinux security context to {}: {}",
+                        ctx, e
+                    ))
+                })?;
+            }
+        } else {
+            // Existing context preservation code
+            handle_preserve(&attributes.context, || -> CopyResult<()> {
+                let context =
+                    selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
+                        format!(
+                            "failed to get security context of {}: {e}",
+                            source.display(),
+                        )
+                    })?;
+                if let Some(context) = context {
+                    context.set_for_path(dest, false, false).map_err(|e| {
+                        format!("failed to set security context for {}: {e}", dest.display(),)
+                    })?;
+                }
+
+                Ok(())
             })?;
         }
-
-        Ok(())
-    })?;
+    }
 
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
         #[cfg(all(unix, not(target_os = "android")))]
@@ -2436,7 +2465,7 @@ fn copy_file(
     if options.dereference(source_in_command_line) {
         if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
             if src.exists() {
-                copy_attributes(&src, dest, &options.attributes)?;
+                copy_attributes(&src, dest, &options.attributes, options)?;
             }
         }
     } else if source_is_stream && source.exists() {
@@ -2444,9 +2473,9 @@ fn copy_file(
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
         // copy function (see `copy_stream` under platform/linux.rs).
-        copy_attributes(source, dest, &options.attributes)?;
+        copy_attributes(source, dest, &options.attributes, options)?;
     } else {
-        copy_attributes(source, dest, &options.attributes)?;
+        copy_attributes(source, dest, &options.attributes, options)?;
     }
 
     #[cfg(feature = "selinux")]
