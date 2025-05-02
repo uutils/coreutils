@@ -178,7 +178,7 @@ impl StringOp {
 
                 let re = Regex::with_options(
                     &re_string,
-                    RegexOptions::REGEX_OPTION_NONE,
+                    RegexOptions::REGEX_OPTION_SINGLELINE,
                     Syntax::grep(),
                 )
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
