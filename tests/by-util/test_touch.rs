@@ -4,9 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
+use filetime::FileTime;
 #[cfg(not(target_os = "freebsd"))]
 use filetime::set_symlink_file_times;
-use filetime::FileTime;
 use std::fs::remove_file;
 use std::path::PathBuf;
 use uutests::at_and_ucmd;
