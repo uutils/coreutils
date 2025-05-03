@@ -204,6 +204,7 @@ fn test_y2038_touch_last_before() {
 }
 
 #[test]
+#[cfg(target_pointer_width = "64")]
 fn test_y2038_touch_at() {
     // Jan 19 2038, 03:14:07 UTC is the moment of the Y2038 bug
     let (at, mut ucmd) = at_and_ucmd!();
@@ -223,6 +224,7 @@ fn test_y2038_touch_at() {
 }
 
 #[test]
+#[cfg(target_pointer_width = "64")]
 fn test_y2038_touch_just_after() {
     // Jan 19 2038, 03:14:07 UTC is the moment of the Y2038 bug
     let (at, mut ucmd) = at_and_ucmd!();
