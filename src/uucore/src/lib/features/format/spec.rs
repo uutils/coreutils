@@ -15,7 +15,7 @@ use super::{
 };
 use crate::{
     format::FormatArguments,
-    os_str_as_bytes_verbose,
+    os_str_as_bytes,
     quoting_style::{QuotingStyle, escape_name},
 };
 use std::{io::Write, num::NonZero, ops::ControlFlow};
@@ -377,10 +377,8 @@ impl Spec {
                 // TODO: We need to not use Rust's formatting for aligning the output,
                 // so that we can just write bytes to stdout without panicking.
                 let precision = resolve_asterisk_precision(*precision, args);
-
                 let os_str = args.next_string(position);
-
-                let bytes = os_str_as_bytes_verbose(os_str)?;
+                let bytes = os_str_as_bytes(os_str)?;
 
                 let truncated = match precision {
                     Some(p) if p < os_str.len() => &bytes[..p],
@@ -390,9 +388,7 @@ impl Spec {
             }
             Self::EscapedString { position } => {
                 let os_str = args.next_string(position);
-
-                let bytes = os_str_as_bytes_verbose(os_str)?;
-
+                let bytes = os_str_as_bytes(os_str)?;
                 let mut parsed = Vec::<u8>::new();
 
                 for c in parse_escape_only(bytes, OctalParsing::ThreeDigits) {
@@ -415,7 +411,7 @@ impl Spec {
                         show_control: false,
                     },
                 );
-                let bytes = os_str_as_bytes_verbose(&s)?;
+                let bytes = os_str_as_bytes(&s)?;
                 writer.write_all(bytes).map_err(FormatError::IoError)
             }
             Self::SignedInt {

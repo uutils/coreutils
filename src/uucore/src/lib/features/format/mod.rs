@@ -42,7 +42,7 @@ use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub use argument::{FormatArgument, FormatArguments};
 
 use self::{escape::parse_escape_code, num_format::Formatter};
-use crate::{NonUtf8OsStrError, OsStrConversionType, error::UError};
+use crate::{NonUtf8OsStrError, error::UError};
 pub use spec::Spec;
 use std::{
     error::Error,
@@ -123,20 +123,7 @@ impl Display for FormatError {
                 escape_char,
                 String::from_utf8_lossy(digits)
             ),
-            Self::InvalidEncoding(no) => {
-                use os_display::Quotable;
-
-                let quoted = no.input_lossy_string.quote();
-
-                match no.conversion_type {
-                    OsStrConversionType::ToBytes => f.write_fmt(format_args!(
-                        "invalid (non-UTF-8) argument like {quoted} encountered when converting argument to bytes on a platform that doesn't use UTF-8",
-                    )),
-                    OsStrConversionType::ToString => f.write_fmt(format_args!(
-                        "invalid (non-UTF-8) argument like {quoted} encountered",
-                    )),
-                }
-            }
+            Self::InvalidEncoding(no) => no.fmt(f),
         }
     }
 }

@@ -7,7 +7,7 @@ use super::{ExtendedBigDecimal, FormatError};
 use crate::format::spec::ArgumentLocation;
 use crate::{
     error::set_exit_code,
-    os_str_as_bytes_verbose, os_str_as_str_verbose,
+    os_str_as_bytes,
     parser::num_parser::{ExtendedParser, ExtendedParserError},
     quoting_style::{Quotes, QuotingStyle, escape_name},
     show_error, show_warning,
@@ -76,7 +76,7 @@ impl<'a> FormatArguments<'a> {
     pub fn next_char(&mut self, position: &ArgumentLocation) -> Result<u8, FormatError> {
         match self.next_arg(position) {
             Some(FormatArgument::Char(c)) => Ok(*c as u8),
-            Some(FormatArgument::Unparsed(os)) => match os_str_as_bytes_verbose(os)?.first() {
+            Some(FormatArgument::Unparsed(os)) => match os_str_as_bytes(os)?.first() {
                 Some(&byte) => Ok(byte),
                 None => Ok(b'\0'),
             },
@@ -94,11 +94,7 @@ impl<'a> FormatArguments<'a> {
     pub fn next_i64(&mut self, position: &ArgumentLocation) -> Result<i64, FormatError> {
         match self.next_arg(position) {
             Some(FormatArgument::SignedInt(n)) => Ok(*n),
-            Some(FormatArgument::Unparsed(os)) => {
-                let str = os_str_as_str_verbose(os)?;
-
-                Ok(extract_value(i64::extended_parse(str), str))
-            }
+            Some(FormatArgument::Unparsed(os)) => Self::get_num::<i64>(os),
             _ => Ok(0),
         }
     }
@@ -106,27 +102,7 @@ impl<'a> FormatArguments<'a> {
     pub fn next_u64(&mut self, position: &ArgumentLocation) -> Result<u64, FormatError> {
         match self.next_arg(position) {
             Some(FormatArgument::UnsignedInt(n)) => Ok(*n),
-            Some(FormatArgument::Unparsed(os)) => {
-                let s = os_str_as_str_verbose(os)?;
-                // Check if the string is a character literal enclosed in quotes
-                if s.starts_with(['"', '\'']) {
-                    // Extract the content between the quotes safely using chars
-                    let mut chars = s.trim_matches(|c| c == '"' || c == '\'').chars();
-                    if let Some(first_char) = chars.next() {
-                        if chars.clone().count() > 0 {
-                            // Emit a warning if there are additional characters
-                            let remaining: String = chars.collect();
-                            show_warning!(
-                                "{}: character(s) following character constant have been ignored",
-                                remaining
-                            );
-                        }
-                        return Ok(first_char as u64); // Use only the first character
-                    }
-                    return Ok(0); // Empty quotes
-                }
-                Ok(extract_value(u64::extended_parse(s), s))
-            }
+            Some(FormatArgument::Unparsed(os)) => Self::get_num::<u64>(os),
             _ => Ok(0),
         }
     }
@@ -137,13 +113,46 @@ impl<'a> FormatArguments<'a> {
     ) -> Result<ExtendedBigDecimal, FormatError> {
         match self.next_arg(position) {
             Some(FormatArgument::Float(n)) => Ok(n.clone()),
-            Some(FormatArgument::Unparsed(os)) => {
-                let s = os_str_as_str_verbose(os)?;
-
-                Ok(extract_value(ExtendedBigDecimal::extended_parse(s), s))
-            }
+            Some(FormatArgument::Unparsed(os)) => Self::get_num::<ExtendedBigDecimal>(os),
             _ => Ok(ExtendedBigDecimal::zero()),
         }
+    }
+
+    fn get_num<T>(os: &OsStr) -> Result<T, FormatError>
+    where
+        T: ExtendedParser + From<u8> + From<u32> + Default,
+    {
+        let s = os_str_as_bytes(os)?;
+        // Check if the string begins with a quote, and is therefore a literal
+        if let Some((&first, bytes)) = s.split_first() {
+            if (first == b'"' || first == b'\'') && !bytes.is_empty() {
+                let (val, len) = if let Some(c) = bytes
+                    .utf8_chunks()
+                    .next()
+                    .expect("bytes should not be empty")
+                    .valid()
+                    .chars()
+                    .next()
+                {
+                    // Valid UTF-8 character, cast the codepoint to u32 then T
+                    // (largest unicode codepoint is only 3 bytes, so this is safe)
+                    ((c as u32).into(), c.len_utf8())
+                } else {
+                    // Not a valid UTF-8 character, use the first byte
+                    (bytes[0].into(), 1)
+                };
+                // Emit a warning if there are additional characters
+                if bytes.len() > len {
+                    show_warning!(
+                        "{}: character(s) following character constant have been ignored",
+                        String::from_utf8_lossy(&bytes[len..])
+                    );
+                }
+                return Ok(val);
+            }
+        }
+        let s = os.to_string_lossy();
+        Ok(extract_value(T::extended_parse(&s), &s))
     }
 
     fn get_at_relative_position(&mut self, pos: NonZero<usize>) -> Option<&'a FormatArgument> {
