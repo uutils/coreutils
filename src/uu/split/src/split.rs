@@ -834,13 +834,7 @@ struct LineChunkWriter<'a> {
 impl<'a> LineChunkWriter<'a> {
     fn new(chunk_size: u64, settings: &'a Settings) -> UResult<Self> {
         let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
-        let filename = filename_iterator
-            .next()
-            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
-        if settings.verbose {
-            println!("creating file {}", filename.quote());
-        }
-        let inner = settings.instantiate_current_writer(&filename, true)?;
+        let inner = Self::start_new_chunk(settings, &mut filename_iterator)?;
         Ok(LineChunkWriter {
             settings,
             chunk_size,
@@ -849,6 +843,19 @@ impl<'a> LineChunkWriter<'a> {
             inner,
             filename_iterator,
         })
+    }
+
+    fn start_new_chunk(
+        settings: &Settings,
+        filename_iterator: &mut FilenameIterator,
+    ) -> io::Result<BufWriter<Box<dyn Write>>> {
+        let filename = filename_iterator
+            .next()
+            .ok_or_else(|| io::Error::other("output file suffixes exhausted"))?;
+        if settings.verbose {
+            println!("creating file {}", filename.quote());
+        }
+        settings.instantiate_current_writer(&filename, true)
     }
 }
 
@@ -869,14 +876,7 @@ impl Write for LineChunkWriter<'_> {
             // corresponding writer.
             if self.num_lines_remaining_in_current_chunk == 0 {
                 self.num_chunks_written += 1;
-                let filename = self
-                    .filename_iterator
-                    .next()
-                    .ok_or_else(|| io::Error::other("output file suffixes exhausted"))?;
-                if self.settings.verbose {
-                    println!("creating file {}", filename.quote());
-                }
-                self.inner = self.settings.instantiate_current_writer(&filename, true)?;
+                self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
                 self.num_lines_remaining_in_current_chunk = self.chunk_size;
             }
 
@@ -889,9 +889,19 @@ impl Write for LineChunkWriter<'_> {
             self.num_lines_remaining_in_current_chunk -= 1;
         }
 
-        let num_bytes_written =
-            custom_write(&buf[prev..buf.len()], &mut self.inner, self.settings)?;
-        total_bytes_written += num_bytes_written;
+        // There might be bytes remaining in the buffer, and we write
+        // them to the current chunk. But first, we may need to rotate
+        // the current chunk in case it has already reached its line
+        // limit.
+        if prev < buf.len() {
+            if self.num_lines_remaining_in_current_chunk == 0 {
+                self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
+                self.num_lines_remaining_in_current_chunk = self.chunk_size;
+            }
+            let num_bytes_written =
+                custom_write(&buf[prev..buf.len()], &mut self.inner, self.settings)?;
+            total_bytes_written += num_bytes_written;
+        }
         Ok(total_bytes_written)
     }
 
