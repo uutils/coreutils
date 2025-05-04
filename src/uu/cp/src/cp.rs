@@ -1710,7 +1710,7 @@ pub(crate) fn copy_attributes(
             if let Some(context) = context {
                 if let Err(e) = context.set_for_path(dest, false, false) {
                     return Err(Error::Error(format!(
-                        "failed to set security context for {}: {e}",
+                        "failed to set the security context of {}: {e}",
                         dest.display()
                     )));
                 }

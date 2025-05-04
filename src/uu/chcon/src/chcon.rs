@@ -608,7 +608,7 @@ fn process_file(
     if result.is_ok() {
         if options.verbose {
             println!(
-                "{}: Changing security context of: {}",
+                "{}: changing security context of {}",
                 uucore::util_name(),
                 file_full_name.quote()
             );

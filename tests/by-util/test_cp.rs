@@ -6315,7 +6315,7 @@ fn test_cp_selinux_invalid() {
             .arg(TEST_HELLO_WORLD_SOURCE)
             .arg(TEST_HELLO_WORLD_DEST)
             .fails()
-            .stderr_contains("Failed to");
+            .stderr_contains("failed to");
         if at.file_exists(TEST_HELLO_WORLD_DEST) {
             at.remove(TEST_HELLO_WORLD_DEST);
         }
