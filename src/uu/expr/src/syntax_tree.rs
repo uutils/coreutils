@@ -171,7 +171,8 @@ impl StringOp {
                 let mut prev_is_escaped = false;
                 for curr in pattern_chars {
                     match curr {
-                        '^' if prev_is_escaped || prev != '\\' => {
+                        // Carets are interpreted literally, unless used as character class negation "[^a]"
+                        '^' if prev_is_escaped || !matches!(prev, '\\' | '[') => {
                             re_string.push_str(r"\^")
                         }
                         char => re_string.push(char),
