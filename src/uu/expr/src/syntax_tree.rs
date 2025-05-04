@@ -178,10 +178,7 @@ impl StringOp {
                         char => re_string.push(char),
                     }
 
-                    prev_is_escaped = match prev {
-                        '\\' => !prev_is_escaped,
-                        _ => false,
-                    };
+                    prev_is_escaped = prev == '\\' && !prev_is_escaped;
                     prev = curr;
                 }
 
