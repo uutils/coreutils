@@ -166,13 +166,19 @@ impl StringOp {
                 };
 
                 // Handle the rest of the input pattern.
-                // Escape characters that should be handled literally within the pattern.
+                // Escaped previous character should not affect the current.
                 let mut prev = first.unwrap_or_default();
+                let mut prev_is_escaped = false;
                 for curr in pattern_chars {
                     match curr {
-                        '^' if prev != '\\' => re_string.push_str(r"\^"),
+                        // Carets are interpreted literally, unless used as character class negation "[^a]"
+                        '^' if prev_is_escaped || !matches!(prev, '\\' | '[') => {
+                            re_string.push_str(r"\^");
+                        }
                         char => re_string.push(char),
                     }
+
+                    prev_is_escaped = prev == '\\' && !prev_is_escaped;
                     prev = curr;
                 }
 

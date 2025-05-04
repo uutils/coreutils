@@ -303,6 +303,26 @@ fn test_regex() {
         .succeeds()
         .stdout_only("2\n");
     new_ucmd!()
+        .args(&["ab[^c]", ":", "ab[^c]"])
+        .succeeds()
+        .stdout_only("3\n"); // Matches "ab["
+    new_ucmd!()
+        .args(&["ab[^c]", ":", "ab\\[^c]"])
+        .succeeds()
+        .stdout_only("6\n");
+    new_ucmd!()
+        .args(&["[^a]", ":", "\\[^a]"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["\\a", ":", "\\\\[^^]"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["^a", ":", "^^[^^]"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
         .args(&["-5", ":", "-\\{0,1\\}[0-9]*$"])
         .succeeds()
         .stdout_only("2\n");
@@ -317,6 +337,10 @@ fn test_regex() {
         .stdout_only("0\n");
     new_ucmd!()
         .args(&["^abc", ":", "^abc"])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["abc", ":", "ab[^c]"])
         .fails()
         .stdout_only("0\n");
 }
