@@ -283,7 +283,9 @@ fn printf_writer<'a>(
     let args = args.into_iter().cloned().collect::<Vec<_>>();
     let mut args = FormatArguments::new(&args);
     for item in parse_spec_only(format_string.as_ref()) {
-        item?.write(&mut writer, &mut args)?;
+        if item?.write(&mut writer, &mut args)?.is_break() {
+            break;
+        }
     }
     Ok(())
 }
