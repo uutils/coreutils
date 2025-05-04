@@ -189,6 +189,29 @@ fn tail_stdin(
     input: &Input,
     observer: &mut Observer,
 ) -> UResult<()> {
+    // on macOS, resolve() will always return None for stdin,
+    // we need to detect if stdin is a directory ourselves.
+    // fstat-ing certain descriptors under /dev/fd fails with
+    // bad file descriptor or might not catch directory cases
+    // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
+    // on macOS and Linux.
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(mut stdin_handle) = Handle::stdin() {
+            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
+                if meta.file_type().is_dir() {
+                    set_exit_code(1);
+                    show_error!(
+                        "cannot open '{}' for reading: {}",
+                        input.display_name,
+                        text::NO_SUCH_FILE
+                    );
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     match input.resolve() {
         // fifo
         Some(path) => {

@@ -78,13 +78,17 @@ impl Input {
                 path.canonicalize().ok()
             }
             InputKind::File(_) | InputKind::Stdin => {
-                if cfg!(unix) {
-                    match PathBuf::from(text::DEV_STDIN).canonicalize().ok() {
-                        Some(path) if path != PathBuf::from(text::FD0) => Some(path),
-                        Some(_) | None => None,
-                    }
-                } else {
+                // on macOS, /dev/fd isn't backed by /proc and canonicalize()
+                // on dev/fd/0 (or /dev/stdin) will fail (NotFound),
+                // so we treat stdin as a pipe here
+                // https://github.com/rust-lang/rust/issues/95239
+                #[cfg(target_os = "macos")]
+                {
                     None
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    PathBuf::from(text::FD0).canonicalize().ok()
                 }
             }
         }
