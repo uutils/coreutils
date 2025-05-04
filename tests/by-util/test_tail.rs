@@ -324,7 +324,6 @@ fn test_stdin_redirect_dir() {
 //  `test_stdin_redirect_dir`
 #[test]
 #[cfg(target_vendor = "apple")]
-#[ignore = "disabled until fixed"]
 fn test_stdin_redirect_dir_when_target_os_is_macos() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
