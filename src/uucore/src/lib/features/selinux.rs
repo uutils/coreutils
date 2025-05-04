@@ -13,16 +13,16 @@ pub enum SeLinuxError {
     #[error("SELinux is not enabled on this system")]
     SELinuxNotEnabled,
 
-    #[error("Failed to open the file: {0}")]
+    #[error("failed to open the file: {0}")]
     FileOpenFailure(String),
 
-    #[error("Failed to retrieve the security context: {0}")]
+    #[error("failed to retrieve the security context: {0}")]
     ContextRetrievalFailure(String),
 
-    #[error("Failed to set default file creation context to '{0}': {1}")]
+    #[error("failed to set default file creation context to '{0}': {1}")]
     ContextSetFailure(String, String),
 
-    #[error("Failed to set default file creation context to '{0}': {1}")]
+    #[error("failed to set default file creation context to '{0}': {1}")]
     ContextConversionFailure(String, String),
 }
 
