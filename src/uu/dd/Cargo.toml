@@ -21,7 +21,12 @@ path = "src/dd.rs"
 clap = { workspace = true }
 gcd = { workspace = true }
 libc = { workspace = true }
-uucore = { workspace = true, features = ["format", "parser", "quoting-style"] }
+uucore = { workspace = true, features = [
+  "format",
+  "parser",
+  "quoting-style",
+  "fs",
+] }
 thiserror = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]

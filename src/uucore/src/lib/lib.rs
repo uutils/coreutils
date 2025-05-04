@@ -24,6 +24,7 @@ pub use uucore_procs::*;
 // * cross-platform modules
 pub use crate::mods::display;
 pub use crate::mods::error;
+#[cfg(feature = "fs")]
 pub use crate::mods::io;
 pub use crate::mods::line_ending;
 pub use crate::mods::os;
