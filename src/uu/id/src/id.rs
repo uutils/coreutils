@@ -238,10 +238,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Ok(());
         }
 
-        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or((
-            if state.rflag { getuid() } else { geteuid() },
-            if state.rflag { getgid() } else { getegid() },
-        ));
+        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or({
+            let use_effective = !state.rflag && (state.uflag || state.gflag || state.gsflag);
+            if use_effective {
+                (geteuid(), getegid())
+            } else {
+                (getuid(), getgid())
+            }
+        });
         state.ids = Some(Ids {
             uid,
             gid,
