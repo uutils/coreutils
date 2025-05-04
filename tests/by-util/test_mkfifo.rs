@@ -160,7 +160,7 @@ fn test_mkfifo_selinux_invalid() {
             .arg(arg)
             .arg(dest)
             .fails()
-            .stderr_contains("Failed to");
+            .stderr_contains("failed to");
         if at.file_exists(dest) {
             at.remove(dest);
         }

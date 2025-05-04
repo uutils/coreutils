@@ -114,7 +114,7 @@ proc-info = ["tty", "walkdir"]
 quoting-style = []
 ranges = []
 ringbuffer = []
-selinux = ["dep:selinux"]
+selinux = ["dep:selinux", "thiserror"]
 signals = []
 sum = [
   "digest",
