@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid getpid
 // spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH
-// spell-checker:ignore pgrep pwait snice
+// spell-checker:ignore pgrep pwait snice getpgrp
 
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
