@@ -173,7 +173,7 @@ impl StringOp {
                     match curr {
                         // Carets are interpreted literally, unless used as character class negation "[^a]"
                         '^' if prev_is_escaped || !matches!(prev, '\\' | '[') => {
-                            re_string.push_str(r"\^")
+                            re_string.push_str(r"\^");
                         }
                         char => re_string.push(char),
                     }
