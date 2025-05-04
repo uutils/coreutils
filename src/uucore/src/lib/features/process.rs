@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid getpid
 // spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH
-// spell-checker:ignore pgrep pwait snice
+// spell-checker:ignore pgrep pwait snice getpgrp
 
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
@@ -21,6 +21,12 @@ use std::time::{Duration, Instant};
 /// `geteuid()` returns the effective user ID of the calling process.
 pub fn geteuid() -> uid_t {
     unsafe { libc::geteuid() }
+}
+
+/// `getpgrp()` returns the process group ID of the calling process.
+/// It is a trivial wrapper over libc::getpgrp to "hide" the unsafe
+pub fn getpgrp() -> pid_t {
+    unsafe { libc::getpgrp() }
 }
 
 /// `getegid()` returns the effective group ID of the calling process.
