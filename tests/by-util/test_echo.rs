@@ -762,3 +762,12 @@ fn test_uchild_when_run_no_wait_with_a_non_blocking_util() {
     // we should be able to call wait without panics and apply some assertions
     child.wait().unwrap().code_is(0).no_stdout().no_stderr();
 }
+
+#[test]
+fn test_escape_sequence_ctrl_c() {
+    new_ucmd!()
+        .args(&["-e", "show\\c123"])
+        .run()
+        .success()
+        .stdout_only("show");
+}
