@@ -313,7 +313,7 @@ breakdown of the GNU test results of the main branch can be found
 See <https://github.com/orgs/uutils/projects/1> for the main meta bugs
 (many are missing).
 
-![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
+![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.svg?raw=true)
 
 </div> <!-- close oranda-hide div -->
 
