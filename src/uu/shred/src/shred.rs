@@ -42,8 +42,8 @@ pub mod options {
     }
 }
 
-// This block size seems to match GNU (2^16 = 65536)
-const BLOCK_SIZE: usize = 1 << 16;
+// This block size seems to match GNU (2^12 = 4096)
+const BLOCK_SIZE: usize = 1 << 12;
 const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
 const PATTERN_LENGTH: usize = 3;
