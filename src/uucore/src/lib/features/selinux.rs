@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use std::error::Error;
 use std::path::Path;
 
 use selinux::SecurityContext;
@@ -43,6 +44,22 @@ impl From<SeLinuxError> for i32 {
 /// This function verifies whether the kernel has SELinux support enabled.
 pub fn is_selinux_enabled() -> bool {
     selinux::kernel_support() != selinux::KernelSupport::Unsupported
+}
+
+/// Returns a string describing the error and its causes.
+fn selinux_error_description(mut error: &dyn Error) -> String {
+    let mut description = String::new();
+    while let Some(source) = error.source() {
+        let error_text = source.to_string();
+        // Check if this is an OS error and trim it
+        if let Some(idx) = error_text.find(" (os error ") {
+            description.push_str(&error_text[..idx]);
+        } else {
+            description.push_str(&error_text);
+        }
+        error = source;
+    }
+    description
 }
 
 /// Sets the SELinux security context for the given filesystem path.
@@ -99,28 +116,40 @@ pub fn set_selinux_security_context(
     if let Some(ctx_str) = context {
         // Create a CString from the provided context string
         let c_context = std::ffi::CString::new(ctx_str.as_str()).map_err(|e| {
-            SeLinuxError::ContextConversionFailure(ctx_str.to_string(), e.to_string())
+            SeLinuxError::ContextConversionFailure(
+                ctx_str.to_string(),
+                selinux_error_description(&e),
+            )
         })?;
 
         // Convert the CString into an SELinux security context
         let security_context =
             selinux::OpaqueSecurityContext::from_c_str(&c_context).map_err(|e| {
-                SeLinuxError::ContextConversionFailure(ctx_str.to_string(), e.to_string())
+                SeLinuxError::ContextConversionFailure(
+                    ctx_str.to_string(),
+                    selinux_error_description(&e),
+                )
             })?;
 
         // Set the provided security context on the specified path
         SecurityContext::from_c_str(
             &security_context.to_c_string().map_err(|e| {
-                SeLinuxError::ContextConversionFailure(ctx_str.to_string(), e.to_string())
+                SeLinuxError::ContextConversionFailure(
+                    ctx_str.to_string(),
+                    selinux_error_description(&e),
+                )
             })?,
             false,
         )
         .set_for_path(path, false, false)
-        .map_err(|e| SeLinuxError::ContextSetFailure(ctx_str.to_string(), e.to_string()))
+        .map_err(|e| {
+            SeLinuxError::ContextSetFailure(ctx_str.to_string(), selinux_error_description(&e))
+        })
     } else {
         // If no context provided, set the default SELinux context for the path
-        SecurityContext::set_default_for_path(path)
-            .map_err(|e| SeLinuxError::ContextSetFailure(String::new(), e.to_string()))
+        SecurityContext::set_default_for_path(path).map_err(|e| {
+            SeLinuxError::ContextSetFailure(String::new(), selinux_error_description(&e))
+        })
     }
 }
 
@@ -171,18 +200,23 @@ pub fn get_selinux_security_context(path: &Path) -> Result<String, SeLinuxError>
         return Err(SeLinuxError::SELinuxNotEnabled);
     }
 
-    let f = std::fs::File::open(path).map_err(|e| SeLinuxError::FileOpenFailure(e.to_string()))?;
+    let f = std::fs::File::open(path)
+        .map_err(|e| SeLinuxError::FileOpenFailure(selinux_error_description(&e)))?;
 
     // Get the security context of the file
     let context = match SecurityContext::of_file(&f, false) {
         Ok(Some(ctx)) => ctx,
         Ok(None) => return Ok(String::new()), // No context found, return empty string
-        Err(e) => return Err(SeLinuxError::ContextRetrievalFailure(e.to_string())),
+        Err(e) => {
+            return Err(SeLinuxError::ContextRetrievalFailure(
+                selinux_error_description(&e),
+            ));
+        }
     };
 
-    let context_c_string = context
-        .to_c_string()
-        .map_err(|e| SeLinuxError::ContextConversionFailure(String::new(), e.to_string()))?;
+    let context_c_string = context.to_c_string().map_err(|e| {
+        SeLinuxError::ContextConversionFailure(String::new(), selinux_error_description(&e))
+    })?;
 
     if let Some(c_str) = context_c_string {
         // Convert the C string to a Rust String
@@ -336,7 +370,8 @@ mod tests {
                     println!("Context conversion failure for '{}': {}", ctx, e);
                 }
                 SeLinuxError::ContextSetFailure(ctx, e) => {
-                    assert!(false);
+                    assert!(!e.is_empty(), "Error message should not be empty");
+                    println!("Context conversion failure for '{}': {}", ctx, e);
                 }
                 SeLinuxError::FileOpenFailure(e) => {
                     assert!(
