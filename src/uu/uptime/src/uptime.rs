@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid formated
+// spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid
 
 use chrono::{Local, TimeZone, Utc};
 use clap::ArgMatches;
@@ -296,6 +296,6 @@ fn print_time() {
 }
 
 fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
-    print!("up  {},  ", get_formated_uptime(boot_time)?);
+    print!("up  {},  ", get_formatted_uptime(boot_time)?);
     Ok(())
 }

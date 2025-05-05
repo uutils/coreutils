@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore gettime BOOTTIME clockid boottime formated nusers loadavg getloadavg
+// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg
 
 //! Provides functions to get system uptime, number of users and load average.
 
@@ -165,7 +165,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 ///
 /// Returns a UResult with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an UptimeError.
 #[inline]
-pub fn get_formated_uptime(boot_time: Option<time_t>) -> UResult<String> {
+pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
     let up_secs = get_uptime(boot_time)?;
 
     if up_secs < 0 {
