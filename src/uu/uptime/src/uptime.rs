@@ -9,11 +9,9 @@ use chrono::{Local, TimeZone, Utc};
 use clap::ArgMatches;
 use std::io;
 use thiserror::Error;
-use uucore::error::UError;
+use uucore::error::{UError, UResult};
 use uucore::libc::time_t;
 use uucore::uptime::*;
-
-use uucore::error::UResult;
 
 use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
@@ -35,6 +33,7 @@ const ABOUT: &str = concat!(
 const ABOUT: &str = help_about!("uptime.md");
 
 const USAGE: &str = help_usage!("uptime.md");
+
 pub mod options {
     pub static SINCE: &str = "since";
     pub static PATH: &str = "path";
@@ -54,6 +53,7 @@ pub enum UptimeError {
     #[error("extra operand '{0}'")]
     ExtraOperandError(String),
 }
+
 impl UError for UptimeError {
     fn code(&self) -> i32 {
         1
@@ -160,7 +160,7 @@ fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
             show_error!("couldn't get boot time");
             print_time();
             print!("up ???? days ??:??,");
-            print_nusers(Some(0))?;
+            print_nusers(Some(0));
             print_loadavg();
             set_exit_code(1);
             return Ok(());
@@ -170,7 +170,7 @@ fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
     if non_fatal_error {
         print_time();
         print!("up ???? days ??:??,");
-        print_nusers(Some(0))?;
+        print_nusers(Some(0));
         print_loadavg();
         return Ok(());
     }
@@ -194,20 +194,19 @@ fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
 
     #[cfg(target_os = "openbsd")]
     {
-        user_count = get_nusers(file_path.to_str().expect("invalid utmp path file"));
-
         let upsecs = get_uptime(None);
-        if upsecs < 0 {
+        if upsecs >= 0 {
+            print_uptime(Some(upsecs))?;
+        } else {
             show_error!("couldn't get boot time");
             set_exit_code(1);
 
             print!("up ???? days ??:??,");
-        } else {
-            print_uptime(Some(upsecs))?;
         }
+        user_count = get_nusers(file_path.to_str().expect("invalid utmp path file"));
     }
 
-    print_nusers(Some(user_count))?;
+    print_nusers(Some(user_count));
     print_loadavg();
 
     Ok(())
@@ -236,7 +235,7 @@ fn default_uptime(matches: &ArgMatches) -> UResult<()> {
 
     print_time();
     print_uptime(None)?;
-    print_nusers(None)?;
+    print_nusers(None);
     print_loadavg();
 
     Ok(())
@@ -276,7 +275,7 @@ fn process_utmpx(file: Option<&std::ffi::OsString>) -> (Option<time_t>, usize) {
     (boot_time, nusers)
 }
 
-fn print_nusers(nusers: Option<usize>) -> UResult<()> {
+fn print_nusers(nusers: Option<usize>) {
     print!(
         "{},  ",
         match nusers {
@@ -288,7 +287,6 @@ fn print_nusers(nusers: Option<usize>) -> UResult<()> {
             }
         }
     );
-    Ok(())
 }
 
 fn print_time() {
