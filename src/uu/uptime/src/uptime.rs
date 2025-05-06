@@ -6,7 +6,6 @@
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid
 
 use chrono::{Local, TimeZone, Utc};
-use clap::ArgMatches;
 #[cfg(unix)]
 use std::ffi::OsString;
 use std::io;
@@ -67,10 +66,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[cfg(windows)]
     let file_path = None;
 
-    if let Some(file_path) = file_path {
-        uptime_with_file(file_path)
+    if matches.get_flag(options::SINCE) {
+        uptime_since()
+    } else if let Some(path) = file_path {
+        uptime_with_file(path)
     } else {
-        default_uptime(&matches)
+        default_uptime()
     }
 }
 
@@ -191,27 +192,29 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     Ok(())
 }
 
+fn uptime_since() -> UResult<()> {
+    #[cfg(unix)]
+    #[cfg(not(target_os = "openbsd"))]
+    let (boot_time, _) = process_utmpx(None);
+
+    #[cfg(target_os = "openbsd")]
+    let uptime = get_uptime(None)?;
+    #[cfg(unix)]
+    #[cfg(not(target_os = "openbsd"))]
+    let uptime = get_uptime(boot_time)?;
+    #[cfg(target_os = "windows")]
+    let uptime = get_uptime(None)?;
+
+    let initial_date = Local
+        .timestamp_opt(Utc::now().timestamp() - uptime, 0)
+        .unwrap();
+    println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
+
+    Ok(())
+}
+
 /// Default uptime behaviour i.e. when no file argument is given.
-fn default_uptime(matches: &ArgMatches) -> UResult<()> {
-    if matches.get_flag(options::SINCE) {
-        #[cfg(unix)]
-        #[cfg(not(target_os = "openbsd"))]
-        let (boot_time, _) = process_utmpx(None);
-
-        #[cfg(target_os = "openbsd")]
-        let uptime = get_uptime(None)?;
-        #[cfg(unix)]
-        #[cfg(not(target_os = "openbsd"))]
-        let uptime = get_uptime(boot_time)?;
-        #[cfg(target_os = "windows")]
-        let uptime = get_uptime(None)?;
-        let initial_date = Local
-            .timestamp_opt(Utc::now().timestamp() - uptime, 0)
-            .unwrap();
-        println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
-        return Ok(());
-    }
-
+fn default_uptime() -> UResult<()> {
     print_time();
     print_uptime(None)?;
     print_nusers(None);
