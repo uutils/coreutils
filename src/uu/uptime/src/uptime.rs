@@ -35,6 +35,7 @@ const ABOUT: &str = concat!(
 const ABOUT: &str = help_about!("uptime.md");
 
 const USAGE: &str = help_usage!("uptime.md");
+
 pub mod options {
     pub static SINCE: &str = "since";
     pub static PATH: &str = "path";
@@ -54,6 +55,7 @@ pub enum UptimeError {
     #[error("extra operand '{0}'")]
     ExtraOperandError(String),
 }
+
 impl UError for UptimeError {
     fn code(&self) -> i32 {
         1
