@@ -163,7 +163,7 @@ impl Stat {
         #[cfg(not(windows))]
         {
             let file_info = FileInfo {
-                file_id: metadata.ino() as u128,
+                file_id: u128::from(metadata.ino()),
                 dev_id: metadata.dev(),
             };
 

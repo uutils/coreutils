@@ -81,7 +81,7 @@ pub struct SignedInt {
 impl Formatter<i64> for SignedInt {
     fn fmt(&self, writer: impl Write, x: i64) -> std::io::Result<()> {
         // -i64::MIN is actually 1 larger than i64::MAX, so we need to cast to i128 first.
-        let abs = (x as i128).abs();
+        let abs = i128::from(x).abs();
         let s = if self.precision > 0 {
             format!("{abs:0>width$}", width = self.precision)
         } else {
