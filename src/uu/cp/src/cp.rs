@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
 
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 use quick_error::ResultExt;
@@ -311,6 +311,10 @@ pub struct Options {
     pub verbose: bool,
     /// `-g`, `--progress`
     pub progress_bar: bool,
+    /// -Z
+    pub set_selinux_context: bool,
+    // --context
+    pub context: Option<String>,
 }
 
 impl Default for Options {
@@ -337,6 +341,8 @@ impl Default for Options {
             debug: false,
             verbose: false,
             progress_bar: false,
+            set_selinux_context: false,
+            context: None,
         }
     }
 }
@@ -448,6 +454,7 @@ mod options {
     pub const RECURSIVE: &str = "recursive";
     pub const REFLINK: &str = "reflink";
     pub const REMOVE_DESTINATION: &str = "remove-destination";
+    pub const SELINUX: &str = "Z";
     pub const SPARSE: &str = "sparse";
     pub const STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
     pub const SYMBOLIC_LINK: &str = "symbolic-link";
@@ -476,6 +483,7 @@ const PRESERVE_DEFAULT_VALUES: &str = if cfg!(unix) {
 } else {
     "mode,timestamp"
 };
+
 pub fn uu_app() -> Command {
     const MODE_ARGS: &[&str] = &[
         options::LINK,
@@ -709,24 +717,25 @@ pub fn uu_app() -> Command {
                 .value_parser(ShortcutValueParser::new(["never", "auto", "always"]))
                 .help("control creation of sparse files. See below"),
         )
-        // TODO: implement the following args
         .arg(
-            Arg::new(options::COPY_CONTENTS)
-                .long(options::COPY_CONTENTS)
-                .overrides_with(options::ATTRIBUTES_ONLY)
-                .help("NotImplemented: copy contents of special files when recursive")
+            Arg::new(options::SELINUX)
+                .short('Z')
+                .help("set SELinux security context of destination file to default type")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CONTEXT)
                 .long(options::CONTEXT)
                 .value_name("CTX")
+                .value_parser(value_parser!(String))
                 .help(
-                    "NotImplemented: set SELinux security context of destination file to \
-                    default type",
-                ),
+                    "like -Z, or if CTX is specified then set the SELinux or SMACK security \
+                    context to CTX",
+                )
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value(""),
         )
-        // END TODO
         .arg(
             // The 'g' short flag is modeled after advcpmv
             // See this repo: https://github.com/jarun/advcpmv
@@ -739,6 +748,15 @@ pub fn uu_app() -> Command {
                 Note: this feature is not supported by GNU coreutils.",
                 ),
         )
+        // TODO: implement the following args
+        .arg(
+            Arg::new(options::COPY_CONTENTS)
+                .long(options::COPY_CONTENTS)
+                .overrides_with(options::ATTRIBUTES_ONLY)
+                .help("NotImplemented: copy contents of special files when recursive")
+                .action(ArgAction::SetTrue),
+        )
+        // END TODO
         .arg(
             Arg::new(options::PATHS)
                 .action(ArgAction::Append)
@@ -971,7 +989,6 @@ impl Options {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
-            options::CONTEXT,
             #[cfg(windows)]
             options::FORCE,
         ];
@@ -1018,7 +1035,6 @@ impl Options {
                 return Err(Error::NotADirectory(dir.clone()));
             }
         };
-
         // cp follows POSIX conventions for overriding options such as "-a",
         // "-d", "--preserve", and "--no-preserve". We can use clap's
         // override-all behavior to achieve this, but there's a challenge: when
@@ -1101,7 +1117,7 @@ impl Options {
             }
         }
 
-        #[cfg(not(feature = "feat_selinux"))]
+        #[cfg(not(feature = "selinux"))]
         if let Preserve::Yes { required } = attributes.context {
             let selinux_disabled_error =
                 Error::Error("SELinux was not enabled during the compile time!".to_string());
@@ -1111,6 +1127,15 @@ impl Options {
                 show_error_if_needed(&selinux_disabled_error);
             }
         }
+
+        // Extract the SELinux related flags and options
+        let set_selinux_context = matches.get_flag(options::SELINUX);
+
+        let context = if matches.contains_id(options::CONTEXT) {
+            matches.get_one::<String>(options::CONTEXT).cloned()
+        } else {
+            None
+        };
 
         let options = Self {
             attributes_only: matches.get_flag(options::ATTRIBUTES_ONLY),
@@ -1172,6 +1197,8 @@ impl Options {
             recursive,
             target_dir,
             progress_bar: matches.get_flag(options::PROGRESS_BAR),
+            set_selinux_context: set_selinux_context || context.is_some(),
+            context,
         };
 
         Ok(options)
@@ -1676,20 +1703,24 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    #[cfg(feature = "feat_selinux")]
+    #[cfg(feature = "selinux")]
     handle_preserve(&attributes.context, || -> CopyResult<()> {
-        let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
-            format!(
-                "failed to get security context of {}: {e}",
-                source.display(),
-            )
-        })?;
-        if let Some(context) = context {
-            context.set_for_path(dest, false, false).map_err(|e| {
-                format!("failed to set security context for {}: {e}", dest.display(),)
-            })?;
+        // Get the source context and apply it to the destination
+        if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
+            if let Some(context) = context {
+                if let Err(e) = context.set_for_path(dest, false, false) {
+                    return Err(Error::Error(format!(
+                        "failed to set security context for {}: {e}",
+                        dest.display()
+                    )));
+                }
+            }
+        } else {
+            return Err(Error::Error(format!(
+                "failed to get security context of {}",
+                source.display()
+            )));
         }
-
         Ok(())
     })?;
 
@@ -2417,9 +2448,18 @@ fn copy_file(
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
         // copy function (see `copy_stream` under platform/linux.rs).
-        copy_attributes(source, dest, &options.attributes)?;
     } else {
         copy_attributes(source, dest, &options.attributes)?;
+    }
+
+    #[cfg(feature = "selinux")]
+    if options.set_selinux_context && uucore::selinux::is_selinux_enabled() {
+        // Set the given selinux permissions on the copied file.
+        if let Err(e) =
+            uucore::selinux::set_selinux_security_context(dest, options.context.as_ref())
+        {
+            return Err(Error::Error(format!("SELinux error: {}", e)));
+        }
     }
 
     copied_files.insert(
