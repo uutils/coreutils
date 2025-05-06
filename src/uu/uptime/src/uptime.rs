@@ -44,14 +44,10 @@ pub enum UptimeError {
     // io::Error wrapper
     #[error("couldn't get boot time: {0}")]
     IoErr(#[from] io::Error),
-
     #[error("couldn't get boot time: Is a directory")]
     TargetIsDir,
-
     #[error("couldn't get boot time: Illegal seek")]
     TargetIsFifo,
-    #[error("extra operand '{0}'")]
-    ExtraOperandError(String),
 }
 
 impl UError for UptimeError {
@@ -70,30 +66,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[cfg(unix)]
     {
         use std::ffi::OsString;
-        use uucore::error::set_exit_code;
-        use uucore::show_error;
 
-        let argument = matches.get_many::<OsString>(options::PATH);
+        let argument = matches.get_one::<OsString>(options::PATH);
 
-        // Switches to default uptime behaviour if there is no argument
-        if argument.is_none() {
-            return default_uptime(&matches);
+        if let Some(file_path) = argument {
+            uptime_with_file(file_path)
+        } else {
+            default_uptime(&matches)
         }
-        let mut arg_iter = argument.unwrap();
-
-        let file_path = arg_iter.next().unwrap();
-        if let Some(path) = arg_iter.next() {
-            // Uptime doesn't attempt to calculate boot time if there is extra arguments.
-            // Its a fatal error
-            show_error!(
-                "{}",
-                UptimeError::ExtraOperandError(path.to_owned().into_string().unwrap())
-            );
-            set_exit_code(1);
-            return Ok(());
-        }
-
-        uptime_with_file(file_path)
     }
 }
 
@@ -113,7 +93,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::PATH)
                 .help("file to search boot time from")
-                .action(ArgAction::Append)
+                .action(ArgAction::Set)
+                .num_args(0..=1)
                 .value_parser(ValueParser::os_string())
                 .value_hint(ValueHint::AnyPath),
         )
