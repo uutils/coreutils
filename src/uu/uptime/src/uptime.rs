@@ -194,17 +194,16 @@ fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
 
     #[cfg(target_os = "openbsd")]
     {
-        user_count = get_nusers(file_path.to_str().expect("invalid utmp path file"));
-
         let upsecs = get_uptime(None);
-        if upsecs < 0 {
+        if upsecs >= 0 {
+            print_uptime(Some(upsecs))?;
+        } else {
             show_error!("couldn't get boot time");
             set_exit_code(1);
 
             print!("up ???? days ??:??,");
-        } else {
-            print_uptime(Some(upsecs))?;
         }
+        user_count = get_nusers(file_path.to_str().expect("invalid utmp path file"));
     }
 
     print_nusers(Some(user_count));
