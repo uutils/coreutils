@@ -9,11 +9,9 @@ use chrono::{Local, TimeZone, Utc};
 use clap::ArgMatches;
 use std::io;
 use thiserror::Error;
-use uucore::error::UError;
+use uucore::error::{UError, UResult};
 use uucore::libc::time_t;
 use uucore::uptime::*;
-
-use uucore::error::UResult;
 
 use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
