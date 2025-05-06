@@ -7,6 +7,8 @@
 
 use chrono::{Local, TimeZone, Utc};
 use clap::ArgMatches;
+#[cfg(unix)]
+use std::ffi::OsString;
 use std::io;
 use thiserror::Error;
 use uucore::error::{UError, UResult};
@@ -60,25 +62,20 @@ impl UError for UptimeError {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    #[cfg(windows)]
-    return default_uptime(&matches);
-
     #[cfg(unix)]
-    {
-        use std::ffi::OsString;
+    let file_path = matches.get_one::<OsString>(options::PATH);
+    #[cfg(windows)]
+    let file_path = None;
 
-        let argument = matches.get_one::<OsString>(options::PATH);
-
-        if let Some(file_path) = argument {
-            uptime_with_file(file_path)
-        } else {
-            default_uptime(&matches)
-        }
+    if let Some(file_path) = file_path {
+        uptime_with_file(file_path)
+    } else {
+        default_uptime(&matches)
     }
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -89,19 +86,20 @@ pub fn uu_app() -> Command {
                 .long(options::SINCE)
                 .help("system up since")
                 .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PATH)
-                .help("file to search boot time from")
-                .action(ArgAction::Set)
-                .num_args(0..=1)
-                .value_parser(ValueParser::os_string())
-                .value_hint(ValueHint::AnyPath),
-        )
+        );
+    #[cfg(unix)]
+    cmd.arg(
+        Arg::new(options::PATH)
+            .help("file to search boot time from")
+            .action(ArgAction::Set)
+            .num_args(0..=1)
+            .value_parser(ValueParser::os_string())
+            .value_hint(ValueHint::AnyPath),
+    )
 }
 
 #[cfg(unix)]
-fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
+fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     use std::fs;
     use std::os::unix::fs::FileTypeExt;
     use uucore::error::set_exit_code;
@@ -232,7 +230,7 @@ fn print_loadavg() {
 
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
-fn process_utmpx(file: Option<&std::ffi::OsString>) -> (Option<time_t>, usize) {
+fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
     let mut nusers = 0;
     let mut boot_time = None;
 
