@@ -160,7 +160,7 @@ fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
             show_error!("couldn't get boot time");
             print_time();
             print!("up ???? days ??:??,");
-            print_nusers(Some(0))?;
+            print_nusers(Some(0));
             print_loadavg();
             set_exit_code(1);
             return Ok(());
@@ -170,7 +170,7 @@ fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
     if non_fatal_error {
         print_time();
         print!("up ???? days ??:??,");
-        print_nusers(Some(0))?;
+        print_nusers(Some(0));
         print_loadavg();
         return Ok(());
     }
@@ -207,7 +207,7 @@ fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
         }
     }
 
-    print_nusers(Some(user_count))?;
+    print_nusers(Some(user_count));
     print_loadavg();
 
     Ok(())
@@ -236,7 +236,7 @@ fn default_uptime(matches: &ArgMatches) -> UResult<()> {
 
     print_time();
     print_uptime(None)?;
-    print_nusers(None)?;
+    print_nusers(None);
     print_loadavg();
 
     Ok(())
@@ -276,7 +276,7 @@ fn process_utmpx(file: Option<&std::ffi::OsString>) -> (Option<time_t>, usize) {
     (boot_time, nusers)
 }
 
-fn print_nusers(nusers: Option<usize>) -> UResult<()> {
+fn print_nusers(nusers: Option<usize>) {
     print!(
         "{},  ",
         match nusers {
@@ -288,7 +288,6 @@ fn print_nusers(nusers: Option<usize>) -> UResult<()> {
             }
         }
     );
-    Ok(())
 }
 
 fn print_time() {
