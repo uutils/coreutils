@@ -174,3 +174,17 @@ fn test_failed_write_is_reported() {
         .fails()
         .stderr_is("ptx: write failed: No space left on device\n");
 }
+
+#[test]
+fn test_utf8() {
+    new_ucmd!()
+        .args(&["-G"])
+        .pipe_in("it’s disabled\n")
+        .succeeds()
+        .stdout_only(".xx \"\" \"it’s\" \"disabled\" \"\"\n.xx \"\" \"\" \"it’s disabled\" \"\"\n");
+    new_ucmd!()
+        .args(&["-G", "-T"])
+        .pipe_in("it’s disabled\n")
+        .succeeds()
+        .stdout_only("\\xx {}{it’s}{disabled}{}{}\n\\xx {}{}{it’s}{ disabled}{}\n");
+}
