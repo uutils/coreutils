@@ -126,9 +126,10 @@ fn test_stdbuf_invalid_mode_fails() {
     not(target_os = "macos")
 ))]
 #[test]
-fn test_setvbuf_resolution() {
-    // Run a simple program with LD_DEBUG=symbols to see which setvbuf is being used
-    // Written in a way that it can run with cross-rs and be used as regression test
+fn test_libstdbuf_preload() {
+    // Run a simple program with LD_DEBUG=symbols to verify that libstdbuf is loaded correctly
+    // and that there are no architecture mismatches when preloading the library.
+    // Note: This does not check which setvbuf implementation is used, as our libstdbuf does not override setvbuf.
     // for https://github.com/uutils/coreutils/issues/6591
 
     let scene = TestScenario::new(util_name!());
