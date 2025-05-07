@@ -47,44 +47,11 @@ pub enum ExecutePattern {
 }
 
 impl ExecutePattern {
-    pub fn iter(&self) -> ExecutePatternIter {
+    /// Whether to continue the loop for this pattern after `i` iterations.
+    pub(crate) fn should_continue(&self, i: usize) -> bool {
         match self {
-            Self::Times(n) => ExecutePatternIter::new(Some(*n)),
-            Self::Always => ExecutePatternIter::new(None),
-        }
-    }
-}
-
-pub struct ExecutePatternIter {
-    max: Option<usize>,
-    cur: usize,
-}
-
-impl ExecutePatternIter {
-    fn new(max: Option<usize>) -> Self {
-        Self { max, cur: 0 }
-    }
-}
-
-impl Iterator for ExecutePatternIter {
-    type Item = (Option<usize>, usize);
-
-    fn next(&mut self) -> Option<(Option<usize>, usize)> {
-        match self.max {
-            // iterate until m is reached
-            Some(m) => {
-                if self.cur == m {
-                    None
-                } else {
-                    self.cur += 1;
-                    Some((self.max, self.cur))
-                }
-            }
-            // no limit, just increment a counter
-            None => {
-                self.cur += 1;
-                Some((None, self.cur))
-            }
+            ExecutePattern::Always => true,
+            ExecutePattern::Times(k) => i < *k,
         }
     }
 }

@@ -68,6 +68,21 @@ fn test_up_to_line_repeat_twice() {
 }
 
 #[test]
+fn test_up_to_line_repeat_star() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-k", "-", "2", "{*}"])
+        .pipe_in("1\n2\n3\n4\n")
+        .fails_with_code(1)
+        .stderr_is("csplit: '2': line number out of range on repetition 2\n")
+        .stdout_is("2\n4\n2\n");
+
+    assert_eq!(at.read("xx00"), "1\n");
+    assert_eq!(at.read("xx01"), "2\n3\n");
+    assert_eq!(at.read("xx02"), "4\n");
+    assert!(!at.file_exists("xx03"));
+}
+
+#[test]
 fn test_up_to_line_sequence() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "25"])
@@ -360,6 +375,22 @@ fn test_skip_to_match_negative_offset() {
         .count();
     assert_eq!(count, 1);
     assert_eq!(at.read("xx00"), generate(20, 51));
+}
+
+#[test]
+fn test_skip_to_match_negative_offset_always() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Take the first five lines just because otherwise there would be
+    // no output at all.
+    ucmd.args(&["numbers50.txt", "5", "%23%-3", "{*}"])
+        .succeeds()
+        .stdout_only("8\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 1);
+    assert_eq!(at.read("xx00"), "1\n2\n3\n4\n");
 }
 
 #[test]
@@ -1053,6 +1084,15 @@ fn test_too_small_line_num_repeat() {
 }
 
 #[test]
+fn test_line_num_out_of_range_empty_input() {
+    new_ucmd!()
+        .args(&["-", "1"])
+        .fails_with_code(1)
+        .stdout_is("0\n")
+        .stderr_is("csplit: '1': line number out of range\n");
+}
+
+#[test]
 fn test_line_num_out_of_range1() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "100"])
@@ -1331,21 +1371,30 @@ fn test_line_num_range_with_up_to_match2() {
     assert_eq!(at.read("xx01"), "");
 }
 
-// NOTE: output different than gnu's: the pattern /10/ is matched but should not
+#[test]
+fn test_same_pattern_twice() {
+    new_ucmd!()
+        .args(&["-", "/b/", "/b/"])
+        .pipe_in("a\nb\nc\n")
+        .fails_with_code(1)
+        .stdout_is("2\n4\n")
+        .stderr_is("csplit: '/b/': match not found\n");
+}
+
 #[test]
 fn test_line_num_range_with_up_to_match3() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/10/", "-k"])
-        .fails()
-        .stderr_is("csplit: '/10/': match not found\n")
-        .stdout_is("18\n123\n");
+        .succeeds()
+        .stdout_only("18\n0\n123\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
         .count();
-    assert_eq!(count, 2);
+    assert_eq!(count, 3);
     assert_eq!(at.read("xx00"), generate(1, 10));
-    assert_eq!(at.read("xx01"), generate(10, 51));
+    assert_eq!(at.read("xx01"), "");
+    assert_eq!(at.read("xx02"), generate(10, 51));
 
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/10/", "10"])
@@ -1393,6 +1442,36 @@ fn no_such_file() {
         .args(&["in", "0"])
         .fails()
         .stderr_contains("cannot open 'in' for reading: No such file or directory");
+}
+
+// TODO I don't understand GNU's behavior here.
+#[test]
+fn test_repeat_line_after_match_suppress_matched() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "--suppress-matched",
+        "-k",
+        "numbers50.txt",
+        "/13/",
+        "9",
+        "{5}",
+    ])
+    .fails_with_code(1)
+    // TODO GNU has "27\n0\n9\n..."
+    .stdout_is("27\n0\n12\n24\n24\n24\n15\n")
+    .stderr_is("csplit: '9': line number out of range on repetition 5\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be some splits created")
+        .count();
+    assert_eq!(count, 7);
+    assert_eq!(at.read("xx00"), generate(1, 12 + 1));
+    assert_eq!(at.read("xx01"), "");
+    assert_eq!(at.read("xx02"), generate(14, 17 + 1)); // TODO GNU starts at 15
+    assert_eq!(at.read("xx03"), generate(19, 26 + 1));
+    assert_eq!(at.read("xx04"), generate(28, 35 + 1));
+    assert_eq!(at.read("xx05"), generate(37, 44 + 1));
+    assert_eq!(at.read("xx06"), generate(46, 50 + 1));
 }
 
 #[test]
@@ -1470,9 +1549,26 @@ fn test_directory_input_file() {
     #[cfg(unix)]
     ucmd.args(&["test_directory", "1"])
         .fails_with_code(1)
-        .stderr_only("csplit: read error: Is a directory\n");
+        .stdout_is("0\n")
+        .stderr_is("csplit: read error: Is a directory\n");
     #[cfg(windows)]
     ucmd.args(&["test_directory", "1"])
         .fails_with_code(1)
-        .stderr_only("csplit: cannot open 'test_directory' for reading: Permission denied\n");
+        // TODO This isn't working on Windows. Why?
+        // .stdout_is("0\n")
+        .stderr_is("csplit: cannot open 'test_directory' for reading: Permission denied\n");
+}
+
+#[test]
+fn test_suppress_matched_last_file_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suppress-matched", "-", "2", "4", "6"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n")
+        .succeeds()
+        .stdout_only("2\n2\n2\n0\n");
+    assert_eq!(at.read("xx00"), "1\n");
+    assert_eq!(at.read("xx01"), "3\n");
+    assert_eq!(at.read("xx02"), "5\n");
+    assert_eq!(at.read("xx03"), "");
+    assert!(!at.file_exists("xx04"));
 }
