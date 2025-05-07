@@ -91,7 +91,7 @@ fn test_uptime_with_non_existent_file() {
 // TODO create a similar test for macos
 // This will pass
 #[test]
-#[cfg(not(any(target_os = "openbsd", target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "openbsd", target_os = "macos")))]
 #[cfg(not(target_env = "musl"))]
 #[cfg_attr(
     all(target_arch = "aarch64", target_os = "linux"),
