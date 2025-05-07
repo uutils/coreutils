@@ -5,14 +5,15 @@
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset CHARCLASS
 
-use clap::{Arg, ArgAction, Command};
-use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::ParseIntError;
+
+use clap::{Arg, ArgAction, Command};
+use regex::Regex;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
@@ -551,26 +552,14 @@ fn format_tex_line(
 ) -> String {
     let mut output = String::new();
     write!(output, "\\{} ", config.macro_name).unwrap();
-    let all_before = if config.input_ref {
-        let before = &line[0..word_ref.position];
-        let before_start_trim_offset =
-            word_ref.position - before.trim_start_matches(reference).trim_start().len();
-        let before_end_index = before.len();
-        &chars_line[before_start_trim_offset..cmp::max(before_end_index, before_start_trim_offset)]
-    } else {
-        let before_chars_trim_idx = (0, word_ref.position);
-        &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1]
-    };
-    let keyword = &line[word_ref.position..word_ref.position_end];
-    let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
-    let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
-    let (tail, before, after, head) = get_output_chunks(all_before, keyword, all_after, config);
+    let (tail, before, keyword, after, head) =
+        prepare_line_chunks(config, word_ref, line, chars_line, reference);
     write!(
         output,
         "{{{0}}}{{{1}}}{{{2}}}{{{3}}}{{{4}}}",
         format_tex_field(&tail),
         format_tex_field(&before),
-        format_tex_field(keyword),
+        format_tex_field(&keyword),
         format_tex_field(&after),
         format_tex_field(&head),
     )
@@ -594,26 +583,14 @@ fn format_roff_line(
 ) -> String {
     let mut output = String::new();
     write!(output, ".{}", config.macro_name).unwrap();
-    let all_before = if config.input_ref {
-        let before = &line[0..word_ref.position];
-        let before_start_trim_offset =
-            word_ref.position - before.trim_start_matches(reference).trim_start().len();
-        let before_end_index = before.len();
-        &chars_line[before_start_trim_offset..cmp::max(before_end_index, before_start_trim_offset)]
-    } else {
-        let before_chars_trim_idx = (0, word_ref.position);
-        &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1]
-    };
-    let keyword = &line[word_ref.position..word_ref.position_end];
-    let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
-    let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
-    let (tail, before, after, head) = get_output_chunks(all_before, keyword, all_after, config);
+    let (tail, before, keyword, after, head) =
+        prepare_line_chunks(config, word_ref, line, chars_line, reference);
     write!(
         output,
         " \"{}\" \"{}\" \"{}{}\" \"{}\"",
         format_roff_field(&tail),
         format_roff_field(&before),
-        format_roff_field(keyword),
+        format_roff_field(&keyword),
         format_roff_field(&after),
         format_roff_field(&head)
     )
@@ -622,6 +599,46 @@ fn format_roff_line(
         write!(output, " \"{}\"", format_roff_field(reference)).unwrap();
     }
     output
+}
+
+/// Extract and prepare text chunks for formatting in both TeX and roff output
+fn prepare_line_chunks(
+    config: &Config,
+    word_ref: &WordRef,
+    line: &str,
+    chars_line: &[char],
+    reference: &str,
+) -> (String, String, String, String, String) {
+    // Convert byte positions to character positions
+    let ref_char_position = line[..word_ref.position].chars().count();
+    let char_position_end = ref_char_position
+        + line[word_ref.position..word_ref.position_end]
+            .chars()
+            .count();
+
+    // Extract the text before the keyword
+    let all_before = if config.input_ref {
+        let before = &line[..word_ref.position];
+        let before_char_count = before.chars().count();
+        let trimmed_char_count = before
+            .trim_start_matches(reference)
+            .trim_start()
+            .chars()
+            .count();
+        let trim_offset = before_char_count - trimmed_char_count;
+        &chars_line[trim_offset..before_char_count]
+    } else {
+        &chars_line[..ref_char_position]
+    };
+
+    // Extract the keyword and text after it
+    let keyword = line[word_ref.position..word_ref.position_end].to_string();
+    let all_after = &chars_line[char_position_end..];
+
+    // Get formatted output chunks
+    let (tail, before, after, head) = get_output_chunks(all_before, &keyword, all_after, config);
+
+    (tail, before, keyword, after, head)
 }
 
 fn write_traditional_output(
