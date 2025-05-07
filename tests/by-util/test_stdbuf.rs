@@ -3,12 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore dyld dylib setvbuf
-#[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "openbsd"),
-    not(target_os = "macos")
-))]
-use std::process::Command;
 use uutests::new_ucmd;
 #[cfg(not(target_os = "windows"))]
 use uutests::util::TestScenario;
@@ -37,7 +31,15 @@ fn test_no_such() {
         .stderr_contains("No such file or directory");
 }
 
-#[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
+// Disabled on x86_64-unknown-linux-musl because the cross-rs Docker image for this target
+// does not provide musl-compiled system utilities (like head), leading to dynamic linker errors
+// when preloading musl-compiled libstdbuf.so into glibc-compiled binaries. Same thing for FreeBSD.
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(all(target_arch = "x86_64", target_env = "musl"))
+))]
 #[test]
 fn test_stdbuf_unbuffered_stdout() {
     // This is a basic smoke test
@@ -51,7 +53,15 @@ fn test_stdbuf_unbuffered_stdout() {
         .stdout_is("The quick brown fox jumps over the lazy dog.");
 }
 
-#[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
+// Disabled on x86_64-unknown-linux-musl because the cross-rs Docker image for this target
+// does not provide musl-compiled system utilities (like head), leading to dynamic linker errors
+// when preloading musl-compiled libstdbuf.so into glibc-compiled binaries. Same thing for FreeBSD.
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(all(target_arch = "x86_64", target_env = "musl"))
+))]
 #[test]
 fn test_stdbuf_line_buffered_stdout() {
     // Note: This test only verifies that stdbuf does not crash and that output is passed through as expected
@@ -75,7 +85,15 @@ fn test_stdbuf_no_buffer_option_fails() {
         .stderr_contains("the following required arguments were not provided:");
 }
 
-#[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
+// Disabled on x86_64-unknown-linux-musl because the cross-rs Docker image for this target
+// does not provide musl-compiled system utilities (like tail), leading to dynamic linker errors
+// when preloading musl-compiled libstdbuf.so into glibc-compiled binaries. Same thing for FreeBSD.
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(all(target_arch = "x86_64", target_env = "musl"))
+))]
 #[test]
 fn test_stdbuf_trailing_var_arg() {
     new_ucmd!()
@@ -119,16 +137,25 @@ fn test_stdbuf_invalid_mode_fails() {
     }
 }
 
-// macos uses DYLD_PRINT_LIBRARIES, not LD_DEBUG, so disable on macos at the moment
+// macos uses DYLD_PRINT_LIBRARIES, not LD_DEBUG, so disable on macos at the moment.
+// On modern Android (Bionic, API 37+), LD_DEBUG is supported and behaves similarly to glibc.
+// On older Android versions (Bionic, API < 37), LD_DEBUG uses integer values instead of strings
+// and is sometimes disabled. Disable test on Android for now.
+// musl libc dynamic loader does not support LD_DEBUG, so disable on musl targets as well.
 #[cfg(all(
     not(target_os = "windows"),
     not(target_os = "openbsd"),
-    not(target_os = "macos")
+    not(target_os = "macos"),
+    not(target_os = "android"),
+    not(target_env = "musl")
 ))]
 #[test]
-fn test_setvbuf_resolution() {
-    // Run a simple program with LD_DEBUG=symbols to see which setvbuf is being used
-    // Written in a way that it can run with cross-rs and be used as regression test
+fn test_libstdbuf_preload() {
+    use std::process::Command;
+
+    // Run a simple program with LD_DEBUG=symbols to verify that libstdbuf is loaded correctly
+    // and that there are no architecture mismatches when preloading the library.
+    // Note: This does not check which setvbuf implementation is used, as our libstdbuf does not override setvbuf.
     // for https://github.com/uutils/coreutils/issues/6591
 
     let scene = TestScenario::new(util_name!());
@@ -149,13 +176,24 @@ fn test_setvbuf_resolution() {
 
     let uutils_debug = String::from_utf8_lossy(&uutils_output.stdout);
 
-    // Check if libstdbuf.so / libstdbuf.dylib is in the lookup path. The log should contain something like this:
-    // "symbol=setvbuf;  lookup in file=/tmp/.tmp0mfmCg/libstdbuf.so [0]"
-    let libstdbuf_in_path = uutils_debug.contains("symbol=setvbuf")
-        && uutils_debug.contains("lookup in file=")
-        && uutils_debug.contains("libstdbuf");
+    // Check if libstdbuf.so / libstdbuf.dylib is in the lookup path.
+    // With GLIBC, the log should contain something like:
+    //   "symbol=setvbuf;  lookup in file=/tmp/.tmp0mfmCg/libstdbuf.so [0]"
+    // With FreeBSD dynamic loader, the log should contain something like:
+    // cspell:disable-next-line
+    //   "calling init function for /tmp/.tmpu11rhP/libstdbuf.so at ..."
+    let libstdbuf_in_path = if cfg!(target_os = "freebsd") {
+        uutils_debug
+            .lines()
+            .any(|line| line.contains("calling init function") && line.contains("libstdbuf"))
+    } else {
+        uutils_debug.contains("symbol=setvbuf")
+            && uutils_debug.contains("lookup in file=")
+            && uutils_debug.contains("libstdbuf")
+    };
 
-    // Check for lack of architecture mismatch error. The potential error message is:
+    // Check for lack of architecture mismatch error. The potential error message with GLIBC is:
+    // cspell:disable-next-line
     // "ERROR: ld.so: object '/tmp/.tmpCLq8jl/libstdbuf.so' from LD_PRELOAD cannot be preloaded (cannot open shared object file): ignored."
     let arch_mismatch_line = uutils_debug
         .lines()
