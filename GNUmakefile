@@ -300,7 +300,7 @@ endif
 endif
 
 build-coreutils:
-	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
+	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE) coreutils" ${PROFILE_CMD} --no-default-features
 
 build: build-coreutils build-pkgs
 

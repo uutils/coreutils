@@ -23,7 +23,7 @@ edition.workspace = true
 all-features = true
 
 [features]
-default = ["feat_common_core", "dep:zip"]
+default = ["feat_common_core", "coreutils"]
 ## OS feature shortcodes
 macos = ["feat_os_macos"]
 unix = ["feat_os_unix"]
@@ -36,6 +36,7 @@ expensive_tests = []
 test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
 uudoc = ["dep:zip", "dep:uuhelp_parser"]
+coreutils = ["dep:zip"]
 ## features
 # "feat_acl" == enable support for ACLs (access control lists; by using`--features feat_acl`)
 # NOTE:
@@ -542,7 +543,7 @@ phf_codegen = { workspace = true }
 [[bin]]
 name = "coreutils"
 path = "src/bin/coreutils.rs"
-required-features = ["default"]
+required-features = ["coreutils"]
 
 [[bin]]
 name = "uudoc"
