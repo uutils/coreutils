@@ -78,7 +78,7 @@ There are currently two methods to build the uutils binaries: either Cargo or
 GNU Make.
 
 > Building the full package, including all documentation, requires both Cargo
-> and Gnu Make on a Unix platform.
+> and GNU Make on a Unix platform.
 
 For either method, we first need to fetch the repository:
 
