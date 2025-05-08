@@ -1479,8 +1479,8 @@ fn test_directory_input_file() {
 
 #[test]
 fn test_stdin_no_trailing_newline() {
-    let mut ucmd = new_ucmd!();
-    ucmd.args(&["-", "2"])
+    new_ucmd!()
+        .args(&["-", "2"])
         .pipe_in("a\nb\nc\nd")
         .succeeds()
         .stdout_only("2\n5\n");
