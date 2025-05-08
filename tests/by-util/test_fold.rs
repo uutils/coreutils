@@ -337,6 +337,21 @@ fn test_bytewise_should_preserve_empty_line_without_final_newline() {
 }
 
 #[test]
+fn test_bytewise_should_does_not_panic_splitting_utf_chars() {
+    new_ucmd!()
+        .args(&["-w2", "-b"])
+        .pipe_in("€")
+        .succeeds()
+        .success();
+
+    new_ucmd!()
+        .args(&["-w1", "-b"])
+        .pipe_in("€")
+        .succeeds()
+        .success();
+}
+
+#[test]
 fn test_bytewise_should_preserve_empty_line_and_final_newline() {
     new_ucmd!()
         .args(&["-w2", "-b"])
