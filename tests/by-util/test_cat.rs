@@ -716,3 +716,86 @@ fn test_child_when_pipe_in() {
 
     ts.ucmd().pipe_in("content").run().stdout_is("content");
 }
+
+#[cfg(target_os = "linux")]
+mod linux_only {
+    use uutests::util::{CmdResult, TestScenario, UCommand};
+
+    use std::fmt::Write;
+    use std::fs::File;
+    use std::process::Stdio;
+    use uutests::new_ucmd;
+    use uutests::util_name;
+
+    fn make_broken_pipe() -> File {
+        use libc::c_int;
+        use std::os::unix::io::FromRawFd;
+
+        let mut fds: [c_int; 2] = [0, 0];
+        assert!(
+            (unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) } == 0),
+            "Failed to create pipe"
+        );
+
+        // Drop the read end of the pipe
+        let _ = unsafe { File::from_raw_fd(fds[0]) };
+
+        // Make the write end of the pipe into a Rust File
+        unsafe { File::from_raw_fd(fds[1]) }
+    }
+
+    fn run_cat(proc: &mut UCommand) -> (String, CmdResult) {
+        let content = (1..=100_000).fold(String::new(), |mut output, x| {
+            let _ = writeln!(output, "{x}");
+            output
+        });
+
+        let result = proc
+            .ignore_stdin_write_error()
+            .set_stdin(Stdio::piped())
+            .run_no_wait()
+            .pipe_in_and_wait(content.as_bytes());
+
+        (content, result)
+    }
+
+    fn expect_silent_success(result: &CmdResult) {
+        assert!(
+            result.succeeded(),
+            "Command was expected to succeed.\nstdout = {}\n stderr = {}",
+            std::str::from_utf8(result.stdout()).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
+        );
+        assert!(
+            result.stderr_str().is_empty(),
+            "Unexpected data on stderr.\n stderr = {}",
+            std::str::from_utf8(result.stderr()).unwrap(),
+        );
+    }
+
+    fn expect_short(result: &CmdResult, contents: &str) {
+        let compare = result.stdout_str();
+        assert!(
+            compare.len() < contents.len(),
+            "Too many bytes ({}) written to stdout (should be a short count from {})",
+            compare.len(),
+            contents.len()
+        );
+        assert!(
+            contents.starts_with(&compare),
+            "Expected truncated output to be a prefix of the correct output, but it isn't.\n Correct: {contents}\n Compare: {compare}"
+        );
+    }
+
+    #[test]
+    fn test_pipe_error_default() {
+        let mut ucmd = new_ucmd!();
+
+        let proc = ucmd.set_stdout(make_broken_pipe());
+
+        let (content, output) = run_cat(proc);
+
+        expect_silent_success(&output);
+        expect_short(&output, &content);
+    }
+}

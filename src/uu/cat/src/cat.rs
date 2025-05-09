@@ -450,6 +450,18 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
 
     for path in files {
         if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
+            if let CatError::Io(ref err_io) = err {
+                if err_io.kind() == io::ErrorKind::BrokenPipe {
+                    continue;
+                }
+            }
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if let CatError::Nix(ref err_nix) = err {
+                // spell-checker:disable-next-line
+                if *err_nix == nix::errno::Errno::EPIPE {
+                    continue;
+                }
+            }
             error_messages.push(format!("{}: {err}", path.maybe_quote()));
         }
     }
