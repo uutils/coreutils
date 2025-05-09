@@ -25,6 +25,8 @@ use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
+#[cfg(feature = "selinux")]
+use uucore::selinux::{contexts_differ, set_selinux_security_context};
 use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
@@ -51,13 +53,12 @@ pub struct Behavior {
     create_leading: bool,
     target_dir: Option<String>,
     no_target_dir: bool,
+    preserve_context: bool,
+    context: Option<String>,
 }
 
 #[derive(Error, Debug)]
 enum InstallError {
-    #[error("Unimplemented feature: {0}")]
-    Unimplemented(String),
-
     #[error("{} with -d requires at least one argument.", uucore::util_name())]
     DirNeedsArg,
 
@@ -108,14 +109,15 @@ enum InstallError {
 
     #[error("extra operand {}\n{}", .0.quote(), .1.quote())]
     ExtraOperand(String, String),
+
+    #[cfg(feature = "selinux")]
+    #[error("{}", .0)]
+    SelinuxContextFailed(String),
 }
 
 impl UError for InstallError {
     fn code(&self) -> i32 {
-        match self {
-            Self::Unimplemented(_) => 2,
-            _ => 1,
-        }
+        1
     }
 
     fn usage(&self) -> bool {
@@ -171,8 +173,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_many::<String>(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
-
-    check_unimplemented(&matches)?;
 
     let behavior = behavior(&matches)?;
 
@@ -295,21 +295,20 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // TODO implement flag
             Arg::new(OPT_PRESERVE_CONTEXT)
                 .short('P')
                 .long(OPT_PRESERVE_CONTEXT)
-                .help("(unimplemented) preserve security context")
+                .help("preserve security context")
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            // TODO implement flag
             Arg::new(OPT_CONTEXT)
                 .short('Z')
                 .long(OPT_CONTEXT)
-                .help("(unimplemented) set security context of files and directories")
+                .help("set security context of files and directories")
                 .value_name("CONTEXT")
-                .action(ArgAction::SetTrue),
+                .value_parser(clap::value_parser!(String))
+                .num_args(0..=1),
         )
         .arg(
             Arg::new(ARG_FILES)
@@ -317,25 +316,6 @@ pub fn uu_app() -> Command {
                 .num_args(1..)
                 .value_hint(clap::ValueHint::AnyPath),
         )
-}
-
-/// Check for unimplemented command line arguments.
-///
-/// Either return the degenerate Ok value, or an Err with string.
-///
-/// # Errors
-///
-/// Error datum is a string of the unimplemented argument.
-///
-///
-fn check_unimplemented(matches: &ArgMatches) -> UResult<()> {
-    if matches.get_flag(OPT_PRESERVE_CONTEXT) {
-        Err(InstallError::Unimplemented(String::from("--preserve-context, -P")).into())
-    } else if matches.get_flag(OPT_CONTEXT) {
-        Err(InstallError::Unimplemented(String::from("--context, -Z")).into())
-    } else {
-        Ok(())
-    }
 }
 
 /// Determine behavior, given command line arguments.
@@ -415,6 +395,8 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         }
     };
 
+    let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
+
     Ok(Behavior {
         main_function,
         specified_mode,
@@ -435,6 +417,8 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
         no_target_dir,
+        preserve_context: matches.get_flag(OPT_PRESERVE_CONTEXT),
+        context,
     })
 }
 
@@ -485,6 +469,10 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
             }
 
             show_if_err!(chown_optional_user_group(path, b));
+
+            // Set SELinux context for directory if needed
+            #[cfg(feature = "selinux")]
+            show_if_err!(set_selinux_context(path, b));
         }
         // If the exit code was set, or show! has been called at least once
         // (which sets the exit code as well), function execution will end after
@@ -941,6 +929,14 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         preserve_timestamps(from, to)?;
     }
 
+    #[cfg(feature = "selinux")]
+    if b.preserve_context {
+        uucore::selinux::preserve_security_context(from, to)
+            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+    } else if b.context.is_some() {
+        set_selinux_context(to, b)?;
+    }
+
     if b.verbose {
         print!("{} -> {}", from.quote(), to.quote());
         match backup_path {
@@ -1012,6 +1008,11 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
         return Ok(true);
     }
 
+    #[cfg(feature = "selinux")]
+    if b.preserve_context && contexts_differ(from, to) {
+        return Ok(true);
+    }
+
     // TODO: if -P (#1809) and from/to contexts mismatch, return true.
 
     // Check if the owner ID is specified and differs from the destination file's owner.
@@ -1041,4 +1042,14 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
     }
 
     Ok(false)
+}
+
+#[cfg(feature = "selinux")]
+fn set_selinux_context(path: &Path, behavior: &Behavior) -> UResult<()> {
+    if !behavior.preserve_context && behavior.context.is_some() {
+        // Use the provided context set by -Z/--context
+        set_selinux_security_context(path, behavior.context.as_ref())
+            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+    }
+    Ok(())
 }

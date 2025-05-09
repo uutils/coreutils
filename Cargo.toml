@@ -49,6 +49,7 @@ feat_acl = ["cp/feat_acl"]
 feat_selinux = [
   "cp/selinux",
   "id/selinux",
+  "install/selinux",
   "ls/selinux",
   "mkdir/selinux",
   "mkfifo/selinux",
