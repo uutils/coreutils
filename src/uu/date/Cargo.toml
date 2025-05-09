@@ -1,4 +1,4 @@
-# spell-checker:ignore datetime
+# spell-checker:ignore datetime tzdb zoneinfo
 [package]
 name = "uu_date"
 description = "date ~ (uutils) display or set the current time"
@@ -19,8 +19,13 @@ workspace = true
 path = "src/date.rs"
 
 [dependencies]
-chrono = { workspace = true }
 clap = { workspace = true }
+chrono = { workspace = true } # TODO: Eventually we'll want to remove this
+jiff = { workspace = true, features = [
+  "tzdb-bundle-platform",
+  "tzdb-zoneinfo",
+  "tzdb-concatenated",
+] }
 uucore = { workspace = true, features = ["custom-tz-fmt", "parser"] }
 parse_datetime = { workspace = true }
 
