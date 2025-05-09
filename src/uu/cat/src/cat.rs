@@ -450,6 +450,44 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
 
     for path in files {
         if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
+            // At this point we know that `cat_path` returned an error.
+            //
+            // Most errors should be logged, but for purpose of compatibility
+            // with GNU cat, we do not want to log errors that occur on the
+            // back of broken pipe.
+            //
+            // A common pattern is to use cat piped together with other tools.
+            // As an example `cat | head -1` could induce a broken pipe
+            // condition.
+            //
+            // Existing workflows choke on there unexpectedly being errors
+            // printed for this condition.
+            //
+            // Different types of errors are wrapped by the `CatError` type,
+            // and the broken pipe error either come from std::io::Error or
+            // nix::Error.
+            //
+            // Make use of pattern matching to know how to check inside the
+            // different types of errors.
+            //
+            // We need to explicitly borrow std::io::Error because it does not
+            // implement the Copy trait and consequently it would be partially
+            // moved, we are also not modifying it and as such would benefit
+            // from not having to do the copy.
+            if let CatError::Io(ref err_io) = err {
+                if err_io.kind() == io::ErrorKind::BrokenPipe {
+                    continue;
+                }
+            }
+            // While nix::Error does implement the Copy trait, we explicitly
+            // borrow it to avoid the unnecessary copy.
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if let CatError::Nix(ref err_nix) = err {
+                // spell-checker:disable-next-line
+                if *err_nix == nix::errno::Errno::EPIPE {
+                    continue;
+                }
+            }
             error_messages.push(format!("{}: {err}", path.maybe_quote()));
         }
     }
