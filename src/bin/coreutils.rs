@@ -20,18 +20,18 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
-    println!("{name} {VERSION} (multi-call binary)\n");
-    println!("Usage: {name} [function [arguments...]]");
-    println!("       {name} --list\n");
-    println!("Options:");
-    println!("      --list    lists all defined functions, one per row\n");
-    println!("Currently defined functions:\n");
+    eprintln!("{name} {VERSION} (multi-call binary)\n");
+    eprintln!("Usage: {name} [function [arguments...]]");
+    eprintln!("       {name} --list\n");
+    eprintln!("Options:");
+    eprintln!("      --list    lists all defined functions, one per row\n");
+    eprintln!("Currently defined functions:\n");
     #[allow(clippy::map_clone)]
     let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
     utils.sort_unstable();
     let display_list = utils.join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
-    println!(
+    eprintln!(
         "{}",
         textwrap::indent(&textwrap::fill(&display_list, width), "    ")
     );
