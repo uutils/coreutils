@@ -2,7 +2,8 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
+# spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed multihardlink texinfo CARGOFLAGS
 
 set -e
 
@@ -28,6 +29,7 @@ REPO_main_dir="$(dirname -- "${ME_dir}")"
 
 # Default profile is 'debug'
 UU_MAKE_PROFILE='debug'
+CARGO_FEATURE_FLAGS=""
 
 for arg in "$@"
 do
@@ -93,9 +95,20 @@ echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
 
+# Check for SELinux support
 if [ "$(uname)" == "Linux" ]; then
-    # only set on linux
+    # Only attempt to enable SELinux features on Linux
     export SELINUX_ENABLED=1
+    CARGO_FEATURE_FLAGS="${CARGO_FEATURE_FLAGS} selinux"
+fi
+
+# Trim leading whitespace from feature flags
+CARGO_FEATURE_FLAGS="$(echo "${CARGO_FEATURE_FLAGS}" | sed -e 's/^[[:space:]]*//')"
+
+# If we have feature flags, format them correctly for cargo
+if [ ! -z "${CARGO_FEATURE_FLAGS}" ]; then
+    CARGO_FEATURE_FLAGS="--features ${CARGO_FEATURE_FLAGS}"
+    echo "Building with cargo flags: ${CARGO_FEATURE_FLAGS}"
 fi
 
 # Set up quilt for patch management
@@ -111,7 +124,12 @@ else
 fi
 cd -
 
-"${MAKE}" PROFILE="${UU_MAKE_PROFILE}"
+# Pass the feature flags to make, which will pass them to cargo
+"${MAKE}" PROFILE="${UU_MAKE_PROFILE}" CARGOFLAGS="${CARGO_FEATURE_FLAGS}"
+touch g
+echo "stat with selinux support"
+./target/debug/stat -c%C g || true
+
 
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
