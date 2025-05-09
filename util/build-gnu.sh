@@ -365,3 +365,7 @@ sed -i 's/not supported/unexpected argument/' tests/mv/mv-exchange.sh
 # /nix/store/xxxxxxxxxxxx...xxxx/bin/tr
 # We just replace the references to `/usr/bin/tr` with the result of `$(which tr)`
 sed -i  's/\/usr\/bin\/tr/$(which tr)/' tests/init.sh
+
+# upstream doesn't having the program name in the error message
+# but we do. We should keep it that way.
+sed -i 's/echo "changing security context/echo "chcon: changing security context/' tests/chcon/chcon.sh
