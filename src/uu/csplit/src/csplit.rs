@@ -6,7 +6,7 @@
 #![allow(rustdoc::private_intra_doc_links)]
 
 use std::cmp::Ordering;
-use std::io::{self, BufReader};
+use std::io::{self, BufReader, ErrorKind};
 use std::{
     fs::{File, remove_file},
     io::{BufRead, BufWriter, Write},
@@ -71,6 +71,35 @@ impl CsplitOptions {
     }
 }
 
+pub struct LinesWithNewlines<T: BufRead> {
+    inner: T,
+}
+
+impl<T: BufRead> LinesWithNewlines<T> {
+    fn new(s: T) -> Self {
+        Self { inner: s }
+    }
+}
+
+impl<T: BufRead> Iterator for LinesWithNewlines<T> {
+    type Item = io::Result<String>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        fn ret(v: Vec<u8>) -> io::Result<String> {
+            String::from_utf8(v).map_err(|_| {
+                io::Error::new(ErrorKind::InvalidData, "stream did not contain valid UTF-8")
+            })
+        }
+
+        let mut v = Vec::new();
+        match self.inner.read_until(b'\n', &mut v) {
+            Ok(0) => None,
+            Ok(_) => Some(ret(v)),
+            Err(e) => Some(Err(e)),
+        }
+    }
+}
+
 /// Splits a file into severals according to the command line patterns.
 ///
 /// # Errors
@@ -87,8 +116,7 @@ pub fn csplit<T>(options: &CsplitOptions, patterns: &[String], input: T) -> Resu
 where
     T: BufRead,
 {
-    let enumerated_input_lines = input
-        .lines()
+    let enumerated_input_lines = LinesWithNewlines::new(input)
         .map(|line| line.map_err_context(|| "read error".to_string()))
         .enumerate();
     let mut input_iter = InputSplitter::new(enumerated_input_lines);
@@ -243,7 +271,7 @@ impl SplitWriter<'_> {
         self.dev_null = true;
     }
 
-    /// Writes the line to the current split, appending a newline character.
+    /// Writes the line to the current split.
     /// If [`self.dev_null`] is true, then the line is discarded.
     ///
     /// # Errors
@@ -255,8 +283,7 @@ impl SplitWriter<'_> {
                 Some(ref mut current_writer) => {
                     let bytes = line.as_bytes();
                     current_writer.write_all(bytes)?;
-                    current_writer.write_all(b"\n")?;
-                    self.size += bytes.len() + 1;
+                    self.size += bytes.len();
                 }
                 None => panic!("trying to write to a split that was not created"),
             }
@@ -321,11 +348,11 @@ impl SplitWriter<'_> {
 
         let mut ret = Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
         while let Some((ln, line)) = input_iter.next() {
-            let l = line?;
+            let line = line?;
             match n.cmp(&(&ln + 1)) {
                 Ordering::Less => {
                     assert!(
-                        input_iter.add_line_to_buffer(ln, l).is_none(),
+                        input_iter.add_line_to_buffer(ln, line).is_none(),
                         "the buffer is big enough to contain 1 line"
                     );
                     ret = Ok(());
@@ -334,7 +361,7 @@ impl SplitWriter<'_> {
                 Ordering::Equal => {
                     assert!(
                         self.options.suppress_matched
-                            || input_iter.add_line_to_buffer(ln, l).is_none(),
+                            || input_iter.add_line_to_buffer(ln, line).is_none(),
                         "the buffer is big enough to contain 1 line"
                     );
                     ret = Ok(());
@@ -342,7 +369,7 @@ impl SplitWriter<'_> {
                 }
                 Ordering::Greater => (),
             }
-            self.writeln(&l)?;
+            self.writeln(&line)?;
         }
         self.finish_split();
         ret
@@ -379,23 +406,26 @@ impl SplitWriter<'_> {
             input_iter.set_size_of_buffer(1);
 
             while let Some((ln, line)) = input_iter.next() {
-                let l = line?;
-                if regex.is_match(&l) {
+                let line = line?;
+                let l = line
+                    .strip_suffix("\r\n")
+                    .unwrap_or_else(|| line.strip_suffix('\n').unwrap_or(&line));
+                if regex.is_match(l) {
                     let mut next_line_suppress_matched = false;
                     match (self.options.suppress_matched, offset) {
                         // no offset, add the line to the next split
                         (false, 0) => {
                             assert!(
-                                input_iter.add_line_to_buffer(ln, l).is_none(),
+                                input_iter.add_line_to_buffer(ln, line).is_none(),
                                 "the buffer is big enough to contain 1 line"
                             );
                         }
                         // a positive offset, some more lines need to be added to the current split
-                        (false, _) => self.writeln(&l)?,
+                        (false, _) => self.writeln(&line)?,
                         // suppress matched option true, but there is a positive offset, so the line is printed
                         (true, 1..) => {
                             next_line_suppress_matched = true;
-                            self.writeln(&l)?;
+                            self.writeln(&line)?;
                         }
                         _ => (),
                     };
@@ -424,7 +454,7 @@ impl SplitWriter<'_> {
                     }
                     return Ok(());
                 }
-                self.writeln(&l)?;
+                self.writeln(&line)?;
             }
         } else {
             // With a negative offset we use a buffer to keep the lines within the offset.
@@ -435,8 +465,11 @@ impl SplitWriter<'_> {
             let offset_usize = -offset as usize;
             input_iter.set_size_of_buffer(offset_usize);
             while let Some((ln, line)) = input_iter.next() {
-                let l = line?;
-                if regex.is_match(&l) {
+                let line = line?;
+                let l = line
+                    .strip_suffix("\r\n")
+                    .unwrap_or_else(|| line.strip_suffix('\n').unwrap_or(&line));
+                if regex.is_match(l) {
                     for line in input_iter.shrink_buffer_to_size() {
                         self.writeln(&line)?;
                     }
@@ -444,12 +477,12 @@ impl SplitWriter<'_> {
                         // since offset_usize is for sure greater than 0
                         // the first element of the buffer should be removed and this
                         // line inserted to be coherent with GNU implementation
-                        input_iter.add_line_to_buffer(ln, l);
+                        input_iter.add_line_to_buffer(ln, line);
                     } else {
                         // add 1 to the buffer size to make place for the matched line
                         input_iter.set_size_of_buffer(offset_usize + 1);
                         assert!(
-                            input_iter.add_line_to_buffer(ln, l).is_none(),
+                            input_iter.add_line_to_buffer(ln, line).is_none(),
                             "should be big enough to hold every lines"
                         );
                     }
@@ -460,7 +493,7 @@ impl SplitWriter<'_> {
                     }
                     return Ok(());
                 }
-                if let Some(line) = input_iter.add_line_to_buffer(ln, l) {
+                if let Some(line) = input_iter.add_line_to_buffer(ln, line) {
                     self.writeln(&line)?;
                 }
             }
