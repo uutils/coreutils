@@ -23,7 +23,6 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
-#[cfg(not(windows))]
 use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
@@ -51,6 +50,7 @@ static TEST_HOW_ARE_YOU_DEST: &str = "hello_dir/how_are_you.txt";
 static TEST_COPY_TO_FOLDER: &str = "hello_dir/";
 static TEST_COPY_TO_FOLDER_FILE: &str = "hello_dir/hello_world.txt";
 static TEST_COPY_FROM_FOLDER: &str = "hello_dir_with_file/";
+static TEST_COPY_FROM_FOLDER_SYMLINK: &str = "hello_dir_with_file.link";
 static TEST_COPY_FROM_FOLDER_FILE: &str = "hello_dir_with_file/hello_world.txt";
 static TEST_COPY_TO_FOLDER_NEW: &str = "hello_dir_new";
 static TEST_COPY_TO_FOLDER_NEW_FILE: &str = "hello_dir_new/hello_world.txt";
@@ -2206,6 +2206,24 @@ fn test_cp_no_deref_folder_to_folder() {
     // Check the content of the symlink
     let path_to_check = path_to_new_symlink.to_str().unwrap();
     assert_eq!(at.read(path_to_check), "Hello, World!\n");
+}
+
+#[test]
+fn test_cp_no_deref_symlinked_folder_to_folder() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_dir(TEST_COPY_FROM_FOLDER, TEST_COPY_FROM_FOLDER_SYMLINK);
+    ucmd.arg("-P")
+        .arg(TEST_COPY_FROM_FOLDER_SYMLINK)
+        .arg(TEST_COPY_TO_FOLDER)
+        .succeeds();
+    let link_dst = Path::new(TEST_COPY_TO_FOLDER).join(TEST_COPY_FROM_FOLDER_SYMLINK);
+    let link_dst = link_dst.to_str().unwrap();
+    assert!(at.is_symlink(link_dst));
+    // Need Path here to ignore path separator differences on Windows
+    assert_eq!(
+        Path::new(&at.read_symlink(link_dst)),
+        Path::new(TEST_COPY_FROM_FOLDER)
+    );
 }
 
 #[test]
