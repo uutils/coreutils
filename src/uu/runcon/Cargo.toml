@@ -19,7 +19,7 @@ path = "src/runcon.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs", "perms"] }
+uucore = { workspace = true, features = ["entries", "fs", "perms", "selinux"] }
 selinux = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }

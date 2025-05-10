@@ -271,7 +271,7 @@ fn set_next_exec_context(context: &OpaqueSecurityContext) -> Result<()> {
 }
 
 fn get_plain_context(context: &OsStr) -> Result<OpaqueSecurityContext> {
-    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+    if !uucore::selinux::is_selinux_enabled() {
         return Err(Error::SELinuxNotEnabled);
     }
 
@@ -342,7 +342,7 @@ fn get_custom_context(
     use OpaqueSecurityContext as OSC;
     type SetNewValueProc = fn(&OSC, &CStr) -> selinux::errors::Result<()>;
 
-    if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+    if !uucore::selinux::is_selinux_enabled() {
         return Err(Error::SELinuxNotEnabled);
     }
 
