@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap procfs uuhelp startswith constness expl
+# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux libloading mangen memmap procfs uuhelp startswith constness expl
 
 [package]
 name = "coreutils"
@@ -36,6 +36,8 @@ expensive_tests = []
 test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
 uudoc = ["zip", "dep:uuhelp_parser"]
+# * only build `coreutils` with dynamic loading when `--feature dynamic` is activated
+dynamic = ["libloading"]
 ## features
 # "feat_acl" == enable support for ACLs (access control lists; by using`--features feat_acl`)
 # NOTE:
@@ -304,6 +306,7 @@ iana-time-zone = "0.1.57"
 indicatif = "0.17.8"
 itertools = "0.14.0"
 libc = "0.2.172"
+libloading = "0.8.6"
 linux-raw-sys = "0.9"
 lscolors = { version = "0.20.0", default-features = false, features = [
   "gnu_legacy",
@@ -377,6 +380,7 @@ phf = { workspace = true }
 selinux = { workspace = true, optional = true }
 textwrap = { workspace = true }
 zip = { workspace = true, optional = true }
+libloading = { workspace = true, optional = true }
 
 uuhelp_parser = { optional = true, version = ">=0.0.19", path = "src/uuhelp_parser" }
 
@@ -541,6 +545,10 @@ phf_codegen = { workspace = true }
 [[bin]]
 name = "coreutils"
 path = "src/bin/coreutils.rs"
+
+[lib]
+name = "coreutils"
+path = "src/lib/coreutils.rs"
 
 [[bin]]
 name = "uudoc"

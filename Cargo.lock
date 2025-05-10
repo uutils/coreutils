@@ -473,6 +473,7 @@ dependencies = [
  "glob",
  "hex-literal",
  "libc",
+ "libloading",
  "nix",
  "num-prime",
  "phf",

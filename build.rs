@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) krate
+// spell-checker:ignore (vars) krate libloading
 
 use std::env;
 use std::fs::File;
@@ -32,11 +32,13 @@ pub fn main() {
             // Allow this as we have a bunch of info in the comments
             #[allow(clippy::match_same_arms)]
             match krate.as_ref() {
-                "default" | "macos" | "unix" | "windows" | "selinux" | "zip" => continue, // common/standard feature names
+                "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "libloading" => {
+                    continue;
+                } // common/standard feature names
                 "nightly" | "test_unimplemented" | "expensive_tests" | "test_risky_names" => {
                     continue;
                 } // crate-local custom features
-                "uudoc" => continue, // is not a utility
+                "uudoc" | "dynamic" => continue, // is not a utility
                 "test" => continue, // over-ridden with 'uu_test' to avoid collision with rust core crate 'test'
                 s if s.starts_with(FEATURE_PREFIX) => continue, // crate feature sets
                 _ => {}             // util feature name

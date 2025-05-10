@@ -1,7 +1,8 @@
-# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
+# spell-checker:ignore (misc) testsuite runtest findstring libcoreutils dylib (targets) busytest toybox distclean pkgs nextest ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR manpages
 
 # Config options
 PROFILE         ?= debug
+DYNAMIC         ?= n
 MULTICALL       ?= n
 COMPLETIONS     ?= y
 MANPAGES        ?= y
@@ -31,9 +32,11 @@ CARGOFLAGS ?=
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
+LIBDIR ?= $(PREFIX)/lib
 DATAROOTDIR ?= $(PREFIX)/share
 
 INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
+INSTALLDIR_LIB=$(DESTDIR)$(LIBDIR)
 
 #prefix to apply to coreutils binary and all tool binaries
 PROG_PREFIX ?=
@@ -271,6 +274,17 @@ TEST_SPEC_FEATURE := selinux
 BUILD_SPEC_FEATURE := selinux
 endif
 
+ifeq (${DYNAMIC}, y)
+BUILD_SPEC_FEATURE += dynamic
+ifeq ($(OS),Windows_NT)
+LIBNAME := libcoreutils.dll
+else ifeq ($(shell uname -s),Darwin)
+LIBNAME := libcoreutils.dylib
+else
+LIBNAME := libcoreutils.so
+endif
+endif
+
 define TEST_BUSYBOX
 test_busybox_$(1):
 	-(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS) $(1))
@@ -299,10 +313,15 @@ else
 endif
 endif
 
+build-lib:
+ifeq (${DYNAMIC}, y)
+	${CARGO} rustc ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --crate-type dylib --lib
+endif
+
 build-coreutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES} $(BUILD_SPEC_FEATURE)" ${PROFILE_CMD} --no-default-features
 
-build: build-coreutils build-pkgs
+build: build-coreutils build-pkgs build-lib
 
 $(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
 
@@ -341,7 +360,7 @@ $(BUILDDIR)/busybox: busybox-src build-coreutils $(BUILDDIR)/.config
 	chmod +x $@
 
 prepare-busytest: $(BUILDDIR)/busybox
-	# disable inapplicable tests
+# disable inapplicable tests
 	-( cd "$(BUSYBOX_SRC)/testsuite" ; if [ -e "busybox.tests" ] ; then mv busybox.tests busybox.tests- ; fi ; )
 
 ifeq ($(EXES),)
@@ -395,7 +414,12 @@ else
 install-completions:
 endif
 
-install: build install-manpages install-completions
+install-lib:
+ifeq (${DYNAMIC}, y)
+	$(INSTALL) $(BUILDDIR)/$(LIBNAME) $(INSTALLDIR_LIB)/
+endif
+
+install: build install-manpages install-completions install-lib
 	mkdir -p $(INSTALLDIR_BIN)
 ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
@@ -413,6 +437,9 @@ endif
 uninstall:
 ifeq (${MULTICALL}, y)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)coreutils)
+endif
+ifeq (${DYNAMIC}, y)
+	rm -f $(INSTALLDIR_BIN)/$(LIBNAME)
 endif
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
 	rm -f $(INSTALLDIR_BIN)/$(PROG_PREFIX)[
