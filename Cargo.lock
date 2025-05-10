@@ -3034,6 +3034,7 @@ dependencies = [
  "fs_extra",
  "indicatif",
  "libc",
+ "nix",
  "thiserror 2.0.12",
  "uucore",
  "windows-sys 0.59.0",
