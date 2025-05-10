@@ -526,6 +526,7 @@ procfs = { version = "0.17", default-features = false }
 nix = { workspace = true, features = ["process", "signal", "user", "term"] }
 rlimit = "0.10.1"
 xattr = { workspace = true }
+subprocess = "0.2.9"
 
 # Specifically used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
 # to deserialize a utmpx struct into a binary file
