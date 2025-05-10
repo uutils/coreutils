@@ -8,6 +8,9 @@
 
 pub mod error;
 
+#[cfg(feature = "special_syscall_touch_now")]
+mod now_other_user;
+
 use chrono::{
     DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime,
     TimeZone, Timelike,
@@ -369,6 +372,11 @@ pub fn uu_app() -> Command {
 /// - `-c`/`--no-create` was passed (`opts.no_create`)
 /// - Either `-h`/`--no-dereference` was passed (`opts.no_deref`) or the file couldn't be created
 pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
+    // Ideally, we would like to parse the date string in such a way that we still know whether it is logically "now".
+    // However, that would require re-implementing a lot of logic from scratch.
+    // Instead, we measure the time immediately before and after the times are computed, and use that to make an educated guess.
+    // TODO: Rewrite *all* the date-parsing logic.
+    let time_before_now = FileTime::now();
     let (atime, mtime) = match &opts.source {
         Source::Reference(reference) => {
             let (atime, mtime) = stat(reference, !opts.no_deref)
@@ -382,7 +390,6 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
         }
         &Source::Timestamp(ts) => (ts, ts),
     };
-
     let (atime, mtime) = if let Some(date) = &opts.date {
         (
             parse_date(
@@ -397,18 +404,30 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     } else {
         (atime, mtime)
     };
+    let time_after_now = FileTime::now();
+    let special_syscall_for_touch_now = opts.change_times == ChangeTimes::Both
+        && (time_before_now <= atime)
+        && (atime <= time_after_now)
+        && (time_before_now <= mtime)
+        && (mtime <= time_after_now);
 
     for (ind, file) in files.iter().enumerate() {
         let (path, is_stdout) = match file {
             InputFile::Stdout => (Cow::Owned(pathbuf_from_stdout()?), true),
             InputFile::Path(path) => (Cow::Borrowed(path), false),
         };
-        touch_file(&path, is_stdout, opts, atime, mtime).map_err(|e| {
-            TouchError::TouchFileError {
-                path: path.into_owned(),
-                index: ind,
-                error: e,
-            }
+        touch_file(
+            &path,
+            is_stdout,
+            special_syscall_for_touch_now,
+            opts,
+            atime,
+            mtime,
+        )
+        .map_err(|e| TouchError::TouchFileError {
+            path: path.into_owned(),
+            index: ind,
+            error: e,
         })?;
     }
 
@@ -426,6 +445,7 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
 fn touch_file(
     path: &Path,
     is_stdout: bool,
+    special_syscall_for_touch_now: bool,
     opts: &Options,
     atime: FileTime,
     mtime: FileTime,
@@ -496,7 +516,14 @@ fn touch_file(
         }
     }
 
-    update_times(path, is_stdout, opts, atime, mtime)
+    update_times(
+        path,
+        is_stdout,
+        special_syscall_for_touch_now,
+        opts,
+        atime,
+        mtime,
+    )
 }
 
 /// Returns which of the times (access, modification) are to be changed.
@@ -536,6 +563,7 @@ fn determine_atime_mtime_change(matches: &ArgMatches) -> ChangeTimes {
 fn update_times(
     path: &Path,
     is_stdout: bool,
+    special_syscall_for_touch_now: bool,
     opts: &Options,
     atime: FileTime,
     mtime: FileTime,
@@ -561,11 +589,59 @@ fn update_times(
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
     if opts.no_deref && !is_stdout {
+        set_symlink_file_times_helper(special_syscall_for_touch_now, path, atime, mtime)
+    } else {
+        set_file_times_helper(special_syscall_for_touch_now, path, atime, mtime)
+    }
+    .map_err_context(|| format!("setting times of {}", path.quote()))
+}
+
+#[cfg(feature = "special_syscall_touch_now")]
+fn set_symlink_file_times_helper(
+    special_syscall_for_touch_now: bool,
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+) -> std::io::Result<()> {
+    if special_syscall_for_touch_now {
+        now_other_user::set_symlink_file_times_now(path)
+    } else {
         set_symlink_file_times(path, atime, mtime)
+    }
+}
+
+#[cfg(not(feature = "special_syscall_touch_now"))]
+fn set_symlink_file_times_helper(
+    _special_syscall_for_touch_now: bool,
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+) -> std::io::Result<()> {
+    set_symlink_file_times(path, atime, mtime)
+}
+
+#[cfg(feature = "special_syscall_touch_now")]
+fn set_file_times_helper(
+    special_syscall_for_touch_now: bool,
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+) -> std::io::Result<()> {
+    if special_syscall_for_touch_now {
+        now_other_user::set_file_times_now(path)
     } else {
         set_file_times(path, atime, mtime)
     }
-    .map_err_context(|| format!("setting times of {}", path.quote()))
+}
+
+#[cfg(not(feature = "special_syscall_touch_now"))]
+fn set_file_times_helper(
+    _special_syscall_for_touch_now: bool,
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+) -> std::io::Result<()> {
+    set_file_times(path, atime, mtime)
 }
 
 /// Get metadata of the provided path
