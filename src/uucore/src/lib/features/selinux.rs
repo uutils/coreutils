@@ -284,7 +284,10 @@ mod tests {
     fn test_invalid_context_string_error() {
         let tmpfile = NamedTempFile::new().expect("Failed to create tempfile");
         let path = tmpfile.path();
-
+        if !is_selinux_enabled() {
+            println!("test skipped: Kernel has no support for SElinux context");
+            return;
+        }
         // Pass a context string containing a null byte to trigger CString::new error
         let invalid_context = String::from("invalid\0context");
         let result = set_selinux_security_context(path, Some(&invalid_context));
@@ -322,7 +325,10 @@ mod tests {
     fn test_get_selinux_security_context() {
         let tmpfile = NamedTempFile::new().expect("Failed to create tempfile");
         let path = tmpfile.path();
-
+        if !is_selinux_enabled() {
+            println!("test skipped: Kernel has no support for SElinux context");
+            return;
+        }
         std::fs::write(path, b"test content").expect("Failed to write to tempfile");
 
         let result = get_selinux_security_context(path);
@@ -387,7 +393,10 @@ mod tests {
     #[test]
     fn test_get_selinux_context_nonexistent_file() {
         let path = Path::new("/nonexistent/file/that/does/not/exist");
-
+        if !is_selinux_enabled() {
+            println!("test skipped: Kernel has no support for SElinux context");
+            return;
+        }
         let result = get_selinux_security_context(path);
 
         assert!(result.is_err());
