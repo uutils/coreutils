@@ -2846,7 +2846,7 @@ fn display_item_long(
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
         let is_acl_set = has_acl(item.display_name.as_os_str());
         output_display.extend(display_permissions(md, true).as_bytes());
-        if item.security_context.len() > 1 {
+        if !item.security_context.is_empty() {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
@@ -2976,7 +2976,7 @@ fn display_item_long(
 
         output_display.extend(leading_char.as_bytes());
         output_display.extend(b"?????????");
-        if item.security_context.len() > 1 {
+        if !item.security_context.is_empty() {
             // GNU `ls` uses a "." character to indicate a file with a security context,
             // but not other alternate access method.
             output_display.extend(b".");
