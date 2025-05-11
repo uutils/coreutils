@@ -49,6 +49,12 @@ const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN
 const PATTERN_LENGTH: usize = 3;
 const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
 
+/// Optimal block size for the filesystem. This constant is used for data size alignment,
+/// similar to the behavior of GNU shred. Usually, optimal block size is a 4K block, which is why
+/// it's defined as a constant. However, it's possible to get the actual size at runtime using, for
+/// example, `std::os::unix::fs::MetadataExt::blksize()`.
+const OPTIMAL_IO_BLOCK_SIZE: usize = 4096;
+
 /// Patterns that appear in order for the passes
 ///
 /// A single-byte pattern is equivalent to a multi-byte pattern of that byte three times.
@@ -507,9 +513,16 @@ fn wipe_file(
     Ok(())
 }
 
-// Aligns data size up to the nearest multiple of block size
-fn get_aligned_size(data_size: usize, block_size: usize) -> usize {
-    data_size.div_ceil(block_size) * block_size
+fn split_on_blocks(file_size: u64, exact: bool) -> (u64, u64) {
+    let file_size = if exact {
+        file_size
+    } else {
+        // The main idea here is to align the file size to the OPTIMAL_IO_BLOCK_SIZE, and then split it into
+        // BLOCK_SIZE + remaining bytes. Since the input data is already aligned to N * OPTIMAL_IO_BLOCK_SIZE,
+        // the output file size will also be aligned and correct.
+        file_size.div_ceil(OPTIMAL_IO_BLOCK_SIZE as u64) * OPTIMAL_IO_BLOCK_SIZE as u64
+    };
+    (file_size / BLOCK_SIZE as u64, file_size % BLOCK_SIZE as u64)
 }
 
 fn do_pass(
@@ -522,27 +535,17 @@ fn do_pass(
     file.rewind()?;
 
     let mut writer = BytesWriter::from_pass_type(pass_type);
+    let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact);
 
     // We start by writing BLOCK_SIZE times as many time as possible.
-    for _ in 0..(file_size / BLOCK_SIZE as u64) {
+    for _ in 0..number_of_blocks {
         let block = writer.bytes_for_pass(BLOCK_SIZE);
         file.write_all(block)?;
     }
 
-    // Now we might have some bytes left, so we write either that
-    // many bytes if exact is true, or aligned by FS_BLOCK_SIZE bytes if not.
-    let bytes_left = (file_size % BLOCK_SIZE as u64) as usize;
-    if bytes_left > 0 {
-        let size = if exact {
-            bytes_left
-        } else {
-            // This alignment allows us to better match GNU shred's behavior.
-            const FS_BLOCK_SIZE: usize = 4096;
-            get_aligned_size(bytes_left, FS_BLOCK_SIZE)
-        };
-        let block = writer.bytes_for_pass(size);
-        file.write_all(block)?;
-    }
+    // Then we write remaining data which is smaller than the BLOCK_SIZE
+    let block = writer.bytes_for_pass(bytes_left as usize);
+    file.write_all(block)?;
 
     file.sync_data()?;
 
@@ -629,4 +632,41 @@ fn do_remove(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{BLOCK_SIZE, OPTIMAL_IO_BLOCK_SIZE, split_on_blocks};
+
+    #[test]
+    fn test_align_non_exact_control_values() {
+        // Note: This test only makes sense for the default values of BLOCK_SIZE and
+        // OPTIMAL_IO_BLOCK_SIZE.
+        assert_eq!(split_on_blocks(1, false), (0, 4096));
+        assert_eq!(split_on_blocks(4095, false), (0, 4096));
+        assert_eq!(split_on_blocks(4096, false), (0, 4096));
+        assert_eq!(split_on_blocks(4097, false), (0, 8192));
+        assert_eq!(split_on_blocks(65535, false), (1, 0));
+        assert_eq!(split_on_blocks(65536, false), (1, 0));
+        assert_eq!(split_on_blocks(65537, false), (1, 4096));
+    }
+
+    #[test]
+    fn test_align_non_exact_cycle() {
+        for size in 1..BLOCK_SIZE as u64 * 2 {
+            let (number_of_blocks, bytes_left) = split_on_blocks(size, false);
+            let test_size = number_of_blocks * BLOCK_SIZE as u64 + bytes_left;
+            assert_eq!(test_size % OPTIMAL_IO_BLOCK_SIZE as u64, 0);
+        }
+    }
+
+    #[test]
+    fn test_align_exact_cycle() {
+        for size in 1..BLOCK_SIZE as u64 * 2 {
+            let (number_of_blocks, bytes_left) = split_on_blocks(size, true);
+            let test_size = number_of_blocks * BLOCK_SIZE as u64 + bytes_left;
+            assert_eq!(test_size, size);
+        }
+    }
 }
