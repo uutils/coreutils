@@ -138,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         selinux_supported: {
             #[cfg(feature = "selinux")]
             {
-                selinux::kernel_support() != selinux::KernelSupport::Unsupported
+                uucore::selinux::is_selinux_enabled()
             }
             #[cfg(not(feature = "selinux"))]
             {
@@ -174,13 +174,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let delimiter = {
-        if state.zflag {
-            "\0".to_string()
-        } else {
-            " ".to_string()
-        }
-    };
+    let delimiter = if state.zflag { "\0" } else { " " };
     let line_ending = LineEnding::from_zero_flag(state.zflag);
 
     if state.cflag {
@@ -307,7 +301,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         }
                     })
                     .collect::<Vec<_>>()
-                    .join(&delimiter),
+                    .join(delimiter),
                 // NOTE: this is necessary to pass GNU's "tests/id/zero.sh":
                 if state.zflag && state.user_specified && users.len() > 1 {
                     "\0"
