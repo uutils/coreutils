@@ -1987,11 +1987,7 @@ impl PathData {
             None => OnceCell::new(),
         };
 
-        let security_context = if config.context {
-            get_security_context(config, &p_buf, must_dereference)
-        } else {
-            String::new()
-        };
+        let security_context = get_security_context(config, &p_buf, must_dereference);
 
         Self {
             md: OnceCell::new(),
