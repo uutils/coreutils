@@ -1157,7 +1157,7 @@ impl Config {
             selinux_supported: {
                 #[cfg(feature = "selinux")]
                 {
-                    selinux::kernel_support() != selinux::KernelSupport::Unsupported
+                    uucore::selinux::is_selinux_enabled()
                 }
                 #[cfg(not(feature = "selinux"))]
                 {
