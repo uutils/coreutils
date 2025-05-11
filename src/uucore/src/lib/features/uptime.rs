@@ -155,29 +155,89 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     Ok(uptime as i64 / 1000)
 }
 
+pub enum OutputFormat {
+    HumanReadable,
+    PrettyPrint,
+}
+
+struct FormattedUptime {
+    up_days: i64,
+    up_hours: i64,
+    up_mins: i64,
+}
+
+impl FormattedUptime {
+    fn new(up_secs: i64) -> Self {
+        let up_days = up_secs / 86400;
+        let up_hours = (up_secs - (up_days * 86400)) / 3600;
+        let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
+
+        FormattedUptime {
+            up_days,
+            up_hours,
+            up_mins,
+        }
+    }
+
+    fn get_human_readable_uptime(&self) -> String {
+        match self.up_days.cmp(&1) {
+            std::cmp::Ordering::Equal => format!(
+                "{} day, {:2}:{:02}",
+                self.up_days, self.up_hours, self.up_mins
+            ),
+            std::cmp::Ordering::Greater => format!(
+                "{} days, {:2}:{:02}",
+                self.up_days, self.up_hours, self.up_mins
+            ),
+            _ => format!("{:2}:{:02}", self.up_hours, self.up_mins),
+        }
+    }
+
+    fn get_pretty_print_uptime(&self) -> String {
+        let day_string = match self.up_days.cmp(&1) {
+            std::cmp::Ordering::Equal => format!("{} day, ", self.up_days),
+            std::cmp::Ordering::Greater => format!("{} days, ", self.up_days),
+            _ => String::new(),
+        };
+        let hour_string = match self.up_hours.cmp(&1) {
+            std::cmp::Ordering::Equal => format!("{} hour, ", self.up_hours),
+            std::cmp::Ordering::Greater => format!("{} hours, ", self.up_hours),
+            _ => String::new(),
+        };
+        let min_string = match self.up_mins.cmp(&1) {
+            std::cmp::Ordering::Equal => format!("{} min", self.up_mins),
+            _ => format!("{} mins", self.up_mins),
+        };
+        format!("{}{}{}", day_string, hour_string, min_string)
+    }
+}
+
 /// Get the system uptime in a human-readable format
 ///
 /// # Arguments
 ///
 /// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
+/// output_format: OutputFormat - Selects the format of the output string.
 ///
 /// # Returns
 ///
 /// Returns a UResult with the uptime in a human-readable format(e.g. "1 day, 3:45") if successful, otherwise an UptimeError.
 #[inline]
-pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
+pub fn get_formatted_uptime(
+    boot_time: Option<time_t>,
+    output_format: OutputFormat,
+) -> UResult<String> {
     let up_secs = get_uptime(boot_time)?;
 
     if up_secs < 0 {
         Err(UptimeError::SystemUptime)?;
     }
-    let up_days = up_secs / 86400;
-    let up_hours = (up_secs - (up_days * 86400)) / 3600;
-    let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
-    match up_days.cmp(&1) {
-        std::cmp::Ordering::Equal => Ok(format!("{up_days:1} day, {up_hours:2}:{up_mins:02}")),
-        std::cmp::Ordering::Greater => Ok(format!("{up_days:1} days {up_hours:2}:{up_mins:02}")),
-        _ => Ok(format!("{up_hours:2}:{up_mins:02}")),
+
+    let formatted_uptime = FormattedUptime::new(up_secs);
+
+    match output_format {
+        OutputFormat::HumanReadable => Ok(formatted_uptime.get_human_readable_uptime()),
+        OutputFormat::PrettyPrint => Ok(formatted_uptime.get_pretty_print_uptime()),
     }
 }
 
