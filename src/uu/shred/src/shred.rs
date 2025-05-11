@@ -507,6 +507,11 @@ fn wipe_file(
     Ok(())
 }
 
+// Aligns data size up to the nearest multiple of block size
+fn get_aligned_size(data_size: usize, block_size: usize) -> usize {
+    data_size.div_ceil(block_size) * block_size
+}
+
 fn do_pass(
     file: &mut File,
     pass_type: &PassType,
@@ -525,10 +530,16 @@ fn do_pass(
     }
 
     // Now we might have some bytes left, so we write either that
-    // many bytes if exact is true, or BLOCK_SIZE bytes if not.
+    // many bytes if exact is true, or aligned by FS_BLOCK_SIZE bytes if not.
     let bytes_left = (file_size % BLOCK_SIZE as u64) as usize;
     if bytes_left > 0 {
-        let size = if exact { bytes_left } else { BLOCK_SIZE };
+        let size = if exact {
+            bytes_left
+        } else {
+            // This alignment allows us to better match GNU shred's behavior.
+            const FS_BLOCK_SIZE: usize = 4096;
+            get_aligned_size(bytes_left, FS_BLOCK_SIZE)
+        };
         let block = writer.bytes_for_pass(size);
         file.write_all(block)?;
     }
