@@ -33,10 +33,11 @@ const NAME: &str = "hashsum";
 const ABOUT: &str = help_about!("hashsum.md");
 const USAGE: &str = help_usage!("hashsum.md");
 
-struct Options {
+struct Options<'a> {
     algoname: &'static str,
     digest: Box<dyn Digest + 'static>,
     binary: bool,
+    binary_name: &'a str,
     //check: bool,
     tag: bool,
     nonames: bool,
@@ -274,6 +275,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         digest: (algo.create_fn)(),
         output_bits: algo.bits,
         binary,
+        binary_name: &binary_name,
         tag: matches.get_flag("tag"),
         nonames,
         //status,
@@ -520,17 +522,25 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     let binary_marker = if options.binary { "*" } else { " " };
+    let mut err = None;
     for filename in files {
         let filename = Path::new(filename);
 
-        let stdin_buf;
-        let file_buf;
         let mut file = BufReader::new(if filename == OsStr::new("-") {
-            stdin_buf = stdin();
-            Box::new(stdin_buf) as Box<dyn Read>
+            Box::new(stdin()) as Box<dyn Read>
         } else {
-            file_buf =
-                File::open(filename).map_err_context(|| "failed to open file".to_string())?;
+            let file_buf = match File::open(filename) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!(
+                        "{}: {}: {e}",
+                        options.binary_name,
+                        filename.to_string_lossy()
+                    );
+                    err = Some(ChecksumError::Io(e));
+                    continue;
+                }
+            };
             Box::new(file_buf) as Box<dyn Read>
         });
 
@@ -568,5 +578,8 @@ where
             println!("{prefix}{sum} {binary_marker}{escaped_filename}");
         }
     }
-    Ok(())
+    match err {
+        None => Ok(()),
+        Some(e) => Err(Box::new(e)),
+    }
 }

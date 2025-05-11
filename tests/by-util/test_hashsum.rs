@@ -98,6 +98,22 @@ macro_rules! test_digest {
                 .no_stderr()
                 .stdout_is(std::str::from_utf8(&expected).unwrap());
         }
+
+        #[test]
+        fn test_missing_file() {
+            let ts = TestScenario::new("hashsum");
+            let at = &ts.fixtures;
+
+            at.write("a", "file1\n");
+            at.write("c", "file3\n");
+
+            ts.ucmd()
+                .args(&[DIGEST_ARG, BITS_ARG, "a", "b", "c"])
+                .fails()
+                .stdout_contains("a\n")
+                .stdout_contains("c\n")
+                .stderr_contains("b: No such file or directory");
+        }
     }
     )*)
 }
