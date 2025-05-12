@@ -155,8 +155,12 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     Ok(uptime as i64 / 1000)
 }
 
+/// The format used to display a FormattedUptime.
 pub enum OutputFormat {
+    /// Typical `uptime` output (e.g. 2 days, 3:04).
     HumanReadable,
+
+    /// Pretty printed output (e.g. 2 days, 3 hours, 04 minutes).
     PrettyPrint,
 }
 
