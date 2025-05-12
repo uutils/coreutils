@@ -8,14 +8,14 @@
 mod flags;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
+use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
-    ControlFlags, InputFlags, LocalFlags, OutputFlags, SpecialCharacterIndices, Termios,
-    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
+    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags,
+    OutputFlags, SpecialCharacterIndices, Termios,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::fs::File;
-use std::io::{self, Stdout, stdout};
+use std::io::{self, stdout, Stdout};
 use std::ops::ControlFlow;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
@@ -212,8 +212,27 @@ fn stty(opts: &Options) -> UResult<()> {
     let mut termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
 
     if let Some(settings) = &opts.settings {
-        for setting in settings {
-            if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
+        let mut settings_iter = settings.into_iter();
+        while let Some(setting) = settings_iter.next() {
+            if is_control_char(setting) {
+                let new_cc = match settings_iter.next() {
+                    Some(cc) => cc,
+                    None => {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("no mapping specified for '{setting}'"),
+                        ));
+                    }
+                };
+                if let ControlFlow::Break(false) = apply_char_mapping(&mut termios, setting, new_cc)
+                {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid mapping '{setting}' => '{new_cc}'"),
+                    ));
+                }
+            }
+            else if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
                 return Err(USimpleError::new(
                     1,
                     format!("invalid argument '{setting}'"),
@@ -281,6 +300,15 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
 
     println!();
     Ok(())
+}
+
+fn is_control_char(option: &str) -> bool {
+    for cc in CONTROL_CHARS {
+        if option == cc.0 {
+            return true;
+        }
+    }
+    false
 }
 
 fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
@@ -469,6 +497,11 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
         }
     }
     ControlFlow::Continue(())
+}
+
+fn apply_char_mapping(termios: &mut Termios, cc: &str, new_cc: &str) -> ControlFlow<bool> {
+    println!("{cc} {new_cc}");
+    ControlFlow::Break(true)
 }
 
 pub fn uu_app() -> Command {
