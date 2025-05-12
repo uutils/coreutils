@@ -49,11 +49,11 @@ const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN
 const PATTERN_LENGTH: usize = 3;
 const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
 
-/// Optimal block size for the filesystem. This constant is used for data size alignment,
-/// similar to the behavior of GNU shred. Usually, optimal block size is a 4K block, which is why
+/// Optimal block size for the filesystem. This constant is used for data size alignment, similar
+/// to the behavior of GNU shred. Usually, optimal block size is a 4K block (2^12), which is why
 /// it's defined as a constant. However, it's possible to get the actual size at runtime using, for
 /// example, `std::os::unix::fs::MetadataExt::blksize()`.
-const OPTIMAL_IO_BLOCK_SIZE: usize = 4096;
+const OPTIMAL_IO_BLOCK_SIZE: usize = 1 << 12;
 
 /// Patterns that appear in order for the passes
 ///
