@@ -669,4 +669,17 @@ mod tests {
             assert_eq!(test_size, size);
         }
     }
+
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn test_sanity_of_block_sizes() {
+        // This test ensures basic expectations on block sizes.
+        //
+        // OPTIMAL_IO_BLOCK_SIZE must not exceed BLOCK_SIZE. Violating this may cause overflows due
+        // to alignment or performance issues. While additional runtime checks can catch such
+        // problems, it's better to fail fast during testing. This kind of misconfiguration is
+        // highly unlikely but would indicate a serious error.
+
+        assert!(OPTIMAL_IO_BLOCK_SIZE <= BLOCK_SIZE);
+    }
 }
