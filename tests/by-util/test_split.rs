@@ -112,11 +112,7 @@ impl RandomFile {
 
     /// Add n lines each of size `RandomFile::LINESIZE`
     fn add_lines(&mut self, lines: usize) {
-        let mut n = lines;
-        while n > 0 {
-            writeln!(self.inner, "{}", random_chars(Self::LINESIZE)).unwrap();
-            n -= 1;
-        }
+        self.add_lines_with_line_size(lines, Self::LINESIZE);
     }
 
     /// Add n lines each of the given size.
