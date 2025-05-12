@@ -212,27 +212,24 @@ fn stty(opts: &Options) -> UResult<()> {
     let mut termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
 
     if let Some(settings) = &opts.settings {
-        let mut settings_iter = settings.into_iter();
+        let mut settings_iter = settings.iter();
         while let Some(setting) = settings_iter.next() {
-            if is_control_char(setting) {
-                let new_cc = match settings_iter.next() {
-                    Some(cc) => cc,
-                    None => {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("no mapping specified for '{setting}'"),
-                        ));
-                    }
+            if let Some(char_index) = is_control_char(setting) {
+                let Some(new_cc) = settings_iter.next() else {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("no mapping specified for '{setting}'"),
+                    ));
                 };
-                if let ControlFlow::Break(false) = apply_char_mapping(&mut termios, setting, new_cc)
+                if let ControlFlow::Break(false) =
+                    apply_char_mapping(&mut termios, setting, char_index, new_cc)
                 {
                     return Err(USimpleError::new(
                         1,
                         format!("invalid mapping '{setting}' => '{new_cc}'"),
                     ));
                 }
-            }
-            else if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
+            } else if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
                 return Err(USimpleError::new(
                     1,
                     format!("invalid argument '{setting}'"),
@@ -302,13 +299,13 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     Ok(())
 }
 
-fn is_control_char(option: &str) -> bool {
+fn is_control_char(option: &str) -> Option<SpecialCharacterIndices> {
     for cc in CONTROL_CHARS {
         if option == cc.0 {
-            return true;
+            return Some(cc.1);
         }
     }
-    false
+    None
 }
 
 fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
@@ -499,9 +496,34 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
     ControlFlow::Continue(())
 }
 
-fn apply_char_mapping(termios: &mut Termios, cc: &str, new_cc: &str) -> ControlFlow<bool> {
-    println!("{cc} {new_cc}");
-    ControlFlow::Break(true)
+fn apply_char_mapping(
+    termios: &mut Termios,
+    cc: &str,
+    control_char_index: SpecialCharacterIndices,
+    new_cc: &str,
+) -> ControlFlow<bool> {
+    if let Some(val) = string_to_control_char(new_cc) {
+        termios.control_chars[control_char_index as usize] = val;
+        return ControlFlow::Break(true);
+    }
+    ControlFlow::Break(false)
+}
+
+// GNU stty defines some valid values for the control character mappings
+// 1. Standard character, can be a a single char (ie 'C') or hat notation (ie '^C')
+// 2. Integer
+//      a. hexadecimal, prefixed by '0x'
+//      b. octal, prefixed by '0'
+//      c. decimal, no prefix
+// 3. Disabling the control character: '^-' or 'undef'
+//
+// This function returns the ascii value of the given char, or None if the input cannot be parsed
+fn string_to_control_char(s: &str) -> Option<u8> {
+    // try to parse int, then char
+    if s == "undef" || s == "^-" {
+        return Some(0);
+    }
+    None
 }
 
 pub fn uu_app() -> Command {
