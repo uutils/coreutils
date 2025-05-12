@@ -514,12 +514,17 @@ fn wipe_file(
 }
 
 fn split_on_blocks(file_size: u64, exact: bool) -> (u64, u64) {
+    // OPTIMAL_IO_BLOCK_SIZE must not exceed BLOCK_SIZE. Violating this may cause overflows due
+    // to alignment or performance issues.This kind of misconfiguration is
+    // highly unlikely but would indicate a serious error.
+    const _: () = assert!(OPTIMAL_IO_BLOCK_SIZE <= BLOCK_SIZE);
+
     let file_size = if exact {
         file_size
     } else {
-        // The main idea here is to align the file size to the OPTIMAL_IO_BLOCK_SIZE, and then split it into
-        // BLOCK_SIZE + remaining bytes. Since the input data is already aligned to N * OPTIMAL_IO_BLOCK_SIZE,
-        // the output file size will also be aligned and correct.
+        // The main idea here is to align the file size to the OPTIMAL_IO_BLOCK_SIZE, and then
+        // split it into BLOCK_SIZE + remaining bytes. Since the input data is already aligned to N
+        // * OPTIMAL_IO_BLOCK_SIZE, the output file size will also be aligned and correct.
         file_size.div_ceil(OPTIMAL_IO_BLOCK_SIZE as u64) * OPTIMAL_IO_BLOCK_SIZE as u64
     };
     (file_size / BLOCK_SIZE as u64, file_size % BLOCK_SIZE as u64)
