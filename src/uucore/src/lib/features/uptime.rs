@@ -15,6 +15,7 @@
 use crate::error::{UError, UResult};
 use chrono::Local;
 use libc::time_t;
+use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -48,9 +49,9 @@ pub fn get_formatted_time() -> String {
 ///
 /// # Returns
 ///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
+/// Returns a UResult with the uptime as a Duration if successful, otherwise an UptimeError.
 #[cfg(target_os = "openbsd")]
-pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
+pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<Duration> {
     use libc::CLOCK_BOOTTIME;
     use libc::clock_gettime;
 
@@ -67,12 +68,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     let ret: c_int = unsafe { clock_gettime(CLOCK_BOOTTIME, raw_tp) };
 
     if ret == 0 {
-        #[cfg(target_pointer_width = "64")]
-        let uptime: i64 = tp.tv_sec;
-        #[cfg(not(target_pointer_width = "64"))]
-        let uptime: i64 = tp.tv_sec.into();
-
-        Ok(uptime)
+        Duration::new(tp.tv_sec, tp.tv_nsec)
     } else {
         Err(UptimeError::SystemUptime)
     }
@@ -86,10 +82,10 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 ///
 /// # Returns
 ///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
+/// Returns a UResult with the uptime as a Duration if successful, otherwise an UptimeError.
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
-pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
+pub fn get_uptime(boot_time: Option<time_t>) -> UResult<Duration> {
     use crate::utmpx::Utmpx;
     use libc::BOOT_TIME;
     use std::fs::File;
@@ -101,7 +97,8 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
         .ok()
         .and_then(|mut f| f.read_to_string(&mut proc_uptime_s).ok())
         .and_then(|_| proc_uptime_s.split_whitespace().next())
-        .and_then(|s| s.split('.').next().unwrap_or("0").parse::<i64>().ok());
+        .and_then(|s| s.parse::<f64>().ok())
+        .and_then(|f| Duration::try_from_secs_f64(f).ok());
 
     if let Some(uptime) = proc_uptime {
         return Ok(uptime);
@@ -132,7 +129,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
         if now < boottime {
             Err(UptimeError::BootTime)?;
         }
-        return Ok(now - boottime);
+        return Ok(Duration::from_secs(u64::try_from(now - boottime).unwrap()));
     }
 
     Err(UptimeError::SystemUptime)?
@@ -146,13 +143,13 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
 ///
 /// # Returns
 ///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
+/// Returns a UResult with the uptime as a Duration if successful, otherwise an UptimeError.
 #[cfg(windows)]
-pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
+pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<Duration> {
     use windows_sys::Win32::System::SystemInformation::GetTickCount;
     // SAFETY: always return u32
     let uptime = unsafe { GetTickCount() };
-    Ok(uptime as i64 / 1000)
+    Duration::from_secs(uptime)
 }
 
 /// The format used to display a FormattedUptime.
@@ -165,13 +162,14 @@ pub enum OutputFormat {
 }
 
 struct FormattedUptime {
-    up_days: i64,
-    up_hours: i64,
-    up_mins: i64,
+    up_days: u64,
+    up_hours: u64,
+    up_mins: u64,
 }
 
 impl FormattedUptime {
-    fn new(up_secs: i64) -> Self {
+    fn new(uptime: Duration) -> Self {
+        let up_secs = uptime.as_secs();
         let up_days = up_secs / 86400;
         let up_hours = (up_secs - (up_days * 86400)) / 3600;
         let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
@@ -231,13 +229,8 @@ pub fn get_formatted_uptime(
     boot_time: Option<time_t>,
     output_format: OutputFormat,
 ) -> UResult<String> {
-    let up_secs = get_uptime(boot_time)?;
-
-    if up_secs < 0 {
-        Err(UptimeError::SystemUptime)?;
-    }
-
-    let formatted_uptime = FormattedUptime::new(up_secs);
+    let uptime = get_uptime(boot_time)?;
+    let formatted_uptime = FormattedUptime::new(uptime);
 
     match output_format {
         OutputFormat::HumanReadable => Ok(formatted_uptime.get_human_readable_uptime()),
