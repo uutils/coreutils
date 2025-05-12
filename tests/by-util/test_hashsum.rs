@@ -107,12 +107,17 @@ macro_rules! test_digest {
             at.write("a", "file1\n");
             at.write("c", "file3\n");
 
+            #[cfg(unix)]
+            let file_not_found_str = "No such file or directory";
+            #[cfg(not(unix))]
+            let file_not_found_str = "The system cannot find the file specified";
+
             ts.ucmd()
                 .args(&[DIGEST_ARG, BITS_ARG, "a", "b", "c"])
                 .fails()
                 .stdout_contains("a\n")
                 .stdout_contains("c\n")
-                .stderr_contains("b: No such file or directory");
+                .stderr_contains(format!("b: {file_not_found_str}"));
         }
     }
     )*)
