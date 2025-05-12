@@ -17,9 +17,7 @@ use std::{
 };
 use uutests::util::{AtPath, TestScenario};
 
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 fn random_chars(n: usize) -> String {
     rng()
