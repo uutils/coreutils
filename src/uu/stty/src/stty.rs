@@ -222,7 +222,7 @@ fn stty(opts: &Options) -> UResult<()> {
                     ));
                 };
                 if let ControlFlow::Break(false) =
-                    apply_char_mapping(&mut termios, setting, char_index, new_cc)
+                    apply_char_mapping(&mut termios, char_index, new_cc)
                 {
                     return Err(USimpleError::new(
                         1,
@@ -498,7 +498,6 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
 
 fn apply_char_mapping(
     termios: &mut Termios,
-    cc: &str,
     control_char_index: SpecialCharacterIndices,
     new_cc: &str,
 ) -> ControlFlow<bool> {
@@ -523,7 +522,31 @@ fn string_to_control_char(s: &str) -> Option<u8> {
     if s == "undef" || s == "^-" {
         return Some(0);
     }
-    None
+
+    // try to parse integer (hex, octal, or decimal)
+    if let Some(hex) = s.strip_prefix("0x") {
+        return u8::from_str_radix(hex, 16).ok();
+    } else if let Some(octal) = s.strip_prefix("0") {
+        return u8::from_str_radix(octal, 8).ok();
+    } else if let Ok(decimal) = s.parse::<u8>() {
+        return Some(decimal);
+    }
+
+    // try to parse ^<char> or just <char>
+    let mut chars = s.chars();
+    match (chars.next(), chars.next()) {
+        (Some('^'), Some(c)) if c.is_ascii_alphabetic() => {
+            // subract by '@' to turn the char into the ascii value of '^<char>'
+            if c == '?' {
+                println!("{}", (c.to_ascii_uppercase() as u8).wrapping_sub(b'@'));
+            }
+            Some((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
+        }
+        (Some(c), None) => {
+            Some(c as u8)
+        }
+        _ => None,
+    }
 }
 
 pub fn uu_app() -> Command {
