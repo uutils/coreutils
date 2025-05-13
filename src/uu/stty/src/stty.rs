@@ -234,7 +234,9 @@ fn stty(opts: &Options) -> UResult<()> {
                         ControlCharMappingError::IntOutOfRange => {
                             return Err(USimpleError::new(
                                 1,
-                                format!("invalid integer argument: '{new_cc}': Numerical result out of range"),
+                                format!(
+                                    "invalid integer argument: '{new_cc}': Numerical result out of range"
+                                ),
                             ));
                         }
                         ControlCharMappingError::MultipleChars => {
@@ -540,7 +542,6 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
         return Ok(0);
     }
 
-    // check if the number is greater than 255, return ControlCharMappingError::IntOutOfRange
     // try to parse integer (hex, octal, or decimal)
     let mut ascii_num: Option<u32> = None;
     if let Some(hex) = s.strip_prefix("0x") {
@@ -566,7 +567,7 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
             if c == '?' {
                 return Ok(ASCII_DEL);
             }
-            // subract by '@' to turn the char into the ascii value of '^<char>'
+            // subtract by '@' to turn the char into the ascii value of '^<char>'
             Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
         }
         (Some(c), None) => Ok(c as u8),
