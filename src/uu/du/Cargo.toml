@@ -22,6 +22,7 @@ chrono = { workspace = true }
 # For the --exclude & --exclude-from options
 glob = { workspace = true }
 clap = { workspace = true }
+regex = { workspace = true }
 uucore = { workspace = true, features = ["format", "parser"] }
 thiserror = { workspace = true }
 
