@@ -23,7 +23,7 @@ uucore = { workspace = true, features = ["entries"] }
 itertools = { workspace = true }
 regex = { workspace = true }
 chrono = { workspace = true }
-thiserror.workspace = true
+thiserror = { workspace = true }
 
 [[bin]]
 name = "pr"

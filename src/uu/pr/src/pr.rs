@@ -143,6 +143,7 @@ enum PrError {
     EncounteredErrors(String),
     #[error("pr: {0}: Is a directory")]
     IsDirectory(String),
+    #[cfg(not(windows))]
     #[error("pr: cannot open {0}, Operation not supported on socket")]
     IsSocket(String),
     #[error("pr: cannot open {0}, No such file or directory")]
