@@ -8,14 +8,14 @@
 mod flags;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
+use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
-    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags,
-    OutputFlags, SpecialCharacterIndices, Termios,
+    ControlFlags, InputFlags, LocalFlags, OutputFlags, SpecialCharacterIndices, Termios,
+    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::fs::File;
-use std::io::{self, stdout, Stdout};
+use std::io::{self, Stdout, stdout};
 use std::ops::ControlFlow;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
@@ -34,6 +34,8 @@ use uucore::locale::get_message;
 )))]
 use flags::BAUD_RATES;
 use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
+
+const ASCII_DEL: u8 = 127;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
@@ -218,7 +220,7 @@ fn stty(opts: &Options) -> UResult<()> {
                 let Some(new_cc) = settings_iter.next() else {
                     return Err(USimpleError::new(
                         1,
-                        format!("no mapping specified for '{setting}'"),
+                        format!("missing argument to '{setting}'"),
                     ));
                 };
                 if let ControlFlow::Break(false) =
@@ -499,9 +501,9 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
 fn apply_char_mapping(
     termios: &mut Termios,
     control_char_index: SpecialCharacterIndices,
-    new_cc: &str,
+    new_val: &str,
 ) -> ControlFlow<bool> {
-    if let Some(val) = string_to_control_char(new_cc) {
+    if let Some(val) = string_to_control_char(new_val) {
         termios.control_chars[control_char_index as usize] = val;
         return ControlFlow::Break(true);
     }
@@ -516,9 +518,8 @@ fn apply_char_mapping(
 //      c. decimal, no prefix
 // 3. Disabling the control character: '^-' or 'undef'
 //
-// This function returns the ascii value of the given char, or None if the input cannot be parsed
+// This function returns the ascii value of valid control chars, or None if the input is invalid
 fn string_to_control_char(s: &str) -> Option<u8> {
-    // try to parse int, then char
     if s == "undef" || s == "^-" {
         return Some(0);
     }
@@ -535,16 +536,15 @@ fn string_to_control_char(s: &str) -> Option<u8> {
     // try to parse ^<char> or just <char>
     let mut chars = s.chars();
     match (chars.next(), chars.next()) {
-        (Some('^'), Some(c)) if c.is_ascii_alphabetic() => {
-            // subract by '@' to turn the char into the ascii value of '^<char>'
+        (Some('^'), Some(c)) => {
+            // special case: ascii value of '^?' is greater than '?'
             if c == '?' {
-                println!("{}", (c.to_ascii_uppercase() as u8).wrapping_sub(b'@'));
+                return Some(ASCII_DEL);
             }
+            // subract by '@' to turn the char into the ascii value of '^<char>'
             Some((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
         }
-        (Some(c), None) => {
-            Some(c as u8)
-        }
+        (Some(c), _) => Some(c as u8),
         _ => None,
     }
 }
