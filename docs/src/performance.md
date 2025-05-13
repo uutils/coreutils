@@ -23,7 +23,7 @@ This three-way comparison provides clear insights into:
 First, you will need to build the binary in release mode. Debug builds are significantly slower:
 
 ```bash
-cargo build --features unix --release
+cargo build --features unix --profile profiling
 ```
 
 ```bash
