@@ -8,14 +8,14 @@
 mod flags;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
+use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
-    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags,
-    OutputFlags, SpecialCharacterIndices, Termios,
+    ControlFlags, InputFlags, LocalFlags, OutputFlags, SpecialCharacterIndices, Termios,
+    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::fs::File;
-use std::io::{self, stdout, Stdout};
+use std::io::{self, Stdout, stdout};
 use std::ops::ControlFlow;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
@@ -224,7 +224,9 @@ fn stty(opts: &Options) -> UResult<()> {
                         ControlCharMappingError::IntOutOfRange => {
                             return Err(USimpleError::new(
                                 1,
-                                format!("invalid integer argument: '{new_cc}': Numerical result out of range"),
+                                format!(
+                                    "invalid integer argument: '{new_cc}': Numerical result out of range"
+                                ),
                             ));
                         }
                         ControlCharMappingError::MultipleChars => {
@@ -530,7 +532,6 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
         return Ok(0);
     }
 
-    // check if the number is greater than 255, return ControlCharMappingError::IntOutOfRange
     // try to parse integer (hex, octal, or decimal)
     let mut ascii_num: Option<u32> = None;
     if let Some(hex) = s.strip_prefix("0x") {
@@ -556,7 +557,7 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
             if c == '?' {
                 return Ok(ASCII_DEL);
             }
-            // subract by '@' to turn the char into the ascii value of '^<char>'
+            // subtract by '@' to turn the char into the ascii value of '^<char>'
             Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
         }
         (Some(c), None) => Ok(c as u8),
