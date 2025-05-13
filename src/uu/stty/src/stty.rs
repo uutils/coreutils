@@ -103,6 +103,11 @@ enum Device {
     Stdout(Stdout),
 }
 
+enum ControlCharMappingError {
+    IntOutOfRange,
+    MultipleChars,
+}
+
 impl AsFd for Device {
     fn as_fd(&self) -> BorrowedFd<'_> {
         match self {
@@ -223,13 +228,22 @@ fn stty(opts: &Options) -> UResult<()> {
                         format!("missing argument to '{setting}'"),
                     ));
                 };
-                if let ControlFlow::Break(false) =
-                    apply_char_mapping(&mut termios, char_index, new_cc)
-                {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid mapping '{setting}' => '{new_cc}'"),
-                    ));
+                match apply_char_mapping(&mut termios, char_index, new_cc) {
+                    Ok(_) => {}
+                    Err(e) => match e {
+                        ControlCharMappingError::IntOutOfRange => {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("invalid integer argument: '{new_cc}': Numerical result out of range"),
+                            ));
+                        }
+                        ControlCharMappingError::MultipleChars => {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("invalid integer argument: '{new_cc}'"),
+                            ));
+                        }
+                    },
                 }
             } else if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
                 return Err(USimpleError::new(
@@ -502,12 +516,14 @@ fn apply_char_mapping(
     termios: &mut Termios,
     control_char_index: SpecialCharacterIndices,
     new_val: &str,
-) -> ControlFlow<bool> {
-    if let Some(val) = string_to_control_char(new_val) {
-        termios.control_chars[control_char_index as usize] = val;
-        return ControlFlow::Break(true);
+) -> Result<(), ControlCharMappingError> {
+    match string_to_control_char(new_val) {
+        Ok(val) => {
+            termios.control_chars[control_char_index as usize] = val;
+            Ok(())
+        }
+        Err(e) => Err(e),
     }
-    ControlFlow::Break(false)
 }
 
 // GNU stty defines some valid values for the control character mappings
@@ -519,33 +535,43 @@ fn apply_char_mapping(
 // 3. Disabling the control character: '^-' or 'undef'
 //
 // This function returns the ascii value of valid control chars, or None if the input is invalid
-fn string_to_control_char(s: &str) -> Option<u8> {
+fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     if s == "undef" || s == "^-" {
-        return Some(0);
+        return Ok(0);
     }
 
+    // check if the number is greater than 255, return ControlCharMappingError::IntOutOfRange
     // try to parse integer (hex, octal, or decimal)
+    let mut ascii_num: Option<u32> = None;
     if let Some(hex) = s.strip_prefix("0x") {
-        return u8::from_str_radix(hex, 16).ok();
+        ascii_num = u32::from_str_radix(hex, 16).ok();
     } else if let Some(octal) = s.strip_prefix("0") {
-        return u8::from_str_radix(octal, 8).ok();
-    } else if let Ok(decimal) = s.parse::<u8>() {
-        return Some(decimal);
+        ascii_num = u32::from_str_radix(octal, 8).ok();
+    } else if let Ok(decimal) = s.parse::<u32>() {
+        ascii_num = Some(decimal);
     }
 
+    if let Some(val) = ascii_num {
+        if val > 255 {
+            return Err(ControlCharMappingError::IntOutOfRange);
+        } else {
+            return Ok(val as u8);
+        }
+    }
     // try to parse ^<char> or just <char>
     let mut chars = s.chars();
     match (chars.next(), chars.next()) {
         (Some('^'), Some(c)) => {
             // special case: ascii value of '^?' is greater than '?'
             if c == '?' {
-                return Some(ASCII_DEL);
+                return Ok(ASCII_DEL);
             }
             // subract by '@' to turn the char into the ascii value of '^<char>'
-            Some((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
+            Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
         }
-        (Some(c), _) => Some(c as u8),
-        _ => None,
+        (Some(c), None) => Ok(c as u8),
+        (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars),
+        _ => unreachable!("No arguments provided: must have been caught earlier"),
     }
 }
 
