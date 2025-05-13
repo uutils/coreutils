@@ -522,7 +522,7 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     let binary_marker = if options.binary { "*" } else { " " };
-    let mut err = None;
+    let mut err_found = None;
     for filename in files {
         let filename = Path::new(filename);
 
@@ -537,7 +537,7 @@ where
                         options.binary_name,
                         filename.to_string_lossy()
                     );
-                    err = Some(ChecksumError::Io(e));
+                    err_found = Some(ChecksumError::Io(e));
                     continue;
                 }
             };
@@ -578,7 +578,7 @@ where
             println!("{prefix}{sum} {binary_marker}{escaped_filename}");
         }
     }
-    match err {
+    match err_found {
         None => Ok(()),
         Some(e) => Err(Box::new(e)),
     }
