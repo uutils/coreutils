@@ -31,13 +31,13 @@ cargo build --features unix --profile profiling
 hyperfine \
   --warmup 3 \
   "/usr/bin/ls -R ." \
-  "./target/release/coreutils.prev ls -R ." \
-  "./target/release/coreutils ls -R ."
+  "./target/profiling/coreutils.prev ls -R ." \
+  "./target/profiling/coreutils ls -R ."
 
 # can be simplified with:
 hyperfine \
   --warmup 3 \
-  -L ls /usr/bin/ls,"./target/release/coreutils.prev ls","./target/release/coreutils ls" \
+  -L ls /usr/bin/ls,"./target/profiling/coreutils.prev ls","./target/profiling/coreutils ls" \
   "{ls} -R ."
 ```
 
