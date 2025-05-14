@@ -197,6 +197,23 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
     }
 }
 
+/// A simple structure used to align a BUF_SIZE buffer to 32-byte boundary.
+///
+/// This is useful as bytecount uses 256-bit wide vector operations that run much
+/// faster on aligned data (at least on x86 with AVX2 support).
+#[repr(align(32))]
+struct AlignedBuffer {
+    data: [u8; BUF_SIZE],
+}
+
+impl Default for AlignedBuffer {
+    fn default() -> Self {
+        Self {
+            data: [0; BUF_SIZE],
+        }
+    }
+}
+
 /// Returns a WordCount that counts the number of bytes, lines, and/or the number of Unicode characters encoded in UTF-8 read via a Reader.
 ///
 /// This corresponds to the `-c`, `-l` and `-m` command line flags to wc.
@@ -213,9 +230,9 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
     handle: &mut R,
 ) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
-    let mut buf = [0; BUF_SIZE];
+    let buf: &mut [u8] = &mut AlignedBuffer::default().data;
     loop {
-        match handle.read(&mut buf) {
+        match handle.read(buf) {
             Ok(0) => return (total, None),
             Ok(n) => {
                 if COUNT_BYTES {
