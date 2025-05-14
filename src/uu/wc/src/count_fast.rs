@@ -32,7 +32,7 @@ use libc::S_IFIFO;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::pipes::{pipe, splice, splice_exact};
 
-const BUF_SIZE: usize = 16 * 1024;
+const BUF_SIZE: usize = 256 * 1024;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const SPLICE_SIZE: usize = 128 * 1024;
 
