@@ -8,14 +8,14 @@
 mod flags;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
+use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
-    ControlFlags, InputFlags, LocalFlags, OutputFlags, SpecialCharacterIndices, Termios,
-    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
+    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags,
+    OutputFlags, SpecialCharacterIndices, Termios,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::fs::File;
-use std::io::{self, Stdout, stdout};
+use std::io::{self, stdout, Stdout};
 use std::ops::ControlFlow;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
@@ -221,32 +221,24 @@ fn stty(opts: &Options) -> UResult<()> {
     if let Some(settings) = &opts.settings {
         let mut settings_iter = settings.iter();
         while let Some(setting) = settings_iter.next() {
-            if let Some(char_index) = is_control_char(setting) {
+            if let Some(char_index) = cc_to_index(setting) {
                 let Some(new_cc) = settings_iter.next() else {
                     return Err(USimpleError::new(
                         1,
                         format!("missing argument to '{setting}'"),
                     ));
                 };
-                match apply_char_mapping(&mut termios, char_index, new_cc) {
-                    Ok(_) => {}
-                    Err(e) => match e {
-                        ControlCharMappingError::IntOutOfRange => {
-                            return Err(USimpleError::new(
-                                1,
-                                format!(
-                                    "invalid integer argument: '{new_cc}': Numerical result out of range"
-                                ),
-                            ));
-                        }
+                apply_char_mapping(&mut termios, char_index, new_cc).map_err(|e| {
+                    let message = match e {
+                        ControlCharMappingError::IntOutOfRange => format!(
+                            "invalid integer argument: '{new_cc}': Numerical result out of range"
+                        ),
                         ControlCharMappingError::MultipleChars => {
-                            return Err(USimpleError::new(
-                                1,
-                                format!("invalid integer argument: '{new_cc}'"),
-                            ));
+                            format!("invalid integer argument: '{new_cc}'")
                         }
-                    },
-                }
+                    };
+                    USimpleError::new(1, message)
+                })?;
             } else if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
                 return Err(USimpleError::new(
                     1,
@@ -317,7 +309,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     Ok(())
 }
 
-fn is_control_char(option: &str) -> Option<SpecialCharacterIndices> {
+fn cc_to_index(option: &str) -> Option<SpecialCharacterIndices> {
     for cc in CONTROL_CHARS {
         if option == cc.0 {
             return Some(cc.1);
