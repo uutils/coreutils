@@ -331,12 +331,12 @@ If you have used [Git for Windows](https://gitforwindows.org) to install `git` o
 
 Alternatively you can install [Cygwin](https://www.cygwin.com) and/or use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/compare-versions#whats-new-in-wsl-2) to get access to all GNU core utilities on Windows.
 
-# Preparing a new release
+## Preparing a new release
 
 1. Modify `util/update-version.sh` (FROM & TO) and run it
 1. Submit a new PR with these changes and wait for it to be merged
 1. Tag the new release `git tag -a X.Y.Z` and `git push --tags`
-1. Once the CI is green, a new release will be automatically created in draft mode. 
+1. Once the CI is green, a new release will be automatically created in draft mode.
    Reuse this release and make sure that assets have been added.
 1. Write the release notes (it takes time) following previous examples
 1. Run `util/publish.sh --do-it` to publish the new release to crates.io
