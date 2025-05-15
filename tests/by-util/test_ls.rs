@@ -4152,6 +4152,22 @@ fn test_ls_dangling_symlinks() {
 
 #[test]
 #[cfg(feature = "feat_selinux")]
+fn test_ls_with_selinux_ext() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("test skipped: Kernel has no support for SElinux context");
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("foo");
+
+    let result = scene.ucmd().args(&["-l", "foo"]).succeeds();
+    let line: Vec<_> = result.stdout_str().split(' ').collect();
+    assert!(line[0].ends_with('.'));
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
 fn test_ls_context1() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5344,7 +5360,11 @@ fn test_acl_display() {
     // ...
     // drwxr-xr-x+  2 user group   40 Apr 21 12:44 with_acl
     // drwxr-xr-x  2 user group   40 Apr 21 12:44 without_acl
-    let re_with_acl = Regex::new(r"[a-z-]*\+ .*with_acl").unwrap();
+    let re_with_acl = if uucore::selinux::is_selinux_enabled() {
+        Regex::new(r"[a-z-]*\. .*with_acl").unwrap()
+    } else {
+        Regex::new(r"[a-z-]*\+ .*with_acl").unwrap()
+    };
     let re_without_acl = Regex::new(r"[a-z-]* .*without_acl").unwrap();
 
     scene
