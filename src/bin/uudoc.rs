@@ -187,22 +187,27 @@ struct MDWriter<'a, 'b> {
 }
 
 fn fix_usage(name: &str, usage: String) -> String {
-    if name == "test" {
-        // replace to [ but not the first two line
-        return usage
-            .lines()
-            .enumerate()
-            .map(|(i, l)| {
-                if i > 1 {
-                    l.replace("test", "[")
-                } else {
-                    l.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+    match name {
+        "test" => {
+            // replace to [ but not the first two line
+            return usage
+                .lines()
+                .enumerate()
+                .map(|(i, l)| {
+                    if i > 1 {
+                        l.replace("test", "[")
+                    } else {
+                        l.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+        }
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
+        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
+        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => usage.replace("--<digest> ", ""),
+        _ => usage,
     }
-    return usage;
 }
 
 impl MDWriter<'_, '_> {
