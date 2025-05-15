@@ -3138,8 +3138,8 @@ dependencies = [
  "chrono",
  "clap",
  "itertools 0.14.0",
- "quick-error",
  "regex",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
