@@ -143,7 +143,7 @@ fn main() -> io::Result<()> {
             "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
             | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
             | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => {
-                // These are all the same, so we can skip them.
+                // These use the hashsum
                 usage_name = "hashsum".to_string();
             }
             _ => {}
@@ -184,6 +184,25 @@ struct MDWriter<'a, 'b> {
     tldr_zip: &'b mut Option<ZipArchive<File>>,
     utils_per_platform: &'b HashMap<&'b str, Vec<String>>,
     markdown: Option<String>,
+}
+
+fn fix_usage(name: &str, usage: String) -> String {
+    if name == "test" {
+        // replace to [ but not the first two line
+        return usage
+            .lines()
+            .enumerate()
+            .map(|(i, l)| {
+                if i > 1 {
+                    l.replace("test", "[")
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    return usage;
 }
 
 impl MDWriter<'_, '_> {
@@ -250,7 +269,7 @@ impl MDWriter<'_, '_> {
         if let Some(markdown) = &self.markdown {
             let usage = uuhelp_parser::parse_usage(markdown);
             let usage = usage.replace("{}", self.name);
-
+            let usage = fix_usage(self.name, usage);
             writeln!(self.w, "\n```")?;
             writeln!(self.w, "{usage}")?;
             writeln!(self.w, "```")
