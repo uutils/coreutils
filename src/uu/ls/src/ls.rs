@@ -2576,7 +2576,11 @@ fn display_items(
 
         for item in items {
             #[cfg(unix)]
-            if config.inode || config.alloc_size {
+            let should_display_leading_info = config.inode || config.alloc_size;
+            #[cfg(not(unix))]
+            let should_display_leading_info = config.alloc_size;
+
+            if should_display_leading_info {
                 let more_info = display_additional_leading_info(
                     item,
                     &padding_collection,
@@ -2586,16 +2590,7 @@ fn display_items(
 
                 write!(state.out, "{more_info}")?;
             }
-            #[cfg(not(unix))]
-            if config.alloc_size {
-                let more_info = display_additional_leading_info(
-                    item,
-                    &padding_collection,
-                    config,
-                    &mut state.out,
-                )?;
-                write!(state.out, "{more_info}")?;
-            }
+
             display_item_long(item, &padding_collection, config, state, dired, quoted)?;
         }
     } else {
