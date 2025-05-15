@@ -135,12 +135,22 @@ fn main() -> io::Result<()> {
 
     println!("Writing to utils");
     for (&name, (_, command)) in utils {
-        if name == "[" {
-            continue;
+        let mut usage_name = name.to_string();
+        match name {
+            "[" => {
+                continue;
+            }
+            "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
+            | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
+            | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => {
+                // These are all the same, so we can skip them.
+                usage_name = "hashsum".to_string();
+            }
+            _ => {}
         }
         let p = format!("docs/src/utils/{name}.md");
 
-        let markdown = File::open(format!("src/uu/{name}/{name}.md"))
+        let markdown = File::open(format!("src/uu/{usage_name}/{usage_name}.md"))
             .and_then(|mut f: File| {
                 let mut s = String::new();
                 f.read_to_string(&mut s)?;
