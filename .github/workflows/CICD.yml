@@ -531,7 +531,7 @@ jobs:
           # TODO: Re-enable after rust-onig release: https://github.com/rust-onig/rust-onig/issues/193
           # - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
-          - { os: windows-latest , target: aarch64-pc-windows-msvc     , features: feat_os_windows, use-cross: use-cross , skip-tests: true }      
+          - { os: windows-latest , target: aarch64-pc-windows-msvc     , features: feat_os_windows, use-cross: use-cross , skip-tests: true }
     steps:
     - uses: actions/checkout@v4
       with:
