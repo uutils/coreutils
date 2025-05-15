@@ -49,11 +49,11 @@ const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN
 const PATTERN_LENGTH: usize = 3;
 const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
 
-/// Optimal block size for the filesystem. This constant is used for data size alignment,
-/// similar to the behavior of GNU shred. Usually, optimal block size is a 4K block, which is why
+/// Optimal block size for the filesystem. This constant is used for data size alignment, similar
+/// to the behavior of GNU shred. Usually, optimal block size is a 4K block (2^12), which is why
 /// it's defined as a constant. However, it's possible to get the actual size at runtime using, for
 /// example, `std::os::unix::fs::MetadataExt::blksize()`.
-const OPTIMAL_IO_BLOCK_SIZE: usize = 4096;
+const OPTIMAL_IO_BLOCK_SIZE: usize = 1 << 12;
 
 /// Patterns that appear in order for the passes
 ///
@@ -668,5 +668,18 @@ mod tests {
             let test_size = number_of_blocks * BLOCK_SIZE as u64 + bytes_left;
             assert_eq!(test_size, size);
         }
+    }
+
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn test_sanity_of_block_sizes() {
+        // This test ensures basic expectations on block sizes.
+        //
+        // OPTIMAL_IO_BLOCK_SIZE must not exceed BLOCK_SIZE. Violating this may cause overflows due
+        // to alignment or performance issues. While additional runtime checks can catch such
+        // problems, it's better to fail fast during testing. This kind of misconfiguration is
+        // highly unlikely but would indicate a serious error.
+
+        assert!(OPTIMAL_IO_BLOCK_SIZE <= BLOCK_SIZE);
     }
 }
