@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) helloworld nodir objdump n'source
+// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
@@ -68,24 +68,6 @@ fn test_install_failing_not_dir() {
         .arg(file3)
         .fails()
         .stderr_contains("not a directory");
-}
-
-#[test]
-fn test_install_unimplemented_arg() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let dir = "target_dir";
-    let file = "source_file";
-    let context_arg = "--context";
-
-    at.touch(file);
-    at.mkdir(dir);
-    ucmd.arg(context_arg)
-        .arg(file)
-        .arg(dir)
-        .fails()
-        .stderr_contains("Unimplemented");
-
-    assert!(!at.file_exists(format!("{dir}/{file}")));
 }
 
 #[test]
@@ -1963,4 +1945,75 @@ fn test_install_no_target_basic() {
 
     assert!(at.file_exists(file));
     assert!(at.file_exists(format!("{dir}/{file}")));
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let src = "orig";
+    at.touch(src);
+
+    let dest = "orig.2";
+
+    let args = ["-Z", "--context=unconfined_u:object_r:user_tmp_t:s0"];
+    for arg in args {
+        new_ucmd!()
+            .arg(arg)
+            .arg("-v")
+            .arg(at.plus_as_string(src))
+            .arg(at.plus_as_string(dest))
+            .succeeds()
+            .stdout_contains("orig' -> '");
+
+        let getfattr_output = Command::new("getfattr")
+            .arg(at.plus_as_string(dest))
+            .arg("-n")
+            .arg("security.selinux")
+            .output()
+            .expect("Failed to run `getfattr` on the destination file");
+        println!("{:?}", getfattr_output);
+        assert!(
+            getfattr_output.status.success(),
+            "getfattr did not run successfully: {}",
+            String::from_utf8_lossy(&getfattr_output.stderr)
+        );
+
+        let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
+        assert!(
+            stdout.contains("unconfined_u"),
+            "Expected 'foo' not found in getfattr output:\n{stdout}"
+        );
+        at.remove(&at.plus_as_string(dest));
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_selinux_invalid_args() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let src = "orig";
+    at.touch(src);
+    let dest = "orig.2";
+
+    let args = [
+        "--context=a",
+        "--context=unconfined_u:object_r:user_tmp_t:s0:a",
+        "--context=nconfined_u:object_r:user_tmp_t:s0",
+    ];
+    for arg in args {
+        new_ucmd!()
+            .arg(arg)
+            .arg("-v")
+            .arg(at.plus_as_string(src))
+            .arg(at.plus_as_string(dest))
+            .fails()
+            .stderr_contains("failed to set default file creation");
+
+        at.remove(&at.plus_as_string(dest));
+    }
 }
