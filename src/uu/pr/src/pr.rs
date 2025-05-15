@@ -9,14 +9,13 @@
 use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
-use quick_error::ResultExt;
 use regex::Regex;
 use std::fs::{File, metadata};
 use std::io::{BufRead, BufReader, Lines, Read, Write, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+use thiserror::Error;
 
-use quick_error::quick_error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::{format_usage, help_about, help_section, help_usage};
@@ -134,35 +133,21 @@ impl From<std::io::Error> for PrError {
     }
 }
 
-quick_error! {
-    #[derive(Debug)]
-    enum PrError {
-        Input(err: std::io::Error, path: String) {
-            context(path: &'a str, err: std::io::Error) -> (err, path.to_owned())
-            display("pr: Reading from input {path} gave error")
-            source(err)
-        }
-
-        UnknownFiletype(path: String) {
-            display("pr: {path}: unknown filetype")
-        }
-
-        EncounteredErrors(msg: String) {
-            display("pr: {msg}")
-        }
-
-        IsDirectory(path: String) {
-            display("pr: {path}: Is a directory")
-        }
-
-        IsSocket(path: String) {
-            display("pr: cannot open {path}, Operation not supported on socket")
-        }
-
-        NotExists(path: String) {
-            display("pr: cannot open {path}, No such file or directory")
-        }
-    }
+#[derive(Debug, Error)]
+enum PrError {
+    #[error("pr: Reading from input {1} gave error")]
+    Input(std::io::Error, String),
+    #[error("pr: {0}: unknown filetype")]
+    UnknownFiletype(String),
+    #[error("pr: {0}")]
+    EncounteredErrors(String),
+    #[error("pr: {0}: Is a directory")]
+    IsDirectory(String),
+    #[cfg(not(windows))]
+    #[error("pr: cannot open {0}, Operation not supported on socket")]
+    IsSocket(String),
+    #[error("pr: cannot open {0}, No such file or directory")]
+    NotExists(String),
 }
 
 pub fn uu_app() -> Command {
@@ -795,9 +780,9 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
                 #[cfg(unix)]
                 ft if ft.is_socket() => Err(PrError::IsSocket(path_string)),
                 ft if ft.is_dir() => Err(PrError::IsDirectory(path_string)),
-                ft if ft.is_file() || ft.is_symlink() => {
-                    Ok(Box::new(File::open(path).context(path)?) as Box<dyn Read>)
-                }
+                ft if ft.is_file() || ft.is_symlink() => Ok(Box::new(
+                    File::open(path).map_err(|e| PrError::Input(e, path.to_string()))?,
+                ) as Box<dyn Read>),
                 _ => Err(PrError::UnknownFiletype(path_string)),
             }
         })

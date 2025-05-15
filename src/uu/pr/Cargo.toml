@@ -20,10 +20,10 @@ path = "src/pr.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries"] }
-quick-error = { workspace = true }
 itertools = { workspace = true }
 regex = { workspace = true }
 chrono = { workspace = true }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "pr"
