@@ -36,6 +36,7 @@ use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS
 
 const USAGE: &str = help_usage!("stty.md");
 const SUMMARY: &str = help_about!("stty.md");
+const ASCII_DEL: u8 = 127;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
@@ -101,6 +102,11 @@ struct Options<'a> {
 enum Device {
     File(File),
     Stdout(Stdout),
+}
+
+enum ControlCharMappingError {
+    IntOutOfRange,
+    MultipleChars,
 }
 
 impl AsFd for Device {
@@ -203,8 +209,27 @@ fn stty(opts: &Options) -> UResult<()> {
     let mut termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
 
     if let Some(settings) = &opts.settings {
-        for setting in settings {
-            if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
+        let mut settings_iter = settings.iter();
+        while let Some(setting) = settings_iter.next() {
+            if let Some(char_index) = cc_to_index(setting) {
+                let Some(new_cc) = settings_iter.next() else {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("missing argument to '{setting}'"),
+                    ));
+                };
+                apply_char_mapping(&mut termios, char_index, new_cc).map_err(|e| {
+                    let message = match e {
+                        ControlCharMappingError::IntOutOfRange => format!(
+                            "invalid integer argument: '{new_cc}': Numerical result out of range"
+                        ),
+                        ControlCharMappingError::MultipleChars => {
+                            format!("invalid integer argument: '{new_cc}'")
+                        }
+                    };
+                    USimpleError::new(1, message)
+                })?;
+            } else if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
                 return Err(USimpleError::new(
                     1,
                     format!("invalid argument '{setting}'"),
@@ -272,6 +297,15 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
 
     println!();
     Ok(())
+}
+
+fn cc_to_index(option: &str) -> Option<SpecialCharacterIndices> {
+    for cc in CONTROL_CHARS {
+        if option == cc.0 {
+            return Some(cc.1);
+        }
+    }
+    None
 }
 
 fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
@@ -460,6 +494,63 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
         }
     }
     ControlFlow::Continue(())
+}
+
+fn apply_char_mapping(
+    termios: &mut Termios,
+    control_char_index: SpecialCharacterIndices,
+    new_val: &str,
+) -> Result<(), ControlCharMappingError> {
+    string_to_control_char(new_val).map(|val| {
+        termios.control_chars[control_char_index as usize] = val;
+    })
+}
+
+// GNU stty defines some valid values for the control character mappings
+// 1. Standard character, can be a a single char (ie 'C') or hat notation (ie '^C')
+// 2. Integer
+//      a. hexadecimal, prefixed by '0x'
+//      b. octal, prefixed by '0'
+//      c. decimal, no prefix
+// 3. Disabling the control character: '^-' or 'undef'
+//
+// This function returns the ascii value of valid control chars, or ControlCharMappingError if invalid
+fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
+    if s == "undef" || s == "^-" {
+        return Ok(0);
+    }
+
+    // try to parse integer (hex, octal, or decimal)
+    let ascii_num = if let Some(hex) = s.strip_prefix("0x") {
+        u32::from_str_radix(hex, 16).ok()
+    } else if let Some(octal) = s.strip_prefix("0") {
+        u32::from_str_radix(octal, 8).ok()
+    } else {
+        s.parse::<u32>().ok()
+    };
+
+    if let Some(val) = ascii_num {
+        if val > 255 {
+            return Err(ControlCharMappingError::IntOutOfRange);
+        } else {
+            return Ok(val as u8);
+        }
+    }
+    // try to parse ^<char> or just <char>
+    let mut chars = s.chars();
+    match (chars.next(), chars.next()) {
+        (Some('^'), Some(c)) => {
+            // special case: ascii value of '^?' is greater than '?'
+            if c == '?' {
+                return Ok(ASCII_DEL);
+            }
+            // subtract by '@' to turn the char into the ascii value of '^<char>'
+            Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
+        }
+        (Some(c), None) => Ok(c as u8),
+        (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars),
+        _ => unreachable!("No arguments provided: must have been caught earlier"),
+    }
 }
 
 pub fn uu_app() -> Command {
