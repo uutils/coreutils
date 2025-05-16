@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
@@ -194,4 +196,13 @@ fn test_kill_subprocess() {
         .fails_with_code(124)
         .stdout_contains("inside_trap")
         .stderr_contains("Terminated");
+}
+
+#[test]
+fn test_hex_timeout_ending_with_d() {
+    new_ucmd!()
+        .args(&["0x0.1d", "sleep", "10"])
+        .timeout(Duration::from_secs(1))
+        .fails_with_code(124)
+        .no_output();
 }
