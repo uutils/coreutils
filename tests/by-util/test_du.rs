@@ -275,7 +275,9 @@ fn du_hard_link(s: &str) {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(target_os = "openbsd"),
+    not(target_os = "android")
 ))]
 fn du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
