@@ -33,3 +33,6 @@ crossterm = { workspace = true, features = ["use-dev-tty"] }
 [[bin]]
 name = "more"
 path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = { workspace = true }
