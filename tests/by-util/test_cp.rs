@@ -1,3 +1,4 @@
+use uucore::display::Quotable;
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
@@ -3946,10 +3947,10 @@ fn test_cp_only_source_no_target() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
-    ts.ucmd()
-        .arg("a")
-        .fails()
-        .stderr_contains("missing destination file operand after \"a\"");
+    ts.ucmd().arg("a").fails().stderr_contains(format!(
+        "missing destination file operand after {}",
+        "a".quote()
+    ));
 }
 
 #[test]
