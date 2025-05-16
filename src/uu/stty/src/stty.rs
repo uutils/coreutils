@@ -511,13 +511,9 @@ fn apply_char_mapping(
     control_char_index: SpecialCharacterIndices,
     new_val: &str,
 ) -> Result<(), ControlCharMappingError> {
-    match string_to_control_char(new_val) {
-        Ok(val) => {
-            termios.control_chars[control_char_index as usize] = val;
-            Ok(())
-        }
-        Err(e) => Err(e),
-    }
+    string_to_control_char(new_val).map(|val| {
+        termios.control_chars[control_char_index as usize] = val;
+    })
 }
 
 // GNU stty defines some valid values for the control character mappings
@@ -528,21 +524,20 @@ fn apply_char_mapping(
 //      c. decimal, no prefix
 // 3. Disabling the control character: '^-' or 'undef'
 //
-// This function returns the ascii value of valid control chars, or None if the input is invalid
+// This function returns the ascii value of valid control chars, or ControlCharMappingError if invalid
 fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     if s == "undef" || s == "^-" {
         return Ok(0);
     }
 
     // try to parse integer (hex, octal, or decimal)
-    let mut ascii_num: Option<u32> = None;
-    if let Some(hex) = s.strip_prefix("0x") {
-        ascii_num = u32::from_str_radix(hex, 16).ok();
+    let ascii_num = if let Some(hex) = s.strip_prefix("0x") {
+        u32::from_str_radix(hex, 16).ok()
     } else if let Some(octal) = s.strip_prefix("0") {
-        ascii_num = u32::from_str_radix(octal, 8).ok();
-    } else if let Ok(decimal) = s.parse::<u32>() {
-        ascii_num = Some(decimal);
-    }
+        u32::from_str_radix(octal, 8).ok()
+    } else {
+        s.parse::<u32>().ok()
+    };
 
     if let Some(val) = ascii_num {
         if val > 255 {
