@@ -826,7 +826,7 @@ fn rename_dir_fallback(
                 io::ErrorKind::PermissionDenied,
                 "Permission denied",
             )),
-            _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
+            _ => Err(io::Error::other(format!("{err:?}"))),
         },
         _ => Ok(()),
     }

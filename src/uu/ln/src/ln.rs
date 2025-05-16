@@ -60,7 +60,7 @@ enum LnError {
     MissingDestination(PathBuf),
 
     #[error("extra operand {}\nTry '{} --help' for more information.",
-    format!("{_0:?}").trim_matches('"'), _1)]
+    _0.display(), _1)]
     ExtraOperand(OsString, String),
 }
 
