@@ -539,10 +539,8 @@ fn wipe_file(
         }
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
-        show_if_err!(
-            do_pass(&mut file, &pass_type, exact, random_source, size)
-                .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))
-        );
+        do_pass(&mut file, &pass_type, exact, random_source, size)
+            .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))?;
     }
 
     if remove_method != RemoveMethod::None {
@@ -681,7 +679,6 @@ fn do_remove(
 
 #[cfg(test)]
 mod tests {
-
     use crate::{BLOCK_SIZE, OPTIMAL_IO_BLOCK_SIZE, split_on_blocks};
 
     #[test]
