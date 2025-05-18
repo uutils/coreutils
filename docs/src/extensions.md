@@ -22,8 +22,12 @@ $ ls -w=80
 
 ## `env`
 
-`env` has an additional `-f`/`--file` flag that can parse `.env` files and set
-variables accordingly. This feature is adopted from `dotenv` style packages.
+GNU `env` allows the empty string to be used as an environment variable name. This is explicitly
+unsupported by the Rust standard library (see the
+[docs](https://doc.rust-lang.org/stable/std/env/fn.set_var.html) for more information), so uutils
+will show a warning on any such assignment. `env` has an additional `-f`/`--file` flag that can
+parse `.env` files and set variables accordingly. This feature is adopted from `dotenv` style
+packages.
 
 ## `cp`
 
