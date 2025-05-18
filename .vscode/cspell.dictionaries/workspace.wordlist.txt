@@ -331,6 +331,7 @@ utmpx
 uucore
 uucore_procs
 uudoc
+uufuzz
 uumain
 uutil
 uutests
