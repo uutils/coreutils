@@ -27,6 +27,7 @@ pub use crate::mods::error;
 #[cfg(feature = "fs")]
 pub use crate::mods::io;
 pub use crate::mods::line_ending;
+pub use crate::mods::locale;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::posix;

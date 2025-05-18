@@ -31,7 +31,6 @@ wild = "2.2.1"
 glob = { workspace = true, optional = true }
 iana-time-zone = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
-thiserror = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
@@ -60,6 +59,11 @@ bigdecimal = { workspace = true, optional = true }
 num-traits = { workspace = true, optional = true }
 selinux = { workspace = true, optional = true }
 
+# Fluent dependencies
+fluent-bundle = { workspace = true }
+fluent = { workspace = true }
+unic-langid = { workspace = true }
+thiserror = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace = true, optional = true }
 nix = { workspace = true, features = ["fs", "uio", "zerocopy", "signal"] }
@@ -87,7 +91,7 @@ default = []
 # * non-default features
 backup-control = []
 colors = []
-checksum = ["data-encoding", "thiserror", "sum"]
+checksum = ["data-encoding", "sum"]
 encoding = ["data-encoding", "data-encoding-macro", "z85"]
 entries = ["libc"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
@@ -114,7 +118,7 @@ proc-info = ["tty", "walkdir"]
 quoting-style = []
 ranges = []
 ringbuffer = []
-selinux = ["dep:selinux", "thiserror"]
+selinux = ["dep:selinux"]
 signals = []
 sum = [
   "digest",
@@ -136,4 +140,4 @@ version-cmp = []
 wide = []
 custom-tz-fmt = ["chrono", "chrono-tz", "iana-time-zone"]
 tty = []
-uptime = ["chrono", "libc", "windows-sys", "utmpx", "utmp-classic", "thiserror"]
+uptime = ["chrono", "libc", "windows-sys", "utmpx", "utmp-classic"]
