@@ -1,0 +1,15 @@
+[package]
+name = "uufuzz"
+edition = "2024"
+description = "uutils ~ 'core' uutils fuzzing library"
+repository = "https://github.com/uutils/coreutils/tree/main/fuzz/uufuzz"
+# readme = "README.md"
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
