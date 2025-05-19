@@ -1259,13 +1259,17 @@ fn parse_path_args(
         return Err("missing file operand".into());
     } else if paths.len() == 1 && options.target_dir.is_none() {
         // Only one file specified
-        return Err(format!("missing destination file operand after {:?}", paths[0]).into());
+        return Err(format!(
+            "missing destination file operand after {}",
+            paths[0].display().to_string().quote()
+        )
+        .into());
     }
 
     // Return an error if the user requested to copy more than one
     // file source to a file target
     if options.no_target_dir && options.target_dir.is_none() && paths.len() > 2 {
-        return Err(format!("extra operand {:?}", paths[2]).into());
+        return Err(format!("extra operand {:}", paths[2].display().to_string().quote()).into());
     }
 
     let target = match options.target_dir {
