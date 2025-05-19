@@ -1119,7 +1119,7 @@ jobs:
       uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        file: ${{ steps.run_test_cov.outputs.report }}
+        files: ${{ steps.run_test_cov.outputs.report }}
         ## flags: IntegrationTests, UnitTests, ${{ steps.vars.outputs.CODECOV_FLAGS }}
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
