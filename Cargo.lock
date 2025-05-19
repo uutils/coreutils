@@ -473,7 +473,7 @@ dependencies = [
  "glob",
  "hex-literal",
  "libc",
- "nix",
+ "nix 0.29.0",
  "num-prime",
  "phf",
  "phf_codegen",
@@ -766,11 +766,11 @@ checksum = "4f211af61d8efdd104f96e57adf5e426ba1bc3ed7a4ead616e15e5881fd79c4d"
 
 [[package]]
 name = "ctrlc"
-version = "3.4.6"
+version = "3.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "697b5419f348fd5ae2478e8018cb016c00a5881c7f46c717de98ffd135a5651c"
+checksum = "46f93780a459b7d656ef7f071fe699c4d3d2cb201c4b24d085b6ddc505276e73"
 dependencies = [
- "nix",
+ "nix 0.30.1",
  "windows-sys 0.59.0",
 ]
 
@@ -933,7 +933,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1330,7 +1330,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -1475,6 +1475,18 @@ name = "nix"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
+dependencies = [
+ "bitflags 2.9.0",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
+name = "nix"
+version = "0.30.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
 dependencies = [
  "bitflags 2.9.0",
  "cfg-if",
@@ -2074,7 +2086,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2087,7 +2099,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.9.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2331,7 +2343,7 @@ dependencies = [
  "getrandom 0.3.1",
  "once_cell",
  "rustix 1.0.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2594,7 +2606,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "memchr",
- "nix",
+ "nix 0.29.0",
  "thiserror 2.0.12",
  "uucore",
 ]
@@ -2719,7 +2731,7 @@ dependencies = [
  "clap",
  "gcd",
  "libc",
- "nix",
+ "nix 0.29.0",
  "signal-hook",
  "thiserror 2.0.12",
  "uucore",
@@ -2786,7 +2798,7 @@ name = "uu_env"
 version = "0.0.30"
 dependencies = [
  "clap",
- "nix",
+ "nix 0.29.0",
  "rust-ini",
  "thiserror 2.0.12",
  "uucore",
@@ -2939,7 +2951,7 @@ name = "uu_kill"
 version = "0.0.30"
 dependencies = [
  "clap",
- "nix",
+ "nix 0.29.0",
  "uucore",
 ]
 
@@ -3030,7 +3042,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "crossterm",
- "nix",
+ "nix 0.29.0",
  "tempfile",
  "unicode-segmentation",
  "unicode-width 0.2.0",
@@ -3056,7 +3068,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "libc",
- "nix",
+ "nix 0.29.0",
  "uucore",
 ]
 
@@ -3275,7 +3287,7 @@ dependencies = [
  "fnv",
  "itertools 0.14.0",
  "memchr",
- "nix",
+ "nix 0.29.0",
  "rand 0.9.1",
  "rayon",
  "self_cell",
@@ -3328,7 +3340,7 @@ name = "uu_stty"
 version = "0.0.30"
 dependencies = [
  "clap",
- "nix",
+ "nix 0.29.0",
  "uucore",
 ]
 
@@ -3346,7 +3358,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "libc",
- "nix",
+ "nix 0.29.0",
  "uucore",
  "windows-sys 0.59.0",
 ]
@@ -3383,7 +3395,7 @@ name = "uu_tee"
 version = "0.0.30"
 dependencies = [
  "clap",
- "nix",
+ "nix 0.29.0",
  "uucore",
 ]
 
@@ -3402,7 +3414,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "libc",
- "nix",
+ "nix 0.29.0",
  "uucore",
 ]
 
@@ -3458,7 +3470,7 @@ name = "uu_tty"
 version = "0.0.30"
 dependencies = [
  "clap",
- "nix",
+ "nix 0.29.0",
  "uucore",
 ]
 
@@ -3533,7 +3545,7 @@ dependencies = [
  "bytecount",
  "clap",
  "libc",
- "nix",
+ "nix 0.29.0",
  "thiserror 2.0.12",
  "unicode-width 0.2.0",
  "uucore",
@@ -3562,7 +3574,7 @@ version = "0.0.30"
 dependencies = [
  "clap",
  "itertools 0.14.0",
- "nix",
+ "nix 0.29.0",
  "uucore",
 ]
 
@@ -3589,7 +3601,7 @@ dependencies = [
  "libc",
  "md-5",
  "memchr",
- "nix",
+ "nix 0.29.0",
  "num-traits",
  "number_prefix",
  "os_display",
@@ -3638,7 +3650,7 @@ dependencies = [
  "ctor",
  "glob",
  "libc",
- "nix",
+ "nix 0.29.0",
  "pretty_assertions",
  "rand 0.9.1",
  "regex",
@@ -3794,7 +3806,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
