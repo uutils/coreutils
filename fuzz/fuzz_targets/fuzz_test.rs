@@ -146,10 +146,7 @@ fn generate_test_arg() -> String {
                 let random_str = generate_random_string(rng.random_range(1..=10));
                 let random_str2 = generate_random_string(rng.random_range(1..=10));
 
-                arg.push_str(&format!(
-                    "{random_str} {} {random_str2}",
-                    test_arg.arg,
-                ));
+                arg.push_str(&format!("{random_str} {} {random_str2}", test_arg.arg,));
             } else if test_arg.arg_type == ArgType::STRING {
                 let random_str = generate_random_string(rng.random_range(1..=10));
                 arg.push_str(&format!("{} {random_str}", test_arg.arg));
