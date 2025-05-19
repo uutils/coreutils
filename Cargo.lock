@@ -3031,6 +3031,7 @@ dependencies = [
  "clap",
  "crossterm",
  "nix",
+ "tempfile",
  "unicode-segmentation",
  "unicode-width 0.2.0",
  "uucore",
