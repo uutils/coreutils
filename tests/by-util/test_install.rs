@@ -12,6 +12,8 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
+#[cfg(unix)]
+use subprocess::Exec;
 use uucore::process::{getegid, geteuid};
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -1963,4 +1965,40 @@ fn test_install_no_target_basic() {
 
     assert!(at.file_exists(file));
     assert!(at.file_exists(format!("{dir}/{file}")));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_set_owner_nonexistent_userid() {
+    let captured = Exec::shell(
+        "cat /etc/passwd|cut -d ':' -f 3|grep '^1...$'|sort -n|tail -n 1|awk '{print $1+1}'",
+    )
+    .capture();
+    let next_userid = match captured {
+        Ok(output) => {
+            let userid_str = output.stdout_str().trim_end().to_owned();
+            match userid_str.parse::<u32>() {
+                Ok(userid) => userid,
+                Err(e) => {
+                    println!("cannot convert {} to userid, {}", userid_str, e);
+                    return;
+                }
+            }
+        }
+        Err(e) => panic!("cannot capture output: {}", e),
+    };
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &[format!("-o{}", next_userid).as_str(), "a", "b"]) {
+        result.success();
+        assert!(at.file_exists("b"));
+
+        let metadata = fs::metadata(at.plus("b")).unwrap();
+        assert_eq!(metadata.uid(), next_userid);
+    } else {
+        print!("Test skipped; requires root user");
+    }
 }
