@@ -369,3 +369,8 @@ sed -i  's/\/usr\/bin\/tr/$(which tr)/' tests/init.sh
 # upstream doesn't having the program name in the error message
 # but we do. We should keep it that way.
 sed -i 's/echo "changing security context/echo "chcon: changing security context/' tests/chcon/chcon.sh
+
+# Disable this test, it is not relevant for us:
+# * the selinux crate is handling errors
+# * the test says "maybe we should not fail when no context available"
+sed -i -e "s|returns_ 1||g" tests/cp/no-ctx.sh
