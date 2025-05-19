@@ -545,7 +545,6 @@ path = "src/bin/coreutils.rs"
 name = "uudoc"
 path = "src/bin/uudoc.rs"
 required-features = ["uudoc"]
-# cargo run --bin uudoc --features uudoc
 
 # The default release profile. It contains all optimizations.
 # With this profile (like in the standard release profile),
