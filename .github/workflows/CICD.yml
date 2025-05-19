@@ -1079,6 +1079,7 @@ jobs:
 
         case '${{ matrix.job.os }}' in
           ubuntu-latest)
+            sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
             # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
             # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands. The account also has empty gecos fields.
             # To work around this for pinky tests, we create a fake login entry for the GH runner account...
