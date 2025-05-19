@@ -2,13 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
-use uutests::path_concat;
+use uucore::display::Quotable;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -3946,10 +3945,10 @@ fn test_cp_only_source_no_target() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
-    ts.ucmd()
-        .arg("a")
-        .fails()
-        .stderr_contains("missing destination file operand after \"a\"");
+    ts.ucmd().arg("a").fails().stderr_contains(format!(
+        "missing destination file operand after {}",
+        "a".quote()
+    ));
 }
 
 #[test]
