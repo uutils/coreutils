@@ -900,7 +900,7 @@ mod tests {
             if let Some(rows) = self.options.lines {
                 self.rows = rows;
             }
-            let pager = Pager::new(
+            Pager::new(
                 InputType::File(BufReader::new(tmpfile)),
                 self.rows,
                 None,
@@ -908,8 +908,7 @@ mod tests {
                 &self.options,
                 out,
             )
-            .unwrap();
-            pager
+            .unwrap()
         }
 
         fn silent(mut self) -> Self {
