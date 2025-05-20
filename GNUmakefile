@@ -57,6 +57,13 @@ TOYBOX_ROOT := $(BASEDIR)/tmp
 TOYBOX_VER  := 0.8.12
 TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
+#------------------------------------------------------------------------
+# Detect the host system.
+# On Windows the environment already sets  OS = Windows_NT.
+# Otherwise let it default to the kernel name returned by uname -s
+# (Linux, Darwin, FreeBSD, …).
+#------------------------------------------------------------------------
+OS ?= $(shell uname -s)
 
 ifdef SELINUX_ENABLED
 	override SELINUX_ENABLED := 0
@@ -179,6 +186,13 @@ UNIX_PROGS := \
 SELINUX_PROGS := \
 	chcon \
 	runcon
+
+$(info Detected OS = $(OS))
+
+# Don't build the SELinux programs on macOS (Darwin)
+ifeq ($(OS),Darwin)
+  SELINUX_PROGS :=
+endif
 
 ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
