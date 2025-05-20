@@ -698,8 +698,8 @@ fn rename_with_fallback(
         // 1. Files are on different devices (EXDEV error)
         // 2. On Windows, if the target file exists and source file is opened by another process
         //    (MoveFileExW fails with "Access Denied" even if the source file has FILE_SHARE_DELETE permission)
-        let should_fallback = matches!(err.raw_os_error(), Some(EXDEV))
-            || (from.is_file() && can_delete_file(from).unwrap_or(false));
+        let should_fallback =
+            matches!(err.raw_os_error(), Some(EXDEV)) || (from.is_file() && can_delete_file(from));
         if !should_fallback {
             return Err(err);
         }
@@ -864,7 +864,7 @@ fn is_empty_dir(path: &Path) -> bool {
 
 /// Checks if a file can be deleted by attempting to open it with delete permissions.
 #[cfg(windows)]
-fn can_delete_file(path: &Path) -> Result<bool, io::Error> {
+fn can_delete_file(path: &Path) -> bool {
     use std::{
         os::windows::ffi::OsStrExt as _,
         ptr::{null, null_mut},
@@ -897,19 +897,19 @@ fn can_delete_file(path: &Path) -> Result<bool, io::Error> {
     };
 
     if handle == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
+        return false;
     }
 
     unsafe { CloseHandle(handle) };
 
-    Ok(true)
+    true
 }
 
 #[cfg(not(windows))]
-fn can_delete_file(_: &Path) -> Result<bool, io::Error> {
+fn can_delete_file(_: &Path) -> bool {
     // On non-Windows platforms, always return false to indicate that we don't need
     // to try the copy+delete fallback. This is because on Unix-like systems,
     // rename() failing with errors other than EXDEV means the operation cannot
     // succeed even with a copy+delete approach (e.g. permission errors).
-    Ok(false)
+    false
 }
