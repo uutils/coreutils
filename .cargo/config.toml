@@ -1,5 +1,9 @@
+# spell-checker:ignore CFLAGS
+
 [target.x86_64-unknown-redox]
 linker = "x86_64-unknown-redox-gcc"
 
 [env]
 PROJECT_NAME_FOR_VERSION_STRING = "uutils coreutils"
+# TODO remove when there is an onig version > 6.4.0, https://github.com/rust-onig/rust-onig/issues/196
+CFLAGS='-std=gnu17'
