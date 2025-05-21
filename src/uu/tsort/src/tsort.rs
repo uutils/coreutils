@@ -161,7 +161,7 @@ impl<'input> Graph<'input> {
                 }
             })
             .collect();
-        
+
         // To make sure the resulting ordering is deterministic we
         // need to order independent nodes.
         //
