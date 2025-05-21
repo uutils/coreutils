@@ -1347,12 +1347,8 @@ dependencies = [
 name = "uucore-fuzz"
 version = "0.0.0"
 dependencies = [
- "console",
- "libc",
  "libfuzzer-sys",
  "rand 0.9.1",
- "similar",
- "tempfile",
  "uu_cksum",
  "uu_cut",
  "uu_date",
@@ -1367,6 +1363,7 @@ dependencies = [
  "uu_tr",
  "uu_wc",
  "uucore",
+ "uufuzz",
 ]
 
 [[package]]
@@ -1376,6 +1373,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "uuhelp_parser",
+]
+
+[[package]]
+name = "uufuzz"
+version = "0.0.30"
+dependencies = [
+ "console",
+ "libc",
+ "rand 0.9.1",
+ "similar",
+ "tempfile",
+ "uucore",
 ]
 
 [[package]]
