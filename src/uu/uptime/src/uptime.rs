@@ -38,6 +38,7 @@ const USAGE: &str = help_usage!("uptime.md");
 pub mod options {
     pub static SINCE: &str = "since";
     pub static PATH: &str = "path";
+    pub static PRETTY: &str = "pretty";
 }
 
 #[derive(Debug, Error)]
@@ -68,6 +69,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if matches.get_flag(options::SINCE) {
         uptime_since()
+    } else if matches.get_flag(options::PRETTY) {
+        pretty_print_uptime(None)
     } else if let Some(path) = file_path {
         uptime_with_file(path)
     } else {
@@ -86,6 +89,13 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SINCE)
                 .help("system up since")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::PRETTY)
+                .short('p')
+                .long(options::PRETTY)
+                .help("show uptime in pretty format")
                 .action(ArgAction::SetTrue),
         );
     #[cfg(unix)]
@@ -276,6 +286,17 @@ fn print_time() {
 }
 
 fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
-    print!("up  {},  ", get_formatted_uptime(boot_time)?);
+    print!(
+        "up  {},  ",
+        get_formatted_uptime(boot_time, OutputFormat::HumanReadable)?
+    );
+    Ok(())
+}
+
+fn pretty_print_uptime(boot_time: Option<time_t>) -> UResult<()> {
+    print!(
+        "up {}",
+        get_formatted_uptime(boot_time, OutputFormat::PrettyPrint)?
+    );
     Ok(())
 }
