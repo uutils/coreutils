@@ -161,8 +161,6 @@ impl<'input> Graph<'input> {
                 }
             })
             .collect();
-        independent_nodes_queue.make_contiguous().sort_unstable(); // to make sure the resulting ordering is deterministic we need to order independent nodes
-        // FIXME: this doesn't comply entirely with the GNU coreutils implementation.
 
         // To make sure the resulting ordering is deterministic we
         // need to order independent nodes.
