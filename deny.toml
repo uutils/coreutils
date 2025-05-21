@@ -102,6 +102,12 @@ skip = [
   { name = "rustix", version = "0.38.43" },
   # rustix
   { name = "linux-raw-sys", version = "0.4.15" },
+  # onig
+  { name = "bindgen", version = "0.64.0" },
+  # bindgen
+  { name = "rustc-hash", version = "1.1.0" },
+  # bindgen
+  { name = "syn", version = "1.0.109" },
 ]
 # spell-checker: enable
 
@@ -113,4 +119,4 @@ skip = [
 unknown-registry = "warn"
 unknown-git = "warn"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = []
+allow-git = ["https://github.com/rust-onig/rust-onig"]
