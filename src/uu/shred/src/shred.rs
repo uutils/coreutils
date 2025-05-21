@@ -49,11 +49,11 @@ const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN
 const PATTERN_LENGTH: usize = 3;
 const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
 
-/// Optimal block size for the filesystem. This constant is used for data size alignment,
-/// similar to the behavior of GNU shred. Usually, optimal block size is a 4K block, which is why
+/// Optimal block size for the filesystem. This constant is used for data size alignment, similar
+/// to the behavior of GNU shred. Usually, optimal block size is a 4K block (2^12), which is why
 /// it's defined as a constant. However, it's possible to get the actual size at runtime using, for
 /// example, `std::os::unix::fs::MetadataExt::blksize()`.
-const OPTIMAL_IO_BLOCK_SIZE: usize = 4096;
+const OPTIMAL_IO_BLOCK_SIZE: usize = 1 << 12;
 
 /// Patterns that appear in order for the passes
 ///
@@ -514,12 +514,17 @@ fn wipe_file(
 }
 
 fn split_on_blocks(file_size: u64, exact: bool) -> (u64, u64) {
+    // OPTIMAL_IO_BLOCK_SIZE must not exceed BLOCK_SIZE. Violating this may cause overflows due
+    // to alignment or performance issues.This kind of misconfiguration is
+    // highly unlikely but would indicate a serious error.
+    const _: () = assert!(OPTIMAL_IO_BLOCK_SIZE <= BLOCK_SIZE);
+
     let file_size = if exact {
         file_size
     } else {
-        // The main idea here is to align the file size to the OPTIMAL_IO_BLOCK_SIZE, and then split it into
-        // BLOCK_SIZE + remaining bytes. Since the input data is already aligned to N * OPTIMAL_IO_BLOCK_SIZE,
-        // the output file size will also be aligned and correct.
+        // The main idea here is to align the file size to the OPTIMAL_IO_BLOCK_SIZE, and then
+        // split it into BLOCK_SIZE + remaining bytes. Since the input data is already aligned to N
+        // * OPTIMAL_IO_BLOCK_SIZE, the output file size will also be aligned and correct.
         file_size.div_ceil(OPTIMAL_IO_BLOCK_SIZE as u64) * OPTIMAL_IO_BLOCK_SIZE as u64
     };
     (file_size / BLOCK_SIZE as u64, file_size % BLOCK_SIZE as u64)
