@@ -193,7 +193,7 @@ impl Suffix {
         if let Strategy::Number(number_type) = strategy {
             let chunks = number_type.num_chunks();
             let required_length = ((start as u64 + chunks) as f64)
-                .log(stype.radix() as f64)
+                .log(f64::from(stype.radix()))
                 .ceil() as usize;
 
             if (start as u64) < chunks && !(is_length_cmd_opt && length > 0) {

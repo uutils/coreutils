@@ -198,10 +198,10 @@ impl Utmpx {
     }
     /// A.K.A. ut.ut_tv
     pub fn login_time(&self) -> time::OffsetDateTime {
-        #[allow(clippy::unnecessary_cast)]
-        let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
-            + 1_000_i64 * self.inner.ut_tv.tv_usec as i64)
-            .into();
+        #[allow(clippy::useless_conversion)]
+        let ts_nanos: i128 = (1_000_000_000_i64 * i64::from(self.inner.ut_tv.tv_sec)
+            + 1_000_i64 * i64::from(self.inner.ut_tv.tv_usec))
+        .into();
         let local_offset =
             time::OffsetDateTime::now_local().map_or_else(|_| time::UtcOffset::UTC, |v| v.offset());
         time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)

@@ -141,7 +141,7 @@ impl Crc {
         table
     }
     fn crc_entry(input: u8) -> u32 {
-        let mut crc = (input as u32) << 24;
+        let mut crc = u32::from(input) << 24;
 
         let mut i = 0;
         while i < 8 {
@@ -153,7 +153,7 @@ impl Crc {
             //       ops
             let condition_table = [else_body, if_body];
 
-            crc = condition_table[(if_condition != 0) as usize];
+            crc = condition_table[usize::from(if_condition != 0)];
             i += 1;
         }
 
