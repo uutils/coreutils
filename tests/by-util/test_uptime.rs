@@ -282,3 +282,12 @@ fn test_uptime_since() {
 
     new_ucmd!().arg("--since").succeeds().stdout_matches(&re);
 }
+
+#[test]
+fn test_uptime_pretty_print() {
+    new_ucmd!()
+        .arg("-p")
+        .succeeds()
+        .stdout_contains("up")
+        .stdout_contains("min");
+}
