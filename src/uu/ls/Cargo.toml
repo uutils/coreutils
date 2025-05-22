@@ -1,3 +1,5 @@
+# spell-checker:ignore tzdb zoneinfo
+
 [package]
 name = "uu_ls"
 description = "ls ~ (uutils) display directory contents"
@@ -23,6 +25,11 @@ chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
 hostname = { workspace = true }
+jiff = { workspace = true, features = [
+  "tzdb-bundle-platform",
+  "tzdb-zoneinfo",
+  "tzdb-concatenated",
+] }
 lscolors = { workspace = true }
 number_prefix = { workspace = true }
 selinux = { workspace = true, optional = true }
