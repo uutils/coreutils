@@ -10,7 +10,7 @@ use std::io::{self, BufWriter, IsTerminal, Read, Write};
 #[cfg(unix)]
 use std::net::Shutdown;
 #[cfg(unix)]
-use std::os::fd::{AsFd, AsRawFd};
+use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
@@ -372,7 +372,7 @@ fn cat_handle<R: FdReadable>(
 #[cfg(unix)]
 fn is_appending() -> bool {
     let stdout = io::stdout();
-    let Ok(flags) = fcntl(stdout.as_raw_fd(), FcntlArg::F_GETFL) else {
+    let Ok(flags) = fcntl(stdout.as_fd(), FcntlArg::F_GETFL) else {
         return false;
     };
     // TODO Replace `1 << 10` with `nix::fcntl::Oflag::O_APPEND`.

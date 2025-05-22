@@ -31,6 +31,8 @@ use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use std::os::fd::AsFd;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::{
@@ -279,7 +281,7 @@ impl Source {
         match self {
             Self::File(f) => {
                 let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_raw_fd(), offset, len, advice)
+                posix_fadvise(f.as_fd(), offset, len, advice)
             }
             _ => Err(Errno::ESPIPE), // "Illegal seek"
         }
@@ -649,7 +651,7 @@ impl Dest {
         match self {
             Self::File(f, _) => {
                 let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_raw_fd(), offset, len, advice)
+                posix_fadvise(f.as_fd(), offset, len, advice)
             }
             _ => Err(Errno::ESPIPE), // "Illegal seek"
         }
@@ -784,7 +786,7 @@ impl<'a> Output<'a> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
             nix::fcntl::fcntl(
-                fx.as_raw().as_raw_fd(),
+                fx.as_raw().as_fd(),
                 F_SETFL(OFlag::from_bits_retain(libc_flags)),
             )?;
         }

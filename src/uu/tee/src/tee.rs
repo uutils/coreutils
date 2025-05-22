@@ -390,12 +390,12 @@ pub fn ensure_stdout_not_broken() -> Result<bool> {
         poll::{PollFd, PollFlags, PollTimeout},
         sys::stat::{SFlag, fstat},
     };
-    use std::os::fd::{AsFd, AsRawFd};
+    use std::os::fd::AsFd;
 
     let out = stdout();
 
     // First, check that stdout is a fifo and return true if it's not the case
-    let stat = fstat(out.as_raw_fd())?;
+    let stat = fstat(out.as_fd())?;
     if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
         return Ok(true);
     }

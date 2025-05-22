@@ -25,7 +25,9 @@ use std::hash::Hash;
 use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
 #[cfg(unix)]
-use std::os::unix::{fs::MetadataExt, io::AsRawFd};
+use std::os::fd::AsFd;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
@@ -50,8 +52,8 @@ pub struct FileInformation(
 impl FileInformation {
     /// Get information from a currently open file
     #[cfg(unix)]
-    pub fn from_file(file: &impl AsRawFd) -> IOResult<Self> {
-        let stat = nix::sys::stat::fstat(file.as_raw_fd())?;
+    pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
+        let stat = nix::sys::stat::fstat(file)?;
         Ok(Self(stat))
     }
 
@@ -717,7 +719,7 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(unix)]
     {
         use nix::sys::stat::fstat;
-        let mode = fstat(stdin.as_raw_fd()).unwrap().st_mode as mode_t;
+        let mode = fstat(stdin.as_fd()).unwrap().st_mode as mode_t;
         has!(mode, S_IFDIR)
     }
 
