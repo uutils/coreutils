@@ -2,6 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore dyld dylib setvbuf
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "openbsd"),
+    not(target_os = "macos")
+))]
+use std::process::Command;
 use uutests::new_ucmd;
 #[cfg(not(target_os = "windows"))]
 use uutests::util::TestScenario;
@@ -34,6 +41,9 @@ fn test_no_such() {
 #[test]
 fn test_stdbuf_unbuffered_stdout() {
     // This is a basic smoke test
+    // Note: This test only verifies that stdbuf does not crash and that output is passed through as expected
+    // for simple, short-lived commands. It does not guarantee that buffering is actually modified or that
+    // libstdbuf is loaded and functioning correctly.
     new_ucmd!()
         .args(&["-o0", "head"])
         .pipe_in("The quick brown fox jumps over the lazy dog.")
@@ -44,6 +54,9 @@ fn test_stdbuf_unbuffered_stdout() {
 #[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
 #[test]
 fn test_stdbuf_line_buffered_stdout() {
+    // Note: This test only verifies that stdbuf does not crash and that output is passed through as expected
+    // for simple, short-lived commands. It does not guarantee that buffering is actually modified or that
+    // libstdbuf is loaded and functioning correctly.
     new_ucmd!()
         .args(&["-oL", "head"])
         .pipe_in("The quick brown fox jumps over the lazy dog.")
@@ -104,4 +117,64 @@ fn test_stdbuf_invalid_mode_fails() {
                 );
         }
     }
+}
+
+// macos uses DYLD_PRINT_LIBRARIES, not LD_DEBUG, so disable on macos at the moment
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "openbsd"),
+    not(target_os = "macos")
+))]
+#[test]
+fn test_setvbuf_resolution() {
+    // Run a simple program with LD_DEBUG=symbols to see which setvbuf is being used
+    // Written in a way that it can run with cross-rs and be used as regression test
+    // for https://github.com/uutils/coreutils/issues/6591
+
+    let scene = TestScenario::new(util_name!());
+    let coreutils_bin = &scene.bin_path;
+
+    // Test with our own echo (should have the correct architecture even when cross-compiled using cross-rs,
+    // in which case the "system" echo will be the host architecture)
+    let uutils_echo_cmd = format!(
+        "LD_DEBUG=symbols {} stdbuf -oL {} echo test 2>&1",
+        coreutils_bin.display(),
+        coreutils_bin.display()
+    );
+    let uutils_output = Command::new("sh")
+        .arg("-c")
+        .arg(&uutils_echo_cmd)
+        .output()
+        .expect("Failed to run uutils echo test");
+
+    let uutils_debug = String::from_utf8_lossy(&uutils_output.stdout);
+
+    // Check if libstdbuf.so / libstdbuf.dylib is in the lookup path. The log should contain something like this:
+    // "symbol=setvbuf;  lookup in file=/tmp/.tmp0mfmCg/libstdbuf.so [0]"
+    let libstdbuf_in_path = uutils_debug.contains("symbol=setvbuf")
+        && uutils_debug.contains("lookup in file=")
+        && uutils_debug.contains("libstdbuf");
+
+    // Check for lack of architecture mismatch error. The potential error message is:
+    // "ERROR: ld.so: object '/tmp/.tmpCLq8jl/libstdbuf.so' from LD_PRELOAD cannot be preloaded (cannot open shared object file): ignored."
+    let arch_mismatch_line = uutils_debug
+        .lines()
+        .find(|line| line.contains("cannot be preloaded"));
+    println!("LD_DEBUG output: {}", uutils_debug);
+    let no_arch_mismatch = arch_mismatch_line.is_none();
+
+    println!("libstdbuf in lookup path: {}", libstdbuf_in_path);
+    println!("No architecture mismatch: {}", no_arch_mismatch);
+    if let Some(error_line) = arch_mismatch_line {
+        println!("Architecture mismatch error: {}", error_line);
+    }
+
+    assert!(
+        libstdbuf_in_path,
+        "libstdbuf should be in lookup path with uutils echo"
+    );
+    assert!(
+        no_arch_mismatch,
+        "uutils echo should not show architecture mismatch"
+    );
 }
