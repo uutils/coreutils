@@ -93,6 +93,7 @@ enum NumberSystem {
     Decimal,
     Octal,
     Hexadecimal,
+    Binary,
 }
 
 impl<'parser> Parser<'parser> {
@@ -146,6 +147,7 @@ impl<'parser> Parser<'parser> {
     /// assert_eq!(Ok(9 * 1000), parser.parse("9kB")); // kB is 1000
     /// assert_eq!(Ok(2 * 1024), parser.parse("2K")); // K is 1024
     /// assert_eq!(Ok(44251 * 1024), parser.parse("0xACDBK")); // 0xACDB is 44251 in decimal
+    /// assert_eq!(Ok(44251 * 1024 * 1024), parser.parse("0b1010110011011011")); // 0b1010110011011011 is 44251 in decimal, default M
     /// ```
     pub fn parse(&self, size: &str) -> Result<u128, ParseSizeError> {
         if size.is_empty() {
@@ -162,6 +164,11 @@ impl<'parser> Parser<'parser> {
                 .chars()
                 .take(2)
                 .chain(size.chars().skip(2).take_while(char::is_ascii_hexdigit))
+                .collect(),
+            NumberSystem::Binary => size
+                .chars()
+                .take(2)
+                .chain(size.chars().skip(2).take_while(|c| c.is_digit(2)))
                 .collect(),
             _ => size.chars().take_while(char::is_ascii_digit).collect(),
         };
@@ -255,6 +262,10 @@ impl<'parser> Parser<'parser> {
                 let trimmed_string = numeric_string.trim_start_matches("0x");
                 Self::parse_number(trimmed_string, 16, size)?
             }
+            NumberSystem::Binary => {
+                let trimmed_string = numeric_string.trim_start_matches("0b");
+                Self::parse_number(trimmed_string, 2, size)?
+            }
         };
 
         number
@@ -313,6 +324,12 @@ impl<'parser> Parser<'parser> {
 
         if size.starts_with("0x") {
             return NumberSystem::Hexadecimal;
+        }
+
+        if let Some(prefix) = size.strip_prefix("0b") {
+            if !prefix.is_empty() {
+                return NumberSystem::Binary;
+            }
         }
 
         let num_digits: usize = size
@@ -612,6 +629,7 @@ mod tests {
     #[test]
     fn b_suffix() {
         assert_eq!(Ok(3 * 512), parse_size_u64("3b")); // b is 512
+        assert_eq!(Ok(0), parse_size_u64("0b")); // b should be used as a suffix in this case instead of signifying binary
     }
 
     #[test]
@@ -750,6 +768,12 @@ mod tests {
         assert_eq!(Ok(10), parse_size_u64("0xA"));
         assert_eq!(Ok(94722), parse_size_u64("0x17202"));
         assert_eq!(Ok(44251 * 1024), parse_size_u128("0xACDBK"));
+    }
+
+    #[test]
+    fn parse_binary_size() {
+        assert_eq!(Ok(44251), parse_size_u64("0b1010110011011011"));
+        assert_eq!(Ok(44251 * 1024), parse_size_u64("0b1010110011011011K"));
     }
 
     #[test]
