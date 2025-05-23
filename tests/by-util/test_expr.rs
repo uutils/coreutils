@@ -283,9 +283,25 @@ fn test_regex() {
         .succeeds()
         .stdout_only("3\n");
     new_ucmd!()
+        .args(&["b", ":", "a\\|^b"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["ab", ":", "\\(^a\\)b"])
+        .succeeds()
+        .stdout_only("a\n");
+    new_ucmd!()
         .args(&["a$b", ":", "a\\$b"])
         .succeeds()
         .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["a", ":", "a$\\|b"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["ab", ":", "a\\(b$\\)"])
+        .succeeds()
+        .stdout_only("b\n");
     new_ucmd!()
         .args(&["abc", ":", "^abc"])
         .succeeds()
@@ -298,6 +314,10 @@ fn test_regex() {
         .args(&["b^$ic", ":", "b^\\$ic"])
         .succeeds()
         .stdout_only("5\n");
+    new_ucmd!()
+        .args(&["a$c", ":", "a$\\c"])
+        .succeeds()
+        .stdout_only("3\n");
     new_ucmd!()
         .args(&["^^^^^^^^^", ":", "^^^"])
         .succeeds()
@@ -766,7 +786,6 @@ mod gnu_expr {
             .stdout_only("3\n");
     }
 
-    #[ignore]
     #[test]
     fn test_bre11() {
         new_ucmd!()
