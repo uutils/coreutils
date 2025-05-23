@@ -319,6 +319,14 @@ fn test_regex() {
         .succeeds()
         .stdout_only("3\n");
     new_ucmd!()
+        .args(&["$a", ":", "$a"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["a", ":", "a$\\|b"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
         .args(&["^^^^^^^^^", ":", "^^^"])
         .succeeds()
         .stdout_only("2\n");
@@ -361,6 +369,14 @@ fn test_regex() {
         .stdout_only("0\n");
     new_ucmd!()
         .args(&["abc", ":", "ab[^c]"])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["$", ":", "$"])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["a$", ":", "a$\\|b"])
         .fails()
         .stdout_only("0\n");
 }

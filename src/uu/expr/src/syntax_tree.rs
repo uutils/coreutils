@@ -161,6 +161,7 @@ impl StringOp {
                 match first {
                     Some('^') => {} // Start of string anchor is already added
                     Some('*') => re_string.push_str(r"\*"),
+                    Some('$') if !is_end_of_expression(&pattern_chars) => re_string.push_str(r"\$"),
                     Some('\\') if right.len() == 1 => return Err(ExprError::TrailingBackslash),
                     Some(char) => re_string.push(char),
                     None => return Ok(0.into()),
@@ -185,23 +186,12 @@ impl StringOp {
                             _ => re_string.push_str(r"\^"),
                         },
                         '$' => {
-                            if let Some('\\') = pattern_chars.peek() {
-                                // The next character was checked to be a backslash
-                                let backslash = pattern_chars.next().unwrap_or_default();
-                                match pattern_chars.peek() {
-                                    // End of a capturing group
-                                    Some(')') => re_string.push('$'),
-                                    // End of an alternative pattern
-                                    Some('|') => re_string.push('$'),
-                                    _ => re_string.push_str(r"\$"),
-                                }
-                                re_string.push(backslash);
-                            } else if (prev_is_escaped || prev != '\\')
-                                && pattern_chars.peek().is_some()
-                            {
+                            if is_end_of_expression(&pattern_chars) {
+                                re_string.push(curr);
+                            } else if !curr_is_escaped {
                                 re_string.push_str(r"\$");
                             } else {
-                                re_string.push('$');
+                                re_string.push(curr);
                             }
                         }
                         '\\' if !curr_is_escaped && pattern_chars.peek().is_none() => {
@@ -244,6 +234,25 @@ impl StringOp {
                 Ok(0.into())
             }
         }
+    }
+}
+
+/// Check if regex pattern character iterator is at the end of a regex expression or subexpression
+fn is_end_of_expression<I>(pattern_chars: &I) -> bool
+where
+    I: Iterator<Item = char> + Clone,
+{
+    let mut pattern_chars_clone = pattern_chars.clone();
+    match pattern_chars_clone.next() {
+        Some('\\') => {
+            match pattern_chars_clone.next() {
+                Some(')')            // End of a capturing group
+                | Some('|') => true, // End of an alternative pattern
+                _ => false,
+            }
+        }
+        None => true, // No characters left
+        _ => false,
     }
 }
 
