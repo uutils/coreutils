@@ -161,6 +161,7 @@ impl StringOp {
                 match first {
                     Some('^') => {} // Start of string anchor is already added
                     Some('*') => re_string.push_str(r"\*"),
+                    Some('\\') if right.len() == 1 => return Err(ExprError::TrailingBackslash),
                     Some(char) => re_string.push(char),
                     None => return Ok(0.into()),
                 };
@@ -169,6 +170,8 @@ impl StringOp {
                 let mut prev = first.unwrap_or_default();
                 let mut prev_is_escaped = false;
                 while let Some(curr) = pattern_chars.next() {
+                    let curr_is_escaped = prev == '\\' && !prev_is_escaped;
+
                     match curr {
                         '^' => match (prev, prev_is_escaped) {
                             // Start of a capturing group
@@ -200,6 +203,9 @@ impl StringOp {
                             } else {
                                 re_string.push('$');
                             }
+                        }
+                        '\\' if !curr_is_escaped && pattern_chars.peek().is_none() => {
+                            return Err(ExprError::TrailingBackslash);
                         }
                         _ => re_string.push(curr),
                     }

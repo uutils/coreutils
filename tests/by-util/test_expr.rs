@@ -366,6 +366,26 @@ fn test_regex() {
 }
 
 #[test]
+fn test_regex_trailing_backslash() {
+    new_ucmd!()
+        .args(&["\\", ":", "\\\\"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["\\", ":", "\\"])
+        .fails()
+        .stderr_only("expr: Trailing backslash\n");
+    new_ucmd!()
+        .args(&["abc\\", ":", "abc\\\\"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["abc\\", ":", "abc\\"])
+        .fails()
+        .stderr_only("expr: Trailing backslash\n");
+}
+
+#[test]
 fn test_substr() {
     new_ucmd!()
         .args(&["substr", "abc", "1", "1"])
