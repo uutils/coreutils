@@ -171,11 +171,18 @@ impl StringOp {
                 let mut prev_is_escaped = false;
                 for curr in pattern_chars {
                     match curr {
-                        // Carets are interpreted literally, unless used as character class negation "[^a]"
-                        '^' if prev_is_escaped || !matches!(prev, '\\' | '[') => {
-                            re_string.push_str(r"\^");
+                        '^' => match (prev, prev_is_escaped) {
+                            // Start of a capturing group
+                            ('(', true)
+                            // Start of an alternative pattern
+                            | ('|', true)
+                            // Character class negation "[^a]"
+                            | ('[', false)
+                            // Explicitly escaped caret
+                            | ('\\', false) => re_string.push(curr),
+                            _ => re_string.push_str(r"\^"),
                         }
-                        char => re_string.push(char),
+                        _ => re_string.push(curr),
                     }
 
                     prev_is_escaped = prev == '\\' && !prev_is_escaped;

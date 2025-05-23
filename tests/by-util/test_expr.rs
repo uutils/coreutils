@@ -283,6 +283,14 @@ fn test_regex() {
         .succeeds()
         .stdout_only("3\n");
     new_ucmd!()
+        .args(&["b", ":", "a\\|^b"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["ab", ":", "\\(^a\\)b"])
+        .succeeds()
+        .stdout_only("a\n");
+    new_ucmd!()
         .args(&["a$b", ":", "a\\$b"])
         .succeeds()
         .stdout_only("3\n");
