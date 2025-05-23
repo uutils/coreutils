@@ -156,7 +156,7 @@ impl StringOp {
                 re_string.push('^');
 
                 // Handle first character from the input pattern
-                let mut pattern_chars = right.chars();
+                let mut pattern_chars = right.chars().peekable();
                 let first = pattern_chars.next();
                 match first {
                     Some('^') => {} // Start of string anchor is already added
@@ -166,10 +166,9 @@ impl StringOp {
                 };
 
                 // Handle the rest of the input pattern.
-                // Escaped previous character should not affect the current.
                 let mut prev = first.unwrap_or_default();
                 let mut prev_is_escaped = false;
-                for curr in pattern_chars {
+                while let Some(curr) = pattern_chars.next() {
                     match curr {
                         '^' => match (prev, prev_is_escaped) {
                             // Start of a capturing group
@@ -181,6 +180,26 @@ impl StringOp {
                             // Explicitly escaped caret
                             | ('\\', false) => re_string.push(curr),
                             _ => re_string.push_str(r"\^"),
+                        },
+                        '$' => {
+                            if let Some('\\') = pattern_chars.peek() {
+                                // The next character was checked to be a backslash
+                                let backslash = pattern_chars.next().unwrap_or_default();
+                                match pattern_chars.peek() {
+                                    // End of a capturing group
+                                    Some(')') => re_string.push('$'),
+                                    // End of an alternative pattern
+                                    Some('|') => re_string.push('$'),
+                                    _ => re_string.push_str(r"\$"),
+                                }
+                                re_string.push(backslash);
+                            } else if (prev_is_escaped || prev != '\\')
+                                && pattern_chars.peek().is_some()
+                            {
+                                re_string.push_str(r"\$");
+                            } else {
+                                re_string.push('$');
+                            }
                         }
                         _ => re_string.push(curr),
                     }
