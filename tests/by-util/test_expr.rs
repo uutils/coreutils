@@ -273,110 +273,10 @@ fn test_length_mb() {
 }
 
 #[test]
-fn test_regex() {
-    new_ucmd!()
-        .args(&["a^b", ":", "a^b"])
-        .succeeds()
-        .stdout_only("3\n");
-    new_ucmd!()
-        .args(&["a^b", ":", "a\\^b"])
-        .succeeds()
-        .stdout_only("3\n");
-    new_ucmd!()
-        .args(&["b", ":", "a\\|^b"])
-        .succeeds()
-        .stdout_only("1\n");
-    new_ucmd!()
-        .args(&["ab", ":", "\\(^a\\)b"])
-        .succeeds()
-        .stdout_only("a\n");
-    new_ucmd!()
-        .args(&["a$b", ":", "a\\$b"])
-        .succeeds()
-        .stdout_only("3\n");
-    new_ucmd!()
-        .args(&["a", ":", "a$\\|b"])
-        .succeeds()
-        .stdout_only("1\n");
-    new_ucmd!()
-        .args(&["ab", ":", "a\\(b$\\)"])
-        .succeeds()
-        .stdout_only("b\n");
-    new_ucmd!()
-        .args(&["abc", ":", "^abc"])
-        .succeeds()
-        .stdout_only("3\n");
-    new_ucmd!()
-        .args(&["^abc", ":", "^^abc"])
-        .succeeds()
-        .stdout_only("4\n");
-    new_ucmd!()
-        .args(&["b^$ic", ":", "b^\\$ic"])
-        .succeeds()
-        .stdout_only("5\n");
-    new_ucmd!()
-        .args(&["a$c", ":", "a$\\c"])
-        .succeeds()
-        .stdout_only("3\n");
-    new_ucmd!()
-        .args(&["$a", ":", "$a"])
-        .succeeds()
-        .stdout_only("2\n");
-    new_ucmd!()
-        .args(&["a", ":", "a$\\|b"])
-        .succeeds()
-        .stdout_only("1\n");
-    new_ucmd!()
-        .args(&["^^^^^^^^^", ":", "^^^"])
-        .succeeds()
-        .stdout_only("2\n");
-    new_ucmd!()
-        .args(&["ab[^c]", ":", "ab[^c]"])
-        .succeeds()
-        .stdout_only("3\n"); // Matches "ab["
-    new_ucmd!()
-        .args(&["ab[^c]", ":", "ab\\[^c]"])
-        .succeeds()
-        .stdout_only("6\n");
-    new_ucmd!()
-        .args(&["[^a]", ":", "\\[^a]"])
-        .succeeds()
-        .stdout_only("4\n");
-    new_ucmd!()
-        .args(&["\\a", ":", "\\\\[^^]"])
-        .succeeds()
-        .stdout_only("2\n");
-    new_ucmd!()
-        .args(&["^a", ":", "^^[^^]"])
-        .succeeds()
-        .stdout_only("2\n");
-    new_ucmd!()
-        .args(&["-5", ":", "-\\{0,1\\}[0-9]*$"])
-        .succeeds()
-        .stdout_only("2\n");
+fn test_regex_empty() {
     new_ucmd!().args(&["", ":", ""]).fails().stdout_only("0\n");
     new_ucmd!()
         .args(&["abc", ":", ""])
-        .fails()
-        .stdout_only("0\n");
-    new_ucmd!()
-        .args(&["abc", ":", "bc"])
-        .fails()
-        .stdout_only("0\n");
-    new_ucmd!()
-        .args(&["^abc", ":", "^abc"])
-        .fails()
-        .stdout_only("0\n");
-    new_ucmd!()
-        .args(&["abc", ":", "ab[^c]"])
-        .fails()
-        .stdout_only("0\n");
-    new_ucmd!()
-        .args(&["$", ":", "$"])
-        .fails()
-        .stdout_only("0\n");
-    new_ucmd!()
-        .args(&["a$", ":", "a$\\|b"])
         .fails()
         .stdout_only("0\n");
 }
@@ -399,6 +299,111 @@ fn test_regex_trailing_backslash() {
         .args(&["abc\\", ":", "abc\\"])
         .fails()
         .stderr_only("expr: Trailing backslash\n");
+}
+
+#[test]
+fn test_regex_caret() {
+    new_ucmd!()
+        .args(&["a^b", ":", "a^b"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["a^b", ":", "a\\^b"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["abc", ":", "^abc"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["^abc", ":", "^^abc"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["b", ":", "a\\|^b"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["ab", ":", "\\(^a\\)b"])
+        .succeeds()
+        .stdout_only("a\n");
+    new_ucmd!()
+        .args(&["^abc", ":", "^abc"])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["^^^^^^^^^", ":", "^^^"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["ab[^c]", ":", "ab[^c]"])
+        .succeeds()
+        .stdout_only("3\n"); // Matches "ab["
+    new_ucmd!()
+        .args(&["ab[^c]", ":", "ab\\[^c]"])
+        .succeeds()
+        .stdout_only("6\n");
+    new_ucmd!()
+        .args(&["[^a]", ":", "\\[^a]"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["\\a", ":", "\\\\[^^]"])
+        .succeeds()
+        .stdout_only("2\n");
+    // Patterns are anchored to the beginning of the pattern "^bc"
+    new_ucmd!()
+        .args(&["abc", ":", "bc"])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["^a", ":", "^^[^^]"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["abc", ":", "ab[^c]"])
+        .fails()
+        .stdout_only("0\n");
+}
+
+#[test]
+fn test_regex_dollar() {
+    new_ucmd!()
+        .args(&["a$b", ":", "a\\$b"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["a", ":", "a$\\|b"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["ab", ":", "a\\(b$\\)"])
+        .succeeds()
+        .stdout_only("b\n");
+    new_ucmd!()
+        .args(&["a$c", ":", "a$\\c"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["$a", ":", "$a"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["a", ":", "a$\\|b"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["-5", ":", "-\\{0,1\\}[0-9]*$"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["$", ":", "$"])
+        .fails()
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["a$", ":", "a$\\|b"])
+        .fails()
+        .stdout_only("0\n");
 }
 
 #[test]
