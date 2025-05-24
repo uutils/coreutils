@@ -439,9 +439,6 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
     let err = unsafe {
         chroot(
             CString::new(root.as_os_str().as_bytes().to_vec())
-                .map_err(|e| {
-                    ChrootError::CannotEnter("Unable to enter root directory".to_string(), e.into())
-                })?
                 .map_err(|e| ChrootError::CannotEnter("root".to_string(), e.into()))?
                 .as_bytes_with_nul()
                 .as_ptr()
