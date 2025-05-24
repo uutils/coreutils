@@ -26,7 +26,8 @@
     "tests/**/fixtures/**",
     "src/uu/dd/test-resources/**",
     "vendor/**",
-    "**/*.svg"
+    "**/*.svg",
+    "src/uu/*/locales/*.ftl"
   ],
 
   "enableGlobDot": true,
