@@ -23,7 +23,7 @@ tempfile = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 
 [build-dependencies]
-libstdbuf = { version = "0.0.30", package = "uu_stdbuf_libstdbuf", path = "src/libstdbuf" }
+libstdbuf = { version = "0.1.0", package = "uu_stdbuf_libstdbuf", path = "src/libstdbuf" }
 
 [[bin]]
 name = "stdbuf"
