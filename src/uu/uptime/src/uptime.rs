@@ -6,7 +6,6 @@
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid
 
 use chrono::{Local, TimeZone, Utc};
-#[cfg(unix)]
 use std::ffi::OsString;
 use std::io;
 use thiserror::Error;
@@ -97,6 +96,11 @@ pub fn uu_app() -> Command {
             .value_parser(ValueParser::os_string())
             .value_hint(ValueHint::AnyPath),
     )
+}
+
+#[cfg(windows)]
+fn uptime_with_file(_: &OsString) -> UResult<()> {
+    unreachable!("The function should never be called on Windows")
 }
 
 #[cfg(unix)]
