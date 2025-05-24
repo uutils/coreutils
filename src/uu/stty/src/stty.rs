@@ -561,7 +561,7 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
         target_os = "openbsd"
     ))]
     if let AllFlags::Baud(n) = input {
-        cfsetospeed(termios, n).expect("Failed to set baud rate");
+        cfsetospeed(termios, *n).expect("Failed to set baud rate");
     }
 
     // Other platforms use an enum.
