@@ -244,13 +244,7 @@ where
 {
     let mut pattern_chars_clone = pattern_chars.clone();
     match pattern_chars_clone.next() {
-        Some('\\') => {
-            match pattern_chars_clone.next() {
-                Some(')')            // End of a capturing group
-                | Some('|') => true, // End of an alternative pattern
-                _ => false,
-            }
-        }
+        Some('\\') => matches!(pattern_chars_clone.next(), Some(')' | '|')),
         None => true, // No characters left
         _ => false,
     }
