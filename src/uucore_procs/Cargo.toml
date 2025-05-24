@@ -18,4 +18,4 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0.81"
 quote = "1.0.36"
-uuhelp_parser = { path = "../uuhelp_parser", version = "0.0.30" }
+uuhelp_parser = { path = "../uuhelp_parser", version = "0.1.0" }
