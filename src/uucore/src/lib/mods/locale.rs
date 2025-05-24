@@ -45,26 +45,47 @@ impl UError for LocalizationError {
 
 pub const DEFAULT_LOCALE: &str = "en-US";
 
-// A struct to handle localization
+// A struct to handle localization with optional English fallback
 struct Localizer {
-    bundle: FluentBundle<FluentResource>,
+    primary_bundle: FluentBundle<FluentResource>,
+    fallback_bundle: Option<FluentBundle<FluentResource>>,
 }
 
 impl Localizer {
-    fn new(bundle: FluentBundle<FluentResource>) -> Self {
-        Self { bundle }
+    fn new(primary_bundle: FluentBundle<FluentResource>) -> Self {
+        Self {
+            primary_bundle,
+            fallback_bundle: None,
+        }
     }
 
-    fn format(&self, id: &str, args: Option<&FluentArgs>, default: &str) -> String {
-        match self.bundle.get_message(id).and_then(|m| m.value()) {
-            Some(value) => {
-                let mut errs = Vec::new();
-                self.bundle
-                    .format_pattern(value, args, &mut errs)
-                    .to_string()
-            }
-            None => default.to_string(),
+    fn with_fallback(mut self, fallback_bundle: FluentBundle<FluentResource>) -> Self {
+        self.fallback_bundle = Some(fallback_bundle);
+        self
+    }
+
+    fn format(&self, id: &str, args: Option<&FluentArgs>) -> String {
+        // Try primary bundle first
+        if let Some(message) = self.primary_bundle.get_message(id).and_then(|m| m.value()) {
+            let mut errs = Vec::new();
+            return self
+                .primary_bundle
+                .format_pattern(message, args, &mut errs)
+                .to_string();
         }
+
+        // Fall back to English bundle if available
+        if let Some(ref fallback) = self.fallback_bundle {
+            if let Some(message) = fallback.get_message(id).and_then(|m| m.value()) {
+                let mut errs = Vec::new();
+                return fallback
+                    .format_pattern(message, args, &mut errs)
+                    .to_string();
+            }
+        }
+
+        // Return the key ID if not found anywhere
+        id.to_string()
     }
 }
 
@@ -76,117 +97,117 @@ thread_local! {
 // Initialize localization with a specific locale and config
 fn init_localization(
     locale: &LanguageIdentifier,
-    config: &LocalizationConfig,
+    locales_dir: &Path,
 ) -> Result<(), LocalizationError> {
-    let bundle = create_bundle(locale, config)?;
+    let en_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+
+    let english_bundle = create_bundle(&en_locale, locales_dir)?;
+    let loc = if locale == &en_locale {
+        // If requesting English, just use English as primary (no fallback needed)
+        Localizer::new(english_bundle)
+    } else {
+        // Try to load the requested locale
+        if let Ok(primary_bundle) = create_bundle(locale, locales_dir) {
+            // Successfully loaded requested locale, load English as fallback
+            Localizer::new(primary_bundle).with_fallback(english_bundle)
+        } else {
+            // Failed to load requested locale, just use English as primary
+            Localizer::new(english_bundle)
+        }
+    };
+
     LOCALIZER.with(|lock| {
-        let loc = Localizer::new(bundle);
         lock.set(loc)
             .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
     })?;
     Ok(())
 }
 
-// Create a bundle for a locale with fallback chain
+// Create a bundle for a specific locale
 fn create_bundle(
     locale: &LanguageIdentifier,
-    config: &LocalizationConfig,
+    locales_dir: &Path,
 ) -> Result<FluentBundle<FluentResource>, LocalizationError> {
-    // Create a new bundle with requested locale
+    let locale_path = locales_dir.join(format!("{locale}.ftl"));
+
+    let ftl_file = fs::read_to_string(&locale_path).map_err(|e| LocalizationError::Io {
+        source: e,
+        path: locale_path.clone(),
+    })?;
+
+    let resource = FluentResource::try_new(ftl_file).map_err(|_| {
+        LocalizationError::Parse(format!(
+            "Failed to parse localization resource for {}: {}",
+            locale,
+            locale_path.display()
+        ))
+    })?;
+
     let mut bundle = FluentBundle::new(vec![locale.clone()]);
 
-    // Try to load the requested locale
-    let mut locales_to_try = vec![locale.clone()];
-    locales_to_try.extend_from_slice(&config.fallback_locales);
+    bundle.add_resource(resource).map_err(|errs| {
+        LocalizationError::Bundle(format!(
+            "Failed to add resource to bundle for {}: {:?}",
+            locale, errs
+        ))
+    })?;
 
-    // Try each locale in the chain
-    let mut tried_paths = Vec::new();
-
-    for try_locale in locales_to_try {
-        let locale_path = config.get_locale_path(&try_locale);
-        tried_paths.push(locale_path.clone());
-
-        if let Ok(ftl_file) = fs::read_to_string(&locale_path) {
-            let resource = FluentResource::try_new(ftl_file).map_err(|_| {
-                LocalizationError::Parse(format!(
-                    "Failed to parse localization resource for {}",
-                    try_locale
-                ))
-            })?;
-
-            bundle.add_resource(resource).map_err(|_| {
-                LocalizationError::Bundle(format!(
-                    "Failed to add resource to bundle for {}",
-                    try_locale
-                ))
-            })?;
-
-            return Ok(bundle);
-        }
-    }
-
-    let paths_str = tried_paths
-        .iter()
-        .map(|p| p.to_string_lossy().to_string())
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    Err(LocalizationError::Io {
-        source: std::io::Error::new(std::io::ErrorKind::NotFound, "No localization files found"),
-        path: PathBuf::from(paths_str),
-    })
+    Ok(bundle)
 }
 
-fn get_message_internal(id: &str, args: Option<FluentArgs>, default: &str) -> String {
+fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
     LOCALIZER.with(|lock| {
         lock.get()
-            .map(|loc| loc.format(id, args.as_ref(), default))
-            .unwrap_or_else(|| default.to_string())
+            .map(|loc| loc.format(id, args.as_ref()))
+            .unwrap_or_else(|| id.to_string()) // Return the key ID if localizer not initialized
     })
 }
 
 /// Retrieves a localized message by its identifier.
 ///
 /// Looks up a message with the given ID in the current locale bundle and returns
-/// the localized text. If the message ID is not found, returns the provided default text.
+/// the localized text. If the message ID is not found in the current locale,
+/// it will fall back to English. If the message is not found in English either,
+/// returns the message ID itself.
 ///
 /// # Arguments
 ///
 /// * `id` - The message identifier in the Fluent resources
-/// * `default` - Default text to use if the message ID isn't found
 ///
 /// # Returns
 ///
-/// A `String` containing either the localized message or the default text
+/// A `String` containing the localized message, or the message ID if not found
 ///
 /// # Examples
 ///
 /// ```
 /// use uucore::locale::get_message;
 ///
-/// // Get a localized greeting or fall back to English
-/// let greeting = get_message("greeting", "Hello, World!");
+/// // Get a localized greeting (from .ftl files)
+/// let greeting = get_message("greeting");
 /// println!("{}", greeting);
 /// ```
-pub fn get_message(id: &str, default: &str) -> String {
-    get_message_internal(id, None, default)
+pub fn get_message(id: &str) -> String {
+    get_message_internal(id, None)
 }
 
 /// Retrieves a localized message with variable substitution.
 ///
 /// Looks up a message with the given ID in the current locale bundle,
 /// substitutes variables from the provided arguments map, and returns the
-/// localized text. If the message ID is not found, returns the provided default text.
+/// localized text. If the message ID is not found in the current locale,
+/// it will fall back to English. If the message is not found in English either,
+/// returns the message ID itself.
 ///
 /// # Arguments
 ///
 /// * `id` - The message identifier in the Fluent resources
 /// * `ftl_args` - Key-value pairs for variable substitution in the message
-/// * `default` - Default text to use if the message ID isn't found
 ///
 /// # Returns
 ///
-/// A `String` containing either the localized message with variable substitution or the default text
+/// A `String` containing the localized message with variable substitution, or the message ID if not found
 ///
 /// # Examples
 ///
@@ -199,44 +220,25 @@ pub fn get_message(id: &str, default: &str) -> String {
 /// args.insert("name".to_string(), "Alice".to_string());
 /// args.insert("count".to_string(), "3".to_string());
 ///
-/// let message = get_message_with_args(
-///     "notification",
-///     args,
-///     "Hello! You have notifications."
-/// );
+/// let message = get_message_with_args("notification", args);
 /// println!("{}", message);
 /// ```
-pub fn get_message_with_args(id: &str, ftl_args: HashMap<String, String>, default: &str) -> String {
-    let args = ftl_args.into_iter().collect();
-    get_message_internal(id, Some(args), default)
-}
+pub fn get_message_with_args(id: &str, ftl_args: HashMap<String, String>) -> String {
+    let mut args = FluentArgs::new();
 
-// Configuration for localization
-#[derive(Clone)]
-struct LocalizationConfig {
-    locales_dir: PathBuf,
-    fallback_locales: Vec<LanguageIdentifier>,
-}
-
-impl LocalizationConfig {
-    // Create a new config with a specific locales directory
-    fn new<P: AsRef<Path>>(locales_dir: P) -> Self {
-        Self {
-            locales_dir: locales_dir.as_ref().to_path_buf(),
-            fallback_locales: vec![],
+    for (key, value) in ftl_args {
+        // Try to parse as number first for proper pluralization support
+        if let Ok(num_val) = value.parse::<i64>() {
+            args.set(key, num_val);
+        } else if let Ok(float_val) = value.parse::<f64>() {
+            args.set(key, float_val);
+        } else {
+            // Keep as string if not a number
+            args.set(key, value);
         }
     }
 
-    // Set fallback locales
-    fn with_fallbacks(mut self, fallbacks: Vec<LanguageIdentifier>) -> Self {
-        self.fallback_locales = fallbacks;
-        self
-    }
-
-    // Get path for a specific locale
-    fn get_locale_path(&self, locale: &LanguageIdentifier) -> PathBuf {
-        self.locales_dir.join(format!("{}.ftl", locale))
-    }
+    get_message_internal(id, Some(args))
 }
 
 // Function to detect system locale from environment variables
@@ -252,11 +254,12 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
         .map_err(|_| LocalizationError::Parse(format!("Failed to parse locale: {}", locale_str)))
 }
 
-/// Sets up localization using the system locale (or default) and project paths.
+/// Sets up localization using the system locale with English fallback.
 ///
 /// This function initializes the localization system based on the system's locale
-/// preferences (via the LANG environment variable) or falls back to the default locale
-/// if the system locale cannot be determined or is invalid.
+/// preferences (via the LANG environment variable) or falls back to English
+/// if the system locale cannot be determined or the locale file doesn't exist.
+/// English is always loaded as a fallback.
 ///
 /// # Arguments
 ///
@@ -270,8 +273,8 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 /// # Errors
 ///
 /// Returns a `LocalizationError` if:
-/// * The localization files cannot be read
-/// * The files contain invalid syntax
+/// * The en-US.ftl file cannot be read (English is required)
+/// * The files contain invalid Fluent syntax
 /// * The bundle cannot be initialized properly
 ///
 /// # Examples
@@ -280,6 +283,8 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 /// use uucore::locale::setup_localization;
 ///
 /// // Initialize localization using files in the "locales" directory
+/// // Make sure you have at least an "en-US.ftl" file in this directory
+/// // Other locale files like "fr-FR.ftl" are optional
 /// match setup_localization("./locales") {
 ///     Ok(_) => println!("Localization initialized successfully"),
 ///     Err(e) => eprintln!("Failed to initialize localization: {}", e),
@@ -290,14 +295,12 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
         LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
     });
 
-    let locales_dir = PathBuf::from(p);
-    let fallback_locales = vec![
-        LanguageIdentifier::from_str(DEFAULT_LOCALE)
-            .expect("Default locale should always be valid"),
-    ];
+    let coreutils_path = PathBuf::from(format!("src/uu/{p}/locales/"));
+    let locales_dir = if coreutils_path.exists() {
+        coreutils_path
+    } else {
+        PathBuf::from(p)
+    };
 
-    let config = LocalizationConfig::new(locales_dir).with_fallbacks(fallback_locales);
-
-    init_localization(&locale, &config)?;
-    Ok(())
+    init_localization(&locale, &locales_dir)
 }
