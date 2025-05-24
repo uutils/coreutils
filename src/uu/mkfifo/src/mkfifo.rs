@@ -74,10 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     uucore::selinux::set_selinux_security_context(Path::new(&f), context)
                 {
                     let _ = fs::remove_file(f);
-                    return Err(USimpleError::new(
-                        1,
-                        format!("failed to set SELinux security context: {e}"),
-                    ));
+                    return Err(USimpleError::new(1, e.to_string()));
                 }
             }
         }

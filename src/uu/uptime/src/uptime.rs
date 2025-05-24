@@ -6,14 +6,13 @@
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid
 
 use chrono::{Local, TimeZone, Utc};
-use clap::ArgMatches;
+#[cfg(unix)]
+use std::ffi::OsString;
 use std::io;
 use thiserror::Error;
-use uucore::error::UError;
+use uucore::error::{UError, UResult};
 use uucore::libc::time_t;
 use uucore::uptime::*;
-
-use uucore::error::UResult;
 
 use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
@@ -35,6 +34,7 @@ const ABOUT: &str = concat!(
 const ABOUT: &str = help_about!("uptime.md");
 
 const USAGE: &str = help_usage!("uptime.md");
+
 pub mod options {
     pub static SINCE: &str = "since";
     pub static PATH: &str = "path";
@@ -45,15 +45,12 @@ pub enum UptimeError {
     // io::Error wrapper
     #[error("couldn't get boot time: {0}")]
     IoErr(#[from] io::Error),
-
     #[error("couldn't get boot time: Is a directory")]
     TargetIsDir,
-
     #[error("couldn't get boot time: Illegal seek")]
     TargetIsFifo,
-    #[error("extra operand '{0}'")]
-    ExtraOperandError(String),
 }
+
 impl UError for UptimeError {
     fn code(&self) -> i32 {
         1
@@ -64,41 +61,22 @@ impl UError for UptimeError {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    #[cfg(windows)]
-    return default_uptime(&matches);
-
     #[cfg(unix)]
-    {
-        use std::ffi::OsString;
-        use uucore::error::set_exit_code;
-        use uucore::show_error;
+    let file_path = matches.get_one::<OsString>(options::PATH);
+    #[cfg(windows)]
+    let file_path = None;
 
-        let argument = matches.get_many::<OsString>(options::PATH);
-
-        // Switches to default uptime behaviour if there is no argument
-        if argument.is_none() {
-            return default_uptime(&matches);
-        }
-        let mut arg_iter = argument.unwrap();
-
-        let file_path = arg_iter.next().unwrap();
-        if let Some(path) = arg_iter.next() {
-            // Uptime doesn't attempt to calculate boot time if there is extra arguments.
-            // Its a fatal error
-            show_error!(
-                "{}",
-                UptimeError::ExtraOperandError(path.to_owned().into_string().unwrap())
-            );
-            set_exit_code(1);
-            return Ok(());
-        }
-
-        uptime_with_file(file_path)
+    if matches.get_flag(options::SINCE) {
+        uptime_since()
+    } else if let Some(path) = file_path {
+        uptime_with_file(path)
+    } else {
+        default_uptime()
     }
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -109,18 +87,20 @@ pub fn uu_app() -> Command {
                 .long(options::SINCE)
                 .help("system up since")
                 .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PATH)
-                .help("file to search boot time from")
-                .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
-                .value_hint(ValueHint::AnyPath),
-        )
+        );
+    #[cfg(unix)]
+    cmd.arg(
+        Arg::new(options::PATH)
+            .help("file to search boot time from")
+            .action(ArgAction::Set)
+            .num_args(0..=1)
+            .value_parser(ValueParser::os_string())
+            .value_hint(ValueHint::AnyPath),
+    )
 }
 
 #[cfg(unix)]
-fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
+fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     use std::fs;
     use std::os::unix::fs::FileTypeExt;
     use uucore::error::set_exit_code;
@@ -160,7 +140,7 @@ fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
             show_error!("couldn't get boot time");
             print_time();
             print!("up ???? days ??:??,");
-            print_nusers(Some(0))?;
+            print_nusers(Some(0));
             print_loadavg();
             set_exit_code(1);
             return Ok(());
@@ -170,7 +150,7 @@ fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
     if non_fatal_error {
         print_time();
         print!("up ???? days ??:??,");
-        print_nusers(Some(0))?;
+        print_nusers(Some(0));
         print_loadavg();
         return Ok(());
     }
@@ -194,49 +174,50 @@ fn uptime_with_file(file_path: &std::ffi::OsString) -> UResult<()> {
 
     #[cfg(target_os = "openbsd")]
     {
-        user_count = get_nusers(file_path.to_str().expect("invalid utmp path file"));
-
         let upsecs = get_uptime(None);
-        if upsecs < 0 {
+        if upsecs >= 0 {
+            print_uptime(Some(upsecs))?;
+        } else {
             show_error!("couldn't get boot time");
             set_exit_code(1);
 
             print!("up ???? days ??:??,");
-        } else {
-            print_uptime(Some(upsecs))?;
         }
+        user_count = get_nusers(file_path.to_str().expect("invalid utmp path file"));
     }
 
-    print_nusers(Some(user_count))?;
+    print_nusers(Some(user_count));
     print_loadavg();
 
     Ok(())
 }
 
+fn uptime_since() -> UResult<()> {
+    #[cfg(unix)]
+    #[cfg(not(target_os = "openbsd"))]
+    let (boot_time, _) = process_utmpx(None);
+
+    #[cfg(target_os = "openbsd")]
+    let uptime = get_uptime(None)?;
+    #[cfg(unix)]
+    #[cfg(not(target_os = "openbsd"))]
+    let uptime = get_uptime(boot_time)?;
+    #[cfg(target_os = "windows")]
+    let uptime = get_uptime(None)?;
+
+    let initial_date = Local
+        .timestamp_opt(Utc::now().timestamp() - uptime, 0)
+        .unwrap();
+    println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
+
+    Ok(())
+}
+
 /// Default uptime behaviour i.e. when no file argument is given.
-fn default_uptime(matches: &ArgMatches) -> UResult<()> {
-    if matches.get_flag(options::SINCE) {
-        #[cfg(unix)]
-        #[cfg(not(target_os = "openbsd"))]
-        let (boot_time, _) = process_utmpx(None);
-
-        #[cfg(target_os = "openbsd")]
-        let uptime = get_uptime(None)?;
-        #[cfg(unix)]
-        #[cfg(not(target_os = "openbsd"))]
-        let uptime = get_uptime(boot_time)?;
-        #[cfg(target_os = "windows")]
-        let uptime = get_uptime(None)?;
-        let initial_date = Local
-            .timestamp_opt(Utc::now().timestamp() - uptime, 0)
-            .unwrap();
-        println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
-        return Ok(());
-    }
-
+fn default_uptime() -> UResult<()> {
     print_time();
     print_uptime(None)?;
-    print_nusers(None)?;
+    print_nusers(None);
     print_loadavg();
 
     Ok(())
@@ -252,7 +233,7 @@ fn print_loadavg() {
 
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
-fn process_utmpx(file: Option<&std::ffi::OsString>) -> (Option<time_t>, usize) {
+fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
     let mut nusers = 0;
     let mut boot_time = None;
 
@@ -276,7 +257,7 @@ fn process_utmpx(file: Option<&std::ffi::OsString>) -> (Option<time_t>, usize) {
     (boot_time, nusers)
 }
 
-fn print_nusers(nusers: Option<usize>) -> UResult<()> {
+fn print_nusers(nusers: Option<usize>) {
     print!(
         "{},  ",
         match nusers {
@@ -288,7 +269,6 @@ fn print_nusers(nusers: Option<usize>) -> UResult<()> {
             }
         }
     );
-    Ok(())
 }
 
 fn print_time() {

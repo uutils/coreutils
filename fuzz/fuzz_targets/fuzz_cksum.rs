@@ -6,20 +6,19 @@
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
+use rand::Rng;
+use std::env::temp_dir;
 use std::ffi::OsString;
+use std::fs::{self, File};
+use std::io::Write;
+use std::process::Command;
 use uu_cksum::uumain;
-mod fuzz_common;
-use crate::fuzz_common::{
+use uufuzz::{
     CommandResult, compare_result, generate_and_run_uumain, generate_random_file,
     generate_random_string,
     pretty_print::{print_or_empty, print_test_begin},
     replace_fuzz_binary_name, run_gnu_cmd,
 };
-use rand::Rng;
-use std::env::temp_dir;
-use std::fs::{self, File};
-use std::io::Write;
-use std::process::Command;
 
 static CMD_PATH: &str = "cksum";
 

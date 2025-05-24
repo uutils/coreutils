@@ -6,7 +6,7 @@
 // spell-checker:ignore funcs
 
 use array_init::array_init;
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 fn table(c: &mut Criterion) {
     #[cfg(target_os = "linux")]
@@ -54,7 +54,9 @@ fn check_personality() {
     let personality = u64::from_str_radix(&p_string, 16)
         .unwrap_or_else(|_| panic!("Expected a hex value for personality, got '{p_string:?}'"));
     if personality & ADDR_NO_RANDOMIZE == 0 {
-        eprintln!("WARNING: Benchmarking with ASLR enabled (personality is {personality:x}), results might not be reproducible.");
+        eprintln!(
+            "WARNING: Benchmarking with ASLR enabled (personality is {personality:x}), results might not be reproducible."
+        );
     }
 }
 

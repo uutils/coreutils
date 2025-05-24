@@ -19,8 +19,6 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
-#[cfg(all(unix, feature = "chmod"))]
-use std::os::unix::io::IntoRawFd;
 use std::path::Path;
 #[cfg(not(windows))]
 use std::path::PathBuf;
@@ -544,50 +542,53 @@ fn test_ls_io_errors() {
 
     #[cfg(unix)]
     {
+        use std::os::fd::AsRawFd;
+
         at.touch("some-dir4/bad-fd.txt");
-        let fd1 = at.open("some-dir4/bad-fd.txt").into_raw_fd();
-        let fd2 = dup(dbg!(fd1)).unwrap();
+        let fd1 = at.open("some-dir4/bad-fd.txt");
+        let fd2 = dup(dbg!(&fd1)).unwrap();
         close(fd1).unwrap();
 
         // on the mac and in certain Linux containers bad fds are typed as dirs,
         // however sometimes bad fds are typed as links and directory entry on links won't fail
-        if PathBuf::from(format!("/dev/fd/{fd2}")).is_dir() {
+        if PathBuf::from(format!("/dev/fd/{}", fd2.as_raw_fd())).is_dir() {
             scene
                 .ucmd()
                 .arg("-alR")
-                .arg(format!("/dev/fd/{fd2}"))
+                .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
                 .fails()
                 .stderr_contains(format!(
-                    "cannot open directory '/dev/fd/{fd2}': Bad file descriptor"
+                    "cannot open directory '/dev/fd/{}': Bad file descriptor",
+                    fd2.as_raw_fd()
                 ))
-                .stdout_does_not_contain(format!("{fd2}:\n"));
+                .stdout_does_not_contain(format!("{}:\n", fd2.as_raw_fd()));
 
             scene
                 .ucmd()
                 .arg("-RiL")
-                .arg(format!("/dev/fd/{fd2}"))
+                .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
                 .fails()
-                .stderr_contains(format!("cannot open directory '/dev/fd/{fd2}': Bad file descriptor"))
+                .stderr_contains(format!("cannot open directory '/dev/fd/{}': Bad file descriptor", fd2.as_raw_fd()))
                 // don't double print bad fd errors
-                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd2}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd2}': Bad file descriptor"));
+                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{0}': Bad file descriptor\nls: cannot open directory '/dev/fd/{0}': Bad file descriptor", fd2.as_raw_fd()));
         } else {
             scene
                 .ucmd()
                 .arg("-alR")
-                .arg(format!("/dev/fd/{fd2}"))
+                .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
                 .succeeds();
 
             scene
                 .ucmd()
                 .arg("-RiL")
-                .arg(format!("/dev/fd/{fd2}"))
+                .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
                 .succeeds();
         }
 
         scene
             .ucmd()
             .arg("-alL")
-            .arg(format!("/dev/fd/{fd2}"))
+            .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
             .succeeds();
 
         let _ = close(fd2);

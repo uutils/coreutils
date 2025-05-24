@@ -251,7 +251,7 @@ fn test_uptime_with_extra_argument() {
         .arg("a")
         .arg("b")
         .fails()
-        .stderr_contains("extra operand 'b'");
+        .stderr_contains("unexpected value 'b'");
 }
 /// Checks whether uptime displays the correct stderr msg when its called with a directory
 #[test]

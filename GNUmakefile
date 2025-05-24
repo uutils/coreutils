@@ -267,8 +267,8 @@ TEST_NO_FAIL_FAST :=--no-fail-fast
 TEST_SPEC_FEATURE := test_unimplemented
 else ifeq ($(SELINUX_ENABLED),1)
 TEST_NO_FAIL_FAST :=
-TEST_SPEC_FEATURE := feat_selinux
-BUILD_SPEC_FEATURE := feat_selinux
+TEST_SPEC_FEATURE := selinux
+BUILD_SPEC_FEATURE := selinux
 endif
 
 define TEST_BUSYBOX

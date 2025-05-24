@@ -18,7 +18,7 @@ use libc::{_SC_PAGESIZE, S_IFREG, sysconf};
 use nix::sys::stat;
 #[cfg(unix)]
 use std::io::{Seek, SeekFrom};
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 use std::os::fd::{AsFd, AsRawFd};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
@@ -32,7 +32,7 @@ use libc::S_IFIFO;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::pipes::{pipe, splice, splice_exact};
 
-const BUF_SIZE: usize = 16 * 1024;
+const BUF_SIZE: usize = 256 * 1024;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const SPLICE_SIZE: usize = 128 * 1024;
 
@@ -48,9 +48,7 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
         .write(true)
         .open("/dev/null")
         .map_err(|_| 0_usize)?;
-    let null_rdev = stat::fstat(null_file.as_raw_fd())
-        .map_err(|_| 0_usize)?
-        .st_rdev as libc::dev_t;
+    let null_rdev = stat::fstat(null_file.as_fd()).map_err(|_| 0_usize)?.st_rdev as libc::dev_t;
     if (libc::major(null_rdev), libc::minor(null_rdev)) != (1, 3) {
         // This is not a proper /dev/null, writing to it is probably bad
         // Bit of an edge case, but it has been known to happen
@@ -92,7 +90,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
 
     #[cfg(unix)]
     {
-        let fd = handle.as_raw_fd();
+        let fd = handle.as_fd();
         if let Ok(stat) = stat::fstat(fd) {
             // If the file is regular, then the `st_size` should hold
             // the file's size in bytes.
@@ -132,7 +130,10 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // However, the raw file descriptor in this situation would be equal to `0`
             // for STDIN in both invocations.
             // Therefore we cannot rely of `st_size` here and should fall back on full read.
-            if fd > 0 && (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
+            if fd.as_raw_fd() > 0
+                && (stat.st_mode as libc::mode_t & S_IFREG) != 0
+                && stat.st_size > 0
+            {
                 let sys_page_size = unsafe { sysconf(_SC_PAGESIZE) as usize };
                 if stat.st_size as usize % sys_page_size > 0 {
                     // regular file or file from /proc, /sys and similar pseudo-filesystems
@@ -197,6 +198,23 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
     }
 }
 
+/// A simple structure used to align a BUF_SIZE buffer to 32-byte boundary.
+///
+/// This is useful as bytecount uses 256-bit wide vector operations that run much
+/// faster on aligned data (at least on x86 with AVX2 support).
+#[repr(align(32))]
+struct AlignedBuffer {
+    data: [u8; BUF_SIZE],
+}
+
+impl Default for AlignedBuffer {
+    fn default() -> Self {
+        Self {
+            data: [0; BUF_SIZE],
+        }
+    }
+}
+
 /// Returns a WordCount that counts the number of bytes, lines, and/or the number of Unicode characters encoded in UTF-8 read via a Reader.
 ///
 /// This corresponds to the `-c`, `-l` and `-m` command line flags to wc.
@@ -213,9 +231,9 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
     handle: &mut R,
 ) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
-    let mut buf = [0; BUF_SIZE];
+    let buf: &mut [u8] = &mut AlignedBuffer::default().data;
     loop {
-        match handle.read(&mut buf) {
+        match handle.read(buf) {
             Ok(0) => return (total, None),
             Ok(n) => {
                 if COUNT_BYTES {

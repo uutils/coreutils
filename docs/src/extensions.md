@@ -22,8 +22,13 @@ $ ls -w=80
 
 ## `env`
 
-`env` has an additional `-f`/`--file` flag that can parse `.env` files and set
-variables accordingly. This feature is adopted from `dotenv` style packages.
+GNU `env` allows the empty string to be used as an environment variable name.
+This is unsupported by uutils, and it will show a warning on any such
+assignment.
+
+ `env` has an additional `-f`/`--file` flag that can
+parse `.env` files and set variables accordingly. This feature is adopted from `dotenv` style
+packages.
 
 ## `cp`
 

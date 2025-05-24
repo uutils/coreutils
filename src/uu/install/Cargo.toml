@@ -33,6 +33,9 @@ uucore = { workspace = true, features = [
   "process",
 ] }
 
+[features]
+selinux = ["uucore/selinux"]
+
 [[bin]]
 name = "install"
 path = "src/main.rs"

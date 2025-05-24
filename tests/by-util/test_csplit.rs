@@ -1476,3 +1476,12 @@ fn test_directory_input_file() {
         .fails_with_code(1)
         .stderr_only("csplit: cannot open 'test_directory' for reading: Permission denied\n");
 }
+
+#[test]
+fn test_stdin_no_trailing_newline() {
+    new_ucmd!()
+        .args(&["-", "2"])
+        .pipe_in("a\nb\nc\nd")
+        .succeeds()
+        .stdout_only("2\n5\n");
+}

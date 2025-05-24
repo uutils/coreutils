@@ -468,8 +468,8 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
 
     match builder.tempdir_in(dir) {
         Ok(d) => {
-            // `into_path` consumes the TempDir without removing it
-            let path = d.into_path();
+            // `keep` consumes the TempDir without removing it
+            let path = d.keep();
             Ok(path)
         }
         Err(e) if e.kind() == ErrorKind::NotFound => {

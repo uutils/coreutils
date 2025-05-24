@@ -1,20 +1,22 @@
 [package]
 name = "uucore-fuzz"
 version = "0.0.0"
+description = "uutils ~ 'core' uutils fuzzers"
+repository = "https://github.com/uutils/coreutils/tree/main/fuzz/"
+edition.workspace = true
 publish = false
+
+[workspace.package]
 edition = "2024"
+license = "MIT"
 
 [package.metadata]
 cargo-fuzz = true
 
 [dependencies]
-console = "0.15.0"
 libfuzzer-sys = "0.4.7"
-libc = "0.2.153"
-tempfile = "3.15.0"
 rand = { version = "0.9.0", features = ["small_rng"] }
-similar = "2.5.0"
-
+uufuzz = { path = "uufuzz/" }
 uucore = { path = "../src/uucore/", features = ["parser"] }
 uu_date = { path = "../src/uu/date/" }
 uu_test = { path = "../src/uu/test/" }

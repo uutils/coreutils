@@ -40,10 +40,10 @@ mod platform {
     /// # Safety
     /// This function is unsafe because it calls `libc::sync` or `libc::syscall` which are unsafe.
     pub unsafe fn do_sync() -> UResult<()> {
-        // see https://github.com/rust-lang/libc/pull/2161
-        #[cfg(target_os = "android")]
-        libc::syscall(libc::SYS_sync);
         unsafe {
+            // see https://github.com/rust-lang/libc/pull/2161
+            #[cfg(target_os = "android")]
+            libc::syscall(libc::SYS_sync);
             #[cfg(not(target_os = "android"))]
             libc::sync();
         }

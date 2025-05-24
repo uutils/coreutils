@@ -411,7 +411,7 @@ fn test_selinux_invalid() {
         .arg(at.plus_as_string(dest))
         .fails()
         .no_stdout()
-        .stderr_contains("Failed to set default file creation context to 'testtest':");
+        .stderr_contains("failed to set default file creation context to 'testtest':");
     // invalid context, so, no directory
     assert!(!at.dir_exists(dest));
 }
