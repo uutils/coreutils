@@ -162,6 +162,7 @@ jobs:
         sudo locale-gen
         sudo locale-gen --keep-existing fr_FR
         sudo locale-gen --keep-existing fr_FR.UTF-8
+        sudo locale-gen --keep-existing es_ES.UTF-8
         sudo locale-gen --keep-existing sv_SE
         sudo locale-gen --keep-existing sv_SE.UTF-8
         sudo locale-gen --keep-existing en_US
