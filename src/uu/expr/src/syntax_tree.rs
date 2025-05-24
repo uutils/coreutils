@@ -185,14 +185,8 @@ impl StringOp {
                             | ('\\', false) => re_string.push(curr),
                             _ => re_string.push_str(r"\^"),
                         },
-                        '$' => {
-                            if is_end_of_expression(&pattern_chars) {
-                                re_string.push(curr);
-                            } else if !curr_is_escaped {
-                                re_string.push_str(r"\$");
-                            } else {
-                                re_string.push(curr);
-                            }
+                        '$' if !curr_is_escaped && !is_end_of_expression(&pattern_chars) => {
+                            re_string.push_str(r"\$");
                         }
                         '\\' if !curr_is_escaped && pattern_chars.peek().is_none() => {
                             return Err(ExprError::TrailingBackslash);
