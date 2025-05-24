@@ -439,7 +439,9 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
     let err = unsafe {
         chroot(
             CString::new(root.as_os_str().as_bytes().to_vec())
-                .unwrap()
+                .map_err(|e| {
+                    ChrootError::CannotEnter("Unable to enter root directory".to_string(), e.into())
+                })?
                 .as_bytes_with_nul()
                 .as_ptr()
                 .cast::<libc::c_char>(),
@@ -448,7 +450,7 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
 
     if err == 0 {
         if !skip_chdir {
-            std::env::set_current_dir("/").unwrap();
+            std::env::set_current_dir("/")?;
         }
         Ok(())
     } else {
