@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, Command};
 use libc::S_IWUSR;
 use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Seek, Write};
+use std::io::{self, Read, Seek, Write};
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -34,6 +34,7 @@ pub mod options {
     pub const VERBOSE: &str = "verbose";
     pub const EXACT: &str = "exact";
     pub const ZERO: &str = "zero";
+    pub const RANDOM_SOURCE: &str = "random-source";
 
     pub mod remove {
         pub const UNLINK: &str = "unlink";
@@ -152,14 +153,23 @@ impl Iterator for FilenameIter {
     }
 }
 
+enum RandomSource {
+    System,
+    Read(File),
+}
+
 /// Used to generate blocks of bytes of size <= BLOCK_SIZE based on either a give pattern
 /// or randomness
 // The lint warns about a large difference because StdRng is big, but the buffers are much
 // larger anyway, so it's fine.
 #[allow(clippy::large_enum_variant)]
-enum BytesWriter {
+enum BytesWriter<'a> {
     Random {
         rng: StdRng,
+        buffer: [u8; BLOCK_SIZE],
+    },
+    RandomFile {
+        rng_file: &'a File,
         buffer: [u8; BLOCK_SIZE],
     },
     // To write patterns we only write to the buffer once. To be able to do
@@ -177,12 +187,18 @@ enum BytesWriter {
     },
 }
 
-impl BytesWriter {
-    fn from_pass_type(pass: &PassType) -> Self {
+impl<'a> BytesWriter<'a> {
+    fn from_pass_type(pass: &PassType, random_source: &'a RandomSource) -> Self {
         match pass {
-            PassType::Random => Self::Random {
-                rng: StdRng::from_os_rng(),
-                buffer: [0; BLOCK_SIZE],
+            PassType::Random => match random_source {
+                RandomSource::System => Self::Random {
+                    rng: StdRng::from_os_rng(),
+                    buffer: [0; BLOCK_SIZE],
+                },
+                RandomSource::Read(file) => Self::RandomFile {
+                    rng_file: file,
+                    buffer: [0; BLOCK_SIZE],
+                },
             },
             PassType::Pattern(pattern) => {
                 // Copy the pattern in chunks rather than simply one byte at a time
@@ -203,17 +219,22 @@ impl BytesWriter {
         }
     }
 
-    fn bytes_for_pass(&mut self, size: usize) -> &[u8] {
+    fn bytes_for_pass(&mut self, size: usize) -> Result<&[u8], io::Error> {
         match self {
             Self::Random { rng, buffer } => {
                 let bytes = &mut buffer[..size];
                 rng.fill(bytes);
-                bytes
+                Ok(bytes)
+            }
+            Self::RandomFile { rng_file, buffer } => {
+                let bytes = &mut buffer[..size];
+                rng_file.read_exact(bytes)?;
+                Ok(bytes)
             }
             Self::Pattern { offset, buffer } => {
                 let bytes = &buffer[*offset..size + *offset];
                 *offset = (*offset + size) % PATTERN_LENGTH;
-                bytes
+                Ok(bytes)
             }
         }
     }
@@ -240,6 +261,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => unreachable!(),
     };
 
+    let random_source = match matches.get_one::<String>(options::RANDOM_SOURCE) {
+        Some(filepath) => RandomSource::Read(File::open(filepath).map_err(|_| {
+            USimpleError::new(
+                1,
+                format!("cannot open random source: {}", filepath.quote()),
+            )
+        })?),
+        None => RandomSource::System,
+    };
     // TODO: implement --random-source
 
     let remove_method = if matches.get_flag(options::WIPESYNC) {
@@ -275,6 +305,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             size,
             exact,
             zero,
+            &random_source,
             verbose,
             force,
         ));
@@ -356,6 +387,13 @@ pub fn uu_app() -> Command {
                 .help("add a final overwrite with zeros to hide shredding")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(options::RANDOM_SOURCE)
+                .long(options::RANDOM_SOURCE)
+                .help("take random bytes from FILE")
+                .value_hint(clap::ValueHint::FilePath)
+                .action(ArgAction::Set),
+        )
         // Positional arguments
         .arg(
             Arg::new(options::FILE)
@@ -395,6 +433,7 @@ fn wipe_file(
     size: Option<u64>,
     exact: bool,
     zero: bool,
+    random_source: &RandomSource,
     verbose: bool,
     force: bool,
 ) -> UResult<()> {
@@ -501,7 +540,7 @@ fn wipe_file(
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
         show_if_err!(
-            do_pass(&mut file, &pass_type, exact, size)
+            do_pass(&mut file, &pass_type, exact, random_source, size)
                 .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))
         );
     }
@@ -534,22 +573,23 @@ fn do_pass(
     file: &mut File,
     pass_type: &PassType,
     exact: bool,
+    random_source: &RandomSource,
     file_size: u64,
 ) -> Result<(), io::Error> {
     // We might be at the end of the file due to a previous iteration, so rewind.
     file.rewind()?;
 
-    let mut writer = BytesWriter::from_pass_type(pass_type);
+    let mut writer = BytesWriter::from_pass_type(pass_type, random_source);
     let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact);
 
     // We start by writing BLOCK_SIZE times as many time as possible.
     for _ in 0..number_of_blocks {
-        let block = writer.bytes_for_pass(BLOCK_SIZE);
+        let block = writer.bytes_for_pass(BLOCK_SIZE)?;
         file.write_all(block)?;
     }
 
     // Then we write remaining data which is smaller than the BLOCK_SIZE
-    let block = writer.bytes_for_pass(bytes_left as usize);
+    let block = writer.bytes_for_pass(bytes_left as usize)?;
     file.write_all(block)?;
 
     file.sync_data()?;
