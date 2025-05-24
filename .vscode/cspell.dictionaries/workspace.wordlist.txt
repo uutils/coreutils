@@ -25,6 +25,7 @@ getrandom
 globset
 indicatif
 itertools
+langid
 lscolors
 mdbook
 memchr
@@ -46,6 +47,7 @@ termsize
 termwidth
 textwrap
 thiserror
+unic
 ureq
 walkdir
 winapi
