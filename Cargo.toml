@@ -363,7 +363,7 @@ crc32fast = "1.4.2"
 digest = "0.10.7"
 
 # Fluent dependencies
-fluent-bundle = "0.15.3"
+fluent-bundle = "0.16.0"
 fluent = "0.16.1"
 unic-langid = "0.9.6"
 
