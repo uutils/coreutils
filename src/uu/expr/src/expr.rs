@@ -50,6 +50,8 @@ pub enum ExprError {
     UnmatchedClosingBrace,
     #[error("Invalid content of \\{{\\}}")]
     InvalidBracketContent,
+    #[error("Trailing backslash")]
+    TrailingBackslash,
 }
 
 impl UError for ExprError {
