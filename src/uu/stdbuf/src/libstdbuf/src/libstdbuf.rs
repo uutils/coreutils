@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) IOFBF IOLBF IONBF setvbuf
+// spell-checker:ignore (ToDO) IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp
 
 use ctor::ctor;
 use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
@@ -15,6 +15,16 @@ fn init() {
     unsafe { __stdbuf() };
 }
 
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
+    unsafe extern "C" {
+        fn __stdinp() -> *mut FILE;
+    }
+    unsafe { __stdinp() }
+}
+
+#[cfg(not(target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
     unsafe extern "C" {
@@ -23,6 +33,16 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
     unsafe { stdin }
 }
 
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
+    unsafe extern "C" {
+        fn __stdoutp() -> *mut FILE;
+    }
+    unsafe { __stdoutp() }
+}
+
+#[cfg(not(target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
     unsafe extern "C" {
@@ -31,6 +51,16 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
     unsafe { stdout }
 }
 
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
+    unsafe extern "C" {
+        fn __stderrp() -> *mut FILE;
+    }
+    unsafe { __stderrp() }
+}
+
+#[cfg(not(target_os = "macos"))]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
     unsafe extern "C" {
