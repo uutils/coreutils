@@ -41,13 +41,12 @@ fn run_write_doc() -> Vec<String> {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let res = String::from_utf8(output.stdout)
+    String::from_utf8(output.stdout)
         .unwrap()
         .lines()
         .map(String::from)
         .filter(|line| line.starts_with("Wrote"))
-        .collect::<Vec<String>>();
-    res
+        .collect::<Vec<String>>()
 }
 
 #[test]
