@@ -251,3 +251,44 @@ fn test_all_patterns_present() {
         result.stderr_contains(pat);
     }
 }
+
+#[test]
+fn test_random_source_regular_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    // Currently, our block size is 4096. If it changes, this test has to be adapted.
+    let mut many_bytes = Vec::with_capacity(4096 * 4);
+    for i in 0..4096u32 {
+        many_bytes.extend(i.to_le_bytes());
+    }
+    assert_eq!(many_bytes.len(), 4096 * 4);
+    at.write_bytes("source_long", &many_bytes);
+    let file = "foo.txt";
+    at.write(file, "a");
+    scene
+        .ucmd()
+        .arg("-vn3")
+        .arg("--random-source=source_long")
+        .arg(file)
+        .succeeds()
+        .stderr_only("shred: foo.txt: pass 1/3 (random)...\nshred: foo.txt: pass 2/3 (random)...\nshred: foo.txt: pass 3/3 (random)...\n");
+    // Should rewrite the file exactly three times
+    assert_eq!(at.read_bytes(file), many_bytes[(4096 * 2)..(4096 * 3)]);
+}
+
+#[test]
+#[ignore = "known issue #7947"]
+fn test_random_source_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("source");
+    let file = "foo.txt";
+    at.write(file, "a");
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--random-source=source")
+        .arg(file)
+        .fails()
+        .stderr_only("shred: foo.txt: pass 1/3 (random)...\nshred: foo.txt: File write pass failed: Is a directory\n");
+}
