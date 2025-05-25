@@ -30,6 +30,8 @@ dunce = { version = "1.0.4", optional = true }
 wild = "2.2.1"
 glob = { workspace = true, optional = true }
 iana-time-zone = { workspace = true, optional = true }
+# TODO: Set optional to true, activated by feature i18n
+icu = { workspace = true, optional = false, features = ["compiled_data"] }
 itertools = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
   "formatting",
@@ -108,6 +110,7 @@ format = [
   "num-traits",
   "quoting-style",
 ]
+# i18n = ["icu"]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
