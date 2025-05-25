@@ -9,6 +9,8 @@
 
 use std::cmp::Ordering;
 
+use uucore::i18n;
+
 fn filter_char(c: char, ignore_non_printing: bool, ignore_non_dictionary: bool) -> bool {
     if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || c.is_ascii_whitespace()) {
         return false;
@@ -36,7 +38,7 @@ pub fn custom_str_cmp(
 ) -> Ordering {
     if !(ignore_case || ignore_non_dictionary || ignore_non_printing) {
         // There are no custom settings. Fall back to the default strcmp, which is faster.
-        return a.cmp(b);
+        return i18n::locale_compare(a, b);
     }
     let mut a_chars = a
         .chars()

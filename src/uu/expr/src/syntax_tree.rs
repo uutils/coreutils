@@ -10,6 +10,7 @@ use std::{cell::Cell, collections::BTreeMap};
 use num_bigint::{BigInt, ParseBigIntError};
 use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
+use uucore::i18n;
 
 use crate::{ExprError, ExprResult};
 
@@ -63,31 +64,27 @@ impl BinOp {
 
 impl RelationOp {
     fn eval(&self, a: ExprResult<NumOrStr>, b: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
+        let check_cmp = |cmp| {
+            use RelationOp::{Eq, Geq, Gt, Leq, Lt, Neq};
+            use std::cmp::Ordering::{Equal, Greater, Less};
+            matches!(
+                (self, cmp),
+                (Lt | Leq | Neq, Less) | (Leq | Eq | Geq, Equal) | (Gt | Geq | Neq, Greater)
+            )
+        };
+
         let a = a?;
         let b = b?;
-        let b = if let (Ok(a), Ok(b)) = (&a.to_bigint(), &b.to_bigint()) {
-            match self {
-                Self::Lt => a < b,
-                Self::Leq => a <= b,
-                Self::Eq => a == b,
-                Self::Neq => a != b,
-                Self::Gt => a > b,
-                Self::Geq => a >= b,
-            }
+
+        let result = if let (Ok(a), Ok(b)) = (&a.to_bigint(), &b.to_bigint()) {
+            check_cmp(a.cmp(b))
         } else {
             // These comparisons should be using locale settings
             let a = a.eval_as_string();
             let b = b.eval_as_string();
-            match self {
-                Self::Lt => a < b,
-                Self::Leq => a <= b,
-                Self::Eq => a == b,
-                Self::Neq => a != b,
-                Self::Gt => a > b,
-                Self::Geq => a >= b,
-            }
+            check_cmp(i18n::locale_compare(&a, &b))
         };
-        if b { Ok(1.into()) } else { Ok(0.into()) }
+        if result { Ok(1.into()) } else { Ok(0.into()) }
     }
 }
 

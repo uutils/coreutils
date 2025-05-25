@@ -19,6 +19,7 @@ path = "src/expr.rs"
 
 [dependencies]
 clap = { workspace = true }
+icu = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 onig = { workspace = true }
