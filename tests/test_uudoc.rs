@@ -9,6 +9,7 @@
 //! ```
 //! cargo test --features uudoc
 //! ```
+#![cfg(feature = "uudoc")]
 
 use std::env;
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_uudoc");
