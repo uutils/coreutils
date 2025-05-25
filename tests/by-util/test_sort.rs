@@ -1345,3 +1345,12 @@ fn test_failed_write_is_reported() {
         .fails()
         .stderr_is("sort: write failed: 'standard output': No space left on device\n");
 }
+
+#[test]
+// Test for GNU tests/sort/sort.pl "o2"
+fn test_multiple_output_files() {
+    new_ucmd!()
+        .args(&["-o", "foo", "-o", "bar"])
+        .fails_with_code(2)
+        .stderr_is("sort: multiple output files specified\n");
+}
