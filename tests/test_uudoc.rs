@@ -49,22 +49,37 @@ fn run_write_doc() -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
+fn get_doc_file_from_output(output: &str) -> (String, String) {
+    let correct_path_test = output
+        .strip_prefix("Wrote to '")
+        .unwrap()
+        .strip_suffix("'")
+        .unwrap()
+        .to_string();
+    let content = std::fs::read_to_string(&correct_path_test);
+    let content = match content {
+        Ok(content) => content,
+        Err(e) => {
+            panic!(
+                "Failed to read file {}: {} from {:?}",
+                correct_path_test,
+                e,
+                env::current_dir()
+            );
+        }
+    };
+    (correct_path_test, content)
+}
+
 #[test]
 fn uudoc_check_test() {
     let pages = run_write_doc();
     println!("Pages written: {pages:?}\n");
     // assert wrote to the correct file
     let path_test = pages.iter().find(|line| line.contains("test.md")).unwrap();
-    let correct_path_test = path_test
-        .strip_prefix("Wrote to '")
-        .unwrap()
-        .strip_suffix("'")
-        .unwrap()
-        .to_string();
-    assert_eq!(correct_path_test, "docs/src/utils/test.md");
+    let (_correct_path, content) = get_doc_file_from_output(path_test);
 
     // open the file
-    let content = std::fs::read_to_string(correct_path_test).unwrap();
     assert!(content.contains(
         "```
 test EXPRESSION
@@ -98,28 +113,8 @@ fn uudoc_check_sums() {
         "b3sum",
     ];
     for one_sum in sums {
-        let path = pages.iter().find(|line| line.contains(one_sum)).unwrap();
-        let correct_path = path
-            .strip_prefix("Wrote to '")
-            .unwrap()
-            .strip_suffix("'")
-            .unwrap()
-            .to_string();
-        assert!(correct_path.contains("docs/src/utils/"));
-        assert!(correct_path.contains(one_sum));
-        // open the file
-        let content = std::fs::read_to_string(&correct_path);
-        let content = match content {
-            Ok(content) => content,
-            Err(e) => {
-                panic!(
-                    "Failed to read file {}: {} from {:?}",
-                    correct_path,
-                    e,
-                    env::current_dir()
-                );
-            }
-        };
+        let output_path = pages.iter().find(|line| line.contains(one_sum)).unwrap();
+        let (correct_path, content) = get_doc_file_from_output(output_path);
         let formatted = format!("```\n{} [OPTIONS]... [FILE]...\n```", one_sum);
         assert!(
             content.contains(&formatted),
