@@ -693,11 +693,6 @@ jobs:
             sudo apt-get -y update
             sudo apt-get -y install fuse3 libfuse-dev
           ;;
-          # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
-          x86_64-pc-windows-gnu)
-            C:/msys64/usr/bin/pacman.exe -Sy --needed mingw-w64-x86_64-gcc --noconfirm
-            echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
-          ;;
         esac
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
