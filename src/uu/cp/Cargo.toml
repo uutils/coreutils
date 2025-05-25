@@ -22,7 +22,6 @@ clap = { workspace = true }
 filetime = { workspace = true }
 libc = { workspace = true }
 linux-raw-sys = { workspace = true }
-quick-error = { workspace = true }
 selinux = { workspace = true, optional = true }
 uucore = { workspace = true, features = [
   "backup-control",
@@ -37,6 +36,7 @@ uucore = { workspace = true, features = [
 ] }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
+thiserror = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 xattr = { workspace = true }

@@ -7,7 +7,6 @@ use std::fs::{self, File, OpenOptions};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
-use quick_error::ResultExt;
 use uucore::buf_copy;
 use uucore::mode::get_umask;
 
