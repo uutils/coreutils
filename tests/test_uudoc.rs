@@ -108,8 +108,24 @@ fn uudoc_check_sums() {
         assert!(correct_path.contains("docs/src/utils/"));
         assert!(correct_path.contains(one_sum));
         // open the file
-        let content = std::fs::read_to_string(correct_path).unwrap();
+        let content = std::fs::read_to_string(&correct_path);
+        let content = match content {
+            Ok(content) => content,
+            Err(e) => {
+                panic!(
+                    "Failed to read file {}: {} from {:?}",
+                    correct_path,
+                    e,
+                    env::current_dir()
+                );
+            }
+        };
         let formatted = format!("```\n{} [OPTIONS]... [FILE]...\n```", one_sum);
-        assert!(content.contains(&formatted));
+        assert!(
+            content.contains(&formatted),
+            "Content of {} does not contain the expected format: {}",
+            correct_path,
+            formatted
+        );
     }
 }
