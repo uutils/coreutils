@@ -37,7 +37,6 @@ terminal_size = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "colors",
-  "custom-tz-fmt",
   "entries",
   "format",
   "fs",
