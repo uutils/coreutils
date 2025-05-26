@@ -160,7 +160,6 @@ impl StringOp {
                 let first = pattern_chars.next();
                 match first {
                     Some('^') => {} // Start of string anchor is already added
-                    Some('*') => re_string.push_str(r"\*"),
                     Some('$') if !is_end_of_expression(&pattern_chars) => re_string.push_str(r"\$"),
                     Some('\\') if right.len() == 1 => return Err(ExprError::TrailingBackslash),
                     Some(char) => re_string.push(char),
