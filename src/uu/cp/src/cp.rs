@@ -52,7 +52,7 @@ pub enum CpError {
     IoErr(#[from] io::Error),
 
     /// Wrapper for io::Error with path context
-    #[error("Reading from input {1} gave error")]
+    #[error("{1}: {0}")]
     IoErrContext(io::Error, String),
 
     /// General copy error
@@ -69,7 +69,7 @@ pub enum CpError {
     WalkDirErr(#[from] walkdir::Error),
 
     /// Simple std::path::StripPrefixError wrapper
-    #[error("{0}")]
+    #[error(transparent)]
     StripPrefixError(#[from] StripPrefixError),
 
     /// Result of a skipped file
@@ -1789,7 +1789,7 @@ fn symlink_file(
 ) -> CopyResult<()> {
     #[cfg(not(windows))]
     {
-        std::os::unix::fs::symlink(source, dest).map_err(|_| CpError::Error(format!(
+        std::os::unix::fs::symlink(source, dest).map_err(|e| CpError::IoErrContext(e, format!(
             "cannot create symlink {} to {}",
             get_filename(dest).unwrap_or("invalid file name").quote(),
             get_filename(source).unwrap_or("invalid file name").quote()
@@ -1797,11 +1797,11 @@ fn symlink_file(
     }
     #[cfg(windows)]
     {
-        std::os::windows::fs::symlink_file(source, dest).context(format!(
+        std::os::windows::fs::symlink_file(source, dest).map_err(|e| CpError::IoErrContext(e, format!(
             "cannot create symlink {} to {}",
             get_filename(dest).unwrap_or("invalid file name").quote(),
             get_filename(source).unwrap_or("invalid file name").quote()
-        ))?;
+        )))?;
     }
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
@@ -1976,7 +1976,7 @@ fn delete_dest_if_needed_and_allowed(
                                 &FileInformation::from_path(
                                     source,
                                     options.dereference(source_in_command_line)
-                                ).map_err(|_| CpError::Error(format!("cannot stat {}", source.quote())))?
+                                ).map_err(|e| CpError::IoErrContext(e, format!("cannot stat {}", source.quote())))?
                             )
                 }
             }
@@ -2117,7 +2117,7 @@ fn handle_copy_mode(
             } else {
                 fs::hard_link(source, dest)
             }
-            .map_err(|_| CpError::Error(format!(
+            .map_err(|e| CpError::IoErrContext(e, format!(
                 "cannot create hard link {} to {}",
                 get_filename(dest).unwrap_or("invalid file name").quote(),
                 get_filename(source).unwrap_or("invalid file name").quote()
@@ -2397,7 +2397,7 @@ fn copy_file(
         // in the destination tree.
         if let Some(new_source) = copied_files.get(
             &FileInformation::from_path(source, options.dereference(source_in_command_line))
-                .map_err(|_| CpError::Error(format!("cannot stat {}", source.quote())))?,
+                .map_err(|e| CpError::IoErrContext(e, format!("cannot stat {}", source.quote())))?,
         ) {
             fs::hard_link(new_source, dest)?;
 

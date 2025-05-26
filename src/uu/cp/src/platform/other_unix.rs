@@ -10,7 +10,7 @@ use std::path::Path;
 use uucore::buf_copy;
 use uucore::mode::get_umask;
 
-use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
+use crate::{CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
 
 /// Copies `source` to `dest` for systems without copy-on-write
 pub(crate) fn copy_on_write(
@@ -47,7 +47,7 @@ pub(crate) fn copy_on_write(
 
         buf_copy::copy_stream(&mut src_file, &mut dst_file)
             .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
-            .context(context)?;
+            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
         if source_is_fifo {
             dst_file.set_permissions(src_file.metadata()?.permissions())?;
@@ -55,7 +55,7 @@ pub(crate) fn copy_on_write(
         return Ok(copy_debug);
     }
 
-    fs::copy(source, dest).context(context)?;
+    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
     Ok(copy_debug)
 }
