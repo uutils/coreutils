@@ -793,6 +793,7 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 mod test {
     use crate::ExprError;
     use crate::ExprError::InvalidBracketContent;
+    use crate::syntax_tree::is_valid_range_quantifier;
 
     use super::{
         AstNode, AstNodeInner, BinOp, NumericOp, RelationOp, StringOp, check_posix_regex_errors,
@@ -1040,5 +1041,23 @@ mod test {
             check_posix_regex_errors("ab\\{,b\\}"),
             Err(InvalidBracketContent)
         );
+    }
+
+    #[test]
+    fn test_is_valid_range_quantifier() {
+        assert!(is_valid_range_quantifier(&"3\\}".chars()));
+        assert!(is_valid_range_quantifier(&"3,\\}".chars()));
+        assert!(is_valid_range_quantifier(&",6\\}".chars()));
+        assert!(is_valid_range_quantifier(&"3,6\\}".chars()));
+        assert!(is_valid_range_quantifier(&",\\}".chars()));
+        assert!(is_valid_range_quantifier(&"3,6\\}anything".chars()));
+        assert!(!is_valid_range_quantifier(&"\\{3,6\\}".chars()));
+        assert!(!is_valid_range_quantifier(&"\\}".chars()));
+        assert!(!is_valid_range_quantifier(&"".chars()));
+        assert!(!is_valid_range_quantifier(&"3".chars()));
+        assert!(!is_valid_range_quantifier(&"3,".chars()));
+        assert!(!is_valid_range_quantifier(&",6".chars()));
+        assert!(!is_valid_range_quantifier(&"3,6".chars()));
+        assert!(!is_valid_range_quantifier(&",".chars()));
     }
 }
