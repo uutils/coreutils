@@ -25,6 +25,10 @@ pub enum LocalizationError {
     Parse(String),
     #[error("Bundle error: {0}")]
     Bundle(String),
+    #[error("Locales directory not found: {0}")]
+    LocalesDirNotFound(String),
+    #[error("Path resolution error: {0}")]
+    PathResolution(String),
 }
 
 impl From<std::io::Error> for LocalizationError {
@@ -295,14 +299,69 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
         LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
     });
 
-    let coreutils_path = PathBuf::from(format!("src/uu/{p}/locales/"));
-    let locales_dir = if coreutils_path.exists() {
-        coreutils_path
-    } else {
-        PathBuf::from(p)
-    };
-
+    let locales_dir = get_locales_dir(p)?;
     init_localization(&locale, &locales_dir)
+}
+
+/// Helper function to get the locales directory based on the build configuration
+fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
+    #[cfg(debug_assertions)]
+    {
+        // During development, use the project's locales directory
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        // from uucore path, load the locales directory from the program directory
+        let dev_path = PathBuf::from(manifest_dir)
+            .join("../uu")
+            .join(p)
+            .join("locales");
+
+        if dev_path.exists() {
+            return Ok(dev_path);
+        }
+
+        // Fallback for development if the expected path doesn't exist
+        let fallback_dev_path = PathBuf::from(manifest_dir).join(p);
+        if fallback_dev_path.exists() {
+            return Ok(fallback_dev_path);
+        }
+
+        Err(LocalizationError::LocalesDirNotFound(format!(
+            "Development locales directory not found at {} or {}",
+            dev_path.display(),
+            fallback_dev_path.display()
+        )))
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        use std::env;
+        // In release builds, look relative to executable
+        let exe_path = env::current_exe().map_err(|e| {
+            LocalizationError::PathResolution(format!("Failed to get executable path: {}", e))
+        })?;
+
+        let exe_dir = exe_path.parent().ok_or_else(|| {
+            LocalizationError::PathResolution("Failed to get executable directory".to_string())
+        })?;
+
+        // Try the coreutils-style path first
+        let coreutils_path = exe_dir.join("locales").join(p);
+        if coreutils_path.exists() {
+            return Ok(coreutils_path);
+        }
+
+        // Fallback to just the parameter as a relative path
+        let fallback_path = exe_dir.join(p);
+        if fallback_path.exists() {
+            return Ok(fallback_path);
+        }
+
+        return Err(LocalizationError::LocalesDirNotFound(format!(
+            "Release locales directory not found at {} or {}",
+            coreutils_path.display(),
+            fallback_path.display()
+        )));
+    }
 }
 
 #[cfg(test)]
