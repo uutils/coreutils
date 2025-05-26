@@ -875,7 +875,6 @@ mod gnu_expr {
             .stdout_only("\n");
     }
 
-    #[ignore]
     #[test]
     fn test_bre17() {
         new_ucmd!()
@@ -884,7 +883,6 @@ mod gnu_expr {
             .stdout_only("{1}a\n");
     }
 
-    #[ignore]
     #[test]
     fn test_bre18() {
         new_ucmd!()
@@ -893,7 +891,6 @@ mod gnu_expr {
             .stdout_only("1\n");
     }
 
-    #[ignore]
     #[test]
     fn test_bre19() {
         new_ucmd!()
@@ -1105,7 +1102,6 @@ mod gnu_expr {
             .stderr_contains("Invalid content of \\{\\}");
     }
 
-    #[ignore]
     #[test]
     fn test_bre45() {
         new_ucmd!()
@@ -1114,7 +1110,6 @@ mod gnu_expr {
             .stdout_only("1\n");
     }
 
-    #[ignore]
     #[test]
     fn test_bre46() {
         new_ucmd!()

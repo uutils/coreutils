@@ -191,10 +191,17 @@ impl StringOp {
                         '\\' if !curr_is_escaped && pattern_chars.peek().is_none() => {
                             return Err(ExprError::TrailingBackslash);
                         }
+                        '{' if curr_is_escaped && is_valid_range_quantifier(&pattern_chars) => {
+                            re_string.push(curr);
+                            // Set the lower bound of range quantifier to 0 if it is missing
+                            if pattern_chars.peek() == Some(&',') {
+                                re_string.push('0');
+                            }
+                        }
                         _ => re_string.push(curr),
                     }
 
-                    prev_is_escaped = prev == '\\' && !prev_is_escaped;
+                    prev_is_escaped = curr_is_escaped;
                     prev = curr;
                 }
 
@@ -244,6 +251,46 @@ where
     }
 }
 
+/// Check if regex pattern character iterator is at the start of a valid range quantifier.
+/// The iterator's start position is expected to be after the opening brace.
+/// Range quantifier ends to closing brace.
+///
+/// # Examples of valid range quantifiers
+///
+/// - `r"\{3\}"`
+/// - `r"\{3,\}"`
+/// - `r"\{,6\}"`
+/// - `r"\{3,6\}"`
+/// - `r"\{,\}"`
+fn is_valid_range_quantifier<I>(pattern_chars: &I) -> bool
+where
+    I: Iterator<Item = char> + Clone,
+{
+    // Parse the string between braces
+    let mut quantifier = String::new();
+    let mut pattern_chars_clone = pattern_chars.clone().peekable();
+    let Some(mut prev) = pattern_chars_clone.next() else {
+        return false;
+    };
+    let mut prev_is_escaped = false;
+    while let Some(curr) = pattern_chars_clone.next() {
+        if prev == '\\' && curr == '}' && !prev_is_escaped {
+            break;
+        }
+        if pattern_chars_clone.peek().is_none() {
+            return false;
+        }
+
+        quantifier.push(prev);
+        prev_is_escaped = prev == '\\' && !prev_is_escaped;
+        prev = curr;
+    }
+
+    // Check if parsed quantifier is valid
+    let re = Regex::new(r"(\d+|\d*,\d*)").expect("valid regular expression");
+    re.is_match(&quantifier)
+}
+
 /// Check for errors in a supplied regular expression
 ///
 /// GNU coreutils shows messages for invalid regular expressions
@@ -287,10 +334,7 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
                         .expect("splitn always returns at least one string"),
                     repetition.next(),
                 ) {
-                    ("", None) => {
-                        // Empty repeating pattern
-                        invalid_content_error = true;
-                    }
+                    ("", Some("")) => {}
                     (x, None | Some("")) => {
                         if x.parse::<i16>().is_err() {
                             invalid_content_error = true;
