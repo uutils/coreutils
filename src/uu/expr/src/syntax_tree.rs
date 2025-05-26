@@ -169,37 +169,46 @@ impl StringOp {
                 // Handle the rest of the input pattern.
                 let mut prev = first.unwrap_or_default();
                 let mut prev_is_escaped = false;
+                let mut is_start_of_expression = first == Some('\\');
                 while let Some(curr) = pattern_chars.next() {
                     let curr_is_escaped = prev == '\\' && !prev_is_escaped;
 
                     match curr {
-                        '^' => match (prev, prev_is_escaped) {
-                            // Start of a capturing group
-                            ('(', true)
-                            // Start of an alternative pattern
-                            | ('|', true)
-                            // Character class negation "[^a]"
-                            | ('[', false)
-                            // Explicitly escaped caret
-                            | ('\\', false) => re_string.push(curr),
-                            _ => re_string.push_str(r"\^"),
-                        },
+                        // Character class negation "[^a]"
+                        // Explicitly escaped caret "\^"
+                        '^' if !is_start_of_expression && !matches!(prev, '[' | '\\') => {
+                            re_string.push_str(r"\^");
+                        }
                         '$' if !curr_is_escaped && !is_end_of_expression(&pattern_chars) => {
                             re_string.push_str(r"\$");
                         }
                         '\\' if !curr_is_escaped && pattern_chars.peek().is_none() => {
                             return Err(ExprError::TrailingBackslash);
                         }
-                        '{' if curr_is_escaped && is_valid_range_quantifier(&pattern_chars) => {
-                            re_string.push(curr);
-                            // Set the lower bound of range quantifier to 0 if it is missing
-                            if pattern_chars.peek() == Some(&',') {
-                                re_string.push('0');
+                        '{' if curr_is_escaped => {
+                            // Handle '{' literally at the start of an expression
+                            if is_start_of_expression {
+                                if re_string.ends_with('\\') {
+                                    let _ = re_string.pop();
+                                }
+                                re_string.push(curr);
+                            } else if is_valid_range_quantifier(&pattern_chars) {
+                                re_string.push(curr);
+                                // Set the lower bound of range quantifier to 0 if it is missing
+                                if pattern_chars.peek() == Some(&',') {
+                                    re_string.push('0');
+                                }
+                            } else {
+                                return Err(ExprError::InvalidBracketContent);
                             }
                         }
                         _ => re_string.push(curr),
                     }
 
+                    // Capturing group "\(abc\)"
+                    // Alternative pattern "a\|b"
+                    is_start_of_expression = curr_is_escaped && matches!(curr, '(' | '|')
+                        || curr == '\\' && prev_is_escaped && matches!(prev, '(' | '|');
                     prev_is_escaped = curr_is_escaped;
                     prev = curr;
                 }
@@ -209,7 +218,14 @@ impl StringOp {
                     RegexOptions::REGEX_OPTION_SINGLELINE,
                     Syntax::grep(),
                 )
-                .map_err(|_| ExprError::InvalidRegexExpression)?;
+                .map_err(|error| match error.code() {
+                    // "invalid repeat range {lower,upper}"
+                    -123 => ExprError::InvalidBracketContent,
+                    // "too big number for repeat range"
+                    -201 => ExprError::InvalidBracketContent,
+                    _ => ExprError::InvalidRegexExpression,
+                })?;
+
                 Ok(if re.captures_len() > 0 {
                     re.captures(&left)
                         .and_then(|captures| captures.at(1))
@@ -286,8 +302,28 @@ where
     }
 
     // Check if parsed quantifier is valid
-    let re = Regex::new(r"(\d+|\d*,\d*)").expect("valid regular expression");
-    re.is_match(&quantifier)
+    let re = Regex::new(r"(\d*,\d*|\d+)").expect("valid regular expression");
+    match re.captures(&quantifier) {
+        None => false,
+        Some(captures) => {
+            let matched = captures.at(0).unwrap_or_default();
+            let mut repetition = matched.splitn(2, ',');
+            match (
+                repetition
+                    .next()
+                    .expect("splitn always returns at least one string"),
+                repetition.next(),
+            ) {
+                ("", Some("")) => true,
+                (x, None | Some("")) => x.parse::<i32>().map_or(true, |x| x <= i16::MAX as i32),
+                ("", Some(x)) => x.parse::<i32>().map_or(true, |x| x <= i16::MAX as i32),
+                (f, Some(l)) => match (f.parse::<i32>(), l.parse::<i32>()) {
+                    (Ok(f), Ok(l)) => f <= l && f <= i16::MAX as i32 && l <= i16::MAX as i32,
+                    _ => false,
+                },
+            }
+        }
+    }
 }
 
 /// Check for errors in a supplied regular expression
@@ -306,77 +342,48 @@ where
 fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
     let mut escaped_parens: u64 = 0;
     let mut escaped_braces: u64 = 0;
-    let mut escaped = false;
+    let mut prev = '\0';
+    let mut prev_is_escaped = false;
+    let mut is_brace_ignored = false;
+    let mut is_start_of_expression = true;
 
-    let mut repeating_pattern_text = String::new();
-    let mut invalid_content_error = false;
+    for curr in pattern.chars() {
+        let curr_is_escaped = prev == '\\' && !prev_is_escaped;
 
-    for c in pattern.chars() {
-        match (escaped, c) {
+        match (curr_is_escaped, curr) {
+            (true, '(') => escaped_parens += 1,
             (true, ')') => {
                 escaped_parens = escaped_parens
                     .checked_sub(1)
                     .ok_or(ExprError::UnmatchedClosingParenthesis)?;
             }
-            (true, '(') => {
-                escaped_parens += 1;
+            (true, '{') => {
+                is_brace_ignored = is_start_of_expression;
+                if !is_brace_ignored {
+                    escaped_braces += 1;
+                }
             }
             (true, '}') => {
-                escaped_braces = escaped_braces
-                    .checked_sub(1)
-                    .ok_or(ExprError::UnmatchedClosingBrace)?;
-                let mut repetition =
-                    repeating_pattern_text[..repeating_pattern_text.len() - 1].splitn(2, ',');
-                match (
-                    repetition
-                        .next()
-                        .expect("splitn always returns at least one string"),
-                    repetition.next(),
-                ) {
-                    ("", Some("")) => {}
-                    (x, None | Some("")) => {
-                        if x.parse::<i16>().is_err() {
-                            invalid_content_error = true;
-                        }
-                    }
-                    ("", Some(x)) => {
-                        if x.parse::<i16>().is_err() {
-                            invalid_content_error = true;
-                        }
-                    }
-                    (f, Some(l)) => {
-                        if let (Ok(f), Ok(l)) = (f.parse::<i16>(), l.parse::<i16>()) {
-                            invalid_content_error = invalid_content_error || f > l;
-                        } else {
-                            invalid_content_error = true;
-                        }
-                    }
-                }
-                repeating_pattern_text.clear();
-            }
-            (true, '{') => {
-                escaped_braces += 1;
-            }
-            _ => {
-                if escaped_braces > 0 && repeating_pattern_text.len() <= 13 {
-                    repeating_pattern_text.push(c);
-                }
-                if escaped_braces > 0 && !(c.is_ascii_digit() || c == '\\' || c == ',') {
-                    invalid_content_error = true;
+                if !is_brace_ignored {
+                    escaped_braces = escaped_braces
+                        .saturating_sub(1)
+                        .ok_or(ExprError::UnmatchedClosingBrace)?;
                 }
             }
+            _ => {}
         }
-        escaped = !escaped && c == '\\';
+
+        is_start_of_expression = prev == '\0'
+            || curr_is_escaped && matches!(curr, '(' | '|')
+            || curr == '\\' && prev_is_escaped && matches!(prev, '(' | '|');
+        prev_is_escaped = curr_is_escaped;
+        prev = curr;
     }
-    match (
-        escaped_parens.is_zero(),
-        escaped_braces.is_zero(),
-        invalid_content_error,
-    ) {
-        (true, true, false) => Ok(()),
-        (_, false, _) => Err(ExprError::UnmatchedOpeningBrace),
-        (false, _, _) => Err(ExprError::UnmatchedOpeningParenthesis),
-        (true, true, true) => Err(ExprError::InvalidBracketContent),
+
+    match (escaped_parens.is_zero(), escaped_braces.is_zero()) {
+        (true, true) => Ok(()),
+        (_, false) => Err(ExprError::UnmatchedOpeningBrace),
+        (false, _) => Err(ExprError::UnmatchedOpeningParenthesis),
     }
 }
 
