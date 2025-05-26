@@ -156,6 +156,9 @@ pub enum SortError {
 
     #[error("{error}")]
     Uft8Error { error: Utf8Error },
+
+    #[error("multiple output files specified")]
+    MultipleOutputFiles,
 }
 
 impl UError for SortError {
@@ -1034,6 +1037,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    // Prevent -o/--output to be specified multiple times
+    if matches
+        .get_occurrences::<String>(options::OUTPUT)
+        .is_some_and(|out| out.len() > 1)
+    {
+        return Err(SortError::MultipleOutputFiles.into());
+    }
+
     settings.debug = matches.get_flag(options::DEBUG);
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
@@ -1427,7 +1438,9 @@ pub fn uu_app() -> Command {
                 .long(options::OUTPUT)
                 .help("write output to FILENAME instead of stdout")
                 .value_name("FILENAME")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                // To detect multiple occurrences and raise an error
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::REVERSE)
