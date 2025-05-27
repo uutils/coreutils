@@ -8,7 +8,7 @@
 use std::{cell::Cell, collections::BTreeMap};
 
 use num_bigint::{BigInt, ParseBigIntError};
-use num_traits::{ToPrimitive, Zero};
+use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::{ExprError, ExprResult};
@@ -151,54 +151,60 @@ impl StringOp {
                 let right = right?.eval_as_string();
                 check_posix_regex_errors(&right)?;
 
-                // All patterns are anchored so they begin with a caret (^)
+                // Transpile the input pattern from BRE syntax to `onig` crate's `Syntax::grep`
                 let mut re_string = String::with_capacity(right.len() + 1);
-                re_string.push('^');
-
-                // Handle first character from the input pattern
                 let mut pattern_chars = right.chars().peekable();
-                let first = pattern_chars.next();
-                match first {
-                    Some('^') => {} // Start of string anchor is already added
-                    Some('$') if !is_end_of_expression(&pattern_chars) => re_string.push_str(r"\$"),
-                    Some('\\') if right.len() == 1 => return Err(ExprError::TrailingBackslash),
-                    Some(char) => re_string.push(char),
-                    None => return Ok(0.into()),
-                };
-
-                // Handle the rest of the input pattern.
-                let mut prev = first.unwrap_or_default();
+                let mut prev = '\0';
                 let mut prev_is_escaped = false;
+                let mut is_start_of_expression = true;
+
+                // All patterns are anchored so they begin with a caret (^)
+                if pattern_chars.peek() != Some(&'^') {
+                    re_string.push('^');
+                }
+
                 while let Some(curr) = pattern_chars.next() {
                     let curr_is_escaped = prev == '\\' && !prev_is_escaped;
+                    let is_first_character = prev == '\0';
 
                     match curr {
-                        '^' => match (prev, prev_is_escaped) {
-                            // Start of a capturing group
-                            ('(', true)
-                            // Start of an alternative pattern
-                            | ('|', true)
-                            // Character class negation "[^a]"
-                            | ('[', false)
-                            // Explicitly escaped caret
-                            | ('\\', false) => re_string.push(curr),
-                            _ => re_string.push_str(r"\^"),
-                        },
+                        // Character class negation "[^a]"
+                        // Explicitly escaped caret "\^"
+                        '^' if !is_start_of_expression && !matches!(prev, '[' | '\\') => {
+                            re_string.push_str(r"\^");
+                        }
                         '$' if !curr_is_escaped && !is_end_of_expression(&pattern_chars) => {
                             re_string.push_str(r"\$");
                         }
                         '\\' if !curr_is_escaped && pattern_chars.peek().is_none() => {
                             return Err(ExprError::TrailingBackslash);
                         }
-                        '{' if curr_is_escaped && is_valid_range_quantifier(&pattern_chars) => {
-                            re_string.push(curr);
-                            // Set the lower bound of range quantifier to 0 if it is missing
-                            if pattern_chars.peek() == Some(&',') {
-                                re_string.push('0');
+                        '{' if curr_is_escaped => {
+                            // Handle '{' literally at the start of an expression
+                            if is_start_of_expression {
+                                if re_string.ends_with('\\') {
+                                    let _ = re_string.pop();
+                                }
+                                re_string.push(curr);
+                            } else {
+                                // Check if the following section is a valid range quantifier
+                                verify_range_quantifier(&pattern_chars)?;
+
+                                re_string.push(curr);
+                                // Set the lower bound of range quantifier to 0 if it is missing
+                                if pattern_chars.peek() == Some(&',') {
+                                    re_string.push('0');
+                                }
                             }
                         }
                         _ => re_string.push(curr),
                     }
+
+                    // Capturing group "\(abc\)"
+                    // Alternative pattern "a\|b"
+                    is_start_of_expression = curr == '\\' && is_first_character
+                        || curr_is_escaped && matches!(curr, '(' | '|')
+                        || curr == '\\' && prev_is_escaped && matches!(prev, '(' | '|');
 
                     prev_is_escaped = curr_is_escaped;
                     prev = curr;
@@ -209,7 +215,14 @@ impl StringOp {
                     RegexOptions::REGEX_OPTION_SINGLELINE,
                     Syntax::grep(),
                 )
-                .map_err(|_| ExprError::InvalidRegexExpression)?;
+                .map_err(|error| match error.code() {
+                    // "invalid repeat range {lower,upper}"
+                    -123 => ExprError::InvalidBracketContent,
+                    // "too big number for repeat range"
+                    -201 => ExprError::TooBigRangeQuantifierIndex,
+                    _ => ExprError::InvalidRegexExpression,
+                })?;
+
                 Ok(if re.captures_len() > 0 {
                     re.captures(&left)
                         .and_then(|captures| captures.at(1))
@@ -261,33 +274,52 @@ where
 /// - `r"\{,6\}"`
 /// - `r"\{3,6\}"`
 /// - `r"\{,\}"`
-fn is_valid_range_quantifier<I>(pattern_chars: &I) -> bool
+fn verify_range_quantifier<I>(pattern_chars: &I) -> Result<(), ExprError>
 where
     I: Iterator<Item = char> + Clone,
 {
+    let mut pattern_chars_clone = pattern_chars.clone().peekable();
+    if pattern_chars_clone.peek().is_none() {
+        return Err(ExprError::UnmatchedOpeningBrace);
+    }
+
     // Parse the string between braces
     let mut quantifier = String::new();
-    let mut pattern_chars_clone = pattern_chars.clone().peekable();
-    let Some(mut prev) = pattern_chars_clone.next() else {
-        return false;
-    };
-    let mut prev_is_escaped = false;
+    let mut prev = '\0';
+    let mut curr_is_escaped = false;
     while let Some(curr) = pattern_chars_clone.next() {
-        if prev == '\\' && curr == '}' && !prev_is_escaped {
+        curr_is_escaped = prev == '\\' && !curr_is_escaped;
+        if curr_is_escaped && curr == '}' {
             break;
         }
         if pattern_chars_clone.peek().is_none() {
-            return false;
+            return Err(ExprError::UnmatchedOpeningBrace);
         }
-
-        quantifier.push(prev);
-        prev_is_escaped = prev == '\\' && !prev_is_escaped;
+        if prev != '\0' {
+            quantifier.push(prev);
+        }
         prev = curr;
     }
 
     // Check if parsed quantifier is valid
-    let re = Regex::new(r"(\d+|\d*,\d*)").expect("valid regular expression");
-    re.is_match(&quantifier)
+    let re = Regex::new(r"^([0-9]*,[0-9]*|[0-9]+)$").expect("valid regular expression");
+    if let Some(captures) = re.captures(&quantifier) {
+        let matched = captures.at(0).unwrap_or_default();
+        match matched.split_once(',') {
+            Some(("", "")) => Ok(()),
+            Some((x, "") | ("", x)) if x.parse::<i16>().is_ok() => Ok(()),
+            Some((_, "") | ("", _)) => Err(ExprError::TooBigRangeQuantifierIndex),
+            Some((f, l)) => match (f.parse::<i16>(), l.parse::<i16>()) {
+                (Ok(f), Ok(l)) if f > l => Err(ExprError::InvalidBracketContent),
+                (Ok(_), Ok(_)) => Ok(()),
+                _ => Err(ExprError::TooBigRangeQuantifierIndex),
+            },
+            None if matched.parse::<i16>().is_ok() => Ok(()),
+            None => Err(ExprError::TooBigRangeQuantifierIndex),
+        }
+    } else {
+        Err(ExprError::InvalidBracketContent)
+    }
 }
 
 /// Check for errors in a supplied regular expression
@@ -305,78 +337,26 @@ where
 /// has specific error messages.
 fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
     let mut escaped_parens: u64 = 0;
-    let mut escaped_braces: u64 = 0;
-    let mut escaped = false;
+    let mut prev = '\0';
+    let mut curr_is_escaped = false;
 
-    let mut repeating_pattern_text = String::new();
-    let mut invalid_content_error = false;
-
-    for c in pattern.chars() {
-        match (escaped, c) {
+    for curr in pattern.chars() {
+        curr_is_escaped = prev == '\\' && !curr_is_escaped;
+        match (curr_is_escaped, curr) {
+            (true, '(') => escaped_parens += 1,
             (true, ')') => {
                 escaped_parens = escaped_parens
                     .checked_sub(1)
                     .ok_or(ExprError::UnmatchedClosingParenthesis)?;
             }
-            (true, '(') => {
-                escaped_parens += 1;
-            }
-            (true, '}') => {
-                escaped_braces = escaped_braces
-                    .checked_sub(1)
-                    .ok_or(ExprError::UnmatchedClosingBrace)?;
-                let mut repetition =
-                    repeating_pattern_text[..repeating_pattern_text.len() - 1].splitn(2, ',');
-                match (
-                    repetition
-                        .next()
-                        .expect("splitn always returns at least one string"),
-                    repetition.next(),
-                ) {
-                    ("", Some("")) => {}
-                    (x, None | Some("")) => {
-                        if x.parse::<i16>().is_err() {
-                            invalid_content_error = true;
-                        }
-                    }
-                    ("", Some(x)) => {
-                        if x.parse::<i16>().is_err() {
-                            invalid_content_error = true;
-                        }
-                    }
-                    (f, Some(l)) => {
-                        if let (Ok(f), Ok(l)) = (f.parse::<i16>(), l.parse::<i16>()) {
-                            invalid_content_error = invalid_content_error || f > l;
-                        } else {
-                            invalid_content_error = true;
-                        }
-                    }
-                }
-                repeating_pattern_text.clear();
-            }
-            (true, '{') => {
-                escaped_braces += 1;
-            }
-            _ => {
-                if escaped_braces > 0 && repeating_pattern_text.len() <= 13 {
-                    repeating_pattern_text.push(c);
-                }
-                if escaped_braces > 0 && !(c.is_ascii_digit() || c == '\\' || c == ',') {
-                    invalid_content_error = true;
-                }
-            }
+            _ => {}
         }
-        escaped = !escaped && c == '\\';
+        prev = curr;
     }
-    match (
-        escaped_parens.is_zero(),
-        escaped_braces.is_zero(),
-        invalid_content_error,
-    ) {
-        (true, true, false) => Ok(()),
-        (_, false, _) => Err(ExprError::UnmatchedOpeningBrace),
-        (false, _, _) => Err(ExprError::UnmatchedOpeningParenthesis),
-        (true, true, true) => Err(ExprError::InvalidBracketContent),
+
+    match escaped_parens {
+        0 => Ok(()),
+        _ => Err(ExprError::UnmatchedOpeningParenthesis),
     }
 }
 
@@ -792,8 +772,7 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 #[cfg(test)]
 mod test {
     use crate::ExprError;
-    use crate::ExprError::InvalidBracketContent;
-    use crate::syntax_tree::is_valid_range_quantifier;
+    use crate::syntax_tree::verify_range_quantifier;
 
     use super::{
         AstNode, AstNodeInner, BinOp, NumericOp, RelationOp, StringOp, check_posix_regex_errors,
@@ -986,11 +965,6 @@ mod test {
             check_posix_regex_errors(r"\(abc"),
             Err(ExprError::UnmatchedOpeningParenthesis)
         );
-
-        assert_eq!(
-            check_posix_regex_errors(r"\{1,2"),
-            Err(ExprError::UnmatchedOpeningBrace)
-        );
     }
 
     #[test]
@@ -999,65 +973,51 @@ mod test {
             check_posix_regex_errors(r"abc\)"),
             Err(ExprError::UnmatchedClosingParenthesis)
         );
-
-        assert_eq!(
-            check_posix_regex_errors(r"abc\}"),
-            Err(ExprError::UnmatchedClosingBrace)
-        );
-    }
-
-    #[test]
-    fn check_regex_empty_repeating_pattern() {
-        assert_eq!(
-            check_posix_regex_errors("ab\\{\\}"),
-            Err(InvalidBracketContent)
-        );
-    }
-
-    #[test]
-    fn check_regex_intervals_two_numbers() {
-        assert_eq!(
-            // out of order
-            check_posix_regex_errors("ab\\{1,0\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{1,a\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,3\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,b\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{,b\\}"),
-            Err(InvalidBracketContent)
-        );
     }
 
     #[test]
     fn test_is_valid_range_quantifier() {
-        assert!(is_valid_range_quantifier(&"3\\}".chars()));
-        assert!(is_valid_range_quantifier(&"3,\\}".chars()));
-        assert!(is_valid_range_quantifier(&",6\\}".chars()));
-        assert!(is_valid_range_quantifier(&"3,6\\}".chars()));
-        assert!(is_valid_range_quantifier(&",\\}".chars()));
-        assert!(is_valid_range_quantifier(&"3,6\\}anything".chars()));
-        assert!(!is_valid_range_quantifier(&"\\{3,6\\}".chars()));
-        assert!(!is_valid_range_quantifier(&"\\}".chars()));
-        assert!(!is_valid_range_quantifier(&"".chars()));
-        assert!(!is_valid_range_quantifier(&"3".chars()));
-        assert!(!is_valid_range_quantifier(&"3,".chars()));
-        assert!(!is_valid_range_quantifier(&",6".chars()));
-        assert!(!is_valid_range_quantifier(&"3,6".chars()));
-        assert!(!is_valid_range_quantifier(&",".chars()));
+        assert!(verify_range_quantifier(&"3\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&"3,\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&",6\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&"3,6\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&",\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&"32767\\}anything".chars()).is_ok());
+        assert_eq!(
+            verify_range_quantifier(&"\\{3,6\\}".chars()),
+            Err(ExprError::InvalidBracketContent)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"\\}".chars()),
+            Err(ExprError::InvalidBracketContent)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"3".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"3,".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&",6".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"3,6".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&",".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"32768\\}".chars()),
+            Err(ExprError::TooBigRangeQuantifierIndex)
+        );
     }
 }

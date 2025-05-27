@@ -46,12 +46,12 @@ pub enum ExprError {
     UnmatchedClosingParenthesis,
     #[error("Unmatched \\{{")]
     UnmatchedOpeningBrace,
-    #[error("Unmatched ) or \\}}")]
-    UnmatchedClosingBrace,
     #[error("Invalid content of \\{{\\}}")]
     InvalidBracketContent,
     #[error("Trailing backslash")]
     TrailingBackslash,
+    #[error("Regular expression too big")]
+    TooBigRangeQuantifierIndex,
 }
 
 impl UError for ExprError {
