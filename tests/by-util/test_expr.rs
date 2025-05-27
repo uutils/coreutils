@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore αbcdef ; (people) kkos
-// spell-checker:ignore aabcccd aabcd aabd abbbd abbcabc abbcac abbcbbbd abbcbd
-// spell-checker:ignore abbccd abcac acabc andand bigcmp bignum emptysub
+// spell-checker:ignore aabcccd aabcd aabd abbb abbbd abbcabc abbcac abbcbbbd abbcbd
+// spell-checker:ignore abbccd abcabc abcac acabc andand bigcmp bignum emptysub
 // spell-checker:ignore orempty oror
 
 use uutests::new_ucmd;
