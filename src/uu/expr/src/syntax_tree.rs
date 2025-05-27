@@ -151,27 +151,21 @@ impl StringOp {
                 let right = right?.eval_as_string();
                 check_posix_regex_errors(&right)?;
 
-                // All patterns are anchored so they begin with a caret (^)
+                // Transpile the input pattern from BRE syntax to `onig` crate's `Syntax::grep`
                 let mut re_string = String::with_capacity(right.len() + 1);
-                re_string.push('^');
-
-                // Handle first character from the input pattern
                 let mut pattern_chars = right.chars().peekable();
-                let first = pattern_chars.next();
-                match first {
-                    Some('^') => {} // Start of string anchor is already added
-                    Some('$') if !is_end_of_expression(&pattern_chars) => re_string.push_str(r"\$"),
-                    Some('\\') if right.len() == 1 => return Err(ExprError::TrailingBackslash),
-                    Some(char) => re_string.push(char),
-                    None => return Ok(0.into()),
-                };
-
-                // Handle the rest of the input pattern.
-                let mut prev = first.unwrap_or_default();
+                let mut prev = '\0';
                 let mut prev_is_escaped = false;
-                let mut is_start_of_expression = first == Some('\\');
+                let mut is_start_of_expression = true;
+
+                // All patterns are anchored so they begin with a caret (^)
+                if pattern_chars.peek() != Some(&'^') {
+                    re_string.push('^');
+                }
+
                 while let Some(curr) = pattern_chars.next() {
                     let curr_is_escaped = prev == '\\' && !prev_is_escaped;
+                    let is_first_character = prev == '\0';
 
                     match curr {
                         // Character class negation "[^a]"
@@ -208,8 +202,10 @@ impl StringOp {
 
                     // Capturing group "\(abc\)"
                     // Alternative pattern "a\|b"
-                    is_start_of_expression = curr_is_escaped && matches!(curr, '(' | '|')
+                    is_start_of_expression = curr == '\\' && is_first_character
+                        || curr_is_escaped && matches!(curr, '(' | '|')
                         || curr == '\\' && prev_is_escaped && matches!(prev, '(' | '|');
+
                     prev_is_escaped = curr_is_escaped;
                     prev = curr;
                 }
