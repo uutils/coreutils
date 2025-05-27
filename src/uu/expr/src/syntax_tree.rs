@@ -302,27 +302,19 @@ where
     }
 
     // Check if parsed quantifier is valid
+    let is_valid_range_index = |s: &str| s.parse::<i32>().map_or(true, |x| x <= i16::MAX as i32);
     let re = Regex::new(r"^(\d*,\d*|\d+)").expect("valid regular expression");
-    match re.captures(&quantifier) {
-        None => false,
-        Some(captures) => {
-            let matched = captures.at(0).unwrap_or_default();
-            let mut repetition = matched.splitn(2, ',');
-            match (
-                repetition
-                    .next()
-                    .expect("splitn always returns at least one string"),
-                repetition.next(),
-            ) {
-                ("", Some("")) => true,
-                (x, None | Some("")) => x.parse::<i32>().map_or(true, |x| x <= i16::MAX as i32),
-                ("", Some(x)) => x.parse::<i32>().map_or(true, |x| x <= i16::MAX as i32),
-                (f, Some(l)) => match (f.parse::<i32>(), l.parse::<i32>()) {
-                    (Ok(f), Ok(l)) => f <= l && f <= i16::MAX as i32 && l <= i16::MAX as i32,
-                    _ => false,
-                },
-            }
+    if let Some(captures) = re.captures(&quantifier) {
+        let matched = captures.at(0).unwrap_or_default();
+        match matched.split_once(',') {
+            None => is_valid_range_index(matched),
+            Some(("", "")) => true,
+            Some((x, "")) => is_valid_range_index(x),
+            Some(("", x)) => is_valid_range_index(x),
+            Some((f, l)) => f <= l && is_valid_range_index(f) && is_valid_range_index(l),
         }
+    } else {
+        false
     }
 }
 
