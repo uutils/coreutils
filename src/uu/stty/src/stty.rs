@@ -15,11 +15,11 @@ use nix::sys::termios::{
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::fs::File;
-use std::io::{self, Stdout, stdout};
+use std::io::Result;
 use std::ops::ControlFlow;
-use std::os::fd::{AsFd, BorrowedFd};
+use std::os::fd::AsFd;
 use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::io::AsRawFd;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage};
 
@@ -94,35 +94,12 @@ mod options {
 struct Options<'a> {
     all: bool,
     save: bool,
-    file: Device,
+    file: File,
     settings: Option<Vec<&'a str>>,
 }
 
-enum Device {
-    File(File),
-    Stdout(Stdout),
-}
-
-impl AsFd for Device {
-    fn as_fd(&self) -> BorrowedFd<'_> {
-        match self {
-            Self::File(f) => f.as_fd(),
-            Self::Stdout(stdout) => stdout.as_fd(),
-        }
-    }
-}
-
-impl AsRawFd for Device {
-    fn as_raw_fd(&self) -> RawFd {
-        match self {
-            Self::File(f) => f.as_raw_fd(),
-            Self::Stdout(stdout) => stdout.as_raw_fd(),
-        }
-    }
-}
-
 impl<'a> Options<'a> {
-    fn from(matches: &'a ArgMatches) -> io::Result<Self> {
+    fn from(matches: &'a ArgMatches) -> Result<Self> {
         Ok(Self {
             all: matches.get_flag(options::ALL),
             save: matches.get_flag(options::SAVE),
@@ -136,13 +113,14 @@ impl<'a> Options<'a> {
                 //    will clean up the FD for us on exit, so it doesn't
                 //    matter. The alternative would be to have an enum of
                 //    BorrowedFd/OwnedFd to handle both cases.
-                Some(f) => Device::File(
-                    std::fs::OpenOptions::new()
-                        .read(true)
-                        .custom_flags(O_NONBLOCK)
-                        .open(f)?,
-                ),
-                None => Device::Stdout(stdout()),
+                Some(f) => std::fs::OpenOptions::new()
+                    .read(true)
+                    .custom_flags(O_NONBLOCK)
+                    .open(f)?,
+                None => std::fs::OpenOptions::new()
+                    .read(true)
+                    .custom_flags(O_NONBLOCK)
+                    .open("/dev/tty")?,
             },
             settings: matches
                 .get_many::<String>(options::SETTINGS)
