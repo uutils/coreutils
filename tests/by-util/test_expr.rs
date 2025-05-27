@@ -407,6 +407,74 @@ fn test_regex_dollar() {
 }
 
 #[test]
+fn test_regex_range_quantifier() {
+    new_ucmd!()
+        .args(&["a", ":", "a\\{1\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["aaaaaaaaaa", ":", "a\\{1,\\}"])
+        .succeeds()
+        .stdout_only("10\n");
+    new_ucmd!()
+        .args(&["aaa", ":", "a\\{,3\\}"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["aa", ":", "a\\{1,3\\}"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["aaaa", ":", "a\\{,\\}"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["a", ":", "ab\\{,3\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["abbb", ":", "ab\\{,3\\}"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["abcabc", ":", "\\(abc\\)\\{,\\}"])
+        .succeeds()
+        .stdout_only("abc\n");
+    new_ucmd!()
+        .args(&["a", ":", "a\\{,6\\}"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["{abc}", ":", "\\{abc\\}"])
+        .succeeds()
+        .stdout_only("5\n");
+    new_ucmd!()
+        .args(&["a{bc}", ":", "a\\(\\{bc\\}\\)"])
+        .succeeds()
+        .stdout_only("{bc}\n");
+    new_ucmd!()
+        .args(&["{b}", ":", "a\\|\\{b\\}"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["{", ":", "a\\|\\{"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["{}}}", ":", "\\{\\}\\}\\}"])
+        .succeeds()
+        .stdout_only("4\n");
+    new_ucmd!()
+        .args(&["a{}}}", ":", "a\\{\\}\\}\\}"])
+        .fails()
+        .stderr_only("expr: Invalid content of \\{\\}\n");
+    new_ucmd!()
+        .args(&["ab", ":", "ab\\{\\}"])
+        .fails()
+        .stderr_only("expr: Invalid content of \\{\\}\n");
+}
+
+#[test]
 fn test_substr() {
     new_ucmd!()
         .args(&["substr", "abc", "1", "1"])
