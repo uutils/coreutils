@@ -10,7 +10,9 @@ use std::path::Path;
 use uucore::buf_copy;
 use uucore::mode::get_umask;
 
-use crate::{CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
+use crate::{
+    CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
+};
 
 /// Copies `source` to `dest` for systems without copy-on-write
 pub(crate) fn copy_on_write(
