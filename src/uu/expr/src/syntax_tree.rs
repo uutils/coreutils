@@ -282,27 +282,25 @@ fn verify_range_quantifier<I>(pattern_chars: &I) -> Result<(), ExprError>
 where
     I: Iterator<Item = char> + Clone,
 {
-    // Parse the string between braces
-    let mut quantifier = String::new();
     let mut pattern_chars_clone = pattern_chars.clone().peekable();
-    let Some(mut prev) = pattern_chars_clone.next() else {
-        return Err(ExprError::UnmatchedOpeningBrace);
-    };
     if pattern_chars_clone.peek().is_none() {
         return Err(ExprError::UnmatchedOpeningBrace);
     }
 
-    let mut prev_is_escaped = false;
+    // Parse the string between braces
+    let mut quantifier = String::new();
+    let mut prev = '\0';
+    let mut curr_is_escaped = false;
     while let Some(curr) = pattern_chars_clone.next() {
-        if prev == '\\' && curr == '}' && !prev_is_escaped {
+        curr_is_escaped = prev == '\\' && !curr_is_escaped;
+        if curr_is_escaped && curr == '}' {
             break;
         }
         if pattern_chars_clone.peek().is_none() {
             return Err(ExprError::UnmatchedOpeningBrace);
         }
 
-        quantifier.push(prev);
-        prev_is_escaped = prev == '\\' && !prev_is_escaped;
+        quantifier.push(curr);
         prev = curr;
     }
 
