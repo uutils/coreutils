@@ -50,6 +50,8 @@ pub enum ExprError {
     InvalidBracketContent,
     #[error("Trailing backslash")]
     TrailingBackslash,
+    #[error("Regular expression too big")]
+    TooBigRangeQuantifierIndex,
 }
 
 impl UError for ExprError {

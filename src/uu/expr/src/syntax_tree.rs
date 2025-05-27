@@ -192,14 +192,15 @@ impl StringOp {
                                     let _ = re_string.pop();
                                 }
                                 re_string.push(curr);
-                            } else if is_valid_range_quantifier(&pattern_chars) {
+                            } else {
+                                // Check if the following section is a valid range quantifier
+                                verify_range_quantifier(&pattern_chars)?;
+
                                 re_string.push(curr);
                                 // Set the lower bound of range quantifier to 0 if it is missing
                                 if pattern_chars.peek() == Some(&',') {
                                     re_string.push('0');
                                 }
-                            } else {
-                                return Err(ExprError::InvalidBracketContent);
                             }
                         }
                         _ => re_string.push(curr),
@@ -222,7 +223,7 @@ impl StringOp {
                     // "invalid repeat range {lower,upper}"
                     -123 => ExprError::InvalidBracketContent,
                     // "too big number for repeat range"
-                    -201 => ExprError::InvalidBracketContent,
+                    -201 => ExprError::TooBigRangeQuantifierIndex,
                     _ => ExprError::InvalidRegexExpression,
                 })?;
 
@@ -277,7 +278,7 @@ where
 /// - `r"\{,6\}"`
 /// - `r"\{3,6\}"`
 /// - `r"\{,\}"`
-fn is_valid_range_quantifier<I>(pattern_chars: &I) -> bool
+fn verify_range_quantifier<I>(pattern_chars: &I) -> Result<(), ExprError>
 where
     I: Iterator<Item = char> + Clone,
 {
@@ -285,15 +286,19 @@ where
     let mut quantifier = String::new();
     let mut pattern_chars_clone = pattern_chars.clone().peekable();
     let Some(mut prev) = pattern_chars_clone.next() else {
-        return false;
+        return Err(ExprError::UnmatchedOpeningBrace);
     };
+    if pattern_chars_clone.peek().is_none() {
+        return Err(ExprError::UnmatchedOpeningBrace);
+    }
+
     let mut prev_is_escaped = false;
     while let Some(curr) = pattern_chars_clone.next() {
         if prev == '\\' && curr == '}' && !prev_is_escaped {
             break;
         }
         if pattern_chars_clone.peek().is_none() {
-            return false;
+            return Err(ExprError::UnmatchedOpeningBrace);
         }
 
         quantifier.push(prev);
@@ -302,19 +307,32 @@ where
     }
 
     // Check if parsed quantifier is valid
-    let is_valid_range_index = |s: &str| s.parse::<i32>().map_or(true, |x| x <= i16::MAX as i32);
     let re = Regex::new(r"^(\d*,\d*|\d+)").expect("valid regular expression");
     if let Some(captures) = re.captures(&quantifier) {
         let matched = captures.at(0).unwrap_or_default();
         match matched.split_once(',') {
-            None => is_valid_range_index(matched),
-            Some(("", "")) => true,
-            Some((x, "")) => is_valid_range_index(x),
-            Some(("", x)) => is_valid_range_index(x),
-            Some((f, l)) => f <= l && is_valid_range_index(f) && is_valid_range_index(l),
+            Some(("", "")) => Ok(()),
+            Some((x, "")) | Some(("", x)) => match x.parse::<i32>() {
+                Ok(x) if x <= i16::MAX.into() => Ok(()),
+                Ok(_) => Err(ExprError::TooBigRangeQuantifierIndex),
+                Err(_) => Err(ExprError::InvalidBracketContent),
+            },
+            Some((f, l)) => match (f.parse::<i32>(), l.parse::<i32>()) {
+                (Ok(f), Ok(l)) if f > l => Err(ExprError::InvalidBracketContent),
+                (Ok(f), Ok(l)) if f > i16::MAX.into() || l > i16::MAX.into() => {
+                    Err(ExprError::TooBigRangeQuantifierIndex)
+                }
+                (Ok(_), Ok(_)) => Ok(()),
+                _ => Err(ExprError::InvalidBracketContent),
+            },
+            None => match matched.parse::<i32>() {
+                Ok(x) if x <= i16::MAX.into() => Ok(()),
+                Ok(_) => Err(ExprError::TooBigRangeQuantifierIndex),
+                Err(_) => Err(ExprError::InvalidBracketContent),
+            },
         }
     } else {
-        false
+        Err(ExprError::InvalidBracketContent)
     }
 }
 
@@ -789,7 +807,7 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 #[cfg(test)]
 mod test {
     use crate::ExprError;
-    use crate::syntax_tree::is_valid_range_quantifier;
+    use crate::syntax_tree::verify_range_quantifier;
 
     use super::{
         AstNode, AstNodeInner, BinOp, NumericOp, RelationOp, StringOp, check_posix_regex_errors,
@@ -999,19 +1017,47 @@ mod test {
 
     #[test]
     fn test_is_valid_range_quantifier() {
-        assert!(is_valid_range_quantifier(&"3\\}".chars()));
-        assert!(is_valid_range_quantifier(&"3,\\}".chars()));
-        assert!(is_valid_range_quantifier(&",6\\}".chars()));
-        assert!(is_valid_range_quantifier(&"3,6\\}".chars()));
-        assert!(is_valid_range_quantifier(&",\\}".chars()));
-        assert!(is_valid_range_quantifier(&"3,6\\}anything".chars()));
-        assert!(!is_valid_range_quantifier(&"\\{3,6\\}".chars()));
-        assert!(!is_valid_range_quantifier(&"\\}".chars()));
-        assert!(!is_valid_range_quantifier(&"".chars()));
-        assert!(!is_valid_range_quantifier(&"3".chars()));
-        assert!(!is_valid_range_quantifier(&"3,".chars()));
-        assert!(!is_valid_range_quantifier(&",6".chars()));
-        assert!(!is_valid_range_quantifier(&"3,6".chars()));
-        assert!(!is_valid_range_quantifier(&",".chars()));
+        assert!(verify_range_quantifier(&"3\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&"3,\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&",6\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&"3,6\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&",\\}".chars()).is_ok());
+        assert!(verify_range_quantifier(&"32767\\}anything".chars()).is_ok());
+        assert_eq!(
+            verify_range_quantifier(&"\\{3,6\\}".chars()),
+            Err(ExprError::InvalidBracketContent)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"\\}".chars()),
+            Err(ExprError::InvalidBracketContent)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"3".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"3,".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&",6".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"3,6".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&",".chars()),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+        assert_eq!(
+            verify_range_quantifier(&"32768\\}".chars()),
+            Err(ExprError::TooBigRangeQuantifierIndex)
+        );
     }
 }

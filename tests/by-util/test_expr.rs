@@ -1210,7 +1210,7 @@ mod gnu_expr {
             .args(&["_", ":", "a\\{32768\\}"])
             .fails_with_code(2)
             .no_stdout()
-            .stderr_contains("Invalid content of \\{\\}");
+            .stderr_contains("Regular expression too big\n");
     }
 
     #[test]
