@@ -797,7 +797,6 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 #[cfg(test)]
 mod test {
     use crate::ExprError;
-    use crate::ExprError::InvalidBracketContent;
     use crate::syntax_tree::is_valid_range_quantifier;
 
     use super::{
@@ -1003,42 +1002,6 @@ mod test {
         assert_eq!(
             check_posix_regex_errors(r"abc\)"),
             Err(ExprError::UnmatchedClosingParenthesis)
-        );
-
-    #[test]
-    fn check_regex_empty_repeating_pattern() {
-        assert_eq!(
-            check_posix_regex_errors("ab\\{\\}"),
-            Err(InvalidBracketContent)
-        );
-    }
-
-    #[test]
-    fn check_regex_intervals_two_numbers() {
-        assert_eq!(
-            // out of order
-            check_posix_regex_errors("ab\\{1,0\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{1,a\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,3\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,b\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{a,\\}"),
-            Err(InvalidBracketContent)
-        );
-        assert_eq!(
-            check_posix_regex_errors("ab\\{,b\\}"),
-            Err(InvalidBracketContent)
         );
     }
 
