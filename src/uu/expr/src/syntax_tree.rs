@@ -295,8 +295,9 @@ where
         if pattern_chars_clone.peek().is_none() {
             return Err(ExprError::UnmatchedOpeningBrace);
         }
-
-        quantifier.push(curr);
+        if prev != '\0' {
+            quantifier.push(prev);
+        }
         prev = curr;
     }
 
