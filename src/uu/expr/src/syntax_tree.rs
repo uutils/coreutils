@@ -302,7 +302,7 @@ where
     }
 
     // Check if parsed quantifier is valid
-    let re = Regex::new(r"(\d*,\d*|\d+)").expect("valid regular expression");
+    let re = Regex::new(r"^(\d*,\d*|\d+)").expect("valid regular expression");
     match re.captures(&quantifier) {
         None => false,
         Some(captures) => {
