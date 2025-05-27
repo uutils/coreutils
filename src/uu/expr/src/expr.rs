@@ -46,8 +46,6 @@ pub enum ExprError {
     UnmatchedClosingParenthesis,
     #[error("Unmatched \\{{")]
     UnmatchedOpeningBrace,
-    #[error("Unmatched ) or \\}}")]
-    UnmatchedClosingBrace,
     #[error("Invalid content of \\{{\\}}")]
     InvalidBracketContent,
     #[error("Trailing backslash")]

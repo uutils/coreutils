@@ -365,9 +365,7 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
             }
             (true, '}') => {
                 if !is_brace_ignored {
-                    escaped_braces = escaped_braces
-                        .saturating_sub(1)
-                        .ok_or(ExprError::UnmatchedClosingBrace)?;
+                    escaped_braces = escaped_braces.saturating_sub(1);
                 }
             }
             _ => {}
@@ -1006,12 +1004,6 @@ mod test {
             check_posix_regex_errors(r"abc\)"),
             Err(ExprError::UnmatchedClosingParenthesis)
         );
-
-        assert_eq!(
-            check_posix_regex_errors(r"abc\}"),
-            Err(ExprError::UnmatchedClosingBrace)
-        );
-    }
 
     #[test]
     fn check_regex_empty_repeating_pattern() {
