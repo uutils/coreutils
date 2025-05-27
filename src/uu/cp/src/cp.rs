@@ -9,10 +9,10 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
-use std::{fmt, io};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
+use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
 
@@ -1679,7 +1679,8 @@ pub(crate) fn copy_attributes(
     attributes: &Attributes,
 ) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
-    let source_metadata = fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    let source_metadata =
+        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
@@ -1694,7 +1695,9 @@ pub(crate) fn copy_attributes(
         // gnu compatibility: cp doesn't report an error if it fails to set the ownership.
         let _ = wrap_chown(
             dest,
-            &dest.symlink_metadata().map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
+            &dest
+                .symlink_metadata()
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
             Some(dest_uid),
             Some(dest_gid),
             false,
@@ -1713,7 +1716,8 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            fs::set_permissions(dest, source_metadata.permissions()).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            fs::set_permissions(dest, source_metadata.permissions())
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
             exacl::getfacl(source, None)
@@ -1789,19 +1793,29 @@ fn symlink_file(
 ) -> CopyResult<()> {
     #[cfg(not(windows))]
     {
-        std::os::unix::fs::symlink(source, dest).map_err(|e| CpError::IoErrContext(e, format!(
-            "cannot create symlink {} to {}",
-            get_filename(dest).unwrap_or("invalid file name").quote(),
-            get_filename(source).unwrap_or("invalid file name").quote()
-        )))?;
+        std::os::unix::fs::symlink(source, dest).map_err(|e| {
+            CpError::IoErrContext(
+                e,
+                format!(
+                    "cannot create symlink {} to {}",
+                    get_filename(dest).unwrap_or("invalid file name").quote(),
+                    get_filename(source).unwrap_or("invalid file name").quote()
+                ),
+            )
+        })?;
     }
     #[cfg(windows)]
     {
-        std::os::windows::fs::symlink_file(source, dest).map_err(|e| CpError::IoErrContext(e, format!(
-            "cannot create symlink {} to {}",
-            get_filename(dest).unwrap_or("invalid file name").quote(),
-            get_filename(source).unwrap_or("invalid file name").quote()
-        )))?;
+        std::os::windows::fs::symlink_file(source, dest).map_err(|e| {
+            CpError::IoErrContext(
+                e,
+                format!(
+                    "cannot create symlink {} to {}",
+                    get_filename(dest).unwrap_or("invalid file name").quote(),
+                    get_filename(source).unwrap_or("invalid file name").quote()
+                ),
+            )
+        })?;
     }
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
@@ -2117,11 +2131,16 @@ fn handle_copy_mode(
             } else {
                 fs::hard_link(source, dest)
             }
-            .map_err(|e| CpError::IoErrContext(e, format!(
-                "cannot create hard link {} to {}",
-                get_filename(dest).unwrap_or("invalid file name").quote(),
-                get_filename(source).unwrap_or("invalid file name").quote()
-            )))?;
+            .map_err(|e| {
+                CpError::IoErrContext(
+                    e,
+                    format!(
+                        "cannot create hard link {} to {}",
+                        get_filename(dest).unwrap_or("invalid file name").quote(),
+                        get_filename(source).unwrap_or("invalid file name").quote()
+                    ),
+                )
+            })?;
         }
         CopyMode::Copy => {
             copy_helper(
@@ -2166,7 +2185,10 @@ fn handle_copy_mode(
                         return Ok(PerformedAction::Skipped);
                     }
                     UpdateMode::NoneFail => {
-                        return Err(CpError::Error(format!("not replacing '{}'", dest.display())));
+                        return Err(CpError::Error(format!(
+                            "not replacing '{}'",
+                            dest.display()
+                        )));
                     }
                     UpdateMode::IfOlder => {
                         let dest_metadata = fs::symlink_metadata(dest)?;
@@ -2238,7 +2260,10 @@ fn calculate_dest_permissions(
     context: &str,
 ) -> CopyResult<Permissions> {
     if dest.exists() {
-        Ok(dest.symlink_metadata().map_err(|e| CpError::IoErrContext(e, context.to_owned()))?.permissions())
+        Ok(dest
+            .symlink_metadata()
+            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
+            .permissions())
     } else {
         #[cfg(unix)]
         {

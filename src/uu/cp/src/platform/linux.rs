@@ -16,7 +16,9 @@ use uucore::buf_copy;
 
 use uucore::mode::get_umask;
 
-use crate::{CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
+use crate::{
+    CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
+};
 
 /// The fallback behavior for [`clone`] on failed system call.
 #[derive(Clone, Copy)]

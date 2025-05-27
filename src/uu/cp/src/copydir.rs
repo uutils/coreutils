@@ -26,7 +26,8 @@ use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, CopyResult, CpError, Options
+    CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
+    copy_link,
 };
 
 /// Ensure a Windows path starts with a `\\?`.

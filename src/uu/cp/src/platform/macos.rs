@@ -12,7 +12,9 @@ use std::path::Path;
 use uucore::buf_copy;
 use uucore::mode::get_umask;
 
-use crate::{CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
+use crate::{
+    CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
+};
 
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
@@ -110,7 +112,8 @@ pub(crate) fn copy_on_write(
                     }
                     context
                 } else {
-                    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
+                    fs::copy(source, dest)
+                        .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
                 }
             }
         };
