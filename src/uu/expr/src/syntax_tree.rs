@@ -302,7 +302,7 @@ where
     }
 
     // Check if parsed quantifier is valid
-    let re = Regex::new(r"^(\d*,\d*|\d+)$").expect("valid regular expression");
+    let re = Regex::new(r"^([0-9]*,[0-9]*|[0-9]+)$").expect("valid regular expression");
     if let Some(captures) = re.captures(&quantifier) {
         let matched = captures.at(0).unwrap_or_default();
         match matched.split_once(',') {
