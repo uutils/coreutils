@@ -992,7 +992,7 @@ mod test {
         );
 
         assert_eq!(
-            check_posix_regex_errors(r"\{1,2"),
+            check_posix_regex_errors(r"a\{1,2"),
             Err(ExprError::UnmatchedOpeningBrace)
         );
     }
