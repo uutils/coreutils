@@ -8,7 +8,7 @@
 use std::{cell::Cell, collections::BTreeMap};
 
 use num_bigint::{BigInt, ParseBigIntError};
-use num_traits::{ToPrimitive, Zero};
+use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::{ExprError, ExprResult};
@@ -351,15 +351,11 @@ where
 /// has specific error messages.
 fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
     let mut escaped_parens: u64 = 0;
-    let mut escaped_braces: u64 = 0;
     let mut prev = '\0';
-    let mut prev_is_escaped = false;
-    let mut is_brace_ignored = false;
-    let mut is_start_of_expression = true;
+    let mut curr_is_escaped = false;
 
     for curr in pattern.chars() {
-        let curr_is_escaped = prev == '\\' && !prev_is_escaped;
-
+        curr_is_escaped = prev == '\\' && !curr_is_escaped;
         match (curr_is_escaped, curr) {
             (true, '(') => escaped_parens += 1,
             (true, ')') => {
@@ -367,31 +363,14 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
                     .checked_sub(1)
                     .ok_or(ExprError::UnmatchedClosingParenthesis)?;
             }
-            (true, '{') => {
-                is_brace_ignored = is_start_of_expression;
-                if !is_brace_ignored {
-                    escaped_braces += 1;
-                }
-            }
-            (true, '}') => {
-                if !is_brace_ignored {
-                    escaped_braces = escaped_braces.saturating_sub(1);
-                }
-            }
             _ => {}
         }
-
-        is_start_of_expression = prev == '\0'
-            || curr_is_escaped && matches!(curr, '(' | '|')
-            || curr == '\\' && prev_is_escaped && matches!(prev, '(' | '|');
-        prev_is_escaped = curr_is_escaped;
         prev = curr;
     }
 
-    match (escaped_parens.is_zero(), escaped_braces.is_zero()) {
-        (true, true) => Ok(()),
-        (_, false) => Err(ExprError::UnmatchedOpeningBrace),
-        (false, _) => Err(ExprError::UnmatchedOpeningParenthesis),
+    match escaped_parens {
+        0 => Ok(()),
+        _ => Err(ExprError::UnmatchedOpeningParenthesis),
     }
 }
 
@@ -999,11 +978,6 @@ mod test {
         assert_eq!(
             check_posix_regex_errors(r"\(abc"),
             Err(ExprError::UnmatchedOpeningParenthesis)
-        );
-
-        assert_eq!(
-            check_posix_regex_errors(r"a\{1,2"),
-            Err(ExprError::UnmatchedOpeningBrace)
         );
     }
 
