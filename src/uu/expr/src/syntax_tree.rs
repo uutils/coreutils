@@ -307,24 +307,15 @@ where
         let matched = captures.at(0).unwrap_or_default();
         match matched.split_once(',') {
             Some(("", "")) => Ok(()),
-            Some((x, "")) | Some(("", x)) => match x.parse::<i32>() {
-                Ok(x) if x <= i16::MAX.into() => Ok(()),
-                Ok(_) => Err(ExprError::TooBigRangeQuantifierIndex),
-                Err(_) => Err(ExprError::InvalidBracketContent),
-            },
-            Some((f, l)) => match (f.parse::<i32>(), l.parse::<i32>()) {
+            Some((x, "") | ("", x)) if x.parse::<i16>().is_ok() => Ok(()),
+            Some((_, "") | ("", _)) => Err(ExprError::TooBigRangeQuantifierIndex),
+            Some((f, l)) => match (f.parse::<i16>(), l.parse::<i16>()) {
                 (Ok(f), Ok(l)) if f > l => Err(ExprError::InvalidBracketContent),
-                (Ok(f), Ok(l)) if f > i16::MAX.into() || l > i16::MAX.into() => {
-                    Err(ExprError::TooBigRangeQuantifierIndex)
-                }
                 (Ok(_), Ok(_)) => Ok(()),
-                _ => Err(ExprError::InvalidBracketContent),
+                _ => Err(ExprError::TooBigRangeQuantifierIndex),
             },
-            None => match matched.parse::<i32>() {
-                Ok(x) if x <= i16::MAX.into() => Ok(()),
-                Ok(_) => Err(ExprError::TooBigRangeQuantifierIndex),
-                Err(_) => Err(ExprError::InvalidBracketContent),
-            },
+            None if matched.parse::<i16>().is_ok() => Ok(()),
+            None => Err(ExprError::TooBigRangeQuantifierIndex),
         }
     } else {
         Err(ExprError::InvalidBracketContent)

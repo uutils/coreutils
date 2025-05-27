@@ -472,6 +472,26 @@ fn test_regex_range_quantifier() {
         .args(&["ab", ":", "ab\\{\\}"])
         .fails()
         .stderr_only("expr: Invalid content of \\{\\}\n");
+    new_ucmd!()
+        .args(&["_", ":", "a\\{12345678901234567890\\}"])
+        .fails()
+        .stderr_only("expr: Regular expression too big\n");
+    new_ucmd!()
+        .args(&["_", ":", "a\\{12345678901234567890,\\}"])
+        .fails()
+        .stderr_only("expr: Regular expression too big\n");
+    new_ucmd!()
+        .args(&["_", ":", "a\\{,12345678901234567890\\}"])
+        .fails()
+        .stderr_only("expr: Regular expression too big\n");
+    new_ucmd!()
+        .args(&["_", ":", "a\\{1,12345678901234567890\\}"])
+        .fails()
+        .stderr_only("expr: Regular expression too big\n");
+    new_ucmd!()
+        .args(&["_", ":", "a\\{1,1234567890abcdef\\}"])
+        .fails()
+        .stderr_only("expr: Invalid content of \\{\\}\n");
 }
 
 #[test]
