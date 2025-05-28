@@ -19,7 +19,6 @@ num-traits = { workspace = true } # used in src/numerics.rs, which is included b
 
 [dependencies]
 clap = { workspace = true }
-coz = { workspace = true, optional = true }
 num-traits = { workspace = true }
 rand = { workspace = true }
 smallvec = { workspace = true }
