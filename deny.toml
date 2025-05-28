@@ -98,10 +98,6 @@ skip = [
   { name = "rand_chacha", version = "0.3.1" },
   # rand
   { name = "rand_core", version = "0.6.4" },
-  # crossterm, procfs, terminal_size
-  { name = "rustix", version = "0.38.43" },
-  # rustix
-  { name = "linux-raw-sys", version = "0.4.15" },
 ]
 # spell-checker: enable
 
