@@ -18,8 +18,6 @@ use std::os::unix::net::UnixStream;
 
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
-#[cfg(unix)]
-use nix::fcntl::{FcntlArg, fcntl};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -368,23 +366,6 @@ fn cat_handle<R: FdReadable>(
     }
 }
 
-/// Whether this process is appending to stdout.
-#[cfg(unix)]
-fn is_appending() -> bool {
-    let stdout = io::stdout();
-    let Ok(flags) = fcntl(stdout.as_fd(), FcntlArg::F_GETFL) else {
-        return false;
-    };
-    // TODO Replace `1 << 10` with `nix::fcntl::Oflag::O_APPEND`.
-    let o_append = 1 << 10;
-    (flags & o_append) > 0
-}
-
-#[cfg(not(unix))]
-fn is_appending() -> bool {
-    false
-}
-
 fn cat_path(
     path: &str,
     options: &OutputOptions,
@@ -400,7 +381,7 @@ fn cat_path(
                 is_interactive: io::stdin().is_terminal(),
             };
             if let Some(out_info) = out_info {
-                if in_info == *out_info && is_appending() {
+                if in_info == *out_info {
                     return Err(CatError::OutputIsInput);
                 }
             }
