@@ -14,7 +14,6 @@ This file documents why some tests are failing:
 * gnu/tests/du/long-from-unreadable.sh - https://github.com/uutils/coreutils/issues/7217
 * gnu/tests/du/move-dir-while-traversing.sh
 * gnu/tests/expr/expr-multibyte.pl
-* gnu/tests/expr/expr.pl
 * gnu/tests/fmt/goal-option.sh
 * gnu/tests/fmt/non-space.sh
 * gnu/tests/head/head-elide-tail.pl
