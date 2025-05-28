@@ -177,6 +177,15 @@ fn test_up_to_match_offset_repeat_twice() {
 }
 
 #[test]
+fn test_up_to_match_non_ascii_offset() {
+    // we use a different error message than GNU
+    new_ucmd!()
+        .args(&["numbers50.txt", "/9$/𝟚"])
+        .fails()
+        .stderr_contains("invalid pattern");
+}
+
+#[test]
 fn test_up_to_match_negative_offset() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/9$/-3"])

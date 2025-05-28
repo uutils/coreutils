@@ -106,7 +106,7 @@ pub fn get_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
 fn extract_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
     let mut patterns = Vec::with_capacity(args.len());
     let to_match_reg =
-        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[\+-]?\d+)?$").unwrap();
+        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[\+-]?[0-9]+)?$").unwrap();
     let execute_ntimes_reg = Regex::new(r"^\{(?P<TIMES>[0-9]+)|\*\}$").unwrap();
     let mut iter = args.iter().peekable();
 
