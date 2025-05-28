@@ -38,13 +38,9 @@ mod platform {
     use uucore::error::UResult;
 
     /// # Safety
-    /// This function is unsafe because it calls `libc::sync` or `libc::syscall` which are unsafe.
+    /// This function is unsafe because it calls `libc::sync` which is unsafe.
     pub unsafe fn do_sync() -> UResult<()> {
         unsafe {
-            // see https://github.com/rust-lang/libc/pull/2161
-            #[cfg(target_os = "android")]
-            libc::syscall(libc::SYS_sync);
-            #[cfg(not(target_os = "android"))]
             libc::sync();
         }
         Ok(())
