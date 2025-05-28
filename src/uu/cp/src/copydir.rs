@@ -26,8 +26,8 @@ use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    CopyResult, Error, Options, Preserve, aligned_ancestors, context_for, copy_attributes, copy_file,
-    copy_link,
+    CopyResult, Error, Options, Preserve, aligned_ancestors, context_for, copy_attributes,
+    copy_file, copy_link,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -462,18 +462,12 @@ pub(crate) fn copy_directory(
             let src = root.join(p);
             let entry = Entry::new(&context, &src, options.no_target_dir)?;
 
-            let mut attributes = options.attributes.clone();
+            let mut attributes = options.attributes;
             if matches!(options.attributes.mode, Preserve::No { explicit: false }) {
-                attributes.mode = Preserve::Yes {
-                    required: true,
-                };
+                attributes.mode = Preserve::Yes { required: true };
             }
 
-            copy_attributes(
-                &entry.source_absolute,
-                &entry.local_to_target,
-                &attributes,
-            )?;
+            copy_attributes(&entry.source_absolute, &entry.local_to_target, &attributes)?;
         }
     }
 
