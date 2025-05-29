@@ -73,7 +73,7 @@ impl TryFrom<PathBuf> for Teletype {
         let f = |prefix: &str| {
             value
                 .iter()
-                .last()?
+                .next_back()?
                 .to_str()?
                 .strip_prefix(prefix)?
                 .parse::<u64>()
