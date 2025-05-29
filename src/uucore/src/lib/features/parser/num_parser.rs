@@ -996,14 +996,14 @@ mod tests {
         assert_eq!(
             Ok(ExtendedBigDecimal::BigDecimal(
                 // Wolfram Alpha says 9.8162042336235053508313854078782835648991393286913072670026492205522618203568834202759669215027003865... × 10^903089986
-                BigDecimal::from_str("9.816204233623505350831385407878283564899139328691307267002649220552261820356883420275966921514831318e+903089986").unwrap()
+                BigDecimal::from_str("9.816204233623505350831385407878283564899139328691307267002649220552261820356883420275966921502700387e+903089986").unwrap()
             )),
             ExtendedBigDecimal::extended_parse("0x1p3000000000")
         );
         assert_eq!(
             Ok(ExtendedBigDecimal::BigDecimal(
                 // Wolfram Alpha says 1.3492131462369983551036088935544888715959511045742395978049631768570509541390540646442193112226520316... × 10^-9030900
-                BigDecimal::from_str("1.349213146236998355103608893554488871595951104574239597804963176857050954139054064644219311222656999e-9030900").unwrap()
+                BigDecimal::from_str("1.349213146236998355103608893554488871595951104574239597804963176857050954139054064644219311222652032e-9030900").unwrap()
             )),
             // Couldn't get a answer from Wolfram Alpha for smaller negative exponents
             ExtendedBigDecimal::extended_parse("0x1p-30000000")
@@ -1011,21 +1011,21 @@ mod tests {
 
         // ExtendedBigDecimal overflow/underflow
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("0x1p{}", u64::MAX as u128 + 1)),
             Err(ExtendedParserError::Overflow(ExtendedBigDecimal::Infinity))
         ));
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("-0x100P{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("-0x100P{}", u64::MAX as u128 + 1)),
             Err(ExtendedParserError::Overflow(
                 ExtendedBigDecimal::MinusInfinity
             ))
         ));
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("0x1p-{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("0x1p-{}", u64::MAX as u128 + 1)),
             Err(ExtendedParserError::Underflow(ebd)) if ebd == ExtendedBigDecimal::zero()
         ));
         assert!(matches!(
-            ExtendedBigDecimal::extended_parse(&format!("-0x0.100p-{}", u32::MAX as u64 + 1)),
+            ExtendedBigDecimal::extended_parse(&format!("-0x0.100p-{}", u64::MAX as u128 + 1)),
             Err(ExtendedParserError::Underflow(
                 ExtendedBigDecimal::MinusZero
             ))
