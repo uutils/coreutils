@@ -140,15 +140,18 @@ fn tail_file(
             return Ok(());
         }
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else if input.is_tailable() {
+    } else {
         let metadata = path.metadata().ok();
         match File::open(path) {
             Ok(mut file) => {
                 header_printer.print_input(input);
                 let mut reader;
+                let is_file_with_no_blocks = metadata
+                    .as_ref()
+                    .map_or(false, |m| m.file_type().is_file() && m.get_block_size() == 0);
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
-                    && metadata.as_ref().unwrap().get_block_size() > 0
+                    && !is_file_with_no_blocks
                 {
                     bounded_tail(&mut file, settings);
                     reader = BufReader::new(file);
@@ -156,12 +159,16 @@ fn tail_file(
                     reader = BufReader::new(file);
                     unbounded_tail(&mut reader, settings)?;
                 }
-                observer.add_path(
-                    path,
-                    input.display_name.as_str(),
-                    Some(Box::new(reader)),
-                    true,
-                )?;
+                if input.is_tailable() {
+                    observer.add_path(
+                        path,
+                        input.display_name.as_str(),
+                        Some(Box::new(reader)),
+                        true,
+                    )?;
+                } else {
+                    observer.add_bad_path(path, input.display_name.as_str(), false)?;
+                }
             }
             Err(e) if e.kind() == ErrorKind::PermissionDenied => {
                 observer.add_bad_path(path, input.display_name.as_str(), false)?;
@@ -176,8 +183,6 @@ fn tail_file(
                 }));
             }
         }
-    } else {
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
     }
 
     Ok(())
