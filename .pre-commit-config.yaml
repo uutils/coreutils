@@ -18,6 +18,6 @@ repos:
     -   id: cspell
         name: Code spell checker (cspell)
         description: Run cspell to check for spelling errors.
-        entry: cspell --
+        entry: cspell --no-must-find-files --
         pass_filenames: true
         language: system
