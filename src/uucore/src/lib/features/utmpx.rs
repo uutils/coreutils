@@ -40,11 +40,19 @@ use std::ptr;
 use std::sync::{Mutex, MutexGuard};
 
 pub use self::ut::*;
+
+// See the FAQ at https://wiki.musl-libc.org/faq#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?
+// Musl implements only stubs for the utmp functions, and the libc crate issues a deprecation warning about this.
+// However, calling these stubs is the correct approach to maintain consistent behavior with GNU coreutils.
+#[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::endutxent;
+#[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::getutxent;
+#[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::setutxent;
 use libc::utmpx;
 #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "netbsd"))]
+#[cfg_attr(target_env = "musl", allow(deprecated))]
 pub use libc::utmpxname;
 
 /// # Safety
@@ -278,6 +286,7 @@ impl Utmpx {
             // This can technically fail, and it would be nice to detect that,
             // but it doesn't return anything so we'd have to do nasty things
             // with errno.
+            #[cfg_attr(target_env = "musl", allow(deprecated))]
             setutxent();
         }
         iter
@@ -302,7 +311,9 @@ impl Utmpx {
             // is specified, no warning or anything.
             // So this function is pretty crazy and we don't try to detect errors.
             // Not much we can do besides pray.
+            #[cfg_attr(target_env = "musl", allow(deprecated))]
             utmpxname(path.as_ptr());
+            #[cfg_attr(target_env = "musl", allow(deprecated))]
             setutxent();
         }
         iter
@@ -342,6 +353,7 @@ impl Iterator for UtmpxIter {
     type Item = Utmpx;
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
+            #[cfg_attr(target_env = "musl", allow(deprecated))]
             let res = getutxent();
             if res.is_null() {
                 None
@@ -361,6 +373,7 @@ impl Iterator for UtmpxIter {
 impl Drop for UtmpxIter {
     fn drop(&mut self) {
         unsafe {
+            #[cfg_attr(target_env = "musl", allow(deprecated))]
             endutxent();
         }
     }
