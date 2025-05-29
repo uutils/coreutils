@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid rgid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
 
 // README:
 // This was originally based on BSD's `id`
@@ -465,8 +465,8 @@ fn pretty(possible_pw: Option<Passwd>) {
             println!("uid\t{rid}");
         }
 
-        let eid = getegid();
-        if eid == rid {
+        let eid = geteuid();
+        if eid != rid {
             if let Ok(p) = Passwd::locate(eid) {
                 println!("euid\t{}", p.name);
             } else {
@@ -474,12 +474,13 @@ fn pretty(possible_pw: Option<Passwd>) {
             }
         }
 
-        let rid = getgid();
-        if rid != eid {
-            if let Ok(g) = Group::locate(rid) {
-                println!("euid\t{}", g.name);
+        let rgid = getgid();
+        let egid = getegid();
+        if egid != rgid {
+            if let Ok(g) = Group::locate(rgid) {
+                println!("rgid\t{}", g.name);
             } else {
-                println!("euid\t{rid}");
+                println!("rgid\t{rgid}");
             }
         }
 
