@@ -78,6 +78,9 @@ use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
 use colors::{StyleManager, color_name};
 
+use rayon::iter::Either;
+use rayon::prelude::*;
+
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
@@ -2005,6 +2008,44 @@ impl PathData {
         }
     }
 
+    fn get_metadata_no_flush(&self) -> Option<&Metadata> {
+        self.md
+            .get_or_init(|| {
+                // check if we can use DirEntry metadata
+                // it will avoid a call to stat()
+                if !self.must_dereference {
+                    if let Some(dir_entry) = &self.de {
+                        return dir_entry.metadata().ok();
+                    }
+                }
+
+                // if not, check if we can use Path metadata
+                match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
+                    Err(err) => {
+                        // FIXME: A bit tricky to propagate the result here
+                        let errno = err.raw_os_error().unwrap_or(1i32);
+                        // a bad fd will throw an error when dereferenced,
+                        // but GNU will not throw an error until a bad fd "dir"
+                        // is entered, here we match that GNU behavior, by handing
+                        // back the non-dereferenced metadata upon an EBADF
+                        if self.must_dereference && errno == 9i32 {
+                            if let Some(dir_entry) = &self.de {
+                                return dir_entry.metadata().ok();
+                            }
+                        }
+                        show!(LsError::IOErrorContext(
+                            self.p_buf.clone(),
+                            err,
+                            self.command_line
+                        ));
+                        None
+                    }
+                    Ok(md) => Some(md),
+                }
+            })
+            .as_ref()
+    }
+
     fn get_metadata(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
@@ -2349,22 +2390,38 @@ fn enter_directory(
         vec![]
     };
 
-    // Convert those entries to the PathData struct
-    for raw_entry in read_dir {
-        let dir_entry = match raw_entry {
-            Ok(path) => path,
-            Err(err) => {
-                state.out.flush()?;
-                show!(LsError::IOError(err));
-                continue;
-            }
-        };
+    // read_dir is still an iterator. Collect it first.
+    let raw_entries: Vec<_> = read_dir.collect();
 
-        if should_display(&dir_entry, config) {
-            let entry_path_data =
-                PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
-            entries.push(entry_path_data);
-        };
+    let (new_entries, errors): (Vec<_>, Vec<_>) =
+        raw_entries.into_par_iter().partition_map(|raw_entry| {
+            match raw_entry {
+                Ok(dir_entry) => {
+                    if should_display(&dir_entry, config) {
+                        let entry_path_data = PathData::new(
+                            dir_entry.path(),
+                            Some(Ok(dir_entry)),
+                            None,
+                            config,
+                            false,
+                        );
+                        entry_path_data.get_metadata_no_flush();
+                        Either::Left(entry_path_data)
+                    } else {
+                        // No error, just filtered out
+                        Either::Right(None)
+                    }
+                }
+                // Real IO error
+                Err(err) => Either::Right(Some(err)),
+            }
+        });
+
+    entries.extend(new_entries);
+
+    for error in errors.into_iter().flatten() {
+        state.out.flush()?;
+        show!(LsError::IOError(error));
     }
 
     sort_entries(&mut entries, config, &mut state.out);
