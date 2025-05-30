@@ -31,7 +31,17 @@ mod options {
     pub const COMMAND: &str = "command";
 }
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "dragonfly"
+))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
+
+#[cfg(target_vendor = "apple")]
+const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dylib"));
 
 enum BufferType {
     Default,
