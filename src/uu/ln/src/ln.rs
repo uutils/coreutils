@@ -48,7 +48,7 @@ pub enum OverwriteMode {
 #[derive(Error, Debug)]
 enum LnError {
     #[error("target {} is not a directory", _0.quote())]
-    TargetIsDirectory(PathBuf),
+    TargetIsNotADirectory(PathBuf),
 
     #[error("")]
     SomeLinksFailed,
@@ -283,7 +283,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
 #[allow(clippy::cognitive_complexity)]
 fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
     if !target_dir.is_dir() {
-        return Err(LnError::TargetIsDirectory(target_dir.to_owned()).into());
+        return Err(LnError::TargetIsNotADirectory(target_dir.to_owned()).into());
     }
     // remember the linked destinations for further usage
     let mut linked_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
