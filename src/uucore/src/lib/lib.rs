@@ -41,8 +41,6 @@ pub use crate::features::buf_copy;
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
 pub use crate::features::colors;
-#[cfg(feature = "custom-tz-fmt")]
-pub use crate::features::custom_tz_fmt;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
 #[cfg(feature = "extendedbigdecimal")]
