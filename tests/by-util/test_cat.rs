@@ -9,6 +9,7 @@ use rlimit::Resource;
 #[cfg(unix)]
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::fs::read_to_string;
 use std::process::Stdio;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -607,6 +608,34 @@ fn test_write_to_self_empty() {
         .unwrap();
 
     s.ucmd().set_stdout(file).arg(&file_path).succeeds();
+}
+
+/// Test derived from the following GNU test in `tests/cat/cat-self.sh`:
+///
+/// `cat - fy <fxy1 1<>fxy1`
+#[test]
+fn test_write_to_read_write_self() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let other_file_contents = "new";
+    at.write("rw_file", "old");
+    at.write("other_file", other_file_contents);
+
+    // Open `rw_file` as both stdin and stdout (read/write)
+    let rw_file_path = at.plus_as_string("rw_file");
+    let rw_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&rw_file_path)
+        .unwrap();
+    ucmd.args(&["-", "other_file"])
+        .set_stdin(rw_file.try_clone().unwrap())
+        .set_stdout(rw_file)
+        .fails_with_code(1)
+        .stderr_only("cat: -: input file is output file\n");
+
+    // The contents of `other_file` should be written to `rw_file`
+    let rw_file_contents = read_to_string(rw_file_path).unwrap();
+    assert_eq!(rw_file_contents, other_file_contents);
 }
 
 #[test]
