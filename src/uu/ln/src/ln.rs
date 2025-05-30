@@ -301,6 +301,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                     show_error!("Could not update {}: {e}", target_dir.quote());
                 };
             }
+            #[cfg(windows)]
             if target_dir.is_dir() {
                 // Not sure why but on Windows, the symlink can be
                 // considered as a dir
