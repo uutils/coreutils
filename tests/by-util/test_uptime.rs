@@ -8,21 +8,10 @@
 
 #[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{new_ucmd, util_name};
 
-#[cfg(not(any(target_os = "macos", target_os = "openbsd", target_env = "musl")))]
-use bincode::{config, serde::encode_to_vec};
 use regex::Regex;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd", target_env = "musl")))]
-use serde::Serialize;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd", target_env = "musl")))]
-use serde_big_array::BigArray;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd", target_env = "musl")))]
-use std::fs::File;
-#[cfg(not(any(target_os = "macos", target_os = "openbsd", target_env = "musl")))]
-use std::{io::Write, path::PathBuf};
 
 #[test]
 fn test_invalid_arg() {
@@ -102,7 +91,7 @@ fn test_uptime_with_non_existent_file() {
 // TODO create a similar test for macos
 // This will pass
 #[test]
-#[cfg(not(any(target_os = "openbsd", target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "openbsd", target_os = "macos")))]
 #[cfg(not(target_env = "musl"))]
 #[cfg_attr(
     all(target_arch = "aarch64", target_os = "linux"),
@@ -110,6 +99,12 @@ fn test_uptime_with_non_existent_file() {
 )]
 #[allow(clippy::too_many_lines, clippy::items_after_statements)]
 fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
+    use bincode::{config, serde::encode_to_vec};
+    use serde::Serialize;
+    use serde_big_array::BigArray;
+    use std::fs::File;
+    use std::{io::Write, path::PathBuf};
+
     // This test will pass for freebsd but we currently don't support changing the utmpx file for
     // freebsd.
     let ts = TestScenario::new(util_name!());
