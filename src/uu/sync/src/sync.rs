@@ -78,7 +78,7 @@ mod platform {
     use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
     fn get_last_error() -> u32 {
-        // SAFETY: GetLastError has no safety preconditions
+        // SAFETY: `GetLastError` has no safety preconditions
         unsafe { GetLastError() as u32 }
     }
 
@@ -122,8 +122,6 @@ mod platform {
         Ok((String::from_wide_null(&name), handle))
     }
 
-    /// # Safety
-    /// This function is unsafe because it calls an unsafe function.
     fn find_all_volumes() -> UResult<Vec<String>> {
         let (first_volume, next_volume_handle) = find_first_volume()?;
         let mut volumes = vec![first_volume];
@@ -136,7 +134,7 @@ mod platform {
             {
                 return match get_last_error() {
                     ERROR_NO_MORE_FILES => {
-                        // SAFETY: next_volume_handle was returned by `find_first_volume`
+                        // SAFETY: `next_volume_handle` was returned by `find_first_volume`
                         unsafe { FindVolumeClose(next_volume_handle) };
                         Ok(volumes)
                     }

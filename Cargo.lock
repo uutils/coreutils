@@ -602,16 +602,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "coz"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cef55b3fe2f5477d59e12bc792e8b3c95a25bd099eadcfae006ecea136de76e2"
-dependencies = [
- "libc",
- "once_cell",
-]
-
-[[package]]
 name = "cpp"
 version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2931,7 +2921,6 @@ name = "uu_factor"
 version = "0.1.0"
 dependencies = [
  "clap",
- "coz",
  "num-bigint",
  "num-prime",
  "num-traits",
