@@ -3287,6 +3287,7 @@ dependencies = [
 name = "uu_sort"
 version = "0.1.0"
 dependencies = [
+ "bigdecimal",
  "binary-heap-plus",
  "clap",
  "compare",

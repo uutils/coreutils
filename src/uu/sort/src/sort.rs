@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal
 
 mod check;
 mod chunks;
@@ -17,6 +17,7 @@ mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
 
+use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
@@ -44,7 +45,9 @@ use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::line_ending::LineEnding;
+use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::version_cmp::version_cmp;
@@ -450,7 +453,7 @@ impl Default for KeySettings {
     }
 }
 enum Selection<'a> {
-    AsF64(GeneralF64ParseResult),
+    AsBigDecimal(GeneralBigDecimalParseResult),
     WithNumInfo(&'a str, NumInfo),
     Str(&'a str),
 }
@@ -492,7 +495,7 @@ impl<'a> Line<'a> {
             .map(|selector| (selector, selector.get_selection(line, token_buffer)))
         {
             match selection {
-                Selection::AsF64(parsed_float) => line_data.parsed_floats.push(parsed_float),
+                Selection::AsBigDecimal(parsed_float) => line_data.parsed_floats.push(parsed_float),
                 Selection::WithNumInfo(str, num_info) => {
                     line_data.num_infos.push(num_info);
                     line_data.selections.push(str);
@@ -904,8 +907,8 @@ impl FieldSelector {
             range = &range[num_range];
             Selection::WithNumInfo(range, info)
         } else if self.settings.mode == SortMode::GeneralNumeric {
-            // Parse this number as f64, as this is the requirement for general numeric sorting.
-            Selection::AsF64(general_f64_parse(&range[get_leading_gen(range)]))
+            // Parse this number as BigDecimal, as this is the requirement for general numeric sorting.
+            Selection::AsBigDecimal(general_bd_parse(&range[get_leading_gen(range)]))
         } else {
             // This is not a numeric sort, so we don't need a NumCache.
             Selection::Str(range)
@@ -1791,35 +1794,45 @@ fn get_leading_gen(input: &str) -> Range<usize> {
     leading_whitespace_len..input.len()
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
-pub enum GeneralF64ParseResult {
+#[derive(Clone, PartialEq, PartialOrd, Debug)]
+pub enum GeneralBigDecimalParseResult {
     Invalid,
-    NaN,
-    NegInfinity,
-    Number(f64),
+    Nan,
+    MinusInfinity,
+    Number(BigDecimal),
     Infinity,
 }
 
-/// Parse the beginning string into a GeneralF64ParseResult.
-/// Using a GeneralF64ParseResult instead of f64 is necessary to correctly order floats.
+/// Parse the beginning string into a GeneralBigDecimalParseResult.
+/// Using a GeneralBigDecimalParseResult instead of ExtendedBigDecimal is necessary to correctly order floats.
 #[inline(always)]
-fn general_f64_parse(a: &str) -> GeneralF64ParseResult {
-    // The actual behavior here relies on Rust's implementation of parsing floating points.
-    // For example "nan", "inf" (ignoring the case) and "infinity" are only parsed to floats starting from 1.53.
-    // TODO: Once our minimum supported Rust version is 1.53 or above, we should add tests for those cases.
-    match a.parse::<f64>() {
-        Ok(a) if a.is_nan() => GeneralF64ParseResult::NaN,
-        Ok(a) if a == f64::NEG_INFINITY => GeneralF64ParseResult::NegInfinity,
-        Ok(a) if a == f64::INFINITY => GeneralF64ParseResult::Infinity,
-        Ok(a) => GeneralF64ParseResult::Number(a),
-        Err(_) => GeneralF64ParseResult::Invalid,
+fn general_bd_parse(a: &str) -> GeneralBigDecimalParseResult {
+    // Parse digits, and fold in recoverable errors
+    let ebd = match ExtendedBigDecimal::extended_parse(a) {
+        Err(ExtendedParserError::NotNumeric) => return GeneralBigDecimalParseResult::Invalid,
+        Err(ExtendedParserError::PartialMatch(ebd, _))
+        | Err(ExtendedParserError::Overflow(ebd))
+        | Err(ExtendedParserError::Underflow(ebd))
+        | Ok(ebd) => ebd,
+    };
+
+    match ebd {
+        ExtendedBigDecimal::BigDecimal(bd) => GeneralBigDecimalParseResult::Number(bd),
+        ExtendedBigDecimal::Infinity => GeneralBigDecimalParseResult::Infinity,
+        ExtendedBigDecimal::MinusInfinity => GeneralBigDecimalParseResult::MinusInfinity,
+        // Minus zero and zero are equal
+        ExtendedBigDecimal::MinusZero => GeneralBigDecimalParseResult::Number(0.into()),
+        ExtendedBigDecimal::Nan | ExtendedBigDecimal::MinusNan => GeneralBigDecimalParseResult::Nan,
     }
 }
 
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
 /// Stops coercing at the first non-numeric char.
 /// We explicitly need to convert to f64 in this case.
-fn general_numeric_compare(a: &GeneralF64ParseResult, b: &GeneralF64ParseResult) -> Ordering {
+fn general_numeric_compare(
+    a: &GeneralBigDecimalParseResult,
+    b: &GeneralBigDecimalParseResult,
+) -> Ordering {
     a.partial_cmp(b).unwrap()
 }
 

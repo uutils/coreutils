@@ -1,3 +1,5 @@
+# spell-checker:ignore bigdecimal
+
 [package]
 name = "uu_sort"
 description = "sort ~ (uutils) sort input lines"
@@ -18,6 +20,7 @@ workspace = true
 path = "src/sort.rs"
 
 [dependencies]
+bigdecimal = { workspace = true }
 binary-heap-plus = { workspace = true }
 clap = { workspace = true }
 compare = { workspace = true }
