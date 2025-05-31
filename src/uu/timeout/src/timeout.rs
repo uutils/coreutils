@@ -17,15 +17,14 @@ use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
 use uucore::process::ChildExt;
 
+use uucore::locale::get_message;
 #[cfg(unix)]
 use uucore::signals::enable_pipe_errors;
 
 use uucore::{
-    format_usage, help_about, help_usage, show_error,
+    format_usage, show_error,
     signals::{signal_by_name_or_value, signal_name_by_value},
 };
-
-use uucore::locale::{self, get_message};
 
 pub mod options {
     pub static FOREGROUND: &str = "foreground";

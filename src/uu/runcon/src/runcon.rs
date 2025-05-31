@@ -10,7 +10,7 @@ use uucore::error::{UClapError, UError, UResult};
 
 use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::format_usage;
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
@@ -23,8 +23,7 @@ mod errors;
 use errors::error_exit_status;
 use errors::{Error, Result, RunconError};
 
-use uucore::locale::{self, get_message};
-const DESCRIPTION: &str = help_section!("after help", "runcon.md");
+use uucore::locale::get_message;
 
 pub mod options {
     pub const COMPUTE: &str = "compute";
@@ -90,7 +89,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(get_message("runcon-about"))
-        .after_help(DESCRIPTION)
+        .after_help(get_message("runcon-after-help"))
         .override_usage(format_usage(&get_message("runcon-usage")))
         .infer_long_args(true)
         .arg(

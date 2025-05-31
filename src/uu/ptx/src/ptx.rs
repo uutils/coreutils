@@ -17,9 +17,9 @@ use regex::Regex;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 #[derive(Debug)]
 enum OutFormat {

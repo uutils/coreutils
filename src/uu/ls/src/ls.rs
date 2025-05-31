@@ -37,8 +37,11 @@ use jiff::{Timestamp, Zoned};
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
+#[cfg(unix)]
+use uucore::entries;
 use uucore::error::USimpleError;
 use uucore::format::human::{SizeFormat, human_readable};
+use uucore::fs::FileInformation;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
@@ -57,6 +60,7 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 ))]
 use uucore::libc::{dev_t, major, minor};
 use uucore::line_ending::LineEnding;
+use uucore::locale::get_message;
 use uucore::quoting_style::{self, QuotingStyle, escape_name};
 use uucore::{
     display::Quotable,
@@ -68,9 +72,7 @@ use uucore::{
     parser::shortcut_value_parser::ShortcutValueParser,
     version_cmp::version_cmp,
 };
-use uucore::{
-    help_about, help_section, help_usage, parser::parse_glob, show, show_error, show_warning,
-};
+use uucore::{parser::parse_glob, show, show_error, show_warning};
 
 mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
@@ -81,8 +83,6 @@ use colors::{StyleManager, color_name};
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
-
-use uucore::locale::{self, get_message};
 
 pub mod options {
     pub mod format {
@@ -3014,10 +3014,6 @@ fn get_inode(metadata: &Metadata) -> String {
 
 // Currently getpwuid is `linux` target only. If it's broken state.out into
 // a posix-compliant attribute this can be updated...
-#[cfg(unix)]
-use uucore::entries;
-use uucore::fs::FileInformation;
-
 #[cfg(unix)]
 fn display_uname<'a>(metadata: &Metadata, config: &Config, state: &'a mut ListState) -> &'a String {
     let uid = metadata.uid();

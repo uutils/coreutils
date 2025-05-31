@@ -16,7 +16,7 @@ use uucore::uptime::*;
 
 use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
@@ -31,7 +31,7 @@ const ABOUT: &str = concat!(
 );
 
 #[cfg(not(target_env = "musl"))]
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 pub mod options {
     pub static SINCE: &str = "since";

@@ -8,12 +8,12 @@ use clap::{Arg, Command};
 use std::env;
 use std::io;
 use std::path::PathBuf;
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 const OPT_LOGICAL: &str = "logical";
 const OPT_PHYSICAL: &str = "physical";
 

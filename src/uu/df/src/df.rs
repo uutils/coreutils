@@ -15,7 +15,7 @@ use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::parse_size::ParseSizeError;
-use uucore::{format_usage, help_about, help_section, help_usage, show};
+use uucore::{format_usage, show};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
@@ -29,7 +29,7 @@ use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
 use crate::table::Table;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";

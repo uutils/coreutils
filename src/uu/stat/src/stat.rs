@@ -13,9 +13,7 @@ use uucore::fsext::{
     BirthTime, FsMeta, StatFs, pretty_filetype, pretty_fstype, read_fs_list, statfs,
 };
 use uucore::libc::mode_t;
-use uucore::{
-    entries, format_usage, help_about, help_section, help_usage, show_error, show_warning,
-};
+use uucore::{entries, format_usage, show_error, show_warning};
 
 use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -28,8 +26,7 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::{env, fs};
 
-use uucore::locale::{self, get_message};
-const LONG_USAGE: &str = help_section!("long usage", "stat.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const DEREFERENCE: &str = "dereference";
@@ -1134,7 +1131,9 @@ impl Stater {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
+    let matches = uu_app()
+        .after_help(get_message("stat-after-help"))
+        .try_get_matches_from(args)?;
 
     let stater = Stater::new(&matches)?;
     let exit_status = stater.exec();

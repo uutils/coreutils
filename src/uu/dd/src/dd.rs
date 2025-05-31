@@ -60,9 +60,9 @@ use uucore::error::{FromIo, UResult};
 use uucore::error::{USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]
 use uucore::show_if_err;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 const BUF_INIT_BYTE: u8 = 0xDD;
 
 /// Final settings after parsing

@@ -26,11 +26,11 @@ use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
 use uucore::error::{FromIo, UResult};
+use uucore::format_usage;
+use uucore::locale::get_message;
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
-use uucore::{format_usage, help_about, help_usage};
 
 const NAME: &str = "hashsum";
-use uucore::locale::{self, get_message};
 
 struct Options {
     algoname: &'static str,

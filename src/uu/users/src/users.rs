@@ -11,7 +11,7 @@ use std::path::Path;
 use clap::builder::ValueParser;
 use clap::{Arg, Command};
 use uucore::error::UResult;
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 #[cfg(target_os = "openbsd")]
 use utmp_classic::{UtmpEntry, parse_from_path};
@@ -26,7 +26,7 @@ const ABOUT: &str = concat!(
 );
 
 #[cfg(not(target_env = "musl"))]
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 #[cfg(target_os = "openbsd")]
 const OPENBSD_UTMP_FILE: &str = "/var/run/utmp";

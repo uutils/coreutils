@@ -10,9 +10,9 @@ use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
 use uucore::error::{UResult, USimpleError};
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::format_usage;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub const STRING: &str = "STRING";

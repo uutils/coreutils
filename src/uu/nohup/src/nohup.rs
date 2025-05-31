@@ -17,9 +17,9 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UError, UResult, set_exit_code};
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
 static EXIT_CANCELED: i32 = 125;

@@ -12,9 +12,9 @@ use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 // When the -l option is selected, the program displays the type of signal related to a certain
 // value or string. In case of a value, the program should control the lower 8 bits, but there is

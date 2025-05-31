@@ -18,9 +18,9 @@ use std::io::{BufWriter, Write, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
-use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show};
+use uucore::{format_usage, os_str_as_bytes, show};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub const COMPLEMENT: &str = "complement";

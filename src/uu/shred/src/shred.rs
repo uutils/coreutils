@@ -18,9 +18,9 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
+use uucore::{format_usage, show_error, show_if_err};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 pub mod options {
     pub const FORCE: &str = "force";

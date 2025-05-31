@@ -17,10 +17,9 @@ use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
 use uucore::error::{UClapError, UResult, UUsageError, set_exit_code};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-use uucore::locale::{self, get_message};
-static USAGE: &str = help_usage!("chroot.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const NEWROOT: &str = "newroot";

@@ -16,7 +16,8 @@ use clap::{Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_section, help_usage, parser::parse_glob};
+use uucore::locale::get_message;
+use uucore::{format_usage, parser::parse_glob};
 
 mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -25,8 +26,6 @@ mod options {
     pub const PRINT_LS_COLORS: &str = "print-ls-colors";
     pub const FILE: &str = "FILE";
 }
-
-use uucore::locale::{self, get_message};
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum OutputFmt {

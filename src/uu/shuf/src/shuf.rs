@@ -19,7 +19,8 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 mod rand_read_adapter;
 
@@ -28,9 +29,6 @@ enum Mode {
     Echo(Vec<OsString>),
     InputRange(RangeInclusive<usize>),
 }
-
-static USAGE: &str = help_usage!("shuf.md");
-use uucore::locale::{self, get_message};
 
 struct Options {
     head_count: usize,

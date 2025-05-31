@@ -23,9 +23,10 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
 use crate::error::TouchError;
+use uucore::locale::get_message;
 
 /// Options contains all the possible behaviors and flags for touch.
 ///
@@ -82,8 +83,6 @@ pub enum Source {
     /// Use current time
     Now,
 }
-
-use uucore::locale::{self, get_message};
 
 pub mod options {
     // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.

@@ -17,9 +17,9 @@ use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";

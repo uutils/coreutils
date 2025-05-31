@@ -18,13 +18,12 @@ use uucore::os_str_as_bytes;
 
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
+use uucore::locale::get_message;
 use uucore::ranges::Range;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
+use uucore::{format_usage, show_error, show_if_err};
 
 mod matcher;
 mod searcher;
-
-use uucore::locale::{self, get_message};
 
 struct Options<'a> {
     out_delimiter: Option<&'a [u8]>,

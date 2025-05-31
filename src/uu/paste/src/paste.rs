@@ -11,10 +11,10 @@ use std::iter::Cycle;
 use std::rc::Rc;
 use std::slice::Iter;
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub const DELIMITER: &str = "delimiters";

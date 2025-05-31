@@ -16,9 +16,9 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
-use uucore::{format_usage, help_about, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 pub mod options {
     pub static TABS: &str = "tabs";

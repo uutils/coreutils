@@ -24,8 +24,9 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::parse_size_u64;
 
+use uucore::format_usage;
+use uucore::locale::get_message;
 use uucore::uio_error;
-use uucore::{format_usage, help_about, help_section, help_usage};
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -45,8 +46,6 @@ static OPT_IO_BLKSIZE: &str = "-io-blksize";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
-
-use uucore::locale::{self, get_message};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

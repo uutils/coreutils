@@ -7,12 +7,11 @@
 
 use clap::{Arg, ArgAction, Command};
 use platform_info::*;
+use uucore::locale::get_message;
 use uucore::{
     error::{UResult, USimpleError},
-    format_usage, help_about, help_usage,
+    format_usage,
 };
-
-use uucore::locale::{self, get_message};
 
 pub mod options {
     pub static ALL: &str = "all";

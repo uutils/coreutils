@@ -9,7 +9,8 @@ use clap::{Arg, ArgAction, Command};
 use std::{env, thread};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
@@ -22,8 +23,6 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
-
-use uucore::locale::{self, get_message};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

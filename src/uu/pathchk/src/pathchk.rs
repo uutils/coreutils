@@ -10,7 +10,8 @@ use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError, set_exit_code};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 // operating mode
 enum Mode {
@@ -19,8 +20,6 @@ enum Mode {
     Extra,   // check for leading dashes and empty names
     Both,    // a combination of `Basic` and `Extra`
 }
-
-use uucore::locale::{self, get_message};
 
 mod options {
     pub const POSIX: &str = "posix";

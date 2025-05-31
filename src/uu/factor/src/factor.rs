@@ -14,9 +14,9 @@ use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::{format_usage, help_about, help_usage, show_error, show_warning};
+use uucore::{format_usage, show_error, show_warning};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub static EXPONENTS: &str = "exponents";

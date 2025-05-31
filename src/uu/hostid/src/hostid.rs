@@ -7,9 +7,9 @@
 
 use clap::Command;
 use libc::{c_long, gethostid};
-use uucore::{error::UResult, format_usage, help_about, help_usage};
+use uucore::{error::UResult, format_usage};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

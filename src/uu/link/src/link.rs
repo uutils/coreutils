@@ -9,9 +9,9 @@ use std::fs::hard_link;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 pub mod options {
     pub static FILES: &str = "FILES";

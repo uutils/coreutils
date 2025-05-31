@@ -15,9 +15,9 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 const DEFAULT_TABSTOP: usize = 8;
 

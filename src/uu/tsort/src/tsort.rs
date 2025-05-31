@@ -9,9 +9,9 @@ use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub const FILE: &str = "file";

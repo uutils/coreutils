@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use uucore::display::{Quotable, println_verbatim};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 use std::env;
 use std::ffi::OsStr;
@@ -25,7 +25,7 @@ use rand::Rng;
 use tempfile::Builder;
 use thiserror::Error;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 

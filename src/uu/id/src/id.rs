@@ -42,8 +42,9 @@ use uucore::error::{USimpleError, set_exit_code};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::line_ending::LineEnding;
+use uucore::locale::get_message;
 use uucore::process::{getegid, geteuid, getgid, getuid};
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
 macro_rules! cstr2cow {
     ($v:expr) => {
@@ -58,8 +59,6 @@ macro_rules! cstr2cow {
         }
     };
 }
-
-use uucore::locale::{self, get_message};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process (not enabled)";

@@ -10,10 +10,9 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-static USAGE: &str = help_usage!("mkfifo.md");
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub static MODE: &str = "mode";

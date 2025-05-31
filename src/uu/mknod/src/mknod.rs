@@ -12,9 +12,9 @@ use std::ffi::CString;
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::format_usage;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 

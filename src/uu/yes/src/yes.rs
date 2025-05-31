@@ -10,11 +10,11 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 #[cfg(unix)]
 use uucore::signals::enable_pipe_errors;
-use uucore::{format_usage, help_about, help_usage};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough

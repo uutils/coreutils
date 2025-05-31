@@ -40,7 +40,7 @@ use uucore::update_control;
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
-use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
+use uucore::{format_usage, prompt_yes, show};
 
 use fs_extra::dir::{
     CopyOptions as DirCopyOptions, TransitProcess, TransitProcessResult, get_size as dir_get_size,
@@ -48,6 +48,7 @@ use fs_extra::dir::{
 };
 
 use crate::error::MvError;
+use uucore::locale::get_message;
 
 /// Options contains all the possible behaviors and flags for mv.
 ///
@@ -122,8 +123,6 @@ pub enum OverwriteMode {
     #[default]
     Force,
 }
-
-use uucore::locale::{self, get_message};
 
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";

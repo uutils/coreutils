@@ -15,16 +15,15 @@ use std::str::FromStr;
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::locale::get_message;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
+use uucore::{format_usage, show, show_error};
 
 pub mod errors;
 pub mod format;
 pub mod options;
 mod units;
-
-use uucore::locale::{self, get_message};
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {

@@ -11,17 +11,15 @@ use std::{
     path::{Path, PathBuf},
 };
 use uucore::fs::make_path_relative_to;
+use uucore::locale::get_message;
 use uucore::{
     display::{Quotable, print_verbatim},
     error::{FromIo, UClapError, UResult},
     format_usage,
     fs::{MissingHandling, ResolveMode, canonicalize},
-    help_about, help_usage,
     line_ending::LineEnding,
     show_if_err,
 };
-
-use uucore::locale::{self, get_message};
 
 static OPT_QUIET: &str = "quiet";
 static OPT_STRIP: &str = "strip";

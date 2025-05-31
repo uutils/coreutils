@@ -8,7 +8,7 @@
 
 use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{display::Quotable, format_usage, help_about, help_usage, show_error, show_warning};
+use uucore::{display::Quotable, format_usage, show_error, show_warning};
 
 use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
@@ -24,7 +24,7 @@ mod fts;
 
 use errors::*;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 pub mod options {
     pub static HELP: &str = "help";

@@ -10,9 +10,9 @@
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
 use uucore::error::{UResult, set_exit_code};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub const SILENT: &str = "silent";

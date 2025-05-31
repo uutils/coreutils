@@ -7,11 +7,11 @@ use std::io::stdout;
 use std::ops::ControlFlow;
 use uucore::error::{UResult, UUsageError};
 use uucore::format::{FormatArgument, FormatArguments, FormatItem, parse_spec_and_escape};
-use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show_warning};
+use uucore::locale::get_message;
+use uucore::{format_usage, os_str_as_bytes, show_warning};
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
-use uucore::locale::{self, get_message};
 
 mod options {
     pub const FORMAT: &str = "FORMAT";

@@ -16,7 +16,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::format_usage;
 
 mod csplit_error;
 mod patterns;
@@ -25,7 +25,7 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub const SUFFIX_FORMAT: &str = "suffix-format";

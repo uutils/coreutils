@@ -13,9 +13,9 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";

@@ -9,11 +9,9 @@ use clap::Command;
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::locale::get_message;
 
 mod platform;
-
-use uucore::locale::{self, get_message};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

@@ -8,15 +8,14 @@ use std::time::Duration;
 
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
-    format_usage, help_about, help_section, help_usage,
+    format_usage,
     parser::parse_time,
     show_error,
 };
 
 use clap::{Arg, ArgAction, Command};
 
-use uucore::locale::{self, get_message};
-static AFTER_HELP: &str = help_section!("after help", "sleep.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const NUMBER: &str = "NUMBER";

@@ -10,15 +10,15 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
+use uucore::locale::get_message;
 
 mod linebreak;
 mod parasplit;
 
-use uucore::locale::{self, get_message};
 const MAX_WIDTH: usize = 2500;
 const DEFAULT_GOAL: usize = 70;
 const DEFAULT_WIDTH: usize = 75;

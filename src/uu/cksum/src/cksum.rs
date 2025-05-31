@@ -17,16 +17,15 @@ use uucore::checksum::{
     ChecksumVerbose, SUPPORTED_ALGORITHMS, calculate_blake2b_length, detect_algo, digest_reader,
     perform_checksum_validation,
 };
+use uucore::locale::get_message;
 use uucore::{
     encoding,
     error::{FromIo, UResult, USimpleError},
-    format_usage, help_about, help_section, help_usage,
+    format_usage,
     line_ending::LineEnding,
     os_str_as_bytes, show,
     sum::Digest,
 };
-
-use uucore::locale::{self, get_message};
 
 #[derive(Debug, PartialEq)]
 enum OutputFormat {

@@ -17,10 +17,11 @@ use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
+use uucore::locale::get_message;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 // Options
@@ -29,8 +30,6 @@ const HOURS: &str = "hours";
 const MINUTES: &str = "minutes";
 const SECONDS: &str = "seconds";
 const NS: &str = "ns";
-
-use uucore::locale::{self, get_message};
 
 const OPT_DATE: &str = "date";
 const OPT_FORMAT: &str = "format";

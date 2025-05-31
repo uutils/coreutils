@@ -11,9 +11,9 @@ use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
     let mut buf = [0; 4096];

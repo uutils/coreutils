@@ -17,10 +17,9 @@ use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
+use uucore::{format_usage, show, show_error};
 
-use uucore::locale::{self, get_message};
-const LONG_USAGE: &str = help_section!("after help", "chmod.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const HELP: &str = "help";
@@ -93,7 +92,9 @@ fn extract_negative_modes(mut args: impl uucore::Args) -> (Option<String>, Vec<O
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (parsed_cmode, args) = extract_negative_modes(args.skip(1)); // skip binary name
-    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
+    let matches = uu_app()
+        .after_help(get_message("chmod-after-help"))
+        .try_get_matches_from(args)?;
 
     let changes = matches.get_flag(options::CHANGES);
     let quiet = matches.get_flag(options::QUIET);

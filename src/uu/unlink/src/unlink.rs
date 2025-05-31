@@ -12,9 +12,9 @@ use clap::{Arg, Command};
 
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 static OPT_PATH: &str = "FILE";
 
 #[uucore::main]

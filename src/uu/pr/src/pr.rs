@@ -18,9 +18,9 @@ use thiserror::Error;
 
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::format_usage;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
 const LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;

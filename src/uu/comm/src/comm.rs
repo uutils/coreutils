@@ -9,13 +9,13 @@ use std::cmp::Ordering;
 use std::fs::{File, metadata};
 use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub const COLUMN_1: &str = "1";

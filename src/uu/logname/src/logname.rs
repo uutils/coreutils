@@ -7,7 +7,8 @@
 
 use clap::Command;
 use std::ffi::CStr;
-use uucore::{error::UResult, format_usage, help_about, help_usage, show_error};
+use uucore::locale::get_message;
+use uucore::{error::UResult, show_error};
 
 unsafe extern "C" {
     // POSIX requires using getlogin (or equivalent code)
@@ -24,8 +25,6 @@ fn get_userlogin() -> Option<String> {
         }
     }
 }
-
-use uucore::locale::{self, get_message};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

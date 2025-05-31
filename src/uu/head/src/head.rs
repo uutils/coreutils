@@ -16,11 +16,9 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
 const BUF_SIZE: usize = 65536;
-
-use uucore::locale::{self, get_message};
 
 mod options {
     pub const BYTES_NAME: &str = "BYTES";
@@ -37,6 +35,7 @@ mod take;
 use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
+use uucore::locale::get_message;
 
 #[derive(Error, Debug)]
 enum HeadError {

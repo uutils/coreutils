@@ -5,9 +5,8 @@
 use clap::{Arg, ArgAction, Command};
 use std::{ffi::OsString, io::Write};
 use uucore::error::{UResult, set_exit_code};
-use uucore::help_about;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

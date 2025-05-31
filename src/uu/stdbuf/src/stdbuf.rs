@@ -16,10 +16,8 @@ use tempfile::tempdir;
 use uucore::error::{FromIo, UClapError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
-use uucore::{format_usage, help_about, help_section, help_usage};
 
-use uucore::locale::{self, get_message};
-const LONG_HELP: &str = help_section!("after help", "stdbuf.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const INPUT: &str = "input";

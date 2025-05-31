@@ -23,10 +23,10 @@ use crossterm::{
 };
 
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::{display::Quotable, show};
-use uucore::{format_usage, help_about, help_usage};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 const BELL: char = '\x07'; // Printing this character will ring the bell
 
 // The prompt to be displayed at the top of the screen when viewing multiple files,

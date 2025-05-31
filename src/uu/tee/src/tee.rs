@@ -12,14 +12,14 @@ use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
 // spell-checker:ignore nopipe
 
 #[cfg(unix)]
 use uucore::signals::{enable_pipe_errors, ignore_interrupts};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub const APPEND: &str = "append";

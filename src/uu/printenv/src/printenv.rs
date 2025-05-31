@@ -5,9 +5,9 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::env;
-use uucore::{error::UResult, format_usage, help_about, help_usage};
+use uucore::{error::UResult, format_usage};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 static OPT_NULL: &str = "null";
 

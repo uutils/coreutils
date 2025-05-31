@@ -36,7 +36,7 @@ use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
 use uucore::signals::signal_by_name_or_value;
-use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
+use uucore::{format_usage, show_warning};
 
 use thiserror::Error;
 
@@ -74,7 +74,7 @@ impl From<string_parser::Error> for EnvError {
     }
 }
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub const IGNORE_ENVIRONMENT: &str = "ignore-environment";

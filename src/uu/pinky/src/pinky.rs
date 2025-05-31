@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
 
 use clap::{Arg, ArgAction, Command};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 mod platform;
 
@@ -20,7 +20,7 @@ const ABOUT: &str = concat!(
 );
 
 #[cfg(not(target_env = "musl"))]
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub const LONG_FORMAT: &str = "long_format";

@@ -11,17 +11,16 @@ use std::io::{Error, Write};
 use std::ptr;
 
 use clap::{Arg, ArgAction, Command};
+use uucore::locale::get_message;
 use uucore::{
     error::{UClapError, UResult, USimpleError, UUsageError, set_exit_code},
-    format_usage, help_about, help_usage, show_error,
+    format_usage, show_error,
 };
 
 pub mod options {
     pub static ADJUSTMENT: &str = "adjustment";
     pub static COMMAND: &str = "COMMAND";
 }
-
-use uucore::locale::{self, get_message};
 
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
     if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {

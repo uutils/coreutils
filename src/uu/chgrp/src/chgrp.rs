@@ -8,15 +8,15 @@
 use uucore::display::Quotable;
 pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
-use uucore::{format_usage, help_about, help_usage};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 fn parse_gid_from_str(group: &str) -> Result<u32, String> {
     if let Some(gid_str) = group.strip_prefix(':') {

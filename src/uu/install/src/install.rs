@@ -27,12 +27,13 @@ use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "selinux")]
 use uucore::selinux::{contexts_differ, set_selinux_security_context};
-use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err};
+use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
+use uucore::locale::get_message;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -139,8 +140,6 @@ impl Behavior {
         self.specified_mode.unwrap_or(DEFAULT_MODE)
     }
 }
-
-use uucore::locale::{self, get_message};
 
 static OPT_COMPARE: &str = "compare";
 static OPT_DIRECTORY: &str = "directory";

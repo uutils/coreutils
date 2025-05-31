@@ -10,15 +10,15 @@ use uucore::{
     display::Quotable,
     entries::{Locate, Passwd, get_groups_gnu, gid2grp},
     error::{UError, UResult},
-    format_usage, help_about, help_usage, show,
+    format_usage, show,
 };
 
 use clap::{Arg, ArgAction, Command};
+use uucore::locale::get_message;
 
 mod options {
     pub const USERS: &str = "USERNAME";
 }
-use uucore::locale::{self, get_message};
 
 #[derive(Debug, Error)]
 enum GroupsError {

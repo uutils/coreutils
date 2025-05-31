@@ -12,8 +12,9 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
+use uucore::locale::get_message;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
-use uucore::{format_usage, help_about, help_section, help_usage};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -70,8 +71,6 @@ impl TruncateMode {
         }
     }
 }
-
-use uucore::locale::{self, get_message};
 
 pub mod options {
     pub static IO_BLOCKS: &str = "io-blocks";

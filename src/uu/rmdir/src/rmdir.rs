@@ -14,9 +14,9 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, set_exit_code, strip_errno};
 
-use uucore::{format_usage, help_about, help_usage, show_error, util_name};
+use uucore::{format_usage, show_error, util_name};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
 static OPT_VERBOSE: &str = "verbose";

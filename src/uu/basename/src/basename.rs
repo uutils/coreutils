@@ -9,10 +9,10 @@ use clap::{Arg, ArgAction, Command};
 use std::path::{PathBuf, is_separator};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
+use uucore::format_usage;
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 pub mod options {
     pub static MULTIPLE: &str = "multiple";

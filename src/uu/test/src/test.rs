@@ -17,11 +17,11 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 #[cfg(not(windows))]
 use uucore::process::{getegid, geteuid};
-use uucore::{format_usage, help_about, help_section};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 // The help_usage method replaces util name (the first word) with {}.
 // And, The format_usage method replaces {} with execution_phrase ( e.g. test or [ ).

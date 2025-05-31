@@ -7,8 +7,8 @@
 
 use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
+use uucore::format_usage;
 use uucore::perms::{GidUidOwnerFilter, IfFrom, chown_base, options};
-use uucore::{format_usage, help_about, help_usage};
 
 use uucore::error::{FromIo, UResult, USimpleError};
 
@@ -17,7 +17,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     let filter = if let Some(spec) = matches.get_one::<String>(options::FROM) {

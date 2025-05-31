@@ -15,7 +15,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
-use uucore::{fast_inc::fast_inc, format_usage, help_about, help_usage};
+use uucore::{fast_inc::fast_inc, format_usage};
 
 mod error;
 
@@ -28,7 +28,7 @@ mod numberparse;
 use crate::error::SeqError;
 use crate::number::PreciseNumber;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 const OPT_SEPARATOR: &str = "separator";
 const OPT_TERMINATOR: &str = "terminator";

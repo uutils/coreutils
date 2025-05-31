@@ -21,8 +21,8 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 use uucore::locale::get_message;
-use uucore::{format_usage, help_about, help_usage};
 
 #[cfg(not(any(
     target_os = "freebsd",

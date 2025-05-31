@@ -48,11 +48,11 @@ use uucore::line_ending::LineEnding;
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::version_cmp::version_cmp;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
 use crate::tmp_dir::TmpDirWrapper;
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub mod modes {

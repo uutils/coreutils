@@ -18,9 +18,8 @@ use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{
-    format_usage, help_about, help_section, help_usage, os_str_as_bytes, prompt_yes, show_error,
-};
+use uucore::locale::get_message;
+use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
@@ -89,8 +88,6 @@ impl Default for Options {
         }
     }
 }
-
-use uucore::locale::{self, get_message};
 
 static OPT_DIR: &str = "dir";
 static OPT_INTERACTIVE: &str = "interactive";

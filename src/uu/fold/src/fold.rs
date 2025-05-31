@@ -11,11 +11,10 @@ use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 const TAB_WIDTH: usize = 8;
-
-use uucore::locale::{self, get_message};
 
 mod options {
     pub const BYTES: &str = "bytes";

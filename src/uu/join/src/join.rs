@@ -18,10 +18,10 @@ use std::os::unix::ffi::OsStrExt;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::format_usage;
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage};
 
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 #[derive(Debug, Error)]
 enum JoinError {

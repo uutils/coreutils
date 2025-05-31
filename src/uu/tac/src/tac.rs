@@ -17,12 +17,11 @@ use std::{
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::error::UResult;
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
 use crate::error::TacError;
 
-static USAGE: &str = help_usage!("tac.md");
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 mod options {
     pub static BEFORE: &str = "before";

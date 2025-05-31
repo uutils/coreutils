@@ -24,13 +24,12 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::fs::FileInformation;
-use uucore::{fast_inc::fast_inc_one, format_usage, help_about, help_usage};
+use uucore::locale::get_message;
+use uucore::{fast_inc::fast_inc_one, format_usage};
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
-
-use uucore::locale::{self, get_message};
 
 // Allocate 32 digits for the line number.
 // An estimate is that we can print about 1e8 lines/seconds, so 32 digits

@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr runlvline pidstr exitstr hoststr
 
 use clap::{Arg, ArgAction, Command};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 mod platform;
 
@@ -37,7 +37,7 @@ const ABOUT: &str = concat!(
 );
 
 #[cfg(not(target_env = "musl"))]
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 #[cfg(target_os = "linux")]
 static RUNLEVEL_HELP: &str = "print current runlevel";
