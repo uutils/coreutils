@@ -14,6 +14,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 use uucore::display::Quotable;
+use uucore::locale;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -111,6 +112,9 @@ fn main() {
 
         match utils.get(util) {
             Some(&(uumain, _)) => {
+                if let Err(e) = locale::setup_localization(uucore::util_name()) {
+                    println!("Could not init the localization system {}", e);
+                }
                 process::exit(uumain(vec![util_os].into_iter().chain(args)));
             }
             None => {
@@ -123,6 +127,7 @@ fn main() {
 
                         match utils.get(util) {
                             Some(&(uumain, _)) => {
+
                                 let code = uumain(
                                     vec![util_os, OsString::from("--help")]
                                         .into_iter()
