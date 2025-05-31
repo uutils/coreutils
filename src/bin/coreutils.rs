@@ -112,8 +112,25 @@ fn main() {
 
         match utils.get(util) {
             Some(&(uumain, _)) => {
-                if let Err(e) = locale::setup_localization(uucore::util_name()) {
-                    println!("Could not init the localization system {}", e);
+                // TODO: plug the deactivation of the translation
+                // and load the English strings directly at compilation time in the
+                // binary to avoid the load of the flt
+                // Could be something like:
+                // #[cfg(not(feature = "only_english"))]
+                match locale::setup_localization(get_canonical_util_name(util)) {
+                    Ok(()) => {}
+                    Err(uucore::locale::LocalizationError::ParseResource {
+                        error: err_msg,
+                        snippet,
+                    }) => {
+                        // Now you have both `err_msg: ParserError` and `snippet: String`
+                        eprintln!("Localization parse error at “{}”: {:?}", snippet, err_msg);
+                        process::exit(1);
+                    }
+                    Err(other) => {
+                        eprintln!("Could not init the localization system: {}", other);
+                        process::exit(1);
+                    }
                 }
                 process::exit(uumain(vec![util_os].into_iter().chain(args)));
             }
