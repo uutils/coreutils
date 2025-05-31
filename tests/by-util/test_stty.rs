@@ -64,3 +64,36 @@ fn save_and_all() {
             "the options for verbose and stty-readable output styles are mutually exclusive",
         );
 }
+
+#[test]
+fn no_mapping() {
+    new_ucmd!()
+        .args(&["intr"])
+        .fails()
+        .stderr_contains("missing argument to 'intr'");
+}
+
+#[test]
+fn invalid_mapping() {
+    new_ucmd!()
+        .args(&["intr", "cc"])
+        .fails()
+        .stderr_contains("invalid integer argument: 'cc'");
+
+    new_ucmd!()
+        .args(&["intr", "256"])
+        .fails()
+        .stderr_contains("invalid integer argument: '256': Value too large for defined data type");
+
+    new_ucmd!()
+        .args(&["intr", "0x100"])
+        .fails()
+        .stderr_contains(
+            "invalid integer argument: '0x100': Value too large for defined data type",
+        );
+
+    new_ucmd!()
+        .args(&["intr", "0400"])
+        .fails()
+        .stderr_contains("invalid integer argument: '0400': Value too large for defined data type");
+}
