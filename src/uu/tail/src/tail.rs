@@ -148,7 +148,7 @@ fn tail_file(
                 let mut reader;
                 let is_file_with_no_blocks = metadata
                     .as_ref()
-                    .map_or(false, |m| m.file_type().is_file() && m.get_block_size() == 0);
+                    .is_some_and(|m| m.file_type().is_file() && m.get_block_size() == 0);
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                     && !is_file_with_no_blocks
