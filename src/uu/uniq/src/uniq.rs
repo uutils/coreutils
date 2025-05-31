@@ -17,9 +17,7 @@ use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{OBSOLETE, posix_version};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str = help_about!("uniq.md");
-const USAGE: &str = help_usage!("uniq.md");
-const AFTER_HELP: &str = help_section!("after help", "uniq.md");
+use uucore::locale::{self, get_message};
 
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
@@ -593,10 +591,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("uniq-about"))
+        .override_usage(format_usage(&get_message("uniq-usage")))
         .infer_long_args(true)
-        .after_help(AFTER_HELP)
+        .after_help(get_message("uniq-after-help"))
         .arg(
             Arg::new(options::ALL_REPEATED)
                 .short('D')

@@ -21,8 +21,7 @@ use uucore::{
     show_if_err,
 };
 
-static ABOUT: &str = help_about!("realpath.md");
-const USAGE: &str = help_usage!("realpath.md");
+use uucore::locale::{self, get_message};
 
 static OPT_QUIET: &str = "quiet";
 static OPT_STRIP: &str = "strip";
@@ -89,8 +88,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("realpath-about"))
+        .override_usage(format_usage(&get_message("realpath-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_QUIET)

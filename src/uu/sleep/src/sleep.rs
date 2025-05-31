@@ -15,8 +15,7 @@ use uucore::{
 
 use clap::{Arg, ArgAction, Command};
 
-static ABOUT: &str = help_about!("sleep.md");
-const USAGE: &str = help_usage!("sleep.md");
+use uucore::locale::{self, get_message};
 static AFTER_HELP: &str = help_section!("after help", "sleep.md");
 
 mod options {
@@ -47,9 +46,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("sleep-about"))
+        .after_help(get_message("sleep-after-help"))
+        .override_usage(format_usage(&get_message("sleep-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::NUMBER)

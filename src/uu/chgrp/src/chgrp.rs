@@ -16,8 +16,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-const ABOUT: &str = help_about!("chgrp.md");
-const USAGE: &str = help_usage!("chgrp.md");
+use uucore::locale::{self, get_message};
 
 fn parse_gid_from_str(group: &str) -> Result<u32, String> {
     if let Some(gid_str) = group.strip_prefix(':') {
@@ -99,8 +98,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("chgrp-about"))
+        .override_usage(format_usage(&get_message("chgrp-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(

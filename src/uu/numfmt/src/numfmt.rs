@@ -24,9 +24,7 @@ pub mod format;
 pub mod options;
 mod units;
 
-const ABOUT: &str = help_about!("numfmt.md");
-const AFTER_HELP: &str = help_section!("after help", "numfmt.md");
-const USAGE: &str = help_usage!("numfmt.md");
+use uucore::locale::{self, get_message};
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {
@@ -277,9 +275,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("numfmt-about"))
+        .after_help(get_message("numfmt-after-help"))
+        .override_usage(format_usage(&get_message("numfmt-usage")))
         .allow_negative_numbers(true)
         .infer_long_args(true)
         .arg(

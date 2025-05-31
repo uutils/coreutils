@@ -46,9 +46,7 @@ static OPT_IO_BLKSIZE: &str = "-io-blksize";
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
-const ABOUT: &str = help_about!("split.md");
-const USAGE: &str = help_usage!("split.md");
-const AFTER_HELP: &str = help_section!("after help", "split.md");
+use uucore::locale::{self, get_message};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -229,9 +227,9 @@ fn handle_preceding_options(
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("split-about"))
+        .after_help(get_message("split-after-help"))
+        .override_usage(format_usage(&get_message("split-usage")))
         .infer_long_args(true)
         // strategy (mutually exclusive)
         .arg(

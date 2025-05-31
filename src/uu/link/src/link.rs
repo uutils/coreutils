@@ -11,8 +11,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = help_about!("link.md");
-const USAGE: &str = help_usage!("link.md");
+use uucore::locale::{self, get_message};
 
 pub mod options {
     pub static FILES: &str = "FILES";
@@ -36,8 +35,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("link-about"))
+        .override_usage(format_usage(&get_message("link-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILES)

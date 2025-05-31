@@ -23,8 +23,7 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
-const ABOUT: &str = help_about!("nproc.md");
-const USAGE: &str = help_usage!("nproc.md");
+use uucore::locale::{self, get_message};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -94,8 +93,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("nproc-about"))
+        .override_usage(format_usage(&get_message("nproc-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_ALL)

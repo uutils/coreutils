@@ -13,7 +13,7 @@ use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show};
 
 static USAGE: &str = help_usage!("mkfifo.md");
-static ABOUT: &str = help_about!("mkfifo.md");
+use uucore::locale::{self, get_message};
 
 mod options {
     pub static MODE: &str = "mode";
@@ -86,8 +86,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("mkfifo-usage")))
+        .about(get_message("mkfifo-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)

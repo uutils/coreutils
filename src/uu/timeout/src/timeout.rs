@@ -25,8 +25,7 @@ use uucore::{
     signals::{signal_by_name_or_value, signal_name_by_value},
 };
 
-const ABOUT: &str = help_about!("timeout.md");
-const USAGE: &str = help_usage!("timeout.md");
+use uucore::locale::{self, get_message};
 
 pub mod options {
     pub static FOREGROUND: &str = "foreground";
@@ -122,8 +121,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new("timeout")
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("timeout-about"))
+        .override_usage(format_usage(&get_message("timeout-usage")))
         .arg(
             Arg::new(options::FOREGROUND)
                 .long(options::FOREGROUND)

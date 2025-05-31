@@ -18,8 +18,7 @@ use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_usage, show_warning};
 
-const ABOUT: &str = help_about!("tail.md");
-const USAGE: &str = help_usage!("tail.md");
+use uucore::locale::{self, get_message};
 
 pub mod options {
     pub mod verbosity {
@@ -464,8 +463,8 @@ pub fn uu_app() -> Command {
 
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("tail-about"))
+        .override_usage(format_usage(&get_message("tail-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES)

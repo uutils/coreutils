@@ -26,9 +26,7 @@ use uucore::{
     sum::Digest,
 };
 
-const USAGE: &str = help_usage!("cksum.md");
-const ABOUT: &str = help_about!("cksum.md");
-const AFTER_HELP: &str = help_section!("after help", "cksum.md");
+use uucore::locale::{self, get_message};
 
 #[derive(Debug, PartialEq)]
 enum OutputFormat {
@@ -343,8 +341,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("cksum-about"))
+        .override_usage(format_usage(&get_message("cksum-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -468,7 +466,7 @@ pub fn uu_app() -> Command {
                 )
                 .action(ArgAction::SetTrue),
         )
-        .after_help(AFTER_HELP)
+        .after_help(get_message("cksum-after-help"))
 }
 
 #[cfg(test)]

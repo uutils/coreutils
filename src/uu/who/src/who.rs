@@ -37,9 +37,7 @@ const ABOUT: &str = concat!(
 );
 
 #[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("who.md");
-
-const USAGE: &str = help_usage!("who.md");
+use uucore::locale::{self, get_message};
 
 #[cfg(target_os = "linux")]
 static RUNLEVEL_HELP: &str = "print current runlevel";
@@ -52,8 +50,8 @@ use platform::uumain;
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("who-about"))
+        .override_usage(format_usage(&get_message("who-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ALL)

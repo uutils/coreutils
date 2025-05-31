@@ -22,7 +22,7 @@ use uucore::{format_usage, help_about, help_usage, show};
 use crate::error::TacError;
 
 static USAGE: &str = help_usage!("tac.md");
-static ABOUT: &str = help_about!("tac.md");
+use uucore::locale::{self, get_message};
 
 mod options {
     pub static BEFORE: &str = "before";
@@ -58,8 +58,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("tac-usage")))
+        .about(get_message("tac-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::BEFORE)

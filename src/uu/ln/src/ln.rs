@@ -70,9 +70,7 @@ impl UError for LnError {
     }
 }
 
-const ABOUT: &str = help_about!("ln.md");
-const USAGE: &str = help_usage!("ln.md");
-const AFTER_HELP: &str = help_section!("after help", "ln.md");
+use uucore::locale::{self, get_message};
 
 mod options {
     pub const FORCE: &str = "force";
@@ -93,7 +91,8 @@ static ARG_FILES: &str = "files";
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = format!(
-        "{AFTER_HELP}\n\n{}",
+        "{}\n\n{}",
+        get_message("ln-after-help"),
         backup_control::BACKUP_CONTROL_LONG_HELP
     );
 
@@ -144,8 +143,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("ln-about"))
+        .override_usage(format_usage(&get_message("ln-usage")))
         .infer_long_args(true)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())

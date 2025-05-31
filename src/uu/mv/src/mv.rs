@@ -123,9 +123,7 @@ pub enum OverwriteMode {
     Force,
 }
 
-const ABOUT: &str = help_about!("mv.md");
-const USAGE: &str = help_usage!("mv.md");
-const AFTER_HELP: &str = help_section!("after help", "mv.md");
+use uucore::locale::{self, get_message};
 
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
@@ -205,10 +203,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("mv-about"))
+        .override_usage(format_usage(&get_message("mv-usage")))
         .after_help(format!(
-            "{AFTER_HELP}\n\n{}",
+            "{}\n\n{}",
+            get_message("mv-after-help"),
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
         .infer_long_args(true)

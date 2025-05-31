@@ -19,9 +19,7 @@ use uucore::display::Quotable;
 use uucore::error::{UClapError, UError, UResult, set_exit_code};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
-const ABOUT: &str = help_about!("nohup.md");
-const AFTER_HELP: &str = help_section!("after help", "nohup.md");
-const USAGE: &str = help_usage!("nohup.md");
+use uucore::locale::{self, get_message};
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
 static EXIT_CANCELED: i32 = 125;
@@ -92,9 +90,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("nohup-about"))
+        .after_help(get_message("nohup-after-help"))
+        .override_usage(format_usage(&get_message("nohup-usage")))
         .arg(
             Arg::new(options::CMD)
                 .hide(true)

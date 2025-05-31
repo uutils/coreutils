@@ -23,8 +23,7 @@ mod errors;
 use errors::error_exit_status;
 use errors::{Error, Result, RunconError};
 
-const ABOUT: &str = help_about!("runcon.md");
-const USAGE: &str = help_usage!("runcon.md");
+use uucore::locale::{self, get_message};
 const DESCRIPTION: &str = help_section!("after help", "runcon.md");
 
 pub mod options {
@@ -90,9 +89,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
+        .about(get_message("runcon-about"))
         .after_help(DESCRIPTION)
-        .override_usage(format_usage(USAGE))
+        .override_usage(format_usage(&get_message("runcon-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::COMPUTE)

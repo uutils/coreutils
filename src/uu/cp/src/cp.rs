@@ -451,9 +451,7 @@ fn show_debug(copy_debug: &CopyDebug) {
     );
 }
 
-const ABOUT: &str = help_about!("cp.md");
-const USAGE: &str = help_usage!("cp.md");
-const AFTER_HELP: &str = help_section!("after help", "cp.md");
+use uucore::locale::{self, get_message};
 
 static EXIT_ERR: i32 = 1;
 
@@ -523,10 +521,11 @@ pub fn uu_app() -> Command {
     ];
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("cp-about"))
+        .override_usage(format_usage(&get_message("cp-usage")))
         .after_help(format!(
-            "{AFTER_HELP}\n\n{}",
+            "{}\n\n{}",
+            get_message("cp-after-help"),
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
         .infer_long_args(true)

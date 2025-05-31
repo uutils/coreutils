@@ -11,9 +11,7 @@ use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
-const USAGE: &str = help_usage!("printf.md");
-const ABOUT: &str = help_about!("printf.md");
-const AFTER_HELP: &str = help_section!("after help", "printf.md");
+use uucore::locale::{self, get_message};
 
 mod options {
     pub const FORMAT: &str = "FORMAT";
@@ -81,9 +79,9 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .allow_hyphen_values(true)
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("printf-about"))
+        .after_help(get_message("printf-after-help"))
+        .override_usage(format_usage(&get_message("printf-usage")))
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(

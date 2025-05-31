@@ -30,8 +30,7 @@ const MINUTES: &str = "minutes";
 const SECONDS: &str = "seconds";
 const NS: &str = "ns";
 
-const ABOUT: &str = help_about!("date.md");
-const USAGE: &str = help_usage!("date.md");
+use uucore::locale::{self, get_message};
 
 const OPT_DATE: &str = "date";
 const OPT_FORMAT: &str = "format";
@@ -290,8 +289,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("date-about"))
+        .override_usage(format_usage(&get_message("date-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_DATE)

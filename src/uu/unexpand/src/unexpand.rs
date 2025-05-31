@@ -17,8 +17,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show};
 
-const USAGE: &str = help_usage!("unexpand.md");
-const ABOUT: &str = help_about!("unexpand.md");
+use uucore::locale::{self, get_message};
 
 const DEFAULT_TABSTOP: usize = 8;
 
@@ -157,8 +156,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("unexpand-usage")))
+        .about(get_message("unexpand-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)

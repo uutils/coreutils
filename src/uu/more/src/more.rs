@@ -26,8 +26,7 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{display::Quotable, show};
 use uucore::{format_usage, help_about, help_usage};
 
-const ABOUT: &str = help_about!("more.md");
-const USAGE: &str = help_usage!("more.md");
+use uucore::locale::{self, get_message};
 const BELL: char = '\x07'; // Printing this character will ring the bell
 
 // The prompt to be displayed at the top of the screen when viewing multiple files,
@@ -155,8 +154,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("more-about"))
+        .override_usage(format_usage(&get_message("more-usage")))
         .version(uucore::crate_version!())
         .infer_long_args(true)
         .arg(

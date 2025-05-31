@@ -83,8 +83,7 @@ pub enum Source {
     Now,
 }
 
-const ABOUT: &str = help_about!("touch.md");
-const USAGE: &str = help_usage!("touch.md");
+use uucore::locale::{self, get_message};
 
 pub mod options {
     // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
@@ -258,8 +257,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("touch-about"))
+        .override_usage(format_usage(&get_message("touch-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(

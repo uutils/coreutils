@@ -14,9 +14,7 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str = help_about!("mknod.md");
-const USAGE: &str = help_usage!("mknod.md");
-const AFTER_HELP: &str = help_section!("after help", "mknod.md");
+use uucore::locale::{self, get_message};
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
@@ -159,9 +157,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("mknod-usage")))
+        .after_help(get_message("mknod-after-help"))
+        .about(get_message("mknod-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)

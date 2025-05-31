@@ -31,9 +31,7 @@ const ABOUT: &str = concat!(
 );
 
 #[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("uptime.md");
-
-const USAGE: &str = help_usage!("uptime.md");
+use uucore::locale::{self, get_message};
 
 pub mod options {
     pub static SINCE: &str = "since";
@@ -78,8 +76,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("uptime-about"))
+        .override_usage(format_usage(&get_message("uptime-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SINCE)

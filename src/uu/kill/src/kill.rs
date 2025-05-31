@@ -14,8 +14,7 @@ use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
 use uucore::{format_usage, help_about, help_usage, show};
 
-static ABOUT: &str = help_about!("kill.md");
-const USAGE: &str = help_usage!("kill.md");
+use uucore::locale::{self, get_message};
 
 // When the -l option is selected, the program displays the type of signal related to a certain
 // value or string. In case of a value, the program should control the lower 8 bits, but there is
@@ -104,8 +103,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("kill-about"))
+        .override_usage(format_usage(&get_message("kill-usage")))
         .infer_long_args(true)
         .allow_negative_numbers(true)
         .arg(

@@ -82,9 +82,7 @@ static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not e
 #[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
 
-const ABOUT: &str = help_about!("ls.md");
-const AFTER_HELP: &str = help_section!("after help", "ls.md");
-const USAGE: &str = help_usage!("ls.md");
+use uucore::locale::{self, get_message};
 
 pub mod options {
     pub mod format {
@@ -1179,8 +1177,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("ls-usage")))
+        .about(get_message("ls-about"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)
@@ -1869,7 +1867,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(ValueParser::os_string()),
         )
-        .after_help(AFTER_HELP)
+        .after_help(get_message("ls-after-help"))
 }
 
 /// Represents a Path along with it's associated data.

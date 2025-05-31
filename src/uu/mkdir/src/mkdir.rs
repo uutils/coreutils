@@ -20,9 +20,7 @@ use uucore::{format_usage, help_about, help_section, help_usage, show_if_err};
 
 static DEFAULT_PERM: u32 = 0o777;
 
-const ABOUT: &str = help_about!("mkdir.md");
-const USAGE: &str = help_usage!("mkdir.md");
-const AFTER_HELP: &str = help_section!("after help", "mkdir.md");
+use uucore::locale::{self, get_message};
 
 mod options {
     pub const MODE: &str = "mode";
@@ -103,7 +101,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let matches = uu_app()
+        .after_help(get_message("mkdir-after-help"))
+        .try_get_matches_from(args)?;
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
@@ -133,8 +133,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("mkdir-about"))
+        .override_usage(format_usage(&get_message("mkdir-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)

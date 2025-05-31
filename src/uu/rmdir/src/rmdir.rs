@@ -16,8 +16,7 @@ use uucore::error::{UResult, set_exit_code, strip_errno};
 
 use uucore::{format_usage, help_about, help_usage, show_error, util_name};
 
-static ABOUT: &str = help_about!("rmdir.md");
-const USAGE: &str = help_usage!("rmdir.md");
+use uucore::locale::{self, get_message};
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
 static OPT_VERBOSE: &str = "verbose";
@@ -165,8 +164,8 @@ struct Opts {
 pub fn uu_app() -> Command {
     Command::new(util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("rmdir-about"))
+        .override_usage(format_usage(&get_message("rmdir-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_IGNORE_FAIL_NON_EMPTY)

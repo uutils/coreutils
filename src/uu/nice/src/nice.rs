@@ -21,8 +21,7 @@ pub mod options {
     pub static COMMAND: &str = "COMMAND";
 }
 
-const ABOUT: &str = help_about!("nice.md");
-const USAGE: &str = help_usage!("nice.md");
+use uucore::locale::{self, get_message};
 
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
     if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
@@ -186,8 +185,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("nice-about"))
+        .override_usage(format_usage(&get_message("nice-usage")))
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())

@@ -24,8 +24,7 @@ mod fts;
 
 use errors::*;
 
-const ABOUT: &str = help_about!("chcon.md");
-const USAGE: &str = help_usage!("chcon.md");
+use uucore::locale::{self, get_message};
 
 pub mod options {
     pub static HELP: &str = "help";
@@ -151,8 +150,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("chcon-about"))
+        .override_usage(format_usage(&get_message("chcon-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)

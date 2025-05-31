@@ -18,8 +18,7 @@ use parasplit::ParagraphStream;
 mod linebreak;
 mod parasplit;
 
-const ABOUT: &str = help_about!("fmt.md");
-const USAGE: &str = help_usage!("fmt.md");
+use uucore::locale::{self, get_message};
 const MAX_WIDTH: usize = 2500;
 const DEFAULT_GOAL: usize = 70;
 const DEFAULT_WIDTH: usize = 75;
@@ -336,8 +335,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("fmt-about"))
+        .override_usage(format_usage(&get_message("fmt-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

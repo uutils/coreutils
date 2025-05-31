@@ -50,9 +50,7 @@ use uucore::{format_usage, help_about, help_section, help_usage, show_error, sho
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 
-const ABOUT: &str = help_about!("od.md");
-const USAGE: &str = help_usage!("od.md");
-const AFTER_HELP: &str = help_section!("after help", "od.md");
+use uucore::locale::{self, get_message};
 
 pub(crate) mod options {
     pub const HELP: &str = "help";
@@ -253,9 +251,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .about(get_message("od-about"))
+        .override_usage(format_usage(&get_message("od-usage")))
+        .after_help(get_message("od-after-help"))
         .trailing_var_arg(true)
         .dont_delimit_trailing_values(true)
         .infer_long_args(true)

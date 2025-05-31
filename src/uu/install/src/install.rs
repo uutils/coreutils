@@ -140,8 +140,7 @@ impl Behavior {
     }
 }
 
-const ABOUT: &str = help_about!("install.md");
-const USAGE: &str = help_usage!("install.md");
+use uucore::locale::{self, get_message};
 
 static OPT_COMPARE: &str = "compare";
 static OPT_DIRECTORY: &str = "directory";
@@ -185,8 +184,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("install-about"))
+        .override_usage(format_usage(&get_message("install-usage")))
         .infer_long_args(true)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
@@ -516,7 +515,11 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         return Err(UUsageError::new(1, "missing file operand"));
     }
     if b.no_target_dir && paths.len() > 2 {
-        return Err(InstallError::ExtraOperand(paths[2].clone(), format_usage(USAGE)).into());
+        return Err(InstallError::ExtraOperand(
+            paths[2].clone(),
+            format_usage(&get_message("install-usage")),
+        )
+        .into());
     }
 
     // get the target from either "-t foo" param or from the last given paths argument

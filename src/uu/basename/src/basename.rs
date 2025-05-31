@@ -12,9 +12,7 @@ use uucore::error::{UResult, UUsageError};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = help_about!("basename.md");
-
-const USAGE: &str = help_usage!("basename.md");
+use uucore::locale::{self, get_message};
 
 pub mod options {
     pub static MULTIPLE: &str = "multiple";
@@ -77,8 +75,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("basename-about"))
+        .override_usage(format_usage(&get_message("basename-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MULTIPLE)

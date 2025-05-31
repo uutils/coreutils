@@ -25,8 +25,7 @@ use rand::Rng;
 use tempfile::Builder;
 use thiserror::Error;
 
-const ABOUT: &str = help_about!("mktemp.md");
-const USAGE: &str = help_usage!("mktemp.md");
+use uucore::locale::{self, get_message};
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -347,8 +346,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("mktemp-about"))
+        .override_usage(format_usage(&get_message("mktemp-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_DIRECTORY)

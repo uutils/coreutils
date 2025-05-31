@@ -25,8 +25,7 @@ fn get_userlogin() -> Option<String> {
     }
 }
 
-const ABOUT: &str = help_about!("logname.md");
-const USAGE: &str = help_usage!("logname.md");
+use uucore::locale::{self, get_message};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -43,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(uucore::util_name())
+        .about(get_message("logname-about"))
         .infer_long_args(true)
 }

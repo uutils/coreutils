@@ -20,9 +20,7 @@ const ABOUT: &str = concat!(
 );
 
 #[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("pinky.md");
-
-const USAGE: &str = help_usage!("pinky.md");
+use uucore::locale::{self, get_message};
 
 mod options {
     pub const LONG_FORMAT: &str = "long_format";
@@ -44,8 +42,8 @@ use platform::uumain;
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("pinky-about"))
+        .override_usage(format_usage(&get_message("pinky-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(

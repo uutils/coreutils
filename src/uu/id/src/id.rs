@@ -59,9 +59,7 @@ macro_rules! cstr2cow {
     };
 }
 
-const ABOUT: &str = help_about!("id.md");
-const USAGE: &str = help_usage!("id.md");
-const AFTER_HELP: &str = help_section!("after help", "id.md");
+use uucore::locale::{self, get_message};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process (not enabled)";
@@ -119,7 +117,9 @@ struct State {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let matches = uu_app()
+        .after_help(get_message("id-after-help"))
+        .try_get_matches_from(args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(options::ARG_USERS)
@@ -327,8 +327,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("id-about"))
+        .override_usage(format_usage(&get_message("id-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

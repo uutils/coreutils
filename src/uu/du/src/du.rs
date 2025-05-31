@@ -70,9 +70,7 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const ABOUT: &str = help_about!("du.md");
-const AFTER_HELP: &str = help_section!("after help", "du.md");
-const USAGE: &str = help_usage!("du.md");
+use uucore::locale::{self, get_message};
 
 struct TraversalOptions {
     all: bool,
@@ -824,9 +822,9 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("du-about"))
+        .after_help(get_message("du-after-help"))
+        .override_usage(format_usage(&get_message("du-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(

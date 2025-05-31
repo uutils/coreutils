@@ -17,9 +17,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-static ABOUT: &str = help_about!("chown.md");
-
-const USAGE: &str = help_usage!("chown.md");
+use uucore::locale::{self, get_message};
 
 fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     let filter = if let Some(spec) = matches.get_one::<String>(options::FROM) {
@@ -79,8 +77,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("chown-about"))
+        .override_usage(format_usage(&get_message("chown-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(

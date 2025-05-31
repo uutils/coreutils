@@ -20,8 +20,7 @@ use uucore::{format_usage, help_about, help_usage, show};
 
 const BUF_SIZE: usize = 65536;
 
-const ABOUT: &str = help_about!("head.md");
-const USAGE: &str = help_usage!("head.md");
+use uucore::locale::{self, get_message};
 
 mod options {
     pub const BYTES_NAME: &str = "BYTES";
@@ -72,8 +71,8 @@ type HeadResult<T> = Result<T, HeadError>;
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("head-about"))
+        .override_usage(format_usage(&get_message("head-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES_NAME)

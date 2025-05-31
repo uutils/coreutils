@@ -30,7 +30,7 @@ enum Mode {
 }
 
 static USAGE: &str = help_usage!("shuf.md");
-static ABOUT: &str = help_about!("shuf.md");
+use uucore::locale::{self, get_message};
 
 struct Options {
     head_count: usize,
@@ -143,9 +143,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
+        .about(get_message("shuf-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
+        .override_usage(format_usage(&get_message("shuf-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ECHO)

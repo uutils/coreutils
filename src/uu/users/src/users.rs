@@ -26,9 +26,7 @@ const ABOUT: &str = concat!(
 );
 
 #[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("users.md");
-
-const USAGE: &str = help_usage!("users.md");
+use uucore::locale::{self, get_message};
 
 #[cfg(target_os = "openbsd")]
 const OPENBSD_UTMP_FILE: &str = "/var/run/utmp";
@@ -97,8 +95,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("users-about"))
+        .override_usage(format_usage(&get_message("users-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(ARG_FILE)

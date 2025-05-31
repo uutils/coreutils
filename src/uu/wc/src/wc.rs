@@ -113,8 +113,7 @@ impl<'a> Settings<'a> {
     }
 }
 
-const ABOUT: &str = help_about!("wc.md");
-const USAGE: &str = help_usage!("wc.md");
+use uucore::locale::{self, get_message};
 
 mod options {
     pub static BYTES: &str = "bytes";
@@ -397,8 +396,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("wc-about"))
+        .override_usage(format_usage(&get_message("wc-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

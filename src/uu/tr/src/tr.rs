@@ -20,9 +20,7 @@ use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
 use uucore::{format_usage, help_about, help_section, help_usage, os_str_as_bytes, show};
 
-const ABOUT: &str = help_about!("tr.md");
-const AFTER_HELP: &str = help_section!("after help", "tr.md");
-const USAGE: &str = help_usage!("tr.md");
+use uucore::locale::{self, get_message};
 
 mod options {
     pub const COMPLEMENT: &str = "complement";
@@ -34,7 +32,9 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let matches = uu_app()
+        .after_help(get_message("tr-after-help"))
+        .try_get_matches_from(args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);
     let complement_flag = matches.get_flag(options::COMPLEMENT);
@@ -164,8 +164,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("tr-about"))
+        .override_usage(format_usage(&get_message("tr-usage")))
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(

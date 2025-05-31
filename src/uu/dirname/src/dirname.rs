@@ -10,9 +10,7 @@ use uucore::error::{UResult, UUsageError};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str = help_about!("dirname.md");
-const USAGE: &str = help_usage!("dirname.md");
-const AFTER_HELP: &str = help_section!("after help", "dirname.md");
+use uucore::locale::{self, get_message};
 
 mod options {
     pub const ZERO: &str = "zero";
@@ -21,7 +19,9 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let matches = uu_app()
+        .after_help(get_message("dirname-after-help"))
+        .try_get_matches_from(args)?;
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
@@ -61,9 +61,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
+        .about(get_message("dirname-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
+        .override_usage(format_usage(&get_message("dirname-usage")))
         .args_override_self(true)
         .infer_long_args(true)
         .arg(

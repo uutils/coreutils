@@ -30,8 +30,7 @@ use uucore::{fast_inc::fast_inc_one, format_usage, help_about, help_usage};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
 
-const USAGE: &str = help_usage!("cat.md");
-const ABOUT: &str = help_about!("cat.md");
+use uucore::locale::{self, get_message};
 
 // Allocate 32 digits for the line number.
 // An estimate is that we can print about 1e8 lines/seconds, so 32 digits
@@ -275,8 +274,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("cat-usage")))
+        .about(get_message("cat-about"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

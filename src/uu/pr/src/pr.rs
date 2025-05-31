@@ -20,9 +20,7 @@ use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str = help_about!("pr.md");
-const USAGE: &str = help_usage!("pr.md");
-const AFTER_HELP: &str = help_section!("after help", "pr.md");
+use uucore::locale::{self, get_message};
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
 const LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
@@ -153,9 +151,9 @@ enum PrError {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("pr-about"))
+        .after_help(get_message("pr-after-help"))
+        .override_usage(format_usage(&get_message("pr-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .disable_help_flag(true)

@@ -19,8 +19,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
 
-const USAGE: &str = help_usage!("ptx.md");
-const ABOUT: &str = help_about!("ptx.md");
+use uucore::locale::{self, get_message};
 
 #[derive(Debug)]
 enum OutFormat {
@@ -765,9 +764,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
+        .about(get_message("ptx-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
+        .override_usage(format_usage(&get_message("ptx-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
