@@ -19,7 +19,7 @@ path = "src/rm.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs"] }
+uucore = { workspace = true, features = ["fs", "fsext"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
