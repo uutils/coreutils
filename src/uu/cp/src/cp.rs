@@ -4,22 +4,22 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
 
-use quick_error::quick_error;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
+use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
-use std::io;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
+use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::copy_xattrs;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
-use quick_error::ResultExt;
+use thiserror::Error;
 
 use platform::copy_on_write;
 use uucore::display::Quotable;
@@ -45,65 +45,94 @@ use crate::copydir::copy_directory;
 mod copydir;
 mod platform;
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum Error {
-        /// Simple io::Error wrapper
-        IoErr(err: io::Error) { from() source(err) display("{err}")}
+#[derive(Debug, Error)]
+pub enum CpError {
+    /// Simple io::Error wrapper
+    #[error("{0}")]
+    IoErr(#[from] io::Error),
 
-        /// Wrapper for io::Error with path context
-        IoErrContext(err: io::Error, path: String) {
-            display("{path}: {err}")
-            context(path: &'a str, err: io::Error) -> (err, path.to_owned())
-            context(context: String, err: io::Error) -> (err, context)
-            source(err)
-        }
+    /// Wrapper for io::Error with path context
+    #[error("{1}: {0}")]
+    IoErrContext(io::Error, String),
 
-        /// General copy error
-        Error(err: String) {
-            display("{err}")
-            from(err: String) -> (err)
-            from(err: &'static str) -> (err.to_string())
-        }
+    /// General copy error
+    #[error("{0}")]
+    Error(String),
 
-        /// Represents the state when a non-fatal error has occurred
-        /// and not all files were copied.
-        NotAllFilesCopied {}
+    /// Represents the state when a non-fatal error has occurred
+    /// and not all files were copied.
+    #[error("Not all files were copied")]
+    NotAllFilesCopied,
 
-        /// Simple walkdir::Error wrapper
-        WalkDirErr(err: walkdir::Error) { from() display("{err}") source(err) }
+    /// Simple walkdir::Error wrapper
+    #[error("{0}")]
+    WalkDirErr(#[from] walkdir::Error),
 
-        /// Simple std::path::StripPrefixError wrapper
-        StripPrefixError(err: StripPrefixError) { from() }
+    /// Simple std::path::StripPrefixError wrapper
+    #[error(transparent)]
+    StripPrefixError(#[from] StripPrefixError),
 
-        /// Result of a skipped file
-        /// Currently happens when "no" is selected in interactive mode or when
-        /// `no-clobber` flag is set and destination is already present.
-        /// `exit with error` is used to determine which exit code should be returned.
-        Skipped(exit_with_error:bool) { }
+    /// Result of a skipped file
+    /// Currently happens when "no" is selected in interactive mode or when
+    /// `no-clobber` flag is set and destination is already present.
+    /// `exit with error` is used to determine which exit code should be returned.
+    #[error("Skipped copying file (exit with error = {0})")]
+    Skipped(bool),
 
-        /// Result of a skipped file
-        InvalidArgument(description: String) { display("{description}") }
+    /// Result of a skipped file
+    #[error("{0}")]
+    InvalidArgument(String),
 
-        /// All standard options are included as an an implementation
-        /// path, but those that are not implemented yet should return
-        /// a NotImplemented error.
-        NotImplemented(opt: String) { display("Option '{opt}' not yet implemented.") }
+    /// All standard options are included as an an implementation
+    /// path, but those that are not implemented yet should return
+    /// a NotImplemented error.
+    #[error("Option '{0}' not yet implemented.")]
+    NotImplemented(String),
 
-        /// Invalid arguments to backup
-        Backup(description: String) { display("{description}\nTry '{} --help' for more information.", uucore::execution_phrase()) }
+    /// Invalid arguments to backup
+    #[error(transparent)]
+    Backup(#[from] BackupError),
 
-        NotADirectory(path: PathBuf) { display("'{}' is not a directory", path.display()) }
+    #[error("'{}' is not a directory", .0.display())]
+    NotADirectory(PathBuf),
+}
+
+// Manual impl for &str
+impl From<&'static str> for CpError {
+    fn from(s: &'static str) -> Self {
+        Self::Error(s.to_string())
     }
 }
 
-impl UError for Error {
+impl From<String> for CpError {
+    fn from(s: String) -> Self {
+        Self::Error(s)
+    }
+}
+
+#[derive(Debug)]
+pub struct BackupError(String);
+
+impl Display for BackupError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "cp: {}\nTry '{} --help' for more information.",
+            self.0,
+            uucore::execution_phrase()
+        )
+    }
+}
+
+impl std::error::Error for BackupError {}
+
+impl UError for CpError {
     fn code(&self) -> i32 {
         EXIT_ERR
     }
 }
 
-pub type CopyResult<T> = Result<T, Error>;
+pub type CopyResult<T> = Result<T, CpError>;
 
 /// Specifies how to overwrite files.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
@@ -803,7 +832,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             match error {
                 // Error::NotAllFilesCopied is non-fatal, but the error
                 // code should still be EXIT_ERR as does GNU cp
-                Error::NotAllFilesCopied => {}
+                CpError::NotAllFilesCopied => {}
                 // Else we caught a fatal bubbled-up error, log it to stderr
                 _ => show_error!("{error}"),
             };
@@ -940,7 +969,7 @@ impl Attributes {
         }
     }
 
-    pub fn parse_iter<T>(values: impl Iterator<Item = T>) -> Result<Self, Error>
+    pub fn parse_iter<T>(values: impl Iterator<Item = T>) -> CopyResult<Self>
     where
         T: AsRef<str>,
     {
@@ -953,7 +982,7 @@ impl Attributes {
 
     /// Tries to match string containing a parameter to preserve with the corresponding entry in the
     /// Attributes struct.
-    fn parse_single_string(value: &str) -> Result<Self, Error> {
+    fn parse_single_string(value: &str) -> CopyResult<Self> {
         let value = value.to_lowercase();
 
         if value == "all" {
@@ -970,7 +999,7 @@ impl Attributes {
             "link" | "links" => &mut new.links,
             "xattr" => &mut new.xattr,
             _ => {
-                return Err(Error::InvalidArgument(format!(
+                return Err(CpError::InvalidArgument(format!(
                     "invalid attribute {}",
                     value.quote()
                 )));
@@ -998,14 +1027,14 @@ impl Options {
                 && matches.value_source(not_implemented_opt)
                     == Some(clap::parser::ValueSource::CommandLine)
             {
-                return Err(Error::NotImplemented(not_implemented_opt.to_string()));
+                return Err(CpError::NotImplemented(not_implemented_opt.to_string()));
             }
         }
 
         let recursive = matches.get_flag(options::RECURSIVE) || matches.get_flag(options::ARCHIVE);
 
         let backup_mode = match backup_control::determine_backup_mode(matches) {
-            Err(e) => return Err(Error::Backup(format!("{e}"))),
+            Err(e) => return Err(CpError::Backup(BackupError(format!("{e}")))),
             Ok(mode) => mode,
         };
         let update_mode = update_control::determine_update_mode(matches);
@@ -1015,7 +1044,7 @@ impl Options {
                 .get_one::<String>(update_control::arguments::OPT_UPDATE)
                 .is_some_and(|v| v == "none" || v == "none-fail")
         {
-            return Err(Error::InvalidArgument(
+            return Err(CpError::InvalidArgument(
                 "--backup is mutually exclusive with -n or --update=none-fail".to_string(),
             ));
         }
@@ -1032,7 +1061,7 @@ impl Options {
 
         if let Some(dir) = &target_dir {
             if !dir.is_dir() {
-                return Err(Error::NotADirectory(dir.clone()));
+                return Err(CpError::NotADirectory(dir.clone()));
             }
         };
         // cp follows POSIX conventions for overriding options such as "-a",
@@ -1120,7 +1149,7 @@ impl Options {
         #[cfg(not(feature = "selinux"))]
         if let Preserve::Yes { required } = attributes.context {
             let selinux_disabled_error =
-                Error::Error("SELinux was not enabled during the compile time!".to_string());
+                CpError::Error("SELinux was not enabled during the compile time!".to_owned());
             if required {
                 return Err(selinux_disabled_error);
             } else {
@@ -1163,7 +1192,7 @@ impl Options {
                         "auto" => ReflinkMode::Auto,
                         "never" => ReflinkMode::Never,
                         value => {
-                            return Err(Error::InvalidArgument(format!(
+                            return Err(CpError::InvalidArgument(format!(
                                 "invalid argument {} for \'reflink\'",
                                 value.quote()
                             )));
@@ -1180,7 +1209,7 @@ impl Options {
                         "auto" => SparseMode::Auto,
                         "never" => SparseMode::Never,
                         _ => {
-                            return Err(Error::InvalidArgument(format!(
+                            return Err(CpError::InvalidArgument(format!(
                                 "invalid argument {val} for \'sparse\'"
                             )));
                         }
@@ -1298,14 +1327,14 @@ fn parse_path_args(
 }
 
 /// When handling errors, we don't always want to show them to the user. This function handles that.
-fn show_error_if_needed(error: &Error) {
+fn show_error_if_needed(error: &CpError) {
     match error {
         // When using --no-clobber, we don't want to show
         // an error message
-        Error::NotAllFilesCopied => {
+        CpError::NotAllFilesCopied => {
             // Need to return an error code
         }
-        Error::Skipped(_) => {
+        CpError::Skipped(_) => {
             // touch a b && echo "n"|cp -i a b && echo $?
             // should return an error from GNU 9.2
         }
@@ -1382,7 +1411,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 // There is already a file and it isn't a symlink (managed in a different place)
                 if copied_destinations.contains(&dest) && options.backup != BackupMode::Numbered {
                     // If the target file was already created in this cp call, do not overwrite
-                    return Err(Error::Error(format!(
+                    return Err(CpError::Error(format!(
                         "will not overwrite just-created '{}' with '{}'",
                         dest.display(),
                         source.display()
@@ -1401,7 +1430,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 &mut copied_files,
             ) {
                 show_error_if_needed(&error);
-                if !matches!(error, Error::Skipped(false)) {
+                if !matches!(error, CpError::Skipped(false)) {
                     non_fatal_errors = true;
                 }
             } else {
@@ -1416,7 +1445,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     }
 
     if non_fatal_errors {
-        Err(Error::NotAllFilesCopied)
+        Err(CpError::NotAllFilesCopied)
     } else {
         Ok(())
     }
@@ -1564,7 +1593,7 @@ impl OverwriteMode {
                 if debug {
                     println!("skipped {}", path.quote());
                 }
-                Err(Error::Skipped(false))
+                Err(CpError::Skipped(false))
             }
             Self::Interactive(_) => {
                 let prompt_yes_result = if let Some((octal, human_readable)) =
@@ -1581,7 +1610,7 @@ impl OverwriteMode {
                 if prompt_yes_result {
                     Ok(())
                 } else {
-                    Err(Error::Skipped(true))
+                    Err(CpError::Skipped(true))
                 }
             }
             Self::Clobber(_) => Ok(()),
@@ -1650,7 +1679,8 @@ pub(crate) fn copy_attributes(
     attributes: &Attributes,
 ) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
-    let source_metadata = fs::symlink_metadata(source).context(context)?;
+    let source_metadata =
+        fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
@@ -1665,7 +1695,9 @@ pub(crate) fn copy_attributes(
         // gnu compatibility: cp doesn't report an error if it fails to set the ownership.
         let _ = wrap_chown(
             dest,
-            &dest.symlink_metadata().context(context)?,
+            &dest
+                .symlink_metadata()
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
             Some(dest_uid),
             Some(dest_gid),
             false,
@@ -1684,12 +1716,13 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
+            fs::set_permissions(dest, source_metadata.permissions())
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
             exacl::getfacl(source, None)
                 .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
-                .map_err(|err| Error::Error(err.to_string()))?;
+                .map_err(|err| CpError::Error(err.to_string()))?;
         }
 
         Ok(())
@@ -1713,14 +1746,14 @@ pub(crate) fn copy_attributes(
         if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
             if let Some(context) = context {
                 if let Err(e) = context.set_for_path(dest, false, false) {
-                    return Err(Error::Error(format!(
+                    return Err(CpError::Error(format!(
                         "failed to set the security context of {}: {e}",
                         dest.display()
                     )));
                 }
             }
         } else {
-            return Err(Error::Error(format!(
+            return Err(CpError::Error(format!(
                 "failed to get security context of {}",
                 source.display()
             )));
@@ -1760,19 +1793,29 @@ fn symlink_file(
 ) -> CopyResult<()> {
     #[cfg(not(windows))]
     {
-        std::os::unix::fs::symlink(source, dest).context(format!(
-            "cannot create symlink {} to {}",
-            get_filename(dest).unwrap_or("invalid file name").quote(),
-            get_filename(source).unwrap_or("invalid file name").quote()
-        ))?;
+        std::os::unix::fs::symlink(source, dest).map_err(|e| {
+            CpError::IoErrContext(
+                e,
+                format!(
+                    "cannot create symlink {} to {}",
+                    get_filename(dest).unwrap_or("invalid file name").quote(),
+                    get_filename(source).unwrap_or("invalid file name").quote()
+                ),
+            )
+        })?;
     }
     #[cfg(windows)]
     {
-        std::os::windows::fs::symlink_file(source, dest).context(format!(
-            "cannot create symlink {} to {}",
-            get_filename(dest).unwrap_or("invalid file name").quote(),
-            get_filename(source).unwrap_or("invalid file name").quote()
-        ))?;
+        std::os::windows::fs::symlink_file(source, dest).map_err(|e| {
+            CpError::IoErrContext(
+                e,
+                format!(
+                    "cannot create symlink {} to {}",
+                    get_filename(dest).unwrap_or("invalid file name").quote(),
+                    get_filename(source).unwrap_or("invalid file name").quote()
+                ),
+            )
+        })?;
     }
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
@@ -1867,7 +1910,7 @@ fn handle_existing_dest(
         if options.debug {
             println!("skipped {}", dest.quote());
         }
-        return Err(Error::Skipped(false));
+        return Err(CpError::Skipped(false));
     }
 
     if options.update != UpdateMode::IfOlder {
@@ -1947,7 +1990,7 @@ fn delete_dest_if_needed_and_allowed(
                                 &FileInformation::from_path(
                                     source,
                                     options.dereference(source_in_command_line)
-                                ).context(format!("cannot stat {}", source.quote()))?
+                                ).map_err(|e| CpError::IoErrContext(e, format!("cannot stat {}", source.quote())))?
                             )
                 }
             }
@@ -2088,11 +2131,16 @@ fn handle_copy_mode(
             } else {
                 fs::hard_link(source, dest)
             }
-            .context(format!(
-                "cannot create hard link {} to {}",
-                get_filename(dest).unwrap_or("invalid file name").quote(),
-                get_filename(source).unwrap_or("invalid file name").quote()
-            ))?;
+            .map_err(|e| {
+                CpError::IoErrContext(
+                    e,
+                    format!(
+                        "cannot create hard link {} to {}",
+                        get_filename(dest).unwrap_or("invalid file name").quote(),
+                        get_filename(source).unwrap_or("invalid file name").quote()
+                    ),
+                )
+            })?;
         }
         CopyMode::Copy => {
             copy_helper(
@@ -2137,7 +2185,10 @@ fn handle_copy_mode(
                         return Ok(PerformedAction::Skipped);
                     }
                     UpdateMode::NoneFail => {
-                        return Err(Error::Error(format!("not replacing '{}'", dest.display())));
+                        return Err(CpError::Error(format!(
+                            "not replacing '{}'",
+                            dest.display()
+                        )));
                     }
                     UpdateMode::IfOlder => {
                         let dest_metadata = fs::symlink_metadata(dest)?;
@@ -2209,7 +2260,10 @@ fn calculate_dest_permissions(
     context: &str,
 ) -> CopyResult<Permissions> {
     if dest.exists() {
-        Ok(dest.symlink_metadata().context(context)?.permissions())
+        Ok(dest
+            .symlink_metadata()
+            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
+            .permissions())
     } else {
         #[cfg(unix)]
         {
@@ -2259,7 +2313,7 @@ fn copy_file(
             .map(|info| symlinked_files.contains(&info))
             .unwrap_or(false)
         {
-            return Err(Error::Error(format!(
+            return Err(CpError::Error(format!(
                 "will not copy '{}' through just-created symlink '{}'",
                 source.display(),
                 dest.display()
@@ -2269,7 +2323,7 @@ fn copy_file(
         // Example: "cp file1 dir1/file1 tmp" where "tmp" is a directory containing a symlink "file1" pointing to a file named "foo".
         // foo will contain the contents of "file1" and "dir1/file1" will not be copied over to "tmp/file1"
         if copied_destinations.contains(dest) {
-            return Err(Error::Error(format!(
+            return Err(CpError::Error(format!(
                 "will not copy '{}' through just-created symlink '{}'",
                 source.display(),
                 dest.display()
@@ -2286,7 +2340,7 @@ fn copy_file(
             && !is_symlink_loop(dest)
             && std::env::var_os("POSIXLY_CORRECT").is_none()
         {
-            return Err(Error::Error(format!(
+            return Err(CpError::Error(format!(
                 "not writing through dangling symlink '{}'",
                 dest.display()
             )));
@@ -2368,7 +2422,7 @@ fn copy_file(
         // in the destination tree.
         if let Some(new_source) = copied_files.get(
             &FileInformation::from_path(source, options.dereference(source_in_command_line))
-                .context(format!("cannot stat {}", source.quote()))?,
+                .map_err(|e| CpError::IoErrContext(e, format!("cannot stat {}", source.quote())))?,
         ) {
             fs::hard_link(new_source, dest)?;
 
@@ -2462,7 +2516,7 @@ fn copy_file(
         if let Err(e) =
             uucore::selinux::set_selinux_security_context(dest, options.context.as_ref())
         {
-            return Err(Error::Error(format!("SELinux error: {}", e)));
+            return Err(CpError::Error(format!("SELinux error: {}", e)));
         }
     }
 
@@ -2542,7 +2596,7 @@ fn copy_helper(
     }
 
     if path_ends_with_terminator(dest) && !dest.is_dir() {
-        return Err(Error::NotADirectory(dest.to_path_buf()));
+        return Err(CpError::NotADirectory(dest.to_path_buf()));
     }
 
     if source_is_fifo && options.recursive && !options.copy_contents {

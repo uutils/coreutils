@@ -26,7 +26,7 @@ use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    CopyResult, Error, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
+    CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
     copy_link,
 };
 
@@ -266,7 +266,7 @@ fn copy_direntry(
                 // TODO What other kinds of errors, if any, should
                 // cause us to continue walking the directory?
                 match err {
-                    Error::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
+                    CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
                         show!(uio_error!(
                             e,
                             "cannot open {} for reading",

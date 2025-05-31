@@ -14,11 +14,11 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use uucore::buf_copy;
 
-use quick_error::ResultExt;
-
 use uucore::mode::get_umask;
 
-use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
+use crate::{
+    CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
+};
 
 /// The fallback behavior for [`clone`] on failed system call.
 #[derive(Clone, Copy)]
@@ -404,7 +404,7 @@ pub(crate) fn copy_on_write(
             return Err("`--reflink=always` can be used only with --sparse=auto".into());
         }
     };
-    result.context(context)?;
+    result.map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
     Ok(copy_debug)
 }
 
