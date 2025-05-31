@@ -1,0 +1,3 @@
+uname-about = Print certain system information.
+  With no OPTION, same as -s.
+uname-usage = uname [OPTION]...
