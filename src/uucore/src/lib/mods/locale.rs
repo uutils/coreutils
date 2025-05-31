@@ -140,13 +140,21 @@ fn create_bundle(
         path: locale_path.clone(),
     })?;
 
-    let resource = FluentResource::try_new(ftl_file).map_err(|_| {
-        LocalizationError::Parse(format!(
-            "Failed to parse localization resource for {}: {}",
-            locale,
-            locale_path.display()
-        ))
-    })?;
+    let resource = FluentResource::try_new(ftl_file.clone()).map_err(
+        |(_partial_resource, mut errs): (FluentResource, Vec<ParserError>)| {
+            let first_err = errs.remove(0);
+            // Attempt to extract the snippet from the original ftl_file
+            let snippet = if let Some(range) = first_err.slice.clone() {
+                ftl_file.get(range).unwrap_or("").to_string()
+            } else {
+                String::new()
+            };
+            LocalizationError::ParseResource {
+                error: first_err,
+                snippet,
+            }
+        },
+    )?;
 
     let mut bundle = FluentBundle::new(vec![locale.clone()]);
 
