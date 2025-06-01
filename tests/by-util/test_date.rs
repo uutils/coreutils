@@ -657,7 +657,39 @@ fn test_date_tz_with_relative_time() {
 #[test]
 fn test_date_utc_time() {
     // Test that -u flag shows correct UTC time
-    new_ucmd!().arg("-u").arg("+%H:%M").succeeds();
+    // We get 2 UTC times just in case we're really unlucky and this runs around
+    // an hour change.
+    let utc_hour_1: i32 = new_ucmd!()
+        .env("TZ", "Asia/Taipei")
+        .arg("-u")
+        .arg("+%-H")
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse()
+        .unwrap();
+    let tpe_hour: i32 = new_ucmd!()
+        .env("TZ", "Asia/Taipei")
+        .arg("+%-H")
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse()
+        .unwrap();
+    let utc_hour_2: i32 = new_ucmd!()
+        .env("TZ", "Asia/Taipei")
+        .arg("-u")
+        .arg("+%-H")
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse()
+        .unwrap();
+    // Taipei is always 8 hours ahead of UTC (no daylight savings)
+    assert!(
+        (tpe_hour - utc_hour_1 + 24) % 24 == 8 || (tpe_hour - utc_hour_2 + 24) % 24 == 8,
+        "TPE: {tpe_hour} UTC: {utc_hour_1}/{utc_hour_2}"
+    );
 
     // Test that -u flag shows UTC timezone
     new_ucmd!()
