@@ -384,6 +384,8 @@ fn make_error<'a>(overflow: bool, negative: bool) -> ExtendedParserError<'a, Ext
 //
 // TODO: Still pending discussion in https://github.com/akubera/bigdecimal-rs/issues/147,
 // we do lose a little bit of precision, and the last digits may not be correct.
+// Note: This has been copied from the latest revision in https://github.com/akubera/bigdecimal-rs/pull/148,
+// so it's using minimum Rust version of `bigdecimal-rs`.
 fn pow_with_context(bd: &BigDecimal, exp: i64, ctx: &Context) -> BigDecimal {
     if exp == 0 {
         return 1.into();
@@ -412,6 +414,7 @@ fn pow_with_context(bd: &BigDecimal, exp: i64, ctx: &Context) -> BigDecimal {
     // Note: 63 - n.leading_zeros() == n.ilog2, but that's only available in recent Rust versions.
     let muls = (n.count_ones() + (63 - n.leading_zeros()) - 1) as u64;
     // Note: div_ceil would be nice to use here, but only available in recent Rust versions.
+    // (see note above about minimum Rust version in use)
     let margin_extra = (muls + MUL_PER_MARGIN_EXTRA / 2) / MUL_PER_MARGIN_EXTRA;
     let mut margin = margin_extra + MARGIN_PER_MUL * muls;
 
