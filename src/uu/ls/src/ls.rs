@@ -292,22 +292,18 @@ impl TimeStyle {
         let mut out = StdIoWrite(out);
         let config = jiff::fmt::strtime::Config::new().lenient(true);
 
-        match (self, recent) {
-            (Self::FullIso, _) => {
-                tm.format_with_config(&config, "%Y-%m-%d %H:%M:%S.%f %z", &mut out)
-            }
-            (Self::LongIso, _) => tm.format_with_config(&config, "%Y-%m-%d %H:%M", &mut out),
-            (Self::Iso, true) => tm.format_with_config(&config, "%m-%d %H:%M", &mut out),
-            (Self::Iso, false) => tm.format_with_config(&config, "%Y-%m-%d ", &mut out),
-            // spell-checker:ignore (word) datetime
-            //In this version of chrono translating can be done
-            //The function is chrono::datetime::DateTime::format_localized
-            //However it's currently still hard to get the current pure-rust-locale
-            //So it's not yet implemented
-            (Self::Locale, true) => tm.format_with_config(&config, "%b %e %H:%M", &mut out),
-            (Self::Locale, false) => tm.format_with_config(&config, "%b %e  %Y", &mut out),
-            (Self::Format(fmt), _) => tm.format_with_config(&config, fmt, &mut out),
-        }
+        let fmt = match (self, recent) {
+            (Self::FullIso, _) => "%Y-%m-%d %H:%M:%S.%f %z",
+            (Self::LongIso, _) => "%Y-%m-%d %H:%M",
+            (Self::Iso, true) => "%m-%d %H:%M",
+            (Self::Iso, false) => "%Y-%m-%d ",
+            // TODO: Using correct locale string is not implemented.
+            (Self::Locale, true) => "%b %e %H:%M",
+            (Self::Locale, false) => "%b %e  %Y",
+            (Self::Format(fmt), _) => fmt,
+        };
+
+        tm.format_with_config(&config, fmt, &mut out)
     }
 }
 
