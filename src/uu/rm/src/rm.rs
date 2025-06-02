@@ -110,7 +110,7 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let files: Vec<&OsStr> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -204,6 +204,7 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
