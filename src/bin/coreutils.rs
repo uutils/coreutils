@@ -68,6 +68,18 @@ fn get_canonical_util_name(util_name: &str) -> &str {
     }
 }
 
+fn find_prefixed_util<'a>(
+    binary_name: &str,
+    mut util_keys: impl Iterator<Item = &'a str>,
+) -> Option<&'a str> {
+    util_keys.find(|util| {
+        binary_name.ends_with(*util)
+            && binary_name.len() > util.len() // Ensure there's actually a prefix
+            && !binary_name[..binary_name.len() - (*util).len()]
+                .ends_with(char::is_alphanumeric)
+    })
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn main() {
     uucore::panic::mute_sigpipe_panic();
@@ -89,13 +101,9 @@ fn main() {
     // binary name equals prefixed util name?
     // * prefix/stem may be any string ending in a non-alphanumeric character
     // For example, if the binary is named `uu_test`, it will match `test` as a utility.
-    let util_name = if let Some(util) = utils.keys().find(|util| {
-        binary_as_util.ends_with(*util)
-            && !binary_as_util[..binary_as_util.len() - (*util).len()]
-                .ends_with(char::is_alphanumeric)
-    }) {
+    let util_name = if let Some(util) = find_prefixed_util(binary_as_util, utils.keys().copied()) {
         // prefixed util => replace 0th (aka, executable name) argument
-        Some(OsString::from(*util))
+        Some(OsString::from(util))
     } else {
         // unmatched binary name => regard as multi-binary container and advance argument list
         uucore::set_utility_is_second_arg();
