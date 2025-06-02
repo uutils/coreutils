@@ -1354,3 +1354,152 @@ fn test_multiple_output_files() {
         .fails_with_code(2)
         .stderr_is("sort: multiple output files specified\n");
 }
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "f-extra-arg"
+fn test_files0_from_extra_arg() {
+    new_ucmd!()
+        .args(&["--files0-from", "-", "foo"])
+        .fails_with_code(2)
+        .stderr_contains(
+            "sort: extra operand 'foo'\nfile operands cannot be combined with --files0-from\n",
+        )
+        .no_stdout();
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "missing"
+fn test_files0_from_missing() {
+    new_ucmd!()
+        .args(&["--files0-from", "missing_file"])
+        .fails_with_code(2)
+        .stderr_only(
+            #[cfg(not(windows))]
+            "sort: open failed: missing_file: No such file or directory\n",
+            #[cfg(windows)]
+            "sort: open failed: missing_file: The system cannot find the file specified.\n",
+        );
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "minus-in-stdin"
+fn test_files0_from_minus_in_stdin() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in("-")
+        .fails_with_code(2)
+        .stderr_only("sort: when reading file names from stdin, no file name of '-' allowed\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "empty"
+fn test_files0_from_empty() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene
+        .ucmd()
+        .args(&["--files0-from", "file"])
+        .fails_with_code(2)
+        .stderr_only("sort: no input from 'file'\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
+fn test_files0_from_empty_non_regular() {
+    new_ucmd!()
+        .args(&["--files0-from", "/dev/null"])
+        .fails_with_code(2)
+        .stderr_only("sort: no input from '/dev/null'\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "nul-1"
+fn test_files0_from_nul() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in("\0")
+        .fails_with_code(2)
+        .stderr_only("sort: -:1: invalid zero-length file name\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "nul-2"
+fn test_files0_from_nul2() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in("\0\0")
+        .fails_with_code(2)
+        .stderr_only("sort: -:1: invalid zero-length file name\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "1"
+fn test_files0_from_1() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    at.append("file", "a");
+    scene
+        .ucmd()
+        .args(&["--files0-from", "-"])
+        .pipe_in("file")
+        .succeeds()
+        .stdout_only("a\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "1a"
+fn test_files0_from_1a() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    at.append("file", "a");
+    scene
+        .ucmd()
+        .args(&["--files0-from", "-"])
+        .pipe_in("file\0")
+        .succeeds()
+        .stdout_only("a\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "2"
+fn test_files0_from_2() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    at.append("file", "a");
+    scene
+        .ucmd()
+        .args(&["--files0-from", "-"])
+        .pipe_in("file\0file")
+        .succeeds()
+        .stdout_only("a\na\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "2a"
+fn test_files0_from_2a() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    at.append("file", "a");
+    scene
+        .ucmd()
+        .args(&["--files0-from", "-"])
+        .pipe_in("file\0file\0")
+        .succeeds()
+        .stdout_only("a\na\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "zero-len"
+fn test_files0_from_zero_length() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in("g\0\0b\0\0")
+        .fails_with_code(2)
+        .stderr_only("sort: -:2: invalid zero-length file name\n");
+}
