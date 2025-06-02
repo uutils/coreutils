@@ -80,6 +80,19 @@ fn find_prefixed_util<'a>(
     })
 }
 
+fn setup_localization_or_exit(util_name: &str) {
+    locale::setup_localization(get_canonical_util_name(util_name)).unwrap_or_else(|err| {
+        match err {
+            uucore::locale::LocalizationError::ParseResource {
+                error: err_msg,
+                snippet,
+            } => eprintln!("Localization parse error at {snippet}: {err_msg}"),
+            other => eprintln!("Could not init the localization system: {other}"),
+        }
+        process::exit(99)
+    });
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn main() {
     uucore::panic::mute_sigpipe_panic();
@@ -143,21 +156,7 @@ fn main() {
                 // binary to avoid the load of the flt
                 // Could be something like:
                 // #[cfg(not(feature = "only_english"))]
-                match locale::setup_localization(get_canonical_util_name(util)) {
-                    Ok(()) => {}
-                    Err(uucore::locale::LocalizationError::ParseResource {
-                        error: err_msg,
-                        snippet,
-                    }) => {
-                        // Now you have both `err_msg: ParserError` and `snippet: String`
-                        eprintln!("Localization parse error at “{}”: {:?}", snippet, err_msg);
-                        process::exit(1);
-                    }
-                    Err(other) => {
-                        eprintln!("Could not init the localization system: {}", other);
-                        process::exit(1);
-                    }
-                }
+                setup_localization_or_exit(util);
                 process::exit(uumain(vec![util_os].into_iter().chain(args)));
             }
             None => {
@@ -261,6 +260,7 @@ fn gen_manpage<T: uucore::Args>(
     let command = if utility == "coreutils" {
         gen_coreutils_app(util_map)
     } else {
+        setup_localization_or_exit(utility);
         util_map.get(utility).unwrap().1()
     };
 
