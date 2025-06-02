@@ -364,6 +364,7 @@ digest = "0.10.7"
 fluent-bundle = "0.16.0"
 fluent = "0.17.0"
 unic-langid = "0.9.6"
+fluent-syntax = "0.12.0"
 
 uucore = { version = "0.1.0", package = "uucore", path = "src/uucore" }
 uucore_procs = { version = "0.1.0", package = "uucore_procs", path = "src/uucore_procs" }

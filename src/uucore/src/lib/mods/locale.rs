@@ -6,6 +6,7 @@
 
 use crate::error::UError;
 use fluent::{FluentArgs, FluentBundle, FluentResource};
+use fluent_syntax::parser::ParserError;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -21,8 +22,14 @@ pub enum LocalizationError {
         source: std::io::Error,
         path: PathBuf,
     },
-    #[error("Parse error: {0}")]
-    Parse(String),
+    #[error("Parse-locale error: {0}")]
+    ParseLocale(String),
+    #[error("Resource parse error at '{snippet}': {error:?}")]
+    ParseResource {
+        #[source]
+        error: ParserError,
+        snippet: String,
+    },
     #[error("Bundle error: {0}")]
     Bundle(String),
     #[error("Locales directory not found: {0}")]
@@ -261,9 +268,9 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
         .next()
         .unwrap_or(DEFAULT_LOCALE)
         .to_string();
-
-    LanguageIdentifier::from_str(&locale_str)
-        .map_err(|_| LocalizationError::Parse(format!("Failed to parse locale: {}", locale_str)))
+    LanguageIdentifier::from_str(&locale_str).map_err(|_| {
+        LocalizationError::ParseLocale(format!("Failed to parse locale: {}", locale_str))
+    })
 }
 
 /// Sets up localization using the system locale with English fallback.
@@ -461,7 +468,7 @@ invalid-syntax = This is { $missing
 
     #[test]
     fn test_localization_error_uerror_impl() {
-        let error = LocalizationError::Parse("test error".to_string());
+        let error = LocalizationError::Bundle("some error".to_string());
         assert_eq!(error.code(), 1);
     }
 
@@ -500,10 +507,14 @@ invalid-syntax = This is { $missing
         let result = create_bundle(&locale, temp_dir.path());
         assert!(result.is_err());
 
-        if let Err(LocalizationError::Parse(_)) = result {
-            // Expected parse error
+        if let Err(LocalizationError::ParseResource {
+            error: _parser_err,
+            snippet: _,
+        }) = result
+        {
+            // Expected ParseResource variant
         } else {
-            panic!("Expected parse error");
+            panic!("Expected ParseResource error");
         }
     }
 
@@ -1042,12 +1053,32 @@ invalid-syntax = This is { $missing
         assert!(error_string.contains("I/O error loading"));
         assert!(error_string.contains("/test/path.ftl"));
 
-        let parse_error = LocalizationError::Parse("Syntax error".to_string());
-        let parse_string = format!("{}", parse_error);
-        assert!(parse_string.contains("Parse error: Syntax error"));
-
         let bundle_error = LocalizationError::Bundle("Bundle creation failed".to_string());
         let bundle_string = format!("{}", bundle_error);
         assert!(bundle_string.contains("Bundle error: Bundle creation failed"));
+    }
+
+    #[test]
+    fn test_parse_resource_error_includes_snippet() {
+        let temp_dir = create_test_locales_dir();
+        let locale = LanguageIdentifier::from_str("es-ES").unwrap();
+
+        let result = create_bundle(&locale, temp_dir.path());
+        assert!(result.is_err());
+
+        if let Err(LocalizationError::ParseResource {
+            error: _err,
+            snippet,
+        }) = result
+        {
+            // The snippet should contain exactly the invalid text from es-ES.ftl
+            assert!(
+                snippet.contains("This is { $missing"),
+                "snippet was `{}` but did not include the invalid text",
+                snippet
+            );
+        } else {
+            panic!("Expected LocalizationError::ParseResource with snippet");
+        }
     }
 }
