@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap procfs uuhelp startswith constness expl
+# spell-checker:ignore (libs) bigdecimal datetime serde bincode gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl
 
 [package]
 name = "coreutils"
@@ -525,9 +525,6 @@ walkdir = { workspace = true }
 hex-literal = "1.0.0"
 rstest = { workspace = true }
 ctor = "0.4.1"
-
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
-procfs = { version = "0.17", default-features = false }
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["process", "signal", "user", "term"] }
