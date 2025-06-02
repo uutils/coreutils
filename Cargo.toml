@@ -158,7 +158,6 @@ feat_os_macos = [
 feat_os_unix = [
   "feat_Tier1",
   #
-  "feat_require_crate_cpp",
   "feat_require_unix",
   "feat_require_unix_utmpx",
   "feat_require_unix_hostid",
@@ -185,9 +184,7 @@ feat_os_unix_android = [
 #
 # ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
 #
-# "feat_require_crate_cpp" == set of utilities requiring the `cpp` crate (which fail to compile on several platforms; as of 2020-04-23)
-feat_require_crate_cpp = ["stdbuf"]
-# "feat_require_unix" == set of utilities requiring support which is only available on unix platforms (as of 2020-04-23)
+# "feat_require_unix" == set of utilities requiring support which is only available on unix platforms
 feat_require_unix = [
   "chgrp",
   "chmod",
@@ -204,6 +201,7 @@ feat_require_unix = [
   "nohup",
   "pathchk",
   "stat",
+  "stdbuf",
   "stty",
   "timeout",
   "tty",
@@ -219,8 +217,6 @@ feat_require_selinux = ["chcon", "runcon"]
 # "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
 feat_os_unix_fuchsia = [
   "feat_common_core",
-  #
-  "feat_require_crate_cpp",
   #
   "chgrp",
   "chmod",
@@ -287,6 +283,7 @@ clap_complete = "4.4"
 clap_mangen = "0.2"
 compare = "0.1.0"
 crossterm = "0.29.0"
+ctor = "0.4.1"
 ctrlc = { version = "3.4.7", features = ["termination"] }
 dns-lookup = { version = "2.0.4" }
 exacl = "0.12.0"
@@ -502,6 +499,7 @@ yes = { optional = true, version = "0.1.0", package = "uu_yes", path = "src/uu/y
 
 [dev-dependencies]
 chrono = { workspace = true }
+ctor = { workspace = true }
 filetime = { workspace = true }
 glob = { workspace = true }
 libc = { workspace = true }
@@ -524,7 +522,6 @@ uucore = { workspace = true, features = [
 walkdir = { workspace = true }
 hex-literal = "1.0.0"
 rstest = { workspace = true }
-ctor = "0.4.1"
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["process", "signal", "user", "term"] }
