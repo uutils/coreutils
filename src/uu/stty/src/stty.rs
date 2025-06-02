@@ -142,7 +142,18 @@ impl<'a> Options<'a> {
                         .custom_flags(O_NONBLOCK)
                         .open(f)?,
                 ),
-                None => Device::Stdout(stdout()),
+                // default to /dev/tty, if that does not exist then default to stdout
+                None => {
+                    if let Ok(f) = std::fs::OpenOptions::new()
+                        .read(true)
+                        .custom_flags(O_NONBLOCK)
+                        .open("/dev/tty")
+                    {
+                        Device::File(f)
+                    } else {
+                        Device::Stdout(stdout())
+                    }
+                }
             },
             settings: matches
                 .get_many::<String>(options::SETTINGS)
