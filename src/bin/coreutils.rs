@@ -51,6 +51,23 @@ fn name(binary_path: &Path) -> Option<&str> {
     binary_path.file_stem()?.to_str()
 }
 
+fn get_canonical_util_name(util_name: &str) -> &str {
+    match util_name {
+        // uu_test aliases - '[' is an alias for test
+        "[" => "test",
+
+        // hashsum aliases - all these hash commands are aliases for hashsum
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
+        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
+        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => "hashsum",
+
+        "dir" => "ls", // dir is an alias for ls
+
+        // Default case - return the util name as is
+        _ => util_name,
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn main() {
     uucore::panic::mute_sigpipe_panic();
@@ -71,6 +88,7 @@ fn main() {
 
     // binary name equals prefixed util name?
     // * prefix/stem may be any string ending in a non-alphanumeric character
+    // For example, if the binary is named `uu_test`, it will match `test` as a utility.
     let util_name = if let Some(util) = utils.keys().find(|util| {
         binary_as_util.ends_with(*util)
             && !binary_as_util[..binary_as_util.len() - (*util).len()]
