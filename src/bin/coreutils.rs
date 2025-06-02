@@ -287,3 +287,70 @@ fn gen_coreutils_app<T: uucore::Args>(util_map: &UtilityMap<T>) -> Command {
     }
     command
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_get_canonical_util_name() {
+        // Test a few key aliases
+        assert_eq!(get_canonical_util_name("["), "test");
+        assert_eq!(get_canonical_util_name("md5sum"), "hashsum");
+        assert_eq!(get_canonical_util_name("dir"), "ls");
+
+        // Test passthrough case
+        assert_eq!(get_canonical_util_name("cat"), "cat");
+    }
+
+    #[test]
+    fn test_name() {
+        // Test normal executable name
+        assert_eq!(name(Path::new("/usr/bin/ls")), Some("ls"));
+        assert_eq!(name(Path::new("cat")), Some("cat"));
+        assert_eq!(
+            name(Path::new("./target/debug/coreutils")),
+            Some("coreutils")
+        );
+
+        // Test with extensions
+        assert_eq!(name(Path::new("program.exe")), Some("program"));
+        assert_eq!(name(Path::new("/path/to/utility.bin")), Some("utility"));
+
+        // Test edge cases
+        assert_eq!(name(Path::new("")), None);
+        assert_eq!(name(Path::new("/")), None);
+    }
+
+    #[test]
+    fn test_find_prefixed_util() {
+        let utils = ["test", "cat", "ls", "cp"];
+
+        // Test exact prefixed matches
+        assert_eq!(
+            find_prefixed_util("uu_test", utils.iter().copied()),
+            Some("test")
+        );
+        assert_eq!(
+            find_prefixed_util("my-cat", utils.iter().copied()),
+            Some("cat")
+        );
+        assert_eq!(
+            find_prefixed_util("prefix_ls", utils.iter().copied()),
+            Some("ls")
+        );
+
+        // Test non-alphanumeric separator requirement
+        assert_eq!(find_prefixed_util("prefixcat", utils.iter().copied()), None); // no separator
+        assert_eq!(find_prefixed_util("testcat", utils.iter().copied()), None); // no separator
+
+        // Test no match
+        assert_eq!(find_prefixed_util("unknown", utils.iter().copied()), None);
+        assert_eq!(find_prefixed_util("", utils.iter().copied()), None);
+
+        // Test exact util name (should not match as prefixed)
+        assert_eq!(find_prefixed_util("test", utils.iter().copied()), None);
+        assert_eq!(find_prefixed_util("cat", utils.iter().copied()), None);
+    }
+}
