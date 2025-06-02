@@ -18,14 +18,6 @@ use utmp_classic::{UtmpEntry, parse_from_path};
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::{self, Utmpx};
 
-#[cfg(target_env = "musl")]
-const ABOUT: &str = concat!(
-    help_about!("users.md"),
-    "\n\nWarning: When built with musl libc, the `users` utility may show '0 users' \n",
-    "due to musl's stub implementation of utmpx functions."
-);
-
-#[cfg(not(target_env = "musl"))]
 use uucore::locale::get_message;
 
 #[cfg(target_os = "openbsd")]
@@ -93,9 +85,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    #[cfg(not(target_env = "musl"))]
+    let about = get_message("users-about");
+    #[cfg(target_env = "musl")]
+    let about = get_message("users-about") + &get_message("users-about-musl-warning");
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(get_message("users-about"))
+        .about(about)
         .override_usage(format_usage(&get_message("users-usage")))
         .infer_long_args(true)
         .arg(
