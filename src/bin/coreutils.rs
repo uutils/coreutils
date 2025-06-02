@@ -169,7 +169,6 @@ fn main() {
 
                         match utils.get(util) {
                             Some(&(uumain, _)) => {
-
                                 let code = uumain(
                                     vec![util_os, OsString::from("--help")]
                                         .into_iter()
