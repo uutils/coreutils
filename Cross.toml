@@ -1,0 +1,7 @@
+# spell-checker:ignore (misc) dpkg noninteractive tzdata
+[build]
+pre-build = [
+  "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install tzdata",
+]
+[build.env]
+passthrough = ["CI", "RUST_BACKTRACE", "CARGO_TERM_COLOR"]

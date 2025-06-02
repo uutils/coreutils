@@ -3,19 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
-use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
-#[cfg(windows)]
-use chrono::{Datelike, Timelike};
 use clap::{Arg, ArgAction, Command};
+use jiff::fmt::strtime;
+use jiff::tz::TimeZone;
+use jiff::{SignedDuration, Timestamp, Zoned};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{CLOCK_REALTIME, clock_settime, timespec};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use uucore::custom_tz_fmt::custom_time_format;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
@@ -75,7 +73,7 @@ struct Settings {
     utc: bool,
     format: Format,
     date_source: DateSource,
-    set_to: Option<DateTime<FixedOffset>>,
+    set_to: Option<Zoned>,
 }
 
 /// Various ways of displaying the date
@@ -93,7 +91,7 @@ enum DateSource {
     Custom(String),
     File(PathBuf),
     Stdin,
-    Human(TimeDelta),
+    Human(SignedDuration),
 }
 
 enum Iso8601Format {
@@ -167,9 +165,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        let ref_time = Local::now();
-        if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date.as_str()) {
-            let duration = new_time.signed_duration_since(ref_time);
+        if let Ok(duration) = parse_offset(date.as_str()) {
             DateSource::Human(duration)
         } else {
             DateSource::Custom(date.into())
@@ -203,39 +199,37 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(date) = settings.set_to {
         // All set time functions expect UTC datetimes.
-        let date: DateTime<Utc> = if settings.utc {
-            date.with_timezone(&Utc)
+        let date = if settings.utc {
+            date.with_time_zone(TimeZone::UTC)
         } else {
-            date.into()
+            date
         };
 
         return set_system_datetime(date);
     } else {
         // Get the current time, either in the local time zone or UTC.
-        let now: DateTime<FixedOffset> = if settings.utc {
-            let now = Utc::now();
-            now.with_timezone(&now.offset().fix())
+        let now = if settings.utc {
+            Timestamp::now().to_zoned(TimeZone::UTC)
         } else {
-            let now = Local::now();
-            now.with_timezone(now.offset())
+            Zoned::now()
         };
 
         // Iterate over all dates - whether it's a single date or a file.
         let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
             DateSource::Custom(ref input) => {
-                let date = parse_date(input.clone());
+                let date = parse_date(input);
                 let iter = std::iter::once(date);
                 Box::new(iter)
             }
             DateSource::Human(relative_time) => {
                 // Double check the result is overflow or not of the current_time + relative_time
                 // it may cause a panic of chrono::datetime::DateTime add
-                match now.checked_add_signed(relative_time) {
-                    Some(date) => {
+                match now.checked_add(relative_time) {
+                    Ok(date) => {
                         let iter = std::iter::once(Ok(date));
                         Box::new(iter)
                     }
-                    None => {
+                    Err(_) => {
                         return Err(USimpleError::new(
                             1,
                             format!("invalid date {relative_time}"),
@@ -272,23 +266,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Format all the dates
         for date in dates {
             match date {
-                Ok(date) => {
-                    let format_string = custom_time_format(format_string);
-                    // Hack to work around panic in chrono,
-                    // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
-                    let format_items = StrftimeItems::new(format_string.as_str());
-                    if format_items.clone().any(|i| i == Item::Error) {
+                // TODO: Switch to lenient formatting.
+                Ok(date) => match strtime::format(format_string, &date) {
+                    Ok(s) => println!("{s}"),
+                    Err(e) => {
                         return Err(USimpleError::new(
                             1,
-                            format!("invalid format {}", format_string.replace("%f", "%N")),
+                            format!("invalid format {} ({e})", format_string),
                         ));
                     }
-                    let formatted = date
-                        .format_with_items(format_items)
-                        .to_string()
-                        .replace("%f", "%N");
-                    println!("{formatted}");
-                }
+                },
                 Err((input, _err)) => show!(USimpleError::new(
                     1,
                     format!("invalid date {}", input.quote())
@@ -388,13 +375,13 @@ fn make_format_string(settings: &Settings) -> &str {
             Iso8601Format::Hours => "%FT%H%:z",
             Iso8601Format::Minutes => "%FT%H:%M%:z",
             Iso8601Format::Seconds => "%FT%T%:z",
-            Iso8601Format::Ns => "%FT%T,%f%:z",
+            Iso8601Format::Ns => "%FT%T,%N%:z",
         },
         Format::Rfc5322 => "%a, %d %h %Y %T %z",
         Format::Rfc3339(ref fmt) => match *fmt {
             Rfc3339Format::Date => "%F",
             Rfc3339Format::Seconds => "%F %T%:z",
-            Rfc3339Format::Ns => "%F %T.%f%:z",
+            Rfc3339Format::Ns => "%F %T.%N%:z",
         },
         Format::Custom(ref fmt) => fmt,
         Format::Default => "%a %b %e %X %Z %Y",
@@ -403,19 +390,43 @@ fn make_format_string(settings: &Settings) -> &str {
 
 /// Parse a `String` into a `DateTime`.
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
+// TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
-) -> Result<DateTime<FixedOffset>, (String, parse_datetime::ParseDateTimeError)> {
-    parse_datetime::parse_datetime(s.as_ref()).map_err(|e| (s.as_ref().into(), e))
+) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
+    match parse_datetime::parse_datetime(s.as_ref()) {
+        Ok(date) => {
+            let timestamp =
+                Timestamp::new(date.timestamp(), date.timestamp_subsec_nanos() as i32).unwrap();
+            Ok(Zoned::new(timestamp, TimeZone::UTC))
+        }
+        Err(e) => Err((s.as_ref().into(), e)),
+    }
+}
+
+// TODO: Convert `parse_datetime` to jiff and remove wrapper from chrono to jiff structures.
+// Also, consider whether parse_datetime::parse_datetime_at_date can be renamed to something
+// like parse_datetime::parse_offset, instead of doing some addition/subtraction.
+fn parse_offset(date: &str) -> Result<SignedDuration, ()> {
+    let ref_time = chrono::Local::now();
+    if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date) {
+        let duration = new_time.signed_duration_since(ref_time);
+        Ok(SignedDuration::new(
+            duration.num_seconds(),
+            duration.subsec_nanos(),
+        ))
+    } else {
+        Err(())
+    }
 }
 
 #[cfg(not(any(unix, windows)))]
-fn set_system_datetime(_date: DateTime<Utc>) -> UResult<()> {
+fn set_system_datetime(_date: Zoned) -> UResult<()> {
     unimplemented!("setting date not implemented (unsupported target)");
 }
 
 #[cfg(target_os = "macos")]
-fn set_system_datetime(_date: DateTime<Utc>) -> UResult<()> {
+fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
         "setting the date is not supported by macOS".to_string(),
@@ -423,7 +434,7 @@ fn set_system_datetime(_date: DateTime<Utc>) -> UResult<()> {
 }
 
 #[cfg(target_os = "redox")]
-fn set_system_datetime(_date: DateTime<Utc>) -> UResult<()> {
+fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
         "setting the date is not supported by Redox".to_string(),
@@ -436,10 +447,11 @@ fn set_system_datetime(_date: DateTime<Utc>) -> UResult<()> {
 /// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`
 /// `<https://linux.die.net/man/3/clock_settime>`
 /// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
-fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
+fn set_system_datetime(date: Zoned) -> UResult<()> {
+    let ts = date.timestamp();
     let timespec = timespec {
-        tv_sec: date.timestamp() as _,
-        tv_nsec: date.timestamp_subsec_nanos() as _,
+        tv_sec: ts.as_second() as _,
+        tv_nsec: ts.subsec_nanosecond() as _,
     };
 
     let result = unsafe { clock_settime(CLOCK_REALTIME, &timespec) };
@@ -456,7 +468,7 @@ fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
 /// See here for more:
 /// https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-setsystemtime
 /// https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime
-fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
+fn set_system_datetime(date: Zoned) -> UResult<()> {
     let system_time = SYSTEMTIME {
         wYear: date.year() as u16,
         wMonth: date.month() as u16,
@@ -467,7 +479,7 @@ fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
         wMinute: date.minute() as u16,
         wSecond: date.second() as u16,
         // TODO: be careful of leap seconds - valid range is [0, 999] - how to handle?
-        wMilliseconds: ((date.nanosecond() / 1_000_000) % 1000) as u16,
+        wMilliseconds: ((date.subsec_nanosecond() / 1_000_000) % 1000) as u16,
     };
 
     let result = unsafe { SetSystemTime(&system_time) };

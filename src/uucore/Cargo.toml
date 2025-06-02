@@ -21,7 +21,6 @@ path = "src/lib/lib.rs"
 
 [dependencies]
 chrono = { workspace = true, optional = true }
-chrono-tz = { workspace = true, optional = true }
 clap = { workspace = true }
 uucore_procs = { workspace = true }
 number_prefix = { workspace = true }
@@ -29,7 +28,6 @@ dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
 wild = "2.2.1"
 glob = { workspace = true, optional = true }
-iana-time-zone = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
   "formatting",
@@ -138,6 +136,5 @@ utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []
 wide = []
-custom-tz-fmt = ["chrono", "chrono-tz", "iana-time-zone"]
 tty = []
 uptime = ["chrono", "libc", "windows-sys", "utmpx", "utmp-classic"]

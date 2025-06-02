@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly nohash strtime
 
 use std::iter;
 #[cfg(windows)]
@@ -16,24 +16,24 @@ use std::{
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, Stdout, Write, stdout},
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 #[cfg(unix)]
 use std::{
     collections::HashMap,
     os::unix::fs::{FileTypeExt, MetadataExt},
-    time::Duration,
 };
 use std::{collections::HashSet, io::IsTerminal};
 
 use ansi_width::ansi_width;
-use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, Local, TimeDelta};
 use clap::{
     Arg, ArgAction, Command,
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
 };
 use glob::{MatchOptions, Pattern};
+use jiff::fmt::StdIoWrite;
+use jiff::fmt::strtime::BrokenDownTime;
+use jiff::{Timestamp, Zoned};
 use lscolors::LsColors;
 use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions, SPACES_IN_TAB};
 use thiserror::Error;
@@ -59,7 +59,6 @@ use uucore::libc::{dev_t, major, minor};
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{self, QuotingStyle, escape_name};
 use uucore::{
-    custom_tz_fmt,
     display::Quotable,
     error::{UError, UResult, set_exit_code},
     format_usage,
@@ -274,64 +273,37 @@ enum TimeStyle {
     Format(String),
 }
 
-/// A struct/impl used to format a file DateTime, precomputing the format for performance reasons.
-struct TimeStyler {
-    // default format, always specified.
-    default: Vec<Item<'static>>,
-    // format for a recent time, only specified it is is different from the default
-    recent: Option<Vec<Item<'static>>>,
-    // If `recent` is set, cache the threshold time when we switch from recent to default format.
-    recent_time_threshold: Option<DateTime<Local>>,
+/// Whether the given date is considered recent (i.e., in the last 6 months).
+fn is_recent(time: Timestamp, state: &mut ListState) -> bool {
+    // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
+    time > state.recent_time_threshold
 }
 
-impl TimeStyler {
-    /// Create a TimeStyler based on a TimeStyle specification.
-    fn new(style: &TimeStyle) -> TimeStyler {
-        let default: Vec<Item<'static>> = match style {
-            TimeStyle::FullIso => StrftimeItems::new("%Y-%m-%d %H:%M:%S.%f %z").parse(),
-            TimeStyle::LongIso => StrftimeItems::new("%Y-%m-%d %H:%M").parse(),
-            TimeStyle::Iso => StrftimeItems::new("%Y-%m-%d ").parse(),
-            // In this version of chrono translating can be done
-            // The function is chrono::datetime::DateTime::format_localized
-            // However it's currently still hard to get the current pure-rust-locale
-            // So it's not yet implemented
-            TimeStyle::Locale => StrftimeItems::new("%b %e  %Y").parse(),
-            TimeStyle::Format(fmt) => {
-                StrftimeItems::new_lenient(custom_tz_fmt::custom_time_format(fmt).as_str())
-                    .parse_to_owned()
-            }
-        }
-        .unwrap();
-        let recent = match style {
-            TimeStyle::Iso => Some(StrftimeItems::new("%m-%d %H:%M")),
-            // See comment above about locale
-            TimeStyle::Locale => Some(StrftimeItems::new("%b %e %H:%M")),
-            _ => None,
-        }
-        .map(|x| x.collect());
-        let recent_time_threshold = if recent.is_some() {
-            // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            Some(Local::now() - TimeDelta::try_seconds(31_556_952 / 2).unwrap())
-        } else {
-            None
+impl TimeStyle {
+    /// Format the given time according to this time format style.
+    fn format(
+        &self,
+        date: Zoned,
+        out: &mut Vec<u8>,
+        state: &mut ListState,
+    ) -> Result<(), jiff::Error> {
+        let recent = is_recent(date.timestamp(), state);
+        let tm = BrokenDownTime::from(&date);
+        let mut out = StdIoWrite(out);
+        let config = jiff::fmt::strtime::Config::new().lenient(true);
+
+        let fmt = match (self, recent) {
+            (Self::FullIso, _) => "%Y-%m-%d %H:%M:%S.%f %z",
+            (Self::LongIso, _) => "%Y-%m-%d %H:%M",
+            (Self::Iso, true) => "%m-%d %H:%M",
+            (Self::Iso, false) => "%Y-%m-%d ",
+            // TODO: Using correct locale string is not implemented.
+            (Self::Locale, true) => "%b %e %H:%M",
+            (Self::Locale, false) => "%b %e  %Y",
+            (Self::Format(fmt), _) => fmt,
         };
 
-        TimeStyler {
-            default,
-            recent,
-            recent_time_threshold,
-        }
-    }
-
-    /// Format a DateTime, using `recent` format if available, and the DateTime
-    /// is recent enough.
-    fn format(&self, time: DateTime<Local>) -> String {
-        if self.recent.is_none() || time <= self.recent_time_threshold.unwrap() {
-            time.format_with_items(self.default.iter())
-        } else {
-            time.format_with_items(self.recent.as_ref().unwrap().iter())
-        }
-        .to_string()
+        tm.format_with_config(&config, fmt, &mut out)
     }
 }
 
@@ -2093,8 +2065,7 @@ struct ListState<'a> {
     uid_cache: HashMap<u32, String>,
     #[cfg(unix)]
     gid_cache: HashMap<u32, String>,
-
-    time_styler: TimeStyler,
+    recent_time_threshold: Timestamp,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -2111,7 +2082,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         uid_cache: HashMap::new(),
         #[cfg(unix)]
         gid_cache: HashMap::new(),
-        time_styler: TimeStyler::new(&config.time_style),
+        recent_time_threshold: Timestamp::now() - Duration::new(31_556_952 / 2, 0),
     };
 
     for loc in locs {
@@ -2907,7 +2878,7 @@ fn display_item_long(
         };
 
         output_display.extend(b" ");
-        output_display.extend(display_date(md, config, state).as_bytes());
+        display_date(md, config, state, &mut output_display)?;
         output_display.extend(b" ");
 
         let item_name = display_item_name(
@@ -3106,15 +3077,27 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     }
 }
 
-fn get_time(md: &Metadata, config: &Config) -> Option<DateTime<Local>> {
+fn get_time(md: &Metadata, config: &Config) -> Option<Zoned> {
     let time = get_system_time(md, config)?;
-    Some(time.into())
+    time.try_into().ok()
 }
 
-fn display_date(metadata: &Metadata, config: &Config, state: &mut ListState) -> String {
+fn display_date(
+    metadata: &Metadata,
+    config: &Config,
+    state: &mut ListState,
+    out: &mut Vec<u8>,
+) -> UResult<()> {
     match get_time(metadata, config) {
-        Some(time) => state.time_styler.format(time),
-        None => "???".into(),
+        // TODO: Some fancier error conversion might be nice.
+        Some(time) => config
+            .time_style
+            .format(time, out, state)
+            .map_err(|x| USimpleError::new(1, x.to_string())),
+        None => {
+            out.extend(b"???");
+            Ok(())
+        }
     }
 }
 
