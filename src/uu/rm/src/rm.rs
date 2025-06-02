@@ -112,7 +112,7 @@ static ARG_FILES: &str = "files";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let files: Vec<&OsStr> = matches
+    let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
         .map(|v| v.map(OsString::as_os_str).collect())
         .unwrap_or_default();
@@ -126,7 +126,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     // If -f(--force) is before any -i (or variants) we want prompts else no prompts
-    let force_prompt_never: bool = force_flag && {
+    let force_prompt_never = force_flag && {
         let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
         ![OPT_PROMPT, OPT_PROMPT_MORE, OPT_INTERACTIVE]
             .iter()
