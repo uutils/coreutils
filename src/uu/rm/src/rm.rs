@@ -119,6 +119,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let force_flag = matches.get_flag(OPT_FORCE);
 
+    if files.is_empty() && !force_flag {
+        // Still check by hand and not use clap
+        // Because "rm -f" is a thing
+        return Err(UUsageError::new(1, "missing operand"));
+    }
+
     // If -f(--force) is before any -i (or variants) we want prompts else no prompts
     let force_prompt_never: bool = force_flag && {
         let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
@@ -130,71 +136,66 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             })
     };
 
-    if files.is_empty() && !force_flag {
-        // Still check by hand and not use clap
-        // Because "rm -f" is a thing
-        return Err(UUsageError::new(1, "missing operand"));
-    } else {
-        let options = Options {
-            force: force_flag,
-            interactive: {
-                if force_prompt_never {
-                    InteractiveMode::Never
-                } else if matches.get_flag(OPT_PROMPT) {
-                    InteractiveMode::Always
-                } else if matches.get_flag(OPT_PROMPT_MORE) {
-                    InteractiveMode::Once
-                } else if matches.contains_id(OPT_INTERACTIVE) {
-                    match matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str() {
-                        "never" => InteractiveMode::Never,
-                        "once" => InteractiveMode::Once,
-                        "always" => InteractiveMode::Always,
-                        val => {
-                            return Err(USimpleError::new(
-                                1,
-                                format!("Invalid argument to interactive ({val})"),
-                            ));
-                        }
+    let options = Options {
+        force: force_flag,
+        interactive: {
+            if force_prompt_never {
+                InteractiveMode::Never
+            } else if matches.get_flag(OPT_PROMPT) {
+                InteractiveMode::Always
+            } else if matches.get_flag(OPT_PROMPT_MORE) {
+                InteractiveMode::Once
+            } else if matches.contains_id(OPT_INTERACTIVE) {
+                match matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str() {
+                    "never" => InteractiveMode::Never,
+                    "once" => InteractiveMode::Once,
+                    "always" => InteractiveMode::Always,
+                    val => {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("Invalid argument to interactive ({val})"),
+                        ));
                     }
-                } else {
-                    InteractiveMode::PromptProtected
                 }
-            },
-            one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
-            preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
-            recursive: matches.get_flag(OPT_RECURSIVE),
-            dir: matches.get_flag(OPT_DIR),
-            verbose: matches.get_flag(OPT_VERBOSE),
-            __presume_input_tty: if matches.get_flag(PRESUME_INPUT_TTY) {
-                Some(true)
             } else {
-                None
-            },
-        };
-        if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
-            let msg: String = format!(
-                "remove {} {}{}",
-                files.len(),
-                if files.len() > 1 {
-                    "arguments"
-                } else {
-                    "argument"
-                },
-                if options.recursive {
-                    " recursively?"
-                } else {
-                    "?"
-                }
-            );
-            if !prompt_yes!("{msg}") {
-                return Ok(());
+                InteractiveMode::PromptProtected
             }
-        }
-
-        if remove(&files, &options) {
-            return Err(1.into());
+        },
+        one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
+        preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
+        recursive: matches.get_flag(OPT_RECURSIVE),
+        dir: matches.get_flag(OPT_DIR),
+        verbose: matches.get_flag(OPT_VERBOSE),
+        __presume_input_tty: if matches.get_flag(PRESUME_INPUT_TTY) {
+            Some(true)
+        } else {
+            None
+        },
+    };
+    if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
+        let msg: String = format!(
+            "remove {} {}{}",
+            files.len(),
+            if files.len() > 1 {
+                "arguments"
+            } else {
+                "argument"
+            },
+            if options.recursive {
+                " recursively?"
+            } else {
+                "?"
+            }
+        );
+        if !prompt_yes!("{msg}") {
+            return Ok(());
         }
     }
+
+    if remove(&files, &options) {
+        return Err(1.into());
+    }
+
     Ok(())
 }
 
