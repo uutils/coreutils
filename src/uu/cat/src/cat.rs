@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
+// spell-checker:ignore (ToDO) lseek nonprint nonblank nonprinting ELOOP
 use std::fs::{File, metadata};
 use std::io::{self, BufWriter, IsTerminal, Read, Write};
 /// Unix domain socket support
@@ -19,10 +19,13 @@ use std::os::unix::net::UnixStream;
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
 #[cfg(unix)]
-use nix::fcntl::{FcntlArg, fcntl};
+use nix::fcntl::{FcntlArg, OFlag, fcntl};
+#[cfg(unix)]
+use nix::unistd::{Whence, lseek};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+#[cfg(unix)]
 use uucore::fs::FileInformation;
 use uucore::{fast_inc::fast_inc_one, format_usage, help_about, help_usage};
 
@@ -368,42 +371,58 @@ fn cat_handle<R: FdReadable>(
     }
 }
 
-/// Whether this process is appending to stdout.
+/// Whether the file is opened with the `O_APPEND` flag
 #[cfg(unix)]
-fn is_appending() -> bool {
-    let stdout = io::stdout();
-    let Ok(flags) = fcntl(stdout.as_fd(), FcntlArg::F_GETFL) else {
+fn is_appending<F: AsFd>(file: &F) -> bool {
+    let flags_raw = fcntl(file.as_fd(), FcntlArg::F_GETFL).unwrap_or_default();
+    let flags = OFlag::from_bits_truncate(flags_raw);
+    flags.contains(OFlag::O_APPEND)
+}
+
+/// An unsafe overwrite occurs when the same file is used as both stdin and stdout,
+/// and the file offset of stdin is positioned earlier than that of stdout.
+/// In this scenario, bytes read from stdin are written to a later part of the file
+/// via stdout, which can then be read again by stdin and written again by stdout,
+/// causing an infinite loop and potential file corruption.
+#[cfg(unix)]
+fn is_unsafe_overwrite<I: AsFd, O: AsFd>(input: &I, output: &O) -> bool {
+    let Ok(input_info) = FileInformation::from_file(input) else {
         return false;
     };
-    // TODO Replace `1 << 10` with `nix::fcntl::Oflag::O_APPEND`.
-    let o_append = 1 << 10;
-    (flags & o_append) > 0
+    let Ok(output_info) = FileInformation::from_file(output) else {
+        return false;
+    };
+    if input_info != output_info || input_info.file_size() == 0 {
+        return false;
+    }
+    if is_appending(output) {
+        return true;
+    }
+    let Ok(input_pos) = lseek(input.as_fd(), 0, Whence::SeekCur) else {
+        return false;
+    };
+    let Ok(output_pos) = lseek(output.as_fd(), 0, Whence::SeekCur) else {
+        return false;
+    };
+    input_pos < output_pos
 }
 
 #[cfg(not(unix))]
-fn is_appending() -> bool {
+const fn is_unsafe_overwrite<I, O>(_in_fd: &I, _out_fd: &O) -> bool {
     false
 }
 
-fn cat_path(
-    path: &str,
-    options: &OutputOptions,
-    state: &mut OutputState,
-    out_info: Option<&FileInformation>,
-) -> CatResult<()> {
+fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
     match get_input_type(path)? {
         InputType::StdIn => {
             let stdin = io::stdin();
-            let in_info = FileInformation::from_file(&stdin)?;
+            if is_unsafe_overwrite(&stdin, &io::stdout()) {
+                return Err(CatError::OutputIsInput);
+            }
             let mut handle = InputHandle {
                 reader: stdin,
                 is_interactive: io::stdin().is_terminal(),
             };
-            if let Some(out_info) = out_info {
-                if in_info == *out_info && is_appending() {
-                    return Err(CatError::OutputIsInput);
-                }
-            }
             cat_handle(&mut handle, options, state)
         }
         InputType::Directory => Err(CatError::IsDirectory),
@@ -419,15 +438,9 @@ fn cat_path(
         }
         _ => {
             let file = File::open(path)?;
-
-            if let Some(out_info) = out_info {
-                if out_info.file_size() != 0
-                    && FileInformation::from_file(&file).ok().as_ref() == Some(out_info)
-                {
-                    return Err(CatError::OutputIsInput);
-                }
+            if is_unsafe_overwrite(&file, &io::stdout()) {
+                return Err(CatError::OutputIsInput);
             }
-
             let mut handle = InputHandle {
                 reader: file,
                 is_interactive: false,
@@ -438,8 +451,6 @@ fn cat_path(
 }
 
 fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
-    let out_info = FileInformation::from_file(&io::stdout()).ok();
-
     let mut state = OutputState {
         line_number: LineNumber::new(),
         at_line_start: true,
@@ -449,7 +460,7 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
     let mut error_messages: Vec<String> = Vec::new();
 
     for path in files {
-        if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
+        if let Err(err) = cat_path(path, options, &mut state) {
             error_messages.push(format!("{}: {err}", path.maybe_quote()));
         }
     }
