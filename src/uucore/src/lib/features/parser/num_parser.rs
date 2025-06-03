@@ -67,15 +67,15 @@ impl Base {
         &self,
         str: &'a str,
         digits: Option<BigUint>,
-    ) -> (Option<BigUint>, u64, &'a str) {
+    ) -> (Option<BigUint>, i64, &'a str) {
         let mut digits: Option<BigUint> = digits;
-        let mut count: u64 = 0;
+        let mut count: i64 = 0;
         let mut rest = str;
 
         // Doing operations on BigUint is really expensive, so we do as much as we
         // can on u64, then add them to the BigUint.
         let mut digits_tmp: u64 = 0;
-        let mut count_tmp: u64 = 0;
+        let mut count_tmp: i64 = 0;
         let mut mul_tmp: u64 = 1;
         while let Some(d) = rest.chars().next().and_then(|c| self.digit(c)) {
             (digits_tmp, count_tmp, mul_tmp) = (
@@ -290,7 +290,7 @@ impl ExtendedParser for ExtendedBigDecimal {
     }
 }
 
-fn parse_digits(base: Base, str: &str, fractional: bool) -> (Option<BigUint>, u64, &str) {
+fn parse_digits(base: Base, str: &str, fractional: bool) -> (Option<BigUint>, i64, &str) {
     // Parse the integral part of the number
     let (digits, rest) = base.parse_digits(str);
 
@@ -472,7 +472,7 @@ fn construct_extended_big_decimal<'a>(
     digits: BigUint,
     negative: bool,
     base: Base,
-    scale: u64,
+    scale: i64,
     exponent: BigInt,
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
     if digits == BigUint::zero() {
@@ -490,14 +490,19 @@ fn construct_extended_big_decimal<'a>(
     let bd = if scale == 0 && exponent.is_zero() {
         BigDecimal::from_bigint(signed_digits, 0)
     } else if base == Base::Decimal {
-        let new_scale = -exponent + scale;
-
-        // BigDecimal "only" supports i64 scale.
-        // Note that new_scale is a negative exponent: large positive value causes an underflow, large negative values an overflow.
-        if let Some(new_scale) = new_scale.to_i64() {
-            BigDecimal::from_bigint(signed_digits, new_scale)
+        if exponent.is_zero() {
+            // Optimization: Converting scale to Bigint and back is relatively slow.
+            BigDecimal::from_bigint(signed_digits, scale)
         } else {
-            return Err(make_error(new_scale.is_negative(), negative));
+            let new_scale = -exponent + scale;
+
+            // BigDecimal "only" supports i64 scale.
+            // Note that new_scale is a negative exponent: large positive value causes an underflow, large negative values an overflow.
+            if let Some(new_scale) = new_scale.to_i64() {
+                BigDecimal::from_bigint(signed_digits, new_scale)
+            } else {
+                return Err(make_error(new_scale.is_negative(), negative));
+            }
         }
     } else if base == Base::Hexadecimal {
         // pow "only" supports u32 values, just error out if given more than 2**32 fractional digits.
