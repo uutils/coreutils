@@ -2,12 +2,11 @@
 name = "uu_factor_benches"
 version = "0.0.0"
 authors = ["nicoo <nicoo@debian.org>"]
-license = "MIT"
 description = "Benchmarks for the uu_factor integer factorization tool"
-homepage = "https://github.com/uutils/coreutils"
-edition = "2024"
-
-[workspace]
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+publish = false
 
 [dependencies]
 uu_factor = { path = "../../../src/uu/factor" }

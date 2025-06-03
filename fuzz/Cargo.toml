@@ -4,7 +4,12 @@ version = "0.0.0"
 description = "uutils ~ 'core' uutils fuzzers"
 repository = "https://github.com/uutils/coreutils/tree/main/fuzz/"
 edition.workspace = true
+license.workspace = true
 publish = false
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
 
 [workspace.package]
 edition = "2024"
@@ -31,10 +36,6 @@ uu_split = { path = "../src/uu/split/" }
 uu_tr = { path = "../src/uu/tr/" }
 uu_env = { path = "../src/uu/env/" }
 uu_cksum = { path = "../src/uu/cksum/" }
-
-# Prevent this from interfering with workspaces
-[workspace]
-members = ["."]
 
 [[bin]]
 name = "fuzz_date"

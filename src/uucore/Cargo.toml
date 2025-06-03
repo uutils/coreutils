@@ -4,7 +4,6 @@
 name = "uucore"
 description = "uutils ~ 'core' uutils code library (cross-platform)"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uucore"
-# readme = "README.md"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true

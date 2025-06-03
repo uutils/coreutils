@@ -7,7 +7,6 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 
-
 [dependencies]
 console = "0.15.0"
 libc = "0.2.153"
