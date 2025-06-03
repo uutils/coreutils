@@ -739,13 +739,14 @@ invalid-syntax = This is { $missing
         assert_eq!(result.unwrap(), "es-ES");
 
         // Restore original LANG value
-        match original_lang {
-            Some(val) => unsafe {
+        if let Some(val) = original_lang {
+            unsafe {
                 env::set_var("LANG", val);
-            },
-            None => unsafe {
+            }
+        } else {
+            unsafe {
                 env::remove_var("LANG");
-            },
+            }
         }
     }
 
@@ -764,11 +765,12 @@ invalid-syntax = This is { $missing
         assert_eq!(result.unwrap().to_string(), "en-US");
 
         // Restore original LANG value
-        match original_lang {
-            Some(val) => unsafe {
+        if let Some(val) = original_lang {
+            unsafe {
                 env::set_var("LANG", val);
-            },
-            None => {} // Was already unset
+            }
+        } else {
+            {} // Was already unset
         }
     }
 
@@ -791,13 +793,14 @@ invalid-syntax = This is { $missing
             assert_eq!(message, "Bonjour, le monde!");
 
             // Restore original LANG value
-            match original_lang {
-                Some(val) => unsafe {
+            if let Some(val) = original_lang {
+                unsafe {
                     env::set_var("LANG", val);
-                },
-                None => unsafe {
+                }
+            } else {
+                unsafe {
                     env::remove_var("LANG");
-                },
+                }
             }
         })
         .join()
@@ -823,13 +826,14 @@ invalid-syntax = This is { $missing
             assert_eq!(message, "Hello, world!");
 
             // Restore original LANG value
-            match original_lang {
-                Some(val) => unsafe {
+            if let Some(val) = original_lang {
+                unsafe {
                     env::set_var("LANG", val);
-                },
-                None => unsafe {
+                }
+            } else {
+                unsafe {
                     env::remove_var("LANG");
-                },
+                }
             }
         })
         .join()
