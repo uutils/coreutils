@@ -350,15 +350,12 @@ rust-ini = "0.21.0"
 same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "0.5.2"
-selinux-sys = "0.6.15"
 signal-hook = "0.3.17"
-smallvec = { version = "1.13.2", features = ["union"] }
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
-unicode-segmentation = "1.11.0"
 unicode-width = "0.2.0"
 utmp-classic = "0.1.6"
 uutils_term_grid = "0.7"
@@ -380,7 +377,6 @@ crc32fast = "1.4.2"
 digest = "0.10.7"
 
 # Fluent dependencies
-fluent-bundle = "0.16.0"
 fluent = "0.17.0"
 unic-langid = "0.9.6"
 fluent-syntax = "0.12.0"

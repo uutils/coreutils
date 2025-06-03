@@ -19,13 +19,11 @@ all-features = true
 path = "src/lib/lib.rs"
 
 [dependencies]
-glob = { workspace = true }
 libc = { workspace = true }
 pretty_assertions = "1.4.0"
 rand = { workspace = true }
 regex = { workspace = true }
 tempfile = { workspace = true }
-time = { workspace = true, features = ["local-offset"] }
 uucore = { workspace = true, features = [
   "mode",
   "entries",
