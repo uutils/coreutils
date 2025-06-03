@@ -465,16 +465,15 @@ fn construct_extended_big_decimal<'a>(
     let bd = if scale == 0 && exponent.is_zero() {
         BigDecimal::from_bigint(signed_digits, 0)
     } else if base == Base::Decimal {
-        let new_scale = BigInt::from(scale) - exponent;
+        let new_scale = -exponent + scale;
 
         // BigDecimal "only" supports i64 scale.
-        // Note that new_scale is a negative exponent: large value causes an underflow, small value an overflow.
-        if new_scale > i64::MAX.into() {
-            return Err(make_error(false, negative));
-        } else if new_scale < i64::MIN.into() {
-            return Err(make_error(true, negative));
+        // Note that new_scale is a negative exponent: large positive value causes an underflow, large negative values an overflow.
+        if let Some(new_scale) = new_scale.to_i64() {
+            BigDecimal::from_bigint(signed_digits, new_scale)
+        } else {
+            return Err(make_error(new_scale.is_negative(), negative));
         }
-        BigDecimal::from_bigint(signed_digits, new_scale.to_i64().unwrap())
     } else if base == Base::Hexadecimal {
         // pow "only" supports u32 values, just error out if given more than 2**32 fractional digits.
         if scale > u32::MAX.into() {
