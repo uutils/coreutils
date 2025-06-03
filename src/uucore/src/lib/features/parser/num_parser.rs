@@ -71,12 +71,37 @@ impl Base {
         let mut digits: Option<BigUint> = digits;
         let mut count: u64 = 0;
         let mut rest = str;
+
+        // Doing operations on BigUint is really expensive, so we do as much as we
+        // can on u64, then add them to the BigUint.
+        let mut digits_tmp: u64 = 0;
+        let mut count_tmp: u64 = 0;
+        let mut mul_tmp: u64 = 1;
         while let Some(d) = rest.chars().next().and_then(|c| self.digit(c)) {
-            (digits, count) = (
-                Some(digits.unwrap_or_default() * *self as u8 + d),
-                count + 1,
+            (digits_tmp, count_tmp, mul_tmp) = (
+                digits_tmp * *self as u64 + d,
+                count_tmp + 1,
+                mul_tmp * *self as u64,
             );
             rest = &rest[1..];
+            // In base 16, we parse 4 bits at a time, so we can parse 16 digits at most in a u64.
+            if count_tmp >= 15 {
+                // Accumulate what we have so far
+                (digits, count) = (
+                    Some(digits.unwrap_or_default() * mul_tmp + digits_tmp),
+                    count + count_tmp,
+                );
+                // Reset state
+                (digits_tmp, count_tmp, mul_tmp) = (0, 0, 1);
+            }
+        }
+
+        // Accumulate the leftovers (if any)
+        if mul_tmp > 1 {
+            (digits, count) = (
+                Some(digits.unwrap_or_default() * mul_tmp + digits_tmp),
+                count + count_tmp,
+            );
         }
         (digits, count, rest)
     }
