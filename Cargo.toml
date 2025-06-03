@@ -541,7 +541,7 @@ nix = { workspace = true, features = ["process", "signal", "user", "term"] }
 rlimit = "0.10.1"
 xattr = { workspace = true }
 
-# Specifically used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
+# Specifically, used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
 # to deserialize a utmpx struct into a binary file
 [target.'cfg(all(target_family= "unix",not(target_os = "macos")))'.dev-dependencies]
 serde = { version = "1.0.202", features = ["derive"] }
