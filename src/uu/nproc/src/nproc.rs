@@ -6,11 +6,12 @@
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr sysconf
 
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::{env, thread};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
@@ -29,12 +30,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     let ignore = match matches.get_one::<String>(OPT_IGNORE) {
-        Some(numstr) => match numstr.trim().parse() {
+        Some(numstr) => match numstr.trim().parse::<usize>() {
             Ok(num) => num,
             Err(e) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("{} is not a valid number: {e}", numstr.quote()),
+                    get_message_with_args(
+                        "nproc-error-invalid-number",
+                        HashMap::from([
+                            ("value".to_string(), numstr.quote().to_string()),
+                            ("error".to_string(), e.to_string()),
+                        ]),
+                    ),
                 ));
             }
         },
@@ -98,14 +105,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_ALL)
                 .long(OPT_ALL)
-                .help("print the number of cores available to the system")
+                .help(get_message("nproc-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_IGNORE)
                 .long(OPT_IGNORE)
                 .value_name("N")
-                .help("ignore up to N cores"),
+                .help(get_message("nproc-help-ignore")),
         )
 }
 
