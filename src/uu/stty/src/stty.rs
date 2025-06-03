@@ -252,22 +252,13 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
             // non control char flag
             } else if let Some(flag) = string_to_flag(arg) {
-                let mut remove_group = false;
-                match flag {
-                    AllFlags::Baud(_) => {}
-                    AllFlags::ControlFlags((flag, remove)) => {
-                        remove_group = check_flag_group(flag, remove);
-                    }
-                    AllFlags::InputFlags((flag, remove)) => {
-                        remove_group = check_flag_group(flag, remove);
-                    }
-                    AllFlags::LocalFlags((flag, remove)) => {
-                        remove_group = check_flag_group(flag, remove);
-                    }
-                    AllFlags::OutputFlags((flag, remove)) => {
-                        remove_group = check_flag_group(flag, remove);
-                    }
-                }
+                let remove_group = match flag {
+                    AllFlags::Baud(_) => false,
+                    AllFlags::ControlFlags((flag, remove)) => check_flag_group(flag, remove),
+                    AllFlags::InputFlags((flag, remove)) => check_flag_group(flag, remove),
+                    AllFlags::LocalFlags((flag, remove)) => check_flag_group(flag, remove),
+                    AllFlags::OutputFlags((flag, remove)) => check_flag_group(flag, remove),
+                };
                 if remove_group {
                     return Err(USimpleError::new(1, format!("invalid argument '{arg}'")));
                 }
@@ -303,10 +294,7 @@ fn stty(opts: &Options) -> UResult<()> {
 }
 
 fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
-    if remove && flag.group.is_some() {
-        return true;
-    }
-    false
+    remove && flag.group.is_some()
 }
 
 fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
@@ -397,10 +385,8 @@ fn string_to_flag(option: &str) -> Option<AllFlags> {
         }
     }
 
-    let (remove, name) = match option.strip_prefix('-') {
-        Some(s) => (true, s),
-        None => (false, option),
-    };
+    let remove = option.starts_with('-');
+    let name = option.trim_start_matches('-');
 
     for cflag in CONTROL_FLAGS {
         if name == cflag.name {
