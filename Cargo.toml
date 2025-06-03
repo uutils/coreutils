@@ -428,7 +428,7 @@ env = { optional = true, version = "0.1.0", package = "uu_env", path = "src/uu/e
 expand = { optional = true, version = "0.1.0", package = "uu_expand", path = "src/uu/expand" }
 expr = { optional = true, version = "0.1.0", package = "uu_expr", path = "src/uu/expr" }
 factor = { optional = true, version = "0.1.0", package = "uu_factor", path = "src/uu/factor" }
-"false" = { optional = true, version = "0.1.0", package = "uu_false", path = "src/uu/false" }
+false = { optional = true, version = "0.1.0", package = "uu_false", path = "src/uu/false" }
 fmt = { optional = true, version = "0.1.0", package = "uu_fmt", path = "src/uu/fmt" }
 fold = { optional = true, version = "0.1.0", package = "uu_fold", path = "src/uu/fold" }
 groups = { optional = true, version = "0.1.0", package = "uu_groups", path = "src/uu/groups" }
@@ -486,7 +486,7 @@ tee = { optional = true, version = "0.1.0", package = "uu_tee", path = "src/uu/t
 timeout = { optional = true, version = "0.1.0", package = "uu_timeout", path = "src/uu/timeout" }
 touch = { optional = true, version = "0.1.0", package = "uu_touch", path = "src/uu/touch" }
 tr = { optional = true, version = "0.1.0", package = "uu_tr", path = "src/uu/tr" }
-"true" = { optional = true, version = "0.1.0", package = "uu_true", path = "src/uu/true" }
+true = { optional = true, version = "0.1.0", package = "uu_true", path = "src/uu/true" }
 truncate = { optional = true, version = "0.1.0", package = "uu_truncate", path = "src/uu/truncate" }
 tsort = { optional = true, version = "0.1.0", package = "uu_tsort", path = "src/uu/tsort" }
 tty = { optional = true, version = "0.1.0", package = "uu_tty", path = "src/uu/tty" }
