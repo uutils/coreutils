@@ -2844,7 +2844,6 @@ name = "uu_chmod"
 version = "0.1.0"
 dependencies = [
  "clap 4.5.39",
- "libc",
  "uucore",
 ]
 
@@ -2871,7 +2870,6 @@ version = "0.1.0"
 dependencies = [
  "clap 4.5.39",
  "hex",
- "regex",
  "uucore",
 ]
 
@@ -3043,8 +3041,6 @@ dependencies = [
  "num-bigint",
  "num-prime",
  "num-traits",
- "rand 0.9.1",
- "smallvec",
  "uucore",
 ]
 
@@ -3101,9 +3097,6 @@ name = "uu_hashsum"
 version = "0.1.0"
 dependencies = [
  "clap 4.5.39",
- "hex",
- "memchr",
- "regex",
  "uucore",
 ]
 
@@ -3153,7 +3146,6 @@ dependencies = [
  "clap 4.5.39",
  "file_diff",
  "filetime",
- "libc",
  "thiserror 2.0.12",
  "uucore",
 ]
@@ -3208,13 +3200,11 @@ name = "uu_ls"
 version = "0.1.0"
 dependencies = [
  "ansi-width",
- "chrono",
  "clap 4.5.39",
  "glob",
  "hostname",
  "jiff",
  "lscolors",
- "number_prefix",
  "selinux",
  "terminal_size",
  "thiserror 2.0.12",
@@ -3267,8 +3257,6 @@ dependencies = [
  "crossterm",
  "nix",
  "tempfile",
- "unicode-segmentation",
- "unicode-width 0.2.0",
  "uucore",
 ]
 
@@ -3579,7 +3567,6 @@ name = "uu_sync"
 version = "0.1.0"
 dependencies = [
  "clap 4.5.39",
- "libc",
  "nix",
  "uucore",
  "windows-sys 0.59.0",
@@ -3816,7 +3803,6 @@ dependencies = [
  "dns-lookup",
  "dunce",
  "fluent",
- "fluent-bundle",
  "glob",
  "hex",
  "itertools 0.14.0",
@@ -3827,7 +3813,6 @@ dependencies = [
  "num-traits",
  "number_prefix",
  "os_display",
- "regex",
  "selinux",
  "sha1",
  "sha2",
@@ -3875,7 +3860,6 @@ name = "uutests"
 version = "0.1.0"
 dependencies = [
  "ctor",
- "glob",
  "libc",
  "nix",
  "pretty_assertions",
@@ -3883,7 +3867,6 @@ dependencies = [
  "regex",
  "rlimit",
  "tempfile",
- "time",
  "uucore",
  "xattr",
 ]
