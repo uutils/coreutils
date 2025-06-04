@@ -153,6 +153,15 @@ See also comments under `printf` for formatting precision and differences.
 
 `seq` provides `-t`/`--terminator` to set the terminator character.
 
+## `sort`
+
+When sorting with `-g`/`--general-numeric-sort`, arbitrary precision decimal numbers
+are parsed and compared, unlike GNU coreutils that uses platform-specific long
+double floating point numbers.
+
+Extremely large or small values can still overflow or underflow to infinity or zero,
+see note in `seq`.
+
 ## `ls`
 
 GNU `ls` provides two ways to use a long listing format: `-l` and `--format=long`. We support a
