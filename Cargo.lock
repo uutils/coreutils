@@ -2709,6 +2709,8 @@ dependencies = [
  "nix",
  "thiserror 2.0.12",
  "uucore",
+ "winapi-util",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
