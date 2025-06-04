@@ -526,7 +526,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
     };
 
     for sourcepath in files {
-        if !sourcepath.exists() {
+        if sourcepath.symlink_metadata().is_err() {
             show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
             continue;
         }
