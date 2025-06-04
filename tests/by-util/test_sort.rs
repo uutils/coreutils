@@ -1503,3 +1503,27 @@ fn test_files0_from_zero_length() {
         .fails_with_code(2)
         .stderr_only("sort: -:2: invalid zero-length file name\n");
 }
+
+#[test]
+// Test for GNU tests/sort/sort-float.sh
+fn test_g_float() {
+    let input = "0\n-3.3621031431120935063e-4932\n3.3621031431120935063e-4932\n";
+    let output = "-3.3621031431120935063e-4932\n0\n3.3621031431120935063e-4932\n";
+    new_ucmd!()
+        .args(&["-g"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+// Test misc numbers ("'a" is not interpreted as literal, trailing text is ignored...)
+fn test_g_misc() {
+    let input = "1\n100\n90\n'a\n85hello\n";
+    let output = "'a\n1\n85hello\n90\n100\n";
+    new_ucmd!()
+        .args(&["-g"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
