@@ -63,11 +63,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     #[cfg(windows)]
-    let _handle = wsa::start().map_err_context(|| "failed to start Winsock".to_owned())?;
+    let _handle = wsa::start().map_err_context(|| get_message("hostname-error-winsock"))?;
 
     match matches.get_one::<OsString>(OPT_HOST) {
         None => display_hostname(&matches),
-        Some(host) => hostname::set(host).map_err_context(|| "failed to set hostname".to_owned()),
+        Some(host) => {
+            hostname::set(host).map_err_context(|| get_message("hostname-error-set-hostname"))
+        }
     }
 }
 
@@ -82,7 +84,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long("domain")
                 .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the name of the DNS domain if possible")
+                .help(get_message("hostname-help-domain"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -90,7 +92,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long("ip-address")
                 .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the network address(es) of the host")
+                .help(get_message("hostname-help-ip-address"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -98,7 +100,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long("fqdn")
                 .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the FQDN (Fully Qualified Domain Name) (default)")
+                .help(get_message("hostname-help-fqdn"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -106,7 +108,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long("short")
                 .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the short hostname (the portion before the first dot) if possible")
+                .help(get_message("hostname-help-short"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
