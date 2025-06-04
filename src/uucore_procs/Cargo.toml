@@ -2,11 +2,11 @@
 [package]
 name = "uucore_procs"
 description = "uutils ~ 'uucore' proc-macros"
-authors = ["Roy Ivy III <rivy.dev@gmail.com>"]
 repository = "https://github.com/uutils/coreutils/tree/main/src/uucore_procs"
 # readme = "README.md"
 keywords = ["cross-platform", "proc-macros", "uucore", "uutils"]
 # categories = ["os"]
+authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
