@@ -194,7 +194,7 @@ jobs:
 
     - name: Selinux - Build for selinux tests
       run: |
-        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh"
+        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh --release-build"
         lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
 
     - name: Selinux - Run selinux tests
