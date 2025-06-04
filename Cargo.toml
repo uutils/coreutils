@@ -496,7 +496,7 @@ vdir = { optional = true, version = "0.1.0", package = "uu_vdir", path = "src/uu
 wc = { optional = true, version = "0.1.0", package = "uu_wc", path = "src/uu/wc" }
 who = { optional = true, version = "0.1.0", package = "uu_who", path = "src/uu/who" }
 whoami = { optional = true, version = "0.1.0", package = "uu_whoami", path = "src/uu/whoami" }
-"yes" = { optional = true, version = "0.1.0", package = "uu_yes", path = "src/uu/yes" }
+yes = { optional = true, version = "0.1.0", package = "uu_yes", path = "src/uu/yes" }
 
 # this breaks clippy linting with: "tests/by-util/test_factor_benches.rs: No such file or directory (os error 2)"
 # factor_benches = { optional = true, version = "0.0.0", package = "uu_factor_benches", path = "tests/benches/factor" }
