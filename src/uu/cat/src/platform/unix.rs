@@ -46,8 +46,9 @@ fn is_appending<F: AsFd>(file: &F) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::platform::unix::is_appending;
+    use crate::platform::unix::{is_appending, is_unsafe_overwrite};
     use std::fs::OpenOptions;
+    use std::io::{Seek, SeekFrom, Write};
     use tempfile::NamedTempFile;
 
     #[test]
@@ -67,5 +68,41 @@ mod tests {
         // Test temp file opened in append mode
         let append_file = OpenOptions::new().append(true).open(&temp_file).unwrap();
         assert!(is_appending(&append_file));
+    }
+
+    #[test]
+    fn test_is_unsafe_overwrite() {
+        // Create two temp files one of which is empty
+        let empty = NamedTempFile::new().unwrap();
+        let mut nonempty = NamedTempFile::new().unwrap();
+        nonempty.write_all(b"anything").unwrap();
+        nonempty.seek(SeekFrom::Start(0)).unwrap();
+
+        // Using a different file as input and output does not result in an overwrite
+        assert!(!is_unsafe_overwrite(&empty, &nonempty));
+
+        // Overwriting an empty file is always safe
+        assert!(!is_unsafe_overwrite(&empty, &empty));
+
+        // Overwriting a nonempty file with itself is safe
+        assert!(!is_unsafe_overwrite(&nonempty, &nonempty));
+
+        // Overwriting an empty file opened in append mode is safe
+        let empty_append = OpenOptions::new().append(true).open(&empty).unwrap();
+        assert!(!is_unsafe_overwrite(&empty, &empty_append));
+
+        // Overwriting a nonempty file opened in append mode is unsafe
+        let nonempty_append = OpenOptions::new().append(true).open(&nonempty).unwrap();
+        assert!(is_unsafe_overwrite(&nonempty, &nonempty_append));
+
+        // Overwriting a file opened in write mode is safe
+        let mut nonempty_write = OpenOptions::new().write(true).open(&nonempty).unwrap();
+        assert!(!is_unsafe_overwrite(&nonempty, &nonempty_write));
+
+        // Overwriting a file when the input and output file descriptors are pointing to
+        // different offsets is safe if the input offset is further than the output offset
+        nonempty_write.seek(SeekFrom::Start(1)).unwrap();
+        assert!(!is_unsafe_overwrite(&nonempty_write, &nonempty));
+        assert!(is_unsafe_overwrite(&nonempty, &nonempty_write));
     }
 }
