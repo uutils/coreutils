@@ -20,10 +20,14 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_uptime() {
-    new_ucmd!()
-        .succeeds()
-        .stdout_contains("load average:")
-        .stdout_contains(" up ");
+    let result = new_ucmd!().succeeds();
+
+    result.stdout_contains(" up ");
+
+    #[cfg(not(windows))]
+    result.stdout_contains("load average:");
+    #[cfg(windows)]
+    result.stdout_does_not_contain("load average:");
 
     // Don't check for users as it doesn't show in some CI
 }
