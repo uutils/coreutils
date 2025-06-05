@@ -95,8 +95,8 @@ static OPT_FORCE: &str = "force";
 static OPT_NO_PRESERVE_ROOT: &str = "no-preserve-root";
 static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
 static OPT_PRESERVE_ROOT: &str = "preserve-root";
-static OPT_PROMPT: &str = "prompt";
-static OPT_PROMPT_MORE: &str = "prompt-more";
+static OPT_PROMPT_ALWAYS: &str = "prompt-always";
+static OPT_PROMPT_ONCE: &str = "prompt-once";
 static OPT_RECURSIVE: &str = "recursive";
 static OPT_VERBOSE: &str = "verbose";
 static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // If -f(--force) is before any -i (or variants) we want prompts else no prompts
     let force_prompt_never = force_flag && {
         let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
-        ![OPT_PROMPT, OPT_PROMPT_MORE, OPT_INTERACTIVE]
+        ![OPT_PROMPT_ALWAYS, OPT_PROMPT_ONCE, OPT_INTERACTIVE]
             .iter()
             .any(|flag| {
                 matches.value_source(flag) == Some(ValueSource::CommandLine)
@@ -136,9 +136,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         interactive: {
             if force_prompt_never {
                 InteractiveMode::Never
-            } else if matches.get_flag(OPT_PROMPT) {
+            } else if matches.get_flag(OPT_PROMPT_ALWAYS) {
                 InteractiveMode::Always
-            } else if matches.get_flag(OPT_PROMPT_MORE) {
+            } else if matches.get_flag(OPT_PROMPT_ONCE) {
                 InteractiveMode::Once
             } else if matches.contains_id(OPT_INTERACTIVE) {
                 match matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str() {
@@ -210,18 +210,18 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_PROMPT)
+            Arg::new(OPT_PROMPT_ALWAYS)
                 .short('i')
                 .help("prompt before every removal")
-                .overrides_with_all([OPT_PROMPT_MORE, OPT_INTERACTIVE])
+                .overrides_with_all([OPT_PROMPT_ONCE, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_PROMPT_MORE)
+            Arg::new(OPT_PROMPT_ONCE)
                 .short('I')
                 .help("prompt once before removing more than three files, or when removing recursively. \
                 Less intrusive than -i, while still giving some protection against most mistakes")
-                .overrides_with_all([OPT_PROMPT, OPT_INTERACTIVE])
+                .overrides_with_all([OPT_PROMPT_ALWAYS, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -235,7 +235,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value("always")
-                .overrides_with_all([OPT_PROMPT, OPT_PROMPT_MORE]),
+                .overrides_with_all([OPT_PROMPT_ALWAYS, OPT_PROMPT_ONCE]),
         )
         .arg(
             Arg::new(OPT_ONE_FILE_SYSTEM)
