@@ -15,7 +15,7 @@ use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError, get_exit_code};
 use uucore::fsext::{MountInfo, read_fs_list};
 use uucore::parser::parse_size::ParseSizeError;
-use uucore::{format_usage, help_about, help_section, help_usage, show};
+use uucore::{format_usage, show};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
@@ -29,9 +29,7 @@ use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
 use crate::table::Table;
 
-const ABOUT: &str = help_about!("df.md");
-const USAGE: &str = help_usage!("df.md");
-const AFTER_HELP: &str = help_section!("after help", "df.md");
+use uucore::locale::get_message;
 
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
@@ -452,9 +450,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .about(get_message("df-about"))
+        .override_usage(format_usage(&get_message("df-usage")))
+        .after_help(get_message("df-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(

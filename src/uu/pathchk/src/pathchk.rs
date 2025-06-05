@@ -10,7 +10,8 @@ use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError, set_exit_code};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 // operating mode
 enum Mode {
@@ -19,9 +20,6 @@ enum Mode {
     Extra,   // check for leading dashes and empty names
     Both,    // a combination of `Basic` and `Extra`
 }
-
-const ABOUT: &str = help_about!("pathchk.md");
-const USAGE: &str = help_usage!("pathchk.md");
 
 mod options {
     pub const POSIX: &str = "posix";
@@ -80,8 +78,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("pathchk-about"))
+        .override_usage(format_usage(&get_message("pathchk-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::POSIX)

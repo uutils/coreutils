@@ -8,16 +8,14 @@ use std::time::Duration;
 
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
-    format_usage, help_about, help_section, help_usage,
+    format_usage,
     parser::parse_time,
     show_error,
 };
 
 use clap::{Arg, ArgAction, Command};
 
-static ABOUT: &str = help_about!("sleep.md");
-const USAGE: &str = help_usage!("sleep.md");
-static AFTER_HELP: &str = help_section!("after help", "sleep.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const NUMBER: &str = "NUMBER";
@@ -47,9 +45,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("sleep-about"))
+        .after_help(get_message("sleep-after-help"))
+        .override_usage(format_usage(&get_message("sleep-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::NUMBER)

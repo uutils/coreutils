@@ -18,9 +18,8 @@ use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{
-    format_usage, help_about, help_section, help_usage, os_str_as_bytes, prompt_yes, show_error,
-};
+use uucore::locale::get_message;
+use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
@@ -89,10 +88,6 @@ impl Default for Options {
         }
     }
 }
-
-const ABOUT: &str = help_about!("rm.md");
-const USAGE: &str = help_usage!("rm.md");
-const AFTER_HELP: &str = help_section!("after help", "rm.md");
 
 static OPT_DIR: &str = "dir";
 static OPT_INTERACTIVE: &str = "interactive";
@@ -202,9 +197,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .about(get_message("rm-about"))
+        .override_usage(format_usage(&get_message("rm-usage")))
+        .after_help(get_message("rm-after-help"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

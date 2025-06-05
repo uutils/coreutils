@@ -15,14 +15,12 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 
 #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
 use dns_lookup::lookup_host;
+use uucore::locale::get_message;
 
 use uucore::{
     error::{FromIo, UResult},
-    format_usage, help_about, help_usage,
+    format_usage,
 };
-
-const ABOUT: &str = help_about!("hostname.md");
-const USAGE: &str = help_usage!("hostname.md");
 
 static OPT_DOMAIN: &str = "domain";
 static OPT_IP_ADDRESS: &str = "ip-address";
@@ -76,8 +74,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("hostname-about"))
+        .override_usage(format_usage(&get_message("hostname-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_DOMAIN)

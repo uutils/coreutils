@@ -60,6 +60,7 @@ selinux = { workspace = true, optional = true }
 # Fluent dependencies
 fluent-bundle = { workspace = true }
 fluent = { workspace = true }
+fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
 [target.'cfg(unix)'.dependencies]

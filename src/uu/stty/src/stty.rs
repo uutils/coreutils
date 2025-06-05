@@ -21,7 +21,8 @@ use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 #[cfg(not(any(
     target_os = "freebsd",
@@ -33,9 +34,6 @@ use uucore::{format_usage, help_about, help_usage};
 )))]
 use flags::BAUD_RATES;
 use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
-
-const USAGE: &str = help_usage!("stty.md");
-const SUMMARY: &str = help_about!("stty.md");
 
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
@@ -476,8 +474,8 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
+        .override_usage(format_usage(&get_message("stty-usage")))
+        .about(get_message("stty-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ALL)

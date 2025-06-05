@@ -3601,6 +3601,7 @@ dependencies = [
  "dunce",
  "fluent",
  "fluent-bundle",
+ "fluent-syntax",
  "glob",
  "hex",
  "itertools 0.14.0",

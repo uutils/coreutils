@@ -9,12 +9,9 @@ use clap::Command;
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::locale::get_message;
 
 mod platform;
-
-const ABOUT: &str = help_about!("whoami.md");
-const USAGE: &str = help_usage!("whoami.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -32,7 +29,7 @@ pub fn whoami() -> UResult<OsString> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("whoami-about"))
+        .override_usage(uucore::util_name())
         .infer_long_args(true)
 }

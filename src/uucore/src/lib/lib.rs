@@ -143,6 +143,25 @@ pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
     Ok(())
 }
 
+pub fn get_canonical_util_name(util_name: &str) -> &str {
+    // remove the "uu_" prefix
+    let util_name = &util_name[3..];
+    match util_name {
+        // uu_test aliases - '[' is an alias for test
+        "[" => "test",
+
+        // hashsum aliases - all these hash commands are aliases for hashsum
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
+        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
+        | "shake128sum" | "shake256sum" | "b2sum" | "b3sum" => "hashsum",
+
+        "dir" => "ls", // dir is an alias for ls
+
+        // Default case - return the util name as is
+        _ => util_name,
+    }
+}
+
 /// Execute utility code for `util`.
 ///
 /// This macro expands to a main function that invokes the `uumain` function in `util`
@@ -152,8 +171,21 @@ macro_rules! bin {
     ($util:ident) => {
         pub fn main() {
             use std::io::Write;
+            use uucore::locale;
             // suppress extraneous error output for SIGPIPE failures/panics
             uucore::panic::mute_sigpipe_panic();
+            locale::setup_localization(uucore::get_canonical_util_name(stringify!($util)))
+                .unwrap_or_else(|err| {
+                    match err {
+                        uucore::locale::LocalizationError::ParseResource {
+                            error: err_msg,
+                            snippet,
+                        } => eprintln!("Localization parse error at {snippet}: {err_msg}"),
+                        other => eprintln!("Could not init the localization system: {other}"),
+                    }
+                    std::process::exit(99)
+                });
+
             // execute utility code
             let code = $util::uumain(uucore::args_os());
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>

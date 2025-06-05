@@ -11,10 +11,9 @@ use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-const USAGE: &str = help_usage!("sum.md");
-const ABOUT: &str = help_about!("sum.md");
+use uucore::locale::get_message;
 
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
     let mut buf = [0; 4096];
@@ -138,8 +137,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("sum-usage")))
+        .about(get_message("sum-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)

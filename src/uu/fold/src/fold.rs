@@ -11,12 +11,10 @@ use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 const TAB_WIDTH: usize = 8;
-
-const USAGE: &str = help_usage!("fold.md");
-const ABOUT: &str = help_about!("fold.md");
 
 mod options {
     pub const BYTES: &str = "bytes";
@@ -60,8 +58,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("fold-usage")))
+        .about(get_message("fold-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES)
