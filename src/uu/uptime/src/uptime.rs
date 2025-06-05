@@ -6,11 +6,6 @@
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid couldnt
 
 use chrono::{Local, TimeZone, Utc};
-<<<<<<< HEAD
-#[cfg(unix)]
-=======
-use std::collections::HashMap;
->>>>>>> bafdfff42 (uptime: add dummy uptime_with_file() for Windows)
 use std::ffi::OsString;
 use std::io;
 use thiserror::Error;
@@ -19,7 +14,7 @@ use uucore::libc::time_t;
 use uucore::translate;
 use uucore::uptime::*;
 
-use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
+use clap::{Arg, ArgAction, Command};
 
 use uucore::format_usage;
 
@@ -86,15 +81,21 @@ pub fn uu_app() -> Command {
                 .help(translate!("uptime-help-since"))
                 .action(ArgAction::SetTrue),
         );
+
     #[cfg(unix)]
-    cmd.arg(
-        Arg::new(options::PATH)
-            .help(translate!("uptime-help-path"))
-            .action(ArgAction::Set)
-            .num_args(0..=1)
-            .value_parser(ValueParser::os_string())
-            .value_hint(ValueHint::AnyPath),
-    )
+    let cmd = {
+        use clap::{ValueHint, builder::ValueParser};
+        cmd.arg(
+            Arg::new(options::PATH)
+                .help(translate!("uptime-help-path"))
+                .action(ArgAction::Set)
+                .num_args(0..=1)
+                .value_parser(ValueParser::os_string())
+                .value_hint(ValueHint::AnyPath),
+        )
+    };
+
+    cmd
 }
 
 #[cfg(windows)]
