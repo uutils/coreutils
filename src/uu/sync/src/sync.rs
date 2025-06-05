@@ -17,10 +17,9 @@ use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
-const ABOUT: &str = help_about!("sync.md");
-const USAGE: &str = help_usage!("sync.md");
+use uucore::locale::get_message;
 
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
@@ -78,7 +77,7 @@ mod platform {
     use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
     fn get_last_error() -> u32 {
-        // SAFETY: GetLastError has no safety preconditions
+        // SAFETY: `GetLastError` has no safety preconditions
         unsafe { GetLastError() as u32 }
     }
 
@@ -122,8 +121,6 @@ mod platform {
         Ok((String::from_wide_null(&name), handle))
     }
 
-    /// # Safety
-    /// This function is unsafe because it calls an unsafe function.
     fn find_all_volumes() -> UResult<Vec<String>> {
         let (first_volume, next_volume_handle) = find_first_volume()?;
         let mut volumes = vec![first_volume];
@@ -136,7 +133,7 @@ mod platform {
             {
                 return match get_last_error() {
                     ERROR_NO_MORE_FILES => {
-                        // SAFETY: next_volume_handle was returned by `find_first_volume`
+                        // SAFETY: `next_volume_handle` was returned by `find_first_volume`
                         unsafe { FindVolumeClose(next_volume_handle) };
                         Ok(volumes)
                     }
@@ -224,8 +221,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("sync-about"))
+        .override_usage(format_usage(&get_message("sync-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE_SYSTEM)

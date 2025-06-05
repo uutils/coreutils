@@ -7,10 +7,9 @@
 
 use clap::Command;
 use libc::{c_long, gethostid};
-use uucore::{error::UResult, format_usage, help_about, help_usage};
+use uucore::{error::UResult, format_usage};
 
-const USAGE: &str = help_usage!("hostid.md");
-const ABOUT: &str = help_about!("hostid.md");
+use uucore::locale::get_message;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -22,8 +21,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("hostid-about"))
+        .override_usage(format_usage(&get_message("hostid-usage")))
         .infer_long_args(true)
 }
 

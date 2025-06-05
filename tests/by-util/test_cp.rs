@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel
 use uucore::display::Quotable;
 use uutests::util::TestScenario;
@@ -2556,21 +2556,20 @@ fn test_cp_reflink_insufficient_permission() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_closes_file_descriptors() {
-    use procfs::process::Process;
     use rlimit::Resource;
-    let me = Process::myself().unwrap();
+
+    let pid = std::process::id();
+    let fd_path = format!("/proc/{pid}/fd");
 
     // The test suite runs in parallel, we have pipe, sockets
     // opened by other tests.
     // So, we take in account the various fd to increase the limit
-    let number_file_already_opened: u64 = me.fd_count().unwrap().try_into().unwrap();
+    let number_file_already_opened: u64 = std::fs::read_dir(fd_path)
+        .unwrap()
+        .count()
+        .try_into()
+        .unwrap();
     let limit_fd: u64 = number_file_already_opened + 9;
-
-    // For debugging purposes:
-    for f in me.fd().unwrap() {
-        let fd = f.unwrap();
-        println!("{fd:?} {:?}", fd.mode());
-    }
 
     new_ucmd!()
         .arg("-r")

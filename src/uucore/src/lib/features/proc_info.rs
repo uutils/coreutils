@@ -164,7 +164,7 @@ impl ProcessInformation {
         let pid = {
             value
                 .iter()
-                .last()
+                .next_back()
                 .ok_or(io::ErrorKind::Other)?
                 .to_str()
                 .ok_or(io::ErrorKind::InvalidData)?

@@ -3,3 +3,8 @@ linker = "x86_64-unknown-redox-gcc"
 
 [env]
 PROJECT_NAME_FOR_VERSION_STRING = "uutils coreutils"
+
+# libstdbuf must be a shared library, so musl libc can't be linked statically
+# https://github.com/rust-lang/rust/issues/82193
+[build]
+rustflags = [ "-C", "target-feature=-crt-static" ]

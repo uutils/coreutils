@@ -8,13 +8,10 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::locale::get_message;
+use uucore::{format_usage, show_error};
 
 mod helper;
-
-const ABOUT: &str = help_about!("nl.md");
-const AFTER_HELP: &str = help_section!("after help", "nl.md");
-const USAGE: &str = help_usage!("nl.md");
 
 // Settings store options used by nl to produce its output.
 pub struct Settings {
@@ -222,10 +219,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
+        .about(get_message("nl-about"))
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .override_usage(format_usage(&get_message("nl-usage")))
+        .after_help(get_message("nl-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(

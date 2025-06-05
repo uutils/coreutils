@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+//
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST
 
 use chrono::{DateTime, Datelike, Duration, NaiveTime, Utc}; // spell-checker:disable-line
 use regex::Regex;
@@ -564,11 +566,153 @@ fn test_date_from_stdin() {
         );
 }
 
+const JAN2: &str = "2024-01-02 12:00:00 +0000";
+const JUL2: &str = "2024-07-02 12:00:00 +0000";
+
 #[test]
-fn test_date_empty_tz() {
+fn test_date_tz() {
+    fn test_tz(tz: &str, date: &str, output: &str) {
+        println!("Test with TZ={tz}, date=\"{date}\".");
+        new_ucmd!()
+            .env("TZ", tz)
+            .arg("-d")
+            .arg(date)
+            .arg("+%Y-%m-%d %H:%M:%S %Z")
+            .succeeds()
+            .stdout_only(output);
+    }
+
+    // Empty TZ, UTC0, invalid timezone.
+    test_tz("", JAN2, "2024-01-02 12:00:00 UTC\n");
+    test_tz("UTC0", JAN2, "2024-01-02 12:00:00 UTC\n");
+    // TODO: We do not handle invalid timezones the same way as GNU coreutils
+    //test_tz("Invalid/Timezone", JAN2, "2024-01-02 12:00:00 Invalid\n");
+
+    // Test various locations, some of them use daylight saving, some don't.
+    test_tz("America/Vancouver", JAN2, "2024-01-02 04:00:00 PST\n");
+    test_tz("America/Vancouver", JUL2, "2024-07-02 05:00:00 PDT\n");
+    test_tz("Europe/Berlin", JAN2, "2024-01-02 13:00:00 CET\n");
+    test_tz("Europe/Berlin", JUL2, "2024-07-02 14:00:00 CEST\n");
+    test_tz("Africa/Cairo", JAN2, "2024-01-02 14:00:00 EET\n");
+    // Egypt restored daylight saving in 2023, so if the database is outdated, this will fail.
+    //test_tz("Africa/Cairo", JUL2, "2024-07-02 15:00:00 EEST\n");
+    test_tz("Asia/Tokyo", JAN2, "2024-01-02 21:00:00 JST\n");
+    test_tz("Asia/Tokyo", JUL2, "2024-07-02 21:00:00 JST\n");
+    test_tz("Australia/Sydney", JAN2, "2024-01-02 23:00:00 AEDT\n");
+    test_tz("Australia/Sydney", JUL2, "2024-07-02 22:00:00 AEST\n"); // Shifts the other way.
+    test_tz("Pacific/Tahiti", JAN2, "2024-01-02 02:00:00 -10\n"); // No abbreviation.
+    test_tz("Antarctica/South_Pole", JAN2, "2024-01-03 01:00:00 NZDT\n");
+    test_tz("Antarctica/South_Pole", JUL2, "2024-07-03 00:00:00 NZST\n");
+}
+
+#[test]
+fn test_date_tz_with_utc_flag() {
     new_ucmd!()
-        .env("TZ", "")
+        .env("TZ", "Europe/Berlin")
+        .arg("-u")
         .arg("+%Z")
         .succeeds()
         .stdout_only("UTC\n");
+}
+
+#[test]
+fn test_date_tz_various_formats() {
+    fn test_tz(tz: &str, date: &str, output: &str) {
+        println!("Test with TZ={tz}, date=\"{date}\".");
+        new_ucmd!()
+            .env("TZ", tz)
+            .arg("-d")
+            .arg(date)
+            .arg("+%z %:z %::z %:::z %Z")
+            .succeeds()
+            .stdout_only(output);
+    }
+
+    test_tz(
+        "America/Vancouver",
+        JAN2,
+        "-0800 -08:00 -08:00:00 -08 PST\n",
+    );
+    // Half-hour timezone
+    test_tz("Asia/Calcutta", JAN2, "+0530 +05:30 +05:30:00 +05:30 IST\n");
+    test_tz("Europe/Berlin", JAN2, "+0100 +01:00 +01:00:00 +01 CET\n");
+    test_tz(
+        "Australia/Sydney",
+        JAN2,
+        "+1100 +11:00 +11:00:00 +11 AEDT\n",
+    );
+}
+
+#[test]
+fn test_date_tz_with_relative_time() {
+    new_ucmd!()
+        .env("TZ", "America/Vancouver")
+        .arg("-d")
+        .arg("1 hour ago")
+        .arg("+%Y-%m-%d %H:%M:%S %Z")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} P[DS]T\n$").unwrap());
+}
+
+#[test]
+fn test_date_utc_time() {
+    // Test that -u flag shows correct UTC time
+    // We get 2 UTC times just in case we're really unlucky and this runs around
+    // an hour change.
+    let utc_hour_1: i32 = new_ucmd!()
+        .env("TZ", "Asia/Taipei")
+        .arg("-u")
+        .arg("+%-H")
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse()
+        .unwrap();
+    let tpe_hour: i32 = new_ucmd!()
+        .env("TZ", "Asia/Taipei")
+        .arg("+%-H")
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse()
+        .unwrap();
+    let utc_hour_2: i32 = new_ucmd!()
+        .env("TZ", "Asia/Taipei")
+        .arg("-u")
+        .arg("+%-H")
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse()
+        .unwrap();
+    // Taipei is always 8 hours ahead of UTC (no daylight savings)
+    assert!(
+        (tpe_hour - utc_hour_1 + 24) % 24 == 8 || (tpe_hour - utc_hour_2 + 24) % 24 == 8,
+        "TPE: {tpe_hour} UTC: {utc_hour_1}/{utc_hour_2}"
+    );
+
+    // Test that -u flag shows UTC timezone
+    new_ucmd!()
+        .arg("-u")
+        .arg("+%Z")
+        .succeeds()
+        .stdout_only("UTC\n");
+
+    // Test that -u flag with specific timestamp shows correct UTC time
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("@0")
+        .succeeds()
+        .stdout_only("Thu Jan  1 00:00:00 UTC 1970\n");
+}
+
+#[test]
+fn test_date_empty_tz_time() {
+    new_ucmd!()
+        .env("TZ", "")
+        .arg("-d")
+        .arg("@0")
+        .succeeds()
+        .stdout_only("Thu Jan  1 00:00:00 UTC 1970\n");
 }

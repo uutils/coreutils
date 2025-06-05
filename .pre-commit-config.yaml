@@ -11,13 +11,13 @@ repos:
     -   id: rust-clippy
         name: Rust clippy
         description: Run cargo clippy on files included in the commit.
-        entry: cargo +stable clippy --workspace --all-targets --all-features --
+        entry: cargo +stable clippy --workspace --all-targets --all-features -- -D warnings
         pass_filenames: false
         types: [file, rust]
         language: system
     -   id: cspell
         name: Code spell checker (cspell)
         description: Run cspell to check for spelling errors.
-        entry: cspell --
+        entry: cspell --no-must-find-files --
         pass_filenames: true
         language: system

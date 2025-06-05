@@ -10,11 +10,9 @@ use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
 use uucore::error::{UResult, USimpleError};
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::format_usage;
 
-const ABOUT: &str = help_about!("echo.md");
-const USAGE: &str = help_usage!("echo.md");
-const AFTER_HELP: &str = help_section!("after help", "echo.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const STRING: &str = "STRING";
@@ -141,9 +139,9 @@ pub fn uu_app() -> Command {
         .trailing_var_arg(true)
         .allow_hyphen_values(true)
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("echo-about"))
+        .after_help(get_message("echo-after-help"))
+        .override_usage(format_usage(&get_message("echo-usage")))
         .arg(
             Arg::new(options::NO_NEWLINE)
                 .short('n')

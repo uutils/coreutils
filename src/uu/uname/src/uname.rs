@@ -7,13 +7,11 @@
 
 use clap::{Arg, ArgAction, Command};
 use platform_info::*;
+use uucore::locale::get_message;
 use uucore::{
     error::{UResult, USimpleError},
-    format_usage, help_about, help_usage,
+    format_usage,
 };
-
-const ABOUT: &str = help_about!("uname.md");
-const USAGE: &str = help_usage!("uname.md");
 
 pub mod options {
     pub static ALL: &str = "all";
@@ -146,8 +144,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("uname-about"))
+        .override_usage(format_usage(&get_message("uname-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ALL)

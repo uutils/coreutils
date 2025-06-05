@@ -6,9 +6,9 @@
 use std::fs;
 use std::path::Path;
 
-use quick_error::ResultExt;
-
-use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
+use crate::{
+    CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
+};
 
 /// Copies `source` to `dest` for systems without copy-on-write
 pub(crate) fn copy_on_write(
@@ -31,7 +31,7 @@ pub(crate) fn copy_on_write(
         reflink: OffloadReflinkDebug::Unsupported,
         sparse_detection: SparseDebug::Unsupported,
     };
-    fs::copy(source, dest).context(context)?;
+    fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
     Ok(copy_debug)
 }

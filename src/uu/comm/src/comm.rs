@@ -9,14 +9,13 @@ use std::cmp::Ordering;
 use std::fs::{File, metadata};
 use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
-const ABOUT: &str = help_about!("comm.md");
-const USAGE: &str = help_usage!("comm.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const COLUMN_1: &str = "1";
@@ -314,8 +313,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("comm-about"))
+        .override_usage(format_usage(&get_message("comm-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

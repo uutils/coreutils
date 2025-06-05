@@ -12,8 +12,9 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
+use uucore::locale::get_message;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
-use uucore::{format_usage, help_about, help_section, help_usage};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -71,10 +72,6 @@ impl TruncateMode {
     }
 }
 
-const ABOUT: &str = help_about!("truncate.md");
-const AFTER_HELP: &str = help_section!("after help", "truncate.md");
-const USAGE: &str = help_usage!("truncate.md");
-
 pub mod options {
     pub static IO_BLOCKS: &str = "io-blocks";
     pub static NO_CREATE: &str = "no-create";
@@ -86,7 +83,7 @@ pub mod options {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
-        .after_help(AFTER_HELP)
+        .after_help(get_message("truncate-after-help"))
         .try_get_matches_from(args)
         .map_err(|e| {
             e.print().expect("Error writing clap::Error");
@@ -117,8 +114,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("truncate-about"))
+        .override_usage(format_usage(&get_message("truncate-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::IO_BLOCKS)

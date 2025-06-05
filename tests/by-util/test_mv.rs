@@ -445,6 +445,19 @@ fn test_mv_same_hardlink() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_dangling_symlink_to_folder() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.symlink_file("404", "abc");
+    at.mkdir("x");
+
+    ucmd.arg("abc").arg("x").succeeds();
+
+    assert!(at.symlink_exists("x/abc"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_same_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";

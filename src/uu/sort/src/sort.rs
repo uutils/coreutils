@@ -48,13 +48,11 @@ use uucore::line_ending::LineEnding;
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::version_cmp::version_cmp;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
 use crate::tmp_dir::TmpDirWrapper;
 
-const ABOUT: &str = help_about!("sort.md");
-const USAGE: &str = help_usage!("sort.md");
-const AFTER_HELP: &str = help_section!("after help", "sort.md");
+use uucore::locale::get_message;
 
 mod options {
     pub mod modes {
@@ -131,7 +129,10 @@ pub enum SortError {
     },
 
     #[error("open failed: {}: {}", .path.maybe_quote(), strip_errno(.error))]
-    OpenFailed { path: String, error: std::io::Error },
+    OpenFailed {
+        path: PathBuf,
+        error: std::io::Error,
+    },
 
     #[error("failed to parse key {}: {}", .key.quote(), .msg)]
     ParseKeyError { key: String, msg: String },
@@ -154,11 +155,23 @@ pub enum SortError {
     #[error("cannot create temporary file in '{}':", .path.display())]
     TmpFileCreationFailed { path: PathBuf },
 
+    #[error("extra operand '{}'\nfile operands cannot be combined with --files0-from\nTry '{} --help' for more information.", .file.display(), uucore::execution_phrase())]
+    FileOperandsCombined { file: PathBuf },
+
     #[error("{error}")]
     Uft8Error { error: Utf8Error },
 
     #[error("multiple output files specified")]
     MultipleOutputFiles,
+
+    #[error("when reading file names from stdin, no file name of '-' allowed")]
+    MinusInStdIn,
+
+    #[error("no input from '{}'", .file.display())]
+    EmptyInputFile { file: PathBuf },
+
+    #[error("{}:{}: invalid zero-length file name", .file.display(), .line_num)]
+    ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
 
 impl UError for SortError {
@@ -204,24 +217,25 @@ impl SortMode {
 }
 
 pub struct Output {
-    file: Option<(String, File)>,
+    file: Option<(OsString, File)>,
 }
 
 impl Output {
-    fn new(name: Option<&str>) -> UResult<Self> {
+    fn new(name: Option<&OsStr>) -> UResult<Self> {
         let file = if let Some(name) = name {
+            let path = Path::new(name);
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
             #[allow(clippy::suspicious_open_options)]
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
-                .open(name)
+                .open(path)
                 .map_err(|e| SortError::OpenFailed {
-                    path: name.to_owned(),
+                    path: path.to_owned(),
                     error: e,
                 })?;
-            Some((name.to_owned(), file))
+            Some((name.to_os_string(), file))
         } else {
             None
         };
@@ -239,9 +253,9 @@ impl Output {
         })
     }
 
-    fn as_output_name(&self) -> Option<&str> {
+    fn as_output_name(&self) -> Option<&OsStr> {
         match &self.file {
-            Some((name, _file)) => Some(name),
+            Some((name, _file)) => Some(name.as_os_str()),
             None => None,
         }
     }
@@ -1016,6 +1030,8 @@ fn get_rlimit() -> UResult<usize> {
     }
 }
 
+const STDIN_FILE: &str = "-";
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -1039,7 +1055,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Prevent -o/--output to be specified multiple times
     if matches
-        .get_occurrences::<String>(options::OUTPUT)
+        .get_occurrences::<OsString>(options::OUTPUT)
         .is_some_and(|out| out.len() > 1)
     {
         return Err(SortError::MultipleOutputFiles.into());
@@ -1049,21 +1065,45 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
     let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
-        let files0_from: Vec<OsString> = matches
-            .get_many::<OsString>(options::FILES0_FROM)
-            .map(|v| v.map(ToOwned::to_owned).collect())
+        let files0_from: PathBuf = matches
+            .get_one::<OsString>(options::FILES0_FROM)
+            .map(|v| v.into())
             .unwrap_or_default();
 
+        // Cannot combine FILES with FILES0_FROM
+        if let Some(s) = matches.get_one::<OsString>(options::FILES) {
+            return Err(SortError::FileOperandsCombined { file: s.into() }.into());
+        }
+
         let mut files = Vec::new();
-        for path in &files0_from {
-            let reader = open(path)?;
-            let buf_reader = BufReader::new(reader);
-            for line in buf_reader.split(b'\0').flatten() {
-                files.push(OsString::from(
-                    std::str::from_utf8(&line)
-                        .expect("Could not parse string from zero terminated input."),
-                ));
+
+        // sort errors with "cannot open: [...]" instead of "cannot read: [...]" here
+        let reader = open_with_open_failed_error(&files0_from)?;
+        let buf_reader = BufReader::new(reader);
+        for (line_num, line) in buf_reader.split(b'\0').flatten().enumerate() {
+            let f = std::str::from_utf8(&line)
+                .expect("Could not parse string from zero terminated input.");
+            match f {
+                STDIN_FILE => {
+                    return Err(SortError::MinusInStdIn.into());
+                }
+                "" => {
+                    return Err(SortError::ZeroLengthFileName {
+                        file: files0_from,
+                        line_num: line_num + 1,
+                    }
+                    .into());
+                }
+                _ => {}
             }
+
+            files.push(OsString::from(
+                std::str::from_utf8(&line)
+                    .expect("Could not parse string from zero terminated input."),
+            ));
+        }
+        if files.is_empty() {
+            return Err(SortError::EmptyInputFile { file: files0_from }.into());
         }
         files
     } else {
@@ -1212,7 +1252,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if files.is_empty() {
         /* if no file, default to stdin */
-        files.push("-".to_string().into());
+        files.push(OsString::from(STDIN_FILE));
     } else if settings.check && files.len() != 1 {
         return Err(UUsageError::new(
             2,
@@ -1282,8 +1322,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let output = Output::new(
         matches
-            .get_one::<String>(options::OUTPUT)
-            .map(|s| s.as_str()),
+            .get_one::<OsString>(options::OUTPUT)
+            .map(|s| s.as_os_str()),
     )?;
 
     settings.init_precomputed();
@@ -1298,9 +1338,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("sort-about"))
+        .after_help(get_message("sort-after-help"))
+        .override_usage(format_usage(&get_message("sort-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
@@ -1437,6 +1477,7 @@ pub fn uu_app() -> Command {
                 .short('o')
                 .long(options::OUTPUT)
                 .help("write output to FILENAME instead of stdout")
+                .value_parser(ValueParser::os_string())
                 .value_name("FILENAME")
                 .value_hint(clap::ValueHint::FilePath)
                 // To detect multiple occurrences and raise an error
@@ -1522,9 +1563,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILES0_FROM)
                 .long(options::FILES0_FROM)
-                .help("read input from the files specified by NUL-terminated NUL_FILES")
-                .value_name("NUL_FILES")
-                .action(ArgAction::Append)
+                .help("read input from the files specified by NUL-terminated NUL_FILE")
+                .value_name("NUL_FILE")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -1865,7 +1905,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 ) -> UResult<()> {
     let output_name = output
         .as_output_name()
-        .unwrap_or("standard output")
+        .unwrap_or(OsStr::new("standard output"))
         .to_owned();
     let ctx = || format!("write failed: {}", output_name.maybe_quote());
 
@@ -1879,16 +1919,34 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 
 fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
     let path = path.as_ref();
-    if path == "-" {
+    if path == STDIN_FILE {
         let stdin = stdin();
         return Ok(Box::new(stdin) as Box<dyn Read + Send>);
     }
 
     let path = Path::new(path);
-
     match File::open(path) {
         Ok(f) => Ok(Box::new(f) as Box<dyn Read + Send>),
         Err(error) => Err(SortError::ReadFailed {
+            path: path.to_owned(),
+            error,
+        }
+        .into()),
+    }
+}
+
+fn open_with_open_failed_error(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
+    // On error, returns an OpenFailed error instead of a ReadFailed error
+    let path = path.as_ref();
+    if path == STDIN_FILE {
+        let stdin = stdin();
+        return Ok(Box::new(stdin) as Box<dyn Read + Send>);
+    }
+
+    let path = Path::new(path);
+    match File::open(path) {
+        Ok(f) => Ok(Box::new(f) as Box<dyn Read + Send>),
+        Err(error) => Err(SortError::OpenFailed {
             path: path.to_owned(),
             error,
         }

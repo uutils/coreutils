@@ -10,12 +10,11 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 #[cfg(unix)]
 use uucore::signals::enable_pipe_errors;
-use uucore::{format_usage, help_about, help_usage};
 
-const ABOUT: &str = help_about!("yes.md");
-const USAGE: &str = help_usage!("yes.md");
+use uucore::locale::get_message;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough
@@ -39,8 +38,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("yes-about"))
+        .override_usage(format_usage(&get_message("yes-usage")))
         .arg(
             Arg::new("STRING")
                 .value_parser(ValueParser::os_string())
