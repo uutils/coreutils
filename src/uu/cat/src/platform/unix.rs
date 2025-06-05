@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore lseek
+// spell-checker:ignore lseek seekable
 
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::unistd::{Whence, lseek};
@@ -16,6 +16,8 @@ use uucore::fs::FileInformation;
 /// via stdout, which can then be read again by stdin and written again by stdout,
 /// causing an infinite loop and potential file corruption.
 pub fn is_unsafe_overwrite<I: AsFd, O: AsFd>(input: &I, output: &O) -> bool {
+    // `FileInformation::from_file` returns an error if the file descriptor is closed, invalid,
+    // or refers to a non-regular file (e.g., socket, pipe, or special device).
     let Ok(input_info) = FileInformation::from_file(input) else {
         return false;
     };
@@ -28,6 +30,8 @@ pub fn is_unsafe_overwrite<I: AsFd, O: AsFd>(input: &I, output: &O) -> bool {
     if is_appending(output) {
         return true;
     }
+    // `lseek` returns an error if the file descriptor is closed or it refers to
+    // a non-seekable resource (e.g., pipe, socket, or some devices).
     let Ok(input_pos) = lseek(input.as_fd(), 0, Whence::SeekCur) else {
         return false;
     };
