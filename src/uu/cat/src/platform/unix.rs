@@ -43,3 +43,29 @@ fn is_appending<F: AsFd>(file: &F) -> bool {
     let flags = OFlag::from_bits_truncate(flags_raw);
     flags.contains(OFlag::O_APPEND)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::platform::unix::is_appending;
+    use std::fs::OpenOptions;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_is_appending() {
+        // Create a temp file
+        let temp_file = NamedTempFile::new().unwrap();
+        assert!(!is_appending(&temp_file));
+
+        // Test temp file opened in read mode
+        let read_file = OpenOptions::new().read(true).open(&temp_file).unwrap();
+        assert!(!is_appending(&read_file));
+
+        // Test temp file opened in write mode
+        let write_file = OpenOptions::new().write(true).open(&temp_file).unwrap();
+        assert!(!is_appending(&write_file));
+
+        // Test temp file opened in append mode
+        let append_file = OpenOptions::new().append(true).open(&temp_file).unwrap();
+        assert!(is_appending(&append_file));
+    }
+}

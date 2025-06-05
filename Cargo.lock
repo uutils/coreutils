@@ -2707,6 +2707,7 @@ dependencies = [
  "clap",
  "memchr",
  "nix",
+ "tempfile",
  "thiserror 2.0.12",
  "uucore",
  "winapi-util",
