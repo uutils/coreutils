@@ -13,7 +13,7 @@ use uucore::error::{UError, UResult};
 use uucore::libc::time_t;
 use uucore::uptime::*;
 
-use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
+use clap::{Arg, ArgAction, Command};
 
 use uucore::format_usage;
 use uucore::locale::get_message;
@@ -80,15 +80,21 @@ pub fn uu_app() -> Command {
                 .help("system up since")
                 .action(ArgAction::SetTrue),
         );
+
     #[cfg(unix)]
-    cmd.arg(
-        Arg::new(options::PATH)
-            .help("file to search boot time from")
-            .action(ArgAction::Set)
-            .num_args(0..=1)
-            .value_parser(ValueParser::os_string())
-            .value_hint(ValueHint::AnyPath),
-    )
+    let cmd = {
+        use clap::{ValueHint, builder::ValueParser};
+        cmd.arg(
+            Arg::new(options::PATH)
+                .help("file to search boot time from")
+                .action(ArgAction::Set)
+                .num_args(0..=1)
+                .value_parser(ValueParser::os_string())
+                .value_hint(ValueHint::AnyPath),
+        )
+    };
+
+    cmd
 }
 
 #[cfg(windows)]
