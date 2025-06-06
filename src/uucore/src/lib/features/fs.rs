@@ -720,7 +720,9 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     {
         use nix::sys::stat::fstat;
         let mode = fstat(stdin.as_fd()).unwrap().st_mode as mode_t;
-        return mode & S_IFMT == S_IFDIR;
+        // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
+        // sockets for directories.
+        mode & S_IFMT == S_IFDIR
     }
 
     #[cfg(windows)]
