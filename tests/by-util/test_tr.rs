@@ -1556,3 +1556,18 @@ fn test_failed_write_is_reported() {
         .fails()
         .stderr_is("tr: write error: No space left on device\n");
 }
+
+#[cfg(not(windows))]
+#[test]
+fn test_stdin_is_socket() {
+    use nix::sys::socket::{socketpair, SockFlag, AddressFamily, SockType};
+    use nix::unistd::write;
+
+    let (fd1, fd2) = socketpair(AddressFamily::Unix, SockType::Stream, None, SockFlag::empty()).unwrap();
+    write(fd1, b"::").unwrap();
+    new_ucmd!()
+        .args(&[":", ";"])
+        .set_stdin(fd2)
+        .succeeds()
+        .stdout_is(";;");
+}
