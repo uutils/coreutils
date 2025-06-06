@@ -153,6 +153,7 @@ IFSOCK
 IRGRP
 IROTH
 IRUSR
+ISDIR
 ISGID
 ISUID
 ISVTX
@@ -204,6 +205,7 @@ setgid
 setgroups
 settime
 setuid
+socketpair
 socktype
 statfs
 statp
