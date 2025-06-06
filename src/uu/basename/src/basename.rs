@@ -6,13 +6,14 @@
 // spell-checker:ignore (ToDO) fullname
 
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::path::{PathBuf, is_separator};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
 
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 pub mod options {
     pub static MULTIPLE: &str = "multiple";
@@ -37,7 +38,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default()
         .collect::<Vec<_>>();
     if name_args.is_empty() {
-        return Err(UUsageError::new(1, "missing operand".to_string()));
+        return Err(UUsageError::new(
+            1,
+            get_message("basename-error-missing-operand"),
+        ));
     }
     let multiple_paths =
         matches.get_one::<String>(options::SUFFIX).is_some() || matches.get_flag(options::MULTIPLE);
@@ -55,7 +59,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             _ => {
                 return Err(UUsageError::new(
                     1,
-                    format!("extra operand {}", name_args[2].quote()),
+                    get_message_with_args(
+                        "basename-error-extra-operand",
+                        HashMap::from([("operand".to_string(), name_args[2].quote().to_string())]),
+                    ),
                 ));
             }
         }
@@ -82,7 +89,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::MULTIPLE)
                 .short('a')
                 .long(options::MULTIPLE)
-                .help("support multiple arguments and treat each as a NAME")
+                .help(get_message("basename-help-multiple"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::MULTIPLE),
         )
@@ -98,14 +105,14 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SUFFIX)
                 .value_name("SUFFIX")
-                .help("remove a trailing SUFFIX; implies -a")
+                .help(get_message("basename-help-suffix"))
                 .overrides_with(options::SUFFIX),
         )
         .arg(
             Arg::new(options::ZERO)
                 .short('z')
                 .long(options::ZERO)
-                .help("end each output line with NUL, not newline")
+                .help(get_message("basename-help-zero"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ZERO),
         )
