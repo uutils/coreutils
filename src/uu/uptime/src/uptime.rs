@@ -19,7 +19,7 @@ use clap::{Arg, ArgAction, Command};
 use uucore::format_usage;
 
 #[cfg(unix)]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "redox", target_os = "android")))]
 use uucore::utmpx::*;
 
 pub mod options {
@@ -162,7 +162,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     print_time();
     let user_count;
 
-    #[cfg(not(target_os = "openbsd"))]
+    #[cfg(not(any(target_os = "openbsd", target_os = "redox", target_os = "android")))]
     {
         let (boot_time, count) = process_utmpx(Some(file_path));
         if let Some(time) = boot_time {
@@ -176,7 +176,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         user_count = count;
     }
 
-    #[cfg(target_os = "openbsd")]
+    #[cfg(any(target_os = "openbsd", target_os = "redox", target_os = "android"))]
     {
         let upsecs = get_uptime(None)?;
         if upsecs >= 0 {
@@ -198,12 +198,17 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
 fn uptime_since() -> UResult<()> {
     #[cfg(unix)]
-    #[cfg(not(target_os = "openbsd"))]
+    #[cfg(not(any(target_os = "openbsd", target_os = "redox", target_os = "android")))]
     let uptime = {
         let (boot_time, _) = process_utmpx(None);
         get_uptime(boot_time)?
     };
-    #[cfg(any(windows, target_os = "openbsd"))]
+    #[cfg(any(
+        windows,
+        target_os = "openbsd",
+        target_os = "redox",
+        target_os = "android"
+    ))]
     let uptime = get_uptime(None)?;
 
     let since_date = Local
@@ -233,7 +238,7 @@ fn print_loadavg() {
 }
 
 #[cfg(unix)]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "redox", target_os = "android")))]
 fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
     let mut nusers = 0;
     let mut boot_time = None;
