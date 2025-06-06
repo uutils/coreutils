@@ -1560,10 +1560,16 @@ fn test_failed_write_is_reported() {
 #[cfg(not(windows))]
 #[test]
 fn test_stdin_is_socket() {
-    use nix::sys::socket::{socketpair, SockFlag, AddressFamily, SockType};
+    use nix::sys::socket::{AddressFamily, SockFlag, SockType, socketpair};
     use nix::unistd::write;
 
-    let (fd1, fd2) = socketpair(AddressFamily::Unix, SockType::Stream, None, SockFlag::empty()).unwrap();
+    let (fd1, fd2) = socketpair(
+        AddressFamily::Unix,
+        SockType::Stream,
+        None,
+        SockFlag::empty(),
+    )
+    .unwrap();
     write(fd1, b"::").unwrap();
     new_ucmd!()
         .args(&[":", ";"])
