@@ -1503,3 +1503,67 @@ fn test_files0_from_zero_length() {
         .fails_with_code(2)
         .stderr_only("sort: -:2: invalid zero-length file name\n");
 }
+
+#[test]
+// Test for GNU tests/sort/sort-float.sh
+fn test_g_float() {
+    let input = "0\n-3.3621031431120935063e-4932\n3.3621031431120935063e-4932\n";
+    let output = "-3.3621031431120935063e-4932\n0\n3.3621031431120935063e-4932\n";
+    new_ucmd!()
+        .args(&["-g"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+// Test misc numbers ("'a" is not interpreted as literal, trailing text is ignored...)
+fn test_g_misc() {
+    let input = "1\n100\n90\n'a\n85hello\n";
+    let output = "'a\n1\n85hello\n90\n100\n";
+    new_ucmd!()
+        .args(&["-g"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+// Test numbers with a large number of digits, where only the last digit is different.
+// We use scientific notation to make sure string sorting does not correctly order them.
+fn test_g_arbitrary() {
+    let input = [
+        // GNU coreutils doesn't handle those correctly as they don't fit exactly in long double
+        "3",
+        "3.000000000000000000000000000000000000000000000000000000000000000004",
+        "0.3000000000000000000000000000000000000000000000000000000000000000002e1",
+        "0.03000000000000000000000000000000000000000000000000000000000000000003e2",
+        "0.003000000000000000000000000000000000000000000000000000000000000000001e3",
+        // GNU coreutils does handle those correctly though
+        "10",
+        "10.000000000000004",
+        "1.0000000000000002e1",
+        "0.10000000000000003e2",
+        "0.010000000000000001e3",
+    ]
+    .join("\n");
+    let output = [
+        "3",
+        "0.003000000000000000000000000000000000000000000000000000000000000000001e3",
+        "0.3000000000000000000000000000000000000000000000000000000000000000002e1",
+        "0.03000000000000000000000000000000000000000000000000000000000000000003e2",
+        "3.000000000000000000000000000000000000000000000000000000000000000004",
+        "10",
+        "0.010000000000000001e3",
+        "1.0000000000000002e1",
+        "0.10000000000000003e2",
+        "10.000000000000004",
+    ]
+    .join("\n")
+        + "\n";
+    new_ucmd!()
+        .args(&["-g"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
