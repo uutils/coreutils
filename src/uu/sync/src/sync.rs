@@ -12,14 +12,14 @@ use nix::errno::Errno;
 use nix::fcntl::{OFlag, open};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::sys::stat::Mode;
+use std::collections::HashMap;
 use std::path::Path;
 use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
@@ -67,6 +67,7 @@ mod platform {
     use std::os::windows::prelude::*;
     use std::path::Path;
     use uucore::error::{UResult, USimpleError};
+    use uucore::locale::get_message;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
         ERROR_NO_MORE_FILES, GetLastError, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
@@ -92,7 +93,7 @@ mod platform {
                     if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
                         Err(USimpleError::new(
                             get_last_error() as i32,
-                            "failed to flush file buffer",
+                            get_message("sync-error-flush-file-buffer"),
                         ))
                     } else {
                         Ok(())
@@ -100,7 +101,7 @@ mod platform {
                 }
                 Err(e) => Err(USimpleError::new(
                     e.raw_os_error().unwrap_or(1),
-                    "failed to create volume handle",
+                    get_message("sync-error-create-volume-handle"),
                 )),
             }
         } else {
@@ -115,7 +116,7 @@ mod platform {
         if handle == INVALID_HANDLE_VALUE {
             return Err(USimpleError::new(
                 get_last_error() as i32,
-                "failed to find first volume",
+                get_message("sync-error-find-first-volume"),
             ));
         }
         Ok((String::from_wide_null(&name), handle))
@@ -137,7 +138,10 @@ mod platform {
                         unsafe { FindVolumeClose(next_volume_handle) };
                         Ok(volumes)
                     }
-                    err => Err(USimpleError::new(err as i32, "failed to find next volume")),
+                    err => Err(USimpleError::new(
+                        err as i32,
+                        get_message("sync-error-find-next-volume"),
+                    )),
                 };
             } else {
                 volumes.push(String::from_wide_null(&name));
@@ -172,14 +176,16 @@ mod platform {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
-
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
     if matches.get_flag(options::DATA) && files.is_empty() {
-        return Err(USimpleError::new(1, "--data needs at least one argument"));
+        return Err(USimpleError::new(
+            1,
+            get_message("sync-error-data-needs-argument"),
+        ));
     }
 
     for f in &files {
@@ -189,17 +195,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let path = Path::new(&f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
                 if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    e.map_err_context(|| format!("error opening {}", f.quote()))?;
+                    e.map_err_context(|| {
+                        get_message_with_args(
+                            "sync-error-opening-file",
+                            HashMap::from([("file".to_string(), f.quote().to_string())]),
+                        )
+                    })?;
                 }
             }
         }
-
         #[cfg(not(any(target_os = "linux", target_os = "android")))]
         {
             if !Path::new(&f).exists() {
                 return Err(USimpleError::new(
                     1,
-                    format!("error opening {}: No such file or directory", f.quote()),
+                    get_message_with_args(
+                        "sync-error-no-such-file",
+                        HashMap::from([("file".to_string(), f.quote().to_string())]),
+                    ),
                 ));
             }
         }
@@ -229,7 +242,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(options::FILE_SYSTEM)
                 .conflicts_with(options::DATA)
-                .help("sync the file systems that contain the files (Linux and Windows only)")
+                .help(get_message("sync-help-file-system"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -237,7 +250,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::DATA)
                 .conflicts_with(options::FILE_SYSTEM)
-                .help("sync only file data, no unneeded metadata (Linux only)")
+                .help(get_message("sync-help-data"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
