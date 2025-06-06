@@ -9,6 +9,7 @@ use rlimit::Resource;
 #[cfg(unix)]
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::fs::read_to_string;
 use std::process::Stdio;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -635,6 +636,57 @@ fn test_write_to_self() {
         s.fixtures.read("first_file"),
         "first_file_content.second_file_content."
     );
+}
+
+/// Test derived from the following GNU test in `tests/cat/cat-self.sh`:
+///
+/// `cat fxy2 fy 1<>fxy2`
+// TODO: make this work on windows
+#[test]
+#[cfg(unix)]
+fn test_successful_write_to_read_write_self() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("fy", "y");
+    at.write("fxy2", "x");
+
+    // Open `rw_file` as both stdin and stdout (read/write)
+    let fxy2_file_path = at.plus("fxy2");
+    let fxy2_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&fxy2_file_path)
+        .unwrap();
+    ucmd.args(&["fxy2", "fy"]).set_stdout(fxy2_file).succeeds();
+
+    // The contents of `fxy2` and `fy` files should be merged
+    let fxy2_contents = read_to_string(fxy2_file_path).unwrap();
+    assert_eq!(fxy2_contents, "xy");
+}
+
+/// Test derived from the following GNU test in `tests/cat/cat-self.sh`:
+///
+/// `cat fx fx3 1<>fx3`
+#[test]
+fn test_failed_write_to_read_write_self() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("fx", "g");
+    at.write("fx3", "bold");
+
+    // Open `rw_file` as both stdin and stdout (read/write)
+    let fx3_file_path = at.plus("fx3");
+    let fx3_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&fx3_file_path)
+        .unwrap();
+    ucmd.args(&["fx", "fx3"])
+        .set_stdout(fx3_file)
+        .fails_with_code(1)
+        .stderr_only("cat: fx3: input file is output file\n");
+
+    // The contents of `fx` should have overwritten the beginning of `fx3`
+    let fx3_contents = read_to_string(fx3_file_path).unwrap();
+    assert_eq!(fx3_contents, "gold");
 }
 
 #[test]
