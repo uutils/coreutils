@@ -537,7 +537,13 @@ hex-literal = "1.0.0"
 rstest.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
-nix = { workspace = true, features = ["process", "signal", "socket", "user", "term"] }
+nix = { workspace = true, features = [
+  "process",
+  "signal",
+  "socket",
+  "user",
+  "term",
+] }
 rlimit = "0.10.1"
 xattr.workspace = true
 
