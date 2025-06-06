@@ -277,7 +277,6 @@ fn test_random_source_regular_file() {
 }
 
 #[test]
-#[ignore = "known issue #7947"]
 fn test_random_source_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
