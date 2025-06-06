@@ -32,7 +32,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     if dirnames.is_empty() {
-        return Err(UUsageError::new(1, "missing operand"));
+        return Err(UUsageError::new(1, get_message("dirname-missing-operand")));
     } else {
         for path in &dirnames {
             let p = Path::new(path);
@@ -70,7 +70,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .short('z')
-                .help("separate output with NUL rather than newline")
+                .help(get_message("dirname-zero-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
