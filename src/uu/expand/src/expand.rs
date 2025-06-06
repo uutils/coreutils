@@ -16,10 +16,9 @@ use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
-use uucore::{format_usage, help_about, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
-const ABOUT: &str = help_about!("expand.md");
-const USAGE: &str = help_usage!("expand.md");
+use uucore::locale::get_message;
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -253,9 +252,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
+        .about(get_message("expand-about"))
         .after_help(LONG_HELP)
-        .override_usage(format_usage(USAGE))
+        .override_usage(format_usage(&get_message("expand-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

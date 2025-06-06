@@ -17,10 +17,9 @@ use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
-const ABOUT: &str = help_about!("sync.md");
-const USAGE: &str = help_usage!("sync.md");
+use uucore::locale::get_message;
 
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
@@ -222,8 +221,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("sync-about"))
+        .override_usage(format_usage(&get_message("sync-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE_SYSTEM)

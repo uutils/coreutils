@@ -15,7 +15,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
-use uucore::{fast_inc::fast_inc, format_usage, help_about, help_usage};
+use uucore::{fast_inc::fast_inc, format_usage};
 
 mod error;
 
@@ -28,8 +28,7 @@ mod numberparse;
 use crate::error::SeqError;
 use crate::number::PreciseNumber;
 
-const ABOUT: &str = help_about!("seq.md");
-const USAGE: &str = help_usage!("seq.md");
+use uucore::locale::get_message;
 
 const OPT_SEPARATOR: &str = "separator";
 const OPT_TERMINATOR: &str = "terminator";
@@ -222,8 +221,8 @@ pub fn uu_app() -> Command {
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("seq-about"))
+        .override_usage(format_usage(&get_message("seq-usage")))
         .arg(
             Arg::new(OPT_SEPARATOR)
                 .short('s')

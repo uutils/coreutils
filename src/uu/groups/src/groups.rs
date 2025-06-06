@@ -10,16 +10,15 @@ use uucore::{
     display::Quotable,
     entries::{Locate, Passwd, get_groups_gnu, gid2grp},
     error::{UError, UResult},
-    format_usage, help_about, help_usage, show,
+    format_usage, show,
 };
 
 use clap::{Arg, ArgAction, Command};
+use uucore::locale::get_message;
 
 mod options {
     pub const USERS: &str = "USERNAME";
 }
-const ABOUT: &str = help_about!("groups.md");
-const USAGE: &str = help_usage!("groups.md");
 
 #[derive(Debug, Error)]
 enum GroupsError {
@@ -82,8 +81,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("groups-about"))
+        .override_usage(format_usage(&get_message("groups-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::USERS)

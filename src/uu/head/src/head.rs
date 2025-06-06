@@ -16,12 +16,9 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
 const BUF_SIZE: usize = 65536;
-
-const ABOUT: &str = help_about!("head.md");
-const USAGE: &str = help_usage!("head.md");
 
 mod options {
     pub const BYTES_NAME: &str = "BYTES";
@@ -38,6 +35,7 @@ mod take;
 use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
+use uucore::locale::get_message;
 
 #[derive(Error, Debug)]
 enum HeadError {
@@ -72,8 +70,8 @@ type HeadResult<T> = Result<T, HeadError>;
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("head-about"))
+        .override_usage(format_usage(&get_message("head-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES_NAME)

@@ -8,15 +8,11 @@
 use clap::{Arg, ArgAction, Command};
 use uu_base32::base_common::{self, BASE_CMD_PARSE_ERROR, Config};
 use uucore::error::UClapError;
+use uucore::locale::get_message;
 use uucore::{
     encoding::Format,
     error::{UResult, UUsageError},
 };
-use uucore::{help_about, help_usage};
-
-const ABOUT: &str = help_about!("basenc.md");
-const USAGE: &str = help_usage!("basenc.md");
-
 const ENCODINGS: &[(&str, Format, &str)] = &[
     ("base64", Format::Base64, "same as 'base64' program"),
     ("base64url", Format::Base64Url, "file- and url-safe base64"),
@@ -47,7 +43,10 @@ const ENCODINGS: &[(&str, Format, &str)] = &[
 ];
 
 pub fn uu_app() -> Command {
-    let mut command = base_common::base_app(ABOUT, USAGE);
+    let about: &'static str = Box::leak(get_message("basenc-about").into_boxed_str());
+    let usage: &'static str = Box::leak(get_message("basenc-usage").into_boxed_str());
+
+    let mut command = base_common::base_app(about, usage);
     for encoding in ENCODINGS {
         let raw_arg = Arg::new(encoding.0)
             .long(encoding.0)

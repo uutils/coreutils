@@ -5,9 +5,8 @@
 use clap::{Arg, ArgAction, Command};
 use std::{ffi::OsString, io::Write};
 use uucore::error::{UResult, set_exit_code};
-use uucore::help_about;
 
-const ABOUT: &str = help_about!("false.md");
+use uucore::locale::get_message;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -46,7 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
+        .about(get_message("false-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
         .disable_version_flag(true)

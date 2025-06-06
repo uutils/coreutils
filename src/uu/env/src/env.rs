@@ -36,7 +36,7 @@ use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
 use uucore::signals::signal_by_name_or_value;
-use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
+use uucore::{format_usage, show_warning};
 
 use thiserror::Error;
 
@@ -74,9 +74,7 @@ impl From<string_parser::Error> for EnvError {
     }
 }
 
-const ABOUT: &str = help_about!("env.md");
-const USAGE: &str = help_usage!("env.md");
-const AFTER_HELP: &str = help_section!("after help", "env.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const IGNORE_ENVIRONMENT: &str = "ignore-environment";
@@ -222,9 +220,9 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(crate_name!())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .about(get_message("env-about"))
+        .override_usage(format_usage(&get_message("env-usage")))
+        .after_help(get_message("env-after-help"))
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(

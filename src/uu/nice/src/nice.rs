@@ -11,18 +11,16 @@ use std::io::{Error, Write};
 use std::ptr;
 
 use clap::{Arg, ArgAction, Command};
+use uucore::locale::get_message;
 use uucore::{
     error::{UClapError, UResult, USimpleError, UUsageError, set_exit_code},
-    format_usage, help_about, help_usage, show_error,
+    format_usage, show_error,
 };
 
 pub mod options {
     pub static ADJUSTMENT: &str = "adjustment";
     pub static COMMAND: &str = "COMMAND";
 }
-
-const ABOUT: &str = help_about!("nice.md");
-const USAGE: &str = help_usage!("nice.md");
 
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
     if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
@@ -186,8 +184,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("nice-about"))
+        .override_usage(format_usage(&get_message("nice-usage")))
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())

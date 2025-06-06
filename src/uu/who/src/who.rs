@@ -6,7 +6,8 @@
 // spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr runlvline pidstr exitstr hoststr
 
 use clap::{Arg, ArgAction, Command};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 mod platform;
 
@@ -28,19 +29,6 @@ mod options {
     pub const FILE: &str = "FILE"; // if length=1: FILE, if length=2: ARG1 ARG2
 }
 
-#[cfg(target_env = "musl")]
-const ABOUT: &str = concat!(
-    help_about!("who.md"),
-    "\n\nNote: When built with musl libc, the `who` utility will not display any \n",
-    "information about logged-in users. This is due to musl's stub implementation \n",
-    "of `utmpx` functions, which prevents access to the necessary data."
-);
-
-#[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("who.md");
-
-const USAGE: &str = help_usage!("who.md");
-
 #[cfg(target_os = "linux")]
 static RUNLEVEL_HELP: &str = "print current runlevel";
 #[cfg(not(target_os = "linux"))]
@@ -50,10 +38,15 @@ static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non
 use platform::uumain;
 
 pub fn uu_app() -> Command {
+    #[cfg(not(target_env = "musl"))]
+    let about = get_message("who-about");
+    #[cfg(target_env = "musl")]
+    let about = get_message("who-about") + &get_message("who-about-musl-warning");
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(about)
+        .override_usage(format_usage(&get_message("who-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ALL)

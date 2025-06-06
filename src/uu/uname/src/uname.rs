@@ -7,13 +7,11 @@
 
 use clap::{Arg, ArgAction, Command};
 use platform_info::*;
+use uucore::locale::get_message;
 use uucore::{
     error::{UResult, USimpleError},
-    format_usage, help_about, help_usage,
+    format_usage,
 };
-
-const ABOUT: &str = help_about!("uname.md");
-const USAGE: &str = help_usage!("uname.md");
 
 pub mod options {
     pub static ALL: &str = "all";
@@ -61,8 +59,9 @@ impl UNameOutput {
     }
 
     pub fn new(opts: &Options) -> UResult<Self> {
-        let uname =
-            PlatformInfo::new().map_err(|_e| USimpleError::new(1, "cannot get system name"))?;
+        let uname = PlatformInfo::new().map_err(|_e| {
+            USimpleError::new(1, get_message("uname-error-cannot-get-system-name"))
+        })?;
         let none = !(opts.all
             || opts.kernel_name
             || opts.nodename
@@ -92,11 +91,11 @@ impl UNameOutput {
 
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-        let processor = opts.processor.then(|| "unknown".to_string());
+        let processor = opts.processor.then(|| get_message("uname-unknown"));
 
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-        let hardware_platform = opts.hardware_platform.then(|| "unknown".to_string());
+        let hardware_platform = opts.hardware_platform.then(|| get_message("uname-unknown"));
 
         Ok(Self {
             kernel_name,
@@ -146,14 +145,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("uname-about"))
+        .override_usage(format_usage(&get_message("uname-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help("Behave as though all of the options -mnrsvo were specified.")
+                .help(get_message("uname-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -161,17 +160,14 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::KERNEL_NAME)
                 .alias("sysname") // Obsolescent option in GNU uname
-                .help("print the kernel name.")
+                .help(get_message("uname-help-kernel-name"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NODENAME)
                 .short('n')
                 .long(options::NODENAME)
-                .help(
-                    "print the nodename (the nodename may be a name that the system \
-                is known by to a communications network).",
-                )
+                .help(get_message("uname-help-nodename"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -179,35 +175,35 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .long(options::KERNEL_RELEASE)
                 .alias("release") // Obsolescent option in GNU uname
-                .help("print the operating system release.")
+                .help(get_message("uname-help-kernel-release"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::KERNEL_VERSION)
                 .short('v')
                 .long(options::KERNEL_VERSION)
-                .help("print the operating system version.")
+                .help(get_message("uname-help-kernel-version"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::MACHINE)
                 .short('m')
                 .long(options::MACHINE)
-                .help("print the machine hardware name.")
+                .help(get_message("uname-help-machine"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OS)
                 .short('o')
                 .long(options::OS)
-                .help("print the operating system name.")
+                .help(get_message("uname-help-os"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PROCESSOR)
                 .short('p')
                 .long(options::PROCESSOR)
-                .help("print the processor type (non-portable)")
+                .help(get_message("uname-help-processor"))
                 .action(ArgAction::SetTrue)
                 .hide(true),
         )
@@ -215,7 +211,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::HARDWARE_PLATFORM)
                 .short('i')
                 .long(options::HARDWARE_PLATFORM)
-                .help("print the hardware platform (non-portable)")
+                .help(get_message("uname-help-hardware-platform"))
                 .action(ArgAction::SetTrue)
                 .hide(true),
         )

@@ -24,10 +24,11 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
+use uucore::locale::get_message;
 
 use uucore::{
     error::{FromIo, UError, UResult},
-    format_usage, help_about, help_usage,
+    format_usage,
     parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
     show,
@@ -112,9 +113,6 @@ impl<'a> Settings<'a> {
         .sum()
     }
 }
-
-const ABOUT: &str = help_about!("wc.md");
-const USAGE: &str = help_usage!("wc.md");
 
 mod options {
     pub static BYTES: &str = "bytes";
@@ -397,8 +395,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("wc-about"))
+        .override_usage(format_usage(&get_message("wc-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

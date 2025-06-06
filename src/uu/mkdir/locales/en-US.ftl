@@ -1,0 +1,3 @@
+mkdir-about = Create the given DIRECTORY(ies) if they do not exist
+mkdir-usage = mkdir [OPTION]... DIRECTORY...
+mkdir-after-help = Each MODE is of the form [ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+.

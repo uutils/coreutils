@@ -11,7 +11,7 @@ categories.workspace = true
 edition.workspace = true
 
 [lib]
-name = "libstdbuf"
+name = "stdbuf"
 path = "src/libstdbuf.rs"
 crate-type = ["cdylib"]
 

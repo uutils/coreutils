@@ -69,7 +69,7 @@ fn main() {
     assert!(status.success(), "Failed to build libstdbuf");
 
     // Copy the built library to OUT_DIR for include_bytes! to find
-    let lib_name = format!("liblibstdbuf{}", platform::DYLIB_EXT);
+    let lib_name = format!("libstdbuf{}", platform::DYLIB_EXT);
     let dest_path = Path::new(&out_dir).join(format!("libstdbuf{}", platform::DYLIB_EXT));
 
     // Check multiple possible locations for the built library

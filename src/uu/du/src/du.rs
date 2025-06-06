@@ -27,10 +27,11 @@ use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::line_ending::LineEnding;
+use uucore::locale::get_message;
 use uucore::parser::parse_glob;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
+use uucore::{format_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -69,10 +70,6 @@ mod options {
     pub const VERBOSE: &str = "verbose";
     pub const FILE: &str = "FILE";
 }
-
-const ABOUT: &str = help_about!("du.md");
-const AFTER_HELP: &str = help_section!("after help", "du.md");
-const USAGE: &str = help_usage!("du.md");
 
 struct TraversalOptions {
     all: bool,
@@ -824,9 +821,9 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("du-about"))
+        .after_help(get_message("du-after-help"))
+        .override_usage(format_usage(&get_message("du-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(

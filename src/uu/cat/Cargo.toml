@@ -26,6 +26,13 @@ uucore = { workspace = true, features = ["fast-inc", "fs", "pipes"] }
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+winapi-util = { workspace = true }
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [[bin]]
 name = "cat"
 path = "src/main.rs"

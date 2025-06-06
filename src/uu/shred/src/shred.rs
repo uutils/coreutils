@@ -18,11 +18,9 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
+use uucore::{format_usage, show_error, show_if_err};
 
-const ABOUT: &str = help_about!("shred.md");
-const USAGE: &str = help_usage!("shred.md");
-const AFTER_HELP: &str = help_section!("after help", "shred.md");
+use uucore::locale::get_message;
 
 pub mod options {
     pub const FORCE: &str = "force";
@@ -316,9 +314,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("shred-about"))
+        .after_help(get_message("shred-after-help"))
+        .override_usage(format_usage(&get_message("shred-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FORCE)

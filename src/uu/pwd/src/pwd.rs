@@ -8,13 +8,12 @@ use clap::{Arg, Command};
 use std::env;
 use std::io;
 use std::path::PathBuf;
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 
-const ABOUT: &str = help_about!("pwd.md");
-const USAGE: &str = help_usage!("pwd.md");
+use uucore::locale::get_message;
 const OPT_LOGICAL: &str = "logical";
 const OPT_PHYSICAL: &str = "physical";
 
@@ -141,8 +140,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("pwd-about"))
+        .override_usage(format_usage(&get_message("pwd-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_LOGICAL)

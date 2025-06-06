@@ -18,15 +18,12 @@ use uucore::os_str_as_bytes;
 
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
+use uucore::locale::get_message;
 use uucore::ranges::Range;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
+use uucore::{format_usage, show_error, show_if_err};
 
 mod matcher;
 mod searcher;
-
-const USAGE: &str = help_usage!("cut.md");
-const ABOUT: &str = help_about!("cut.md");
-const AFTER_HELP: &str = help_section!("after help", "cut.md");
 
 struct Options<'a> {
     out_delimiter: Option<&'a [u8]>,
@@ -580,9 +577,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
+        .override_usage(format_usage(&get_message("cut-usage")))
+        .about(get_message("cut-about"))
+        .after_help(get_message("cut-after-help"))
         .infer_long_args(true)
         // While `args_override_self(true)` for some arguments, such as `-d`
         // and `--output-delimiter`, is consistent to the behavior of GNU cut,

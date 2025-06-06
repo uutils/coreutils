@@ -16,24 +16,12 @@ use uucore::uptime::*;
 
 use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
 
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 #[cfg(unix)]
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::*;
-
-#[cfg(target_env = "musl")]
-const ABOUT: &str = concat!(
-    help_about!("uptime.md"),
-    "\n\nWarning: When built with musl libc, the `uptime` utility may show '0 users' \n",
-    "due to musl's stub implementation of utmpx functions. Boot time and load averages \n",
-    "are still calculated using alternative mechanisms."
-);
-
-#[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("uptime.md");
-
-const USAGE: &str = help_usage!("uptime.md");
 
 pub mod options {
     pub static SINCE: &str = "since";
@@ -76,10 +64,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    #[cfg(not(target_env = "musl"))]
+    let about = get_message("uptime-about");
+    #[cfg(target_env = "musl")]
+    let about = get_message("uptime-about") + &get_message("uptime-about-musl-warning");
+
     let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(about)
+        .override_usage(format_usage(&get_message("uptime-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SINCE)

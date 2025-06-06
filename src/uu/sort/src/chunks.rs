@@ -17,7 +17,9 @@ use memchr::memchr_iter;
 use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError};
 
-use crate::{GeneralF64ParseResult, GlobalSettings, Line, SortError, numeric_str_cmp::NumInfo};
+use crate::{
+    GeneralBigDecimalParseResult, GlobalSettings, Line, SortError, numeric_str_cmp::NumInfo,
+};
 
 self_cell!(
     /// The chunk that is passed around between threads.
@@ -41,7 +43,7 @@ pub struct ChunkContents<'a> {
 pub struct LineData<'a> {
     pub selections: Vec<&'a str>,
     pub num_infos: Vec<NumInfo>,
-    pub parsed_floats: Vec<GeneralF64ParseResult>,
+    pub parsed_floats: Vec<GeneralBigDecimalParseResult>,
     pub line_num_floats: Vec<Option<f64>>,
 }
 
@@ -100,7 +102,7 @@ pub struct RecycledChunk {
     lines: Vec<Line<'static>>,
     selections: Vec<&'static str>,
     num_infos: Vec<NumInfo>,
-    parsed_floats: Vec<GeneralF64ParseResult>,
+    parsed_floats: Vec<GeneralBigDecimalParseResult>,
     line_num_floats: Vec<Option<f64>>,
     buffer: Vec<u8>,
 }

@@ -11,24 +11,14 @@ use std::path::Path;
 use clap::builder::ValueParser;
 use clap::{Arg, Command};
 use uucore::error::UResult;
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 #[cfg(target_os = "openbsd")]
 use utmp_classic::{UtmpEntry, parse_from_path};
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::{self, Utmpx};
 
-#[cfg(target_env = "musl")]
-const ABOUT: &str = concat!(
-    help_about!("users.md"),
-    "\n\nWarning: When built with musl libc, the `users` utility may show '0 users' \n",
-    "due to musl's stub implementation of utmpx functions."
-);
-
-#[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("users.md");
-
-const USAGE: &str = help_usage!("users.md");
+use uucore::locale::get_message;
 
 #[cfg(target_os = "openbsd")]
 const OPENBSD_UTMP_FILE: &str = "/var/run/utmp";
@@ -95,10 +85,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    #[cfg(not(target_env = "musl"))]
+    let about = get_message("users-about");
+    #[cfg(target_env = "musl")]
+    let about = get_message("users-about") + &get_message("users-about-musl-warning");
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(about)
+        .override_usage(format_usage(&get_message("users-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(ARG_FILE)

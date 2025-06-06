@@ -12,16 +12,14 @@ use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
 // spell-checker:ignore nopipe
 
 #[cfg(unix)]
 use uucore::signals::{enable_pipe_errors, ignore_interrupts};
 
-const ABOUT: &str = help_about!("tee.md");
-const USAGE: &str = help_usage!("tee.md");
-const AFTER_HELP: &str = help_section!("after help", "tee.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const APPEND: &str = "append";
@@ -97,9 +95,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .about(get_message("tee-about"))
+        .override_usage(format_usage(&get_message("tee-usage")))
+        .after_help(get_message("tee-after-help"))
         .infer_long_args(true)
         // Since we use value-specific help texts for "--output-error", clap's "short help" and "long help" differ.
         // However, this is something that the GNU tests explicitly test for, so we *always* show the long help instead.
