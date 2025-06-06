@@ -28,10 +28,10 @@ fn test_one_file() {
 
 #[test]
 fn test_failed() {
-    let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_rm_one_file"; // Doesn't exist
 
-    ucmd.arg(file)
+    new_ucmd!()
+        .arg(file)
         .fails()
         .stderr_contains(format!("cannot remove '{file}': No such file or directory"));
 }
@@ -310,15 +310,12 @@ fn test_invalid_symlink() {
 
 #[test]
 fn test_force_no_operand() {
-    let mut ucmd = new_ucmd!();
-
-    ucmd.arg("-f").succeeds().no_stderr();
+    new_ucmd!().arg("-f").succeeds().no_stderr();
 }
 
 #[test]
 fn test_no_operand() {
-    let ts = TestScenario::new(util_name!());
-    ts.ucmd().fails().usage_error("missing operand");
+    new_ucmd!().fails().usage_error("missing operand");
 }
 
 #[test]
