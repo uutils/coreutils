@@ -45,9 +45,9 @@ impl UNameOutput {
             self.kernel_release.as_ref(),
             self.kernel_version.as_ref(),
             self.machine.as_ref(),
-            self.os.as_ref(),
             self.processor.as_ref(),
             self.hardware_platform.as_ref(),
+            self.os.as_ref(),
         ]
         .into_iter()
         .flatten()
