@@ -496,11 +496,16 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
     let mut buf = [0; 1024 * 64];
-    while let Ok(n) = handle.reader.read(&mut buf) {
-        if n == 0 {
-            break;
+    loop {
+        match handle.reader.read(&mut buf) {
+            Ok(n) => {
+                if n == 0 {
+                    break;
+                }
+                stdout_lock.write_all(&buf[..n])?;
+            }
+            Err(e) => return Err(e.into()),
         }
-        stdout_lock.write_all(&buf[..n])?;
     }
 
     // If the splice() call failed and there has been some data written to
