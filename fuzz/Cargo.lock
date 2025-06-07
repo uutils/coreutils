@@ -1263,7 +1263,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "hex",
- "regex",
  "uucore",
 ]
 
@@ -1418,7 +1417,6 @@ dependencies = [
  "digest",
  "dunce",
  "fluent",
- "fluent-bundle",
  "fluent-syntax",
  "glob",
  "hex",
