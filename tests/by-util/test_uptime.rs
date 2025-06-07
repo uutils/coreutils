@@ -113,7 +113,7 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
     // the days can be more than 1 digit or not there. This will match even if the amount of whitespace is
     // wrong between the days and the time.
 
-    let re = Regex::new(r"up [(\d){1,} days]*\d{1,2}:\d\d").unwrap();
+    let re = Regex::new(r"up\s+(?:(\d+)\s+days?\s+)?(\d{1,2}):(\d{1,2})").unwrap();
     utmp(&at.plus("testx"));
     ts.ucmd()
         .arg("testx")
@@ -248,6 +248,7 @@ fn test_uptime_with_extra_argument() {
         .fails()
         .stderr_contains("unexpected value 'b'");
 }
+
 /// Checks whether uptime displays the correct stderr msg when its called with a directory
 #[test]
 fn test_uptime_with_dir() {
