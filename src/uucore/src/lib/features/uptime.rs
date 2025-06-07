@@ -385,9 +385,9 @@ pub fn get_formatted_loadavg() -> UResult<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::locale;
     use super::*;
-
+    use crate::locale;
+    use regex::Regex;
     #[test]
     fn test_format_nusers() {
         unsafe {
@@ -397,5 +397,115 @@ mod tests {
         assert_eq!("0 users", format_nusers(0));
         assert_eq!("1 user", format_nusers(1));
         assert_eq!("2 users", format_nusers(2));
+    }
+
+    #[test]
+    fn test_regex_with_new_format() {
+        use crate::locale::get_message_with_args;
+        use std::collections::HashMap;
+
+        // Force English locale and initialize localization
+        unsafe {
+            std::env::set_var("LANG", "en_US.UTF-8");
+        }
+        let _ = locale::setup_localization("uptime");
+
+        for test_days in [0, 1, 2] {
+            let output = get_message_with_args(
+                "uptime-format",
+                HashMap::from([
+                    ("days".to_string(), test_days.to_string()),
+                    ("hours".to_string(), " 0".to_string()),
+                    ("mins".to_string(), "05".to_string()),
+                ]),
+            );
+            println!("  {} days → '{}'", test_days, output);
+        }
+
+        // - Singular: "1 day, 2:05" (with comma)
+        // - Plural: "3 days 10:15" (without comma)
+        let regex =
+            Regex::new(r"up\s+(?:(\d+)\s+(?:day,\s+|days\s+))?(\d{1,2}):(\d{1,2})").unwrap();
+
+        let test_scenarios = [
+            ("0 days, 0 hours, 5 minutes", 0, 0, 5), // [0] case: should show no days
+            ("0 days, 2 hours, 30 minutes", 0, 2, 30), // [0] case: should show no days
+            ("1 day, 5 hours, 45 minutes", 1, 5, 45), // [one] case: singular
+            ("3 days, 10 hours, 15 minutes", 3, 10, 15), // [other] case: plural
+        ];
+
+        for (description, days, hours, mins) in test_scenarios {
+            let formatted_uptime = get_message_with_args(
+                "uptime-format",
+                HashMap::from([
+                    ("days".to_string(), days.to_string()),
+                    ("hours".to_string(), format!("{hours:2}")),
+                    ("mins".to_string(), format!("{mins:02}")),
+                ]),
+            );
+
+            let full_uptime_line = format!(
+                "10:57:19  up {}, 1 user, load average: 1.96, 1.02, 0.4",
+                formatted_uptime
+            );
+            println!("   Full line: '{}'", full_uptime_line);
+
+            let caps = regex.captures(&full_uptime_line).expect(&format!(
+                "Regex should match uptime line for {}: '{}'",
+                description, full_uptime_line
+            ));
+
+            let captured_days = caps.get(1);
+            let captured_hours = caps.get(2).unwrap().as_str().trim();
+            let captured_minutes = caps.get(3).unwrap().as_str();
+
+            println!(
+                "   Captured: days={:?}, hours='{}', minutes='{}'",
+                captured_days.map(|m| m.as_str()),
+                captured_hours,
+                captured_minutes
+            );
+
+            if days == 0 {
+                // For [0] case, days group should NOT be captured at all
+                assert!(
+                    captured_days.is_none(),
+                    "For {} with 0 days, regex should not capture days group. Full line: '{}', captured days: '{:?}'",
+                    description,
+                    full_uptime_line,
+                    captured_days.map(|m| m.as_str())
+                );
+            } else {
+                assert!(
+                    captured_days.is_some(),
+                    "For {} with {} days, regex should capture days group",
+                    description,
+                    days
+                );
+                assert_eq!(
+                    captured_days.unwrap().as_str(),
+                    days.to_string(),
+                    "For {}, captured days should match expected days",
+                    description
+                );
+            }
+
+            assert_eq!(
+                captured_hours,
+                hours.to_string(),
+                "For {}, captured hours should match expected hours",
+                description
+            );
+
+            let captured_mins_num: i64 = captured_minutes.parse().expect(&format!(
+                "Captured minutes '{}' should be a valid number",
+                captured_minutes
+            ));
+            assert_eq!(
+                captured_mins_num, mins,
+                "For {}, captured minutes as number should match expected minutes",
+                description
+            );
+        }
     }
 }
