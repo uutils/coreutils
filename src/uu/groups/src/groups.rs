@@ -22,13 +22,13 @@ mod options {
 
 #[derive(Debug, Error)]
 enum GroupsError {
-    #[error("failed to fetch groups")]
+    #[error("{message}", message = get_message("groups-error-fetch"))]
     GetGroupsFailed,
 
-    #[error("cannot find name for group ID {0}")]
+    #[error("{message} {gid}", message = get_message("groups-error-notfound"), gid = .0)]
     GroupNotFound(u32),
 
-    #[error("{user}: no such user", user = .0.quote())]
+    #[error("{user}: {message}", user = .0.quote(), message = get_message("groups-error-user"))]
     UserNotFound(String),
 }
 
