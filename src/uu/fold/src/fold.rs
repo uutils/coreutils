@@ -6,13 +6,14 @@
 // spell-checker:ignore (ToDOs) ncount routput
 
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 const TAB_WIDTH: usize = 8;
 
@@ -41,7 +42,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(inp_width) => inp_width.parse::<usize>().map_err(|e| {
             USimpleError::new(
                 1,
-                format!("illegal width value ({}): {e}", inp_width.quote()),
+                get_message_with_args(
+                    "fold-error-illegal-width",
+                    HashMap::from([
+                        ("width".to_string(), inp_width.quote().to_string()),
+                        ("error".to_string(), e.to_string()),
+                    ]),
+                ),
             )
         })?,
         None => 80,
@@ -65,24 +72,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::BYTES)
                 .long(options::BYTES)
                 .short('b')
-                .help(
-                    "count using bytes rather than columns (meaning control characters \
-                     such as newline are not treated specially)",
-                )
+                .help(get_message("fold-bytes-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SPACES)
                 .long(options::SPACES)
                 .short('s')
-                .help("break lines at word boundaries rather than a hard cut-off")
+                .help(get_message("fold-spaces-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
                 .long(options::WIDTH)
                 .short('w')
-                .help("set WIDTH as the maximum line width rather than 80")
+                .help(get_message("fold-width-help"))
                 .value_name("WIDTH")
                 .allow_hyphen_values(true),
         )
@@ -142,7 +146,7 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
     loop {
         if file
             .read_line(&mut line)
-            .map_err_context(|| "failed to read line".to_string())?
+            .map_err_context(|| get_message("fold-error-readline"))?
             == 0
         {
             break;
@@ -236,7 +240,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> URe
     loop {
         if file
             .read_line(&mut line)
-            .map_err_context(|| "failed to read line".to_string())?
+            .map_err_context(|| get_message("fold-error-readline"))?
             == 0
         {
             break;
@@ -275,7 +279,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> URe
                     col_count += 1;
                 }
                 _ => col_count += 1,
-            };
+            }
 
             output.push(ch);
         }
