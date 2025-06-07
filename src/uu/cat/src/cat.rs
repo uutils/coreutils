@@ -4,6 +4,10 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
+
+mod platform;
+
+use crate::platform::is_unsafe_overwrite;
 use std::fs::{File, metadata};
 use std::io::{self, BufWriter, IsTerminal, Read, Write};
 /// Unix domain socket support
@@ -18,20 +22,15 @@ use std::os::unix::net::UnixStream;
 
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
-#[cfg(unix)]
-use nix::fcntl::{FcntlArg, fcntl};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::fs::FileInformation;
-use uucore::{fast_inc::fast_inc_one, format_usage, help_about, help_usage};
+use uucore::locale::get_message;
+use uucore::{fast_inc::fast_inc_one, format_usage};
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
-
-const USAGE: &str = help_usage!("cat.md");
-const ABOUT: &str = help_about!("cat.md");
 
 // Allocate 32 digits for the line number.
 // An estimate is that we can print about 1e8 lines/seconds, so 32 digits
@@ -275,8 +274,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("cat-usage")))
+        .about(get_message("cat-about"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -368,42 +367,17 @@ fn cat_handle<R: FdReadable>(
     }
 }
 
-/// Whether this process is appending to stdout.
-#[cfg(unix)]
-fn is_appending() -> bool {
-    let stdout = io::stdout();
-    let Ok(flags) = fcntl(stdout.as_fd(), FcntlArg::F_GETFL) else {
-        return false;
-    };
-    // TODO Replace `1 << 10` with `nix::fcntl::Oflag::O_APPEND`.
-    let o_append = 1 << 10;
-    (flags & o_append) > 0
-}
-
-#[cfg(not(unix))]
-fn is_appending() -> bool {
-    false
-}
-
-fn cat_path(
-    path: &str,
-    options: &OutputOptions,
-    state: &mut OutputState,
-    out_info: Option<&FileInformation>,
-) -> CatResult<()> {
+fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
     match get_input_type(path)? {
         InputType::StdIn => {
             let stdin = io::stdin();
-            let in_info = FileInformation::from_file(&stdin)?;
+            if is_unsafe_overwrite(&stdin, &io::stdout()) {
+                return Err(CatError::OutputIsInput);
+            }
             let mut handle = InputHandle {
                 reader: stdin,
                 is_interactive: io::stdin().is_terminal(),
             };
-            if let Some(out_info) = out_info {
-                if in_info == *out_info && is_appending() {
-                    return Err(CatError::OutputIsInput);
-                }
-            }
             cat_handle(&mut handle, options, state)
         }
         InputType::Directory => Err(CatError::IsDirectory),
@@ -419,15 +393,9 @@ fn cat_path(
         }
         _ => {
             let file = File::open(path)?;
-
-            if let Some(out_info) = out_info {
-                if out_info.file_size() != 0
-                    && FileInformation::from_file(&file).ok().as_ref() == Some(out_info)
-                {
-                    return Err(CatError::OutputIsInput);
-                }
+            if is_unsafe_overwrite(&file, &io::stdout()) {
+                return Err(CatError::OutputIsInput);
             }
-
             let mut handle = InputHandle {
                 reader: file,
                 is_interactive: false,
@@ -438,8 +406,6 @@ fn cat_path(
 }
 
 fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
-    let out_info = FileInformation::from_file(&io::stdout()).ok();
-
     let mut state = OutputState {
         line_number: LineNumber::new(),
         at_line_start: true,
@@ -449,7 +415,7 @@ fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
     let mut error_messages: Vec<String> = Vec::new();
 
     for path in files {
-        if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
+        if let Err(err) = cat_path(path, options, &mut state) {
             error_messages.push(format!("{}: {err}", path.maybe_quote()));
         }
     }

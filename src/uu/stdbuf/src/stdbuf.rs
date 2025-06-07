@@ -14,12 +14,10 @@ use std::process;
 use tempfile::TempDir;
 use tempfile::tempdir;
 use uucore::error::{FromIo, UClapError, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
-use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str = help_about!("stdbuf.md");
-const USAGE: &str = help_usage!("stdbuf.md");
-const LONG_HELP: &str = help_section!("after help", "stdbuf.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const INPUT: &str = "input";
@@ -31,7 +29,17 @@ mod options {
     pub const COMMAND: &str = "command";
 }
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "dragonfly"
+))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
+
+#[cfg(target_vendor = "apple")]
+const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dylib"));
 
 enum BufferType {
     Default,
@@ -194,9 +202,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(LONG_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("stdbuf-about"))
+        .after_help(get_message("stdbuf-after-help"))
+        .override_usage(format_usage(&get_message("stdbuf-usage")))
         .trailing_var_arg(true)
         .infer_long_args(true)
         .arg(

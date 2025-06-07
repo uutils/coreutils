@@ -8,21 +8,19 @@
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
+use uucore::locale::{get_message, get_message_with_args};
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
-use uucore::{format_usage, help_about, help_section, help_usage, show_if_err};
+use uucore::{format_usage, show_if_err};
 
 static DEFAULT_PERM: u32 = 0o777;
-
-const ABOUT: &str = help_about!("mkdir.md");
-const USAGE: &str = help_usage!("mkdir.md");
-const AFTER_HELP: &str = help_section!("after help", "mkdir.md");
 
 mod options {
     pub const MODE: &str = "mode";
@@ -103,7 +101,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let matches = uu_app()
+        .after_help(get_message("mkdir-after-help"))
+        .try_get_matches_from(args)?;
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
@@ -133,20 +133,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("mkdir-about"))
+        .override_usage(format_usage(&get_message("mkdir-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)
                 .short('m')
                 .long(options::MODE)
-                .help("set file mode (not implemented on windows)"),
+                .help(get_message("mkdir-help-mode")),
         )
         .arg(
             Arg::new(options::PARENTS)
                 .short('p')
                 .long(options::PARENTS)
-                .help("make parent directories as needed")
+                .help(get_message("mkdir-help-parents"))
                 .overrides_with(options::PARENTS)
                 .action(ArgAction::SetTrue),
         )
@@ -154,18 +154,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help("print a message for each printed directory")
+                .help(get_message("mkdir-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SELINUX)
                 .short('Z')
-                .help("set SELinux security context of each created directory to the default type")
+                .help(get_message("mkdir-help-selinux"))
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(options::CONTEXT).long(options::CONTEXT).value_name("CTX").help(
-            "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX",
-        ))
+        .arg(
+            Arg::new(options::CONTEXT)
+                .long(options::CONTEXT)
+                .value_name("CTX")
+                .help(get_message("mkdir-help-context")),
+        )
         .arg(
             Arg::new(options::DIRS)
                 .action(ArgAction::Append)
@@ -206,10 +209,9 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
     if path.as_os_str().is_empty() {
         return Err(USimpleError::new(
             1,
-            "cannot create directory '': No such file or directory".to_owned(),
+            get_message("mkdir-error-empty-directory-name"),
         ));
     }
-
     // Special case to match GNU's behavior:
     // mkdir -p foo/. should work and just create foo/
     // std::fs::create_dir("foo/."); fails in pure Rust
@@ -223,8 +225,12 @@ fn chmod(path: &Path, mode: u32) -> UResult<()> {
     use std::fs::{Permissions, set_permissions};
     use std::os::unix::fs::PermissionsExt;
     let mode = Permissions::from_mode(mode);
-    set_permissions(path, mode)
-        .map_err_context(|| format!("cannot set permissions {}", path.quote()))
+    set_permissions(path, mode).map_err_context(|| {
+        get_message_with_args(
+            "mkdir-error-cannot-set-permissions",
+            HashMap::from([("path".to_string(), path.quote().to_string())]),
+        )
+    })
 }
 
 #[cfg(windows)]
@@ -241,7 +247,10 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     if path_exists && !config.recursive {
         return Err(USimpleError::new(
             1,
-            format!("{}: File exists", path.display()),
+            get_message_with_args(
+                "mkdir-error-file-exists",
+                HashMap::from([("path".to_string(), path.to_string_lossy().to_string())]),
+            ),
         ));
     }
     if path == Path::new("") {
@@ -252,7 +261,7 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
         match path.parent() {
             Some(p) => create_dir(p, true, config)?,
             None => {
-                USimpleError::new(1, "failed to create whole tree");
+                USimpleError::new(1, get_message("mkdir-error-failed-to-create-tree"));
             }
         }
     }
@@ -261,9 +270,14 @@ fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
         Ok(()) => {
             if config.verbose {
                 println!(
-                    "{}: created directory {}",
-                    uucore::util_name(),
-                    path.quote()
+                    "{}",
+                    get_message_with_args(
+                        "mkdir-verbose-created-directory",
+                        HashMap::from([
+                            ("util_name".to_string(), uucore::util_name().to_string()),
+                            ("path".to_string(), path.quote().to_string())
+                        ])
+                    )
                 );
             }
 

@@ -5,24 +5,23 @@
 
 // spell-checker:ignore (ToDO) getpriority execvp setpriority nstr PRIO cstrs ENOENT
 
+use clap::{Arg, ArgAction, Command};
 use libc::{PRIO_PROCESS, c_char, c_int, execvp};
+use std::collections::HashMap;
 use std::ffi::{CString, OsString};
 use std::io::{Error, Write};
 use std::ptr;
 
-use clap::{Arg, ArgAction, Command};
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::{
     error::{UClapError, UResult, USimpleError, UUsageError, set_exit_code},
-    format_usage, help_about, help_usage, show_error,
+    format_usage, show_error,
 };
 
 pub mod options {
     pub static ADJUSTMENT: &str = "adjustment";
     pub static COMMAND: &str = "COMMAND";
 }
-
-const ABOUT: &str = help_about!("nice.md");
-const USAGE: &str = help_usage!("nice.md");
 
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
     if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
@@ -98,7 +97,6 @@ fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
     if saw_n {
         v.push("-n".into());
     }
-
     v.into_iter()
 }
 
@@ -113,7 +111,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if Error::last_os_error().raw_os_error().unwrap() != 0 {
         return Err(USimpleError::new(
             125,
-            format!("getpriority: {}", Error::last_os_error()),
+            get_message_with_args(
+                "nice-error-getpriority",
+                HashMap::from([("error".to_string(), Error::last_os_error().to_string())]),
+            ),
         ));
     }
 
@@ -122,15 +123,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if !matches.contains_id(options::COMMAND) {
                 return Err(UUsageError::new(
                     125,
-                    "A command must be given with an adjustment.",
+                    get_message("nice-error-command-required-with-adjustment"),
                 ));
             }
-            match nstr.parse() {
+            match nstr.parse::<i32>() {
                 Ok(num) => num,
                 Err(e) => {
                     return Err(USimpleError::new(
                         125,
-                        format!("\"{nstr}\" is not a valid number: {e}"),
+                        get_message_with_args(
+                            "nice-error-invalid-number",
+                            HashMap::from([
+                                ("value".to_string(), nstr.clone()),
+                                ("error".to_string(), e.to_string()),
+                            ]),
+                        ),
                     ));
                 }
             }
@@ -149,17 +156,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // isn't writable. The GNU test suite checks specifically that the
     // exit code when failing to write the advisory is 125, but Rust
     // will produce an exit code of 101 when it panics.
-    if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1
-        && write!(
-            std::io::stderr(),
-            "{}: warning: setpriority: {}",
-            uucore::util_name(),
-            Error::last_os_error()
-        )
-        .is_err()
-    {
-        set_exit_code(125);
-        return Ok(());
+    if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1 {
+        let warning_msg = get_message_with_args(
+            "nice-warning-setpriority",
+            HashMap::from([
+                ("util_name".to_string(), uucore::util_name().to_string()),
+                ("error".to_string(), Error::last_os_error().to_string()),
+            ]),
+        );
+
+        if write!(std::io::stderr(), "{}", warning_msg).is_err() {
+            set_exit_code(125);
+            return Ok(());
+        }
     }
 
     let cstrs: Vec<CString> = matches
@@ -174,7 +183,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         execvp(args[0], args.as_mut_ptr());
     }
 
-    show_error!("execvp: {}", Error::last_os_error());
+    show_error!(
+        "{}",
+        get_message_with_args(
+            "nice-error-execvp",
+            HashMap::from([("error".to_string(), Error::last_os_error().to_string())])
+        )
+    );
+
     let exit_code = if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
         127
     } else {
@@ -186,8 +202,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("nice-about"))
+        .override_usage(format_usage(&get_message("nice-usage")))
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
@@ -195,7 +211,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ADJUSTMENT)
                 .short('n')
                 .long(options::ADJUSTMENT)
-                .help("add N to the niceness (default is 10)")
+                .help(get_message("nice-help-adjustment"))
                 .action(ArgAction::Set)
                 .overrides_with(options::ADJUSTMENT)
                 .allow_hyphen_values(true),

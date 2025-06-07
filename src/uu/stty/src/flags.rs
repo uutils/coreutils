@@ -26,6 +26,31 @@ use nix::sys::termios::{
     SpecialCharacterIndices as S,
 };
 
+pub enum AllFlags<'a> {
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    Baud(u32),
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    Baud(BaudRate),
+    ControlFlags((&'a Flag<C>, bool)),
+    InputFlags((&'a Flag<I>, bool)),
+    LocalFlags((&'a Flag<L>, bool)),
+    OutputFlags((&'a Flag<O>, bool)),
+}
+
 pub const CONTROL_FLAGS: &[Flag<C>] = &[
     Flag::new("parenb", C::PARENB),
     Flag::new("parodd", C::PARODD),

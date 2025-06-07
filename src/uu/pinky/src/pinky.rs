@@ -6,23 +6,10 @@
 // spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
 
 use clap::{Arg, ArgAction, Command};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 mod platform;
-
-#[cfg(target_env = "musl")]
-const ABOUT: &str = concat!(
-    help_about!("pinky.md"),
-    "\n\nWarning: When built with musl libc, the `pinky` utility may show incomplete \n",
-    "or missing user information due to musl's stub implementation of `utmpx` \n",
-    "functions. This limitation affects the ability to retrieve accurate details \n",
-    "about logged-in users."
-);
-
-#[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("pinky.md");
-
-const USAGE: &str = help_usage!("pinky.md");
 
 mod options {
     pub const LONG_FORMAT: &str = "long_format";
@@ -42,10 +29,15 @@ mod options {
 use platform::uumain;
 
 pub fn uu_app() -> Command {
+    #[cfg(not(target_env = "musl"))]
+    let about = get_message("pinky-about");
+    #[cfg(target_env = "musl")]
+    let about = get_message("pinky-about") + &get_message("pinky-about-musl-warning");
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(about)
+        .override_usage(format_usage(&get_message("pinky-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(

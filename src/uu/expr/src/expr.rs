@@ -6,10 +6,11 @@
 use clap::{Arg, ArgAction, Command};
 use syntax_tree::{AstNode, is_truthy};
 use thiserror::Error;
+use uucore::locale::get_message;
 use uucore::{
     display::Quotable,
     error::{UError, UResult},
-    format_usage, help_about, help_section, help_usage,
+    format_usage,
 };
 
 mod syntax_tree;
@@ -46,12 +47,12 @@ pub enum ExprError {
     UnmatchedClosingParenthesis,
     #[error("Unmatched \\{{")]
     UnmatchedOpeningBrace,
-    #[error("Unmatched ) or \\}}")]
-    UnmatchedClosingBrace,
     #[error("Invalid content of \\{{\\}}")]
     InvalidBracketContent,
     #[error("Trailing backslash")]
     TrailingBackslash,
+    #[error("Regular expression too big")]
+    TooBigRangeQuantifierIndex,
 }
 
 impl UError for ExprError {
@@ -67,9 +68,9 @@ impl UError for ExprError {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(help_about!("expr.md"))
-        .override_usage(format_usage(help_usage!("expr.md")))
-        .after_help(help_section!("after help", "expr.md"))
+        .about(get_message("expr-about"))
+        .override_usage(format_usage(&get_message("expr-usage")))
+        .after_help(get_message("expr-after-help"))
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)

@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal
 
 mod check;
 mod chunks;
@@ -17,6 +17,7 @@ mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
 
+use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
@@ -44,17 +45,17 @@ use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::line_ending::LineEnding;
+use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::version_cmp::version_cmp;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
 use crate::tmp_dir::TmpDirWrapper;
 
-const ABOUT: &str = help_about!("sort.md");
-const USAGE: &str = help_usage!("sort.md");
-const AFTER_HELP: &str = help_section!("after help", "sort.md");
+use uucore::locale::get_message;
 
 mod options {
     pub mod modes {
@@ -131,7 +132,10 @@ pub enum SortError {
     },
 
     #[error("open failed: {}: {}", .path.maybe_quote(), strip_errno(.error))]
-    OpenFailed { path: String, error: std::io::Error },
+    OpenFailed {
+        path: PathBuf,
+        error: std::io::Error,
+    },
 
     #[error("failed to parse key {}: {}", .key.quote(), .msg)]
     ParseKeyError { key: String, msg: String },
@@ -154,8 +158,23 @@ pub enum SortError {
     #[error("cannot create temporary file in '{}':", .path.display())]
     TmpFileCreationFailed { path: PathBuf },
 
+    #[error("extra operand '{}'\nfile operands cannot be combined with --files0-from\nTry '{} --help' for more information.", .file.display(), uucore::execution_phrase())]
+    FileOperandsCombined { file: PathBuf },
+
     #[error("{error}")]
     Uft8Error { error: Utf8Error },
+
+    #[error("multiple output files specified")]
+    MultipleOutputFiles,
+
+    #[error("when reading file names from stdin, no file name of '-' allowed")]
+    MinusInStdIn,
+
+    #[error("no input from '{}'", .file.display())]
+    EmptyInputFile { file: PathBuf },
+
+    #[error("{}:{}: invalid zero-length file name", .file.display(), .line_num)]
+    ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
 
 impl UError for SortError {
@@ -201,24 +220,25 @@ impl SortMode {
 }
 
 pub struct Output {
-    file: Option<(String, File)>,
+    file: Option<(OsString, File)>,
 }
 
 impl Output {
-    fn new(name: Option<&str>) -> UResult<Self> {
+    fn new(name: Option<&OsStr>) -> UResult<Self> {
         let file = if let Some(name) = name {
+            let path = Path::new(name);
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
             #[allow(clippy::suspicious_open_options)]
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
-                .open(name)
+                .open(path)
                 .map_err(|e| SortError::OpenFailed {
-                    path: name.to_owned(),
+                    path: path.to_owned(),
                     error: e,
                 })?;
-            Some((name.to_owned(), file))
+            Some((name.to_os_string(), file))
         } else {
             None
         };
@@ -236,9 +256,9 @@ impl Output {
         })
     }
 
-    fn as_output_name(&self) -> Option<&str> {
+    fn as_output_name(&self) -> Option<&OsStr> {
         match &self.file {
-            Some((name, _file)) => Some(name),
+            Some((name, _file)) => Some(name.as_os_str()),
             None => None,
         }
     }
@@ -431,7 +451,7 @@ impl Default for KeySettings {
     }
 }
 enum Selection<'a> {
-    AsF64(GeneralF64ParseResult),
+    AsBigDecimal(GeneralBigDecimalParseResult),
     WithNumInfo(&'a str, NumInfo),
     Str(&'a str),
 }
@@ -473,7 +493,7 @@ impl<'a> Line<'a> {
             .map(|selector| (selector, selector.get_selection(line, token_buffer)))
         {
             match selection {
-                Selection::AsF64(parsed_float) => line_data.parsed_floats.push(parsed_float),
+                Selection::AsBigDecimal(parsed_float) => line_data.parsed_floats.push(parsed_float),
                 Selection::WithNumInfo(str, num_info) => {
                     line_data.num_infos.push(num_info);
                     line_data.selections.push(str);
@@ -885,8 +905,8 @@ impl FieldSelector {
             range = &range[num_range];
             Selection::WithNumInfo(range, info)
         } else if self.settings.mode == SortMode::GeneralNumeric {
-            // Parse this number as f64, as this is the requirement for general numeric sorting.
-            Selection::AsF64(general_f64_parse(&range[get_leading_gen(range)]))
+            // Parse this number as BigDecimal, as this is the requirement for general numeric sorting.
+            Selection::AsBigDecimal(general_bd_parse(&range[get_leading_gen(range)]))
         } else {
             // This is not a numeric sort, so we don't need a NumCache.
             Selection::Str(range)
@@ -1013,6 +1033,8 @@ fn get_rlimit() -> UResult<usize> {
     }
 }
 
+const STDIN_FILE: &str = "-";
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -1034,25 +1056,57 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    // Prevent -o/--output to be specified multiple times
+    if matches
+        .get_occurrences::<OsString>(options::OUTPUT)
+        .is_some_and(|out| out.len() > 1)
+    {
+        return Err(SortError::MultipleOutputFiles.into());
+    }
+
     settings.debug = matches.get_flag(options::DEBUG);
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
     let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
-        let files0_from: Vec<OsString> = matches
-            .get_many::<OsString>(options::FILES0_FROM)
-            .map(|v| v.map(ToOwned::to_owned).collect())
+        let files0_from: PathBuf = matches
+            .get_one::<OsString>(options::FILES0_FROM)
+            .map(|v| v.into())
             .unwrap_or_default();
 
+        // Cannot combine FILES with FILES0_FROM
+        if let Some(s) = matches.get_one::<OsString>(options::FILES) {
+            return Err(SortError::FileOperandsCombined { file: s.into() }.into());
+        }
+
         let mut files = Vec::new();
-        for path in &files0_from {
-            let reader = open(path)?;
-            let buf_reader = BufReader::new(reader);
-            for line in buf_reader.split(b'\0').flatten() {
-                files.push(OsString::from(
-                    std::str::from_utf8(&line)
-                        .expect("Could not parse string from zero terminated input."),
-                ));
+
+        // sort errors with "cannot open: [...]" instead of "cannot read: [...]" here
+        let reader = open_with_open_failed_error(&files0_from)?;
+        let buf_reader = BufReader::new(reader);
+        for (line_num, line) in buf_reader.split(b'\0').flatten().enumerate() {
+            let f = std::str::from_utf8(&line)
+                .expect("Could not parse string from zero terminated input.");
+            match f {
+                STDIN_FILE => {
+                    return Err(SortError::MinusInStdIn.into());
+                }
+                "" => {
+                    return Err(SortError::ZeroLengthFileName {
+                        file: files0_from,
+                        line_num: line_num + 1,
+                    }
+                    .into());
+                }
+                _ => {}
             }
+
+            files.push(OsString::from(
+                std::str::from_utf8(&line)
+                    .expect("Could not parse string from zero terminated input."),
+            ));
+        }
+        if files.is_empty() {
+            return Err(SortError::EmptyInputFile { file: files0_from }.into());
         }
         files
     } else {
@@ -1201,7 +1255,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if files.is_empty() {
         /* if no file, default to stdin */
-        files.push("-".to_string().into());
+        files.push(OsString::from(STDIN_FILE));
     } else if settings.check && files.len() != 1 {
         return Err(UUsageError::new(
             2,
@@ -1271,8 +1325,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let output = Output::new(
         matches
-            .get_one::<String>(options::OUTPUT)
-            .map(|s| s.as_str()),
+            .get_one::<OsString>(options::OUTPUT)
+            .map(|s| s.as_os_str()),
     )?;
 
     settings.init_precomputed();
@@ -1287,9 +1341,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("sort-about"))
+        .after_help(get_message("sort-after-help"))
+        .override_usage(format_usage(&get_message("sort-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
@@ -1426,8 +1480,11 @@ pub fn uu_app() -> Command {
                 .short('o')
                 .long(options::OUTPUT)
                 .help("write output to FILENAME instead of stdout")
+                .value_parser(ValueParser::os_string())
                 .value_name("FILENAME")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                // To detect multiple occurrences and raise an error
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::REVERSE)
@@ -1509,9 +1566,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILES0_FROM)
                 .long(options::FILES0_FROM)
-                .help("read input from the files specified by NUL-terminated NUL_FILES")
-                .value_name("NUL_FILES")
-                .action(ArgAction::Append)
+                .help("read input from the files specified by NUL-terminated NUL_FILE")
+                .value_name("NUL_FILE")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -1736,35 +1792,45 @@ fn get_leading_gen(input: &str) -> Range<usize> {
     leading_whitespace_len..input.len()
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
-pub enum GeneralF64ParseResult {
+#[derive(Clone, PartialEq, PartialOrd, Debug)]
+pub enum GeneralBigDecimalParseResult {
     Invalid,
-    NaN,
-    NegInfinity,
-    Number(f64),
+    Nan,
+    MinusInfinity,
+    Number(BigDecimal),
     Infinity,
 }
 
-/// Parse the beginning string into a GeneralF64ParseResult.
-/// Using a GeneralF64ParseResult instead of f64 is necessary to correctly order floats.
+/// Parse the beginning string into a GeneralBigDecimalParseResult.
+/// Using a GeneralBigDecimalParseResult instead of ExtendedBigDecimal is necessary to correctly order floats.
 #[inline(always)]
-fn general_f64_parse(a: &str) -> GeneralF64ParseResult {
-    // The actual behavior here relies on Rust's implementation of parsing floating points.
-    // For example "nan", "inf" (ignoring the case) and "infinity" are only parsed to floats starting from 1.53.
-    // TODO: Once our minimum supported Rust version is 1.53 or above, we should add tests for those cases.
-    match a.parse::<f64>() {
-        Ok(a) if a.is_nan() => GeneralF64ParseResult::NaN,
-        Ok(a) if a == f64::NEG_INFINITY => GeneralF64ParseResult::NegInfinity,
-        Ok(a) if a == f64::INFINITY => GeneralF64ParseResult::Infinity,
-        Ok(a) => GeneralF64ParseResult::Number(a),
-        Err(_) => GeneralF64ParseResult::Invalid,
+fn general_bd_parse(a: &str) -> GeneralBigDecimalParseResult {
+    // Parse digits, and fold in recoverable errors
+    let ebd = match ExtendedBigDecimal::extended_parse(a) {
+        Err(ExtendedParserError::NotNumeric) => return GeneralBigDecimalParseResult::Invalid,
+        Err(ExtendedParserError::PartialMatch(ebd, _))
+        | Err(ExtendedParserError::Overflow(ebd))
+        | Err(ExtendedParserError::Underflow(ebd))
+        | Ok(ebd) => ebd,
+    };
+
+    match ebd {
+        ExtendedBigDecimal::BigDecimal(bd) => GeneralBigDecimalParseResult::Number(bd),
+        ExtendedBigDecimal::Infinity => GeneralBigDecimalParseResult::Infinity,
+        ExtendedBigDecimal::MinusInfinity => GeneralBigDecimalParseResult::MinusInfinity,
+        // Minus zero and zero are equal
+        ExtendedBigDecimal::MinusZero => GeneralBigDecimalParseResult::Number(0.into()),
+        ExtendedBigDecimal::Nan | ExtendedBigDecimal::MinusNan => GeneralBigDecimalParseResult::Nan,
     }
 }
 
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
 /// Stops coercing at the first non-numeric char.
 /// We explicitly need to convert to f64 in this case.
-fn general_numeric_compare(a: &GeneralF64ParseResult, b: &GeneralF64ParseResult) -> Ordering {
+fn general_numeric_compare(
+    a: &GeneralBigDecimalParseResult,
+    b: &GeneralBigDecimalParseResult,
+) -> Ordering {
     a.partial_cmp(b).unwrap()
 }
 
@@ -1852,7 +1918,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 ) -> UResult<()> {
     let output_name = output
         .as_output_name()
-        .unwrap_or("standard output")
+        .unwrap_or(OsStr::new("standard output"))
         .to_owned();
     let ctx = || format!("write failed: {}", output_name.maybe_quote());
 
@@ -1866,16 +1932,34 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 
 fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
     let path = path.as_ref();
-    if path == "-" {
+    if path == STDIN_FILE {
         let stdin = stdin();
         return Ok(Box::new(stdin) as Box<dyn Read + Send>);
     }
 
     let path = Path::new(path);
-
     match File::open(path) {
         Ok(f) => Ok(Box::new(f) as Box<dyn Read + Send>),
         Err(error) => Err(SortError::ReadFailed {
+            path: path.to_owned(),
+            error,
+        }
+        .into()),
+    }
+}
+
+fn open_with_open_failed_error(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
+    // On error, returns an OpenFailed error instead of a ReadFailed error
+    let path = path.as_ref();
+    if path == STDIN_FILE {
+        let stdin = stdin();
+        return Ok(Box::new(stdin) as Box<dyn Read + Send>);
+    }
+
+    let path = Path::new(path);
+    match File::open(path) {
+        Ok(f) => Ok(Box::new(f) as Box<dyn Read + Send>),
+        Err(error) => Err(SortError::OpenFailed {
             path: path.to_owned(),
             error,
         }

@@ -17,10 +17,9 @@ use uucore::entries::{Locate, Passwd, grp2gid, usr2uid};
 use uucore::error::{UClapError, UResult, UUsageError, set_exit_code};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-static ABOUT: &str = help_about!("chroot.md");
-static USAGE: &str = help_usage!("chroot.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const NEWROOT: &str = "newroot";
@@ -237,8 +236,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("chroot-about"))
+        .override_usage(format_usage(&get_message("chroot-usage")))
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(
@@ -439,7 +438,7 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
     let err = unsafe {
         chroot(
             CString::new(root.as_os_str().as_bytes().to_vec())
-                .unwrap()
+                .map_err(|e| ChrootError::CannotEnter("root".to_string(), e.into()))?
                 .as_bytes_with_nul()
                 .as_ptr()
                 .cast::<libc::c_char>(),
@@ -448,7 +447,7 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
 
     if err == 0 {
         if !skip_chdir {
-            std::env::set_current_dir("/").unwrap();
+            std::env::set_current_dir("/")?;
         }
         Ok(())
     } else {

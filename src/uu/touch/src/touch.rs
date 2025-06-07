@@ -23,9 +23,10 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
 use crate::error::TouchError;
+use uucore::locale::get_message;
 
 /// Options contains all the possible behaviors and flags for touch.
 ///
@@ -82,9 +83,6 @@ pub enum Source {
     /// Use current time
     Now,
 }
-
-const ABOUT: &str = help_about!("touch.md");
-const USAGE: &str = help_usage!("touch.md");
 
 pub mod options {
     // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
@@ -258,8 +256,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("touch-about"))
+        .override_usage(format_usage(&get_message("touch-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(

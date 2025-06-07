@@ -40,7 +40,7 @@ use uucore::update_control;
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
-use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
+use uucore::{format_usage, prompt_yes, show};
 
 use fs_extra::dir::{
     CopyOptions as DirCopyOptions, TransitProcess, TransitProcessResult, get_size as dir_get_size,
@@ -48,6 +48,7 @@ use fs_extra::dir::{
 };
 
 use crate::error::MvError;
+use uucore::locale::get_message;
 
 /// Options contains all the possible behaviors and flags for mv.
 ///
@@ -122,10 +123,6 @@ pub enum OverwriteMode {
     #[default]
     Force,
 }
-
-const ABOUT: &str = help_about!("mv.md");
-const USAGE: &str = help_usage!("mv.md");
-const AFTER_HELP: &str = help_section!("after help", "mv.md");
 
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
@@ -205,10 +202,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("mv-about"))
+        .override_usage(format_usage(&get_message("mv-usage")))
         .after_help(format!(
-            "{AFTER_HELP}\n\n{}",
+            "{}\n\n{}",
+            get_message("mv-after-help"),
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
         .infer_long_args(true)
@@ -526,7 +524,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
     };
 
     for sourcepath in files {
-        if !sourcepath.exists() {
+        if sourcepath.symlink_metadata().is_err() {
             show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
             continue;
         }

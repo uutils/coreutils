@@ -136,7 +136,7 @@ jobs:
       working-directory: ${{ steps.vars.outputs.path_GNU }}
 
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v9
+      uses: dawidd6/action-download-artifact@v10
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
@@ -162,6 +162,7 @@ jobs:
         sudo locale-gen
         sudo locale-gen --keep-existing fr_FR
         sudo locale-gen --keep-existing fr_FR.UTF-8
+        sudo locale-gen --keep-existing es_ES.UTF-8
         sudo locale-gen --keep-existing sv_SE
         sudo locale-gen --keep-existing sv_SE.UTF-8
         sudo locale-gen --keep-existing en_US
@@ -193,7 +194,7 @@ jobs:
 
     - name: Selinux - Build for selinux tests
       run: |
-        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh"
+        lima bash -c "cd ~/work/uutils/ && bash util/build-gnu.sh --release-build"
         lima bash -c "mkdir -p ~/work/gnu/tests-selinux/"
 
     - name: Selinux - Run selinux tests

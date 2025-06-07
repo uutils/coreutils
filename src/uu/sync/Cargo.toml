@@ -22,7 +22,7 @@ clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["wide"] }
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]

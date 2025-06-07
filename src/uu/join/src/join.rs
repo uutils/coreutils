@@ -18,11 +18,10 @@ use std::os::unix::ffi::OsStrExt;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::format_usage;
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage};
 
-const ABOUT: &str = help_about!("join.md");
-const USAGE: &str = help_usage!("join.md");
+use uucore::locale::get_message;
 
 #[derive(Debug, Error)]
 enum JoinError {
@@ -855,8 +854,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("join-about"))
+        .override_usage(format_usage(&get_message("join-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new("a")

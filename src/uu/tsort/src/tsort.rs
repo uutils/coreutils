@@ -9,10 +9,9 @@ use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-const ABOUT: &str = help_about!("tsort.md");
-const USAGE: &str = help_usage!("tsort.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const FILE: &str = "file";
@@ -76,8 +75,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("tsort-usage")))
+        .about(get_message("tsort-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)

@@ -84,6 +84,15 @@ fn test_up_to_line_sequence() {
 }
 
 #[test]
+fn test_up_to_line_with_non_ascii_repeat() {
+    // we use a different error message than GNU
+    new_ucmd!()
+        .args(&["numbers50.txt", "10", "{𝟚}"])
+        .fails()
+        .stderr_contains("invalid pattern");
+}
+
+#[test]
 fn test_up_to_match() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/9$/"])
@@ -165,6 +174,15 @@ fn test_up_to_match_offset_repeat_twice() {
     assert_eq!(at.read("xx01"), generate(12, 22));
     assert_eq!(at.read("xx02"), generate(22, 32));
     assert_eq!(at.read("xx03"), generate(32, 51));
+}
+
+#[test]
+fn test_up_to_match_non_ascii_offset() {
+    // we use a different error message than GNU
+    new_ucmd!()
+        .args(&["numbers50.txt", "/9$/𝟚"])
+        .fails()
+        .stderr_contains("invalid pattern");
 }
 
 #[test]

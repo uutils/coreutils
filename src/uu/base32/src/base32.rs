@@ -5,24 +5,25 @@
 
 pub mod base_common;
 
-use base_common::ReadSeek;
 use clap::Command;
-use uucore::{encoding::Format, error::UResult, help_about, help_usage};
-
-const ABOUT: &str = help_about!("base32.md");
-const USAGE: &str = help_usage!("base32.md");
+use uucore::{encoding::Format, error::UResult, locale::get_message};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format = Format::Base32;
-
-    let config = base_common::parse_base_cmd_args(args, ABOUT, USAGE)?;
-
-    let mut input: Box<dyn ReadSeek> = base_common::get_input(&config)?;
-
+    let (about, usage) = get_info();
+    let config = base_common::parse_base_cmd_args(args, about, usage)?;
+    let mut input = base_common::get_input(&config)?;
     base_common::handle_input(&mut input, format, config)
 }
 
 pub fn uu_app() -> Command {
-    base_common::base_app(ABOUT, USAGE)
+    let (about, usage) = get_info();
+    base_common::base_app(about, usage)
+}
+
+fn get_info() -> (&'static str, &'static str) {
+    let about: &'static str = Box::leak(get_message("base32-about").into_boxed_str());
+    let usage: &'static str = Box::leak(get_message("base32-usage").into_boxed_str());
+    (about, usage)
 }
