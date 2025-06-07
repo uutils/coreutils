@@ -49,13 +49,13 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new("help")
                 .long("help")
-                .help("Print help information")
+                .help(get_message("true-help-text"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new("version")
                 .long("version")
-                .help("Print version information")
+                .help(get_message("true-version-text"))
                 .action(ArgAction::Version),
         )
 }
