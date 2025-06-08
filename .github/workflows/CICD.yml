@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy dtolnay Anson dawidd
 # spell-checker:ignore (shell/tools) binutils choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl mkdir nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -641,6 +641,8 @@ jobs:
             CARGO_CMD_OPTIONS=''
             ;;
         esac
+        # needed for target "aarch64-apple-darwin". There are two jobs, and the difference between them is whether "features" is set
+        if [ -z "${{ matrix.job.features" ]; then ARTIFACTS_SUFFIX='-nofeatures' ; fi
         outputs CARGO_CMD
         outputs CARGO_CMD_OPTIONS
         outputs ARTIFACTS_SUFFIX
