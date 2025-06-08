@@ -642,7 +642,7 @@ jobs:
             ;;
         esac
         # needed for target "aarch64-apple-darwin". There are two jobs, and the difference between them is whether "features" is set
-        if [ -z "${{ matrix.job.features" ]; then ARTIFACTS_SUFFIX='-nofeatures' ; fi
+        if [ -z "${{ matrix.job.features }}" ]; then ARTIFACTS_SUFFIX='-nofeatures' ; fi
         outputs CARGO_CMD
         outputs CARGO_CMD_OPTIONS
         outputs ARTIFACTS_SUFFIX
