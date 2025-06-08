@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
@@ -17,19 +18,19 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::{format_usage, show};
 
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 const DEFAULT_TABSTOP: usize = 8;
 
 #[derive(Debug, Error)]
 enum ParseError {
-    #[error("tab size contains invalid character(s): {}", _0.quote())]
+    #[error("{}", get_message_with_args("unexpand-error-invalid-character", HashMap::from([("char".to_string(), _0.quote().to_string())])))]
     InvalidCharacter(String),
-    #[error("tab size cannot be 0")]
+    #[error("{}", get_message("unexpand-error-tab-size-cannot-be-zero"))]
     TabSizeCannotBeZero,
-    #[error("tab stop value is too large")]
+    #[error("{}", get_message("unexpand-error-tab-size-too-large"))]
     TabSizeTooLarge,
-    #[error("tab sizes must be ascending")]
+    #[error("{}", get_message("unexpand-error-tab-sizes-must-be-ascending"))]
     TabSizesMustBeAscending,
 }
 
@@ -169,23 +170,20 @@ pub fn uu_app() -> Command {
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help("convert all blanks, instead of just initial blanks")
+                .help(get_message("unexpand-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FIRST_ONLY)
                 .long(options::FIRST_ONLY)
-                .help("convert only leading sequences of blanks (overrides -a)")
+                .help(get_message("unexpand-help-first-only"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TABS)
                 .short('t')
                 .long(options::TABS)
-                .help(
-                    "use comma separated LIST of tab positions or have tabs N characters \
-                apart instead of 8 (enables -a)",
-                )
+                .help(get_message("unexpand-help-tabs"))
                 .action(ArgAction::Append)
                 .value_name("N, LIST"),
         )
@@ -193,7 +191,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_UTF8)
                 .short('U')
                 .long(options::NO_UTF8)
-                .help("interpret input file as 8-bit ASCII rather than UTF-8")
+                .help(get_message("unexpand-help-no-utf8"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -204,7 +202,10 @@ fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     if filename.is_dir() {
         Err(Box::new(USimpleError {
             code: 1,
-            message: format!("{}: Is a directory", filename.display()),
+            message: get_message_with_args(
+                "unexpand-error-is-directory",
+                HashMap::from([("path".to_string(), filename.display().to_string())]),
+            ),
         }))
     } else if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
