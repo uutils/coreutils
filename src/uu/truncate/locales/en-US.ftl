@@ -16,3 +16,18 @@ truncate-after-help = SIZE is an integer with an optional prefix and optional un
       '>' => at least
       '/' => round down to multiple of
       '%' => round up to multiple of
+
+# Help messages
+truncate-help-io-blocks = treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)
+truncate-help-no-create = do not create files that do not exist
+truncate-help-reference = base the size of each file on the size of RFILE
+truncate-help-size = set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified
+
+# Error messages
+truncate-error-missing-file-operand = missing file operand
+truncate-error-cannot-open-no-device = cannot open { $filename } for writing: No such device or address
+truncate-error-cannot-open-for-writing = cannot open { $filename } for writing
+truncate-error-invalid-number = Invalid number: { $error }
+truncate-error-must-specify-relative-size = you must specify a relative '--size' with '--reference'
+truncate-error-division-by-zero = division by zero
+truncate-error-cannot-stat-no-such-file = cannot stat { $filename }: No such file or directory
