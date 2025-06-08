@@ -13,6 +13,7 @@ use std::io::{Seek, SeekFrom};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
+use uucore::locale::get_message;
 
 #[derive(Debug, Clone)]
 pub enum InputKind {
@@ -55,7 +56,7 @@ impl Input {
         let kind = string.into();
         let display_name = match kind {
             InputKind::File(_) => string.to_string_lossy().to_string(),
-            InputKind::Stdin => text::STDIN_HEADER.to_string(),
+            InputKind::Stdin => get_message("tail-stdin-header"),
         };
 
         Self { kind, display_name }
@@ -106,7 +107,7 @@ impl Default for Input {
     fn default() -> Self {
         Self {
             kind: InputKind::Stdin,
-            display_name: String::from(text::STDIN_HEADER),
+            display_name: get_message("tail-stdin-header"),
         }
     }
 }
@@ -221,7 +222,7 @@ impl PathExtTail for Path {
     fn is_stdin(&self) -> bool {
         self.eq(Self::new(text::DASH))
             || self.eq(Self::new(text::DEV_STDIN))
-            || self.eq(Self::new(text::STDIN_HEADER))
+            || self.eq(Self::new(&get_message("tail-stdin-header")))
     }
 
     /// Return true if `path` does not have an existing parent directory
