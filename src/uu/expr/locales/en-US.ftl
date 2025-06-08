@@ -43,3 +43,23 @@ expr-after-help = Print the value of EXPRESSION to standard output. A blank line
   - EXPR_DEBUG_RPN=1: dump expression represented in reverse polish notation
   - EXPR_DEBUG_SYA_STEP=1: dump each parser step
   - EXPR_DEBUG_AST=1: dump expression represented abstract syntax tree
+
+# Help messages
+expr-help-version = output version information and exit
+expr-help-help = display this help and exit
+
+# Error messages
+expr-error-unexpected-argument = syntax error: unexpected argument { $arg }
+expr-error-missing-argument = syntax error: missing argument after { $arg }
+expr-error-non-integer-argument = non-integer argument
+expr-error-missing-operand = missing operand
+expr-error-division-by-zero = division by zero
+expr-error-invalid-regex-expression = Invalid regex expression
+expr-error-expected-closing-brace-after = syntax error: expecting ')' after { $arg }
+expr-error-expected-closing-brace-instead-of = syntax error: expecting ')' instead of { $arg }
+expr-error-unmatched-opening-parenthesis = Unmatched ( or \(
+expr-error-unmatched-closing-parenthesis = Unmatched ) or \)
+expr-error-unmatched-opening-brace = Unmatched {"\\{"}
+expr-error-invalid-bracket-content = Invalid content of {"\\{\\}"}
+expr-error-trailing-backslash = Trailing backslash
+expr-error-too-big-range-quantifier-index = Regular expression too big
