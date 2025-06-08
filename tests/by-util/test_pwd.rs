@@ -38,7 +38,7 @@ fn test_deleted_dir() {
     let output = Command::new("sh")
         .arg("-c")
         .arg(format!(
-            "cd '{}'; mkdir foo; cd foo; rmdir ../foo; exec '{}' {}",
+            "cd '{}'; mkdir foo; cd foo; rmdir ../foo; LANG=C exec '{}' {}",
             at.root_dir_resolved(),
             ts.bin_path.to_str().unwrap(),
             ts.util_name,
@@ -48,8 +48,8 @@ fn test_deleted_dir() {
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
     assert_eq!(
-        output.stderr,
-        b"pwd: failed to get current directory: No such file or directory\n"
+        String::from_utf8_lossy(&output.stderr),
+        "pwd: failed to get current directory: No such file or directory\n"
     );
 }
 
