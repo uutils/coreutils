@@ -13,6 +13,7 @@ use clap::{Arg, ArgAction, Command, value_parser};
 use operation::{
     Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
 };
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::{BufWriter, Write, stdin, stdout};
 use uucore::display::Quotable;
@@ -20,7 +21,7 @@ use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
 use uucore::{format_usage, os_str_as_bytes, show};
 
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 mod options {
     pub const COMPLEMENT: &str = "complement";
@@ -53,15 +54,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let sets_len = sets.len();
 
     if sets.is_empty() {
-        return Err(UUsageError::new(1, "missing operand"));
+        return Err(UUsageError::new(1, get_message("tr-error-missing-operand")));
     }
 
     if !(delete_flag || squeeze_flag) && sets_len < 2 {
         return Err(UUsageError::new(
             1,
-            format!(
-                "missing operand after {}\nTwo strings must be given when translating.",
-                sets[0].quote()
+            get_message_with_args(
+                "tr-error-missing-operand-translating",
+                HashMap::from([("set".to_string(), sets[0].quote().to_string())]),
             ),
         ));
     }
@@ -69,29 +70,35 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if delete_flag & squeeze_flag && sets_len < 2 {
         return Err(UUsageError::new(
             1,
-            format!(
-                "missing operand after {}\nTwo strings must be given when deleting and squeezing.",
-                sets[0].quote()
+            get_message_with_args(
+                "tr-error-missing-operand-deleting-squeezing",
+                HashMap::from([("set".to_string(), sets[0].quote().to_string())]),
             ),
         ));
     }
 
     if sets_len > 1 {
-        let start = "extra operand";
         if delete_flag && !squeeze_flag {
             let op = sets[1].quote();
             let msg = if sets_len == 2 {
-                format!(
-                    "{start} {op}\nOnly one string may be given when deleting without squeezing repeats.",
+                get_message_with_args(
+                    "tr-error-extra-operand-deleting-without-squeezing",
+                    HashMap::from([("operand".to_string(), op.to_string())]),
                 )
             } else {
-                format!("{start} {op}")
+                get_message_with_args(
+                    "tr-error-extra-operand-simple",
+                    HashMap::from([("operand".to_string(), op.to_string())]),
+                )
             };
             return Err(UUsageError::new(1, msg));
         }
         if sets_len > 2 {
             let op = sets[2].quote();
-            let msg = format!("{start} {op}");
+            let msg = get_message_with_args(
+                "tr-error-extra-operand-simple",
+                HashMap::from([("operand".to_string(), op.to_string())]),
+            );
             return Err(UUsageError::new(1, msg));
         }
     }
@@ -103,7 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // The trailing backslash has a non-backslash character before it.
             show!(USimpleError::new(
                 0,
-                "warning: an unescaped backslash at end of string is not portable"
+                get_message("tr-warning-unescaped-backslash")
             ));
         }
     }
@@ -125,7 +132,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )?;
 
     if is_stdin_directory(&stdin) {
-        return Err(USimpleError::new(1, "read error: Is a directory"));
+        return Err(USimpleError::new(1, get_message("tr-error-read-directory")));
     }
 
     // '*_op' are the operations that need to be applied, in order.
@@ -156,7 +163,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     buffered_stdout
         .flush()
-        .map_err_context(|| "write error".into())?;
+        .map_err_context(|| get_message("tr-error-write-error"))?;
 
     Ok(())
 }
@@ -173,7 +180,7 @@ pub fn uu_app() -> Command {
                 .visible_short_alias('C')
                 .short('c')
                 .long(options::COMPLEMENT)
-                .help("use the complement of SET1")
+                .help(get_message("tr-help-complement"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::COMPLEMENT),
         )
@@ -181,7 +188,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::DELETE)
                 .short('d')
                 .long(options::DELETE)
-                .help("delete characters in SET1, do not translate")
+                .help(get_message("tr-help-delete"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::DELETE),
         )
@@ -189,11 +196,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::SQUEEZE)
                 .long(options::SQUEEZE)
                 .short('s')
-                .help(
-                    "replace each sequence of a repeated character that is \
-                     listed in the last specified SET, with a single occurrence \
-                     of that character",
-                )
+                .help(get_message("tr-help-squeeze"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::SQUEEZE),
         )
@@ -201,7 +204,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::TRUNCATE_SET1)
                 .long(options::TRUNCATE_SET1)
                 .short('t')
-                .help("first truncate SET1 to length of SET2")
+                .help(get_message("tr-help-truncate-set1"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::TRUNCATE_SET1),
         )

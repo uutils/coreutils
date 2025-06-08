@@ -1521,7 +1521,7 @@ fn test_multibyte_octal_sequence() {
         .args(&["-d", r"\501"])
         .pipe_in("(1Ł)")
         .succeeds()
-        .stderr_is("tr: warning: the ambiguous octal escape \\501 is being\n        interpreted as the 2-byte sequence \\050, 1\n")
+        .stderr_is("tr: warning: the ambiguous octal escape \\501 is being interpreted as the 2-byte sequence \\050, 1\n")
         .stdout_is("Ł)");
 }
 
