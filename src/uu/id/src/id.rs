@@ -473,22 +473,22 @@ fn pretty(possible_pw: Option<Passwd>) {
         );
     } else {
         let login = cstr2cow!(getlogin().cast_const());
-        let rid = getuid();
-        if let Ok(p) = Passwd::locate(rid) {
+        let uid = getuid();
+        if let Ok(p) = Passwd::locate(uid) {
             if let Some(user_name) = login {
                 println!("{}\t{user_name}", get_message("id-output-login"));
             }
             println!("{}\t{}", get_message("id-output-uid"), p.name);
         } else {
-            println!("{}\t{rid}", get_message("id-output-uid"));
+            println!("{}\t{uid}", get_message("id-output-uid"));
         }
 
-        let eid = geteuid();
-        if eid != rid {
-            if let Ok(p) = Passwd::locate(eid) {
+        let euid = geteuid();
+        if euid != uid {
+            if let Ok(p) = Passwd::locate(euid) {
                 println!("{}\t{}", get_message("id-output-euid"), p.name);
             } else {
-                println!("{}\t{eid}", get_message("id-output-euid"));
+                println!("{}\t{euid}", get_message("id-output-euid"));
             }
         }
 
