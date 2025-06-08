@@ -1448,6 +1448,7 @@ fn too_many_arguments() {
         .succeeds()
         .stdout_only("123");
 }
+
 #[test]
 fn format_with_flags() {
     new_ucmd!()
