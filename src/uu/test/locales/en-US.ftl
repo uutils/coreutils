@@ -63,9 +63,10 @@ test-after-help = Exit with the status determined by EXPRESSION.
 
   NOTE: Binary -a and -o are inherently ambiguous.
   Use test EXPR1 && test EXPR2 or test EXPR1 || test EXPR2 instead.
-
-  NOTE: [ honors the --help and --version options, but test does not.
+  NOTE: {"["} honors the --help and --version options, but test does not.
   test treats each of those as it treats any other nonempty STRING.
-
-  NOTE: your shell may have its own version of test and/or [, which usually supersedes the version described here.
+  NOTE: your shell may have its own version of test and/or {"["}, which usually supersedes the version described here.
   Please refer to your shell's documentation for details about the options it supports.
+
+# Error messages
+test-error-missing-closing-bracket = missing '{"]"}'
