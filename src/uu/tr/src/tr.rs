@@ -6,10 +6,10 @@
 mod operation;
 mod unicode_table;
 
-use crate::operation::DeleteOperation;
 use clap::{Arg, ArgAction, Command, value_parser};
 use operation::{
-    Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
+    DeleteOperation, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
+    translate_input,
 };
 use std::collections::HashMap;
 use std::ffi::OsString;
