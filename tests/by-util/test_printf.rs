@@ -1385,23 +1385,13 @@ fn format_unsigned_octal() {
 }
 
 #[test]
-fn format_string_and_char_broken_current_behavior() {
-    // FIXME: This test matches the current (incorrect) behavior of `%c`.
-    // Expected: "helloA"
-    // Actual:   "hello 6"
+#[ignore = "issue #8128"]
+fn format_string_and_char() {
     new_ucmd!()
-        .args(&["%s", "%c", "hello", "65"])
+        .args(&["%s%c", "hello", "65"])
         .succeeds()
-        .stdout_only("hello 6");
+        .stdout_only("helloA");
 }
-
-// #[test]
-// fn format_string_and_char_should_be_fixed() {
-//     new_ucmd!()
-//         .args(&["%s%c", "hello", "65"])
-//         .succeeds()
-//         .stdout_only("helloA");
-// }
 
 #[test]
 fn format_floats() {
