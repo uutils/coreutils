@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar
 
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -96,4 +96,17 @@ fn invalid_mapping() {
         .args(&["intr", "0400"])
         .fails()
         .stderr_contains("invalid integer argument: '0400': Value too large for defined data type");
+}
+
+#[test]
+fn invalid_setting() {
+    new_ucmd!()
+        .args(&["-econl"])
+        .fails()
+        .stderr_contains("invalid argument '-econl'");
+
+    new_ucmd!()
+        .args(&["igpar"])
+        .fails()
+        .stderr_contains("invalid argument 'igpar'");
 }
