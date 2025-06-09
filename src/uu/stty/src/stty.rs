@@ -578,7 +578,7 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(SpecialCharacterIndices,
 //
 // This function returns the ascii value of valid control chars, or ControlCharMappingError if invalid
 fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
-    if s == "undef" || s == "^-" {
+    if s == "undef" || s == "^-" || s.is_empty() {
         return Ok(0);
     }
 
