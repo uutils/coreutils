@@ -145,6 +145,10 @@ fn main() {
                 }
                 process::exit(0);
             }
+            "--version" => {
+                println!("{binary_as_util} {VERSION} (multi-call binary)");
+                process::exit(0);
+            }
             // Not a special command: fallthrough to calling a util
             _ => {}
         }
