@@ -3,15 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) allocs bset dflag cflag sflag tflag
-
 mod operation;
 mod unicode_table;
 
-use crate::operation::DeleteOperation;
 use clap::{Arg, ArgAction, Command, value_parser};
 use operation::{
-    Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
+    DeleteOperation, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
+    translate_input,
 };
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -33,9 +31,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_message("tr-after-help"))
-        .try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);
     let complement_flag = matches.get_flag(options::COMPLEMENT);
@@ -51,13 +47,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(ToOwned::to_owned)
         .collect();
 
-    let sets_len = sets.len();
-
     if sets.is_empty() {
         return Err(UUsageError::new(1, get_message("tr-error-missing-operand")));
     }
 
-    if !(delete_flag || squeeze_flag) && sets_len < 2 {
+    let sets_len = sets.len();
+
+    if !(delete_flag || squeeze_flag) && sets_len == 1 {
         return Err(UUsageError::new(
             1,
             get_message_with_args(
@@ -67,7 +63,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if delete_flag & squeeze_flag && sets_len < 2 {
+    if delete_flag && squeeze_flag && sets_len == 1 {
         return Err(UUsageError::new(
             1,
             get_message_with_args(
@@ -147,7 +143,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         }
     } else if squeeze_flag {
-        if sets_len < 2 {
+        if sets_len == 1 {
             let op = SqueezeOperation::new(set1);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         } else {
@@ -173,6 +169,7 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .about(get_message("tr-about"))
         .override_usage(format_usage(&get_message("tr-usage")))
+        .after_help(get_message("tr-after-help"))
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(
