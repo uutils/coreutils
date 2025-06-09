@@ -47,13 +47,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(ToOwned::to_owned)
         .collect();
 
-    let sets_len = sets.len();
-
     if sets.is_empty() {
         return Err(UUsageError::new(1, get_message("tr-error-missing-operand")));
     }
 
-    if !(delete_flag || squeeze_flag) && sets_len < 2 {
+    let sets_len = sets.len();
+
+    if !(delete_flag || squeeze_flag) && sets_len == 1 {
         return Err(UUsageError::new(
             1,
             get_message_with_args(
@@ -63,7 +63,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if delete_flag & squeeze_flag && sets_len < 2 {
+    if delete_flag & squeeze_flag && sets_len == 1 {
         return Err(UUsageError::new(
             1,
             get_message_with_args(
@@ -143,7 +143,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         }
     } else if squeeze_flag {
-        if sets_len < 2 {
+        if sets_len == 1 {
             let op = SqueezeOperation::new(set1);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
         } else {
