@@ -70,3 +70,10 @@ test-after-help = Exit with the status determined by EXPRESSION.
 
 # Error messages
 test-error-missing-closing-bracket = missing '{"]"}'
+test-error-expected = expected { $value }
+test-error-expected-value = expected value
+test-error-missing-argument = missing argument after { $argument }
+test-error-extra-argument = extra argument { $argument }
+test-error-unknown-operator = unknown operator { $operator }
+test-error-invalid-integer = invalid integer { $value }
+test-error-unary-operator-expected = { $operator }: unary operator expected

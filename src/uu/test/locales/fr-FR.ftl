@@ -70,3 +70,10 @@ test-after-help = Quitter avec le statut déterminé par EXPRESSION.
 
 # Messages d'erreur
 test-error-missing-closing-bracket = '{"]"}' manquant
+test-error-expected = { $value } attendu
+test-error-expected-value = valeur attendue
+test-error-missing-argument = argument manquant après { $argument }
+test-error-extra-argument = argument supplémentaire { $argument }
+test-error-unknown-operator = opérateur inconnu { $operator }
+test-error-invalid-integer = entier invalide { $value }
+test-error-unary-operator-expected = { $operator } : opérateur unaire attendu
