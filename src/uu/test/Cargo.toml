@@ -21,6 +21,7 @@ path = "src/test.rs"
 clap = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["process"] }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "test"
