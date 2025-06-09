@@ -63,7 +63,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if delete_flag & squeeze_flag && sets_len == 1 {
+    if delete_flag && squeeze_flag && sets_len == 1 {
         return Err(UUsageError::new(
             1,
             get_message_with_args(
