@@ -31,9 +31,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_message("tr-after-help"))
-        .try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);
     let complement_flag = matches.get_flag(options::COMPLEMENT);
@@ -171,6 +169,7 @@ pub fn uu_app() -> Command {
         .version(uucore::crate_version!())
         .about(get_message("tr-about"))
         .override_usage(format_usage(&get_message("tr-usage")))
+        .after_help(get_message("tr-after-help"))
         .infer_long_args(true)
         .trailing_var_arg(true)
         .arg(
