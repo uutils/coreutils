@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (paths) wtmp
 
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::Path;
 
@@ -18,7 +19,7 @@ use utmp_classic::{UtmpEntry, parse_from_path};
 #[cfg(not(target_os = "openbsd"))]
 use uucore::utmpx::{self, Utmpx};
 
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 #[cfg(target_os = "openbsd")]
 const OPENBSD_UTMP_FILE: &str = "/var/run/utmp";
@@ -30,9 +31,10 @@ fn get_long_usage() -> String {
     let default_path: &str = utmpx::DEFAULT_FILE;
     #[cfg(target_os = "openbsd")]
     let default_path: &str = OPENBSD_UTMP_FILE;
-    format!(
-        "Output who is currently logged in according to FILE.
-If FILE is not specified, use {default_path}.  /var/log/wtmp as FILE is common."
+
+    get_message_with_args(
+        "users-long-usage",
+        HashMap::from([("default_path".to_string(), default_path.to_string())]),
     )
 }
 
