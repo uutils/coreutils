@@ -1799,13 +1799,14 @@ dependencies = [
 
 [[package]]
 name = "parse_datetime"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fd3830b49ee3a0dcc8fdfadc68c6354c97d00101ac1cac5b2eee25d35c42066"
+checksum = "c7fd5a149584170040e54b129821667f86f3cd2b16d8c275e8b39a6c9474efd3"
 dependencies = [
  "chrono",
- "nom 8.0.0",
+ "num-traits",
  "regex",
+ "winnow",
 ]
 
 [[package]]
