@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid colorterm disp
 
 use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::env;
 use std::fmt::Write as _;
 use std::fs::File;
@@ -16,7 +17,7 @@ use clap::{Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::{format_usage, parser::parse_glob};
 
 mod options {
@@ -132,15 +133,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         return Err(UUsageError::new(
             1,
-            "the options to output non shell syntax,\n\
-             and to select a shell syntax are mutually exclusive",
+            get_message("dircolors-error-shell-and-output-exclusive"),
         ));
     }
 
     if matches.get_flag(options::PRINT_DATABASE) && matches.get_flag(options::PRINT_LS_COLORS) {
         return Err(UUsageError::new(
             1,
-            "options --print-database and --print-ls-colors are mutually exclusive",
+            get_message("dircolors-error-print-database-and-ls-colors-exclusive"),
         ));
     }
 
@@ -148,10 +148,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !files.is_empty() {
             return Err(UUsageError::new(
                 1,
-                format!(
-                    "extra operand {}\nfile operands cannot be combined with \
-                     --print-database (-p)",
-                    files[0].quote()
+                get_message_with_args(
+                    "dircolors-error-extra-operand-print-database",
+                    HashMap::from([("operand".to_string(), files[0].quote().to_string())]),
                 ),
             ));
         }
@@ -175,7 +174,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             OutputFmt::Unknown => {
                 return Err(USimpleError::new(
                     1,
-                    "no SHELL environment variable, and no shell type option given",
+                    get_message("dircolors-error-no-shell-environment"),
                 ));
             }
             fmt => out_format = fmt,
@@ -201,7 +200,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
-            format!("extra operand {}", files[1].quote()),
+            get_message_with_args(
+                "dircolors-error-extra-operand",
+                HashMap::from([("operand".to_string(), files[1].quote().to_string())]),
+            ),
         ));
     } else if files[0].eq("-") {
         let fin = BufReader::new(std::io::stdin());
@@ -212,7 +214,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if path.is_dir() {
             return Err(USimpleError::new(
                 2,
-                format!("expected file, got directory {}", path.quote()),
+                get_message_with_args(
+                    "dircolors-error-expected-file-got-directory",
+                    HashMap::from([("path".to_string(), path.quote().to_string())]),
+                ),
             ));
         }
         match File::open(path) {
@@ -253,7 +258,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .visible_alias("bourne-shell")
                 .overrides_with(options::C_SHELL)
-                .help("output Bourne shell code to set LS_COLORS")
+                .help(get_message("dircolors-help-bourne-shell"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -262,20 +267,20 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .visible_alias("c-shell")
                 .overrides_with(options::BOURNE_SHELL)
-                .help("output C shell code to set LS_COLORS")
+                .help(get_message("dircolors-help-c-shell"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRINT_DATABASE)
                 .long("print-database")
                 .short('p')
-                .help("print the byte counts")
+                .help(get_message("dircolors-help-print-database"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRINT_LS_COLORS)
                 .long("print-ls-colors")
-                .help("output fully escaped colors for display")
+                .help(get_message("dircolors-help-print-ls-colors"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -375,10 +380,12 @@ where
 
         let (key, val) = line.split_two();
         if val.is_empty() {
-            return Err(format!(
-                // The double space is what GNU is doing
-                "{}:{num}: invalid line;  missing second token",
-                fp.maybe_quote(),
+            return Err(get_message_with_args(
+                "dircolors-error-invalid-line-missing-token",
+                HashMap::from([
+                    ("file".to_string(), fp.maybe_quote().to_string()),
+                    ("line".to_string(), num.to_string()),
+                ]),
             ));
         }
 
@@ -461,7 +468,10 @@ fn append_entry(
                 result.push_str(&disp);
                 Ok(())
             } else {
-                Err(format!("unrecognized keyword {key}"))
+                Err(get_message_with_args(
+                    "dircolors-error-unrecognized-keyword",
+                    HashMap::from([("keyword".to_string(), key.to_string())]),
+                ))
             }
         }
     }
