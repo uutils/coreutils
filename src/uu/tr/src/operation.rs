@@ -24,6 +24,7 @@ use std::{
     ops::Not,
 };
 use uucore::error::{FromIo, UError, UResult};
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::show_warning;
 
 #[derive(Debug, Clone)]
@@ -45,44 +46,65 @@ pub enum BadSequence {
 impl Display for BadSequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MissingCharClassName => write!(f, "missing character class name '[::]'"),
+            Self::MissingCharClassName => {
+                write!(f, "{}", get_message("tr-error-missing-char-class-name"))
+            }
             Self::MissingEquivalentClassChar => {
-                write!(f, "missing equivalence class character '[==]'")
+                write!(
+                    f,
+                    "{}",
+                    get_message("tr-error-missing-equivalence-class-char")
+                )
             }
             Self::MultipleCharRepeatInSet2 => {
-                write!(f, "only one [c*] repeat construct may appear in string2")
+                write!(
+                    f,
+                    "{}",
+                    get_message("tr-error-multiple-char-repeat-in-set2")
+                )
             }
             Self::CharRepeatInSet1 => {
-                write!(f, "the [c*] repeat construct may not appear in string1")
+                write!(f, "{}", get_message("tr-error-char-repeat-in-set1"))
             }
             Self::InvalidRepeatCount(count) => {
-                write!(f, "invalid repeat count '{count}' in [c*n] construct")
+                write!(
+                    f,
+                    "{}",
+                    get_message_with_args(
+                        "tr-error-invalid-repeat-count",
+                        HashMap::from([("count".to_string(), format!("'{}'", count))])
+                    )
+                )
             }
             Self::EmptySet2WhenNotTruncatingSet1 => {
-                write!(f, "when not truncating set1, string2 must be non-empty")
+                write!(
+                    f,
+                    "{}",
+                    get_message("tr-error-empty-set2-when-not-truncating")
+                )
             }
             Self::ClassExceptLowerUpperInSet2 => {
                 write!(
                     f,
-                    "when translating, the only character classes that may appear in set2 are 'upper' and 'lower'"
+                    "{}",
+                    get_message("tr-error-class-except-lower-upper-in-set2")
                 )
             }
             Self::ClassInSet2NotMatchedBySet1 => {
-                write!(
-                    f,
-                    "when translating, every 'upper'/'lower' in set2 must be matched by a 'upper'/'lower' in the same position in set1"
-                )
+                write!(f, "{}", get_message("tr-error-class-in-set2-not-matched"))
             }
             Self::Set1LongerSet2EndsInClass => {
                 write!(
                     f,
-                    "when translating with string1 longer than string2,\nthe latter string must not end with a character class"
+                    "{}",
+                    get_message("tr-error-set1-longer-set2-ends-in-class")
                 )
             }
             Self::ComplementMoreThanOneUniqueInSet2 => {
                 write!(
                     f,
-                    "when translating with complemented character classes,\nstring2 must map all characters in the domain to one"
+                    "{}",
+                    get_message("tr-error-complement-more-than-one-unique")
                 )
             }
             Self::BackwardsRange { end, start } => {
@@ -94,17 +116,25 @@ impl Display for BadSequence {
                         }
                     }
                 }
-
                 write!(
                     f,
-                    "range-endpoints of '{}-{}' are in reverse collating sequence order",
-                    end_or_start_to_string(start),
-                    end_or_start_to_string(end)
+                    "{}",
+                    get_message_with_args(
+                        "tr-error-backwards-range",
+                        HashMap::from([
+                            ("start".to_string(), end_or_start_to_string(start)),
+                            ("end".to_string(), end_or_start_to_string(end))
+                        ])
+                    )
                 )
             }
             Self::MultipleCharInEquivalence(s) => write!(
                 f,
-                "{s}: equivalence class operand must be a single character"
+                "{}",
+                get_message_with_args(
+                    "tr-error-multiple-char-in-equivalence",
+                    HashMap::from([("chars".to_string(), s.clone())])
+                )
             ),
         }
     }
@@ -364,11 +394,25 @@ impl Sequence {
                     let origin_octal: &str = std::str::from_utf8(input).unwrap();
                     let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
                     let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
-                    show_warning!("the ambiguous octal escape \\{origin_octal} is being\n        interpreted as the 2-byte sequence \\0{actual_octal_tail}, {outstand_char}");
+                    show_warning!(
+                        "{}",
+                        get_message_with_args(
+                            "tr-warning-ambiguous-octal-escape",
+                            HashMap::from([
+                                ("origin_octal".to_string(), origin_octal.to_string()),
+                                (
+                                    "actual_octal_tail".to_string(),
+                                    actual_octal_tail.to_string()
+                                ),
+                                ("outstand_char".to_string(), outstand_char.to_string())
+                            ])
+                        )
+                    );
                 }
                 result
             },
-        ).parse(input)
+        )
+        .parse(input)
     }
 
     fn parse_octal_two_digits(input: &[u8]) -> IResult<&[u8], u8> {
@@ -666,7 +710,7 @@ where
 
         output
             .write_all(&output_buf)
-            .map_err_context(|| "write error".into())?;
+            .map_err_context(|| get_message("tr-error-write-error"))?;
 
         buf.clear();
         output_buf.clear();

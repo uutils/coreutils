@@ -302,13 +302,13 @@ pub fn get_nusers() -> usize {
 ///
 /// # Returns
 ///
-/// e.g. "0 user", "1 user", "2 users"
+/// e.g. "0 users", "1 user", "2 users"
 #[inline]
-pub fn format_nusers(nusers: usize) -> String {
-    match nusers {
-        0 => "0 user".to_string(),
-        1 => "1 user".to_string(),
-        _ => format!("{nusers} users"),
+pub fn format_nusers(n: usize) -> String {
+    if n == 1 {
+        String::from("1 user")
+    } else {
+        format!("{n} users")
     }
 }
 
@@ -372,4 +372,16 @@ pub fn get_formatted_loadavg() -> UResult<String> {
         "load average: {:.2}, {:.2}, {:.2}",
         loadavg.0, loadavg.1, loadavg.2
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_nusers() {
+        assert_eq!("0 users", format_nusers(0));
+        assert_eq!("1 user", format_nusers(1));
+        assert_eq!("2 users", format_nusers(2));
+    }
 }

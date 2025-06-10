@@ -6,10 +6,8 @@
 
 use std::process::Stdio;
 
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
 use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[test]
 fn test_invalid_arg() {
@@ -17,7 +15,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
-fn test_rm_one_file() {
+fn test_one_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_rm_one_file";
 
@@ -29,17 +27,17 @@ fn test_rm_one_file() {
 }
 
 #[test]
-fn test_rm_failed() {
-    let (_at, mut ucmd) = at_and_ucmd!();
+fn test_failed() {
     let file = "test_rm_one_file"; // Doesn't exist
 
-    ucmd.arg(file)
+    new_ucmd!()
+        .arg(file)
         .fails()
         .stderr_contains(format!("cannot remove '{file}': No such file or directory"));
 }
 
 #[test]
-fn test_rm_multiple_files() {
+fn test_multiple_files() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_multiple_file_a";
     let file_b = "test_rm_multiple_file_b";
@@ -54,7 +52,7 @@ fn test_rm_multiple_files() {
 }
 
 #[test]
-fn test_rm_interactive() {
+fn test_interactive() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -90,7 +88,7 @@ fn test_rm_interactive() {
 }
 
 #[test]
-fn test_rm_force() {
+fn test_force() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_force_a";
     let file_b = "test_rm_force_b";
@@ -111,7 +109,7 @@ fn test_rm_force() {
 }
 
 #[test]
-fn test_rm_force_multiple() {
+fn test_force_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_force_a";
     let file_b = "test_rm_force_b";
@@ -134,7 +132,7 @@ fn test_rm_force_multiple() {
 }
 
 #[test]
-fn test_rm_empty_directory() {
+fn test_empty_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_empty_directory";
 
@@ -146,7 +144,7 @@ fn test_rm_empty_directory() {
 }
 
 #[test]
-fn test_rm_empty_directory_verbose() {
+fn test_empty_directory_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_empty_directory_verbose";
 
@@ -162,7 +160,7 @@ fn test_rm_empty_directory_verbose() {
 }
 
 #[test]
-fn test_rm_non_empty_directory() {
+fn test_non_empty_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_non_empty_dir";
     let file_a = &format!("{dir}/test_rm_non_empty_file_a");
@@ -180,7 +178,7 @@ fn test_rm_non_empty_directory() {
 }
 
 #[test]
-fn test_rm_recursive() {
+fn test_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_recursive_directory";
     let file_a = "test_rm_recursive_directory/test_rm_recursive_file_a";
@@ -198,7 +196,7 @@ fn test_rm_recursive() {
 }
 
 #[test]
-fn test_rm_recursive_multiple() {
+fn test_recursive_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_recursive_directory";
     let file_a = "test_rm_recursive_directory/test_rm_recursive_file_a";
@@ -221,7 +219,7 @@ fn test_rm_recursive_multiple() {
 }
 
 #[test]
-fn test_rm_directory_without_flag() {
+fn test_directory_without_flag() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_directory_without_flag_dir";
 
@@ -235,7 +233,7 @@ fn test_rm_directory_without_flag() {
 #[test]
 #[cfg(windows)]
 // https://github.com/uutils/coreutils/issues/3200
-fn test_rm_directory_with_trailing_backslash() {
+fn test_directory_with_trailing_backslash() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "dir";
 
@@ -246,7 +244,7 @@ fn test_rm_directory_with_trailing_backslash() {
 }
 
 #[test]
-fn test_rm_verbose() {
+fn test_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_verbose_file_a";
     let file_b = "test_rm_verbose_file_b";
@@ -264,7 +262,7 @@ fn test_rm_verbose() {
 #[test]
 #[cfg(not(windows))]
 // on unix symlink_dir is a file
-fn test_rm_symlink_dir() {
+fn test_symlink_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let dir = "test_rm_symlink_dir_directory";
@@ -279,7 +277,7 @@ fn test_rm_symlink_dir() {
 #[test]
 #[cfg(windows)]
 // on windows removing symlink_dir requires "-r" or "-d"
-fn test_rm_symlink_dir() {
+fn test_symlink_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -301,7 +299,7 @@ fn test_rm_symlink_dir() {
 }
 
 #[test]
-fn test_rm_invalid_symlink() {
+fn test_invalid_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let link = "test_rm_invalid_symlink";
 
@@ -311,20 +309,17 @@ fn test_rm_invalid_symlink() {
 }
 
 #[test]
-fn test_rm_force_no_operand() {
-    let mut ucmd = new_ucmd!();
-
-    ucmd.arg("-f").succeeds().no_stderr();
+fn test_force_no_operand() {
+    new_ucmd!().arg("-f").succeeds().no_stderr();
 }
 
 #[test]
-fn test_rm_no_operand() {
-    let ts = TestScenario::new(util_name!());
-    ts.ucmd().fails().usage_error("missing operand");
+fn test_no_operand() {
+    new_ucmd!().fails().usage_error("missing operand");
 }
 
 #[test]
-fn test_rm_verbose_slash() {
+fn test_verbose_slash() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_verbose_slash_directory";
     let file_a = &format!("{dir}/test_rm_verbose_slash_file_a");
@@ -351,7 +346,7 @@ fn test_rm_verbose_slash() {
 }
 
 #[test]
-fn test_rm_silently_accepts_presume_input_tty2() {
+fn test_silently_accepts_presume_input_tty2() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_2 = "test_rm_silently_accepts_presume_input_tty2";
 
@@ -363,7 +358,7 @@ fn test_rm_silently_accepts_presume_input_tty2() {
 }
 
 #[test]
-fn test_rm_interactive_never() {
+fn test_interactive_never() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -384,7 +379,7 @@ fn test_rm_interactive_never() {
 }
 
 #[test]
-fn test_rm_interactive_missing_value() {
+fn test_interactive_missing_value() {
     // `--interactive` is equivalent to `--interactive=always` or `-i`
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -405,7 +400,7 @@ fn test_rm_interactive_missing_value() {
 }
 
 #[test]
-fn test_rm_interactive_once_prompt() {
+fn test_interactive_once_prompt() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let file1 = "test_rm_interactive_once_recursive_prompt_file1";
@@ -434,7 +429,7 @@ fn test_rm_interactive_once_prompt() {
 }
 
 #[test]
-fn test_rm_interactive_once_recursive_prompt() {
+fn test_interactive_once_recursive_prompt() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let file1 = "test_rm_interactive_once_recursive_prompt_file1";
@@ -452,7 +447,7 @@ fn test_rm_interactive_once_recursive_prompt() {
 }
 
 #[test]
-fn test_rm_descend_directory() {
+fn test_descend_directory() {
     // This test descends into each directory and deletes the files and folders inside of them
     // This test will have the rm process asks 6 question and us answering Y to them will delete all the files and folders
 
@@ -494,7 +489,7 @@ fn test_rm_descend_directory() {
 
 #[cfg(feature = "chmod")]
 #[test]
-fn test_rm_prompts() {
+fn test_prompts() {
     use std::io::Write;
 
     // Needed for talking with stdin on platforms where CRLF or LF matters
@@ -581,7 +576,7 @@ fn test_rm_prompts() {
 
 #[cfg(feature = "chmod")]
 #[test]
-fn test_rm_prompts_no_tty() {
+fn test_prompts_no_tty() {
     // This test ensures InteractiveMode.PromptProtected proceeds silently with non-interactive stdin
 
     use std::io::Write;
@@ -624,7 +619,7 @@ fn test_rm_prompts_no_tty() {
 }
 
 #[test]
-fn test_rm_force_prompts_order() {
+fn test_force_prompts_order() {
     // Needed for talking with stdin on platforms where CRLF or LF matters
     const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
@@ -665,7 +660,7 @@ fn test_rm_force_prompts_order() {
 
 #[test]
 #[ignore = "issue #3722"]
-fn test_rm_directory_rights_rm1() {
+fn test_directory_rights_rm1() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("b/a/p");
     at.mkdir_all("b/c");
@@ -738,7 +733,7 @@ fn test_remove_inaccessible_dir() {
 
 #[test]
 #[cfg(not(windows))]
-fn test_rm_current_or_parent_dir_rm4() {
+fn test_current_or_parent_dir_rm4() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
@@ -769,7 +764,7 @@ fn test_rm_current_or_parent_dir_rm4() {
 
 #[test]
 #[cfg(windows)]
-fn test_rm_current_or_parent_dir_rm4_windows() {
+fn test_current_or_parent_dir_rm4_windows() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 

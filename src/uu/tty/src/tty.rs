@@ -2,8 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//  *
-//  * Synced with http://lingrok.org/xref/coreutils/src/tty.c
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
@@ -41,7 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(name) => writeln!(stdout, "{}", name.display()),
         Err(_) => {
             set_exit_code(1);
-            writeln!(stdout, "not a tty")
+            writeln!(stdout, "{}", get_message("tty-not-a-tty"))
         }
     };
 
@@ -65,7 +63,7 @@ pub fn uu_app() -> Command {
                 .long(options::SILENT)
                 .visible_alias("quiet")
                 .short('s')
-                .help("print nothing, only return an exit status")
+                .help(get_message("tty-help-silent"))
                 .action(ArgAction::SetTrue),
         )
 }

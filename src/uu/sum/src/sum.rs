@@ -6,14 +6,14 @@
 // spell-checker:ignore (ToDO) sysv
 
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::{format_usage, show};
-
-use uucore::locale::get_message;
 
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
     let mut buf = [0; 4096];
@@ -74,14 +74,20 @@ fn open(name: &str) -> UResult<Box<dyn Read>> {
             if path.is_dir() {
                 return Err(USimpleError::new(
                     2,
-                    format!("{}: Is a directory", name.maybe_quote()),
+                    get_message_with_args(
+                        "sum-error-is-directory",
+                        HashMap::from([("name".to_string(), name.maybe_quote().to_string())]),
+                    ),
                 ));
             };
             // Silent the warning as we want to the error message
             if path.metadata().is_err() {
                 return Err(USimpleError::new(
                     2,
-                    format!("{}: No such file or directory", name.maybe_quote()),
+                    get_message_with_args(
+                        "sum-error-no-such-file-or-directory",
+                        HashMap::from([("name".to_string(), name.maybe_quote().to_string())]),
+                    ),
                 ));
             };
             let f = File::open(path).map_err_context(String::new)?;
@@ -149,14 +155,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::BSD_COMPATIBLE)
                 .short('r')
-                .help("use the BSD sum algorithm, use 1K blocks (default)")
+                .help(get_message("sum-help-bsd-compatible"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SYSTEM_V_COMPATIBLE)
                 .short('s')
                 .long(options::SYSTEM_V_COMPATIBLE)
-                .help("use System V sum algorithm, use 512 bytes blocks")
+                .help(get_message("sum-help-sysv-compatible"))
                 .action(ArgAction::SetTrue),
         )
 }

@@ -38,24 +38,21 @@ pub struct UNameOutput {
 
 impl UNameOutput {
     fn display(&self) -> String {
-        let mut output = String::new();
-        for name in [
+        [
             self.kernel_name.as_ref(),
             self.nodename.as_ref(),
             self.kernel_release.as_ref(),
             self.kernel_version.as_ref(),
             self.machine.as_ref(),
-            self.os.as_ref(),
             self.processor.as_ref(),
             self.hardware_platform.as_ref(),
+            self.os.as_ref(),
         ]
         .into_iter()
         .flatten()
-        {
-            output.push_str(name);
-            output.push(' ');
-        }
-        output
+        .map(|name| name.as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
     }
 
     pub fn new(opts: &Options) -> UResult<Self> {
@@ -138,7 +135,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         os: matches.get_flag(options::OS),
     };
     let output = UNameOutput::new(&options)?;
-    println!("{}", output.display().trim_end());
+    println!("{}", output.display());
     Ok(())
 }
 

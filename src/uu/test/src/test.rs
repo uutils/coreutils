@@ -55,7 +55,10 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         // If invoked via name '[', matching ']' must be in the last arg
         let last = args.pop();
         if last.as_deref() != Some(OsStr::new("]")) {
-            return Err(USimpleError::new(2, "missing ']'"));
+            return Err(USimpleError::new(
+                2,
+                get_message("test-error-missing-closing-bracket"),
+            ));
         }
     }
 
