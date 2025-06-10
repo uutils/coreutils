@@ -145,7 +145,7 @@ fn main() {
                 }
                 process::exit(0);
             }
-            "--version" => {
+            "--version" | "-V" => {
                 println!("{binary_as_util} {VERSION} (multi-call binary)");
                 process::exit(0);
             }
