@@ -438,7 +438,7 @@ dependencies = [
  "encode_unicode",
  "libc",
  "once_cell",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "windows-sys 0.59.0",
 ]
 
@@ -1270,7 +1270,7 @@ dependencies = [
  "console",
  "number_prefix",
  "portable-atomic",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "web-time",
 ]
 
@@ -1771,7 +1771,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad5fd71b79026fb918650dde6d125000a233764f1c2f1659a1c71118e33ea08f"
 dependencies = [
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
 ]
 
 [[package]]
@@ -2479,7 +2479,7 @@ dependencies = [
  "smawk",
  "terminal_size",
  "unicode-linebreak",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
 ]
 
 [[package]]
@@ -2666,9 +2666,9 @@ checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
 name = "unicode-width"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
+checksum = "4a1a07cc7db3810833284e8d372ccdc6da29741639ecc70c9ec107df0fa6154c"
 
 [[package]]
 name = "unindent"
@@ -2903,7 +2903,7 @@ dependencies = [
  "clap",
  "tempfile",
  "thiserror 2.0.12",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "uucore",
 ]
 
@@ -2969,7 +2969,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "thiserror 2.0.12",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "uucore",
 ]
 
@@ -3025,7 +3025,7 @@ name = "uu_fmt"
 version = "0.1.0"
 dependencies = [
  "clap",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "uucore",
 ]
 
@@ -3218,7 +3218,7 @@ dependencies = [
  "nix",
  "tempfile",
  "unicode-segmentation",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "uucore",
 ]
 
@@ -3467,7 +3467,7 @@ dependencies = [
  "self_cell",
  "tempfile",
  "thiserror 2.0.12",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "uucore",
 ]
 
@@ -3663,7 +3663,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "thiserror 2.0.12",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "uucore",
 ]
 
@@ -3721,7 +3721,7 @@ dependencies = [
  "libc",
  "nix",
  "thiserror 2.0.12",
- "unicode-width 0.2.0",
+ "unicode-width 0.2.1",
  "uucore",
 ]
 
