@@ -14,19 +14,17 @@ fn test_invalid_arg() {
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn runs() {
     new_ucmd!().succeeds();
 }
 
 #[test]
-#[ignore = "Fails because cargo test does not run in a tty"]
 fn print_all() {
-    let res = new_ucmd!().succeeds();
+    let res = new_ucmd!().args(&["--all"]).succeeds();
 
     // Random selection of flags to check for
     for flag in [
-        "parenb", "parmrk", "ixany", "iuclc", "onlcr", "ofdel", "icanon", "noflsh",
+        "parenb", "parmrk", "ixany", "onlcr", "ofdel", "icanon", "noflsh",
     ] {
         res.stdout_contains(flag);
     }
@@ -96,6 +94,16 @@ fn invalid_mapping() {
         .args(&["intr", "0400"])
         .fails()
         .stderr_contains("invalid integer argument: '0400': Value too large for defined data type");
+
+    new_ucmd!()
+        .args(&["-econl"])
+        .fails()
+        .stderr_contains("invalid argument '-econl'");
+
+    new_ucmd!()
+        .args(&["igpar"])
+        .fails()
+        .stderr_contains("invalid argument 'igpar'");
 }
 
 #[test]
@@ -166,4 +174,36 @@ fn invalid_baud_setting() {
         .args(&["ospeed", "995"])
         .fails()
         .stderr_contains("invalid ospeed '995'");
+}
+
+#[test]
+fn set_mapping() {
+    new_ucmd!().args(&["intr", "'"]).succeeds();
+    new_ucmd!()
+        .args(&["--all"])
+        .succeeds()
+        .stdout_contains("intr = '");
+
+    new_ucmd!().args(&["intr", "undef"]).succeeds();
+    new_ucmd!()
+        .args(&["--all"])
+        .succeeds()
+        .stdout_contains("intr = <undef>");
+
+    new_ucmd!().args(&["intr", "^-"]).succeeds();
+    new_ucmd!()
+        .args(&["--all"])
+        .succeeds()
+        .stdout_contains("intr = <undef>");
+
+    new_ucmd!().args(&["intr", "^C"]).succeeds();
+    new_ucmd!()
+        .args(&["--all"])
+        .succeeds()
+        .stdout_contains("intr = ^C");
+
+    new_ucmd!()
+        .args(&["intr", "''"])
+        .fails()
+        .stderr_contains("invalid integer argument: ''''");
 }
