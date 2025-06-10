@@ -126,7 +126,9 @@ fn set_mapping() {
         .args(&["intr", "''"])
         .fails()
         .stderr_contains("invalid integer argument: ''''");
+}
 
+#[test]
 fn invalid_setting() {
     new_ucmd!()
         .args(&["-econl"])
