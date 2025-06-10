@@ -6,12 +6,13 @@
 
 // spell-checker:ignore (ToDO) lstat
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::format_usage;
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 // operating mode
 enum Mode {
@@ -54,7 +55,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // take necessary actions
     let paths = matches.get_many::<String>(options::PATH);
     if paths.is_none() {
-        return Err(UUsageError::new(1, "missing operand"));
+        return Err(UUsageError::new(
+            1,
+            get_message("pathchk-error-missing-operand"),
+        ));
     }
 
     // free strings are path operands
@@ -84,19 +88,19 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::POSIX)
                 .short('p')
-                .help("check for most POSIX systems")
+                .help(get_message("pathchk-help-posix"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::POSIX_SPECIAL)
                 .short('P')
-                .help(r#"check for empty names and leading "-""#)
+                .help(get_message("pathchk-help-posix-special"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PORTABILITY)
                 .long(options::PORTABILITY)
-                .help("check for all POSIX systems (equivalent to -p -P)")
+                .help(get_message("pathchk-help-portability"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -125,11 +129,23 @@ fn check_basic(path: &[String]) -> bool {
     if total_len > POSIX_PATH_MAX {
         writeln!(
             std::io::stderr(),
-            "limit {POSIX_PATH_MAX} exceeded by length {total_len} of file name {joined_path}"
+            "{}",
+            get_message_with_args(
+                "pathchk-error-posix-path-length-exceeded",
+                HashMap::from([
+                    ("limit".to_string(), POSIX_PATH_MAX.to_string()),
+                    ("length".to_string(), total_len.to_string()),
+                    ("path".to_string(), joined_path),
+                ])
+            )
         );
         return false;
     } else if total_len == 0 {
-        writeln!(std::io::stderr(), "empty file name");
+        writeln!(
+            std::io::stderr(),
+            "{}",
+            get_message("pathchk-error-empty-file-name")
+        );
         return false;
     }
     // components: character portability and length
@@ -138,8 +154,15 @@ fn check_basic(path: &[String]) -> bool {
         if component_len > POSIX_NAME_MAX {
             writeln!(
                 std::io::stderr(),
-                "limit {POSIX_NAME_MAX} exceeded by length {component_len} of file name component {}",
-                p.quote()
+                "{}",
+                get_message_with_args(
+                    "pathchk-error-posix-name-length-exceeded",
+                    HashMap::from([
+                        ("limit".to_string(), POSIX_NAME_MAX.to_string()),
+                        ("length".to_string(), component_len.to_string()),
+                        ("component".to_string(), p.quote().to_string()),
+                    ])
+                )
             );
             return false;
         }
@@ -158,15 +181,22 @@ fn check_extra(path: &[String]) -> bool {
         if p.starts_with('-') {
             writeln!(
                 std::io::stderr(),
-                "leading hyphen in file name component {}",
-                p.quote()
+                "{}",
+                get_message_with_args(
+                    "pathchk-error-leading-hyphen",
+                    HashMap::from([("component".to_string(), p.quote().to_string())])
+                )
             );
             return false;
         }
     }
     // path length
     if path.join("/").is_empty() {
-        writeln!(std::io::stderr(), "empty file name");
+        writeln!(
+            std::io::stderr(),
+            "{}",
+            get_message("pathchk-error-empty-file-name")
+        );
         return false;
     }
     true
@@ -180,9 +210,15 @@ fn check_default(path: &[String]) -> bool {
     if total_len > libc::PATH_MAX as usize {
         writeln!(
             std::io::stderr(),
-            "limit {} exceeded by length {total_len} of file name {}",
-            libc::PATH_MAX,
-            joined_path.quote()
+            "{}",
+            get_message_with_args(
+                "pathchk-error-path-length-exceeded",
+                HashMap::from([
+                    ("limit".to_string(), libc::PATH_MAX.to_string()),
+                    ("length".to_string(), total_len.to_string()),
+                    ("path".to_string(), joined_path.quote().to_string()),
+                ])
+            )
         );
         return false;
     }
@@ -192,7 +228,11 @@ fn check_default(path: &[String]) -> bool {
         // but some non-POSIX hosts do (as an alias for "."),
         // so allow "" if `symlink_metadata` (corresponds to `lstat`) does.
         if fs::symlink_metadata(&joined_path).is_err() {
-            writeln!(std::io::stderr(), "pathchk: '': No such file or directory");
+            writeln!(
+                std::io::stderr(),
+                "{}",
+                get_message("pathchk-error-empty-path-not-found")
+            );
             return false;
         }
     }
@@ -203,9 +243,15 @@ fn check_default(path: &[String]) -> bool {
         if component_len > libc::FILENAME_MAX as usize {
             writeln!(
                 std::io::stderr(),
-                "limit {} exceeded by length {component_len} of file name component {}",
-                libc::FILENAME_MAX,
-                p.quote()
+                "{}",
+                get_message_with_args(
+                    "pathchk-error-name-length-exceeded",
+                    HashMap::from([
+                        ("limit".to_string(), libc::FILENAME_MAX.to_string()),
+                        ("length".to_string(), component_len.to_string()),
+                        ("component".to_string(), p.quote().to_string()),
+                    ])
+                )
             );
             return false;
         }
@@ -238,8 +284,14 @@ fn check_portable_chars(path_segment: &str) -> bool {
             let invalid = path_segment[i..].chars().next().unwrap();
             writeln!(
                 std::io::stderr(),
-                "nonportable character '{invalid}' in file name component {}",
-                path_segment.quote()
+                "{}",
+                get_message_with_args(
+                    "pathchk-error-nonportable-character",
+                    HashMap::from([
+                        ("character".to_string(), invalid.to_string()),
+                        ("component".to_string(), path_segment.quote().to_string()),
+                    ])
+                )
             );
             return false;
         }
