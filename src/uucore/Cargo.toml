@@ -4,7 +4,6 @@
 name = "uucore"
 description = "uutils ~ 'core' uutils code library (cross-platform)"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uucore"
-# readme = "README.md"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
@@ -60,6 +59,7 @@ selinux = { workspace = true, optional = true }
 # Fluent dependencies
 fluent-bundle = { workspace = true }
 fluent = { workspace = true }
+fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
 [target.'cfg(unix)'.dependencies]

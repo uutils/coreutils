@@ -14,10 +14,9 @@ use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::{format_usage, help_about, help_usage, show_error, show_warning};
+use uucore::{format_usage, show_error, show_warning};
 
-const ABOUT: &str = help_about!("factor.md");
-const USAGE: &str = help_usage!("factor.md");
+use uucore::locale::get_message;
 
 mod options {
     pub static EXPONENTS: &str = "exponents";
@@ -122,8 +121,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("factor-about"))
+        .override_usage(format_usage(&get_message("factor-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .args_override_self(true)

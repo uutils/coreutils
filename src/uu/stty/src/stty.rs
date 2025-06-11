@@ -3,10 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime
+// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag
 
 mod flags;
 
+use crate::flags::AllFlags;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
@@ -16,12 +17,12 @@ use nix::sys::termios::{
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::fs::File;
 use std::io::{self, Stdout, stdout};
-use std::ops::ControlFlow;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 #[cfg(not(any(
     target_os = "freebsd",
@@ -34,8 +35,7 @@ use uucore::{format_usage, help_about, help_usage};
 use flags::BAUD_RATES;
 use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
-const USAGE: &str = help_usage!("stty.md");
-const SUMMARY: &str = help_about!("stty.md");
+const ASCII_DEL: u8 = 127;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
@@ -101,6 +101,22 @@ struct Options<'a> {
 enum Device {
     File(File),
     Stdout(Stdout),
+}
+
+enum ControlCharMappingError {
+    IntOutOfRange,
+    MultipleChars,
+}
+
+enum ArgOptions<'a> {
+    Flags(AllFlags<'a>),
+    Mapping((SpecialCharacterIndices, u8)),
+}
+
+impl<'a> From<AllFlags<'a>> for ArgOptions<'a> {
+    fn from(flag: AllFlags<'a>) -> Self {
+        ArgOptions::Flags(flag)
+    }
 }
 
 impl AsFd for Device {
@@ -210,19 +226,59 @@ fn stty(opts: &Options) -> UResult<()> {
         ));
     }
 
-    // TODO: Figure out the right error message for when tcgetattr fails
-    let mut termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
+    let mut valid_args: Vec<ArgOptions> = Vec::new();
 
-    if let Some(settings) = &opts.settings {
-        for setting in settings {
-            if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
-                return Err(USimpleError::new(
-                    1,
-                    format!("invalid argument '{setting}'"),
-                ));
+    if let Some(args) = &opts.settings {
+        let mut args_iter = args.iter();
+        // iterate over args: skip to next arg if current one is a control char
+        while let Some(arg) = args_iter.next() {
+            // control char
+            if let Some(char_index) = cc_to_index(arg) {
+                if let Some(mapping) = args_iter.next() {
+                    let cc_mapping = string_to_control_char(mapping).map_err(|e| {
+                        let message = match e {
+                            ControlCharMappingError::IntOutOfRange => format!(
+                                "invalid integer argument: '{mapping}': Value too large for defined data type"
+                            ),
+                            ControlCharMappingError::MultipleChars => {
+                                format!("invalid integer argument: '{mapping}'")
+                            }
+                        };
+                        USimpleError::new(1, message)
+                    })?;
+                    valid_args.push(ArgOptions::Mapping((char_index, cc_mapping)));
+                } else {
+                    return Err(USimpleError::new(1, format!("missing argument to '{arg}'")));
+                }
+            // non control char flag
+            } else if let Some(flag) = string_to_flag(arg) {
+                let remove_group = match flag {
+                    AllFlags::Baud(_) => false,
+                    AllFlags::ControlFlags((flag, remove)) => check_flag_group(flag, remove),
+                    AllFlags::InputFlags((flag, remove)) => check_flag_group(flag, remove),
+                    AllFlags::LocalFlags((flag, remove)) => check_flag_group(flag, remove),
+                    AllFlags::OutputFlags((flag, remove)) => check_flag_group(flag, remove),
+                };
+                if remove_group {
+                    return Err(USimpleError::new(1, format!("invalid argument '{arg}'")));
+                }
+                valid_args.push(flag.into());
+            // not a valid control char or flag
+            } else {
+                return Err(USimpleError::new(1, format!("invalid argument '{arg}'")));
             }
         }
 
+        // TODO: Figure out the right error message for when tcgetattr fails
+        let mut termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
+
+        // iterate over valid_args, match on the arg type, do the matching apply function
+        for arg in &valid_args {
+            match arg {
+                ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
+                ArgOptions::Flags(flag) => apply_setting(&mut termios, flag),
+            }
+        }
         tcsetattr(
             opts.file.as_fd(),
             nix::sys::termios::SetArg::TCSANOW,
@@ -230,9 +286,15 @@ fn stty(opts: &Options) -> UResult<()> {
         )
         .expect("Could not write terminal attributes");
     } else {
+        // TODO: Figure out the right error message for when tcgetattr fails
+        let termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
         print_settings(&termios, opts).expect("TODO: make proper error here from nix error");
     }
     Ok(())
+}
+
+fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
+    remove && flag.group.is_some()
 }
 
 fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
@@ -283,6 +345,70 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
 
     println!();
     Ok(())
+}
+
+fn cc_to_index(option: &str) -> Option<SpecialCharacterIndices> {
+    for cc in CONTROL_CHARS {
+        if option == cc.0 {
+            return Some(cc.1);
+        }
+    }
+    None
+}
+
+// return Some(flag) if the input is a valid flag, None if not
+fn string_to_flag(option: &str) -> Option<AllFlags> {
+    // BSDs use a u32 for the baud rate, so any decimal number applies.
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    if let Ok(n) = option.parse::<u32>() {
+        return Some(AllFlags::Baud(n));
+    }
+
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    for (text, baud_rate) in BAUD_RATES {
+        if *text == option {
+            return Some(AllFlags::Baud(*baud_rate));
+        }
+    }
+
+    let remove = option.starts_with('-');
+    let name = option.trim_start_matches('-');
+
+    for cflag in CONTROL_FLAGS {
+        if name == cflag.name {
+            return Some(AllFlags::ControlFlags((cflag, remove)));
+        }
+    }
+    for iflag in INPUT_FLAGS {
+        if name == iflag.name {
+            return Some(AllFlags::InputFlags((iflag, remove)));
+        }
+    }
+    for lflag in LOCAL_FLAGS {
+        if name == lflag.name {
+            return Some(AllFlags::LocalFlags((lflag, remove)));
+        }
+    }
+    for oflag in OUTPUT_FLAGS {
+        if name == oflag.name {
+            return Some(AllFlags::OutputFlags((oflag, remove)));
+        }
+    }
+    None
 }
 
 fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
@@ -392,55 +518,25 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
 }
 
 /// Apply a single setting
-///
-/// The value inside the `Break` variant of the `ControlFlow` indicates whether
-/// the setting has been applied.
-fn apply_setting(termios: &mut Termios, s: &str) -> ControlFlow<bool> {
-    apply_baud_rate_flag(termios, s)?;
-
-    let (remove, name) = match s.strip_prefix('-') {
-        Some(s) => (true, s),
-        None => (false, s),
-    };
-    apply_flag(termios, CONTROL_FLAGS, name, remove)?;
-    apply_flag(termios, INPUT_FLAGS, name, remove)?;
-    apply_flag(termios, OUTPUT_FLAGS, name, remove)?;
-    apply_flag(termios, LOCAL_FLAGS, name, remove)?;
-    ControlFlow::Break(false)
-}
-
-/// Apply a flag to a slice of flags
-///
-/// The value inside the `Break` variant of the `ControlFlow` indicates whether
-/// the setting has been applied.
-fn apply_flag<T: TermiosFlag>(
-    termios: &mut Termios,
-    flags: &[Flag<T>],
-    input: &str,
-    remove: bool,
-) -> ControlFlow<bool> {
-    for Flag {
-        name, flag, group, ..
-    } in flags
-    {
-        if input == *name {
-            // Flags with groups cannot be removed
-            // Since the name matches, we can short circuit and don't have to check the other flags.
-            if remove && group.is_some() {
-                return ControlFlow::Break(false);
-            }
-            // If there is a group, the bits for that group should be cleared before applying the flag
-            if let Some(group) = group {
-                group.apply(termios, false);
-            }
-            flag.apply(termios, !remove);
-            return ControlFlow::Break(true);
+fn apply_setting(termios: &mut Termios, setting: &AllFlags) {
+    match setting {
+        AllFlags::Baud(_) => apply_baud_rate_flag(termios, setting),
+        AllFlags::ControlFlags((setting, disable)) => {
+            setting.flag.apply(termios, !disable);
+        }
+        AllFlags::InputFlags((setting, disable)) => {
+            setting.flag.apply(termios, !disable);
+        }
+        AllFlags::LocalFlags((setting, disable)) => {
+            setting.flag.apply(termios, !disable);
+        }
+        AllFlags::OutputFlags((setting, disable)) => {
+            setting.flag.apply(termios, !disable);
         }
     }
-    ControlFlow::Continue(())
 }
 
-fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool> {
+fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
     // BSDs use a u32 for the baud rate, so any decimal number applies.
     #[cfg(any(
         target_os = "freebsd",
@@ -450,9 +546,8 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    if let Ok(n) = input.parse::<u32>() {
-        cfsetospeed(termios, n).expect("Failed to set baud rate");
-        return ControlFlow::Break(true);
+    if let AllFlags::Baud(n) = input {
+        cfsetospeed(termios, *n).expect("Failed to set baud rate");
     }
 
     // Other platforms use an enum.
@@ -464,20 +559,67 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
-    for (text, baud_rate) in BAUD_RATES {
-        if *text == input {
-            cfsetospeed(termios, *baud_rate).expect("Failed to set baud rate");
-            return ControlFlow::Break(true);
+    if let AllFlags::Baud(br) = input {
+        cfsetospeed(termios, *br).expect("Failed to set baud rate");
+    }
+}
+
+fn apply_char_mapping(termios: &mut Termios, mapping: &(SpecialCharacterIndices, u8)) {
+    termios.control_chars[mapping.0 as usize] = mapping.1;
+}
+
+// GNU stty defines some valid values for the control character mappings
+// 1. Standard character, can be a a single char (ie 'C') or hat notation (ie '^C')
+// 2. Integer
+//      a. hexadecimal, prefixed by '0x'
+//      b. octal, prefixed by '0'
+//      c. decimal, no prefix
+// 3. Disabling the control character: '^-' or 'undef'
+//
+// This function returns the ascii value of valid control chars, or ControlCharMappingError if invalid
+fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
+    if s == "undef" || s == "^-" {
+        return Ok(0);
+    }
+
+    // try to parse integer (hex, octal, or decimal)
+    let ascii_num = if let Some(hex) = s.strip_prefix("0x") {
+        u32::from_str_radix(hex, 16).ok()
+    } else if let Some(octal) = s.strip_prefix("0") {
+        u32::from_str_radix(octal, 8).ok()
+    } else {
+        s.parse::<u32>().ok()
+    };
+
+    if let Some(val) = ascii_num {
+        if val > 255 {
+            return Err(ControlCharMappingError::IntOutOfRange);
+        } else {
+            return Ok(val as u8);
         }
     }
-    ControlFlow::Continue(())
+    // try to parse ^<char> or just <char>
+    let mut chars = s.chars();
+    match (chars.next(), chars.next()) {
+        (Some('^'), Some(c)) => {
+            // special case: ascii value of '^?' is greater than '?'
+            if c == '?' {
+                return Ok(ASCII_DEL);
+            }
+            // subtract by '@' to turn the char into the ascii value of '^<char>'
+            Ok((c.to_ascii_uppercase() as u8).wrapping_sub(b'@'))
+        }
+        (Some(c), None) => Ok(c as u8),
+        (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars),
+        _ => unreachable!("No arguments provided: must have been caught earlier"),
+    }
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
+        .override_usage(format_usage(&get_message("stty-usage")))
+        .about(get_message("stty-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ALL)
@@ -504,6 +646,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SETTINGS)
                 .action(ArgAction::Append)
+                .allow_hyphen_values(true)
                 .help("settings to change"),
         )
 }

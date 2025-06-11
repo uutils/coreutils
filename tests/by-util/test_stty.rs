@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar
 
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -63,4 +63,50 @@ fn save_and_all() {
         .stderr_contains(
             "the options for verbose and stty-readable output styles are mutually exclusive",
         );
+}
+
+#[test]
+fn no_mapping() {
+    new_ucmd!()
+        .args(&["intr"])
+        .fails()
+        .stderr_contains("missing argument to 'intr'");
+}
+
+#[test]
+fn invalid_mapping() {
+    new_ucmd!()
+        .args(&["intr", "cc"])
+        .fails()
+        .stderr_contains("invalid integer argument: 'cc'");
+
+    new_ucmd!()
+        .args(&["intr", "256"])
+        .fails()
+        .stderr_contains("invalid integer argument: '256': Value too large for defined data type");
+
+    new_ucmd!()
+        .args(&["intr", "0x100"])
+        .fails()
+        .stderr_contains(
+            "invalid integer argument: '0x100': Value too large for defined data type",
+        );
+
+    new_ucmd!()
+        .args(&["intr", "0400"])
+        .fails()
+        .stderr_contains("invalid integer argument: '0400': Value too large for defined data type");
+}
+
+#[test]
+fn invalid_setting() {
+    new_ucmd!()
+        .args(&["-econl"])
+        .fails()
+        .stderr_contains("invalid argument '-econl'");
+
+    new_ucmd!()
+        .args(&["igpar"])
+        .fails()
+        .stderr_contains("invalid argument 'igpar'");
 }

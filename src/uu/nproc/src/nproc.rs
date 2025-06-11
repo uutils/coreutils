@@ -6,10 +6,12 @@
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr sysconf
 
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::{env, thread};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::{get_message, get_message_with_args};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
@@ -23,20 +25,23 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
-const ABOUT: &str = help_about!("nproc.md");
-const USAGE: &str = help_usage!("nproc.md");
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     let ignore = match matches.get_one::<String>(OPT_IGNORE) {
-        Some(numstr) => match numstr.trim().parse() {
+        Some(numstr) => match numstr.trim().parse::<usize>() {
             Ok(num) => num,
             Err(e) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("{} is not a valid number: {e}", numstr.quote()),
+                    get_message_with_args(
+                        "nproc-error-invalid-number",
+                        HashMap::from([
+                            ("value".to_string(), numstr.quote().to_string()),
+                            ("error".to_string(), e.to_string()),
+                        ]),
+                    ),
                 ));
             }
         },
@@ -94,20 +99,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("nproc-about"))
+        .override_usage(format_usage(&get_message("nproc-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_ALL)
                 .long(OPT_ALL)
-                .help("print the number of cores available to the system")
+                .help(get_message("nproc-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_IGNORE)
                 .long(OPT_IGNORE)
                 .value_name("N")
-                .help("ignore up to N cores"),
+                .help(get_message("nproc-help-ignore")),
         )
 }
 

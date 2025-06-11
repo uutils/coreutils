@@ -60,11 +60,9 @@ use uucore::error::{FromIo, UResult};
 use uucore::error::{USimpleError, set_exit_code};
 #[cfg(target_os = "linux")]
 use uucore::show_if_err;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
-const ABOUT: &str = help_about!("dd.md");
-const AFTER_HELP: &str = help_section!("after help", "dd.md");
-const USAGE: &str = help_usage!("dd.md");
+use uucore::locale::get_message;
 const BUF_INIT_BYTE: u8 = 0xDD;
 
 /// Final settings after parsing
@@ -1427,9 +1425,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .about(get_message("dd-about"))
+        .override_usage(format_usage(&get_message("dd-usage")))
+        .after_help(get_message("dd-after-help"))
         .infer_long_args(true)
         .arg(Arg::new(options::OPERANDS).num_args(1..))
 }

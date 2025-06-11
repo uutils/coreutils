@@ -1345,6 +1345,7 @@ dependencies = [
 name = "uu_sort"
 version = "0.1.0"
 dependencies = [
+ "bigdecimal",
  "binary-heap-plus",
  "clap",
  "compare",
@@ -1378,6 +1379,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "libc",
+ "thiserror",
  "uucore",
 ]
 
@@ -1418,6 +1420,7 @@ dependencies = [
  "dunce",
  "fluent",
  "fluent-bundle",
+ "fluent-syntax",
  "glob",
  "hex",
  "itertools",

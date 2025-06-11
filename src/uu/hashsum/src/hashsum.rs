@@ -26,12 +26,11 @@ use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
 use uucore::error::{FromIo, UResult};
+use uucore::format_usage;
+use uucore::locale::get_message;
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
-use uucore::{format_usage, help_about, help_usage};
 
 const NAME: &str = "hashsum";
-const ABOUT: &str = help_about!("hashsum.md");
-const USAGE: &str = help_usage!("hashsum.md");
 
 struct Options {
     algoname: &'static str,
@@ -318,8 +317,8 @@ pub fn uu_app_common() -> Command {
     const TEXT_HELP: &str = "read in text mode (default)";
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("hashsum-about"))
+        .override_usage(format_usage(&get_message("hashsum-usage")))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(

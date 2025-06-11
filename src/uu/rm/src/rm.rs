@@ -18,9 +18,8 @@ use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{
-    format_usage, help_about, help_section, help_usage, os_str_as_bytes, prompt_yes, show_error,
-};
+use uucore::locale::get_message;
+use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
@@ -90,18 +89,14 @@ impl Default for Options {
     }
 }
 
-const ABOUT: &str = help_about!("rm.md");
-const USAGE: &str = help_usage!("rm.md");
-const AFTER_HELP: &str = help_section!("after help", "rm.md");
-
 static OPT_DIR: &str = "dir";
 static OPT_INTERACTIVE: &str = "interactive";
 static OPT_FORCE: &str = "force";
 static OPT_NO_PRESERVE_ROOT: &str = "no-preserve-root";
 static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
 static OPT_PRESERVE_ROOT: &str = "preserve-root";
-static OPT_PROMPT: &str = "prompt";
-static OPT_PROMPT_MORE: &str = "prompt-more";
+static OPT_PROMPT_ALWAYS: &str = "prompt-always";
+static OPT_PROMPT_ONCE: &str = "prompt-once";
 static OPT_RECURSIVE: &str = "recursive";
 static OPT_VERBOSE: &str = "verbose";
 static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
@@ -128,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // If -f(--force) is before any -i (or variants) we want prompts else no prompts
     let force_prompt_never = force_flag && {
         let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
-        ![OPT_PROMPT, OPT_PROMPT_MORE, OPT_INTERACTIVE]
+        ![OPT_PROMPT_ALWAYS, OPT_PROMPT_ONCE, OPT_INTERACTIVE]
             .iter()
             .any(|flag| {
                 matches.value_source(flag) == Some(ValueSource::CommandLine)
@@ -141,9 +136,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         interactive: {
             if force_prompt_never {
                 InteractiveMode::Never
-            } else if matches.get_flag(OPT_PROMPT) {
+            } else if matches.get_flag(OPT_PROMPT_ALWAYS) {
                 InteractiveMode::Always
-            } else if matches.get_flag(OPT_PROMPT_MORE) {
+            } else if matches.get_flag(OPT_PROMPT_ONCE) {
                 InteractiveMode::Once
             } else if matches.contains_id(OPT_INTERACTIVE) {
                 match matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str() {
@@ -202,9 +197,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .about(get_message("rm-about"))
+        .override_usage(format_usage(&get_message("rm-usage")))
+        .after_help(get_message("rm-after-help"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -215,18 +210,18 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_PROMPT)
+            Arg::new(OPT_PROMPT_ALWAYS)
                 .short('i')
                 .help("prompt before every removal")
-                .overrides_with_all([OPT_PROMPT_MORE, OPT_INTERACTIVE])
+                .overrides_with_all([OPT_PROMPT_ONCE, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_PROMPT_MORE)
+            Arg::new(OPT_PROMPT_ONCE)
                 .short('I')
                 .help("prompt once before removing more than three files, or when removing recursively. \
                 Less intrusive than -i, while still giving some protection against most mistakes")
-                .overrides_with_all([OPT_PROMPT, OPT_INTERACTIVE])
+                .overrides_with_all([OPT_PROMPT_ALWAYS, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -240,7 +235,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value("always")
-                .overrides_with_all([OPT_PROMPT, OPT_PROMPT_MORE]),
+                .overrides_with_all([OPT_PROMPT_ALWAYS, OPT_PROMPT_ONCE]),
         )
         .arg(
             Arg::new(OPT_ONE_FILE_SYSTEM)

@@ -9,10 +9,9 @@ use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::{format_usage, show};
 
-const ABOUT: &str = help_about!("tsort.md");
-const USAGE: &str = help_usage!("tsort.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const FILE: &str = "file";
@@ -21,18 +20,18 @@ mod options {
 #[derive(Debug, Error)]
 enum TsortError {
     /// The input file is actually a directory.
-    #[error("{0}: read error: Is a directory")]
+    #[error("{input}: {message}", input = .0, message = get_message("tsort-error-is-dir"))]
     IsDir(String),
 
     /// The number of tokens in the input data is odd.
     ///
     /// The list of edges must be even because each edge has two
     /// components: a source node and a target node.
-    #[error("{input}: input contains an odd number of tokens", input = .0.maybe_quote())]
+    #[error("{input}: {message}", input = .0.maybe_quote(), message = get_message("tsort-error-odd"))]
     NumTokensOdd(String),
 
     /// The graph contains a cycle.
-    #[error("{0}: input contains a loop:")]
+    #[error("{input}: {message}", input = .0, message = get_message("tsort-error-loop"))]
     Loop(String),
 
     /// A particular node in a cycle. (This is mainly used for printing.)
@@ -73,11 +72,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     g.run_tsort();
     Ok(())
 }
+
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("tsort-usage")))
+        .about(get_message("tsort-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
@@ -148,7 +148,7 @@ impl<'input> Graph<'input> {
 
     /// Implementation of algorithm T from TAOCP (Don. Knuth), vol. 1.
     fn run_tsort(&mut self) {
-        // First, we find a node that have no prerequisites (independent nodes)
+        // First, we find nodes that have no prerequisites (independent nodes).
         // If no such node exists, then there is a cycle.
         let mut independent_nodes_queue: VecDeque<&'input str> = self
             .nodes
@@ -178,7 +178,7 @@ impl<'input> Graph<'input> {
                     let successor_node = self.nodes.get_mut(successor_name).unwrap();
                     successor_node.predecessor_count -= 1;
                     if successor_node.predecessor_count == 0 {
-                        // if we find nodes without any other prerequisites, we add them to the queue.
+                        // If we find nodes without any other prerequisites, we add them to the queue.
                         independent_nodes_queue.push_back(successor_name);
                     }
                 }

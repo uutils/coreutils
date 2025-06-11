@@ -12,16 +12,15 @@ use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
 // spell-checker:ignore nopipe
 
 #[cfg(unix)]
 use uucore::signals::{enable_pipe_errors, ignore_interrupts};
 
-const ABOUT: &str = help_about!("tee.md");
-const USAGE: &str = help_usage!("tee.md");
-const AFTER_HELP: &str = help_section!("after help", "tee.md");
+use std::collections::HashMap;
+use uucore::locale::{get_message, get_message_with_args};
 
 mod options {
     pub const APPEND: &str = "append";
@@ -97,9 +96,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .about(get_message("tee-about"))
+        .override_usage(format_usage(&get_message("tee-usage")))
+        .after_help(get_message("tee-after-help"))
         .infer_long_args(true)
         // Since we use value-specific help texts for "--output-error", clap's "short help" and "long help" differ.
         // However, this is something that the GNU tests explicitly test for, so we *always* show the long help instead.
@@ -108,21 +107,21 @@ pub fn uu_app() -> Command {
             Arg::new("--help")
                 .short('h')
                 .long("help")
-                .help("Print help")
-                .action(ArgAction::HelpLong)
+                .help(get_message("tee-help-help"))
+                .action(ArgAction::HelpLong),
         )
         .arg(
             Arg::new(options::APPEND)
                 .long(options::APPEND)
                 .short('a')
-                .help("append to the given FILEs, do not overwrite")
+                .help(get_message("tee-help-append"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_INTERRUPTS)
                 .long(options::IGNORE_INTERRUPTS)
                 .short('i')
-                .help("ignore interrupt signals (ignored on non-Unix platforms)")
+                .help(get_message("tee-help-ignore-interrupts"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -133,7 +132,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::IGNORE_PIPE_ERRORS)
                 .short('p')
-                .help("set write error behavior (ignored on non-Unix platforms)")
+                .help(get_message("tee-help-ignore-pipe-errors"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -142,15 +141,14 @@ pub fn uu_app() -> Command {
                 .require_equals(true)
                 .num_args(0..=1)
                 .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("warn")
-                        .help("produce warnings for errors writing to any output"),
+                    PossibleValue::new("warn").help(get_message("tee-help-output-error-warn")),
                     PossibleValue::new("warn-nopipe")
-                        .help("produce warnings for errors that are not pipe errors (ignored on non-unix platforms)"),
-                    PossibleValue::new("exit").help("exit on write errors to any output"),
+                        .help(get_message("tee-help-output-error-warn-nopipe")),
+                    PossibleValue::new("exit").help(get_message("tee-help-output-error-exit")),
                     PossibleValue::new("exit-nopipe")
-                        .help("exit on write errors to any output that are not pipe errors (equivalent to exit on non-unix platforms)"),
+                        .help(get_message("tee-help-output-error-exit-nopipe")),
                 ]))
-                .help("set write error behavior")
+                .help(get_message("tee-help-output-error")),
         )
 }
 
@@ -177,7 +175,7 @@ fn tee(options: &Options) -> Result<()> {
     writers.insert(
         0,
         NamedWriter {
-            name: "'standard output'".to_owned(),
+            name: get_message("tee-standard-output"),
             inner: Box::new(stdout()),
         },
     );
@@ -375,7 +373,13 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                show_error!("stdin: {f}");
+                show_error!(
+                    "{}",
+                    get_message_with_args(
+                        "tee-error-stdin",
+                        HashMap::from([("error".to_string(), f.to_string())])
+                    )
+                );
                 Err(f)
             }
             okay => okay,

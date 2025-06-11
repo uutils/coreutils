@@ -6,6 +6,7 @@
 
 use crate::error::UError;
 use fluent::{FluentArgs, FluentBundle, FluentResource};
+use fluent_syntax::parser::ParserError;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -21,8 +22,14 @@ pub enum LocalizationError {
         source: std::io::Error,
         path: PathBuf,
     },
-    #[error("Parse error: {0}")]
-    Parse(String),
+    #[error("Parse-locale error: {0}")]
+    ParseLocale(String),
+    #[error("Resource parse error at '{snippet}': {error:?}")]
+    ParseResource {
+        #[source]
+        error: ParserError,
+        snippet: String,
+    },
     #[error("Bundle error: {0}")]
     Bundle(String),
     #[error("Locales directory not found: {0}")]
@@ -140,15 +147,30 @@ fn create_bundle(
         path: locale_path.clone(),
     })?;
 
-    let resource = FluentResource::try_new(ftl_file).map_err(|_| {
-        LocalizationError::Parse(format!(
-            "Failed to parse localization resource for {}: {}",
-            locale,
-            locale_path.display()
-        ))
-    })?;
+    let resource = FluentResource::try_new(ftl_file.clone()).map_err(
+        |(_partial_resource, mut errs): (FluentResource, Vec<ParserError>)| {
+            let first_err = errs.remove(0);
+            // Attempt to extract the snippet from the original ftl_file
+            let snippet = if let Some(range) = first_err.slice.clone() {
+                ftl_file.get(range).unwrap_or("").to_string()
+            } else {
+                String::new()
+            };
+            LocalizationError::ParseResource {
+                error: first_err,
+                snippet,
+            }
+        },
+    )?;
 
     let mut bundle = FluentBundle::new(vec![locale.clone()]);
+
+    // Disable Unicode directional isolate characters (U+2068, U+2069)
+    // By default, Fluent wraps variables for security
+    // and proper text rendering in mixed-script environments (Arabic + English).
+    // Disabling gives cleaner output: "Welcome, Alice!" but reduces protection
+    // against bidirectional text attacks. Safe for English-only applications.
+    bundle.set_use_isolating(false);
 
     bundle.add_resource(resource).map_err(|errs| {
         LocalizationError::Bundle(format!(
@@ -253,9 +275,9 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
         .next()
         .unwrap_or(DEFAULT_LOCALE)
         .to_string();
-
-    LanguageIdentifier::from_str(&locale_str)
-        .map_err(|_| LocalizationError::Parse(format!("Failed to parse locale: {}", locale_str)))
+    LanguageIdentifier::from_str(&locale_str).map_err(|_| {
+        LocalizationError::ParseLocale(format!("Failed to parse locale: {}", locale_str))
+    })
 }
 
 /// Sets up localization using the system locale with English fallback.
@@ -453,7 +475,7 @@ invalid-syntax = This is { $missing
 
     #[test]
     fn test_localization_error_uerror_impl() {
-        let error = LocalizationError::Parse("test error".to_string());
+        let error = LocalizationError::Bundle("some error".to_string());
         assert_eq!(error.code(), 1);
     }
 
@@ -492,10 +514,14 @@ invalid-syntax = This is { $missing
         let result = create_bundle(&locale, temp_dir.path());
         assert!(result.is_err());
 
-        if let Err(LocalizationError::Parse(_)) = result {
-            // Expected parse error
+        if let Err(LocalizationError::ParseResource {
+            error: _parser_err,
+            snippet: _,
+        }) = result
+        {
+            // Expected ParseResource variant
         } else {
-            panic!("Expected parse error");
+            panic!("Expected ParseResource error");
         }
     }
 
@@ -527,7 +553,7 @@ invalid-syntax = This is { $missing
         args.set("name", "Alice");
 
         let result = localizer.format("welcome", Some(&args));
-        assert_eq!(result, "Welcome, \u{2068}Alice\u{2069}!");
+        assert_eq!(result, "Welcome, Alice!");
     }
 
     #[test]
@@ -687,7 +713,7 @@ invalid-syntax = This is { $missing
             args.insert("name".to_string(), "Bob".to_string());
 
             let message = get_message_with_args("welcome", args);
-            assert_eq!(message, "Welcome, \u{2068}Bob\u{2069}!");
+            assert_eq!(message, "Welcome, Bob!");
         })
         .join()
         .unwrap();
@@ -705,18 +731,17 @@ invalid-syntax = This is { $missing
             let mut args1 = HashMap::new();
             args1.insert("count".to_string(), "1".to_string());
             let message1 = get_message_with_args("count-items", args1);
-            assert_eq!(message1, "You have \u{2068}\u{2068}1\u{2069} item\u{2069}");
+            assert_eq!(message1, "You have 1 item");
 
             // Test plural
             let mut args2 = HashMap::new();
             args2.insert("count".to_string(), "5".to_string());
             let message2 = get_message_with_args("count-items", args2);
-            assert_eq!(message2, "You have \u{2068}\u{2068}5\u{2069} items\u{2069}");
+            assert_eq!(message2, "You have 5 items");
         })
         .join()
         .unwrap();
     }
-
     #[test]
     fn test_detect_system_locale_from_lang_env() {
         // Save current LANG value
@@ -917,13 +942,13 @@ invalid-syntax = This is { $missing
             let mut args = HashMap::new();
             args.insert("name".to_string(), "田中".to_string());
             let welcome = get_message_with_args("welcome", args);
-            assert_eq!(welcome, "ようこそ、\u{2068}田中\u{2069}さん！");
+            assert_eq!(welcome, "ようこそ、田中さん！");
 
             // Test Japanese count (no pluralization)
             let mut count_args = HashMap::new();
             count_args.insert("count".to_string(), "5".to_string());
             let count_message = get_message_with_args("count-items", count_args);
-            assert_eq!(count_message, "\u{2068}5\u{2069}個のアイテムがあります");
+            assert_eq!(count_message, "5個のアイテムがあります");
         })
         .join()
         .unwrap();
@@ -946,37 +971,38 @@ invalid-syntax = This is { $missing
             let mut args = HashMap::new();
             args.insert("name".to_string(), "أحمد".to_string());
             let welcome = get_message_with_args("welcome", args);
-            assert_eq!(welcome, "أهلاً وسهلاً، \u{2068}أحمد\u{2069}！");
+
+            assert_eq!(welcome, "أهلاً وسهلاً، أحمد！");
 
             // Test Arabic pluralization (zero case)
             let mut args_zero = HashMap::new();
             args_zero.insert("count".to_string(), "0".to_string());
             let message_zero = get_message_with_args("count-items", args_zero);
-            assert_eq!(message_zero, "لديك \u{2068}لا عناصر\u{2069}");
+            assert_eq!(message_zero, "لديك لا عناصر");
 
             // Test Arabic pluralization (one case)
             let mut args_one = HashMap::new();
             args_one.insert("count".to_string(), "1".to_string());
             let message_one = get_message_with_args("count-items", args_one);
-            assert_eq!(message_one, "لديك \u{2068}عنصر واحد\u{2069}");
+            assert_eq!(message_one, "لديك عنصر واحد");
 
             // Test Arabic pluralization (two case)
             let mut args_two = HashMap::new();
             args_two.insert("count".to_string(), "2".to_string());
             let message_two = get_message_with_args("count-items", args_two);
-            assert_eq!(message_two, "لديك \u{2068}عنصران\u{2069}");
+            assert_eq!(message_two, "لديك عنصران");
 
             // Test Arabic pluralization (few case - 3-10)
             let mut args_few = HashMap::new();
             args_few.insert("count".to_string(), "5".to_string());
             let message_few = get_message_with_args("count-items", args_few);
-            assert_eq!(message_few, "لديك \u{2068}\u{2068}5\u{2069} عناصر\u{2069}");
+            assert_eq!(message_few, "لديك 5 عناصر");
 
             // Test Arabic pluralization (other case - 11+)
             let mut args_many = HashMap::new();
             args_many.insert("count".to_string(), "15".to_string());
             let message_many = get_message_with_args("count-items", args_many);
-            assert_eq!(message_many, "لديك \u{2068}\u{2068}15\u{2069} عنصر\u{2069}");
+            assert_eq!(message_many, "لديك 15 عنصر");
         })
         .join()
         .unwrap();
@@ -1002,23 +1028,23 @@ invalid-syntax = This is { $missing
         .join()
         .unwrap();
     }
-
     #[test]
-    fn test_unicode_directional_isolation() {
+    fn test_unicode_directional_isolation_disabled() {
         std::thread::spawn(|| {
             let temp_dir = create_test_locales_dir();
             let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
 
             init_localization(&locale, temp_dir.path()).unwrap();
 
-            // Test that Latin script names are properly isolated in RTL context
+            // Test that Latin script names are NOT isolated in RTL context
+            // since we disabled Unicode directional isolation
             let mut args = HashMap::new();
             args.insert("name".to_string(), "John Smith".to_string());
             let message = get_message_with_args("welcome", args);
 
-            // The Latin name should be wrapped in directional isolate characters
-            assert!(message.contains("\u{2068}John Smith\u{2069}"));
-            assert_eq!(message, "أهلاً وسهلاً، \u{2068}John Smith\u{2069}！");
+            // The Latin name should NOT be wrapped in directional isolate characters
+            assert!(!message.contains("\u{2068}John Smith\u{2069}"));
+            assert_eq!(message, "أهلاً وسهلاً، John Smith！");
         })
         .join()
         .unwrap();
@@ -1034,12 +1060,32 @@ invalid-syntax = This is { $missing
         assert!(error_string.contains("I/O error loading"));
         assert!(error_string.contains("/test/path.ftl"));
 
-        let parse_error = LocalizationError::Parse("Syntax error".to_string());
-        let parse_string = format!("{}", parse_error);
-        assert!(parse_string.contains("Parse error: Syntax error"));
-
         let bundle_error = LocalizationError::Bundle("Bundle creation failed".to_string());
         let bundle_string = format!("{}", bundle_error);
         assert!(bundle_string.contains("Bundle error: Bundle creation failed"));
+    }
+
+    #[test]
+    fn test_parse_resource_error_includes_snippet() {
+        let temp_dir = create_test_locales_dir();
+        let locale = LanguageIdentifier::from_str("es-ES").unwrap();
+
+        let result = create_bundle(&locale, temp_dir.path());
+        assert!(result.is_err());
+
+        if let Err(LocalizationError::ParseResource {
+            error: _err,
+            snippet,
+        }) = result
+        {
+            // The snippet should contain exactly the invalid text from es-ES.ftl
+            assert!(
+                snippet.contains("This is { $missing"),
+                "snippet was `{}` but did not include the invalid text",
+                snippet
+            );
+        } else {
+            panic!("Expected LocalizationError::ParseResource with snippet");
+        }
     }
 }

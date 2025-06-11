@@ -10,26 +10,25 @@ use uucore::{
     display::Quotable,
     entries::{Locate, Passwd, get_groups_gnu, gid2grp},
     error::{UError, UResult},
-    format_usage, help_about, help_usage, show,
+    format_usage, show,
 };
 
 use clap::{Arg, ArgAction, Command};
+use uucore::locale::get_message;
 
 mod options {
     pub const USERS: &str = "USERNAME";
 }
-const ABOUT: &str = help_about!("groups.md");
-const USAGE: &str = help_usage!("groups.md");
 
 #[derive(Debug, Error)]
 enum GroupsError {
-    #[error("failed to fetch groups")]
+    #[error("{message}", message = get_message("groups-error-fetch"))]
     GetGroupsFailed,
 
-    #[error("cannot find name for group ID {0}")]
+    #[error("{message} {gid}", message = get_message("groups-error-notfound"), gid = .0)]
     GroupNotFound(u32),
 
-    #[error("{user}: no such user", user = .0.quote())]
+    #[error("{user}: {message}", user = .0.quote(), message = get_message("groups-error-user"))]
     UserNotFound(String),
 }
 
@@ -82,8 +81,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("groups-about"))
+        .override_usage(format_usage(&get_message("groups-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::USERS)

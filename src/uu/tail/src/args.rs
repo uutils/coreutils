@@ -9,6 +9,7 @@ use crate::paths::Input;
 use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use same_file::Handle;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
@@ -16,10 +17,9 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_usage, show_warning};
+use uucore::{format_usage, show_warning};
 
-const ABOUT: &str = help_about!("tail.md");
-const USAGE: &str = help_usage!("tail.md");
+use uucore::locale::{get_message, get_message_with_args};
 
 pub mod options {
     pub mod verbosity {
@@ -79,7 +79,10 @@ impl FilterMode {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("invalid number of bytes: '{e}'"),
+                        get_message_with_args(
+                            "tail-error-invalid-number-of-bytes",
+                            HashMap::from([("arg".to_string(), format!("'{}'", e))]),
+                        ),
                     ));
                 }
             }
@@ -89,10 +92,13 @@ impl FilterMode {
                     let delimiter = if zero_term { 0 } else { b'\n' };
                     Self::Lines(signum, delimiter)
                 }
-                Err(e) => {
+                Err(_) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("invalid number of lines: {e}"),
+                        get_message_with_args(
+                            "tail-error-invalid-number-of-lines",
+                            HashMap::from([("arg".to_string(), arg.quote().to_string())]),
+                        ),
                     ));
                 }
             }
@@ -229,7 +235,13 @@ impl Settings {
 
         if let Some(source) = matches.get_one::<String>(options::SLEEP_INT) {
             settings.sleep_sec = parse_time::from_str(source, false).map_err(|_| {
-                UUsageError::new(1, format!("invalid number of seconds: '{source}'"))
+                UUsageError::new(
+                    1,
+                    get_message_with_args(
+                        "tail-error-invalid-number-of-seconds",
+                        HashMap::from([("source".to_string(), source.clone())]),
+                    ),
+                )
             })?;
         }
 
@@ -239,9 +251,9 @@ impl Settings {
                 Err(_) => {
                     return Err(UUsageError::new(
                         1,
-                        format!(
-                            "invalid maximum number of unchanged stats between opens: {}",
-                            s.quote()
+                        get_message_with_args(
+                            "tail-error-invalid-max-unchanged-stats",
+                            HashMap::from([("value".to_string(), s.quote().to_string())]),
                         ),
                     ));
                 }
@@ -257,7 +269,10 @@ impl Settings {
                         // NOTE: tail only accepts an unsigned pid
                         return Err(USimpleError::new(
                             1,
-                            format!("invalid PID: {}", pid_str.quote()),
+                            get_message_with_args(
+                                "tail-error-invalid-pid",
+                                HashMap::from([("pid".to_string(), pid_str.quote().to_string())]),
+                            ),
                         ));
                     }
 
@@ -266,7 +281,13 @@ impl Settings {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("invalid PID: {}: {e}", pid_str.quote()),
+                        get_message_with_args(
+                            "tail-error-invalid-pid-with-error",
+                            HashMap::from([
+                                ("pid".to_string(), pid_str.quote().to_string()),
+                                ("error".to_string(), e.to_string()),
+                            ]),
+                        ),
                     ));
                 }
             }
@@ -301,17 +322,17 @@ impl Settings {
     pub fn check_warnings(&self) {
         if self.retry {
             if self.follow.is_none() {
-                show_warning!("--retry ignored; --retry is useful only when following");
+                show_warning!("{}", get_message("tail-warning-retry-ignored"));
             } else if self.follow == Some(FollowMode::Descriptor) {
-                show_warning!("--retry only effective for the initial open");
+                show_warning!("{}", get_message("tail-warning-retry-only-effective"));
             }
         }
 
         if self.pid != 0 {
             if self.follow.is_none() {
-                show_warning!("PID ignored; --pid=PID is useful only when following");
+                show_warning!("{}", get_message("tail-warning-pid-ignored"));
             } else if !platform::supports_pid_checks(self.pid) {
-                show_warning!("--pid=PID is not supported on this system");
+                show_warning!("{}", get_message("tail-warning-pid-not-supported"));
             }
         }
 
@@ -331,7 +352,10 @@ impl Settings {
                 });
 
             if !blocking_stdin && std::io::stdin().is_terminal() {
-                show_warning!("following standard input indefinitely is ineffective");
+                show_warning!(
+                    "{}",
+                    get_message("tail-warning-following-stdin-ineffective")
+                );
             }
         }
     }
@@ -369,19 +393,26 @@ pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Optio
             Err(USimpleError::new(
                 1,
                 match e {
-                    parse::ParseError::OutOfRange => format!(
-                        "invalid number: {}: Numerical result out of range",
-                        arg_str.quote()
+                    parse::ParseError::OutOfRange => get_message_with_args(
+                        "tail-error-invalid-number-out-of-range",
+                        HashMap::from([("arg".to_string(), arg_str.quote().to_string())]),
                     ),
-                    parse::ParseError::Overflow => format!("invalid number: {}", arg_str.quote()),
+                    parse::ParseError::Overflow => get_message_with_args(
+                        "tail-error-invalid-number-overflow",
+                        HashMap::from([("arg".to_string(), arg_str.quote().to_string())]),
+                    ),
                     // this ensures compatibility to GNU's error message (as tested in misc/tail)
-                    parse::ParseError::Context => format!(
-                        "option used in invalid context -- {}",
-                        arg_str.chars().nth(1).unwrap_or_default()
+                    parse::ParseError::Context => get_message_with_args(
+                        "tail-error-option-used-in-invalid-context",
+                        HashMap::from([(
+                            "option".to_string(),
+                            arg_str.chars().nth(1).unwrap_or_default().to_string(),
+                        )]),
                     ),
-                    parse::ParseError::InvalidEncoding => {
-                        format!("bad argument encoding: '{arg_str}'")
-                    }
+                    parse::ParseError::InvalidEncoding => get_message_with_args(
+                        "tail-error-bad-argument-encoding",
+                        HashMap::from([("arg".to_string(), arg_str.to_string())]),
+                    ),
                 },
             ))
         }
@@ -456,16 +487,16 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
 
 pub fn uu_app() -> Command {
     #[cfg(target_os = "linux")]
-    const POLLING_HELP: &str = "Disable 'inotify' support and use polling instead";
+    let polling_help = get_message("tail-help-polling-linux");
     #[cfg(all(unix, not(target_os = "linux")))]
-    const POLLING_HELP: &str = "Disable 'kqueue' support and use polling instead";
+    let polling_help = get_message("tail-help-polling-unix");
     #[cfg(target_os = "windows")]
-    const POLLING_HELP: &str = "Disable 'ReadDirectoryChanges' support and use polling instead";
+    let polling_help = get_message("tail-help-polling-windows");
 
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("tail-about"))
+        .override_usage(format_usage(&get_message("tail-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES)
@@ -473,7 +504,7 @@ pub fn uu_app() -> Command {
                 .long(options::BYTES)
                 .allow_hyphen_values(true)
                 .overrides_with_all([options::BYTES, options::LINES])
-                .help("Number of bytes to print"),
+                .help(get_message("tail-help-bytes")),
         )
         .arg(
             Arg::new(options::FOLLOW)
@@ -484,7 +515,7 @@ pub fn uu_app() -> Command {
                 .require_equals(true)
                 .value_parser(ShortcutValueParser::new(["descriptor", "name"]))
                 .overrides_with(options::FOLLOW)
-                .help("Print the file as it grows"),
+                .help(get_message("tail-help-follow")),
         )
         .arg(
             Arg::new(options::LINES)
@@ -492,13 +523,13 @@ pub fn uu_app() -> Command {
                 .long(options::LINES)
                 .allow_hyphen_values(true)
                 .overrides_with_all([options::BYTES, options::LINES])
-                .help("Number of lines to print"),
+                .help(get_message("tail-help-lines")),
         )
         .arg(
             Arg::new(options::PID)
                 .long(options::PID)
                 .value_name("PID")
-                .help("With -f, terminate after process ID, PID dies")
+                .help(get_message("tail-help-pid"))
                 .overrides_with(options::PID),
         )
         .arg(
@@ -507,7 +538,7 @@ pub fn uu_app() -> Command {
                 .long(options::verbosity::QUIET)
                 .visible_alias("silent")
                 .overrides_with_all([options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help("Never output headers giving file names")
+                .help(get_message("tail-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -515,32 +546,27 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .value_name("N")
                 .long(options::SLEEP_INT)
-                .help("Number of seconds to sleep between polling the file when running with -f"),
+                .help(get_message("tail-help-sleep-interval")),
         )
         .arg(
             Arg::new(options::MAX_UNCHANGED_STATS)
                 .value_name("N")
                 .long(options::MAX_UNCHANGED_STATS)
-                .help(
-                    "Reopen a FILE which has not changed size after N (default 5) iterations \
-                        to see if it has been unlinked or renamed (this is the usual case of rotated \
-                        log files); This option is meaningful only when polling \
-                        (i.e., with --use-polling) and when --follow=name",
-                ),
+                .help(get_message("tail-help-max-unchanged-stats")),
         )
         .arg(
             Arg::new(options::verbosity::VERBOSE)
                 .short('v')
                 .long(options::verbosity::VERBOSE)
                 .overrides_with_all([options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help("Always output headers giving file names")
+                .help(get_message("tail-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERM)
                 .short('z')
                 .long(options::ZERO_TERM)
-                .help("Line delimiter is NUL, not newline")
+                .help(get_message("tail-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -548,20 +574,20 @@ pub fn uu_app() -> Command {
                 .alias(options::DISABLE_INOTIFY_TERM) // NOTE: Used by GNU's test suite
                 .alias("dis") // NOTE: Used by GNU's test suite
                 .long(options::USE_POLLING)
-                .help(POLLING_HELP)
+                .help(polling_help)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RETRY)
                 .long(options::RETRY)
-                .help("Keep trying to open a file if it is inaccessible")
+                .help(get_message("tail-help-retry"))
                 .overrides_with(options::RETRY)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FOLLOW_RETRY)
                 .short('F')
-                .help("Same as --follow=name --retry")
+                .help(get_message("tail-help-follow-retry"))
                 .overrides_with(options::FOLLOW_RETRY)
                 .action(ArgAction::SetTrue),
         )
