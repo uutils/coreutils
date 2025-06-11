@@ -64,21 +64,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::BEFORE)
                 .short('b')
                 .long(options::BEFORE)
-                .help("attach the separator before instead of after")
+                .help(get_message("tac-help-before"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REGEX)
                 .short('r')
                 .long(options::REGEX)
-                .help("interpret the sequence as a regular expression")
+                .help(get_message("tac-help-regex"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SEPARATOR)
                 .short('s')
                 .long(options::SEPARATOR)
-                .help("use STRING as the separator instead of newline")
+                .help(get_message("tac-help-separator"))
                 .value_name("STRING"),
         )
         .arg(
