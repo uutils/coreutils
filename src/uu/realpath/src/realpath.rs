@@ -21,17 +21,17 @@ use uucore::{
     show_if_err,
 };
 
-static OPT_QUIET: &str = "quiet";
-static OPT_STRIP: &str = "strip";
-static OPT_ZERO: &str = "zero";
-static OPT_PHYSICAL: &str = "physical";
-static OPT_LOGICAL: &str = "logical";
+const OPT_QUIET: &str = "quiet";
+const OPT_STRIP: &str = "strip";
+const OPT_ZERO: &str = "zero";
+const OPT_PHYSICAL: &str = "physical";
+const OPT_LOGICAL: &str = "logical";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
 const OPT_RELATIVE_TO: &str = "relative-to";
 const OPT_RELATIVE_BASE: &str = "relative-base";
 
-static ARG_FILES: &str = "files";
+const ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
