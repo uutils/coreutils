@@ -4,8 +4,10 @@
 // file that was distributed with this source code.
 // spell-checker:ignore bytestream
 use super::*;
+use std::collections::HashMap;
 use std::io::{self, BufRead};
 use thiserror::Error;
+use uucore::locale::get_message_with_args;
 
 /// Wraps a `std::io::BufRead` buffered byte stream and decode it as UTF-8.
 pub struct BufReadDecoder<B: BufRead> {
@@ -20,11 +22,11 @@ pub enum BufReadDecoderError<'a> {
     ///
     /// In lossy decoding, each such error should be replaced with U+FFFD.
     /// (See `BufReadDecoder::next_lossy` and `BufReadDecoderError::lossy`.)
-    #[error("invalid byte sequence: {0:02x?}")]
+    #[error("{}", get_message_with_args("decoder-error-invalid-byte-sequence", HashMap::from([("bytes".to_string(), format!("{:02x?}", .0))])))]
     InvalidByteSequence(&'a [u8]),
 
     /// An I/O error from the underlying byte stream
-    #[error("underlying bytestream error: {0}")]
+    #[error("{}", get_message_with_args("decoder-error-io", HashMap::from([("error".to_string(), .0.to_string())])))]
     Io(#[source] io::Error),
 }
 
