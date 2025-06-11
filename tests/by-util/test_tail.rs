@@ -13,6 +13,8 @@
     clippy::cast_possible_truncation
 )]
 
+use nix::sys::signal::{Signal, kill};
+use nix::unistd::Pid;
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
@@ -679,7 +681,7 @@ fn test_follow_invalid_pid() {
         ));
 }
 
-// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset. // spell-checker:disable-line
+// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort') // spell-checker:disable-line
 // FIXME: FreeBSD: See issue https://github.com/uutils/coreutils/issues/4306
 //        Fails intermittently in the CI, but couldn't reproduce the failure locally.
 #[test]
@@ -734,7 +736,7 @@ fn test_follow_with_pid() {
         .stdout_only_fixture("foobar_follow_multiple_appended.expected");
 
     // kill the dummy process and give tail time to notice this
-    dummy.kill().unwrap();
+    kill(Pid::from_raw(i32::try_from(pid).unwrap()), Signal::SIGUSR1).unwrap();
     let _ = dummy.wait();
 
     child.delay(DEFAULT_SLEEP_INTERVAL_MILLIS);
