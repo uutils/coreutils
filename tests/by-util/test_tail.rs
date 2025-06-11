@@ -13,7 +13,9 @@
     clippy::cast_possible_truncation
 )]
 
+#[cfg(unix)]
 use nix::sys::signal::{Signal, kill};
+#[cfg(unix)]
 use nix::unistd::Pid;
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
@@ -696,12 +698,7 @@ fn test_follow_with_pid() {
 
     let (at, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(unix)]
     let dummy_cmd = "sh";
-
-    #[cfg(windows)]
-    let dummy_cmd = "cmd";
-
     let mut dummy = Command::new(dummy_cmd).spawn().unwrap();
     let pid = dummy.id();
 
