@@ -13,9 +13,19 @@
     clippy::cast_possible_truncation
 )]
 
-#[cfg(unix)]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))]
 use nix::sys::signal::{Signal, kill};
-#[cfg(unix)]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))]
 use nix::unistd::Pid;
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
