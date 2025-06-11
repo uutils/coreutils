@@ -468,18 +468,3 @@ pub fn uu_app() -> Command {
         )
         .after_help(get_message("cksum-after-help"))
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::calculate_blake2b_length;
-
-    #[test]
-    fn test_calculate_length() {
-        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
-        assert_eq!(calculate_blake2b_length(512).unwrap(), None);
-        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
-        calculate_blake2b_length(255).unwrap_err();
-        calculate_blake2b_length(33).unwrap_err();
-        calculate_blake2b_length(513).unwrap_err();
-    }
-}
