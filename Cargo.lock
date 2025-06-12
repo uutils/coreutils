@@ -1445,7 +1445,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.53.0",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -2766,7 +2766,7 @@ dependencies = [
  "thiserror 2.0.12",
  "uucore",
  "winapi-util",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
 ]
 
 [[package]]
@@ -2880,7 +2880,7 @@ dependencies = [
  "libc",
  "parse_datetime",
  "uucore",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
 ]
 
 [[package]]
@@ -2941,7 +2941,7 @@ dependencies = [
  "glob",
  "thiserror 2.0.12",
  "uucore",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
 ]
 
 [[package]]
@@ -3084,7 +3084,7 @@ dependencies = [
  "dns-lookup",
  "hostname",
  "uucore",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
 ]
 
 [[package]]
@@ -3232,7 +3232,7 @@ dependencies = [
  "libc",
  "thiserror 2.0.12",
  "uucore",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
 ]
 
 [[package]]
@@ -3386,7 +3386,7 @@ dependencies = [
  "clap",
  "libc",
  "uucore",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
 ]
 
 [[package]]
@@ -3533,7 +3533,7 @@ dependencies = [
  "libc",
  "nix",
  "uucore",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
 ]
 
 [[package]]
@@ -3560,7 +3560,7 @@ dependencies = [
  "same-file",
  "uucore",
  "winapi-util",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
 ]
 
 [[package]]
@@ -3602,7 +3602,7 @@ dependencies = [
  "parse_datetime",
  "thiserror 2.0.12",
  "uucore",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
 ]
 
 [[package]]
@@ -3739,7 +3739,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "uucore",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
 ]
 
 [[package]]
@@ -3795,7 +3795,7 @@ dependencies = [
  "walkdir",
  "wild",
  "winapi-util",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.1",
  "xattr",
  "z85",
 ]
@@ -3996,7 +3996,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4092,6 +4092,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-sys"
+version = "0.60.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b36e9ed89376c545e20cbf5a13c306b49106b21b9d1d4f9cb9a1cb6b1e9ee06a"
+dependencies = [
+ "windows-targets 0.53.1",
+]
+
+[[package]]
 name = "windows-targets"
 version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4124,9 +4133,9 @@ dependencies = [
 
 [[package]]
 name = "windows-targets"
-version = "0.53.0"
+version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1e4c7e8ceaaf9cb7d7507c974735728ab453b67ef8f18febdd7c11fe59dca8b"
+checksum = "30357ec391cde730f8fbfcdc29adc47518b06504528df977ab5af02ef23fdee9"
 dependencies = [
  "windows_aarch64_gnullvm 0.53.0",
  "windows_aarch64_msvc 0.53.0",
