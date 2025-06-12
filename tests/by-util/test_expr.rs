@@ -508,6 +508,19 @@ fn test_substr() {
 }
 
 #[test]
+fn test_substr_precedence() {
+    new_ucmd!()
+        .args(&["substr", "ab cd", "3", "1", "!=", " "])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["substr", "ab cd", "2", "1", "!=", " "])
+        .succeeds()
+        .stdout_only("1\n");
+}
+
+#[test]
 fn test_invalid_substr() {
     new_ucmd!()
         .args(&["substr", "abc", "0", "1"])

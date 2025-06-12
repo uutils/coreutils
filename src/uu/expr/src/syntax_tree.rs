@@ -685,9 +685,9 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
                 }
             }
             "substr" => {
-                let string = self.parse_expression()?;
-                let pos = self.parse_expression()?;
-                let length = self.parse_expression()?;
+                let string = self.parse_simple_expression()?;
+                let pos = self.parse_simple_expression()?;
+                let length = self.parse_simple_expression()?;
                 AstNodeInner::Substr {
                     string: Box::new(string),
                     pos: Box::new(pos),
