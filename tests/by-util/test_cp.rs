@@ -6256,6 +6256,7 @@ fn test_cp_from_stream() {
     let test_string2 = "shorter";
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
+    at.touch(target);
 
     let mut ucmd = scenario.ucmd();
     ucmd.arg("/dev/fd/0")
