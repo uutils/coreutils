@@ -26,6 +26,7 @@ use uucore::utmpx::*;
 pub mod options {
     pub static SINCE: &str = "since";
     pub static PATH: &str = "path";
+    pub static PRETTY: &str = "pretty";
 }
 
 #[derive(Debug, Error)]
@@ -56,6 +57,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if matches.get_flag(options::SINCE) {
         uptime_since()
+    } else if matches.get_flag(options::PRETTY) {
+        pretty_print_uptime(None)
     } else if let Some(path) = file_path {
         uptime_with_file(path)
     } else {
@@ -79,6 +82,13 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SINCE)
                 .help("system up since")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::PRETTY)
+                .short('p')
+                .long(options::PRETTY)
+                .help("show uptime in pretty format")
                 .action(ArgAction::SetTrue),
         );
     #[cfg(unix)]
@@ -167,9 +177,9 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
     #[cfg(target_os = "openbsd")]
     {
-        let upsecs = get_uptime(None);
-        if upsecs >= 0 {
-            print_uptime(Some(upsecs))?;
+        let uptime = get_uptime(None);
+        if uptime.is_ok() >= 0 {
+            print_uptime(uptime.unwrap())?;
         } else {
             show_error!("couldn't get boot time");
             set_exit_code(1);
@@ -198,8 +208,9 @@ fn uptime_since() -> UResult<()> {
     #[cfg(target_os = "windows")]
     let uptime = get_uptime(None)?;
 
+    // It is safe to cast Unix timestamps from u64->i64 at least for several trillion centuries.
     let initial_date = Local
-        .timestamp_opt(Utc::now().timestamp() - uptime, 0)
+        .timestamp_opt(Utc::now().timestamp() - uptime.as_secs() as i64, 0)
         .unwrap();
     println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
 
@@ -269,6 +280,17 @@ fn print_time() {
 }
 
 fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
-    print!("up  {},  ", get_formatted_uptime(boot_time)?);
+    print!(
+        "up  {},  ",
+        get_formatted_uptime(boot_time, OutputFormat::HumanReadable)?
+    );
+    Ok(())
+}
+
+fn pretty_print_uptime(boot_time: Option<time_t>) -> UResult<()> {
+    print!(
+        "up {}",
+        get_formatted_uptime(boot_time, OutputFormat::PrettyPrint)?
+    );
     Ok(())
 }
