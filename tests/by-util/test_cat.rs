@@ -714,6 +714,26 @@ fn test_u_ignored() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_write_fast_read_error() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create a file with content
+    at.write("foo", "content");
+
+    // Remove read permissions to cause a read error
+    let file_path = at.plus_as_string("foo");
+    let mut perms = std::fs::metadata(&file_path).unwrap().permissions();
+    perms.set_mode(0o000); // No permissions
+    std::fs::set_permissions(&file_path, perms).unwrap();
+
+    // Test that cat fails with permission denied
+    ucmd.arg("foo").fails().stderr_contains("Permission denied");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_appending_same_input_output() {
     let (at, mut ucmd) = at_and_ucmd!();
