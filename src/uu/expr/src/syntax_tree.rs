@@ -676,8 +676,8 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
         let first = self.next()?;
         let inner = match first {
             "match" => {
-                let left = self.parse_expression()?;
-                let right = self.parse_expression()?;
+                let left = self.parse_simple_expression()?;
+                let right = self.parse_simple_expression()?;
                 AstNodeInner::BinOp {
                     op_type: BinOp::String(StringOp::Match),
                     left: Box::new(left),
@@ -695,8 +695,8 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
                 }
             }
             "index" => {
-                let left = self.parse_expression()?;
-                let right = self.parse_expression()?;
+                let left = self.parse_simple_expression()?;
+                let right = self.parse_simple_expression()?;
                 AstNodeInner::BinOp {
                     op_type: BinOp::String(StringOp::Index),
                     left: Box::new(left),
@@ -704,7 +704,7 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
                 }
             }
             "length" => {
-                let string = self.parse_expression()?;
+                let string = self.parse_simple_expression()?;
                 AstNodeInner::Length {
                     string: Box::new(string),
                 }
