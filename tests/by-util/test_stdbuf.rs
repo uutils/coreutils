@@ -216,3 +216,130 @@ fn test_libstdbuf_preload() {
         "uutils echo should not show architecture mismatch"
     );
 }
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "openbsd")))]
+#[test]
+fn test_stdbuf_shell_scripts() {
+    // Note: This is an actual functional test of line buffering. It verifies that stdbuf modifies buffering
+    // behavior as expected by checking that output appears in the output file when new lines are added to the log
+    // file. This test will fail if libstdbuf is missing, broken, or not loaded, and thus provides real coverage
+    // of stdbuf's intended functionality.
+
+    // TODO: the test works with GNU coreutils utilities, but fails with uutils coreutils utilities
+    use std::fs::File;
+    use std::io::Write;
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a work directory for our test
+    let work_dir = "stdbuf_work_dir";
+    at.mkdir(work_dir);
+
+    // Paths for files in the work directory
+    let work_dir_path = at.plus(work_dir);
+    let log_file_path = work_dir_path.join("log_file");
+    let output_path = work_dir_path.join("stdbuf_output");
+
+    // Path to the coreutils binary we want to test
+    let coreutils_bin = &scene.bin_path;
+
+    // Ensure the log file exists before starting tail
+    File::create(&log_file_path).expect("Failed to touch log_file");
+
+    // Dynamically generate the shell command for the tail pipeline
+    let tail_cmd = format!(
+        "cd '{}' && tail -f log_file | '{}' stdbuf -oL cut -d ' ' -f 1",
+        work_dir_path.display(),
+        coreutils_bin.display()
+    );
+
+    // 1. Start the tail pipeline in the background, capturing its output
+    let mut tail_process = Command::new("sh")
+        .arg("-c")
+        .arg(&tail_cmd)
+        .stdout(File::create(&output_path).unwrap())
+        .spawn()
+        .expect("Failed to start tail pipeline");
+
+    // Give the tail script time to start up
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
+    // 2. Write the first line to the log file (simulating echo_script)
+    {
+        let mut log_file = File::create(&log_file_path).expect("Failed to create log_file");
+        writeln!(log_file, "A 1").expect("Failed to write to log_file");
+    }
+
+    // Verify the log file was created with expected content
+    let log_content = std::fs::read_to_string(&log_file_path).expect("Failed to read log file");
+    assert!(log_content.contains("A 1"), "Log file should contain 'A 1'");
+
+    // Give the tail process time to react
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Kill the process
+    tail_process.kill().expect("Failed to kill tail process");
+    tail_process
+        .wait()
+        .expect("Failed to wait for tail process");
+
+    // Read the captured output
+    let stdbuf_output = std::fs::read_to_string(&output_path).expect("Failed to read output file");
+
+    // If stdbuf is working correctly, we should see at least one "A" in the output
+    assert!(
+        stdbuf_output.contains('A'),
+        "stdbuf did not correctly line-buffer the output. Expected to see 'A' in the output"
+    );
+
+    // --- Test with a large buffer: output should NOT appear immediately ---
+
+    // Clean up output file and log file
+    std::fs::remove_file(&output_path).ok();
+    std::fs::remove_file(&log_file_path).ok();
+    File::create(&log_file_path).expect("Failed to touch log_file");
+
+    // Use a large buffer (1MB)
+    let tail_cmd_bigbuf = format!(
+        "cd '{}' && tail -f log_file | '{}' stdbuf -o1048576 cut -d ' ' -f 1",
+        work_dir_path.display(),
+        coreutils_bin.display()
+    );
+
+    let mut tail_process_bigbuf = Command::new("sh")
+        .arg("-c")
+        .arg(&tail_cmd_bigbuf)
+        .stdout(File::create(&output_path).unwrap())
+        .spawn()
+        .expect("Failed to start tail pipeline with big buffer");
+
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
+    // Write a line to the log file
+    {
+        let mut log_file = File::create(&log_file_path).expect("Failed to create log_file");
+        writeln!(log_file, "A 1").expect("Failed to write to log_file");
+    }
+
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
+    // Kill the process (since output would only be flushed on buffer full or process exit)
+    tail_process_bigbuf
+        .kill()
+        .expect("Failed to kill tail process with big buffer");
+    tail_process_bigbuf
+        .wait()
+        .expect("Failed to wait for tail process with big buffer");
+
+    // Read the captured output
+    let stdbuf_output_bigbuf =
+        std::fs::read_to_string(&output_path).expect("Failed to read output file (big buffer)");
+
+    // With a big buffer, we should NOT see 'A' in the output (unless the process is killed, which may flush)
+    assert!(
+        !stdbuf_output_bigbuf.contains('A'),
+        "stdbuf with a large buffer should not flush output immediately. Did not expect to see 'A' in the output"
+    );
+}
