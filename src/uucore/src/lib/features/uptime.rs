@@ -13,19 +13,21 @@
 // See https://github.com/uutils/coreutils/pull/7289 for discussion.
 
 use crate::error::{UError, UResult};
+use crate::locale::{get_message, get_message_with_args};
 use chrono::Local;
 use libc::time_t;
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum UptimeError {
-    #[error("could not retrieve system uptime")]
+    #[error("{}", get_message("uptime-lib-error-system-uptime"))]
     SystemUptime,
-    #[error("could not retrieve system load average")]
+    #[error("{}", get_message("uptime-lib-error-system-loadavg"))]
     SystemLoadavg,
-    #[error("Windows does not have an equivalent to the load average on Unix-like systems")]
+    #[error("{}", get_message("uptime-lib-error-windows-loadavg"))]
     WindowsLoadavg,
-    #[error("boot time larger than current time")]
+    #[error("{}", get_message("uptime-lib-error-boot-time"))]
     BootTime,
 }
 
@@ -174,11 +176,15 @@ pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
     let up_days = up_secs / 86400;
     let up_hours = (up_secs - (up_days * 86400)) / 3600;
     let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
-    match up_days.cmp(&1) {
-        std::cmp::Ordering::Equal => Ok(format!("{up_days:1} day, {up_hours:2}:{up_mins:02}")),
-        std::cmp::Ordering::Greater => Ok(format!("{up_days:1} days {up_hours:2}:{up_mins:02}")),
-        _ => Ok(format!("{up_hours:2}:{up_mins:02}")),
-    }
+
+    Ok(get_message_with_args(
+        "uptime-format",
+        HashMap::from([
+            ("days".to_string(), up_days.to_string()),
+            ("hours".to_string(), format!("{up_hours:2}")),
+            ("mins".to_string(), format!("{up_mins:02}")),
+        ]),
+    ))
 }
 
 /// Get the number of users currently logged in
@@ -305,11 +311,10 @@ pub fn get_nusers() -> usize {
 /// e.g. "0 users", "1 user", "2 users"
 #[inline]
 pub fn format_nusers(n: usize) -> String {
-    if n == 1 {
-        String::from("1 user")
-    } else {
-        format!("{n} users")
-    }
+    get_message_with_args(
+        "uptime-user-count",
+        HashMap::from([("count".to_string(), n.to_string())]),
+    )
 }
 
 /// Get the number of users currently logged in in a human-readable format
@@ -368,20 +373,139 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
 #[inline]
 pub fn get_formatted_loadavg() -> UResult<String> {
     let loadavg = get_loadavg()?;
-    Ok(format!(
-        "load average: {:.2}, {:.2}, {:.2}",
-        loadavg.0, loadavg.1, loadavg.2
+    Ok(get_message_with_args(
+        "uptime-lib-format-loadavg",
+        HashMap::from([
+            ("avg1".to_string(), format!("{:.2}", loadavg.0)),
+            ("avg5".to_string(), format!("{:.2}", loadavg.1)),
+            ("avg15".to_string(), format!("{:.2}", loadavg.2)),
+        ]),
     ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use crate::locale;
+    use regex::Regex;
     #[test]
     fn test_format_nusers() {
+        unsafe {
+            std::env::set_var("LANG", "en_US.UTF-8");
+        }
+        let _ = locale::setup_localization("uptime");
         assert_eq!("0 users", format_nusers(0));
         assert_eq!("1 user", format_nusers(1));
         assert_eq!("2 users", format_nusers(2));
+    }
+
+    #[test]
+    fn test_regex_with_new_format() {
+        use crate::locale::get_message_with_args;
+        use std::collections::HashMap;
+
+        // Force English locale and initialize localization
+        unsafe {
+            std::env::set_var("LANG", "en_US.UTF-8");
+        }
+        let _ = locale::setup_localization("uptime");
+
+        for test_days in [0, 1, 2] {
+            let output = get_message_with_args(
+                "uptime-format",
+                HashMap::from([
+                    ("days".to_string(), test_days.to_string()),
+                    ("hours".to_string(), " 0".to_string()),
+                    ("mins".to_string(), "05".to_string()),
+                ]),
+            );
+            println!("  {} days → '{}'", test_days, output);
+        }
+
+        // - Singular: "1 day, 2:05" (with comma)
+        // - Plural: "3 days 10:15" (without comma)
+        let regex =
+            Regex::new(r"up\s+(?:(\d+)\s+(?:day,\s+|days\s+))?(\d{1,2}):(\d{1,2})").unwrap();
+
+        let test_scenarios = [
+            ("0 days, 0 hours, 5 minutes", 0, 0, 5), // [0] case: should show no days
+            ("0 days, 2 hours, 30 minutes", 0, 2, 30), // [0] case: should show no days
+            ("1 day, 5 hours, 45 minutes", 1, 5, 45), // [one] case: singular
+            ("3 days, 10 hours, 15 minutes", 3, 10, 15), // [other] case: plural
+        ];
+
+        for (description, days, hours, mins) in test_scenarios {
+            let formatted_uptime = get_message_with_args(
+                "uptime-format",
+                HashMap::from([
+                    ("days".to_string(), days.to_string()),
+                    ("hours".to_string(), format!("{hours:2}")),
+                    ("mins".to_string(), format!("{mins:02}")),
+                ]),
+            );
+
+            let full_uptime_line = format!(
+                "10:57:19  up {}, 1 user, load average: 1.96, 1.02, 0.4",
+                formatted_uptime
+            );
+            println!("   Full line: '{}'", full_uptime_line);
+
+            let caps = regex.captures(&full_uptime_line).expect(&format!(
+                "Regex should match uptime line for {}: '{}'",
+                description, full_uptime_line
+            ));
+
+            let captured_days = caps.get(1);
+            let captured_hours = caps.get(2).unwrap().as_str().trim();
+            let captured_minutes = caps.get(3).unwrap().as_str();
+
+            println!(
+                "   Captured: days={:?}, hours='{}', minutes='{}'",
+                captured_days.map(|m| m.as_str()),
+                captured_hours,
+                captured_minutes
+            );
+
+            if days == 0 {
+                // For [0] case, days group should NOT be captured at all
+                assert!(
+                    captured_days.is_none(),
+                    "For {} with 0 days, regex should not capture days group. Full line: '{}', captured days: '{:?}'",
+                    description,
+                    full_uptime_line,
+                    captured_days.map(|m| m.as_str())
+                );
+            } else {
+                assert!(
+                    captured_days.is_some(),
+                    "For {} with {} days, regex should capture days group",
+                    description,
+                    days
+                );
+                assert_eq!(
+                    captured_days.unwrap().as_str(),
+                    days.to_string(),
+                    "For {}, captured days should match expected days",
+                    description
+                );
+            }
+
+            assert_eq!(
+                captured_hours,
+                hours.to_string(),
+                "For {}, captured hours should match expected hours",
+                description
+            );
+
+            let captured_mins_num: i64 = captured_minutes.parse().expect(&format!(
+                "Captured minutes '{}' should be a valid number",
+                captured_minutes
+            ));
+            assert_eq!(
+                captured_mins_num, mins,
+                "For {}, captured minutes as number should match expected minutes",
+                description
+            );
+        }
     }
 }
