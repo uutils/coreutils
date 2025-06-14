@@ -150,6 +150,15 @@ fn test_zero_terminated_syntax_2() {
 }
 
 #[test]
+fn test_non_terminated_input() {
+    new_ucmd!()
+        .args(&["-n", "-1"])
+        .pipe_in("x\ny")
+        .succeeds()
+        .stdout_is("x\n");
+}
+
+#[test]
 fn test_zero_terminated_negative_lines() {
     new_ucmd!()
         .args(&["-z", "-n", "-1"])
@@ -442,11 +451,18 @@ fn test_all_but_last_lines_large_file() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
     let seq_20000_file_name = "seq_20000";
+    let seq_20000_truncated_file_name = "seq_20000_truncated";
     let seq_1000_file_name = "seq_1000";
     scene
         .cmd("seq")
         .arg("20000")
         .set_stdout(fixtures.make_file(seq_20000_file_name))
+        .succeeds();
+    // Create a file the same as seq_20000 except for the final terminating endline.
+    scene
+        .ucmd()
+        .args(&["-c", "-1", seq_20000_file_name])
+        .set_stdout(fixtures.make_file(seq_20000_truncated_file_name))
         .succeeds();
     scene
         .cmd("seq")
@@ -459,7 +475,7 @@ fn test_all_but_last_lines_large_file() {
         .ucmd()
         .args(&["-n", "-19000", seq_20000_file_name])
         .succeeds()
-        .stdout_only_fixture("seq_1000");
+        .stdout_only_fixture(seq_1000_file_name);
 
     scene
         .ucmd()
@@ -470,6 +486,25 @@ fn test_all_but_last_lines_large_file() {
     scene
         .ucmd()
         .args(&["-n", "-20001", seq_20000_file_name])
+        .succeeds()
+        .stdout_only_fixture("emptyfile.txt");
+
+    // Confirm correct behavior when the input file doesn't end with a newline.
+    scene
+        .ucmd()
+        .args(&["-n", "-19000", seq_20000_truncated_file_name])
+        .succeeds()
+        .stdout_only_fixture(seq_1000_file_name);
+
+    scene
+        .ucmd()
+        .args(&["-n", "-20000", seq_20000_truncated_file_name])
+        .succeeds()
+        .stdout_only_fixture("emptyfile.txt");
+
+    scene
+        .ucmd()
+        .args(&["-n", "-20001", seq_20000_truncated_file_name])
         .succeeds()
         .stdout_only_fixture("emptyfile.txt");
 }
