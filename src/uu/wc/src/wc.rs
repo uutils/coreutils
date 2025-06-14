@@ -259,7 +259,9 @@ impl<'a> Input<'a> {
             Self::Path(path) => {
                 let path = path.as_os_str();
                 if path.to_string_lossy().contains('\n') {
-                    Some(Cow::Owned(quoting_style::escape_name(path, QS_ESCAPE)))
+                    Some(Cow::Owned(quoting_style::locale_aware_escape_name(
+                        path, QS_ESCAPE,
+                    )))
                 } else {
                     Some(Cow::Borrowed(path))
                 }
@@ -759,7 +761,7 @@ fn files0_iter_file<'a>(path: &Path) -> UResult<impl Iterator<Item = InputIterIt
                 "wc-error-cannot-open-for-reading",
                 HashMap::from([(
                     "path".to_string(),
-                    quoting_style::escape_name(path.as_os_str(), QS_QUOTE_ESCAPE)
+                    quoting_style::locale_aware_escape_name(path.as_os_str(), QS_QUOTE_ESCAPE)
                         .into_string()
                         .expect("All escaped names with the escaping option return valid strings."),
                 )]),
@@ -812,7 +814,7 @@ fn files0_iter<'a>(
 }
 
 fn escape_name_wrapper(name: &OsStr) -> String {
-    quoting_style::escape_name(name, QS_ESCAPE)
+    quoting_style::locale_aware_escape_name(name, QS_ESCAPE)
         .into_string()
         .expect("All escaped names with the escaping option return valid strings.")
 }
