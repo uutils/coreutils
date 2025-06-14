@@ -332,7 +332,7 @@ num-prime = "0.4.4"
 num-traits = "0.2.19"
 number_prefix = "0.4"
 onig = { version = "~6.5.1", default-features = false }
-parse_datetime = "0.9.0"
+parse_datetime = "0.10.0"
 phf = "0.11.2"
 phf_codegen = "0.11.2"
 platform-info = "2.0.3"
