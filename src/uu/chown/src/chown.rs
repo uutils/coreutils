@@ -277,7 +277,9 @@ mod test {
         assert!(format!("{}", parse_spec("0:", ':').err().unwrap()).starts_with("invalid spec: "));
     }
 
+    /// root user uid/gid unresolvable in some environments
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_parse_spec_named() {
         assert!(matches!(parse_spec("root:", ':'), Ok((Some(0), Some(0)))));
     }
