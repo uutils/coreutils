@@ -9,9 +9,14 @@ use std::char::from_digit;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 
-// These are characters with special meaning in the shell (e.g. bash).
-// The first const contains characters that only have a special meaning when they appear at the beginning of a name.
-const SPECIAL_SHELL_CHARS_START: &[u8] = b"~#";
+use crate::quoting_style::c_quoter::CQuoter;
+use crate::quoting_style::literal_quoter::LiteralQuoter;
+use crate::quoting_style::shell_quoter::{EscapedShellQuoter, NonEscapedShellQuoter};
+
+mod c_quoter;
+mod literal_quoter;
+mod shell_quoter;
+
 // PR#6559 : Remove `]{}` from special shell chars.
 const SPECIAL_SHELL_CHARS: &str = "`$&*()|[;\\'\"<>?! ";
 
@@ -45,6 +50,26 @@ pub enum QuotingStyle {
         /// Whether to show control and non-unicode characters, or replace them with `?`.
         show_control: bool,
     },
+}
+
+/// Common interface of quoting mechanisms.
+trait Quoter {
+    /// Push a valid character.
+    fn push_char(&mut self, input: char);
+
+    /// Push a sequence of valid characters.
+    fn push_str(&mut self, input: &str) {
+        for c in input.chars() {
+            self.push_char(c);
+        }
+    }
+
+    /// Push a continuous slice of invalid data wrt the encoding used to
+    /// decode the stream.
+    fn push_invalid(&mut self, input: &[u8]);
+
+    /// Apply post-processing on the constructed buffer and return it.
+    fn finalize(self: Box<Self>) -> Vec<u8>;
 }
 
 /// The type of quotes to use when escaping a name as a C string.
@@ -251,211 +276,48 @@ impl Iterator for EscapedChar {
     }
 }
 
-/// Check whether `bytes` starts with any byte in `pattern`.
-fn bytes_start_with(bytes: &[u8], pattern: &[u8]) -> bool {
-    !bytes.is_empty() && pattern.contains(&bytes[0])
-}
-
-fn shell_without_escape(name: &[u8], quotes: Quotes, show_control_chars: bool) -> (Vec<u8>, bool) {
-    let mut must_quote = false;
-    let mut escaped_str = Vec::with_capacity(name.len());
-    let mut utf8_buf = vec![0; 4];
-
-    for s in name.utf8_chunks() {
-        for c in s.valid().chars() {
-            let escaped = {
-                let ec = EscapedChar::new_shell(c, false, quotes);
-                if show_control_chars {
-                    ec
-                } else {
-                    ec.hide_control()
-                }
-            };
-
-            match escaped.state {
-                EscapeState::Backslash('\'') => escaped_str.extend_from_slice(b"'\\''"),
-                EscapeState::ForceQuote(x) => {
-                    must_quote = true;
-                    escaped_str.extend_from_slice(x.encode_utf8(&mut utf8_buf).as_bytes());
-                }
-                _ => {
-                    for c in escaped {
-                        escaped_str.extend_from_slice(c.encode_utf8(&mut utf8_buf).as_bytes());
-                    }
-                }
-            }
-        }
-
-        if show_control_chars {
-            escaped_str.extend_from_slice(s.invalid());
-        } else {
-            escaped_str.resize(escaped_str.len() + s.invalid().len(), b'?');
-        }
-    }
-
-    must_quote = must_quote || bytes_start_with(name, SPECIAL_SHELL_CHARS_START);
-    (escaped_str, must_quote)
-}
-
-fn shell_with_escape(name: &[u8], quotes: Quotes) -> (Vec<u8>, bool) {
-    // We need to keep track of whether we are in a dollar expression
-    // because e.g. \b\n is escaped as $'\b\n' and not like $'b'$'n'
-    let mut in_dollar = false;
-    let mut must_quote = false;
-    let mut escaped_str = String::with_capacity(name.len());
-
-    for s in name.utf8_chunks() {
-        for c in s.valid().chars() {
-            let escaped = EscapedChar::new_shell(c, true, quotes);
-            match escaped.state {
-                EscapeState::Char(x) => {
-                    if in_dollar {
-                        escaped_str.push_str("''");
-                        in_dollar = false;
-                    }
-                    escaped_str.push(x);
-                }
-                EscapeState::ForceQuote(x) => {
-                    if in_dollar {
-                        escaped_str.push_str("''");
-                        in_dollar = false;
-                    }
-                    must_quote = true;
-                    escaped_str.push(x);
-                }
-                // Single quotes are not put in dollar expressions, but are escaped
-                // if the string also contains double quotes. In that case, they must
-                // be handled separately.
-                EscapeState::Backslash('\'') => {
-                    must_quote = true;
-                    in_dollar = false;
-                    escaped_str.push_str("'\\''");
-                }
-                _ => {
-                    if !in_dollar {
-                        escaped_str.push_str("'$'");
-                        in_dollar = true;
-                    }
-                    must_quote = true;
-                    for char in escaped {
-                        escaped_str.push(char);
-                    }
-                }
-            }
-        }
-        if !s.invalid().is_empty() {
-            if !in_dollar {
-                escaped_str.push_str("'$'");
-                in_dollar = true;
-            }
-            must_quote = true;
-            let escaped_bytes: String = s
-                .invalid()
-                .iter()
-                .flat_map(|b| EscapedChar::new_octal(*b))
-                .collect();
-            escaped_str.push_str(&escaped_bytes);
-        }
-    }
-    must_quote = must_quote || bytes_start_with(name, SPECIAL_SHELL_CHARS_START);
-    (escaped_str.into(), must_quote)
-}
-
-/// Return a set of characters that implies quoting of the word in
-/// shell-quoting mode.
-fn shell_escaped_char_set(is_dirname: bool) -> &'static [u8] {
-    const ESCAPED_CHARS: &[u8] = b":\"`$\\^\n\t\r=";
-    // the ':' colon character only induce quoting in the
-    // context of ls displaying a directory name before listing its content.
-    // (e.g. with the recursive flag -R)
-    let start_index = if is_dirname { 0 } else { 1 };
-    &ESCAPED_CHARS[start_index..]
-}
-
 /// Escape a name according to the given quoting style.
 ///
 /// This inner function provides an additional flag `dirname` which
 /// is meant for ls' directory name display.
 fn escape_name_inner(name: &[u8], style: &QuotingStyle, dirname: bool) -> Vec<u8> {
-    match style {
-        QuotingStyle::Literal { show_control } => {
-            if *show_control {
-                name.to_owned()
-            } else {
-                name.utf8_chunks()
-                    .map(|s| {
-                        let valid: String = s
-                            .valid()
-                            .chars()
-                            .flat_map(|c| EscapedChar::new_literal(c).hide_control())
-                            .collect();
-                        let invalid = "?".repeat(s.invalid().len());
-                        valid + &invalid
-                    })
-                    .collect::<String>()
-                    .into()
-            }
-        }
-        QuotingStyle::C { quotes } => {
-            let escaped_str: String = name
-                .utf8_chunks()
-                .flat_map(|s| {
-                    let valid = s
-                        .valid()
-                        .chars()
-                        .flat_map(|c| EscapedChar::new_c(c, *quotes, dirname));
-                    let invalid = s.invalid().iter().flat_map(|b| EscapedChar::new_octal(*b));
-                    valid.chain(invalid)
-                })
-                .collect::<String>();
+    // Early handle Literal with show_control style
+    if let QuotingStyle::Literal { show_control: true } = style {
+        return name.to_owned();
+    }
 
-            match quotes {
-                Quotes::Single => format!("'{escaped_str}'"),
-                Quotes::Double => format!("\"{escaped_str}\""),
-                Quotes::None => escaped_str,
-            }
-            .into()
-        }
+    let mut quoter: Box<dyn Quoter> = match style {
+        QuotingStyle::Literal { .. } => Box::new(LiteralQuoter::new(name.len())),
+        QuotingStyle::C { quotes } => Box::new(CQuoter::new(*quotes, dirname, name.len())),
         QuotingStyle::Shell {
-            escape,
+            escape: true,
+            always_quote,
+            ..
+        } => Box::new(EscapedShellQuoter::new(
+            name,
+            *always_quote,
+            dirname,
+            name.len(),
+        )),
+        QuotingStyle::Shell {
+            escape: false,
             always_quote,
             show_control,
-        } => {
-            let (quotes, must_quote) = if name
-                .iter()
-                .any(|c| shell_escaped_char_set(dirname).contains(c))
-            {
-                (Quotes::Single, true)
-            } else if name.contains(&b'\'') {
-                (Quotes::Double, true)
-            } else if *always_quote || name.is_empty() {
-                (Quotes::Single, true)
-            } else {
-                (Quotes::Single, false)
-            };
+        } => Box::new(NonEscapedShellQuoter::new(
+            name,
+            *show_control,
+            *always_quote,
+            dirname,
+            name.len(),
+        )),
+    };
 
-            let (escaped_str, contains_quote_chars) = if *escape {
-                shell_with_escape(name, quotes)
-            } else {
-                shell_without_escape(name, quotes, *show_control)
-            };
-
-            if must_quote | contains_quote_chars && quotes != Quotes::None {
-                let mut quoted_str = Vec::<u8>::with_capacity(escaped_str.len() + 2);
-                let quote = if quotes == Quotes::Single {
-                    b'\''
-                } else {
-                    b'"'
-                };
-                quoted_str.push(quote);
-                quoted_str.extend(escaped_str);
-                quoted_str.push(quote);
-                quoted_str
-            } else {
-                escaped_str
-            }
-        }
+    for chunk in name.utf8_chunks() {
+        quoter.push_str(chunk.valid());
+        quoter.push_invalid(chunk.invalid());
     }
+
+    quoter.finalize()
 }
 
 /// Escape a filename with respect to the given style.
