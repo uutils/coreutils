@@ -222,7 +222,7 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     let group = args
         .next()
         .map(|g| {
-            if g.is_empty() {
+            if g.is_empty() && sep == ':' {
                 // argument ended with a colon, implicit group == user
                 implicit_group_is_user = true;
                 user
