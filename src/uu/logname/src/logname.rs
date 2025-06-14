@@ -32,7 +32,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match get_userlogin() {
         Some(userlogin) => println!("{userlogin}"),
-        None => show_error!("no login name"),
+        None => show_error!("{}", get_message("logname-error-no-login-name")),
     }
 
     Ok(())
