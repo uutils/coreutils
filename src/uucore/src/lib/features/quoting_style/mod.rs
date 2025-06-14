@@ -265,18 +265,18 @@ mod tests {
         }
     }
 
-    fn check_names_inner<T>(name: &[u8], map: &[(T, &str)]) -> Vec<Vec<u8>> {
+    fn check_names_inner<T>(encoding: UEncoding, name: &[u8], map: &[(T, &str)]) -> Vec<Vec<u8>> {
         map.iter()
-            .map(|(_, style)| escape_name_inner(name, &get_style(style), false, UEncoding::Utf8))
+            .map(|(_, style)| escape_name_inner(name, &get_style(style), false, encoding))
             .collect()
     }
 
-    fn check_names(name: &str, map: &[(&str, &str)]) {
+    fn check_names_encoding(encoding: UEncoding, name: &str, map: &[(&str, &str)]) {
         assert_eq!(
             map.iter()
                 .map(|(correct, _)| *correct)
                 .collect::<Vec<&str>>(),
-            check_names_inner(name.as_bytes(), map)
+            check_names_inner(encoding, name.as_bytes(), map)
                 .iter()
                 .map(|bytes| std::str::from_utf8(bytes)
                     .expect("valid str goes in, valid str comes out"))
@@ -284,18 +284,28 @@ mod tests {
         );
     }
 
-    fn check_names_raw(name: &[u8], map: &[(&[u8], &str)]) {
+    fn check_names_both(name: &str, map: &[(&str, &str)]) {
+        check_names_encoding(UEncoding::Utf8, name, map);
+        check_names_encoding(UEncoding::Ascii, name, map);
+    }
+
+    fn check_names_encoding_raw(encoding: UEncoding, name: &[u8], map: &[(&[u8], &str)]) {
         assert_eq!(
             map.iter()
                 .map(|(correct, _)| *correct)
                 .collect::<Vec<&[u8]>>(),
-            check_names_inner(name, map)
+            check_names_inner(encoding, name, map)
         );
+    }
+
+    fn check_names_raw_both(name: &[u8], map: &[(&[u8], &str)]) {
+        check_names_encoding_raw(UEncoding::Utf8, name, map);
+        check_names_encoding_raw(UEncoding::Ascii, name, map);
     }
 
     #[test]
     fn test_simple_names() {
-        check_names(
+        check_names_both(
             "one_two",
             &[
                 ("one_two", "literal"),
@@ -314,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_empty_string() {
-        check_names(
+        check_names_both(
             "",
             &[
                 ("", "literal"),
@@ -333,7 +343,7 @@ mod tests {
 
     #[test]
     fn test_spaces() {
-        check_names(
+        check_names_both(
             "one two",
             &[
                 ("one two", "literal"),
@@ -349,7 +359,7 @@ mod tests {
             ],
         );
 
-        check_names(
+        check_names_both(
             " one",
             &[
                 (" one", "literal"),
@@ -369,7 +379,7 @@ mod tests {
     #[test]
     fn test_quotes() {
         // One double quote
-        check_names(
+        check_names_both(
             "one\"two",
             &[
                 ("one\"two", "literal"),
@@ -386,7 +396,7 @@ mod tests {
         );
 
         // One single quote
-        check_names(
+        check_names_both(
             "one'two",
             &[
                 ("one'two", "literal"),
@@ -403,7 +413,7 @@ mod tests {
         );
 
         // One single quote and one double quote
-        check_names(
+        check_names_both(
             "one'two\"three",
             &[
                 ("one'two\"three", "literal"),
@@ -420,7 +430,7 @@ mod tests {
         );
 
         // Consecutive quotes
-        check_names(
+        check_names_both(
             "one''two\"\"three",
             &[
                 ("one''two\"\"three", "literal"),
@@ -440,7 +450,7 @@ mod tests {
     #[test]
     fn test_control_chars() {
         // A simple newline
-        check_names(
+        check_names_both(
             "one\ntwo",
             &[
                 ("one?two", "literal"),
@@ -457,7 +467,7 @@ mod tests {
         );
 
         // A control character followed by a special shell character
-        check_names(
+        check_names_both(
             "one\n&two",
             &[
                 ("one?&two", "literal"),
@@ -475,7 +485,7 @@ mod tests {
 
         // The first 16 ASCII control characters. NUL is also included, even though it is of
         // no importance for file names.
-        check_names(
+        check_names_both(
             "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F",
             &[
                 ("????????????????", "literal"),
@@ -513,7 +523,7 @@ mod tests {
         );
 
         // The last 16 ASCII control characters.
-        check_names(
+        check_names_both(
             "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
             &[
                 ("????????????????", "literal"),
@@ -551,7 +561,7 @@ mod tests {
         );
 
         // DEL
-        check_names(
+        check_names_both(
             "\x7F",
             &[
                 ("?", "literal"),
@@ -569,10 +579,9 @@ mod tests {
 
         // The first 16 Unicode control characters.
         let test_str = std::str::from_utf8(b"\xC2\x80\xC2\x81\xC2\x82\xC2\x83\xC2\x84\xC2\x85\xC2\x86\xC2\x87\xC2\x88\xC2\x89\xC2\x8A\xC2\x8B\xC2\x8C\xC2\x8D\xC2\x8E\xC2\x8F").unwrap();
-        check_names(
+        check_names_both(
             test_str,
             &[
-                ("????????????????", "literal"),
                 (test_str, "literal-show"),
                 (
                     "\\302\\200\\302\\201\\302\\202\\302\\203\\302\\204\\302\\205\\302\\206\\302\\207\\302\\210\\302\\211\\302\\212\\302\\213\\302\\214\\302\\215\\302\\216\\302\\217",
@@ -582,9 +591,7 @@ mod tests {
                     "\"\\302\\200\\302\\201\\302\\202\\302\\203\\302\\204\\302\\205\\302\\206\\302\\207\\302\\210\\302\\211\\302\\212\\302\\213\\302\\214\\302\\215\\302\\216\\302\\217\"",
                     "c",
                 ),
-                ("????????????????", "shell"),
                 (test_str, "shell-show"),
-                ("'????????????????'", "shell-always"),
                 (&format!("'{test_str}'"), "shell-always-show"),
                 (
                     "''$'\\302\\200\\302\\201\\302\\202\\302\\203\\302\\204\\302\\205\\302\\206\\302\\207\\302\\210\\302\\211\\302\\212\\302\\213\\302\\214\\302\\215\\302\\216\\302\\217'",
@@ -596,13 +603,31 @@ mod tests {
                 ),
             ],
         );
-
-        // The last 16 Unicode control characters.
-        let test_str = std::str::from_utf8(b"\xC2\x90\xC2\x91\xC2\x92\xC2\x93\xC2\x94\xC2\x95\xC2\x96\xC2\x97\xC2\x98\xC2\x99\xC2\x9A\xC2\x9B\xC2\x9C\xC2\x9D\xC2\x9E\xC2\x9F").unwrap();
-        check_names(
+        // Different expected output for UTF-8 and ASCII in these cases.
+        check_names_encoding(
+            UEncoding::Utf8,
             test_str,
             &[
                 ("????????????????", "literal"),
+                ("????????????????", "shell"),
+                ("'????????????????'", "shell-always"),
+            ],
+        );
+        check_names_encoding(
+            UEncoding::Ascii,
+            test_str,
+            &[
+                ("????????????????????????????????", "literal"),
+                ("????????????????????????????????", "shell"),
+                ("'????????????????????????????????'", "shell-always"),
+            ],
+        );
+
+        // The last 16 Unicode control characters.
+        let test_str = std::str::from_utf8(b"\xC2\x90\xC2\x91\xC2\x92\xC2\x93\xC2\x94\xC2\x95\xC2\x96\xC2\x97\xC2\x98\xC2\x99\xC2\x9A\xC2\x9B\xC2\x9C\xC2\x9D\xC2\x9E\xC2\x9F").unwrap();
+        check_names_both(
+            test_str,
+            &[
                 (test_str, "literal-show"),
                 (
                     "\\302\\220\\302\\221\\302\\222\\302\\223\\302\\224\\302\\225\\302\\226\\302\\227\\302\\230\\302\\231\\302\\232\\302\\233\\302\\234\\302\\235\\302\\236\\302\\237",
@@ -612,9 +637,7 @@ mod tests {
                     "\"\\302\\220\\302\\221\\302\\222\\302\\223\\302\\224\\302\\225\\302\\226\\302\\227\\302\\230\\302\\231\\302\\232\\302\\233\\302\\234\\302\\235\\302\\236\\302\\237\"",
                     "c",
                 ),
-                ("????????????????", "shell"),
                 (test_str, "shell-show"),
-                ("'????????????????'", "shell-always"),
                 (&format!("'{test_str}'"), "shell-always-show"),
                 (
                     "''$'\\302\\220\\302\\221\\302\\222\\302\\223\\302\\224\\302\\225\\302\\226\\302\\227\\302\\230\\302\\231\\302\\232\\302\\233\\302\\234\\302\\235\\302\\236\\302\\237'",
@@ -624,6 +647,25 @@ mod tests {
                     "''$'\\302\\220\\302\\221\\302\\222\\302\\223\\302\\224\\302\\225\\302\\226\\302\\227\\302\\230\\302\\231\\302\\232\\302\\233\\302\\234\\302\\235\\302\\236\\302\\237'",
                     "shell-escape-always",
                 ),
+            ],
+        );
+        // Different expected output for UTF-8 and ASCII in these cases.
+        check_names_encoding(
+            UEncoding::Utf8,
+            test_str,
+            &[
+                ("????????????????", "literal"),
+                ("????????????????", "shell"),
+                ("'????????????????'", "shell-always"),
+            ],
+        );
+        check_names_encoding(
+            UEncoding::Ascii,
+            test_str,
+            &[
+                ("????????????????????????????????", "literal"),
+                ("????????????????????????????????", "shell"),
+                ("'????????????????????????????????'", "shell-always"),
             ],
         );
     }
@@ -638,7 +680,7 @@ mod tests {
         let invalid = b'\xC0';
 
         // a single byte value invalid outside of additional context in UTF-8
-        check_names_raw(
+        check_names_raw_both(
             &[continuation],
             &[
                 (b"?", "literal"),
@@ -656,24 +698,45 @@ mod tests {
 
         // ...but the byte becomes valid with appropriate context
         // (this is just the § character in UTF-8, written as bytes)
-        check_names_raw(
-            &[first2byte, continuation],
+        let input = &[first2byte, continuation];
+        check_names_raw_both(
+            input,
+            &[
+                (b"\xC2\xA7", "literal-show"),
+                (b"\xC2\xA7", "shell-show"),
+                (b"'\xC2\xA7'", "shell-always-show"),
+            ],
+        );
+        // Different expected output for UTF-8 and ASCII in these cases.
+        check_names_encoding_raw(
+            UEncoding::Utf8,
+            input,
             &[
                 (b"\xC2\xA7", "literal"),
-                (b"\xC2\xA7", "literal-show"),
                 (b"\xC2\xA7", "escape"),
                 (b"\"\xC2\xA7\"", "c"),
                 (b"\xC2\xA7", "shell"),
-                (b"\xC2\xA7", "shell-show"),
                 (b"'\xC2\xA7'", "shell-always"),
-                (b"'\xC2\xA7'", "shell-always-show"),
                 (b"\xC2\xA7", "shell-escape"),
                 (b"'\xC2\xA7'", "shell-escape-always"),
             ],
         );
+        check_names_encoding_raw(
+            UEncoding::Ascii,
+            input,
+            &[
+                (b"??", "literal"),
+                (b"\\302\\247", "escape"),
+                (b"\"\\302\\247\"", "c"),
+                (b"??", "shell"),
+                (b"'??'", "shell-always"),
+                (b"''$'\\302\\247'", "shell-escape"),
+                (b"''$'\\302\\247'", "shell-escape-always"),
+            ],
+        );
 
         // mixed with valid characters
-        check_names_raw(
+        check_names_raw_both(
             &[continuation, ascii],
             &[
                 (b"?_", "literal"),
@@ -688,7 +751,7 @@ mod tests {
                 (b"''$'\\247''_'", "shell-escape-always"),
             ],
         );
-        check_names_raw(
+        check_names_raw_both(
             &[ascii, continuation],
             &[
                 (b"_?", "literal"),
@@ -703,7 +766,7 @@ mod tests {
                 (b"'_'$'\\247'", "shell-escape-always"),
             ],
         );
-        check_names_raw(
+        check_names_raw_both(
             &[ascii, continuation, ascii],
             &[
                 (b"_?_", "literal"),
@@ -718,7 +781,7 @@ mod tests {
                 (b"'_'$'\\247''_'", "shell-escape-always"),
             ],
         );
-        check_names_raw(
+        check_names_raw_both(
             &[continuation, ascii, continuation],
             &[
                 (b"?_?", "literal"),
@@ -735,7 +798,7 @@ mod tests {
         );
 
         // contiguous invalid bytes
-        check_names_raw(
+        check_names_raw_both(
             &[
                 ascii,
                 invalid,
@@ -789,7 +852,7 @@ mod tests {
         );
 
         // invalid multi-byte sequences that start valid
-        check_names_raw(
+        check_names_raw_both(
             &[first2byte, ascii],
             &[
                 (b"?_", "literal"),
@@ -804,11 +867,15 @@ mod tests {
                 (b"''$'\\302''_'", "shell-escape-always"),
             ],
         );
-        check_names_raw(
-            &[first2byte, first2byte, continuation],
+
+        let input = &[first2byte, first2byte, continuation];
+        check_names_raw_both(input, &[(b"\xC2\xC2\xA7", "literal-show")]);
+        // Different expected output for UTF-8 and ASCII in these cases.
+        check_names_encoding_raw(
+            UEncoding::Utf8,
+            input,
             &[
                 (b"?\xC2\xA7", "literal"),
-                (b"\xC2\xC2\xA7", "literal-show"),
                 (b"\\302\xC2\xA7", "escape"),
                 (b"\"\\302\xC2\xA7\"", "c"),
                 (b"?\xC2\xA7", "shell"),
@@ -819,7 +886,23 @@ mod tests {
                 (b"''$'\\302''\xC2\xA7'", "shell-escape-always"),
             ],
         );
-        check_names_raw(
+        check_names_encoding_raw(
+            UEncoding::Ascii,
+            input,
+            &[
+                (b"???", "literal"),
+                (b"\\302\\302\\247", "escape"),
+                (b"\"\\302\\302\\247\"", "c"),
+                (b"???", "shell"),
+                (b"\xC2\xC2\xA7", "shell-show"),
+                (b"'???'", "shell-always"),
+                (b"'\xC2\xC2\xA7'", "shell-always-show"),
+                (b"''$'\\302\\302\\247'", "shell-escape"),
+                (b"''$'\\302\\302\\247'", "shell-escape-always"),
+            ],
+        );
+
+        check_names_raw_both(
             &[first3byte, continuation, ascii],
             &[
                 (b"??_", "literal"),
@@ -834,7 +917,7 @@ mod tests {
                 (b"''$'\\340\\247''_'", "shell-escape-always"),
             ],
         );
-        check_names_raw(
+        check_names_raw_both(
             &[first4byte, continuation, continuation, ascii],
             &[
                 (b"???_", "literal"),
@@ -856,7 +939,7 @@ mod tests {
         // A question mark must force quotes in shell and shell-always, unless
         // it is in place of a control character (that case is already covered
         // in other tests)
-        check_names(
+        check_names_both(
             "one?two",
             &[
                 ("one?two", "literal"),
@@ -876,7 +959,7 @@ mod tests {
     #[test]
     fn test_backslash() {
         // Escaped in C-style, but not in Shell-style escaping
-        check_names(
+        check_names_both(
             "one\\two",
             &[
                 ("one\\two", "literal"),
@@ -893,32 +976,32 @@ mod tests {
 
     #[test]
     fn test_tilde_and_hash() {
-        check_names("~", &[("'~'", "shell"), ("'~'", "shell-escape")]);
-        check_names(
+        check_names_both("~", &[("'~'", "shell"), ("'~'", "shell-escape")]);
+        check_names_both(
             "~name",
             &[("'~name'", "shell"), ("'~name'", "shell-escape")],
         );
-        check_names(
+        check_names_both(
             "some~name",
             &[("some~name", "shell"), ("some~name", "shell-escape")],
         );
-        check_names("name~", &[("name~", "shell"), ("name~", "shell-escape")]);
+        check_names_both("name~", &[("name~", "shell"), ("name~", "shell-escape")]);
 
-        check_names("#", &[("'#'", "shell"), ("'#'", "shell-escape")]);
-        check_names(
+        check_names_both("#", &[("'#'", "shell"), ("'#'", "shell-escape")]);
+        check_names_both(
             "#name",
             &[("'#name'", "shell"), ("'#name'", "shell-escape")],
         );
-        check_names(
+        check_names_both(
             "some#name",
             &[("some#name", "shell"), ("some#name", "shell-escape")],
         );
-        check_names("name#", &[("name#", "shell"), ("name#", "shell-escape")]);
+        check_names_both("name#", &[("name#", "shell"), ("name#", "shell-escape")]);
     }
 
     #[test]
     fn test_special_chars_in_double_quotes() {
-        check_names(
+        check_names_both(
             "can'$t",
             &[
                 ("'can'\\''$t'", "shell"),
@@ -928,7 +1011,7 @@ mod tests {
             ],
         );
 
-        check_names(
+        check_names_both(
             "can'`t",
             &[
                 ("'can'\\''`t'", "shell"),
@@ -938,7 +1021,7 @@ mod tests {
             ],
         );
 
-        check_names(
+        check_names_both(
             "can'\\t",
             &[
                 ("'can'\\''\\t'", "shell"),
