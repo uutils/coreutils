@@ -174,13 +174,17 @@ fn test_chown_only_owner_colon() {
         .stderr_contains("retained as")
         .stderr_contains("warning: '.' should be ':'");
 
-    scene
+    let failure = scene
         .ucmd()
         .arg("root:")
         .arg("--verbose")
         .arg(file1)
-        .fails()
-        .stderr_contains("failed to change");
+        .fails();
+    // Depending on the environment, it may be a forbidden group (failed to change) or group not existing (invalid group)
+    assert!(
+        failure.stderr_str().contains("failed to change")
+            || failure.stderr_str().contains("invalid group")
+    );
 }
 
 #[test]
