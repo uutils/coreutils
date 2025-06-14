@@ -156,13 +156,17 @@ fn test_chown_only_owner_colon() {
             .succeeds()
             .stderr_contains("retained as");
     } else {
-        scene
+        let failure = scene
             .ucmd()
             .arg(format!("{user_name}:"))
             .arg("--verbose")
             .arg(file1)
-            .fails()
-            .stderr_contains("failed to change");
+            .fails();
+        // Depending on the environment, it may be a forbidden group (failed to change) or group not existing (invalid group)
+        assert!(
+            failure.stderr_str().contains("failed to change")
+                || failure.stderr_str().contains("invalid group")
+        );
     }
 
     scene
