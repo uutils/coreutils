@@ -372,7 +372,11 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
             let path = Path::new(&filename[..]);
 
             if path.is_dir() {
-                show_error!("{}: Is a directory", filename.maybe_quote());
+                show_error!(
+                    "{}: {}",
+                    filename.maybe_quote(),
+                    get_message("cut-error-is-directory")
+                );
                 set_exit_code(1);
                 continue;
             }
@@ -392,7 +396,10 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
         }
     }
 
-    show_if_err!(out.flush().map_err_context(|| "write error".into()));
+    show_if_err!(
+        out.flush()
+            .map_err_context(|| get_message("cut-error-write-error"))
+    );
 }
 
 // Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
@@ -404,7 +411,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
         Some(_) if whitespace_delimited => {
             return Err(USimpleError::new(
                 1,
-                "invalid input: Only one of --delimiter (-d) or -w option can be specified",
+                get_message("cut-error-delimiter-and-whitespace-conflict"),
             ));
         }
         Some(os_string) => {
@@ -420,7 +427,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
                 {
                     return Err(USimpleError::new(
                         1,
-                        "the delimiter must be a single character",
+                        get_message("cut-error-delimiter-must-be-single-character"),
                     ));
                 } else {
                     Delimiter::from(os_string)
@@ -502,39 +509,50 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         matches.get_one::<String>(options::CHARACTERS),
         matches.get_one::<String>(options::FIELDS),
     ) {
-        (1, Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
-            Mode::Bytes(
-                ranges,
-                Options {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: None,
-                },
-            )
-        }),
-        (1, None, Some(char_ranges), None) => list_to_ranges(char_ranges, complement).map(|ranges| {
-            Mode::Characters(
-                ranges,
-                Options {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: None,
-                },
-            )
-        }),
-        (1, None, None, Some(field_ranges)) => list_to_ranges(field_ranges, complement).map(|ranges| {
-            Mode::Fields(
-                ranges,
-                Options {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: Some(FieldOptions { delimiter, only_delimited })},
-            )
-        }),
-        (2.., _, _, _) => Err(
-            "invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)".into()
-        ),
-        _ => Err("invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)".into()),
+        (1, Some(byte_ranges), None, None) => {
+            list_to_ranges(byte_ranges, complement).map(|ranges| {
+                Mode::Bytes(
+                    ranges,
+                    Options {
+                        out_delimiter,
+                        line_ending,
+                        field_opts: None,
+                    },
+                )
+            })
+        }
+
+        (1, None, Some(char_ranges), None) => {
+            list_to_ranges(char_ranges, complement).map(|ranges| {
+                Mode::Characters(
+                    ranges,
+                    Options {
+                        out_delimiter,
+                        line_ending,
+                        field_opts: None,
+                    },
+                )
+            })
+        }
+
+        (1, None, None, Some(field_ranges)) => {
+            list_to_ranges(field_ranges, complement).map(|ranges| {
+                Mode::Fields(
+                    ranges,
+                    Options {
+                        out_delimiter,
+                        line_ending,
+                        field_opts: Some(FieldOptions {
+                            delimiter,
+                            only_delimited,
+                        }),
+                    },
+                )
+            })
+        }
+
+        (2.., _, _, _) => Err(get_message("cut-error-multiple-mode-args")),
+        _ => Err(get_message("cut-error-missing-mode-arg")),
     };
 
     let mode_parse = match mode_parse {
@@ -543,17 +561,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.contains_id(options::DELIMITER) =>
             {
-                Err("invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields".into())
+                Err(get_message("cut-error-delimiter-only-with-fields"))
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.get_flag(options::WHITESPACE_DELIMITED) =>
             {
-                Err("invalid input: The '-w' option only usable if printing a sequence of fields".into())
+                Err(get_message("cut-error-whitespace-only-with-fields"))
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.get_flag(options::ONLY_DELIMITED) =>
             {
-                Err("invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields".into())
+                Err(get_message("cut-error-only-delimited-only-with-fields"))
             }
             _ => Ok(mode),
         },
@@ -593,7 +611,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::BYTES)
                 .short('b')
                 .long(options::BYTES)
-                .help("filter byte columns from the input source")
+                .help(get_message("cut-help-bytes"))
                 .allow_hyphen_values(true)
                 .value_name("LIST")
                 .action(ArgAction::Append),
@@ -602,7 +620,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::CHARACTERS)
                 .short('c')
                 .long(options::CHARACTERS)
-                .help("alias for character mode")
+                .help(get_message("cut-help-characters"))
                 .allow_hyphen_values(true)
                 .value_name("LIST")
                 .action(ArgAction::Append),
@@ -612,13 +630,13 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::DELIMITER)
                 .value_parser(ValueParser::os_string())
-                .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
+                .help(get_message("cut-help-delimiter"))
                 .value_name("DELIM"),
         )
         .arg(
             Arg::new(options::WHITESPACE_DELIMITED)
                 .short('w')
-                .help("Use any number of whitespace (Space, Tab) to separate fields in the input source (FreeBSD extension).")
+                .help(get_message("cut-help-whitespace-delimited"))
                 .value_name("WHITESPACE")
                 .action(ArgAction::SetTrue),
         )
@@ -626,7 +644,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FIELDS)
                 .short('f')
                 .long(options::FIELDS)
-                .help("filter field columns from the input source")
+                .help(get_message("cut-help-fields"))
                 .allow_hyphen_values(true)
                 .value_name("LIST")
                 .action(ArgAction::Append),
@@ -634,34 +652,34 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::COMPLEMENT)
                 .long(options::COMPLEMENT)
-                .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
+                .help(get_message("cut-help-complement"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ONLY_DELIMITED)
                 .short('s')
                 .long(options::ONLY_DELIMITED)
-                .help("in field mode, only print lines which contain the delimiter")
+                .help(get_message("cut-help-only-delimited"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help("instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
+                .help(get_message("cut-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OUTPUT_DELIMITER)
                 .long(options::OUTPUT_DELIMITER)
                 .value_parser(ValueParser::os_string())
-                .help("in field mode, replace the delimiter in output lines with this option's argument")
+                .help(get_message("cut-help-output-delimiter"))
                 .value_name("NEW_DELIM"),
         )
         .arg(
             Arg::new(options::FILE)
-            .hide(true)
-            .action(ArgAction::Append)
-            .value_hint(clap::ValueHint::FilePath)
+                .hide(true)
+                .action(ArgAction::Append)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
