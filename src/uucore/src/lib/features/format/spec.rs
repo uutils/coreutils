@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
-use crate::quoting_style::{QuotingStyle, escape_name};
+use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 
 use super::{
     ExtendedBigDecimal, FormatChar, FormatError, OctalParsing,
@@ -402,7 +402,7 @@ impl Spec {
                 writer.write_all(&parsed).map_err(FormatError::IoError)
             }
             Self::QuotedString { position } => {
-                let s = escape_name(
+                let s = locale_aware_escape_name(
                     args.next_string(position).as_ref(),
                     &QuotingStyle::Shell {
                         escape: true,
