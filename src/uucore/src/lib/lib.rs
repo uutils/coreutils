@@ -51,6 +51,8 @@ pub use crate::features::fast_inc;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
+// #[cfg(feature = "i18n")] TODO
+pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
 #[cfg(feature = "parser")]
