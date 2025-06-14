@@ -250,6 +250,23 @@ fn stty(opts: &Options) -> UResult<()> {
                 } else {
                     return Err(USimpleError::new(1, format!("missing argument to '{arg}'")));
                 }
+            // ispeed/ospeed baud rate setting
+            } else if *arg == "ispeed" || *arg == "ospeed" {
+                match args_iter.next() {
+                    Some(speed) => {
+                        if let Some(baud_flag) = string_to_baud(speed) {
+                            valid_args.push(ArgOptions::Flags(baud_flag));
+                        } else {
+                            return Err(USimpleError::new(1, format!("invalid {arg} '{speed}'")));
+                        }
+                    }
+                    None => {
+                        return Err(USimpleError::new(1, format!("missing argument to '{arg}'")));
+                    }
+                }
+            // baud rate setting
+            } else if let Some(baud_flag) = string_to_baud(arg) {
+                valid_args.push(ArgOptions::Flags(baud_flag));
             // non control char flag
             } else if let Some(flag) = string_to_flag(arg) {
                 let remove_group = match flag {
@@ -356,8 +373,7 @@ fn cc_to_index(option: &str) -> Option<SpecialCharacterIndices> {
     None
 }
 
-// return Some(flag) if the input is a valid flag, None if not
-fn string_to_flag(option: &str) -> Option<AllFlags> {
+fn string_to_baud(arg: &str) -> Option<AllFlags> {
     // BSDs use a u32 for the baud rate, so any decimal number applies.
     #[cfg(any(
         target_os = "freebsd",
@@ -367,7 +383,7 @@ fn string_to_flag(option: &str) -> Option<AllFlags> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    if let Ok(n) = option.parse::<u32>() {
+    if let Ok(n) = arg.parse::<u32>() {
         return Some(AllFlags::Baud(n));
     }
 
@@ -380,11 +396,15 @@ fn string_to_flag(option: &str) -> Option<AllFlags> {
         target_os = "openbsd"
     )))]
     for (text, baud_rate) in BAUD_RATES {
-        if *text == option {
+        if *text == arg {
             return Some(AllFlags::Baud(*baud_rate));
         }
     }
+    None
+}
 
+// return Some(flag) if the input is a valid flag, None if not
+fn string_to_flag(option: &str) -> Option<AllFlags> {
     let remove = option.starts_with('-');
     let name = option.trim_start_matches('-');
 
