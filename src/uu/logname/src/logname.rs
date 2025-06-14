@@ -10,14 +10,9 @@ use std::ffi::CStr;
 use uucore::locale::get_message;
 use uucore::{error::UResult, show_error};
 
-unsafe extern "C" {
-    // POSIX requires using getlogin (or equivalent code)
-    pub fn getlogin() -> *const libc::c_char;
-}
-
 fn get_userlogin() -> Option<String> {
     unsafe {
-        let login: *const libc::c_char = getlogin();
+        let login: *const libc::c_char = libc::getlogin();
         if login.is_null() {
             None
         } else {
