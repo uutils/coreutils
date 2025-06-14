@@ -8,6 +8,7 @@
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 
+use crate::i18n::{self, UEncoding};
 use crate::quoting_style::c_quoter::CQuoter;
 use crate::quoting_style::literal_quoter::LiteralQuoter;
 use crate::quoting_style::shell_quoter::{EscapedShellQuoter, NonEscapedShellQuoter};
@@ -89,7 +90,12 @@ pub enum Quotes {
 ///
 /// This inner function provides an additional flag `dirname` which
 /// is meant for ls' directory name display.
-fn escape_name_inner(name: &[u8], style: &QuotingStyle, dirname: bool) -> Vec<u8> {
+fn escape_name_inner(
+    name: &[u8],
+    style: &QuotingStyle,
+    dirname: bool,
+    encoding: UEncoding,
+) -> Vec<u8> {
     // Early handle Literal with show_control style
     if let QuotingStyle::Literal { show_control: true } = style {
         return name.to_owned();
@@ -121,28 +127,51 @@ fn escape_name_inner(name: &[u8], style: &QuotingStyle, dirname: bool) -> Vec<u8
         )),
     };
 
-    for chunk in name.utf8_chunks() {
-        quoter.push_str(chunk.valid());
-        quoter.push_invalid(chunk.invalid());
+    match encoding {
+        UEncoding::Ascii => {
+            for b in name {
+                if b.is_ascii() {
+                    quoter.push_char(*b as char);
+                } else {
+                    quoter.push_invalid(&[*b]);
+                }
+            }
+        }
+        UEncoding::Utf8 => {
+            for chunk in name.utf8_chunks() {
+                quoter.push_str(chunk.valid());
+                quoter.push_invalid(chunk.invalid());
+            }
+        }
     }
 
     quoter.finalize()
 }
 
 /// Escape a filename with respect to the given style.
-pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> OsString {
+pub fn escape_name(name: &OsStr, style: &QuotingStyle, encoding: UEncoding) -> OsString {
     let name = crate::os_str_as_bytes_lossy(name);
-    crate::os_string_from_vec(escape_name_inner(&name, style, false))
+    crate::os_string_from_vec(escape_name_inner(&name, style, false, encoding))
         .expect("all byte sequences should be valid for platform, or already replaced in name")
+}
+
+/// Retrieve the encoding from the locale and pass it to `escape_name`.
+pub fn locale_aware_escape_name(name: &OsStr, style: &QuotingStyle) -> OsString {
+    escape_name(name, style, i18n::get_locale_encoding())
 }
 
 /// Escape a directory name with respect to the given style.
 /// This is mainly meant to be used for ls' directory name printing and is not
 /// likely to be used elsewhere.
-pub fn escape_dir_name(dir_name: &OsStr, style: &QuotingStyle) -> OsString {
+pub fn escape_dir_name(dir_name: &OsStr, style: &QuotingStyle, encoding: UEncoding) -> OsString {
     let name = crate::os_str_as_bytes_lossy(dir_name);
-    crate::os_string_from_vec(escape_name_inner(&name, style, true))
+    crate::os_string_from_vec(escape_name_inner(&name, style, true, encoding))
         .expect("all byte sequences should be valid for platform, or already replaced in name")
+}
+
+/// Retrieve the encoding from the locale and pass it to `escape_dir_name`.
+pub fn locale_aware_escape_dir_name(name: &OsStr, style: &QuotingStyle) -> OsString {
+    escape_dir_name(name, style, i18n::get_locale_encoding())
 }
 
 impl fmt::Display for QuotingStyle {
@@ -183,7 +212,10 @@ impl fmt::Display for Quotes {
 
 #[cfg(test)]
 mod tests {
-    use crate::quoting_style::{Quotes, QuotingStyle, escape_name_inner};
+    use crate::{
+        i18n::UEncoding,
+        quoting_style::{Quotes, QuotingStyle, escape_name_inner},
+    };
 
     // spell-checker:ignore (tests/words) one\'two one'two
 
@@ -235,7 +267,7 @@ mod tests {
 
     fn check_names_inner<T>(name: &[u8], map: &[(T, &str)]) -> Vec<Vec<u8>> {
         map.iter()
-            .map(|(_, style)| escape_name_inner(name, &get_style(style), false))
+            .map(|(_, style)| escape_name_inner(name, &get_style(style), false, UEncoding::Utf8))
             .collect()
     }
 
