@@ -134,16 +134,14 @@ pub struct UnsignedInt {
 }
 
 impl Formatter<u64> for UnsignedInt {
-    fn fmt(&self, mut writer: impl Write, x: u64) -> std::io::Result<()> {
+    fn fmt(&self, writer: impl Write, x: u64) -> std::io::Result<()> {
         let mut s = match self.variant {
             UnsignedIntVariant::Decimal => format!("{x}"),
             UnsignedIntVariant::Octal(_) => format!("{x:o}"),
-            UnsignedIntVariant::Hexadecimal(Case::Lowercase, _) => {
-                format!("{x:x}")
-            }
-            UnsignedIntVariant::Hexadecimal(Case::Uppercase, _) => {
-                format!("{x:X}")
-            }
+            UnsignedIntVariant::Hexadecimal(case, _) => match case {
+                Case::Lowercase => format!("{x:x}"),
+                Case::Uppercase => format!("{x:X}"),
+            },
         };
 
         // Zeroes do not get a prefix. An octal value does also not get a
@@ -156,12 +154,7 @@ impl Formatter<u64> for UnsignedInt {
         };
 
         s = format!("{prefix}{s:0>width$}", width = self.precision);
-
-        match self.alignment {
-            NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
-            NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
-            NumberAlignment::RightZero => write!(writer, "{s:0>width$}", width = self.width),
-        }
+        write_output(writer, "".to_string(), s, self.width, self.alignment)
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
@@ -700,7 +693,14 @@ fn write_output(
             }
         }
         NumberAlignment::RightZero => {
-            write!(writer, "{sign_indicator}{s:0>remaining_width$}")
+            // Add the padding after "0x" for hexadecimals
+            let (prefix, rest) = if s.len() >= 2 && s[..2].eq_ignore_ascii_case("0x") {
+                (&s[..2], &s[2..])
+            } else {
+                ("", s.as_str())
+            };
+            let remaining_width = remaining_width.saturating_sub(prefix.len());
+            write!(writer, "{sign_indicator}{prefix}{rest:0>remaining_width$}")
         }
     }
 }
@@ -1271,18 +1271,7 @@ mod test {
         assert_eq!(f("%#09.e", &(-100.0).into()), "-001.e+02");
         assert_eq!(f("%# 9.E", &100.0.into()), "   1.E+02");
         assert_eq!(f("% 12.2A", &(-100.0).into()), "  -0XC.80P+3");
-    }
-
-    #[test]
-    #[ignore = "Need issue #7510 to be fixed"]
-    fn format_float_others_broken() {
-        // TODO: Merge this back into format_float_others.
-        let f = |fmt_str: &str, n: &ExtendedBigDecimal| {
-            let format = Format::<Float, &ExtendedBigDecimal>::parse(fmt_str).unwrap();
-            fmt(&format, n)
-        };
-
-        // #7510
         assert_eq!(f("%012.2a", &(-100.0).into()), "-0x00c.80p+3");
+        assert_eq!(f("%012.2A", &(-100.0).into()), "-0X00C.80P+3");
     }
 }
