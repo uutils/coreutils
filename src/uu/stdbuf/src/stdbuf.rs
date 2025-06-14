@@ -6,8 +6,6 @@
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use std::fs::File;
-use std::io::Write;
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process;
@@ -29,16 +27,19 @@ mod options {
     pub const COMMAND: &str = "command";
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "dragonfly"
+#[cfg(all(
+    not(feature = "feat_external_libstdbuf"),
+    any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    )
 ))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(not(feature = "feat_external_libstdbuf"), target_vendor = "apple"))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dylib"));
 
 enum BufferType {
@@ -137,7 +138,11 @@ fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_typ
     }
 }
 
+#[cfg(not(feature = "feat_external_libstdbuf"))]
 fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
+    use std::fs::File;
+    use std::io::Write;
+
     let (preload, extension) = preload_strings()?;
     let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
 
@@ -145,6 +150,29 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     file.write_all(STDBUF_INJECT)?;
 
     Ok((preload.to_owned(), inject_path))
+}
+
+#[cfg(feature = "feat_external_libstdbuf")]
+fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
+    let (preload, extension) = preload_strings()?;
+
+    // Use the directory provided at compile time via LIBSTDBUF_DIR environment variable
+    // This will fail to compile if LIBSTDBUF_DIR is not set, which is the desired behavior
+    const LIBSTDBUF_DIR: &str = env!("LIBSTDBUF_DIR");
+    let path_buf = PathBuf::from(LIBSTDBUF_DIR)
+        .join("libstdbuf")
+        .with_extension(extension);
+    if path_buf.exists() {
+        return Ok((preload.to_owned(), path_buf));
+    }
+
+    Err(USimpleError::new(
+        1,
+        format!(
+            "External libstdbuf not found at configured path: {}",
+            path_buf.display()
+        ),
+    ))
 }
 
 #[uucore::main]

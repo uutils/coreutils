@@ -29,6 +29,26 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/libstdbuf/src/libstdbuf.rs");
 
+    // Check for external stdbuf feature requirements
+    #[cfg(feature = "feat_external_libstdbuf")]
+    {
+        if env::var("LIBSTDBUF_DIR").is_err() {
+            eprintln!(
+                "\n\x1b[31mError:\x1b[0m The 'feat_external_libstdbuf' feature requires the LIBSTDBUF_DIR environment variable to be set."
+            );
+            eprintln!(
+                "\x1b[33mUsage:\x1b[0m LIBSTDBUF_DIR=/path/to/lib/directory cargo build --features feat_external_libstdbuf"
+            );
+            eprintln!(
+                "\x1b[33mExample:\x1b[0m LIBSTDBUF_DIR=/usr/lib cargo build --features feat_external_libstdbuf"
+            );
+            eprintln!(
+                "\nThis directory should point to where libstdbuf.so / libstdbuf.dylib will be installed on the target system."
+            );
+            std::process::exit(1);
+        }
+    }
+
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
 
