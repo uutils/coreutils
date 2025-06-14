@@ -204,18 +204,15 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     let mut args = spec.splitn(2, sep);
     let user = args.next().unwrap_or("");
     let mut implicit_group_is_user = false;
-    let group = args
-        .next()
-        .map(|g| {
-            if g.is_empty() {
-                // argument ended with a colon, implicit group == user
-                implicit_group_is_user = true;
-                user
-            } else {
-                g
-            }
-        })
-        .unwrap_or("");
+    let group = args.next().map_or("", |g| {
+        if g.is_empty() && sep == ':' {
+            // argument ended with a colon, implicit group == user
+            implicit_group_is_user = true;
+            user
+        } else {
+            g
+        }
+    });
 
     // dot separator: try as username first, fall back to owner.group (like GNU)
     if sep == ':' && !spec.contains(':') && spec.contains('.') {
