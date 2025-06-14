@@ -233,6 +233,8 @@ pub enum ChecksumError {
     CombineMultipleAlgorithms,
     #[error("Needs an algorithm to hash with.\nUse --help for more information.")]
     NeedAlgorithmToHash,
+    #[error("")]
+    Io(#[from] io::Error),
 }
 
 impl UError for ChecksumError {
