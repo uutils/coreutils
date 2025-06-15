@@ -8,13 +8,13 @@
 use clap::{Arg, ArgAction, Command};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
+use std::collections::HashMap;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
 use uucore::{format_usage, show};
-
-use uucore::locale::get_message;
 
 // When the -l option is selected, the program displays the type of signal related to a certain
 // value or string. In case of a value, the program should control the lower 8 bits, but there is
@@ -81,8 +81,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if pids.is_empty() {
                 Err(USimpleError::new(
                     1,
-                    "no process ID specified\n\
-                     Try --help for more information.",
+                    get_message("kill-error-no-process-id"),
                 ))
             } else {
                 kill(sig, &pids);
@@ -111,7 +110,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::LIST)
                 .short('l')
                 .long(options::LIST)
-                .help("Lists signals")
+                .help(get_message("kill-help-list"))
                 .conflicts_with(options::TABLE)
                 .action(ArgAction::SetTrue),
         )
@@ -120,7 +119,7 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .short_alias('L')
                 .long(options::TABLE)
-                .help("Lists table of signals")
+                .help(get_message("kill-help-table"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -129,7 +128,7 @@ pub fn uu_app() -> Command {
                 .short_alias('n') // For bash compatibility, like in GNU coreutils
                 .long(options::SIGNAL)
                 .value_name("signal")
-                .help("Sends given signal instead of SIGTERM")
+                .help(get_message("kill-help-signal"))
                 .conflicts_with_all([options::LIST, options::TABLE]),
         )
         .arg(
@@ -192,7 +191,13 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     }
     Err(USimpleError::new(
         1,
-        format!("{}: invalid signal", signal_name_or_value.quote()),
+        get_message_with_args(
+            "kill-error-invalid-signal",
+            HashMap::from([(
+                "signal".to_string(),
+                signal_name_or_value.quote().to_string(),
+            )]),
+        ),
     ))
 }
 
@@ -220,7 +225,10 @@ fn parse_signal_value(signal_name: &str) -> UResult<usize> {
         Some(x) => Ok(x),
         None => Err(USimpleError::new(
             1,
-            format!("{}: invalid signal", signal_name.quote()),
+            get_message_with_args(
+                "kill-error-invalid-signal",
+                HashMap::from([("signal".to_string(), signal_name.quote().to_string())]),
+            ),
         )),
     }
 }
@@ -229,7 +237,16 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
     pids.iter()
         .map(|x| {
             x.parse::<i32>().map_err(|e| {
-                USimpleError::new(1, format!("failed to parse argument {}: {e}", x.quote()))
+                USimpleError::new(
+                    1,
+                    get_message_with_args(
+                        "kill-error-parse-argument",
+                        HashMap::from([
+                            ("argument".to_string(), x.quote().to_string()),
+                            ("error".to_string(), e.to_string()),
+                        ]),
+                    ),
+                )
             })
         })
         .collect()
@@ -238,10 +255,12 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
 fn kill(sig: Option<Signal>, pids: &[i32]) {
     for &pid in pids {
         if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
-            show!(
-                Error::from_raw_os_error(e as i32)
-                    .map_err_context(|| format!("sending signal to {pid} failed"))
-            );
+            show!(Error::from_raw_os_error(e as i32).map_err_context(|| {
+                get_message_with_args(
+                    "kill-error-sending-signal",
+                    HashMap::from([("pid".to_string(), pid.to_string())]),
+                )
+            }));
         }
     }
 }

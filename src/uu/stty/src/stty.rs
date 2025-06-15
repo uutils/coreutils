@@ -646,6 +646,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SETTINGS)
                 .action(ArgAction::Append)
+                .allow_hyphen_values(true)
                 .help("settings to change"),
         )
 }

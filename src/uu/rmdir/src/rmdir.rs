@@ -7,6 +7,7 @@
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
 use std::io;
@@ -14,9 +15,9 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, set_exit_code, strip_errno};
 
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::{format_usage, show_error, util_name};
 
-use uucore::locale::get_message;
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
 static OPT_VERBOSE: &str = "verbose";
@@ -72,15 +73,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     let no_slash: &Path = OsStr::from_bytes(&bytes[..bytes.len() - 1]).as_ref();
                     if no_slash.is_symlink() && points_to_directory(no_slash).unwrap_or(true) {
                         show_error!(
-                            "failed to remove {}: Symbolic link not followed",
-                            path.quote()
+                            "{}",
+                            get_message_with_args(
+                                "rmdir-error-symbolic-link-not-followed",
+                                HashMap::from([("path".to_string(), path.quote().to_string())])
+                            )
                         );
                         continue;
                     }
                 }
             }
 
-            show_error!("failed to remove {}: {}", path.quote(), strip_errno(&error));
+            show_error!(
+                "{}",
+                get_message_with_args(
+                    "rmdir-error-failed-to-remove",
+                    HashMap::from([
+                        ("path".to_string(), path.quote().to_string()),
+                        ("err".to_string(), strip_errno(&error).to_string())
+                    ])
+                )
+            );
         }
     }
 
@@ -108,7 +121,16 @@ fn remove(mut path: &Path, opts: Opts) -> Result<(), Error<'_>> {
 
 fn remove_single(path: &Path, opts: Opts) -> Result<(), Error<'_>> {
     if opts.verbose {
-        println!("{}: removing directory, {}", util_name(), path.quote());
+        println!(
+            "{}",
+            get_message_with_args(
+                "rmdir-verbose-removing-directory",
+                HashMap::from([
+                    ("util_name".to_string(), util_name().to_string()),
+                    ("path".to_string(), path.quote().to_string())
+                ])
+            )
+        );
     }
     remove_dir(path).map_err(|error| Error { error, path })
 }
@@ -170,24 +192,21 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_IGNORE_FAIL_NON_EMPTY)
                 .long(OPT_IGNORE_FAIL_NON_EMPTY)
-                .help("ignore each failure that is solely because a directory is non-empty")
+                .help(get_message("rmdir-help-ignore-fail-non-empty"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PARENTS)
                 .short('p')
                 .long(OPT_PARENTS)
-                .help(
-                    "remove DIRECTORY and its ancestors; e.g.,
-                  'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a",
-                )
+                .help(get_message("rmdir-help-parents"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help("output a diagnostic for every directory processed")
+                .help(get_message("rmdir-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

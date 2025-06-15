@@ -508,6 +508,49 @@ fn test_substr() {
 }
 
 #[test]
+fn test_builtin_functions_precedence() {
+    new_ucmd!()
+        .args(&["substr", "ab cd", "3", "1", "!=", " "])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["substr", "ab cd", "3", "1", "=", " "])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["length", "abcd", "!=", "4"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["length", "abcd", "=", "4"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["index", "abcd", "c", "!=", "3"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["index", "abcd", "c", "=", "3"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["match", "abcd", "ab\\(.*\\)", "!=", "cd"])
+        .fails_with_code(1)
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["match", "abcd", "ab\\(.*\\)", "=", "cd"])
+        .succeeds()
+        .stdout_only("1\n");
+}
+
+#[test]
 fn test_invalid_substr() {
     new_ucmd!()
         .args(&["substr", "abc", "0", "1"])
