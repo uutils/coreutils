@@ -9,6 +9,7 @@
 //! read and write progress of a running `dd` process. The
 //! [`gen_prog_updater`] function can be used to implement a progress
 //! updater that runs in its own thread.
+use std::collections::HashMap;
 use std::io::Write;
 use std::sync::mpsc;
 #[cfg(target_os = "linux")]
@@ -20,6 +21,8 @@ use signal_hook::iterator::Handle;
 use uucore::{
     error::UResult,
     format::num_format::{FloatVariant, Formatter},
+    locale::get_message_with_args,
+    locale::setup_localization,
 };
 
 use crate::numbers::{SuffixType, to_magnitude_and_suffix};
@@ -102,8 +105,13 @@ impl ProgUpdate {
         self.write_stat.report(w)?;
         match self.read_stat.records_truncated {
             0 => {}
-            1 => writeln!(w, "1 truncated record")?,
-            n => writeln!(w, "{n} truncated records")?,
+            count => {
+                let message = get_message_with_args(
+                    "dd-progress-truncated-record",
+                    HashMap::from([("count".to_string(), count.to_string())]),
+                );
+                writeln!(w, "{}", message)?;
+            }
         }
         Ok(())
     }
@@ -164,24 +172,45 @@ impl ProgUpdate {
         // If the number of bytes written is sufficiently large, then
         // print a more concise representation of the number, like
         // "1.2 kB" and "1.0 KiB".
-        match btotal {
-            1 => write!(
-                w,
-                "{carriage_return}{btotal} byte copied, {duration_str} s, {transfer_rate}/s{newline}",
-            )?,
-            0..=999 => write!(
-                w,
-                "{carriage_return}{btotal} bytes copied, {duration_str} s, {transfer_rate}/s{newline}",
-            )?,
-            1000..=1023 => write!(
-                w,
-                "{carriage_return}{btotal} bytes ({btotal_metric}) copied, {duration_str} s, {transfer_rate}/s{newline}",
-            )?,
-            _ => write!(
-                w,
-                "{carriage_return}{btotal} bytes ({btotal_metric}, {btotal_bin}) copied, {duration_str} s, {transfer_rate}/s{newline}",
-            )?,
+        let message = match btotal {
+            1 => get_message_with_args(
+                "dd-progress-byte-copied",
+                HashMap::from([
+                    ("bytes".to_string(), btotal.to_string()),
+                    ("duration".to_string(), duration_str.to_string()),
+                    ("rate".to_string(), transfer_rate.to_string()),
+                ]),
+            ),
+            0..=999 => get_message_with_args(
+                "dd-progress-bytes-copied",
+                HashMap::from([
+                    ("bytes".to_string(), btotal.to_string()),
+                    ("duration".to_string(), duration_str.to_string()),
+                    ("rate".to_string(), transfer_rate.to_string()),
+                ]),
+            ),
+            1000..=1023 => get_message_with_args(
+                "dd-progress-bytes-copied-si",
+                HashMap::from([
+                    ("bytes".to_string(), btotal.to_string()),
+                    ("si".to_string(), btotal_metric.to_string()),
+                    ("duration".to_string(), duration_str.to_string()),
+                    ("rate".to_string(), transfer_rate.to_string()),
+                ]),
+            ),
+            _ => get_message_with_args(
+                "dd-progress-bytes-copied-si-iec",
+                HashMap::from([
+                    ("bytes".to_string(), btotal.to_string()),
+                    ("si".to_string(), btotal_metric.to_string()),
+                    ("iec".to_string(), btotal_bin.to_string()),
+                    ("duration".to_string(), duration_str.to_string()),
+                    ("rate".to_string(), transfer_rate.to_string()),
+                ]),
+            ),
         };
+
+        write!(w, "{carriage_return}{message}{newline}")?;
         Ok(())
     }
 
@@ -311,11 +340,14 @@ impl ReadStat {
     ///
     /// If there is a problem writing to `w`.
     fn report(&self, w: &mut impl Write) -> std::io::Result<()> {
-        writeln!(
-            w,
-            "{}+{} records in",
-            self.reads_complete, self.reads_partial
-        )?;
+        let message = get_message_with_args(
+            "dd-progress-records-in",
+            HashMap::from([
+                ("complete".to_string(), self.reads_complete.to_string()),
+                ("partial".to_string(), self.reads_partial.to_string()),
+            ]),
+        );
+        writeln!(w, "{}", message)?;
         Ok(())
     }
 }
@@ -368,11 +400,14 @@ impl WriteStat {
     ///
     /// If there is a problem writing to `w`.
     fn report(&self, w: &mut impl Write) -> std::io::Result<()> {
-        writeln!(
-            w,
-            "{}+{} records out",
-            self.writes_complete, self.writes_partial
-        )
+        let message = get_message_with_args(
+            "dd-progress-records-out",
+            HashMap::from([
+                ("complete".to_string(), self.writes_complete.to_string()),
+                ("partial".to_string(), self.writes_partial.to_string()),
+            ]),
+        );
+        writeln!(w, "{}", message)
     }
 }
 
@@ -427,6 +462,8 @@ pub(crate) fn gen_prog_updater(
     rx: mpsc::Receiver<ProgUpdate>,
     print_level: Option<StatusLevel>,
 ) -> impl Fn() {
+    // As we are in a thread, we need to set up localization independently.
+    let _ = setup_localization("dd");
     move || {
         let mut progress_printed = false;
         while let Ok(update) = rx.recv() {
@@ -502,6 +539,9 @@ pub(crate) fn gen_prog_updater(
 ) -> impl Fn() {
     // --------------------------------------------------------------
     move || {
+        // As we are in a thread, we need to set up localization independently.
+        let _ = setup_localization("dd");
+
         // Holds the state of whether we have printed the current progress.
         // This is needed so that we know whether or not to print a newline
         // character before outputting non-progress data.
