@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh econl igpar ispeed ospeed
 
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -109,4 +109,61 @@ fn invalid_setting() {
         .args(&["igpar"])
         .fails()
         .stderr_contains("invalid argument 'igpar'");
+}
+
+#[test]
+fn invalid_baud_setting() {
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    new_ucmd!()
+        .args(&["100"])
+        .fails()
+        .stderr_contains("invalid argument '100'");
+
+    new_ucmd!()
+        .args(&["-1"])
+        .fails()
+        .stderr_contains("invalid argument '-1'");
+
+    new_ucmd!()
+        .args(&["ispeed"])
+        .fails()
+        .stderr_contains("missing argument to 'ispeed'");
+
+    new_ucmd!()
+        .args(&["ospeed"])
+        .fails()
+        .stderr_contains("missing argument to 'ospeed'");
+
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    new_ucmd!()
+        .args(&["ispeed", "995"])
+        .fails()
+        .stderr_contains("invalid ispeed '995'");
+
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    new_ucmd!()
+        .args(&["ospeed", "995"])
+        .fails()
+        .stderr_contains("invalid ospeed '995'");
 }
