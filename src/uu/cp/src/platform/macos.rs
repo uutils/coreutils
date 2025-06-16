@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore reflink
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::ffi::OsStrExt;
@@ -10,6 +11,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
 use uucore::buf_copy;
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::mode::get_umask;
 
 use crate::{
@@ -30,7 +32,9 @@ pub(crate) fn copy_on_write(
     source_is_stream: bool,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
-        return Err("--sparse is only supported on linux".to_string().into());
+        return Err(get_message("cp-error-sparse-not-supported")
+            .to_string()
+            .into());
     }
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
@@ -85,10 +89,13 @@ pub(crate) fn copy_on_write(
         // support COW).
         match reflink_mode {
             ReflinkMode::Always => {
-                return Err(format!(
-                    "failed to clone {} from {}: {error}",
-                    source.display(),
-                    dest.display()
+                return Err(get_message_with_args(
+                    "cp-error-failed-to-clone",
+                    HashMap::from([
+                        ("source".to_string(), source.display().to_string()),
+                        ("dest".to_string(), dest.display().to_string()),
+                        ("error".to_string(), error.to_string()),
+                    ]),
                 )
                 .into());
             }

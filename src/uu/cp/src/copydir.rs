@@ -20,6 +20,7 @@ use uucore::error::UIoError;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, canonicalize, path_ends_with_terminator,
 };
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::show;
 use uucore::show_error;
 use uucore::uio_error;
@@ -183,7 +184,13 @@ impl Entry {
             let source_is_dir = source.is_dir();
             if path_ends_with_terminator(context.target) && source_is_dir {
                 if let Err(e) = fs::create_dir_all(context.target) {
-                    eprintln!("Failed to create directory: {e}");
+                    eprintln!(
+                        "{}",
+                        get_message_with_args(
+                            "cp-error-failed-to-create-directory",
+                            HashMap::from([("error".to_string(), e.to_string())])
+                        )
+                    );
                 }
             } else {
                 descendant = descendant.strip_prefix(context.root)?.to_path_buf();
@@ -229,7 +236,7 @@ fn copy_direntry(
     // exist, ...
     if source_absolute.is_dir() && !local_to_target.exists() {
         return if target_is_file {
-            Err("cannot overwrite non-directory with directory".into())
+            Err(get_message("cp-error-cannot-overwrite-non-directory-with-directory").into())
         } else {
             build_dir(&local_to_target, false, options, Some(&source_absolute))?;
             if options.verbose {
@@ -269,8 +276,14 @@ fn copy_direntry(
                     CpError::IoErrContext(e, _) if e.kind() == io::ErrorKind::PermissionDenied => {
                         show!(uio_error!(
                             e,
-                            "cannot open {} for reading",
-                            source_relative.quote(),
+                            "{}",
+                            get_message_with_args(
+                                "cp-error-cannot-open-for-reading",
+                                HashMap::from([(
+                                    "source".to_string(),
+                                    source_relative.quote().to_string()
+                                )])
+                            ),
                         ));
                     }
                     e => return Err(e),
@@ -315,15 +328,24 @@ pub(crate) fn copy_directory(
     }
 
     if !options.recursive {
-        return Err(format!("-r not specified; omitting directory {}", root.quote()).into());
+        return Err(get_message_with_args(
+            "cp-error-omitting-directory",
+            HashMap::from([("dir".to_string(), root.quote().to_string())]),
+        )
+        .into());
     }
 
     // check if root is a prefix of target
     if path_has_prefix(target, root)? {
-        return Err(format!(
-            "cannot copy a directory, {}, into itself, {}",
-            root.quote(),
-            target.join(root.file_name().unwrap()).quote()
+        return Err(get_message_with_args(
+            "cp-error-cannot-copy-directory-into-itself",
+            HashMap::from([
+                ("source".to_string(), root.quote().to_string()),
+                (
+                    "dest".to_string(),
+                    target.join(root.file_name().unwrap()).quote().to_string(),
+                ),
+            ]),
         )
         .into());
     }
@@ -368,7 +390,13 @@ pub(crate) fn copy_directory(
     // the target directory.
     let context = match Context::new(root, target) {
         Ok(c) => c,
-        Err(e) => return Err(format!("failed to get current directory {e}").into()),
+        Err(e) => {
+            return Err(get_message_with_args(
+                "cp-error-failed-get-current-dir",
+                HashMap::from([("error".to_string(), e.to_string())]),
+            )
+            .into());
+        }
     };
 
     // The directory we were in during the previous iteration
