@@ -9,6 +9,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use memchr::{Memchr3, memchr_iter, memmem::Finder};
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
@@ -21,11 +22,11 @@ use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
 
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 #[derive(Debug, Error)]
 enum JoinError {
-    #[error("io error: {0}")]
+    #[error("{}", get_message_with_args("join-error-io", HashMap::from([("error".to_string(), .0.to_string())])))]
     IOError(#[from] std::io::Error),
 
     #[error("{0}")]
@@ -361,7 +362,10 @@ impl Spec {
                 }
                 return Err(USimpleError::new(
                     1,
-                    format!("invalid field specifier: {}", format.quote()),
+                    get_message_with_args(
+                        "join-error-invalid-field-specifier",
+                        HashMap::from([("spec".to_string(), format.quote().to_string())]),
+                    ),
                 ));
             }
             Some('1') => FileNum::File1,
@@ -369,7 +373,10 @@ impl Spec {
             _ => {
                 return Err(USimpleError::new(
                     1,
-                    format!("invalid file number in field spec: {}", format.quote()),
+                    get_message_with_args(
+                        "join-error-invalid-file-number",
+                        HashMap::from([("spec".to_string(), format.quote().to_string())]),
+                    ),
                 ));
             }
         };
@@ -380,7 +387,10 @@ impl Spec {
 
         Err(USimpleError::new(
             1,
-            format!("invalid field specifier: {}", format.quote()),
+            get_message_with_args(
+                "join-error-invalid-field-specifier",
+                HashMap::from([("spec".to_string(), format.quote().to_string())]),
+            ),
         ))
     }
 }
@@ -639,11 +649,16 @@ impl<'a> State<'a> {
                 && (input.check_order == CheckOrder::Enabled
                     || (self.has_unpaired && !self.has_failed))
             {
-                let err_msg = format!(
-                    "{}:{}: is not sorted: {}",
-                    self.file_name.maybe_quote(),
-                    self.line_num,
-                    String::from_utf8_lossy(&line.string)
+                let err_msg = get_message_with_args(
+                    "join-error-not-sorted",
+                    HashMap::from([
+                        ("file".to_string(), self.file_name.maybe_quote().to_string()),
+                        ("line_num".to_string(), self.line_num.to_string()),
+                        (
+                            "content".to_string(),
+                            String::from_utf8_lossy(&line.string).to_string(),
+                        ),
+                    ]),
                 );
                 // This is fatal if the check is enabled.
                 if input.check_order == CheckOrder::Enabled {
@@ -720,11 +735,11 @@ fn parse_separator(value_os: &OsString) -> UResult<SepSetting> {
 
     let Some(value) = value_os.to_str() else {
         #[cfg(unix)]
-        return Err(USimpleError::new(1, "non-UTF-8 multi-byte tab"));
+        return Err(USimpleError::new(1, get_message("join-error-non-utf8-tab")));
         #[cfg(not(unix))]
         return Err(USimpleError::new(
             1,
-            "unprintable field separators are only supported on unix-like platforms",
+            get_message("join-error-unprintable-separators"),
         ));
     };
 
@@ -733,7 +748,13 @@ fn parse_separator(value_os: &OsString) -> UResult<SepSetting> {
     match chars.next() {
         None => Ok(SepSetting::Char(value.into())),
         Some('0') if c == '\\' => Ok(SepSetting::Byte(0)),
-        _ => Err(USimpleError::new(1, format!("multi-character tab {value}"))),
+        _ => Err(USimpleError::new(
+            1,
+            get_message_with_args(
+                "join-error-multi-character-tab",
+                HashMap::from([("value".to_string(), value.to_string())]),
+            ),
+        )),
     }
 }
 
@@ -832,7 +853,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let file2 = matches.get_one::<String>("file2").unwrap();
 
     if file1 == "-" && file2 == "-" {
-        return Err(USimpleError::new(1, "both files cannot be standard input"));
+        return Err(USimpleError::new(
+            1,
+            get_message("join-error-both-files-stdin"),
+        ));
     }
 
     let sep = settings.separator.clone();
@@ -864,10 +888,7 @@ pub fn uu_app() -> Command {
                 .num_args(1)
                 .value_parser(["1", "2"])
                 .value_name("FILENUM")
-                .help(
-                    "also print unpairable lines from file FILENUM, where
-FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
-                ),
+                .help(get_message("join-help-a")),
         )
         .arg(
             Arg::new("v")
@@ -876,81 +897,75 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 .num_args(1)
                 .value_parser(["1", "2"])
                 .value_name("FILENUM")
-                .help("like -a FILENUM, but suppress joined output lines"),
+                .help(get_message("join-help-v")),
         )
         .arg(
             Arg::new("e")
                 .short('e')
                 .value_name("EMPTY")
-                .help("replace missing input fields with EMPTY"),
+                .help(get_message("join-help-e")),
         )
         .arg(
             Arg::new("i")
                 .short('i')
                 .long("ignore-case")
-                .help("ignore differences in case when comparing fields")
+                .help(get_message("join-help-i"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("j")
                 .short('j')
                 .value_name("FIELD")
-                .help("equivalent to '-1 FIELD -2 FIELD'"),
+                .help(get_message("join-help-j")),
         )
         .arg(
             Arg::new("o")
                 .short('o')
                 .value_name("FORMAT")
-                .help("obey FORMAT while constructing output line"),
+                .help(get_message("join-help-o")),
         )
         .arg(
             Arg::new("t")
                 .short('t')
                 .value_name("CHAR")
                 .value_parser(ValueParser::os_string())
-                .help("use CHAR as input and output field separator"),
+                .help(get_message("join-help-t")),
         )
         .arg(
             Arg::new("1")
                 .short('1')
                 .value_name("FIELD")
-                .help("join on this FIELD of file 1"),
+                .help(get_message("join-help-1")),
         )
         .arg(
             Arg::new("2")
                 .short('2')
                 .value_name("FIELD")
-                .help("join on this FIELD of file 2"),
+                .help(get_message("join-help-2")),
         )
         .arg(
             Arg::new("check-order")
                 .long("check-order")
-                .help(
-                    "check that the input is correctly sorted, \
-             even if all input lines are pairable",
-                )
+                .help(get_message("join-help-check-order"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("nocheck-order")
                 .long("nocheck-order")
-                .help("do not check that the input is correctly sorted")
+                .help(get_message("join-help-nocheck-order"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("header")
                 .long("header")
-                .help(
-                    "treat the first line in each file as field headers, \
-             print them without trying to pair them",
-                )
+                .help(get_message("join-help-header"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("z")
                 .short('z')
                 .long("zero-terminated")
-                .help("line delimiter is NUL, not newline")
+                .help(get_message("join-help-z"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1082,8 +1097,9 @@ fn exec<Sep: Separator>(file1: &str, file2: &str, settings: Settings, sep: Sep) 
 
     if state1.has_failed || state2.has_failed {
         eprintln!(
-            "{}: input is not in sorted order",
-            uucore::execution_phrase()
+            "{}: {}",
+            uucore::execution_phrase(),
+            get_message("join-error-input-not-sorted")
         );
         set_exit_code(1);
     }
@@ -1099,7 +1115,13 @@ fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
                 // Show zero-based field numbers as one-based.
                 return Err(USimpleError::new(
                     1,
-                    format!("incompatible join fields {}, {}", keys + 1, key + 1),
+                    get_message_with_args(
+                        "join-error-incompatible-fields",
+                        HashMap::from([
+                            ("field1".to_string(), (keys + 1).to_string()),
+                            ("field2".to_string(), (key + 1).to_string()),
+                        ]),
+                    ),
                 ));
             }
         }
@@ -1118,7 +1140,10 @@ fn parse_field_number(value: &str) -> UResult<usize> {
         Err(e) if e.kind() == &IntErrorKind::PosOverflow => Ok(usize::MAX),
         _ => Err(USimpleError::new(
             1,
-            format!("invalid field number: {}", value.quote()),
+            get_message_with_args(
+                "join-error-invalid-field-number",
+                HashMap::from([("value".to_string(), value.quote().to_string())]),
+            ),
         )),
     }
 }
@@ -1129,7 +1154,10 @@ fn parse_file_number(value: &str) -> UResult<FileNum> {
         "2" => Ok(FileNum::File2),
         value => Err(USimpleError::new(
             1,
-            format!("invalid file number: {}", value.quote()),
+            get_message_with_args(
+                "join-error-invalid-file-number-simple",
+                HashMap::from([("value".to_string(), value.quote().to_string())]),
+            ),
         )),
     }
 }
