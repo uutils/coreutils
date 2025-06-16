@@ -218,7 +218,7 @@ impl<'input> Graph<'input> {
         let cycle = self.detect_cycle();
         show!(TsortError::Loop(self.name.clone()));
         for node in &cycle {
-            show!(TsortError::LoopNode(node.to_string()));
+            show!(TsortError::LoopNode((*node).to_string()));
         }
         let u = cycle[0];
         let v = cycle[1];
