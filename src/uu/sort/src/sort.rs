@@ -1808,9 +1808,11 @@ fn general_bd_parse(a: &str) -> GeneralBigDecimalParseResult {
     // Parse digits, and fold in recoverable errors
     let ebd = match ExtendedBigDecimal::extended_parse(a) {
         Err(ExtendedParserError::NotNumeric) => return GeneralBigDecimalParseResult::Invalid,
-        Err(ExtendedParserError::PartialMatch(ebd, _))
-        | Err(ExtendedParserError::Overflow(ebd))
-        | Err(ExtendedParserError::Underflow(ebd))
+        Err(
+            ExtendedParserError::PartialMatch(ebd, _)
+            | ExtendedParserError::Overflow(ebd)
+            | ExtendedParserError::Underflow(ebd),
+        )
         | Ok(ebd) => ebd,
     };
 
