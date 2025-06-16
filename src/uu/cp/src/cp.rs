@@ -796,7 +796,7 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut matches = uu_app().try_get_matches_from(args)?;
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let options = Options::from_matches(&matches)?;
 
@@ -808,7 +808,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let paths: Vec<PathBuf> = matches
-        .remove_many::<OsString>(options::PATHS)
+        .get_many::<OsString>(options::PATHS)
         .map(|v| v.map(PathBuf::from).collect())
         .unwrap_or_default();
 
