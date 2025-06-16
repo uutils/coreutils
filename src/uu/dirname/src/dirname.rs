@@ -33,27 +33,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if dirnames.is_empty() {
         return Err(UUsageError::new(1, get_message("dirname-missing-operand")));
-    } else {
-        for path in &dirnames {
-            let p = Path::new(path);
-            match p.parent() {
-                Some(d) => {
-                    if d.components().next().is_none() {
-                        print!(".");
-                    } else {
-                        print_verbatim(d).unwrap();
-                    }
-                }
-                None => {
-                    if p.is_absolute() || path == "/" {
-                        print!("/");
-                    } else {
-                        print!(".");
-                    }
+    }
+
+    for path in &dirnames {
+        let p = Path::new(path);
+        match p.parent() {
+            Some(d) => {
+                if d.components().next().is_none() {
+                    print!(".");
+                } else {
+                    print_verbatim(d).unwrap();
                 }
             }
-            print!("{line_ending}");
+            None => {
+                if p.is_absolute() || path == "/" {
+                    print!("/");
+                } else {
+                    print!(".");
+                }
+            }
         }
+        print!("{line_ending}");
     }
 
     Ok(())

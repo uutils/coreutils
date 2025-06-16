@@ -429,9 +429,8 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
                         1,
                         get_message("cut-error-delimiter-must-be-single-character"),
                     ));
-                } else {
-                    Delimiter::from(os_string)
                 }
+                Delimiter::from(os_string)
             }
         }
         None => {

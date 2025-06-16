@@ -594,9 +594,11 @@ impl EnvAppData {
         match cmd.status() {
             Ok(exit) if !exit.success() => {
                 #[cfg(unix)]
-                if let Some(exit_code) = exit.code() {
-                    return Err(exit_code.into());
-                } else {
+                {
+                    if let Some(exit_code) = exit.code() {
+                        return Err(exit_code.into());
+                    }
+
                     // `exit.code()` returns `None` on Unix when the process is terminated by a signal.
                     // See std::os::unix::process::ExitStatusExt for more information. This prints out
                     // the interrupted process and the signal it received.

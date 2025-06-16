@@ -204,81 +204,81 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
         return set_system_datetime(date);
-    } else {
-        // Get the current time, either in the local time zone or UTC.
-        let now = if settings.utc {
-            Timestamp::now().to_zoned(TimeZone::UTC)
-        } else {
-            Zoned::now()
-        };
+    }
 
-        // Iterate over all dates - whether it's a single date or a file.
-        let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
-            DateSource::Custom(ref input) => {
-                let date = parse_date(input);
-                let iter = std::iter::once(date);
-                Box::new(iter)
-            }
-            DateSource::Human(relative_time) => {
-                // Double check the result is overflow or not of the current_time + relative_time
-                // it may cause a panic of chrono::datetime::DateTime add
-                match now.checked_add(relative_time) {
-                    Ok(date) => {
-                        let iter = std::iter::once(Ok(date));
-                        Box::new(iter)
-                    }
-                    Err(_) => {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid date {relative_time}"),
-                        ));
-                    }
+    // Get the current time, either in the local time zone or UTC.
+    let now = if settings.utc {
+        Timestamp::now().to_zoned(TimeZone::UTC)
+    } else {
+        Zoned::now()
+    };
+
+    // Iterate over all dates - whether it's a single date or a file.
+    let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
+        DateSource::Custom(ref input) => {
+            let date = parse_date(input);
+            let iter = std::iter::once(date);
+            Box::new(iter)
+        }
+        DateSource::Human(relative_time) => {
+            // Double check the result is overflow or not of the current_time + relative_time
+            // it may cause a panic of chrono::datetime::DateTime add
+            match now.checked_add(relative_time) {
+                Ok(date) => {
+                    let iter = std::iter::once(Ok(date));
+                    Box::new(iter)
                 }
-            }
-            DateSource::Stdin => {
-                let lines = BufReader::new(std::io::stdin()).lines();
-                let iter = lines.map_while(Result::ok).map(parse_date);
-                Box::new(iter)
-            }
-            DateSource::File(ref path) => {
-                if path.is_dir() {
+                Err(_) => {
                     return Err(USimpleError::new(
-                        2,
-                        format!("expected file, got directory {}", path.quote()),
+                        1,
+                        format!("invalid date {relative_time}"),
                     ));
                 }
-                let file = File::open(path)
-                    .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
-                let lines = BufReader::new(file).lines();
-                let iter = lines.map_while(Result::ok).map(parse_date);
-                Box::new(iter)
             }
-            DateSource::Now => {
-                let iter = std::iter::once(Ok(now));
-                Box::new(iter)
+        }
+        DateSource::Stdin => {
+            let lines = BufReader::new(std::io::stdin()).lines();
+            let iter = lines.map_while(Result::ok).map(parse_date);
+            Box::new(iter)
+        }
+        DateSource::File(ref path) => {
+            if path.is_dir() {
+                return Err(USimpleError::new(
+                    2,
+                    format!("expected file, got directory {}", path.quote()),
+                ));
             }
-        };
+            let file = File::open(path)
+                .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+            let lines = BufReader::new(file).lines();
+            let iter = lines.map_while(Result::ok).map(parse_date);
+            Box::new(iter)
+        }
+        DateSource::Now => {
+            let iter = std::iter::once(Ok(now));
+            Box::new(iter)
+        }
+    };
 
-        let format_string = make_format_string(&settings);
+    let format_string = make_format_string(&settings);
 
-        // Format all the dates
-        for date in dates {
-            match date {
-                // TODO: Switch to lenient formatting.
-                Ok(date) => match strtime::format(format_string, &date) {
-                    Ok(s) => println!("{s}"),
-                    Err(e) => {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid format {format_string} ({e})"),
-                        ));
-                    }
-                },
-                Err((input, _err)) => show!(USimpleError::new(
-                    1,
-                    format!("invalid date {}", input.quote())
-                )),
-            }
+    // Format all the dates
+    for date in dates {
+        match date {
+            // TODO: Switch to lenient formatting.
+            Ok(date) => match strtime::format(format_string, &date) {
+                Ok(s) => println!("{s}"),
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid format {format_string} ({e})"),
+                    ));
+                }
+            },
+            Err((input, _err)) => show!(USimpleError::new(
+                1,
+                format!("invalid date {}", input.quote())
+            )),
         }
     }
 

@@ -1150,9 +1150,8 @@ impl Options {
                 CpError::Error("SELinux was not enabled during the compile time!".to_owned());
             if required {
                 return Err(selinux_disabled_error);
-            } else {
-                show_error_if_needed(&selinux_disabled_error);
             }
+            show_error_if_needed(&selinux_disabled_error);
         }
 
         // Extract the SELinux related flags and options
@@ -1925,10 +1924,9 @@ fn handle_existing_dest(
                 source.quote()
             )
             .into());
-        } else {
-            is_dest_removed = dest.is_symlink();
-            backup_dest(dest, &backup_path, is_dest_removed)?;
         }
+        is_dest_removed = dest.is_symlink();
+        backup_dest(dest, &backup_path, is_dest_removed)?;
     }
     if !is_dest_removed {
         delete_dest_if_needed_and_allowed(
@@ -2195,21 +2193,21 @@ fn handle_copy_mode(
                         let dest_time = dest_metadata.modified()?;
                         if src_time <= dest_time {
                             return Ok(PerformedAction::Skipped);
-                        } else {
-                            options.overwrite.verify(dest, options.debug)?;
-
-                            copy_helper(
-                                source,
-                                dest,
-                                options,
-                                context,
-                                source_is_symlink,
-                                source_is_fifo,
-                                symlinked_files,
-                                #[cfg(unix)]
-                                source_is_stream,
-                            )?;
                         }
+
+                        options.overwrite.verify(dest, options.debug)?;
+
+                        copy_helper(
+                            source,
+                            dest,
+                            options,
+                            context,
+                            source_is_symlink,
+                            source_is_fifo,
+                            symlinked_files,
+                            #[cfg(unix)]
+                            source_is_stream,
+                        )?;
                     }
                 }
             } else {

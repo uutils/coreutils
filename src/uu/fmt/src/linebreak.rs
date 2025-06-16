@@ -175,9 +175,8 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
                         fresh = true;
                     }
                     break;
-                } else {
-                    write_with_spaces(word, slen, args.ostream)?;
                 }
+                write_with_spaces(word, slen, args.ostream)?;
             }
             Ok((prev_punct, fresh))
         },
