@@ -8,6 +8,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
 use uucore::buf_copy;
+use uucore::locale::get_message;
 use uucore::mode::get_umask;
 
 use crate::{
@@ -25,12 +26,14 @@ pub(crate) fn copy_on_write(
     source_is_stream: bool,
 ) -> CopyResult<CopyDebug> {
     if reflink_mode != ReflinkMode::Never {
-        return Err("--reflink is only supported on linux and macOS"
+        return Err(get_message("cp-error-reflink-not-supported")
             .to_string()
             .into());
     }
     if sparse_mode != SparseMode::Auto {
-        return Err("--sparse is only supported on linux".to_string().into());
+        return Err(get_message("cp-error-sparse-not-supported")
+            .to_string()
+            .into());
     }
     let copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unsupported,
