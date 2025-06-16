@@ -363,7 +363,7 @@ fn parse_special_value<'a>(
         ("nan", ExtendedBigDecimal::Nan),
     ];
 
-    for (str, ebd) in MATCH_TABLE.iter() {
+    for (str, ebd) in MATCH_TABLE {
         if input_lc.starts_with(str) {
             let mut special = ebd.clone();
             if negative {
