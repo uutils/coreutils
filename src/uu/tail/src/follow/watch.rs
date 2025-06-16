@@ -284,7 +284,7 @@ impl Observer {
         if let Some(watcher_rx) = &mut self.watcher_rx {
             for input in inputs {
                 match input.kind() {
-                    InputKind::Stdin => continue,
+                    InputKind::Stdin => (),
                     InputKind::File(path) => {
                         #[cfg(all(unix, not(target_os = "linux")))]
                         if !path.is_file() {

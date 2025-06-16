@@ -29,7 +29,7 @@ fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
                     rotated.wrapping_add(u16::from(byte))
                 });
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return Err(e),
         }
     }
@@ -53,7 +53,7 @@ fn sysv_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
                     .iter()
                     .fold(ret, |acc, &byte| acc.wrapping_add(u32::from(byte)));
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return Err(e),
         }
     }

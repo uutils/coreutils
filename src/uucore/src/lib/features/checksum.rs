@@ -1063,7 +1063,7 @@ fn process_checksum_file(
             }
             Err(CantOpenFile | FileIsDirectory) => res.failed_open_file += 1,
             Err(FileNotFound) if !opts.ignore_missing => res.failed_open_file += 1,
-            _ => continue,
+            _ => (),
         };
     }
 
@@ -1132,7 +1132,7 @@ where
         match process_checksum_file(filename_input, algo_name_input, length_input, opts) {
             Err(UError(e)) => return Err(e),
             Err(Failed | CantOpenChecksumFile) => failed = true,
-            Ok(_) => continue,
+            Ok(_) => (),
         }
     }
 

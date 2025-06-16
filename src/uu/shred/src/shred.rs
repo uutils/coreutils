@@ -138,7 +138,6 @@ impl Iterator for FilenameIter {
             if *index == NAME_CHARSET.len() - 1 {
                 // Carry the 1
                 *index = 0;
-                continue;
             } else {
                 *index += 1;
                 return Some(ret);

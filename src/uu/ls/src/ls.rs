@@ -2366,7 +2366,6 @@ fn enter_directory(
                         err,
                         e.command_line
                     ));
-                    continue;
                 }
                 Ok(rd) => {
                     if listed_ancestors

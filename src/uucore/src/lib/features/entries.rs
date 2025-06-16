@@ -82,7 +82,6 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
             let err = IOError::last_os_error();
             if err.raw_os_error() == Some(libc::EINVAL) {
                 // Number of groups has increased, retry
-                continue;
             } else {
                 return Err(err);
             }
