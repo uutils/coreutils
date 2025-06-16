@@ -671,7 +671,7 @@ impl LineInfo {
             match cached_format {
                 LineFormat::Untagged => LineFormat::parse_untagged(line_bytes),
                 LineFormat::SingleSpace => LineFormat::parse_single_space(line_bytes),
-                _ => unreachable!("we never catch the algo based format"),
+                LineFormat::AlgoBased => unreachable!("we never catch the algo based format"),
             }
         } else if let Some(info) = LineFormat::parse_untagged(line_bytes) {
             *cached_line_format = Some(LineFormat::Untagged);
