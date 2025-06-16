@@ -745,7 +745,7 @@ impl<'a> Pager<'a> {
                     &format!("{}{pattern}{}", Attribute::Reverse, Attribute::Reset),
                 );
             };
-            self.stdout.write_all(format!("\r{}\n", line).as_bytes())?;
+            self.stdout.write_all(format!("\r{line}\n").as_bytes())?;
             lines_printed += 1;
             index += 1;
         }
@@ -792,7 +792,7 @@ impl<'a> Pager<'a> {
                 if percentage >= 100 {
                     " (END)".to_string()
                 } else {
-                    format!(" ({}%)", percentage)
+                    format!(" ({percentage}%)")
                 }
             }
         } else {

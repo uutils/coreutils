@@ -270,7 +270,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     Err(e) => {
                         return Err(USimpleError::new(
                             1,
-                            format!("invalid format {} ({e})", format_string),
+                            format!("invalid format {format_string} ({e})"),
                         ));
                     }
                 },

@@ -72,7 +72,7 @@ impl Display for BadSequence {
                     "{}",
                     get_message_with_args(
                         "tr-error-invalid-repeat-count",
-                        HashMap::from([("count".to_string(), format!("'{}'", count))])
+                        HashMap::from([("count".to_string(), format!("'{count}'"))])
                     )
                 )
             }
