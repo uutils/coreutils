@@ -516,11 +516,8 @@ fn construct_extended_big_decimal<'a>(
 
         // pow_with_context "only" supports i64 values. Just overflow/underflow if the value provided
         // is > 2**64 or < 2**-64.
-        let exponent = match exponent.to_i64() {
-            Some(exp) => exp,
-            None => {
-                return Err(make_error(exponent.is_positive(), negative));
-            }
+        let Some(exponent) = exponent.to_i64() else {
+            return Err(make_error(exponent.is_positive(), negative));
         };
 
         // Confusingly, exponent is in base 2 for hex floating point numbers.
