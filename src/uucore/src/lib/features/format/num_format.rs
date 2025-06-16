@@ -154,7 +154,7 @@ impl Formatter<u64> for UnsignedInt {
         };
 
         s = format!("{prefix}{s:0>width$}", width = self.precision);
-        write_output(writer, "".to_string(), s, self.width, self.alignment)
+        write_output(writer, String::new(), s, self.width, self.alignment)
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
