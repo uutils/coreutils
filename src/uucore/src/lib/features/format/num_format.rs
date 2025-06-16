@@ -328,14 +328,14 @@ impl Formatter<&ExtendedBigDecimal> for Float {
 }
 
 fn get_sign_indicator(sign: PositiveSign, negative: bool) -> String {
-    if !negative {
+    if negative {
+        String::from("-")
+    } else {
         match sign {
             PositiveSign::None => String::new(),
             PositiveSign::Plus => String::from("+"),
             PositiveSign::Space => String::from(" "),
         }
-    } else {
-        String::from("-")
     }
 }
 

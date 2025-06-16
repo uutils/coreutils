@@ -638,13 +638,13 @@ pub(crate) fn parse<'a>(
 
     // Return what has been parsed so far. If there are extra characters, mark the
     // parsing as a partial match.
-    if !rest.is_empty() {
+    if rest.is_empty() {
+        ebd_result
+    } else {
         Err(ExtendedParserError::PartialMatch(
             ebd_result.unwrap_or_else(|e| e.extract()),
             rest,
         ))
-    } else {
-        ebd_result
     }
 }
 

@@ -1091,13 +1091,13 @@ impl Config {
             Dereference::DirArgs
         };
 
-        let tab_size = if !needs_color {
+        let tab_size = if needs_color {
+            Some(0)
+        } else {
             options
                 .get_one::<String>(options::format::TAB_SIZE)
                 .and_then(|size| size.parse::<usize>().ok())
                 .or_else(|| std::env::var("TABSIZE").ok().and_then(|s| s.parse().ok()))
-        } else {
-            Some(0)
         }
         .unwrap_or(SPACES_IN_TAB);
 
