@@ -23,7 +23,7 @@ use thiserror::Error;
 
 use platform::copy_on_write;
 use uucore::display::Quotable;
-use uucore::error::{UClapError, UError, UResult, UUsageError, set_exit_code};
+use uucore::error::{UError, UResult, UUsageError, set_exit_code};
 #[cfg(unix)]
 use uucore::fs::make_fifo;
 use uucore::fs::{
@@ -796,46 +796,33 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
-    // The error is parsed here because we do not want version or help being printed to stderr.
-    if let Err(e) = matches {
-        let mut app = uu_app();
+    let options = Options::from_matches(&matches)?;
 
-        match e.kind() {
-            clap::error::ErrorKind::DisplayHelp => {
-                app.print_help()?;
-            }
-            clap::error::ErrorKind::DisplayVersion => print!("{}", app.render_version()),
-            _ => return Err(Box::new(e.with_exit_code(1))),
+    if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::None {
+        return Err(UUsageError::new(
+            EXIT_ERR,
+            "options --backup and --no-clobber are mutually exclusive",
+        ));
+    }
+
+    let paths: Vec<PathBuf> = matches
+        .get_many::<OsString>(options::PATHS)
+        .map(|v| v.map(PathBuf::from).collect())
+        .unwrap_or_default();
+
+    let (sources, target) = parse_path_args(paths, &options)?;
+
+    if let Err(error) = copy(&sources, &target, &options) {
+        match error {
+            // Error::NotAllFilesCopied is non-fatal, but the error
+            // code should still be EXIT_ERR as does GNU cp
+            CpError::NotAllFilesCopied => {}
+            // Else we caught a fatal bubbled-up error, log it to stderr
+            _ => show_error!("{error}"),
         };
-    } else if let Ok(mut matches) = matches {
-        let options = Options::from_matches(&matches)?;
-
-        if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::None {
-            return Err(UUsageError::new(
-                EXIT_ERR,
-                "options --backup and --no-clobber are mutually exclusive",
-            ));
-        }
-
-        let paths: Vec<PathBuf> = matches
-            .remove_many::<OsString>(options::PATHS)
-            .map(|v| v.map(PathBuf::from).collect())
-            .unwrap_or_default();
-
-        let (sources, target) = parse_path_args(paths, &options)?;
-
-        if let Err(error) = copy(&sources, &target, &options) {
-            match error {
-                // Error::NotAllFilesCopied is non-fatal, but the error
-                // code should still be EXIT_ERR as does GNU cp
-                CpError::NotAllFilesCopied => {}
-                // Else we caught a fatal bubbled-up error, log it to stderr
-                _ => show_error!("{error}"),
-            };
-            set_exit_code(EXIT_ERR);
-        }
+        set_exit_code(EXIT_ERR);
     }
 
     Ok(())
