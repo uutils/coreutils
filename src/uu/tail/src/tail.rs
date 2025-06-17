@@ -393,7 +393,7 @@ fn forwards_thru_file(
                 }
                 total += n;
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return Err(e),
         }
     }

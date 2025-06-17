@@ -81,7 +81,7 @@ impl FilterMode {
                         1,
                         get_message_with_args(
                             "tail-error-invalid-number-of-bytes",
-                            HashMap::from([("arg".to_string(), format!("'{}'", e))]),
+                            HashMap::from([("arg".to_string(), format!("'{e}'"))]),
                         ),
                     ));
                 }

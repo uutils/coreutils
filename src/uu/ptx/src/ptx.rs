@@ -736,16 +736,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .flatten()
         .cloned();
 
-    if !config.gnu_ext {
-        input_files = vec![files.next().unwrap_or("-".to_string())];
-        output_file = files.next().unwrap_or("-".to_string());
-        if let Some(file) = files.next() {
-            return Err(UUsageError::new(
-                1,
-                format!("extra operand {}", file.quote()),
-            ));
-        }
-    } else {
+    if config.gnu_ext {
         input_files = {
             let mut files = files.collect::<Vec<_>>();
             if files.is_empty() {
@@ -754,6 +745,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             files
         };
         output_file = "-".to_string();
+    } else {
+        input_files = vec![files.next().unwrap_or("-".to_string())];
+        output_file = files.next().unwrap_or("-".to_string());
+        if let Some(file) = files.next() {
+            return Err(UUsageError::new(
+                1,
+                format!("extra operand {}", file.quote()),
+            ));
+        }
     }
 
     let word_filter = WordFilter::new(&matches, &config)?;

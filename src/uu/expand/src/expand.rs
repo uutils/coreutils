@@ -464,7 +464,6 @@ fn expand(options: &Options) -> UResult<()> {
             Err(e) => {
                 show_error!("{e}");
                 set_exit_code(1);
-                continue;
             }
         }
     }

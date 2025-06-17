@@ -437,7 +437,7 @@ impl Read for Input<'_> {
                     }
                 }
                 Ok(len) => return Ok(len),
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
                 Err(_) if self.settings.iconv.noerror => return Ok(base_idx),
                 Err(e) => return Err(e),
             }
@@ -861,7 +861,7 @@ impl<'a> Output<'a> {
                         return Ok(base_idx);
                     }
                 }
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
                 Err(e) => return Err(e),
             }
         }

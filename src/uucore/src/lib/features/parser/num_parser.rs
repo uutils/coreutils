@@ -363,7 +363,7 @@ fn parse_special_value<'a>(
         ("nan", ExtendedBigDecimal::Nan),
     ];
 
-    for (str, ebd) in MATCH_TABLE.iter() {
+    for (str, ebd) in MATCH_TABLE {
         if input_lc.starts_with(str) {
             let mut special = ebd.clone();
             if negative {
@@ -516,11 +516,8 @@ fn construct_extended_big_decimal<'a>(
 
         // pow_with_context "only" supports i64 values. Just overflow/underflow if the value provided
         // is > 2**64 or < 2**-64.
-        let exponent = match exponent.to_i64() {
-            Some(exp) => exp,
-            None => {
-                return Err(make_error(exponent.is_positive(), negative));
-            }
+        let Some(exponent) = exponent.to_i64() else {
+            return Err(make_error(exponent.is_positive(), negative));
         };
 
         // Confusingly, exponent is in base 2 for hex floating point numbers.
@@ -638,13 +635,13 @@ pub(crate) fn parse<'a>(
 
     // Return what has been parsed so far. If there are extra characters, mark the
     // parsing as a partial match.
-    if !rest.is_empty() {
+    if rest.is_empty() {
+        ebd_result
+    } else {
         Err(ExtendedParserError::PartialMatch(
             ebd_result.unwrap_or_else(|e| e.extract()),
             rest,
         ))
-    } else {
-        ebd_result
     }
 }
 

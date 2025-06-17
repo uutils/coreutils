@@ -174,8 +174,7 @@ fn create_bundle(
 
     bundle.add_resource(resource).map_err(|errs| {
         LocalizationError::Bundle(format!(
-            "Failed to add resource to bundle for {}: {:?}",
-            locale, errs
+            "Failed to add resource to bundle for {locale}: {errs:?}",
         ))
     })?;
 
@@ -276,7 +275,7 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
         .unwrap_or(DEFAULT_LOCALE)
         .to_string();
     LanguageIdentifier::from_str(&locale_str).map_err(|_| {
-        LocalizationError::ParseLocale(format!("Failed to parse locale: {}", locale_str))
+        LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_str}"))
     })
 }
 

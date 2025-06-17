@@ -763,28 +763,28 @@ impl Write for ByteChunkWriter<'_> {
                 let num_bytes_written = custom_write(buf, &mut self.inner, self.settings)?;
                 self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
                 return Ok(carryover_bytes_written + num_bytes_written);
-            } else {
-                // Write enough bytes to fill the current chunk.
-                //
-                // Conversion to usize is safe because we checked that
-                // self.num_bytes_remaining_in_current_chunk is lower than
-                // n, which is already usize.
-                let i = self.num_bytes_remaining_in_current_chunk as usize;
-                let num_bytes_written = custom_write(&buf[..i], &mut self.inner, self.settings)?;
-                self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
-
-                // It's possible that the underlying writer did not
-                // write all the bytes.
-                if num_bytes_written < i {
-                    return Ok(carryover_bytes_written + num_bytes_written);
-                } else {
-                    // Move the window to look at only the remaining bytes.
-                    buf = &buf[i..];
-
-                    // Remember for the next iteration that we wrote these bytes.
-                    carryover_bytes_written += num_bytes_written;
-                }
             }
+
+            // Write enough bytes to fill the current chunk.
+            //
+            // Conversion to usize is safe because we checked that
+            // self.num_bytes_remaining_in_current_chunk is lower than
+            // n, which is already usize.
+            let i = self.num_bytes_remaining_in_current_chunk as usize;
+            let num_bytes_written = custom_write(&buf[..i], &mut self.inner, self.settings)?;
+            self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
+
+            // It's possible that the underlying writer did not
+            // write all the bytes.
+            if num_bytes_written < i {
+                return Ok(carryover_bytes_written + num_bytes_written);
+            }
+
+            // Move the window to look at only the remaining bytes.
+            buf = &buf[i..];
+
+            // Remember for the next iteration that we wrote these bytes.
+            carryover_bytes_written += num_bytes_written;
         }
     }
     fn flush(&mut self) -> io::Result<()> {

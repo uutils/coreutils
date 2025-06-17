@@ -1086,9 +1086,8 @@ fn write_columns(
         }
         if not_found_break && feed_line_present {
             break;
-        } else {
-            out.write_all(line_separator)?;
         }
+        out.write_all(line_separator)?;
     }
 
     Ok(lines_printed)

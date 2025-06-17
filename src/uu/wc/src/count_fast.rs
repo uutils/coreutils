@@ -192,7 +192,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             Ok(n) => {
                 byte_count += n;
             }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (byte_count, Some(e)),
         }
     }
@@ -246,7 +246,7 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                     total.lines += bytecount::count(&buf[..n], b'\n');
                 }
             }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (total, Some(e)),
         }
     }

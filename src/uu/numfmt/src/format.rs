@@ -390,7 +390,7 @@ fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
     }
 
     let eol = if options.zero_terminated { '\0' } else { '\n' };
-    print!("{}", eol);
+    print!("{eol}");
 
     Ok(())
 }

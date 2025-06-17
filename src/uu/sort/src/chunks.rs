@@ -287,13 +287,13 @@ fn read_to_buffer<T: Read>(
                         let end = last_line_end.unwrap();
                         // We want to include the separator here, because it shouldn't be carried over.
                         return Ok((end + 1, true));
-                    } else {
-                        // We need to read more lines
-                        let len = buffer.len();
-                        // resize the vector to 10 KB more
-                        buffer.resize(len + 1024 * 10, 0);
-                        read_target = &mut buffer[len..];
                     }
+
+                    // We need to read more lines
+                    let len = buffer.len();
+                    // resize the vector to 10 KB more
+                    buffer.resize(len + 1024 * 10, 0);
+                    read_target = &mut buffer[len..];
                 } else {
                     // This file has been fully read.
                     let mut leftover_len = read_target.len();
