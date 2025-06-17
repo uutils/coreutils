@@ -917,6 +917,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uucore::locale;
 
     #[test]
     fn test_split_string_environment_vars_test() {
@@ -951,12 +952,14 @@ mod tests {
 
     #[test]
     fn test_error_cases() {
+        let _ = locale::setup_localization("env");
+
         // Test EnvBackslashCNotAllowedInDoubleQuotes
         let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \c""#));
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "'\\c' must not appear in double-quoted -S string"
+            "'\\c' must not appear in double-quoted -S string at position 13"
         );
 
         // Test EnvInvalidBackslashAtEndOfStringInMinusS
@@ -964,7 +967,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "no terminating quote in -S string"
+            "no terminating quote in -S string at position 13 for quote '\"'"
         );
 
         // Test EnvInvalidSequenceBackslashXInMinusS
@@ -982,7 +985,7 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
-            "no terminating quote in -S string"
+            "no terminating quote in -S string at position 12 for quote '\"'"
         );
 
         // Test variable-related errors
