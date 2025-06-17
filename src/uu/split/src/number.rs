@@ -16,6 +16,7 @@
 //! [positional notation]: https://en.wikipedia.org/wiki/Positional_notation
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
+use uucore::locale::get_message;
 
 /// An overflow due to incrementing a number beyond its representable limit.
 #[derive(Debug)]
@@ -23,7 +24,7 @@ pub struct Overflow;
 
 impl Display for Overflow {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Overflow")
+        write!(f, "{}", get_message("split-error-overflow"))
     }
 }
 
