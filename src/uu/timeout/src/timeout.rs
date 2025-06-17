@@ -187,7 +187,7 @@ fn unblock_sigchld() {
 }
 
 /// We should terminate child process when receiving TERM signal.
-static SIGTERMED: AtomicBool = AtomicBool::new(false);
+static SIGNALED: AtomicBool = AtomicBool::new(false);
 
 fn catch_sigterm() {
     use nix::sys::signal;
@@ -195,7 +195,7 @@ fn catch_sigterm() {
     extern "C" fn handle_sigterm(signal: libc::c_int) {
         let signal = signal::Signal::try_from(signal).unwrap();
         if signal == signal::Signal::SIGTERM {
-            SIGTERMED.store(true, atomic::Ordering::Relaxed);
+            SIGNALED.store(true, atomic::Ordering::Relaxed);
         }
     }
 
@@ -361,7 +361,7 @@ fn timeout(
     // TODO The structure of this block is extremely similar to the
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
-    match process.wait_or_timeout(duration, Some(&SIGTERMED)) {
+    match process.wait_or_timeout(duration, Some(&SIGNALED)) {
         Ok(Some(status)) => Err(status
             .code()
             .unwrap_or_else(|| preserve_signal_info(status.signal().unwrap()))
@@ -372,7 +372,7 @@ fn timeout(
             match kill_after {
                 None => {
                     let status = process.wait()?;
-                    if SIGTERMED.load(atomic::Ordering::Relaxed) {
+                    if SIGNALED.load(atomic::Ordering::Relaxed) {
                         Err(ExitStatus::Terminated.into())
                     } else if preserve_status {
                         if let Some(ec) = status.code() {
