@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag Preprocess
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
@@ -18,7 +19,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::{format_usage, show_error};
 
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -61,17 +62,17 @@ fn is_digit_or_comma(c: char) -> bool {
 /// Errors that can occur when parsing a `--tabs` argument.
 #[derive(Debug, Error)]
 enum ParseError {
-    #[error("tab size contains invalid character(s): {}", .0.quote())]
+    #[error("{}", get_message_with_args("expand-error-invalid-character", HashMap::from([("char".to_string(), .0.quote().to_string())])))]
     InvalidCharacter(String),
-    #[error("{} specifier not at start of number: {}", .0.quote(), .1.quote())]
+    #[error("{}", get_message_with_args("expand-error-specifier-not-at-start", HashMap::from([("specifier".to_string(), .0.quote().to_string()), ("number".to_string(), .1.quote().to_string())])))]
     SpecifierNotAtStartOfNumber(String, String),
-    #[error("{} specifier only allowed with the last value", .0.quote())]
+    #[error("{}", get_message_with_args("expand-error-specifier-only-allowed-with-last", HashMap::from([("specifier".to_string(), .0.quote().to_string())])))]
     SpecifierOnlyAllowedWithLastValue(String),
-    #[error("tab size cannot be 0")]
+    #[error("{}", get_message("expand-error-tab-size-cannot-be-zero"))]
     TabSizeCannotBeZero,
-    #[error("tab stop is too large {}", .0.quote())]
+    #[error("{}", get_message_with_args("expand-error-tab-size-too-large", HashMap::from([("size".to_string(), .0.quote().to_string())])))]
     TabSizeTooLarge(String),
-    #[error("tab sizes must be ascending")]
+    #[error("{}", get_message("expand-error-tab-sizes-must-be-ascending"))]
     TabSizesMustBeAscending,
 }
 
@@ -261,7 +262,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::INITIAL)
                 .long(options::INITIAL)
                 .short('i')
-                .help("do not convert tabs after non blanks")
+                .help(get_message("expand-help-initial"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -270,16 +271,13 @@ pub fn uu_app() -> Command {
                 .short('t')
                 .value_name("N, LIST")
                 .action(ArgAction::Append)
-                .help(
-                    "have tabs N characters apart, not 8 or use comma separated list \
-                    of explicit tab positions",
-                ),
+                .help(get_message("expand-help-tabs")),
         )
         .arg(
             Arg::new(options::NO_UTF8)
                 .long(options::NO_UTF8)
                 .short('U')
-                .help("interpret input file as 8-bit ASCII rather than UTF-8")
+                .help(get_message("expand-help-no-utf8"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -447,7 +445,13 @@ fn expand(options: &Options) -> UResult<()> {
 
     for file in &options.files {
         if Path::new(file).is_dir() {
-            show_error!("{file}: Is a directory");
+            show_error!(
+                "{}",
+                get_message_with_args(
+                    "expand-error-is-directory",
+                    HashMap::from([("file".to_string(), file.to_string())])
+                )
+            );
             set_exit_code(1);
             continue;
         }
@@ -458,7 +462,7 @@ fn expand(options: &Options) -> UResult<()> {
                     Err(_) => buf.is_empty(),
                 } {
                     expand_line(&mut buf, &mut output, ts, options)
-                        .map_err_context(|| "failed to write output".to_string())?;
+                        .map_err_context(|| get_message("expand-error-failed-to-write-output"))?;
                 }
             }
             Err(e) => {
