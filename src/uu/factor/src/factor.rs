@@ -5,7 +5,7 @@
 
 // spell-checker:ignore funcs
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::BufRead;
 use std::io::{self, Write, stdin, stdout};
 
@@ -16,7 +16,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::{format_usage, show_error, show_warning};
 
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 mod options {
     pub static EXPONENTS: &str = "exponents";
@@ -46,11 +46,12 @@ fn print_factors_str(
     if let Some(_remaining) = remaining {
         return Err(USimpleError::new(
             1,
-            "Factorization incomplete. Remainders exists.",
+            get_message("factor-error-factorization-incomplete"),
         ));
     }
 
-    write_result(w, &x, factorization, print_exponents).map_err_context(|| "write error".into())?;
+    write_result(w, &x, factorization, print_exponents)
+        .map_err_context(|| get_message("factor-error-write-error"))?;
 
     Ok(())
 }
@@ -104,7 +105,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 Err(e) => {
                     set_exit_code(1);
-                    show_error!("error reading input: {e}");
+                    show_error!(
+                        "{}",
+                        get_message_with_args(
+                            "factor-error-reading-input",
+                            HashMap::from([("error".to_string(), e.to_string())])
+                        )
+                    );
                     return Ok(());
                 }
             }
@@ -131,13 +138,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::EXPONENTS)
                 .short('h')
                 .long(options::EXPONENTS)
-                .help("Print factors in the form p^e")
+                .help(get_message("factor-help-exponents"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information.")
+                .help(get_message("factor-help-help"))
                 .action(ArgAction::Help),
         )
 }
