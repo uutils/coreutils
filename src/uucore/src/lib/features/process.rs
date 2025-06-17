@@ -136,7 +136,7 @@ impl ChildExt for Child {
             }
 
             if start.elapsed() >= timeout
-                || signaled.is_some_and(|sigtermed| sigtermed.load(atomic::Ordering::Relaxed))
+                || signaled.is_some_and(|signaled| signaled.load(atomic::Ordering::Relaxed))
             {
                 break;
             }
