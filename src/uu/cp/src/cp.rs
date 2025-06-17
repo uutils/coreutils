@@ -2664,9 +2664,8 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
             if is_explicit_no_preserve_mode {
                 return MODE_RW_UGO;
-            } else {
-                return org_mode & S_IRWXUGO;
-            };
+            }
+            return org_mode & S_IRWXUGO;
         }
     }
 

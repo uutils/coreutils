@@ -242,7 +242,7 @@ fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
                     boot_time = Some(dt.unix_timestamp() as time_t);
                 }
             }
-            _ => continue,
+            _ => (),
         }
     }
     (boot_time, nusers)
