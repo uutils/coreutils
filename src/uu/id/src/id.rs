@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid rgid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
 
 // README:
 // This was originally based on BSD's `id`
@@ -473,31 +473,32 @@ fn pretty(possible_pw: Option<Passwd>) {
         );
     } else {
         let login = cstr2cow!(getlogin().cast_const());
-        let rid = getuid();
-        if let Ok(p) = Passwd::locate(rid) {
+        let uid = getuid();
+        if let Ok(p) = Passwd::locate(uid) {
             if let Some(user_name) = login {
                 println!("{}\t{user_name}", get_message("id-output-login"));
             }
             println!("{}\t{}", get_message("id-output-uid"), p.name);
         } else {
-            println!("{}\t{rid}", get_message("id-output-uid"));
+            println!("{}\t{uid}", get_message("id-output-uid"));
         }
 
-        let eid = getegid();
-        if eid == rid {
-            if let Ok(p) = Passwd::locate(eid) {
+        let euid = geteuid();
+        if euid != uid {
+            if let Ok(p) = Passwd::locate(euid) {
                 println!("{}\t{}", get_message("id-output-euid"), p.name);
             } else {
-                println!("{}\t{eid}", get_message("id-output-euid"));
+                println!("{}\t{euid}", get_message("id-output-euid"));
             }
         }
 
-        let rid = getgid();
-        if rid != eid {
-            if let Ok(g) = Group::locate(rid) {
-                println!("{}\t{}", get_message("id-output-euid"), g.name);
+        let rgid = getgid();
+        let egid = getegid();
+        if egid != rgid {
+            if let Ok(g) = Group::locate(rgid) {
+                println!("{}\t{}", get_message("id-output-rgid"), g.name);
             } else {
-                println!("{}\t{rid}", get_message("id-output-euid"));
+                println!("{}\t{rgid}", get_message("id-output-rgid"));
             }
         }
 
