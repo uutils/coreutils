@@ -273,7 +273,6 @@ enum TimeStyle {
 
 /// Whether the given date is considered recent (i.e., in the last 6 months).
 fn is_recent(time: Timestamp, state: &mut ListState) -> bool {
-    // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
     time > state.recent_time_threshold
 }
 
@@ -2080,6 +2079,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         uid_cache: HashMap::new(),
         #[cfg(unix)]
         gid_cache: HashMap::new(),
+        // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
         recent_time_threshold: Timestamp::now() - Duration::new(31_556_952 / 2, 0),
     };
 
