@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
-// spell-checker:ignore (words) fakeroot setcap drwxr
+// spell-checker:ignore (words) fakeroot setcap drwxr drwxrwxr
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
