@@ -134,31 +134,6 @@ fn test_readonly() {
     assert_eq!(at.read(writable_file), content_tee);
 }
 
-#[test]
-#[cfg(target_os = "linux")]
-fn test_tee_no_more_writeable_2() {
-    use std::fs::File;
-    let (at, mut ucmd) = at_and_ucmd!();
-    let content = (1..=10).fold(String::new(), |mut output, x| {
-        let _ = writeln!(output, "{x}");
-        output
-    });
-    let file_out_a = "tee_file_out_a";
-    let file_out_b = "tee_file_out_b";
-    let dev_full = File::options().append(true).open("/dev/full").unwrap();
-
-    let result = ucmd
-        .arg(file_out_a)
-        .arg(file_out_b)
-        .set_stdout(dev_full)
-        .pipe_in(content.as_bytes())
-        .fails();
-
-    assert_eq!(at.read(file_out_a), content);
-    assert_eq!(at.read(file_out_b), content);
-    assert!(result.stderr_str().contains("No space left on device"));
-}
-
 #[cfg(target_os = "linux")]
 mod linux_only {
     use uutests::util::{AtPath, CmdResult, TestScenario, UCommand};
@@ -579,5 +554,29 @@ mod linux_only {
 
         expect_success(&output);
         expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_tee_no_more_writeable_2() {
+        use std::fs::File;
+        let (at, mut ucmd) = at_and_ucmd!();
+        let content = (1..=10).fold(String::new(), |mut output, x| {
+            let _ = writeln!(output, "{x}");
+            output
+        });
+        let file_out_a = "tee_file_out_a";
+        let file_out_b = "tee_file_out_b";
+        let dev_full = File::options().append(true).open("/dev/full").unwrap();
+
+        let result = ucmd
+            .arg(file_out_a)
+            .arg(file_out_b)
+            .set_stdout(dev_full)
+            .pipe_in(content.as_bytes())
+            .fails();
+
+        assert_eq!(at.read(file_out_a), content);
+        assert_eq!(at.read(file_out_b), content);
+        assert!(result.stderr_str().contains("No space left on device"));
     }
 }
