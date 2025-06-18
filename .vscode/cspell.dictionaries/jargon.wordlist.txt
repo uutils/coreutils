@@ -28,6 +28,8 @@ denoland
 deque
 dequeue
 dev
+devcontainer
+devcontainers
 devs
 discoverability
 duplicative
