@@ -49,6 +49,14 @@ fn all_and_setting() {
 }
 
 #[test]
+fn all_and_print_setting() {
+    new_ucmd!()
+        .args(&["--all", "size"])
+        .fails()
+        .stderr_contains("when specifying an output style, modes may not be set");
+}
+
+#[test]
 fn save_and_all() {
     new_ucmd!()
         .args(&["--save", "--all"])

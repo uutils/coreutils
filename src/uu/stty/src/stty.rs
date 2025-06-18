@@ -108,15 +108,20 @@ enum ControlCharMappingError {
     MultipleChars,
 }
 
-enum SpecialSettings {
+enum SpecialSetting {
     Rows(u16),
     Cols(u16),
+}
+
+enum PrintSetting {
+    Size,
 }
 
 enum ArgOptions<'a> {
     Flags(AllFlags<'a>),
     Mapping((SpecialCharacterIndices, u8)),
-    Special(SpecialSettings),
+    Special(SpecialSetting),
+    Print(PrintSetting),
 }
 
 impl<'a> From<AllFlags<'a>> for ArgOptions<'a> {
@@ -289,7 +294,7 @@ fn stty(opts: &Options) -> UResult<()> {
             } else if *arg == "rows" {
                 if let Some(rows) = args_iter.next() {
                     if let Some(n) = parse_rows_cols(rows) {
-                        valid_args.push(ArgOptions::Special(SpecialSettings::Rows(n)));
+                        valid_args.push(ArgOptions::Special(SpecialSetting::Rows(n)));
                     } else {
                         return Err(USimpleError::new(
                             1,
@@ -302,7 +307,7 @@ fn stty(opts: &Options) -> UResult<()> {
             } else if *arg == "columns" || *arg == "cols" {
                 if let Some(cols) = args_iter.next() {
                     if let Some(n) = parse_rows_cols(cols) {
-                        valid_args.push(ArgOptions::Special(SpecialSettings::Cols(n)));
+                        valid_args.push(ArgOptions::Special(SpecialSetting::Cols(n)));
                     } else {
                         return Err(USimpleError::new(
                             1,
@@ -312,7 +317,9 @@ fn stty(opts: &Options) -> UResult<()> {
                 } else {
                     return Err(USimpleError::new(1, format!("missing argument to '{arg}'")));
                 }
-            // not a valid control char or flag
+            } else if *arg == "size" {
+                valid_args.push(ArgOptions::Print(PrintSetting::Size));
+            // not a valid option
             } else {
                 return Err(USimpleError::new(1, format!("invalid argument '{arg}'")));
             }
@@ -328,6 +335,9 @@ fn stty(opts: &Options) -> UResult<()> {
                 ArgOptions::Flags(flag) => apply_setting(&mut termios, flag),
                 ArgOptions::Special(setting) => {
                     apply_special_setting(setting, opts.file.as_raw_fd())?;
+                }
+                ArgOptions::Print(setting) => {
+                    print_special_setting(setting, opts.file.as_raw_fd())?;
                 }
             }
         }
@@ -356,6 +366,17 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
 
 fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
     remove && flag.group.is_some()
+}
+
+fn print_special_setting(setting: &PrintSetting, fd: i32) -> nix::Result<()> {
+    match setting {
+        PrintSetting::Size => {
+            let mut size = TermSize::default();
+            unsafe { tiocgwinsz(fd, &raw mut size)? };
+            println!("{} {}", size.rows, size.columns);
+        }
+    }
+    Ok(())
 }
 
 fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
@@ -632,7 +653,7 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(SpecialCharacterIndices,
     termios.control_chars[mapping.0 as usize] = mapping.1;
 }
 
-fn apply_special_setting(setting: &SpecialSettings, fd: i32) -> nix::Result<()> {
+fn apply_special_setting(setting: &SpecialSetting, fd: i32) -> nix::Result<()> {
     let mut size = TermSize::default();
     unsafe { tiocgwinsz(fd, &raw mut size)? };
     match setting {
