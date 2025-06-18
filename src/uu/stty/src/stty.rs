@@ -108,9 +108,15 @@ enum ControlCharMappingError {
     MultipleChars,
 }
 
+enum SpecialSettings {
+    Rows(u16),
+    Cols(u16),
+}
+
 enum ArgOptions<'a> {
     Flags(AllFlags<'a>),
     Mapping((SpecialCharacterIndices, u8)),
+    Special(SpecialSettings),
 }
 
 impl<'a> From<AllFlags<'a>> for ArgOptions<'a> {
@@ -280,6 +286,32 @@ fn stty(opts: &Options) -> UResult<()> {
                     return Err(USimpleError::new(1, format!("invalid argument '{arg}'")));
                 }
                 valid_args.push(flag.into());
+            } else if *arg == "rows" {
+                if let Some(rows) = args_iter.next() {
+                    if let Some(n) = parse_rows_cols(rows) {
+                        valid_args.push(ArgOptions::Special(SpecialSettings::Rows(n)));
+                    } else {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("invalid integer argument: '{rows}'"),
+                        ));
+                    }
+                } else {
+                    return Err(USimpleError::new(1, format!("missing argument to '{arg}'")));
+                }
+            } else if *arg == "columns" || *arg == "cols" {
+                if let Some(cols) = args_iter.next() {
+                    if let Some(n) = parse_rows_cols(cols) {
+                        valid_args.push(ArgOptions::Special(SpecialSettings::Cols(n)));
+                    } else {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("invalid integer argument: '{cols}'"),
+                        ));
+                    }
+                } else {
+                    return Err(USimpleError::new(1, format!("missing argument to '{arg}'")));
+                }
             // not a valid control char or flag
             } else {
                 return Err(USimpleError::new(1, format!("invalid argument '{arg}'")));
@@ -294,6 +326,9 @@ fn stty(opts: &Options) -> UResult<()> {
             match arg {
                 ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
                 ArgOptions::Flags(flag) => apply_setting(&mut termios, flag),
+                ArgOptions::Special(setting) => {
+                    apply_special_setting(setting, opts.file.as_raw_fd())?;
+                }
             }
         }
         tcsetattr(
@@ -308,6 +343,15 @@ fn stty(opts: &Options) -> UResult<()> {
         print_settings(&termios, opts).expect("TODO: make proper error here from nix error");
     }
     Ok(())
+}
+
+// GNU uses an unsigned 32 bit integer for row/col sizes, but then wraps around 16 bits
+// this function returns Some(n), where n is a u16 row/col size, or None if the string arg cannot be parsed as a u32
+fn parse_rows_cols(arg: &str) -> Option<u16> {
+    if let Ok(n) = arg.parse::<u32>() {
+        return Some((n % (u16::MAX as u32 + 1)) as u16);
+    }
+    None
 }
 
 fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
@@ -586,6 +630,17 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
 
 fn apply_char_mapping(termios: &mut Termios, mapping: &(SpecialCharacterIndices, u8)) {
     termios.control_chars[mapping.0 as usize] = mapping.1;
+}
+
+fn apply_special_setting(setting: &SpecialSettings, fd: i32) -> nix::Result<()> {
+    let mut size = TermSize::default();
+    unsafe { tiocgwinsz(fd, &raw mut size)? };
+    match setting {
+        SpecialSetting::Rows(n) => size.rows = *n,
+        SpecialSetting::Cols(n) => size.columns = *n,
+    }
+    unsafe { tiocswinsz(fd, &raw mut size)? };
+    Ok(())
 }
 
 // GNU stty defines some valid values for the control character mappings
