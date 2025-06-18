@@ -137,27 +137,26 @@ fn test_readonly() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_tee_no_more_writeable_2() {
-    // should be equals to 'tee out1 out2 >/dev/full <multi_read' call
-    // but currently there is no way to redirect stdout to /dev/full
-    // so this test is disabled
-    let (_at, mut ucmd) = at_and_ucmd!();
-    let _content = (1..=10).fold(String::new(), |mut output, x| {
+    use std::fs::File;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content = (1..=10).fold(String::new(), |mut output, x| {
         let _ = writeln!(output, "{x}");
         output
     });
     let file_out_a = "tee_file_out_a";
     let file_out_b = "tee_file_out_b";
+    let dev_full = File::options().append(true).open("/dev/full").unwrap();
 
-    let _result = ucmd
+    let result = ucmd
         .arg(file_out_a)
         .arg(file_out_b)
-        .pipe_in("/dev/full")
-        .succeeds(); // TODO: expected to succeed currently; change to fails() when required
+        .set_stdout(dev_full)
+        .pipe_in(content.as_bytes())
+        .fails();
 
-    // TODO: comment in after https://github.com/uutils/coreutils/issues/1805 is fixed
-    // assert_eq!(at.read(file_out_a), content);
-    // assert_eq!(at.read(file_out_b), content);
-    // assert!(result.stderr.contains("No space left on device"));
+    assert_eq!(at.read(file_out_a), content);
+    assert_eq!(at.read(file_out_b), content);
+    assert!(result.stderr_str().contains("No space left on device"));
 }
 
 #[cfg(target_os = "linux")]
