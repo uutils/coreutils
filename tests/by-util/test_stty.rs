@@ -201,3 +201,37 @@ fn set_mapping() {
         .succeeds()
         .stdout_contains("intr = ^C");
 }
+
+#[test]
+fn row_column_sizes() {
+    new_ucmd!()
+        .args(&["rows", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument: '-1'");
+
+    new_ucmd!()
+        .args(&["columns", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument: '-1'");
+
+    // overflow the u32 used for row/col counts
+    new_ucmd!()
+        .args(&["cols", "4294967296"])
+        .fails()
+        .stderr_contains("invalid integer argument: '4294967296'");
+
+    new_ucmd!()
+        .args(&["rows", ""])
+        .fails()
+        .stderr_contains("invalid integer argument: ''");
+
+    new_ucmd!()
+        .args(&["columns"])
+        .fails()
+        .stderr_contains("missing argument to 'columns'");
+
+    new_ucmd!()
+        .args(&["rows"])
+        .fails()
+        .stderr_contains("missing argument to 'rows'");
+}
