@@ -5,9 +5,8 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::env;
-use uucore::{error::UResult, format_usage};
-
 use uucore::locale::get_message;
+use uucore::{error::UResult, format_usage};
 
 static OPT_NULL: &str = "null";
 
@@ -62,7 +61,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NULL)
                 .short('0')
                 .long(OPT_NULL)
-                .help("end each output line with 0 byte rather than newline")
+                .help(get_message("printenv-help-null"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
