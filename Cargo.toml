@@ -37,6 +37,9 @@ test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
 uudoc = ["zip", "dep:uuhelp_parser"]
 ## features
+## Optional feature for stdbuf
+# "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
+feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
 # "feat_acl" == enable support for ACLs (access control lists; by using`--features feat_acl`)
 # NOTE:
 # * On linux, the posix-acl/acl-sys crate requires `libacl` headers and shared library to be accessible in the C toolchain at compile time.
