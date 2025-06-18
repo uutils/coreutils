@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command, builder::PossibleValue};
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read, Result, Write, copy, stdin, stdout};
+use std::io::{Error, ErrorKind, Read, Result, Write, stdin, stdout};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -190,6 +190,7 @@ fn tee(options: &Options) -> Result<()> {
         return Ok(());
     }
 
+    // We cannot use std::io::copy here as it doesn't flush the output buffer
     let res = match copy(input, &mut output) {
         // ErrorKind::Other is raised by MultiWriter when all writers
         // have exited, so that copy will abort. It's equivalent to
@@ -204,6 +205,46 @@ fn tee(options: &Options) -> Result<()> {
         Err(Error::from(ErrorKind::Other))
     } else {
         Ok(())
+    }
+}
+
+/// Copies all bytes from the input buffer to the output buffer.
+///
+/// Returns the number of written bytes.
+fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
+    // The implementation for this function is adopted from the generic buffer copy implementation from
+    // the standard library:
+    // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
+
+    // Use buffer size from std implementation:
+    // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
+    // spell-checker:ignore espidf
+    const DEFAULT_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
+        512
+    } else {
+        8 * 1024
+    };
+
+    let mut buffer = [0u8; DEFAULT_BUF_SIZE];
+    let mut len = 0;
+
+    loop {
+        let received = match input.read(&mut buffer) {
+            Ok(bytes_count) => bytes_count,
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        };
+
+        if received == 0 {
+            return Ok(len);
+        }
+
+        output.write_all(&buffer[0..received])?;
+
+        // We need to flush the buffer here to comply with POSIX requirement that
+        // `tee` does not buffer the input.
+        output.flush()?;
+        len += received;
     }
 }
 

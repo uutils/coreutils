@@ -10,6 +10,8 @@ use uutests::{at_and_ucmd, new_ucmd, util_name};
 use regex::Regex;
 #[cfg(target_os = "linux")]
 use std::fmt::Write;
+use std::process::Stdio;
+use std::time::Duration;
 
 // tests for basic tee functionality.
 // inspired by:
@@ -132,6 +134,52 @@ fn test_readonly() {
         .stderr_matches(&Regex::new("(Permission|Access is) denied").unwrap());
     assert_eq!(at.read(file_out), content_file);
     assert_eq!(at.read(writable_file), content_tee);
+}
+
+#[test]
+fn test_tee_output_not_buffered() {
+    // POSIX says: The tee utility shall not buffer output
+
+    // If the output is buffered, the test will hang, so we run it in
+    // a separate thread to stop execution by timeout.
+    let handle = std::thread::spawn(move || {
+        let content = "a";
+        let file_out = "tee_file_out";
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        let mut child = ucmd
+            .arg(file_out)
+            .set_stdin(Stdio::piped())
+            .set_stdout(Stdio::piped())
+            .run_no_wait();
+
+        // We write to the input pipe, but do not close it. If the output is
+        // buffered, reading from output pipe will hang indefinitely, as we
+        // will never write anything else to it.
+        child.write_in(content.as_bytes());
+
+        let out = String::from_utf8(child.stdout_exact_bytes(1)).unwrap();
+        assert_eq!(&out, content);
+
+        // Writing to a file may take a couple hundreds nanoseconds
+        child.delay(1);
+        assert_eq!(at.read(file_out), content);
+    });
+
+    // Give some time for the `tee` to create an output file. Some platforms
+    // take a lot of time to spin up the process and create the output file
+    for _ in 0..100 {
+        std::thread::sleep(Duration::from_millis(1));
+        if handle.is_finished() {
+            break;
+        }
+    }
+
+    assert!(
+        handle.is_finished(),
+        "Nothing was received through output pipe"
+    );
+    handle.join().unwrap();
 }
 
 #[cfg(target_os = "linux")]
