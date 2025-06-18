@@ -309,14 +309,6 @@ mod options {
 }
 
 pub fn uu_app_common() -> Command {
-    #[cfg(windows)]
-    const BINARY_HELP: &str = "read or check in binary mode (default)";
-    #[cfg(not(windows))]
-    const BINARY_HELP: &str = "read in binary mode";
-    #[cfg(windows)]
-    const TEXT_HELP: &str = "read or check in text mode";
-    #[cfg(not(windows))]
-    const TEXT_HELP: &str = "read in text mode (default)";
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(get_message("hashsum-about"))
@@ -327,21 +319,30 @@ pub fn uu_app_common() -> Command {
             Arg::new(options::BINARY)
                 .short('b')
                 .long("binary")
-                .help(BINARY_HELP)
+                .help({
+                    #[cfg(windows)]
+                    {
+                        get_message("hashsum-help-binary-windows")
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        get_message("hashsum-help-binary-other")
+                    }
+                })
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHECK)
                 .short('c')
                 .long("check")
-                .help("read hashsums from the FILEs and check them")
+                .help(get_message("hashsum-help-check"))
                 .action(ArgAction::SetTrue)
                 .conflicts_with("tag"),
         )
         .arg(
             Arg::new(options::TAG)
                 .long("tag")
-                .help("create a BSD-style checksum")
+                .help(get_message("hashsum-help-tag"))
                 .action(ArgAction::SetTrue)
                 .conflicts_with("text"),
         )
@@ -349,7 +350,16 @@ pub fn uu_app_common() -> Command {
             Arg::new(options::TEXT)
                 .short('t')
                 .long("text")
-                .help(TEXT_HELP)
+                .help({
+                    #[cfg(windows)]
+                    {
+                        get_message("hashsum-help-text-windows")
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        get_message("hashsum-help-text-other")
+                    }
+                })
                 .conflicts_with("binary")
                 .action(ArgAction::SetTrue),
         )
@@ -357,7 +367,7 @@ pub fn uu_app_common() -> Command {
             Arg::new(options::QUIET)
                 .short('q')
                 .long(options::QUIET)
-                .help("don't print OK for each successfully verified file")
+                .help(get_message("hashsum-help-quiet"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::STATUS, options::WARN]),
         )
@@ -365,27 +375,27 @@ pub fn uu_app_common() -> Command {
             Arg::new(options::STATUS)
                 .short('s')
                 .long("status")
-                .help("don't output anything, status code shows success")
+                .help(get_message("hashsum-help-status"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::QUIET, options::WARN]),
         )
         .arg(
             Arg::new(options::STRICT)
                 .long("strict")
-                .help("exit non-zero for improperly formatted checksum lines")
+                .help(get_message("hashsum-help-strict"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("ignore-missing")
                 .long("ignore-missing")
-                .help("don't fail or report status for missing files")
+                .help(get_message("hashsum-help-ignore-missing"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WARN)
                 .short('w')
                 .long("warn")
-                .help("warn about improperly formatted checksum lines")
+                .help(get_message("hashsum-help-warn"))
                 .action(ArgAction::SetTrue)
                 .overrides_with_all([options::QUIET, options::STATUS]),
         )
@@ -393,7 +403,7 @@ pub fn uu_app_common() -> Command {
             Arg::new("zero")
                 .short('z')
                 .long("zero")
-                .help("end each output line with NUL, not newline")
+                .help(get_message("hashsum-help-zero"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -416,10 +426,7 @@ fn uu_app_opt_length(command: Command) -> Command {
             .long(options::LENGTH)
             .value_parser(value_parser!(usize))
             .short('l')
-            .help(
-                "digest length in bits; must not exceed the max for the blake2 algorithm \
-                    and must be a multiple of 8",
-            )
+            .help(get_message("hashsum-help-length"))
             .overrides_with(options::LENGTH)
             .action(ArgAction::Set),
     )
@@ -433,7 +440,7 @@ fn uu_app_b3sum_opts(command: Command) -> Command {
     command.arg(
         Arg::new("no-names")
             .long("no-names")
-            .help("Omits filenames in the output (option not present in GNU/Coreutils)")
+            .help(get_message("hashsum-help-no-names"))
             .action(ArgAction::SetTrue),
     )
 }
@@ -447,7 +454,7 @@ fn uu_app_opt_bits(command: Command) -> Command {
     command.arg(
         Arg::new("bits")
             .long("bits")
-            .help("set the size of the output (only for SHAKE)")
+            .help(get_message("hashsum-help-bits"))
             .value_name("BITS")
             // XXX: should we actually use validators?  they're not particularly efficient
             .value_parser(parse_bit_num),
@@ -457,34 +464,28 @@ fn uu_app_opt_bits(command: Command) -> Command {
 pub fn uu_app_custom() -> Command {
     let mut command = uu_app_b3sum_opts(uu_app_opt_bits(uu_app_common()));
     let algorithms = &[
-        ("md5", "work with MD5"),
-        ("sha1", "work with SHA1"),
-        ("sha224", "work with SHA224"),
-        ("sha256", "work with SHA256"),
-        ("sha384", "work with SHA384"),
-        ("sha512", "work with SHA512"),
-        ("sha3", "work with SHA3"),
-        ("sha3-224", "work with SHA3-224"),
-        ("sha3-256", "work with SHA3-256"),
-        ("sha3-384", "work with SHA3-384"),
-        ("sha3-512", "work with SHA3-512"),
-        (
-            "shake128",
-            "work with SHAKE128 using BITS for the output size",
-        ),
-        (
-            "shake256",
-            "work with SHAKE256 using BITS for the output size",
-        ),
-        ("b2sum", "work with BLAKE2"),
-        ("b3sum", "work with BLAKE3"),
+        ("md5", get_message("hashsum-help-md5")),
+        ("sha1", get_message("hashsum-help-sha1")),
+        ("sha224", get_message("hashsum-help-sha224")),
+        ("sha256", get_message("hashsum-help-sha256")),
+        ("sha384", get_message("hashsum-help-sha384")),
+        ("sha512", get_message("hashsum-help-sha512")),
+        ("sha3", get_message("hashsum-help-sha3")),
+        ("sha3-224", get_message("hashsum-help-sha3-224")),
+        ("sha3-256", get_message("hashsum-help-sha3-256")),
+        ("sha3-384", get_message("hashsum-help-sha3-384")),
+        ("sha3-512", get_message("hashsum-help-sha3-512")),
+        ("shake128", get_message("hashsum-help-shake128")),
+        ("shake256", get_message("hashsum-help-shake256")),
+        ("b2sum", get_message("hashsum-help-b2sum")),
+        ("b3sum", get_message("hashsum-help-b3sum")),
     ];
 
     for (name, desc) in algorithms {
         command = command.arg(
             Arg::new(*name)
                 .long(name)
-                .help(*desc)
+                .help(desc)
                 .action(ArgAction::SetTrue),
         );
     }
@@ -549,7 +550,7 @@ where
             options.binary,
             options.output_bits,
         )
-        .map_err_context(|| "failed to read input".to_string())?;
+        .map_err_context(|| get_message("hashsum-error-failed-to-read-input"))?;
         let (escaped_filename, prefix) = escape_filename(filename);
         if options.tag {
             if options.algoname == "blake2b" {
