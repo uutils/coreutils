@@ -227,26 +227,26 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_SEPARATOR)
                 .short('s')
                 .long("separator")
-                .help("Separator character (defaults to \\n)"),
+                .help(get_message("seq-help-separator")),
         )
         .arg(
             Arg::new(OPT_TERMINATOR)
                 .short('t')
                 .long("terminator")
-                .help("Terminator character (defaults to \\n)"),
+                .help(get_message("seq-help-terminator")),
         )
         .arg(
             Arg::new(OPT_EQUAL_WIDTH)
                 .short('w')
                 .long("equal-width")
-                .help("Equalize widths of all numbers by padding with zeros")
+                .help(get_message("seq-help-equal-width"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_FORMAT)
                 .short('f')
                 .long(OPT_FORMAT)
-                .help("use printf style floating-point FORMAT"),
+                .help(get_message("seq-help-format")),
         )
         .arg(
             // we use allow_hyphen_values instead of allow_negative_numbers because clap removed
