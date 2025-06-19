@@ -96,6 +96,24 @@ fn unexpand_first_only_1() {
 }
 
 #[test]
+fn unexpand_first_only_2() {
+    new_ucmd!()
+        .args(&["-t3", "-f"])
+        .pipe_in("        A     B")
+        .succeeds()
+        .stdout_is("\t\t  A     B");
+}
+
+#[test]
+fn unexpand_first_only_3() {
+    new_ucmd!()
+        .args(&["-f", "-t8"])
+        .pipe_in("        A     B")
+        .succeeds()
+        .stdout_is("\tA     B");
+}
+
+#[test]
 fn unexpand_trailing_space_0() {
     // evil
     // Individual spaces before fields starting with non blanks should not be
