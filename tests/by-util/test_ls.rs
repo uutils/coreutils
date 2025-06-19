@@ -5716,3 +5716,40 @@ fn test_unknown_format_specifier() {
         .succeeds()
         .stdout_matches(&re_custom_format);
 }
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl_display_symlink() {
+    use std::process::Command;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_name = "dir";
+    let link_name = "link";
+    at.mkdir(dir_name);
+
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new("setfacl")
+        .args(["-d", "-m", "u:bin:rwx", &at.plus_as_string(dir_name)])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {e}");
+            return;
+        }
+    }
+
+    at.symlink_dir(dir_name, link_name);
+
+    let re_with_acl = Regex::new(r"[a-z-]*\+ .*link").unwrap();
+    ucmd.arg("-lLd")
+        .arg(link_name)
+        .succeeds()
+        .stdout_matches(&re_with_acl);
+}
