@@ -49,6 +49,14 @@ fn all_and_setting() {
 }
 
 #[test]
+fn all_and_print_setting() {
+    new_ucmd!()
+        .args(&["--all", "size"])
+        .fails()
+        .stderr_contains("when specifying an output style, modes may not be set");
+}
+
+#[test]
 fn save_and_all() {
     new_ucmd!()
         .args(&["--save", "--all"])
@@ -200,4 +208,38 @@ fn set_mapping() {
         .args(&["--all"])
         .succeeds()
         .stdout_contains("intr = ^C");
+}
+
+#[test]
+fn row_column_sizes() {
+    new_ucmd!()
+        .args(&["rows", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument: '-1'");
+
+    new_ucmd!()
+        .args(&["columns", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument: '-1'");
+
+    // overflow the u32 used for row/col counts
+    new_ucmd!()
+        .args(&["cols", "4294967296"])
+        .fails()
+        .stderr_contains("invalid integer argument: '4294967296'");
+
+    new_ucmd!()
+        .args(&["rows", ""])
+        .fails()
+        .stderr_contains("invalid integer argument: ''");
+
+    new_ucmd!()
+        .args(&["columns"])
+        .fails()
+        .stderr_contains("missing argument to 'columns'");
+
+    new_ucmd!()
+        .args(&["rows"])
+        .fails()
+        .stderr_contains("missing argument to 'rows'");
 }
