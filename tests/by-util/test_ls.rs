@@ -5730,7 +5730,7 @@ fn test_acl_display_symlink() {
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     match Command::new("setfacl")
-        .args(["-d", "-m", "u:bin:rwx", dir_name])
+        .args(["-d", "-m", "u:bin:rwx", &at.plus_as_string(dir_name)])
         .status()
         .map(|status| status.code())
     {
