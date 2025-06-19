@@ -5744,9 +5744,12 @@ fn test_acl_display_symlink() {
             return;
         }
     }
+
     at.symlink_dir(dir_name, link_name);
+
+    let re_with_acl = Regex::new(r"[a-z-]*\+ .*link").unwrap();
     ucmd.arg("-lLd")
         .arg(link_name)
         .succeeds()
-        .stdout_contains("drwxrwxr-x+");
+        .stdout_matches(&re_with_acl);
 }
