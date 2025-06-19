@@ -175,6 +175,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::FIRST_ONLY)
+                .short('f')
                 .long(options::FIRST_ONLY)
                 .help(get_message("unexpand-help-first-only"))
                 .action(ArgAction::SetTrue),
