@@ -8,8 +8,6 @@ use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 use regex::Regex;
-#[cfg(target_os = "linux")]
-use std::fmt::Write;
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -92,27 +90,6 @@ fn test_tee_append() {
         .stdout_is(content);
     assert!(at.file_exists(file));
     assert_eq!(at.read(file), content.repeat(2));
-}
-
-#[test]
-#[cfg(target_os = "linux")]
-fn test_tee_no_more_writeable_1() {
-    // equals to 'tee /dev/full out2 <multi_read' call
-    let (at, mut ucmd) = at_and_ucmd!();
-    let content = (1..=10).fold(String::new(), |mut output, x| {
-        writeln!(output, "{x}").unwrap();
-        output
-    });
-    let file_out = "tee_file_out";
-
-    ucmd.arg("/dev/full")
-        .arg(file_out)
-        .pipe_in(&content[..])
-        .fails()
-        .stdout_contains(&content)
-        .stderr_contains("No space left on device");
-
-    assert_eq!(at.read(file_out), content);
 }
 
 #[test]
@@ -602,6 +579,26 @@ mod linux_only {
 
         expect_success(&output);
         expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_tee_no_more_writeable_1() {
+        // equals to 'tee /dev/full out2 <multi_read' call
+        let (at, mut ucmd) = at_and_ucmd!();
+        let content = (1..=10).fold(String::new(), |mut output, x| {
+            writeln!(output, "{x}").unwrap();
+            output
+        });
+        let file_out = "tee_file_out";
+
+        ucmd.arg("/dev/full")
+            .arg(file_out)
+            .pipe_in(&content[..])
+            .fails()
+            .stdout_contains(&content)
+            .stderr_contains("No space left on device");
+
+        assert_eq!(at.read(file_out), content);
     }
 
     #[test]
