@@ -61,7 +61,9 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::libc::{dev_t, major, minor};
 use uucore::line_ending::LineEnding;
 use uucore::locale::get_message;
-use uucore::quoting_style::{self, QuotingStyle, escape_name};
+use uucore::quoting_style::{
+    self, QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name,
+};
 use uucore::{
     display::Quotable,
     error::{UError, UResult, set_exit_code},
@@ -2037,7 +2039,7 @@ fn show_dir_name(
     config: &Config,
 ) -> std::io::Result<()> {
     let escaped_name =
-        quoting_style::escape_dir_name(path_data.p_buf.as_os_str(), &config.quoting_style);
+        locale_aware_escape_dir_name(path_data.p_buf.as_os_str(), &config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -2535,7 +2537,7 @@ fn display_items(
     // option, print the security context to the left of the size column.
 
     let quoted = items.iter().any(|item| {
-        let name = escape_name(&item.display_name, &config.quoting_style);
+        let name = locale_aware_escape_name(&item.display_name, &config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
 
@@ -3178,7 +3180,7 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
 /// Takes a [`PathData`] struct and returns a cell with a name ready for displaying.
 ///
 /// This function relies on the following parameters in the provided `&Config`:
-/// * `config.quoting_style` to decide how we will escape `name` using [`escape_name`].
+/// * `config.quoting_style` to decide how we will escape `name` using [`locale_aware_escape_name`].
 /// * `config.inode` decides whether to display inode numbers beside names using [`get_inode`].
 /// * `config.color` decides whether it's going to color `name` using [`color_name`].
 /// * `config.indicator_style` to append specific characters to `name` using [`classify_file`].
@@ -3199,7 +3201,7 @@ fn display_item_name(
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
-    let mut name = escape_name(&path.display_name, &config.quoting_style);
+    let mut name = locale_aware_escape_name(&path.display_name, &config.quoting_style);
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
@@ -3291,7 +3293,7 @@ fn display_item_name(
                         name.push(path.p_buf.read_link().unwrap());
                     } else {
                         name.push(color_name(
-                            escape_name(target.as_os_str(), &config.quoting_style),
+                            locale_aware_escape_name(target.as_os_str(), &config.quoting_style),
                             path,
                             style_manager,
                             &mut state.out,
@@ -3302,7 +3304,10 @@ fn display_item_name(
                 } else {
                     // If no coloring is required, we just use target as is.
                     // Apply the right quoting
-                    name.push(escape_name(target.as_os_str(), &config.quoting_style));
+                    name.push(locale_aware_escape_name(
+                        target.as_os_str(),
+                        &config.quoting_style,
+                    ));
                 }
             }
             Err(err) => {
