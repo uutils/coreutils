@@ -113,3 +113,48 @@ dd-after-help = ### Operands
   - nocache : request that OS drop cache.
   - noctty : do not assign a controlling tty.
   - nofollow : do not follow system links.
+
+# Error messages
+dd-error-failed-to-open = failed to open { $path }
+dd-error-write-error = write error
+dd-error-failed-to-seek = failed to seek in output file
+dd-error-io-error = IO error
+dd-error-cannot-skip-offset = '{ $file }': cannot skip to specified offset
+dd-error-cannot-skip-invalid = '{ $file }': cannot skip: Invalid argument
+dd-error-cannot-seek-invalid = '{ $output }': cannot seek: Invalid argument
+dd-error-not-directory = setting flags for '{ $file }': Not a directory
+dd-error-failed-discard-cache-input = failed to discard cache for: 'standard input'
+dd-error-failed-discard-cache-output = failed to discard cache for: 'standard output'
+
+# Parse errors
+dd-error-unrecognized-operand = Unrecognized operand '{ $operand }'
+dd-error-multiple-format-table = Only one of conv=ascii conv=ebcdic or conv=ibm may be specified
+dd-error-multiple-case = Only one of conv=lcase or conv=ucase may be specified
+dd-error-multiple-block = Only one of conv=block or conv=unblock may be specified
+dd-error-multiple-excl = Only one ov conv=excl or conv=nocreat may be specified
+dd-error-invalid-flag = invalid input flag: ‘{ $flag }’
+  Try '{ $cmd } --help' for more information.
+dd-error-conv-flag-no-match = Unrecognized conv=CONV -> { $flag }
+dd-error-multiplier-parse-failure = invalid number: '{ $input }'
+dd-error-multiplier-overflow = Multiplier string would overflow on current system -> { $input }
+dd-error-block-without-cbs = conv=block or conv=unblock specified without cbs=N
+dd-error-status-not-recognized = status=LEVEL not recognized -> { $level }
+dd-error-unimplemented = feature not implemented on this system -> { $feature }
+dd-error-bs-out-of-range = { $param }=N cannot fit into memory
+dd-error-invalid-number = invalid number: ‘{ $input }’
+
+# Progress messages
+dd-progress-records-in = { $complete }+{ $partial } records in
+dd-progress-records-out = { $complete }+{ $partial } records out
+dd-progress-truncated-record = { $count ->
+    [one] { $count } truncated record
+   *[other] { $count } truncated records
+}
+dd-progress-byte-copied = { $bytes } byte copied, { $duration } s, { $rate }/s
+dd-progress-bytes-copied = { $bytes } bytes copied, { $duration } s, { $rate }/s
+dd-progress-bytes-copied-si = { $bytes } bytes ({ $si }) copied, { $duration } s, { $rate }/s
+dd-progress-bytes-copied-si-iec = { $bytes } bytes ({ $si }, { $iec }) copied, { $duration } s, { $rate }/s
+
+# Warnings
+dd-warning-zero-multiplier = { $zero } is a zero multiplier; use { $alternative } if that is intended
+dd-warning-signal-handler = Internal dd Warning: Unable to register signal handler
