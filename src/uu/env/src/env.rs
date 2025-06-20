@@ -22,6 +22,7 @@ use nix::sys::signal::{
     SaFlags, SigAction, SigHandler, SigHandler::SigIgn, SigSet, Signal, raise, sigaction, signal,
 };
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
@@ -34,6 +35,7 @@ use std::process::{self};
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
+use uucore::locale::{get_message, get_message_with_args};
 #[cfg(unix)]
 use uucore::signals::signal_by_name_or_value;
 use uucore::{format_usage, show_warning};
@@ -42,23 +44,23 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum EnvError {
-    #[error("no terminating quote in -S string")]
+    #[error("{}", get_message_with_args("env-error-missing-closing-quote", HashMap::from([("position".to_string(), .0.to_string()), ("quote".to_string(), .1.to_string())])))]
     EnvMissingClosingQuote(usize, char),
-    #[error("invalid backslash at end of string in -S")]
+    #[error("{}", get_message_with_args("env-error-invalid-backslash-at-end", HashMap::from([("position".to_string(), .0.to_string()), ("context".to_string(), .1.clone())])))]
     EnvInvalidBackslashAtEndOfStringInMinusS(usize, String),
-    #[error("'\\c' must not appear in double-quoted -S string")]
+    #[error("{}", get_message_with_args("env-error-backslash-c-not-allowed", HashMap::from([("position".to_string(), .0.to_string())])))]
     EnvBackslashCNotAllowedInDoubleQuotes(usize),
-    #[error("invalid sequence '\\{}' in -S",.1)]
+    #[error("{}", get_message_with_args("env-error-invalid-sequence", HashMap::from([("position".to_string(), .0.to_string()), ("char".to_string(), .1.to_string())])))]
     EnvInvalidSequenceBackslashXInMinusS(usize, char),
-    #[error("Missing closing brace")]
+    #[error("{}", get_message_with_args("env-error-missing-closing-brace", HashMap::from([("position".to_string(), .0.to_string())])))]
     EnvParsingOfVariableMissingClosingBrace(usize),
-    #[error("Missing variable name")]
+    #[error("{}", get_message_with_args("env-error-missing-variable", HashMap::from([("position".to_string(), .0.to_string())])))]
     EnvParsingOfMissingVariable(usize),
-    #[error("Missing closing brace after default value at {}",.0)]
+    #[error("{}", get_message_with_args("env-error-missing-closing-brace-after-value", HashMap::from([("position".to_string(), .0.to_string())])))]
     EnvParsingOfVariableMissingClosingBraceAfterValue(usize),
-    #[error("Unexpected character: '{}', expected variable name must not start with 0..9",.1)]
+    #[error("{}", get_message_with_args("env-error-unexpected-number", HashMap::from([("position".to_string(), .0.to_string()), ("char".to_string(), .1.clone())])))]
     EnvParsingOfVariableUnexpectedNumber(usize, String),
-    #[error("Unexpected character: '{}', expected a closing brace ('}}') or colon (':')",.1)]
+    #[error("{}", get_message_with_args("env-error-expected-brace-or-colon", HashMap::from([("position".to_string(), .0.to_string()), ("char".to_string(), .1.clone())])))]
     EnvParsingOfVariableExceptedBraceOrColon(usize, String),
     #[error("")]
     EnvReachedEnd,
@@ -74,8 +76,6 @@ impl From<string_parser::Error> for EnvError {
     }
 }
 
-use uucore::locale::get_message;
-
 mod options {
     pub const IGNORE_ENVIRONMENT: &str = "ignore-environment";
     pub const CHDIR: &str = "chdir";
@@ -87,8 +87,6 @@ mod options {
     pub const ARGV0: &str = "argv0";
     pub const IGNORE_SIGNAL: &str = "ignore-signal";
 }
-
-const ERROR_MSG_S_SHEBANG: &str = "use -[v]S to pass options in shebang lines";
 
 struct Options<'a> {
     ignore_env: bool,
@@ -131,7 +129,7 @@ fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> 
     if opts.line_ending == LineEnding::Nul {
         Err(UUsageError::new(
             125,
-            "cannot specify --null (-0) with command".to_string(),
+            get_message("env-error-cannot-specify-null-with-command"),
         ))
     } else {
         opts.program.push(opt);
@@ -143,7 +141,13 @@ fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> 
 fn parse_signal_value(signal_name: &str) -> UResult<usize> {
     let signal_name_upcase = signal_name.to_uppercase();
     let optional_signal_value = signal_by_name_or_value(&signal_name_upcase);
-    let error = USimpleError::new(125, format!("{}: invalid signal", signal_name.quote()));
+    let error = USimpleError::new(
+        125,
+        get_message_with_args(
+            "env-error-invalid-signal",
+            HashMap::from([("signal".to_string(), signal_name.quote().to_string())]),
+        ),
+    );
     match optional_signal_value {
         Some(sig_val) => {
             if sig_val == 0 {
@@ -177,7 +181,10 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
         let Some(sig_str) = sig.to_str() else {
             return Err(USimpleError::new(
                 1,
-                format!("{}: invalid signal", sig.quote()),
+                get_message_with_args(
+                    "env-error-invalid-signal",
+                    HashMap::from([("signal".to_string(), sig.quote().to_string())]),
+                ),
             ));
         };
         let sig_val = parse_signal_value(sig_str)?;
@@ -201,8 +208,18 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
             Ini::load_from_file(file)
         };
 
-        let conf =
-            conf.map_err(|e| USimpleError::new(1, format!("{}: {e}", file.maybe_quote())))?;
+        let conf = conf.map_err(|e| {
+            USimpleError::new(
+                1,
+                get_message_with_args(
+                    "env-error-config-file",
+                    HashMap::from([
+                        ("file".to_string(), file.maybe_quote().to_string()),
+                        ("error".to_string(), e.to_string()),
+                    ]),
+                ),
+            )
+        })?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
@@ -229,7 +246,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::IGNORE_ENVIRONMENT)
                 .short('i')
                 .long(options::IGNORE_ENVIRONMENT)
-                .help("start with an empty environment")
+                .help(get_message("env-help-ignore-environment"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -240,16 +257,13 @@ pub fn uu_app() -> Command {
                 .value_name("DIR")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath)
-                .help("change working directory to DIR"),
+                .help(get_message("env-help-chdir")),
         )
         .arg(
             Arg::new(options::NULL)
                 .short('0')
                 .long(options::NULL)
-                .help(
-                    "end each output line with a 0 byte rather than a newline (only \
-                valid when printing the environment)",
-                )
+                .help(get_message("env-help-null"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -260,10 +274,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(ValueParser::os_string())
                 .action(ArgAction::Append)
-                .help(
-                    "read and set variables from a \".env\"-style configuration file \
-                (prior to any unset and/or set)",
-                ),
+                .help(get_message("env-help-file")),
         )
         .arg(
             Arg::new(options::UNSET)
@@ -272,14 +283,14 @@ pub fn uu_app() -> Command {
                 .value_name("NAME")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
-                .help("remove variable from the environment"),
+                .help(get_message("env-help-unset")),
         )
         .arg(
             Arg::new(options::DEBUG)
                 .short('v')
                 .long(options::DEBUG)
                 .action(ArgAction::Count)
-                .help("print verbose information for each processing step"),
+                .help(get_message("env-help-debug")),
         )
         .arg(
             Arg::new(options::SPLIT_STRING) // split string handling is implemented directly, not using CLAP. But this entry here is needed for the help information output.
@@ -288,8 +299,9 @@ pub fn uu_app() -> Command {
                 .value_name("S")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
-                .help("process and split S into separate arguments; used to pass multiple arguments on shebang lines")
-        ).arg(
+                .help(get_message("env-help-split-string")),
+        )
+        .arg(
             Arg::new(options::ARGV0)
                 .overrides_with(options::ARGV0)
                 .short('a')
@@ -297,13 +309,12 @@ pub fn uu_app() -> Command {
                 .value_name("a")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
-                .help("Override the zeroth argument passed to the command being executed. \
-                       Without this option a default value of `command` is used.")
+                .help(get_message("env-help-argv0")),
         )
         .arg(
             Arg::new("vars")
                 .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::IGNORE_SIGNAL)
@@ -311,7 +322,7 @@ pub fn uu_app() -> Command {
                 .value_name("SIG")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
-                .help("set handling of SIG signal(s) to do nothing")
+                .help(get_message("env-help-ignore-signal")),
         )
 }
 
@@ -325,22 +336,63 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
             USimpleError::new(125, e.to_string())
         }
         EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
-        EnvError::EnvParsingOfVariableMissingClosingBrace(pos) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
-        }
-        EnvError::EnvParsingOfMissingVariable(pos) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
-        }
-        EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
-        }
-        EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
-        }
-        EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => {
-            USimpleError::new(125, format!("variable name issue (at {pos}): {e}"))
-        }
-        _ => USimpleError::new(125, format!("Error: {e:?}")),
+        EnvError::EnvParsingOfVariableMissingClosingBrace(pos) => USimpleError::new(
+            125,
+            get_message_with_args(
+                "env-error-variable-name-issue",
+                HashMap::from([
+                    ("position".to_string(), pos.to_string()),
+                    ("error".to_string(), e.to_string()),
+                ]),
+            ),
+        ),
+        EnvError::EnvParsingOfMissingVariable(pos) => USimpleError::new(
+            125,
+            get_message_with_args(
+                "env-error-variable-name-issue",
+                HashMap::from([
+                    ("position".to_string(), pos.to_string()),
+                    ("error".to_string(), e.to_string()),
+                ]),
+            ),
+        ),
+        EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => USimpleError::new(
+            125,
+            get_message_with_args(
+                "env-error-variable-name-issue",
+                HashMap::from([
+                    ("position".to_string(), pos.to_string()),
+                    ("error".to_string(), e.to_string()),
+                ]),
+            ),
+        ),
+        EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => USimpleError::new(
+            125,
+            get_message_with_args(
+                "env-error-variable-name-issue",
+                HashMap::from([
+                    ("position".to_string(), pos.to_string()),
+                    ("error".to_string(), e.to_string()),
+                ]),
+            ),
+        ),
+        EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => USimpleError::new(
+            125,
+            get_message_with_args(
+                "env-error-variable-name-issue",
+                HashMap::from([
+                    ("position".to_string(), pos.to_string()),
+                    ("error".to_string(), e.to_string()),
+                ]),
+            ),
+        ),
+        _ => USimpleError::new(
+            125,
+            get_message_with_args(
+                "env-error-generic",
+                HashMap::from([("error".to_string(), format!("{e:?}"))]),
+            ),
+        ),
     })
 }
 
@@ -385,9 +437,15 @@ struct EnvAppData {
 
 impl EnvAppData {
     fn make_error_no_such_file_or_dir(&self, prog: &OsStr) -> Box<dyn UError> {
-        uucore::show_error!("{}: No such file or directory", prog.quote());
+        uucore::show_error!(
+            "{}",
+            get_message_with_args(
+                "env-error-no-such-file",
+                HashMap::from([("program".to_string(), prog.quote().to_string())])
+            )
+        );
         if !self.had_string_argument {
-            uucore::show_error!("{ERROR_MSG_S_SHEBANG}");
+            uucore::show_error!("{}", get_message("env-error-use-s-shebang"));
         }
         ExitCode::new(127)
     }
@@ -461,7 +519,10 @@ impl EnvAppData {
                     {
                         return Err(USimpleError::new(
                             125,
-                            format!("cannot unset '{}': Invalid argument", &arg_str[2..]),
+                            get_message_with_args(
+                                "env-error-cannot-unset",
+                                HashMap::from([("name".to_string(), arg_str[2..].to_string())]),
+                            ),
                         ));
                     }
 
@@ -493,7 +554,7 @@ impl EnvAppData {
                             let s = s.trim_end();
                             uucore::show_error!("{s}");
                         }
-                        uucore::show_error!("{ERROR_MSG_S_SHEBANG}");
+                        uucore::show_error!("{}", get_message("env-error-use-s-shebang"));
                         ExitCode::new(125)
                     }
                 }
@@ -578,7 +639,7 @@ impl EnvAppData {
             #[cfg(not(unix))]
             return Err(USimpleError::new(
                 2,
-                "--argv0 is currently not supported on this platform",
+                get_message("env-error-argv0-not-supported"),
             ));
         }
 
@@ -629,11 +690,23 @@ impl EnvAppData {
                         Err(self.make_error_no_such_file_or_dir(&prog))
                     }
                     io::ErrorKind::PermissionDenied => {
-                        uucore::show_error!("{}: Permission denied", prog.quote());
+                        uucore::show_error!(
+                            "{}",
+                            get_message_with_args(
+                                "env-error-permission-denied",
+                                HashMap::from([("program".to_string(), prog.quote().to_string())])
+                            )
+                        );
                         Err(126.into())
                     }
                     _ => {
-                        uucore::show_error!("unknown error: {err:?}");
+                        uucore::show_error!(
+                            "{}",
+                            get_message_with_args(
+                                "env-error-unknown",
+                                HashMap::from([("error".to_string(), format!("{err:?}"))])
+                            )
+                        );
                         Err(126.into())
                     }
                 };
@@ -722,7 +795,10 @@ fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
         {
             return Err(USimpleError::new(
                 125,
-                format!("cannot unset {}: Invalid argument", name.quote()),
+                get_message_with_args(
+                    "env-error-cannot-unset-invalid",
+                    HashMap::from([("name".to_string(), name.quote().to_string())]),
+                ),
             ));
         }
         unsafe {
@@ -737,7 +813,7 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     if opts.program.is_empty() && opts.running_directory.is_some() {
         return Err(UUsageError::new(
             125,
-            "must specify command with --chdir (-C)".to_string(),
+            get_message("env-error-must-specify-command-with-chdir"),
         ));
     }
 
@@ -747,7 +823,13 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
             Err(error) => {
                 return Err(USimpleError::new(
                     125,
-                    format!("cannot change directory to {}: {error}", d.quote()),
+                    get_message_with_args(
+                        "env-error-cannot-change-directory",
+                        HashMap::from([
+                            ("directory".to_string(), d.quote().to_string()),
+                            ("error".to_string(), error.to_string()),
+                        ]),
+                    ),
                 ));
             }
         };
@@ -781,7 +863,13 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
          */
 
         if name.is_empty() {
-            show_warning!("no name specified for value {}", val.quote());
+            show_warning!(
+                "{}",
+                get_message_with_args(
+                    "env-warning-no-name-specified",
+                    HashMap::from([("value".to_string(), val.quote().to_string())])
+                )
+            );
             continue;
         }
         unsafe {
@@ -809,10 +897,12 @@ fn ignore_signal(sig: Signal) -> UResult<()> {
     if let Err(err) = result {
         return Err(USimpleError::new(
             125,
-            format!(
-                "failed to set signal action for signal {}: {}",
-                sig as i32,
-                err.desc()
+            get_message_with_args(
+                "env-error-failed-set-signal-action",
+                HashMap::from([
+                    ("signal".to_string(), (sig as i32).to_string()),
+                    ("error".to_string(), err.desc().to_string()),
+                ]),
             ),
         ));
     }
