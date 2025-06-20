@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use std::collections::HashMap;
 use std::env;
 use std::io::Write;
 use std::io::{BufWriter, Error, Result};
@@ -10,6 +11,7 @@ use std::process::{Child, Command, Stdio};
 use uucore::error::USimpleError;
 use uucore::fs;
 use uucore::fs::FileInformation;
+use uucore::locale::get_message_with_args;
 use uucore::show;
 
 /// A writer that writes to a shell_process' stdin
@@ -110,11 +112,17 @@ impl Drop for FilterWriter {
             if return_code != 0 {
                 show!(USimpleError::new(
                     1,
-                    format!("Shell process returned {return_code}")
+                    get_message_with_args(
+                        "split-error-shell-process-returned",
+                        HashMap::from([("code".to_string(), return_code.to_string())])
+                    )
                 ));
             }
         } else {
-            show!(USimpleError::new(1, "Shell process terminated by signal"));
+            show!(USimpleError::new(
+                1,
+                get_message_with_args("split-error-shell-process-terminated", HashMap::new())
+            ));
         }
     }
 }
@@ -134,14 +142,22 @@ pub fn instantiate_current_writer(
                     .create(true)
                     .truncate(true)
                     .open(Path::new(&filename))
-                    .map_err(|_| Error::other(format!("unable to open '{filename}'; aborting")))?
+                    .map_err(|_| {
+                        Error::other(get_message_with_args(
+                            "split-error-unable-to-open-file",
+                            HashMap::from([("file".to_string(), filename.to_string())]),
+                        ))
+                    })?
             } else {
                 // re-open file that we previously created to append to it
                 std::fs::OpenOptions::new()
                     .append(true)
                     .open(Path::new(&filename))
                     .map_err(|_| {
-                        Error::other(format!("unable to re-open '{filename}'; aborting"))
+                        Error::other(get_message_with_args(
+                            "split-error-unable-to-reopen-file",
+                            HashMap::from([("file".to_string(), filename.to_string())]),
+                        ))
                     })?
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
