@@ -35,3 +35,33 @@ shred-after-help = Delete FILE(s) if --remove (-u) is specified. The default is 
   In addition, file system backups and remote mirrors may contain copies of
   the file that cannot be removed, and that will allow a shredded file to be
   recovered later.
+
+# Error messages
+shred-missing-file-operand = missing file operand
+shred-invalid-number-of-passes = invalid number of passes: {$passes}
+shred-cannot-open-random-source = cannot open random source: {$source}
+shred-invalid-file-size = invalid file size: {$size}
+shred-no-such-file-or-directory = {$file}: No such file or directory
+shred-not-a-file = {$file}: Not a file
+
+# Option help text
+shred-force-help = change permissions to allow writing if necessary
+shred-iterations-help = overwrite N times instead of the default (3)
+shred-size-help = shred this many bytes (suffixes like K, M, G accepted)
+shred-deallocate-help = deallocate and remove file after overwriting
+shred-remove-help = like -u but give control on HOW to delete;  See below
+shred-verbose-help = show progress
+shred-exact-help = do not round file sizes up to the next full block;
+                   this is the default for non-regular files
+shred-zero-help = add a final overwrite with zeros to hide shredding
+shred-random-source-help = take random bytes from FILE
+
+# Verbose messages
+shred-removing = {$file}: removing
+shred-removed = {$file}: removed
+shred-renamed-to = renamed to
+shred-pass-progress = {$file}: pass
+shred-couldnt-rename = {$file}: Couldn't rename to {$new_name}: {$error}
+shred-failed-to-open-for-writing = {$file}: failed to open for writing
+shred-file-write-pass-failed = {$file}: File write pass failed
+shred-failed-to-remove-file = {$file}: failed to remove file
