@@ -324,6 +324,31 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     init_localization(&locale, &locales_dir)
 }
 
+#[cfg(not(debug_assertions))]
+fn resolve_locales_dir_from_exe_dir(exe_dir: &Path, p: &str) -> Option<PathBuf> {
+    // 1. <bindir>/locales/<prog>
+    let coreutils = exe_dir.join("locales").join(p);
+    if coreutils.exists() {
+        return Some(coreutils);
+    }
+
+    // 2. <prefix>/share/locales/<prog>
+    if let Some(prefix) = exe_dir.parent() {
+        let fhs = prefix.join("share").join("locales").join(p);
+        if fhs.exists() {
+            return Some(fhs);
+        }
+    }
+
+    // 3. <bindir>/<prog>   (legacy fall-back)
+    let fallback = exe_dir.join(p);
+    if fallback.exists() {
+        return Some(fallback);
+    }
+
+    None
+}
+
 /// Helper function to get the locales directory based on the build configuration
 fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     #[cfg(debug_assertions)]
@@ -365,23 +390,14 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
             LocalizationError::PathResolution("Failed to get executable directory".to_string())
         })?;
 
-        // Try the coreutils-style path first
-        let coreutils_path = exe_dir.join("locales").join(p);
-        if coreutils_path.exists() {
-            return Ok(coreutils_path);
+        if let Some(dir) = resolve_locales_dir_from_exe_dir(exe_dir, p) {
+            return Ok(dir);
         }
 
-        // Fallback to just the parameter as a relative path
-        let fallback_path = exe_dir.join(p);
-        if fallback_path.exists() {
-            return Ok(fallback_path);
-        }
-
-        return Err(LocalizationError::LocalesDirNotFound(format!(
-            "Release locales directory not found at {} or {}",
-            coreutils_path.display(),
-            fallback_path.display()
-        )));
+        Err(LocalizationError::LocalesDirNotFound(format!(
+            "Release locales directory not found starting from {}",
+            exe_dir.display()
+        )))
     }
 }
 
@@ -1086,5 +1102,30 @@ invalid-syntax = This is { $missing
         } else {
             panic!("Expected LocalizationError::ParseResource with snippet");
         }
+    }
+}
+
+#[cfg(all(test, not(debug_assertions)))]
+mod fhs_tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn resolves_fhs_share_locales_layout() {
+        // 1. Set up a fake installation prefix in a temp directory
+        let prefix = TempDir::new().unwrap(); // e.g.  /tmp/xyz
+        let bin_dir = prefix.path().join("bin"); //        /tmp/xyz/bin
+        let share_dir = prefix.path().join("share").join("locales").join("cut"); // /tmp/xyz/share/locales/cut
+        std::fs::create_dir_all(&share_dir).unwrap();
+        std::fs::create_dir_all(&bin_dir).unwrap();
+
+        // 2. Pretend the executable lives in <prefix>/bin
+        let exe_dir = bin_dir.as_path();
+
+        // 3. Ask the helper to resolve the locales dir
+        let result = resolve_locales_dir_from_exe_dir(exe_dir, "cut")
+            .expect("should find locales via FHS path");
+
+        assert_eq!(result, share_dir);
     }
 }
