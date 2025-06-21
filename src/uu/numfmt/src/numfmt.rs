@@ -8,6 +8,7 @@ use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
+use std::collections::HashMap;
 use std::io::{BufRead, Error, Write};
 use std::result::Result as StdResult;
 use std::str::FromStr;
@@ -15,7 +16,7 @@ use std::str::FromStr;
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::ranges::Range;
 use uucore::{format_usage, show, show_error};
@@ -97,7 +98,7 @@ fn parse_unit(s: &str) -> Result<Unit> {
         "iec" => Ok(Unit::Iec(false)),
         "iec-i" => Ok(Unit::Iec(true)),
         "none" => Ok(Unit::None),
-        _ => Err("Unsupported unit is specified".to_owned()),
+        _ => Err(get_message("numfmt-error-unsupported-unit")),
     }
 }
 
@@ -119,7 +120,10 @@ fn parse_unit_size(s: &str) -> Result<usize> {
         }
     }
 
-    Err(format!("invalid unit size: {}", s.quote()))
+    Err(get_message_with_args(
+        "numfmt-error-invalid-unit-size",
+        HashMap::from([("size".to_string(), s.quote().to_string())]),
+    ))
 }
 
 // Parses a suffix of a unit size and returns the corresponding multiplier. For example,
@@ -170,7 +174,12 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
                 0 => Err(s),
                 _ => Ok(n),
             })
-            .map_err(|s| format!("invalid padding value {}", s.quote())),
+            .map_err(|s| {
+                get_message_with_args(
+                    "numfmt-error-invalid-padding",
+                    HashMap::from([("value".to_string(), s.quote().to_string())]),
+                )
+            }),
         None => Ok(0),
     }?;
 
@@ -184,7 +193,12 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
                 0 => Err(value),
                 _ => Ok(n),
             })
-            .map_err(|value| format!("invalid header value {}", value.quote()))
+            .map_err(|value| {
+                get_message_with_args(
+                    "numfmt-error-invalid-header",
+                    HashMap::from([("value".to_string(), value.quote().to_string())]),
+                )
+            })
     } else {
         Ok(0)
     }?;
@@ -206,14 +220,18 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     };
 
     if format.grouping && to != Unit::None {
-        return Err("grouping cannot be combined with --to".to_string());
+        return Err(get_message(
+            "numfmt-error-grouping-cannot-be-combined-with-to",
+        ));
     }
 
     let delimiter = args.get_one::<String>(DELIMITER).map_or(Ok(None), |arg| {
         if arg.len() == 1 {
             Ok(Some(arg.to_string()))
         } else {
-            Err("the delimiter must be a single character".to_string())
+            Err(get_message(
+                "numfmt-error-delimiter-must-be-single-character",
+            ))
         }
     })?;
 
@@ -284,12 +302,12 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(DELIMITER)
                 .value_name("X")
-                .help("use X instead of whitespace for field delimiter"),
+                .help(get_message("numfmt-help-delimiter")),
         )
         .arg(
             Arg::new(FIELD)
                 .long(FIELD)
-                .help("replace the numbers in these input fields; see FIELDS below")
+                .help(get_message("numfmt-help-field"))
                 .value_name("FIELDS")
                 .allow_hyphen_values(true)
                 .default_value(FIELD_DEFAULT),
@@ -297,56 +315,48 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(FORMAT)
                 .long(FORMAT)
-                .help("use printf style floating-point FORMAT; see FORMAT below for details")
+                .help(get_message("numfmt-help-format"))
                 .value_name("FORMAT")
                 .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(FROM)
                 .long(FROM)
-                .help("auto-scale input numbers to UNITs; see UNIT below")
+                .help(get_message("numfmt-help-from"))
                 .value_name("UNIT")
                 .default_value(FROM_DEFAULT),
         )
         .arg(
             Arg::new(FROM_UNIT)
                 .long(FROM_UNIT)
-                .help("specify the input unit size")
+                .help(get_message("numfmt-help-from-unit"))
                 .value_name("N")
                 .default_value(FROM_UNIT_DEFAULT),
         )
         .arg(
             Arg::new(TO)
                 .long(TO)
-                .help("auto-scale output numbers to UNITs; see UNIT below")
+                .help(get_message("numfmt-help-to"))
                 .value_name("UNIT")
                 .default_value(TO_DEFAULT),
         )
         .arg(
             Arg::new(TO_UNIT)
                 .long(TO_UNIT)
-                .help("the output unit size")
+                .help(get_message("numfmt-help-to-unit"))
                 .value_name("N")
                 .default_value(TO_UNIT_DEFAULT),
         )
         .arg(
             Arg::new(PADDING)
                 .long(PADDING)
-                .help(
-                    "pad the output to N characters; positive N will \
-                     right-align; negative N will left-align; padding is \
-                     ignored if the output is wider than N; the default is \
-                     to automatically pad if a whitespace is found",
-                )
+                .help(get_message("numfmt-help-padding"))
                 .value_name("N"),
         )
         .arg(
             Arg::new(HEADER)
                 .long(HEADER)
-                .help(
-                    "print (without converting) the first N header lines; \
-                     N defaults to 1 if not specified",
-                )
+                .help(get_message("numfmt-help-header"))
                 .num_args(..=1)
                 .value_name("N")
                 .default_missing_value(HEADER_DEFAULT)
@@ -355,7 +365,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ROUND)
                 .long(ROUND)
-                .help("use METHOD for rounding when scaling")
+                .help(get_message("numfmt-help-round"))
                 .value_name("METHOD")
                 .default_value("from-zero")
                 .value_parser(ShortcutValueParser::new([
@@ -369,16 +379,13 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(SUFFIX)
                 .long(SUFFIX)
-                .help(
-                    "print SUFFIX after each formatted number, and accept \
-                    inputs optionally ending with SUFFIX",
-                )
+                .help(get_message("numfmt-help-suffix"))
                 .value_name("SUFFIX"),
         )
         .arg(
             Arg::new(INVALID)
                 .long(INVALID)
-                .help("set the failure mode for invalid input")
+                .help(get_message("numfmt-help-invalid"))
                 .default_value("abort")
                 .value_parser(["abort", "fail", "warn", "ignore"])
                 .value_name("INVALID"),
@@ -387,7 +394,7 @@ pub fn uu_app() -> Command {
             Arg::new(ZERO_TERMINATED)
                 .long(ZERO_TERMINATED)
                 .short('z')
-                .help("line delimiter is NUL, not newline")
+                .help(get_message("numfmt-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(NUMBER).hide(true).action(ArgAction::Append))
@@ -465,9 +472,9 @@ mod tests {
         let result_display = format!("{result}");
         assert_eq!(
             result_debug,
-            "FormattingError(\"invalid suffix in input: 'hello'\")"
+            "FormattingError(\"numfmt-error-invalid-suffix\")"
         );
-        assert_eq!(result_display, "invalid suffix in input: 'hello'");
+        assert_eq!(result_display, "numfmt-error-invalid-suffix");
         assert_eq!(result.code(), 2);
     }
 
