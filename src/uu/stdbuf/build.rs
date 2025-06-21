@@ -121,7 +121,6 @@ fn main() {
 
     assert!(
         found,
-        "Could not find built libstdbuf library. Searched in: {:?}.",
-        possible_paths
+        "Could not find built libstdbuf library. Searched in: {possible_paths:?}."
     );
 }

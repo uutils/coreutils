@@ -151,6 +151,7 @@ mod tests {
         }
     }
 
+    #[allow(clippy::inefficient_to_string)]
     fn obsolete_result(src: &[&str]) -> Option<Result<Vec<String>, ParseError>> {
         Some(Ok(src.iter().map(|s| s.to_string()).collect()))
     }

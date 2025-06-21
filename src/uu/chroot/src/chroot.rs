@@ -95,12 +95,12 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
                 if name.is_empty() {
                     // --groups=","
                     continue;
-                } else {
-                    // --groups=", "
-                    // chroot: invalid group ' '
-                    show!(ChrootError::InvalidGroup(name.to_string()));
-                    err = true;
                 }
+
+                // --groups=", "
+                // chroot: invalid group ' '
+                show!(ChrootError::InvalidGroup(name.to_string()));
+                err = true;
             } else {
                 // TODO Figure out a better condition here.
                 if trimmed_name.starts_with(char::is_numeric)
