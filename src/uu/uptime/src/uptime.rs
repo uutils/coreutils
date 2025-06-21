@@ -188,20 +188,17 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 fn uptime_since() -> UResult<()> {
     #[cfg(unix)]
     #[cfg(not(target_os = "openbsd"))]
-    let (boot_time, _) = process_utmpx(None);
-
-    #[cfg(target_os = "openbsd")]
-    let uptime = get_uptime(None)?;
-    #[cfg(unix)]
-    #[cfg(not(target_os = "openbsd"))]
-    let uptime = get_uptime(boot_time)?;
-    #[cfg(target_os = "windows")]
+    let uptime = {
+        let (boot_time, _) = process_utmpx(None);
+        get_uptime(boot_time)?
+    };
+    #[cfg(any(windows, target_os = "openbsd"))]
     let uptime = get_uptime(None)?;
 
-    let initial_date = Local
+    let since_date = Local
         .timestamp_opt(Utc::now().timestamp() - uptime, 0)
         .unwrap();
-    println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
+    println!("{}", since_date.format("%Y-%m-%d %H:%M:%S"));
 
     Ok(())
 }
