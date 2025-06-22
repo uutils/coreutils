@@ -380,13 +380,13 @@ pub(crate) fn copy_directory(
         ..options.attributes
     };
 
-    let do_fix_permissions = match options.attributes.mode {
-        Preserve::No { explicit: true } => false,
-        _ => true,
-    };
+    let do_fix_permissions = !matches!(options.attributes.mode, Preserve::No { explicit: true });
 
     // fix permissions only for those folders that aren't ancestor to direntry
     let fix_permissions = |direntry: Option<&DirEntry>, dirs: &mut Vec<Entry>| -> CopyResult<()> {
+        if !do_fix_permissions {
+            return Ok(());
+        }
         while let Some(dir) = dirs.last() {
             if let Some(direntry) = direntry {
                 // stop if dir is an ancestor of direntry
@@ -397,13 +397,11 @@ pub(crate) fn copy_directory(
 
             let dir = dirs.pop().expect("dirs is non-empty");
 
-            if do_fix_permissions {
-                copy_attributes(
-                    &dir.source_absolute,
-                    &dir.local_to_target,
-                    &fixing_attributes,
-                )?
-            }
+            copy_attributes(
+                &dir.source_absolute,
+                &dir.local_to_target,
+                &fixing_attributes,
+            )?;
         }
 
         Ok(())
