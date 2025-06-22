@@ -217,9 +217,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     set_exit_code(1);
                     if i + 1 >= users.len() {
                         break;
-                    } else {
-                        continue;
                     }
+
+                    continue;
                 }
             }
         } else {

@@ -143,9 +143,8 @@ mod platform {
                         get_message("sync-error-find-next-volume"),
                     )),
                 };
-            } else {
-                volumes.push(String::from_wide_null(&name));
             }
+            volumes.push(String::from_wide_null(&name));
         }
     }
 
