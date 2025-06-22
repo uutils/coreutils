@@ -3498,6 +3498,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "tempfile",
+ "thiserror 2.0.12",
  "uu_stdbuf_libstdbuf",
  "uucore",
 ]
