@@ -19,6 +19,11 @@ repos:
         args: [ --fix=lf ]
       - id: trailing-whitespace
 
+  - repo: https://github.com/uutils/pre-commit-fluent-hook
+    rev: v0.0.1
+    hooks:
+    -   id: check-fluent
+
   - repo: local
     hooks:
       - id: rust-linting
