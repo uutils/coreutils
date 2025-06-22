@@ -39,3 +39,40 @@ od-after-help = Displays data in various human-readable formats. If multiple for
 
   If an error occurred, a diagnostic message will be printed to stderr, and the
   exit code will be non-zero.
+
+# Error messages
+od-error-invalid-endian = Invalid argument --endian={$endian}
+od-error-invalid-inputs = Invalid inputs: {$msg}
+od-error-too-large = value is too large
+od-error-radix-invalid = Radix must be one of [o, d, x, n], got: {$radix}
+od-error-radix-empty = Radix cannot be empty, and must be one of [o, d, x, n]
+od-error-invalid-width = invalid width {$width}; using {$min} instead
+od-error-missing-format-spec = missing format specification after '--format' / '-t'
+od-error-unexpected-char = unexpected char '{$char}' in format specification {$spec}
+od-error-invalid-number = invalid number {$number} in format specification {$spec}
+od-error-invalid-size = invalid size '{$size}' in format specification {$spec}
+od-error-invalid-offset = invalid offset: {$offset}
+od-error-invalid-label = invalid label: {$label}
+od-error-too-many-inputs = too many inputs after --traditional: {$input}
+od-error-parse-failed = parse failed
+od-error-invalid-suffix = invalid suffix in --{$option} argument {$value}
+od-error-invalid-argument = invalid --{$option} argument {$value}
+od-error-argument-too-large = --{$option} argument {$value} too large
+od-error-skip-past-end = tried to skip past end of input
+
+# Help messages
+od-help-help = Print help information.
+od-help-address-radix = Select the base in which file offsets are printed.
+od-help-skip-bytes = Skip bytes input bytes before formatting and writing.
+od-help-read-bytes = limit dump to BYTES input bytes
+od-help-endian = byte order to use for multi-byte formats
+od-help-a = named characters, ignoring high-order bit
+od-help-b = octal bytes
+od-help-c = ASCII characters or backslash escapes
+od-help-d = unsigned decimal 2-byte units
+od-help-D = unsigned decimal 4-byte units
+od-help-format = select output format or formats
+od-help-output-duplicates = do not use * to mark line suppression
+od-help-width = output BYTES bytes per output line. 32 is implied when BYTES is not
+                specified.
+od-help-traditional = compatibility mode with one input, offset and label.

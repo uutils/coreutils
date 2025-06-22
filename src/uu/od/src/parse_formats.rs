@@ -4,7 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore formatteriteminfo docopt fvox fvoxw vals acdx
 
+use std::collections::HashMap;
 use uucore::display::Quotable;
+use uucore::locale::{get_message, get_message_with_args};
 
 use crate::formatteriteminfo::FormatterItemInfo;
 use crate::prn_char::*;
@@ -150,7 +152,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
         }
     }
     if expect_type_string {
-        return Err("missing format specification after '--format' / '-t'".to_string());
+        return Err(get_message("od-error-missing-format-spec"));
     }
 
     if formats.is_empty() {
@@ -273,9 +275,12 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 
     while let Some(type_char) = ch {
         let type_char = format_type(type_char).ok_or_else(|| {
-            format!(
-                "unexpected char '{type_char}' in format specification {}",
-                params.quote()
+            get_message_with_args(
+                "od-error-unexpected-char",
+                HashMap::from([
+                    ("char".to_string(), type_char.to_string()),
+                    ("spec".to_string(), params.quote().to_string()),
+                ]),
             )
         })?;
 
@@ -294,10 +299,12 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
             }
             if !decimal_size.is_empty() {
                 byte_size = decimal_size.parse().map_err(|_| {
-                    format!(
-                        "invalid number {} in format specification {}",
-                        decimal_size.quote(),
-                        params.quote()
+                    get_message_with_args(
+                        "od-error-invalid-number",
+                        HashMap::from([
+                            ("number".to_string(), decimal_size.quote().to_string()),
+                            ("spec".to_string(), params.quote().to_string()),
+                        ]),
                     )
                 })?;
             }
@@ -307,9 +314,12 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
         }
 
         let ft = od_format_type(type_char, byte_size).ok_or_else(|| {
-            format!(
-                "invalid size '{byte_size}' in format specification {}",
-                params.quote()
+            get_message_with_args(
+                "od-error-invalid-size",
+                HashMap::from([
+                    ("size".to_string(), byte_size.to_string()),
+                    ("spec".to_string(), params.quote().to_string()),
+                ]),
             )
         })?;
         formats.push(ParsedFormatterItemInfo::new(ft, show_ascii_dump));
