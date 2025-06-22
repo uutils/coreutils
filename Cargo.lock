@@ -3027,6 +3027,7 @@ name = "uu_fmt"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "thiserror 2.0.12",
  "unicode-width 0.2.1",
  "uucore",
 ]
