@@ -23,6 +23,7 @@ clap = { workspace = true }
 libstdbuf = { package = "uu_stdbuf_libstdbuf", path = "src/libstdbuf" }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
+thiserror = { workspace = true }
 
 # "feat_external_libstdbuf": use an external libstdbuf.so for stdbuf instead of embedding it into
 # the stdbuf binary.
