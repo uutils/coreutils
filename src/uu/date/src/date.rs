@@ -14,14 +14,14 @@ use libc::{CLOCK_REALTIME, clock_settime, timespec};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
-use uucore::locale::get_message;
+use std::collections::HashMap;
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 // Options
@@ -42,29 +42,6 @@ const OPT_SET: &str = "set";
 const OPT_REFERENCE: &str = "reference";
 const OPT_UNIVERSAL: &str = "universal";
 const OPT_UNIVERSAL_2: &str = "utc";
-
-// Help strings
-
-static ISO_8601_HELP_STRING: &str = "output date/time in ISO 8601 format.
- FMT='date' for date only (the default),
- 'hours', 'minutes', 'seconds', or 'ns'
- for date and time to the indicated precision.
- Example: 2006-08-14T02:34:56-06:00";
-
-static RFC_5322_HELP_STRING: &str = "output date and time in RFC 5322 format.
- Example: Mon, 14 Aug 2006 02:34:56 -0600";
-
-static RFC_3339_HELP_STRING: &str = "output date/time in RFC 3339 format.
- FMT='date', 'seconds', or 'ns'
- for date and time to the indicated precision.
- Example: 2006-08-14 02:34:56-06:00";
-
-#[cfg(not(any(target_os = "macos", target_os = "redox")))]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING";
-#[cfg(target_os = "macos")]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on mac yet)";
-#[cfg(target_os = "redox")]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on redox yet)";
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -141,7 +118,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !form.starts_with('+') {
             return Err(USimpleError::new(
                 1,
-                format!("invalid date {}", form.quote()),
+                get_message_with_args(
+                    "date-error-invalid-date",
+                    HashMap::from([("date".to_string(), form.to_string())]),
+                ),
             ));
         }
         let form = form[1..].to_string();
@@ -182,7 +162,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(Err((input, _err))) => {
             return Err(USimpleError::new(
                 1,
-                format!("invalid date {}", input.quote()),
+                get_message_with_args(
+                    "date-error-invalid-date",
+                    HashMap::from([("date".to_string(), input.to_string())]),
+                ),
             ));
         }
         Some(Ok(date)) => Some(date),
@@ -231,7 +214,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(_) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("invalid date {relative_time}"),
+                        get_message_with_args(
+                            "date-error-date-overflow",
+                            HashMap::from([("date".to_string(), relative_time.to_string())]),
+                        ),
                     ));
                 }
             }
@@ -245,7 +231,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if path.is_dir() {
                 return Err(USimpleError::new(
                     2,
-                    format!("expected file, got directory {}", path.quote()),
+                    get_message_with_args(
+                        "date-error-expected-file-got-directory",
+                        HashMap::from([("path".to_string(), path.to_string_lossy().to_string())]),
+                    ),
                 ));
             }
             let file = File::open(path)
@@ -271,13 +260,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("invalid format {format_string} ({e})"),
+                        get_message_with_args(
+                            "date-error-invalid-format",
+                            HashMap::from([
+                                ("format".to_string(), format_string.to_string()),
+                                ("error".to_string(), e.to_string()),
+                            ]),
+                        ),
                     ));
                 }
             },
             Err((input, _err)) => show!(USimpleError::new(
                 1,
-                format!("invalid date {}", input.quote())
+                get_message_with_args(
+                    "date-error-invalid-date",
+                    HashMap::from([("date".to_string(), input.to_string())])
+                )
             )),
         }
     }
@@ -297,7 +295,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_DATE)
                 .value_name("STRING")
                 .allow_hyphen_values(true)
-                .help("display time described by STRING, not 'now'"),
+                .help(get_message("date-help-date")),
         )
         .arg(
             Arg::new(OPT_FILE)
@@ -305,7 +303,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .help("like --date; once for each line of DATEFILE"),
+                .help(get_message("date-help-file")),
         )
         .arg(
             Arg::new(OPT_ISO_8601)
@@ -317,13 +315,13 @@ pub fn uu_app() -> Command {
                 ]))
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
-                .help(ISO_8601_HELP_STRING),
+                .help(get_message("date-help-iso-8601")),
         )
         .arg(
             Arg::new(OPT_RFC_EMAIL)
                 .short('R')
                 .long(OPT_RFC_EMAIL)
-                .help(RFC_5322_HELP_STRING)
+                .help(get_message("date-help-rfc-email"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -331,12 +329,12 @@ pub fn uu_app() -> Command {
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
                 .value_parser(ShortcutValueParser::new([DATE, SECONDS, NS]))
-                .help(RFC_3339_HELP_STRING),
+                .help(get_message("date-help-rfc-3339")),
         )
         .arg(
             Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
-                .help("annotate the parsed date, and warn about questionable usage to stderr")
+                .help(get_message("date-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -345,21 +343,34 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
-                .help("display the last modification time of FILE"),
+                .help(get_message("date-help-reference")),
         )
         .arg(
             Arg::new(OPT_SET)
                 .short('s')
                 .long(OPT_SET)
                 .value_name("STRING")
-                .help(OPT_SET_HELP_STRING),
+                .help({
+                    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+                    {
+                        get_message("date-help-set")
+                    }
+                    #[cfg(target_os = "macos")]
+                    {
+                        get_message("date-help-set-macos")
+                    }
+                    #[cfg(target_os = "redox")]
+                    {
+                        get_message("date-help-set-redox")
+                    }
+                }),
         )
         .arg(
             Arg::new(OPT_UNIVERSAL)
                 .short('u')
                 .long(OPT_UNIVERSAL)
                 .alias(OPT_UNIVERSAL_2)
-                .help("print or set Coordinated Universal Time (UTC)")
+                .help(get_message("date-help-universal"))
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(OPT_FORMAT))
@@ -427,7 +438,7 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
-        "setting the date is not supported by macOS".to_string(),
+        get_message("date-error-setting-date-not-supported-macos"),
     ))
 }
 
@@ -435,7 +446,7 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
-        "setting the date is not supported by Redox".to_string(),
+        get_message("date-error-setting-date-not-supported-redox"),
     ))
 }
 
@@ -457,7 +468,8 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
     if result == 0 {
         Ok(())
     } else {
-        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
+        Err(std::io::Error::last_os_error()
+            .map_err_context(|| get_message("date-error-cannot-set-date")))
     }
 }
 
@@ -483,7 +495,8 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
     let result = unsafe { SetSystemTime(&system_time) };
 
     if result == 0 {
-        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
+        Err(std::io::Error::last_os_error()
+            .map_err_context(|| get_message("date-error-cannot-set-date")))
     } else {
         Ok(())
     }
