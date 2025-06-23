@@ -18,8 +18,7 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
-
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 #[derive(Debug)]
 enum OutFormat {
@@ -196,10 +195,12 @@ struct WordRef {
 
 #[derive(Debug, Error)]
 enum PtxError {
-    #[error("There is no dumb format with GNU extensions disabled")]
+    #[error("{}", get_message("ptx-error-dumb-format"))]
     DumbFormat,
-    #[error("{0} not implemented yet")]
+
+    #[error("{}", get_message_with_args("ptx-error-not-implemented", HashMap::from([("feature".to_string(), .0.to_string())])))]
     NotImplemented(&'static str),
+
     #[error("{0}")]
     ParseError(ParseIntError),
 }
@@ -690,10 +691,13 @@ fn write_traditional_output(
                 return Err(PtxError::DumbFormat.into());
             }
         };
-        writeln!(writer, "{output_line}").map_err_context(|| "write failed".into())?;
+        writeln!(writer, "{output_line}")
+            .map_err_context(|| get_message("ptx-error-write-failed"))?;
     }
 
-    writer.flush().map_err_context(|| "write failed".into())?;
+    writer
+        .flush()
+        .map_err_context(|| get_message("ptx-error-write-failed"))?;
 
     Ok(())
 }
@@ -751,7 +755,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Some(file) = files.next() {
             return Err(UUsageError::new(
                 1,
-                format!("extra operand {}", file.quote()),
+                get_message_with_args(
+                    "ptx-error-extra-operand",
+                    HashMap::from([("operand".to_string(), file.quote().to_string())]),
+                ),
             ));
         }
     }
@@ -778,28 +785,28 @@ pub fn uu_app() -> Command {
             Arg::new(options::AUTO_REFERENCE)
                 .short('A')
                 .long(options::AUTO_REFERENCE)
-                .help("output automatically generated references")
+                .help(get_message("ptx-help-auto-reference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TRADITIONAL)
                 .short('G')
                 .long(options::TRADITIONAL)
-                .help("behave more like System V 'ptx'")
+                .help(get_message("ptx-help-traditional"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FLAG_TRUNCATION)
                 .short('F')
                 .long(options::FLAG_TRUNCATION)
-                .help("use STRING for flagging line truncations")
+                .help(get_message("ptx-help-flag-truncation"))
                 .value_name("STRING"),
         )
         .arg(
             Arg::new(options::MACRO_NAME)
                 .short('M')
                 .long(options::MACRO_NAME)
-                .help("macro name to use instead of 'xx'")
+                .help(get_message("ptx-help-macro-name"))
                 .value_name("STRING"),
         )
         .arg(
@@ -812,14 +819,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::format::ROFF)
                 .short('O')
-                .help("generate output as roff directives")
+                .help(get_message("ptx-help-roff"))
                 .overrides_with_all([options::FORMAT, options::format::ROFF, options::format::TEX])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::format::TEX)
                 .short('T')
-                .help("generate output as TeX directives")
+                .help(get_message("ptx-help-tex"))
                 .overrides_with_all([options::FORMAT, options::format::ROFF, options::format::TEX])
                 .action(ArgAction::SetTrue),
         )
@@ -827,28 +834,28 @@ pub fn uu_app() -> Command {
             Arg::new(options::RIGHT_SIDE_REFS)
                 .short('R')
                 .long(options::RIGHT_SIDE_REFS)
-                .help("put references at right, not counted in -w")
+                .help(get_message("ptx-help-right-side-refs"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SENTENCE_REGEXP)
                 .short('S')
                 .long(options::SENTENCE_REGEXP)
-                .help("for end of lines or end of sentences")
+                .help(get_message("ptx-help-sentence-regexp"))
                 .value_name("REGEXP"),
         )
         .arg(
             Arg::new(options::WORD_REGEXP)
                 .short('W')
                 .long(options::WORD_REGEXP)
-                .help("use REGEXP to match each keyword")
+                .help(get_message("ptx-help-word-regexp"))
                 .value_name("REGEXP"),
         )
         .arg(
             Arg::new(options::BREAK_FILE)
                 .short('b')
                 .long(options::BREAK_FILE)
-                .help("word break characters in this FILE")
+                .help(get_message("ptx-help-break-file"))
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -856,21 +863,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::IGNORE_CASE)
                 .short('f')
                 .long(options::IGNORE_CASE)
-                .help("fold lower case to upper case for sorting")
+                .help(get_message("ptx-help-ignore-case"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::GAP_SIZE)
                 .short('g')
                 .long(options::GAP_SIZE)
-                .help("gap size in columns between output fields")
+                .help(get_message("ptx-help-gap-size"))
                 .value_name("NUMBER"),
         )
         .arg(
             Arg::new(options::IGNORE_FILE)
                 .short('i')
                 .long(options::IGNORE_FILE)
-                .help("read ignore word list from FILE")
+                .help(get_message("ptx-help-ignore-file"))
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -878,7 +885,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ONLY_FILE)
                 .short('o')
                 .long(options::ONLY_FILE)
-                .help("read only word list from this FILE")
+                .help(get_message("ptx-help-only-file"))
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -886,7 +893,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::REFERENCES)
                 .short('r')
                 .long(options::REFERENCES)
-                .help("first field of each line is a reference")
+                .help(get_message("ptx-help-references"))
                 .value_name("FILE")
                 .action(ArgAction::SetTrue),
         )
@@ -894,7 +901,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::WIDTH)
                 .short('w')
                 .long(options::WIDTH)
-                .help("output width in columns, reference excluded")
+                .help(get_message("ptx-help-width"))
                 .value_name("NUMBER"),
         )
 }
