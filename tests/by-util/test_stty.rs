@@ -293,3 +293,19 @@ fn min_and_time() {
         .fails()
         .stderr_contains("invalid integer argument: '256': Value too large for defined data type");
 }
+
+#[test]
+fn non_negatable_combo() {
+    new_ucmd!()
+        .args(&["-dec"])
+        .fails()
+        .stderr_contains("invalid argument '-dec'");
+    new_ucmd!()
+        .args(&["-crt"])
+        .fails()
+        .stderr_contains("invalid argument '-crt'");
+    new_ucmd!()
+        .args(&["-ek"])
+        .fails()
+        .stderr_contains("invalid argument '-ek'");
+}
