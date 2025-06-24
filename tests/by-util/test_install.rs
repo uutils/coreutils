@@ -1695,6 +1695,193 @@ fn test_install_compare_option() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_install_compare_basic() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.write(source, "test content");
+
+    // First install should copy
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, dest])
+        .succeeds()
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Second install with same mode should be no-op (compare works)
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, dest])
+        .succeeds()
+        .no_stdout();
+
+    // Test that compare works correctly when content actually differs
+    let source2 = "source2";
+    at.write(source2, "different content");
+
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source2, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source2}' -> '{dest}'"));
+
+    // Second install should be no-op since content is now identical
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source2, dest])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
+fn test_install_compare_special_mode_bits() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.write(source, "test content");
+
+    // Special mode bits - setgid (tests the core bug fix)
+    // When setgid bit is set, -C should be ignored (always copy)
+    // This tests the bug where b.specified_mode.unwrap_or(0) was used instead of b.mode()
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m2755", source, dest])
+        .succeeds()
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Second install with same setgid mode should ALSO copy (not skip)
+    // because -C option should be ignored when special mode bits are present
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m2755", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Special mode bits - setuid
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m4755", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Second install with setuid should also copy
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m4755", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Special mode bits - sticky bit
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m1755", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Second install with sticky bit should also copy
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m1755", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Back to normal mode - compare should work again
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Second install with normal mode should be no-op
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, dest])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_install_compare_group_ownership() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let dest = "dest_file";
+
+    at.write(source, "test content");
+
+    let user_group = std::process::Command::new("id")
+        .arg("-nrg")
+        .output()
+        .map_or_else(
+            |_| "users".to_string(),
+            |output| String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        ); // fallback group name
+
+    // Install with explicit group
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m664", "-g", &user_group, source, dest])
+        .succeeds()
+        .stdout_contains(format!("'{source}' -> '{dest}'"));
+
+    // Install without group - this should detect that no copy is needed
+    // because the file already has the correct group (user's group)
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m664", source, dest])
+        .succeeds()
+        .no_stdout(); // Should be no-op if group ownership logic is correct
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_install_compare_symlink_handling() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let symlink_dest = "symlink_dest";
+    let target_file = "target_file";
+
+    at.write(source, "test content");
+    at.write(target_file, "test content"); // Same content to test that symlinks are always replaced
+    at.symlink_file(target_file, symlink_dest);
+
+    // Create a symlink as destination pointing to a different file - should always be replaced
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, symlink_dest])
+        .succeeds()
+        .stdout_contains("removed")
+        .stdout_contains(format!("'{source}' -> '{symlink_dest}'"));
+
+    // Even if content would be the same, symlink destination should be replaced
+    // Now symlink_dest is a regular file, so compare should work normally
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m644", source, symlink_dest])
+        .succeeds()
+        .no_stdout(); // Now it's a regular file, so compare should work
+}
+
+#[test]
 // Matches part of tests/install/basic-1
 fn test_t_exist_dir() {
     let scene = TestScenario::new(util_name!());
