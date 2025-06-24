@@ -71,7 +71,7 @@ macro_rules! new_ucmd {
 #[macro_export]
 macro_rules! at_and_ucmd {
     () => {{
-        let ts = TestScenario::new(util_name!());
+        let ts = ::uutests::util::TestScenario::new(::uutests::util_name!());
         (ts.fixtures.clone(), ts.ucmd())
     }};
 }
