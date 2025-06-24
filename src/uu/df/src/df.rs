@@ -29,7 +29,8 @@ use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
 use crate::table::Table;
 
-use uucore::locale::get_message;
+use std::collections::HashMap;
+use uucore::locale::{get_message, get_message_with_args};
 
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
@@ -115,25 +116,28 @@ impl Default for Options {
 enum OptionsError {
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("--block-size argument '{0}' too large")]
+    #[error("{}", get_message_with_args("df-error-block-size-too-large", HashMap::from([("size".to_string(), .0.clone())])))]
     BlockSizeTooLarge(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.,
-    #[error("invalid --block-size argument {0}")]
+    #[error("{}", get_message_with_args("df-error-invalid-block-size", HashMap::from([("size".to_string(), .0.clone())])))]
     InvalidBlockSize(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("invalid suffix in --block-size argument {0}")]
+    #[error("{}", get_message_with_args("df-error-invalid-suffix", HashMap::from([("size".to_string(), .0.clone())])))]
     InvalidSuffix(String),
 
     /// An error getting the columns to display in the output table.
-    #[error("option --output: field {0} used more than once")]
+    #[error("{}", get_message_with_args("df-error-field-used-more-than-once", HashMap::from([("field".to_string(), format!("{}", .0))])))]
     ColumnError(ColumnError),
 
-    #[error("{}", .0.iter()
-            .map(|t| format!("file system type {} both selected and excluded", t.quote()))
+    #[error(
+        "{}",
+        .0.iter()
+            .map(|t| get_message_with_args("df-error-filesystem-type-both-selected-and-excluded", HashMap::from([("type".to_string(), t.quote().to_string())])))
             .collect::<Vec<_>>()
-            .join(format!("\n{}: ", uucore::util_name()).as_str()))]
+            .join(format!("\n{}: ", uucore::util_name()).as_str())
+    )]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
 
@@ -359,26 +363,35 @@ where
             Err(FsError::InvalidPath) => {
                 show!(USimpleError::new(
                     1,
-                    format!("{}: No such file or directory", path.as_ref().display())
+                    get_message_with_args(
+                        "df-error-no-such-file-or-directory",
+                        HashMap::from([("path".to_string(), path.as_ref().display().to_string())])
+                    )
                 ));
             }
             Err(FsError::MountMissing) => {
-                show!(USimpleError::new(1, "no file systems processed"));
+                show!(USimpleError::new(
+                    1,
+                    get_message("df-error-no-file-systems-processed")
+                ));
             }
             #[cfg(not(windows))]
             Err(FsError::OverMounted) => {
                 show!(USimpleError::new(
                     1,
-                    format!(
-                        "cannot access {}: over-mounted by another device",
-                        path.as_ref().quote()
+                    get_message_with_args(
+                        "df-error-cannot-access-over-mounted",
+                        HashMap::from([("path".to_string(), path.as_ref().quote().to_string())])
                     )
                 ));
             }
         }
     }
     if get_exit_code() == 0 && result.is_empty() {
-        show!(USimpleError::new(1, "no file systems processed"));
+        show!(USimpleError::new(
+            1,
+            get_message("df-error-no-file-systems-processed")
+        ));
         return Ok(result);
     }
 
@@ -405,7 +418,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[cfg(windows)]
     {
         if matches.get_flag(OPT_INODES) {
-            println!("{}: doesn't support -i option", uucore::util_name());
+            println!(
+                "{}",
+                get_message_with_args(
+                    "df-error-inodes-not-supported-windows",
+                    HashMap::from([("program".to_string(), uucore::util_name().to_string())])
+                )
+            );
             return Ok(());
         }
     }
@@ -415,12 +434,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let filesystems: Vec<Filesystem> = match matches.get_many::<String>(OPT_PATHS) {
         None => {
             let filesystems = get_all_filesystems(&opt).map_err(|e| {
-                let context = "cannot read table of mounted file systems";
+                let context = get_message("df-error-cannot-read-table-of-mounted-filesystems");
                 USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
             if filesystems.is_empty() {
-                return Err(USimpleError::new(1, "no file systems processed"));
+                return Err(USimpleError::new(
+                    1,
+                    get_message("df-error-no-file-systems-processed"),
+                ));
             }
 
             filesystems
@@ -428,7 +450,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(paths) => {
             let paths: Vec<_> = paths.collect();
             let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
-                let context = "cannot read table of mounted file systems";
+                let context = get_message("df-error-cannot-read-table-of-mounted-filesystems");
                 USimpleError::new(e.code(), format!("{context}: {e}"))
             })?;
 
@@ -458,7 +480,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_HELP)
                 .long(OPT_HELP)
-                .help("Print help information.")
+                .help(get_message("df-help-print-help"))
                 .action(ArgAction::Help),
         )
         .arg(
@@ -466,7 +488,7 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long("all")
                 .overrides_with(OPT_ALL)
-                .help("include dummy file systems")
+                .help(get_message("df-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -475,16 +497,13 @@ pub fn uu_app() -> Command {
                 .long("block-size")
                 .value_name("SIZE")
                 .overrides_with_all([OPT_KILO, OPT_BLOCKSIZE])
-                .help(
-                    "scale sizes by SIZE before printing them; e.g.\
-                    '-BM' prints sizes in units of 1,048,576 bytes",
-                ),
+                .help(get_message("df-help-block-size")),
         )
         .arg(
             Arg::new(OPT_TOTAL)
                 .long("total")
                 .overrides_with(OPT_TOTAL)
-                .help("produce a grand total")
+                .help(get_message("df-help-total"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -492,7 +511,7 @@ pub fn uu_app() -> Command {
                 .short('h')
                 .long("human-readable")
                 .overrides_with_all([OPT_HUMAN_READABLE_DECIMAL, OPT_HUMAN_READABLE_BINARY])
-                .help("print sizes in human readable format (e.g., 1K 234M 2G)")
+                .help(get_message("df-help-human-readable"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -500,7 +519,7 @@ pub fn uu_app() -> Command {
                 .short('H')
                 .long("si")
                 .overrides_with_all([OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL])
-                .help("likewise, but use powers of 1000 not 1024")
+                .help(get_message("df-help-si"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -508,13 +527,13 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long("inodes")
                 .overrides_with(OPT_INODES)
-                .help("list inode information instead of block usage")
+                .help(get_message("df-help-inodes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_KILO)
                 .short('k')
-                .help("like --block-size=1K")
+                .help(get_message("df-help-kilo"))
                 .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO])
                 .action(ArgAction::SetTrue),
         )
@@ -523,14 +542,14 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long("local")
                 .overrides_with(OPT_LOCAL)
-                .help("limit listing to local file systems")
+                .help(get_message("df-help-local"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_SYNC)
                 .long("no-sync")
                 .overrides_with_all([OPT_SYNC, OPT_NO_SYNC])
-                .help("do not invoke sync before getting usage info (default)")
+                .help(get_message("df-help-no-sync"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -545,24 +564,21 @@ pub fn uu_app() -> Command {
                 .default_missing_values(OUTPUT_FIELD_LIST)
                 .default_values(["source", "size", "used", "avail", "pcent", "target"])
                 .conflicts_with_all([OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
-                .help(
-                    "use the output format defined by FIELD_LIST, \
-                     or print all fields if FIELD_LIST is omitted.",
-                ),
+                .help(get_message("df-help-output")),
         )
         .arg(
             Arg::new(OPT_PORTABILITY)
                 .short('P')
                 .long("portability")
                 .overrides_with(OPT_PORTABILITY)
-                .help("use the POSIX output format")
+                .help(get_message("df-help-portability"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SYNC)
                 .long("sync")
                 .overrides_with_all([OPT_NO_SYNC, OPT_SYNC])
-                .help("invoke sync before getting usage info (non-windows only)")
+                .help(get_message("df-help-sync"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -572,14 +588,14 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_name("TYPE")
                 .action(ArgAction::Append)
-                .help("limit listing to file systems of type TYPE"),
+                .help(get_message("df-help-type")),
         )
         .arg(
             Arg::new(OPT_PRINT_TYPE)
                 .short('T')
                 .long("print-type")
                 .overrides_with(OPT_PRINT_TYPE)
-                .help("print file system type")
+                .help(get_message("df-help-print-type"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -590,7 +606,7 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_name("TYPE")
                 .use_value_delimiter(true)
-                .help("limit listing to file systems not of type TYPE"),
+                .help(get_message("df-help-exclude-type")),
         )
         .arg(
             Arg::new(OPT_PATHS)
