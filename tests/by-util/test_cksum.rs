@@ -1453,7 +1453,7 @@ fn test_check_trailing_space_fails() {
 /// in checksum files.
 /// These tests are excluded from Windows because it does not provide any safe
 /// conversion between `OsString` and byte sequences for non-utf-8 strings.
-mod check_utf8 {
+mod check_encoding {
 
     // This test should pass on linux and macos.
     #[cfg(not(windows))]
@@ -1467,15 +1467,12 @@ mod check_utf8 {
         BLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n"
     ;
 
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
+        let (at, mut cmd) = at_and_ucmd!();
 
         at.touch("empty");
         at.write_bytes("check", hashes);
 
-        scene
-            .ucmd()
-            .arg("--check")
+        cmd.arg("--check")
             .arg(at.subdir.join("check"))
             .succeeds()
             .stdout_is("empty: OK\nempty: OK\nempty: OK\n")
@@ -1527,6 +1524,29 @@ mod check_utf8 {
             .fails()
             .stdout_is_bytes(b"flakey\xffname: FAILED open or read\n")
             .stderr_contains("1 listed file could not be read");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_quoting_in_stderr() {
+        use super::*;
+        use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+        let (at, mut cmd) = at_and_ucmd!();
+
+        at.mkdir(<OsStr as OsStrExt>::from_bytes(b"FFF\xffDIR"));
+        at.write_bytes(
+            "check",
+            b"SHA256 (FFF\xffFFF) = 29953405eaa3dcc41c37d1621d55b6a47eee93e05613e439e73295029740b10c\nSHA256 (FFF\xffDIR) = 29953405eaa3dcc41c37d1621d55b6a47eee93e05613e439e73295029740b10c\n",
+        );
+
+        cmd.arg("-c")
+            .arg("check")
+            .fails_with_code(1)
+            .stdout_contains_bytes(b"FFF\xffFFF: FAILED open or read")
+            .stdout_contains_bytes(b"FFF\xffDIR: FAILED open or read")
+            .stderr_contains("'FFF'$'\\377''FFF': No such file or directory")
+            .stderr_contains("'FFF'$'\\377''DIR': Is a directory");
     }
 }
 
