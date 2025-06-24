@@ -106,6 +106,7 @@ fn test_invalid_value_time_style() {
         .arg("-g")
         .arg("--time-style=definitely_invalid_value")
         .fails_with_code(2)
+        .stderr_contains("time-style argument 'definitely_invalid_value'")
         .no_stdout();
     // If it only looks temporarily like it might be used, no error:
     new_ucmd!()
