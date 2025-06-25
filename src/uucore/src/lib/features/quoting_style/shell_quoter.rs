@@ -51,7 +51,7 @@ impl<'a> NonEscapedShellQuoter<'a> {
     }
 }
 
-impl<'a> Quoter for NonEscapedShellQuoter<'a> {
+impl Quoter for NonEscapedShellQuoter<'_> {
     fn push_char(&mut self, input: char) {
         let escaped = EscapedChar::new_shell(input, false, self.quotes);
 
@@ -133,7 +133,7 @@ impl<'a> EscapedShellQuoter<'a> {
     }
 }
 
-impl<'a> Quoter for EscapedShellQuoter<'a> {
+impl Quoter for EscapedShellQuoter<'_> {
     fn push_char(&mut self, input: char) {
         let escaped = EscapedChar::new_shell(input, true, self.quotes);
         match escaped.state {
