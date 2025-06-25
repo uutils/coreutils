@@ -2976,6 +2976,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "libc",
+ "thiserror 2.0.12",
  "uucore",
 ]
 
