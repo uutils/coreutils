@@ -6,6 +6,8 @@
 
 use crate::csplit_error::CsplitError;
 use regex::Regex;
+use std::collections::HashMap;
+use uucore::locale::get_message_with_args;
 use uucore::show_warning;
 
 /// The definition of a pattern to match on a line.
@@ -168,7 +170,13 @@ fn validate_line_numbers(patterns: &[Pattern]) -> Result<(), CsplitError> {
             (_, 0) => Err(CsplitError::LineNumberIsZero),
             // two consecutive numbers should not be equal
             (n, m) if n == m => {
-                show_warning!("line number '{n}' is the same as preceding line number");
+                show_warning!(
+                    "{}",
+                    get_message_with_args(
+                        "csplit-warning-line-number-same-as-previous",
+                        HashMap::from([("line_number".to_string(), n.to_string())])
+                    )
+                );
                 Ok(n)
             }
             // a number cannot be greater than the one that follows
