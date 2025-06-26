@@ -2,9 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::units::Unit;
+use uucore::locale::get_message_with_args;
 use uucore::ranges::Range;
 
 pub const DELIMITER: &str = "delimiter";
@@ -145,9 +147,15 @@ impl FromStr for FormatOptions {
 
         if iter.peek().is_none() {
             return if options.prefix == s {
-                Err(format!("format '{s}' has no % directive"))
+                Err(get_message_with_args(
+                    "numfmt-error-format-no-percent",
+                    HashMap::from([("format".to_string(), s.to_string())]),
+                ))
             } else {
-                Err(format!("format '{s}' ends in %"))
+                Err(get_message_with_args(
+                    "numfmt-error-format-ends-in-percent",
+                    HashMap::from([("format".to_string(), s.to_string())]),
+                ))
             };
         }
 
@@ -167,8 +175,9 @@ impl FromStr for FormatOptions {
             match iter.peek() {
                 Some(c) if c.is_ascii_digit() => padding.push('-'),
                 _ => {
-                    return Err(format!(
-                        "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
+                    return Err(get_message_with_args(
+                        "numfmt-error-invalid-format-directive",
+                        HashMap::from([("format".to_string(), s.to_string())]),
                     ));
                 }
             }
@@ -187,7 +196,10 @@ impl FromStr for FormatOptions {
             if let Ok(p) = padding.parse() {
                 options.padding = Some(p);
             } else {
-                return Err(format!("invalid format '{s}' (width overflow)"));
+                return Err(get_message_with_args(
+                    "numfmt-error-invalid-format-width-overflow",
+                    HashMap::from([("format".to_string(), s.to_string())]),
+                ));
             }
         }
 
@@ -195,7 +207,10 @@ impl FromStr for FormatOptions {
             iter.next();
 
             if matches!(iter.peek(), Some(' ' | '+' | '-')) {
-                return Err(format!("invalid precision in format '{s}'"));
+                return Err(get_message_with_args(
+                    "numfmt-error-invalid-precision",
+                    HashMap::from([("format".to_string(), s.to_string())]),
+                ));
             }
 
             while let Some(c) = iter.peek() {
@@ -212,15 +227,19 @@ impl FromStr for FormatOptions {
             } else if let Ok(p) = precision.parse() {
                 options.precision = Some(p);
             } else {
-                return Err(format!("invalid precision in format '{s}'"));
+                return Err(get_message_with_args(
+                    "numfmt-error-invalid-precision",
+                    HashMap::from([("format".to_string(), s.to_string())]),
+                ));
             }
         }
 
         if let Some('f') = iter.peek() {
             iter.next();
         } else {
-            return Err(format!(
-                "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
+            return Err(get_message_with_args(
+                "numfmt-error-invalid-format-directive",
+                HashMap::from([("format".to_string(), s.to_string())]),
             ));
         }
 
@@ -235,7 +254,10 @@ impl FromStr for FormatOptions {
                 }
                 iter.next();
             } else {
-                return Err(format!("format '{s}' has too many % directives"));
+                return Err(get_message_with_args(
+                    "numfmt-error-format-too-many-percent",
+                    HashMap::from([("format".to_string(), s.to_string())]),
+                ));
             }
         }
 
@@ -252,7 +274,10 @@ impl FromStr for InvalidModes {
             "fail" => Ok(Self::Fail),
             "warn" => Ok(Self::Warn),
             "ignore" => Ok(Self::Ignore),
-            unknown => Err(format!("Unknown invalid mode: {unknown}")),
+            unknown => Err(get_message_with_args(
+                "numfmt-error-unknown-invalid-mode",
+                HashMap::from([("mode".to_string(), unknown.to_string())]),
+            )),
         }
     }
 }
