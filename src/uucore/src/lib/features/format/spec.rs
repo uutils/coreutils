@@ -404,11 +404,7 @@ impl Spec {
             Self::QuotedString { position } => {
                 let s = locale_aware_escape_name(
                     args.next_string(position).as_ref(),
-                    &QuotingStyle::Shell {
-                        escape: true,
-                        always_quote: false,
-                        show_control: false,
-                    },
+                    QuotingStyle::SHELL_ESCAPE,
                 );
                 #[cfg(unix)]
                 let bytes = std::os::unix::ffi::OsStringExt::into_vec(s);

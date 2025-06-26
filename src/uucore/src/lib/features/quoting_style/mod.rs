@@ -52,6 +52,60 @@ pub enum QuotingStyle {
     },
 }
 
+/// Provide sane defaults for quoting styles.
+impl QuotingStyle {
+    pub const SHELL: Self = Self::Shell {
+        escape: false,
+        always_quote: false,
+        show_control: false,
+    };
+
+    pub const SHELL_ESCAPE: Self = Self::Shell {
+        escape: true,
+        always_quote: false,
+        show_control: false,
+    };
+
+    pub const SHELL_QUOTE: Self = Self::Shell {
+        escape: false,
+        always_quote: true,
+        show_control: false,
+    };
+
+    pub const SHELL_ESCAPE_QUOTE: Self = Self::Shell {
+        escape: true,
+        always_quote: true,
+        show_control: false,
+    };
+
+    pub const C_NO_QUOTES: Self = Self::C {
+        quotes: Quotes::None,
+    };
+
+    pub const C_DOUBLE: Self = Self::C {
+        quotes: Quotes::Double,
+    };
+
+    /// Set the `show_control` field of the quoting style.
+    /// Note: this is a no-op for the `C` variant.
+    pub fn show_control(self, show_control: bool) -> Self {
+        use QuotingStyle::*;
+        match self {
+            Shell {
+                escape,
+                always_quote,
+                ..
+            } => Shell {
+                escape,
+                always_quote,
+                show_control,
+            },
+            Literal { .. } => Literal { show_control },
+            C { .. } => self,
+        }
+    }
+}
+
 /// Common interface of quoting mechanisms.
 trait Quoter {
     /// Push a valid character.
@@ -92,7 +146,7 @@ pub enum Quotes {
 /// is meant for ls' directory name display.
 fn escape_name_inner(
     name: &[u8],
-    style: &QuotingStyle,
+    style: QuotingStyle,
     dirname: bool,
     encoding: UEncoding,
 ) -> Vec<u8> {
@@ -103,14 +157,14 @@ fn escape_name_inner(
 
     let mut quoter: Box<dyn Quoter> = match style {
         QuotingStyle::Literal { .. } => Box::new(LiteralQuoter::new(name.len())),
-        QuotingStyle::C { quotes } => Box::new(CQuoter::new(*quotes, dirname, name.len())),
+        QuotingStyle::C { quotes } => Box::new(CQuoter::new(quotes, dirname, name.len())),
         QuotingStyle::Shell {
             escape: true,
             always_quote,
             ..
         } => Box::new(EscapedShellQuoter::new(
             name,
-            *always_quote,
+            always_quote,
             dirname,
             name.len(),
         )),
@@ -120,8 +174,8 @@ fn escape_name_inner(
             show_control,
         } => Box::new(NonEscapedShellQuoter::new(
             name,
-            *show_control,
-            *always_quote,
+            show_control,
+            always_quote,
             dirname,
             name.len(),
         )),
@@ -149,28 +203,28 @@ fn escape_name_inner(
 }
 
 /// Escape a filename with respect to the given style.
-pub fn escape_name(name: &OsStr, style: &QuotingStyle, encoding: UEncoding) -> OsString {
+pub fn escape_name(name: &OsStr, style: QuotingStyle, encoding: UEncoding) -> OsString {
     let name = crate::os_str_as_bytes_lossy(name);
     crate::os_string_from_vec(escape_name_inner(&name, style, false, encoding))
         .expect("all byte sequences should be valid for platform, or already replaced in name")
 }
 
 /// Retrieve the encoding from the locale and pass it to `escape_name`.
-pub fn locale_aware_escape_name(name: &OsStr, style: &QuotingStyle) -> OsString {
+pub fn locale_aware_escape_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_name(name, style, i18n::get_locale_encoding())
 }
 
 /// Escape a directory name with respect to the given style.
 /// This is mainly meant to be used for ls' directory name printing and is not
 /// likely to be used elsewhere.
-pub fn escape_dir_name(dir_name: &OsStr, style: &QuotingStyle, encoding: UEncoding) -> OsString {
+pub fn escape_dir_name(dir_name: &OsStr, style: QuotingStyle, encoding: UEncoding) -> OsString {
     let name = crate::os_str_as_bytes_lossy(dir_name);
     crate::os_string_from_vec(escape_name_inner(&name, style, true, encoding))
         .expect("all byte sequences should be valid for platform, or already replaced in name")
 }
 
 /// Retrieve the encoding from the locale and pass it to `escape_dir_name`.
-pub fn locale_aware_escape_dir_name(name: &OsStr, style: &QuotingStyle) -> OsString {
+pub fn locale_aware_escape_dir_name(name: &OsStr, style: QuotingStyle) -> OsString {
     escape_dir_name(name, style, i18n::get_locale_encoding())
 }
 
@@ -225,49 +279,21 @@ mod tests {
                 show_control: false,
             },
             "literal-show" => QuotingStyle::Literal { show_control: true },
-            "escape" => QuotingStyle::C {
-                quotes: Quotes::None,
-            },
-            "c" => QuotingStyle::C {
-                quotes: Quotes::Double,
-            },
-            "shell" => QuotingStyle::Shell {
-                escape: false,
-                always_quote: false,
-                show_control: false,
-            },
-            "shell-show" => QuotingStyle::Shell {
-                escape: false,
-                always_quote: false,
-                show_control: true,
-            },
-            "shell-always" => QuotingStyle::Shell {
-                escape: false,
-                always_quote: true,
-                show_control: false,
-            },
-            "shell-always-show" => QuotingStyle::Shell {
-                escape: false,
-                always_quote: true,
-                show_control: true,
-            },
-            "shell-escape" => QuotingStyle::Shell {
-                escape: true,
-                always_quote: false,
-                show_control: false,
-            },
-            "shell-escape-always" => QuotingStyle::Shell {
-                escape: true,
-                always_quote: true,
-                show_control: false,
-            },
+            "escape" => QuotingStyle::C_NO_QUOTES,
+            "c" => QuotingStyle::C_DOUBLE,
+            "shell" => QuotingStyle::SHELL,
+            "shell-show" => QuotingStyle::SHELL.show_control(true),
+            "shell-always" => QuotingStyle::SHELL_QUOTE,
+            "shell-always-show" => QuotingStyle::SHELL_QUOTE.show_control(true),
+            "shell-escape" => QuotingStyle::SHELL_ESCAPE,
+            "shell-escape-always" => QuotingStyle::SHELL_ESCAPE_QUOTE,
             _ => panic!("Invalid name!"),
         }
     }
 
     fn check_names_inner<T>(encoding: UEncoding, name: &[u8], map: &[(T, &str)]) -> Vec<Vec<u8>> {
         map.iter()
-            .map(|(_, style)| escape_name_inner(name, &get_style(style), false, encoding))
+            .map(|(_, style)| escape_name_inner(name, get_style(style), false, encoding))
             .collect()
     }
 
@@ -1034,30 +1060,16 @@ mod tests {
 
     #[test]
     fn test_quoting_style_display() {
-        let style = QuotingStyle::Shell {
-            escape: true,
-            always_quote: false,
-            show_control: false,
-        };
+        let style = QuotingStyle::SHELL_ESCAPE;
         assert_eq!(format!("{style}"), "shell-escape");
 
-        let style = QuotingStyle::Shell {
-            escape: false,
-            always_quote: true,
-            show_control: false,
-        };
+        let style = QuotingStyle::SHELL_QUOTE;
         assert_eq!(format!("{style}"), "shell-always-quote");
 
-        let style = QuotingStyle::Shell {
-            escape: false,
-            always_quote: false,
-            show_control: true,
-        };
+        let style = QuotingStyle::SHELL.show_control(true);
         assert_eq!(format!("{style}"), "shell-show-control");
 
-        let style = QuotingStyle::C {
-            quotes: Quotes::Double,
-        };
+        let style = QuotingStyle::C_DOUBLE;
         assert_eq!(format!("{style}"), "C");
 
         let style = QuotingStyle::Literal {

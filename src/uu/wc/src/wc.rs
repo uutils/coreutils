@@ -127,17 +127,6 @@ mod options {
 static ARG_FILES: &str = "files";
 static STDIN_REPR: &str = "-";
 
-static QS_ESCAPE: &QuotingStyle = &QuotingStyle::Shell {
-    escape: true,
-    always_quote: false,
-    show_control: false,
-};
-static QS_QUOTE_ESCAPE: &QuotingStyle = &QuotingStyle::Shell {
-    escape: true,
-    always_quote: true,
-    show_control: false,
-};
-
 /// Supported inputs.
 #[derive(Debug)]
 enum Inputs<'a> {
@@ -260,7 +249,8 @@ impl<'a> Input<'a> {
                 let path = path.as_os_str();
                 if path.to_string_lossy().contains('\n') {
                     Some(Cow::Owned(quoting_style::locale_aware_escape_name(
-                        path, QS_ESCAPE,
+                        path,
+                        QuotingStyle::SHELL_ESCAPE,
                     )))
                 } else {
                     Some(Cow::Borrowed(path))
@@ -761,9 +751,12 @@ fn files0_iter_file<'a>(path: &Path) -> UResult<impl Iterator<Item = InputIterIt
                 "wc-error-cannot-open-for-reading",
                 HashMap::from([(
                     "path".to_string(),
-                    quoting_style::locale_aware_escape_name(path.as_os_str(), QS_QUOTE_ESCAPE)
-                        .into_string()
-                        .expect("All escaped names with the escaping option return valid strings."),
+                    quoting_style::locale_aware_escape_name(
+                        path.as_os_str(),
+                        QuotingStyle::SHELL_ESCAPE_QUOTE,
+                    )
+                    .into_string()
+                    .expect("All escaped names with the escaping option return valid strings."),
                 )]),
             )
         })),
@@ -814,7 +807,7 @@ fn files0_iter<'a>(
 }
 
 fn escape_name_wrapper(name: &OsStr) -> String {
-    quoting_style::locale_aware_escape_name(name, QS_ESCAPE)
+    quoting_style::locale_aware_escape_name(name, QuotingStyle::SHELL_ESCAPE)
         .into_string()
         .expect("All escaped names with the escaping option return valid strings.")
 }

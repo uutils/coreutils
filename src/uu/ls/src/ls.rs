@@ -61,9 +61,7 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::libc::{dev_t, major, minor};
 use uucore::line_ending::LineEnding;
 use uucore::locale::{get_message, get_message_with_args};
-use uucore::quoting_style::{
-    self, QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name,
-};
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name};
 use uucore::{
     display::Quotable,
     error::{UError, UResult, set_exit_code},
@@ -598,34 +596,15 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
 fn match_quoting_style_name(style: &str, show_control: bool) -> Option<QuotingStyle> {
     match style {
         "literal" => Some(QuotingStyle::Literal { show_control }),
-        "shell" => Some(QuotingStyle::Shell {
-            escape: false,
-            always_quote: false,
-            show_control,
-        }),
-        "shell-always" => Some(QuotingStyle::Shell {
-            escape: false,
-            always_quote: true,
-            show_control,
-        }),
-        "shell-escape" => Some(QuotingStyle::Shell {
-            escape: true,
-            always_quote: false,
-            show_control,
-        }),
-        "shell-escape-always" => Some(QuotingStyle::Shell {
-            escape: true,
-            always_quote: true,
-            show_control,
-        }),
-        "c" => Some(QuotingStyle::C {
-            quotes: quoting_style::Quotes::Double,
-        }),
-        "escape" => Some(QuotingStyle::C {
-            quotes: quoting_style::Quotes::None,
-        }),
+        "shell" => Some(QuotingStyle::SHELL),
+        "shell-always" => Some(QuotingStyle::SHELL_QUOTE),
+        "shell-escape" => Some(QuotingStyle::SHELL_ESCAPE),
+        "shell-escape-always" => Some(QuotingStyle::SHELL_ESCAPE_QUOTE),
+        "c" => Some(QuotingStyle::C_DOUBLE),
+        "escape" => Some(QuotingStyle::C_NO_QUOTES),
         _ => None,
     }
+    .map(|qs| qs.show_control(show_control))
 }
 
 /// Extracts the quoting style to use based on the options provided.
@@ -651,13 +630,9 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
     } else if options.get_flag(options::quoting::LITERAL) {
         QuotingStyle::Literal { show_control }
     } else if options.get_flag(options::quoting::ESCAPE) {
-        QuotingStyle::C {
-            quotes: quoting_style::Quotes::None,
-        }
+        QuotingStyle::C_NO_QUOTES
     } else if options.get_flag(options::quoting::C) {
-        QuotingStyle::C {
-            quotes: quoting_style::Quotes::Double,
-        }
+        QuotingStyle::C_DOUBLE
     } else if options.get_flag(options::DIRED) {
         QuotingStyle::Literal { show_control }
     } else {
@@ -684,11 +659,7 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
         // By default, `ls` uses Shell escape quoting style when writing to a terminal file
         // descriptor and Literal otherwise.
         if stdout().is_terminal() {
-            QuotingStyle::Shell {
-                escape: true,
-                always_quote: false,
-                show_control,
-            }
+            QuotingStyle::SHELL_ESCAPE.show_control(show_control)
         } else {
             QuotingStyle::Literal { show_control }
         }
@@ -2010,7 +1981,7 @@ fn show_dir_name(
     config: &Config,
 ) -> std::io::Result<()> {
     let escaped_name =
-        locale_aware_escape_dir_name(path_data.p_buf.as_os_str(), &config.quoting_style);
+        locale_aware_escape_dir_name(path_data.p_buf.as_os_str(), config.quoting_style);
 
     let name = if config.hyperlink && !config.dired {
         create_hyperlink(&escaped_name, path_data)
@@ -2511,7 +2482,7 @@ fn display_items(
     // option, print the security context to the left of the size column.
 
     let quoted = items.iter().any(|item| {
-        let name = locale_aware_escape_name(&item.display_name, &config.quoting_style);
+        let name = locale_aware_escape_name(&item.display_name, config.quoting_style);
         os_str_starts_with(&name, b"'")
     });
 
@@ -3175,7 +3146,7 @@ fn display_item_name(
     current_column: LazyCell<usize, Box<dyn FnOnce() -> usize + '_>>,
 ) -> OsString {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
-    let mut name = locale_aware_escape_name(&path.display_name, &config.quoting_style);
+    let mut name = locale_aware_escape_name(&path.display_name, config.quoting_style);
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
@@ -3267,7 +3238,7 @@ fn display_item_name(
                         name.push(path.p_buf.read_link().unwrap());
                     } else {
                         name.push(color_name(
-                            locale_aware_escape_name(target.as_os_str(), &config.quoting_style),
+                            locale_aware_escape_name(target.as_os_str(), config.quoting_style),
                             path,
                             style_manager,
                             &mut state.out,
@@ -3280,7 +3251,7 @@ fn display_item_name(
                     // Apply the right quoting
                     name.push(locale_aware_escape_name(
                         target.as_os_str(),
-                        &config.quoting_style,
+                        config.quoting_style,
                     ));
                 }
             }

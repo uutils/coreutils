@@ -8,7 +8,7 @@ use std::ffi::OsString;
 use std::path::Path;
 use uu_ls::{Config, Format, options};
 use uucore::error::UResult;
-use uucore::quoting_style::{Quotes, QuotingStyle};
+use uucore::quoting_style::QuotingStyle;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -45,9 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut config = Config::from(&matches)?;
 
     if default_quoting_style {
-        config.quoting_style = QuotingStyle::C {
-            quotes: Quotes::None,
-        };
+        config.quoting_style = QuotingStyle::C_NO_QUOTES;
     }
     if default_format_style {
         config.format = Format::Columns;
