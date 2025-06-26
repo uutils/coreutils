@@ -6248,6 +6248,7 @@ fn test_cp_update_none_interactive_prompt_no() {
 }
 
 #[test]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
 fn test_copy_dir_implicit_preserve_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a1");
@@ -6277,6 +6278,7 @@ fn test_copy_dir_implicit_preserve_permissions() {
 }
 
 #[test]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
 fn test_copy_dir_preserve_all_subdir_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a1");
