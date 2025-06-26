@@ -293,7 +293,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long("force")
                 .help("(ignored)")
-                .hidden(true)
+                .hide(true)
                 .action(ArgAction::SetTrue),
         )
         .arg(
