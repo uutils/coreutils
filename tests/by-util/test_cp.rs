@@ -6247,6 +6247,71 @@ fn test_cp_update_none_interactive_prompt_no() {
     assert_eq!(at.read(new_file), "new content");
 }
 
+#[test]
+fn test_copy_dir_implicit_preserve_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a1");
+    at.mkdir("a1/a2");
+    at.set_mode("a1/a2", 0o0555);
+    at.set_mode("a1", 0o0555);
+
+    // no -p argument here: should defaults to keeping permissions
+    ucmd.args(&["-r", "a1", "b1"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    // Make sure everything is preserved
+    assert!(at.dir_exists("b1"));
+    assert!(at.dir_exists("b1/a2"));
+    assert_eq!(
+        at.metadata("a1").mode(),
+        at.metadata("b1").mode(),
+        "a1 mode differs from b1"
+    );
+    assert_eq!(
+        at.metadata("a1/a2").mode(),
+        at.metadata("b1/a2").mode(),
+        "a1/a2 mode differs from b1/a2"
+    );
+}
+
+#[test]
+fn test_copy_dir_preserve_all_subdir_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a1");
+    at.mkdir("a1/a2");
+    at.mkdir("a1/a3");
+    at.set_mode("a1/a2", 0o0555);
+    at.set_mode("a1/a3", 0o0555);
+    at.set_mode("a1", 0o0777);
+
+    ucmd.args(&["-p", "-r", "a1", "b1"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    // Make sure everything is preserved
+    assert!(at.dir_exists("b1"));
+    assert!(at.dir_exists("b1/a2"));
+    assert!(at.dir_exists("b1/a3"));
+    assert_eq!(
+        at.metadata("a1").mode(),
+        at.metadata("b1").mode(),
+        "a1 mode differs from b1"
+    );
+    assert_eq!(
+        at.metadata("a1/a2").mode(),
+        at.metadata("b1/a2").mode(),
+        "a1/a2 mode differs from b1/a2"
+    );
+    assert_eq!(
+        at.metadata("a1/a3").mode(),
+        at.metadata("b1/a3").mode(),
+        "a1/a3 mode differs from b1/a3"
+    );
+}
+
 #[cfg(feature = "feat_selinux")]
 fn get_getfattr_output(f: &str) -> String {
     use std::process::Command;
