@@ -98,6 +98,7 @@ pub mod options {
     pub static NO_CREATE: &str = "no-create";
     pub static NO_DEREF: &str = "no-dereference";
     pub static TIME: &str = "time";
+    pub static FORCE: &str = "force";
 }
 
 static ARG_FILES: &str = "files";
@@ -286,6 +287,13 @@ pub fn uu_app() -> Command {
                 .help("parse argument and use it instead of current time")
                 .value_name("STRING")
                 .conflicts_with(options::sources::TIMESTAMP),
+        )
+        .arg(
+            Arg::new(options::FORCE)
+                .short('f')
+                .long("force")
+                .help("(ignored)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::MODIFICATION)
