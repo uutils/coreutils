@@ -2444,3 +2444,47 @@ fn test_special_file_different_filesystem() {
     assert!(Path::new("/dev/shm/tmp/f").exists());
     std::fs::remove_dir_all("/dev/shm/tmp").unwrap();
 }
+
+/// Test cross-device move with permission denied error
+/// This test mimics the scenario from the GNU part-fail test where
+/// a cross-device move fails due to permission errors when removing the target file
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_permission_denied() {
+    use std::fs::{set_permissions, write};
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("k", "source content");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+
+    let target_file_path = other_fs_tempdir.path().join("k");
+    write(&target_file_path, "target content").expect("Unable to write target file");
+
+    // Remove write permissions from the directory to cause permission denied
+    set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o555))
+        .expect("Unable to set directory permissions");
+
+    // Attempt to move file to the other filesystem
+    // This should fail with a permission denied error
+    let result = scene
+        .ucmd()
+        .arg("-f")
+        .arg("k")
+        .arg(target_file_path.to_str().unwrap())
+        .fails();
+
+    // Check that it contains permission denied and references the file
+    // The exact format may vary but should contain these key elements
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("Permission denied") || stderr.contains("permission denied"));
+
+    set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o755))
+        .expect("Unable to restore directory permissions");
+}

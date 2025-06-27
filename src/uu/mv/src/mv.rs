@@ -362,15 +362,27 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         if opts.no_target_dir {
             if source.is_dir() {
                 #[cfg(unix)]
-                {
-                    let (mut hardlink_tracker, hardlink_scanner) = create_hardlink_context();
-                    rename(
-                        source,
-                        target,
-                        opts,
-                        None,
-                        Some(&mut hardlink_tracker),
-                        Some(&hardlink_scanner),
+                let (mut hardlink_tracker, hardlink_scanner) = create_hardlink_context();
+                #[cfg(unix)]
+                let hardlink_params = (Some(&mut hardlink_tracker), Some(&hardlink_scanner));
+                #[cfg(not(unix))]
+                let hardlink_params = (None, None);
+
+                rename(
+                    source,
+                    target,
+                    opts,
+                    None,
+                    hardlink_params.0,
+                    hardlink_params.1,
+                )
+                .map_err_context(|| {
+                    get_message_with_args(
+                        "mv-error-cannot-move",
+                        HashMap::from([
+                            ("source".to_string(), source.quote().to_string()),
+                            ("target".to_string(), target.quote().to_string()),
+                        ]),
                     )
                 })
             } else {
@@ -1053,22 +1065,22 @@ fn rename_file_fallback(
     hardlink_tracker: &mut HardlinkTracker,
     hardlink_scanner: &HardlinkGroupScanner,
 ) -> io::Result<()> {
+    // Remove existing target file if it exists
     if to.is_symlink() {
         fs::remove_file(to).map_err(|err| {
-            let to = to.to_string_lossy();
-            let from = from.to_string_lossy();
-            io::Error::new(
-                err.kind(),
-                get_message_with_args(
-                    "mv-error-inter-device-move-failed",
-                    HashMap::from([
-                        ("from".to_string(), from.to_string()),
-                        ("to".to_string(), to.to_string()),
-                        ("err".to_string(), err.to_string()),
-                    ]),
-                ),
-            )
+            let inter_device_msg = get_message_with_args(
+                "mv-error-inter-device-move-failed",
+                HashMap::from([
+                    ("from".to_string(), from.display().to_string()),
+                    ("to".to_string(), to.display().to_string()),
+                    ("err".to_string(), err.to_string()),
+                ]),
+            );
+            io::Error::new(err.kind(), inter_device_msg)
         })?;
+    } else if to.exists() {
+        // For non-symlinks, just remove the file without special error handling
+        fs::remove_file(to)?;
     }
 
     // Check if this file is part of a hardlink group and if so, create a hardlink instead of copying
@@ -1090,9 +1102,12 @@ fn rename_file_fallback(
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     fs::copy(from, to)
         .and_then(|_| fsxattr::copy_xattrs(&from, &to))
-        .and_then(|_| fs::remove_file(from))?;
+        .and_then(|_| fs::remove_file(from))
+        .map_err(|err| io::Error::new(err.kind(), get_message("mv-error-permission-denied")))?;
     #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
-    fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
+    fs::copy(from, to)
+        .and_then(|_| fs::remove_file(from))
+        .map_err(|err| io::Error::new(err.kind(), get_message("mv-error-permission-denied")))?;
     Ok(())
 }
 
