@@ -492,7 +492,7 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
         wMilliseconds: ((date.subsec_nanosecond() / 1_000_000) % 1000) as u16,
     };
 
-    let result = unsafe { SetSystemTime(&system_time) };
+    let result = unsafe { SetSystemTime(&raw const system_time) };
 
     if result == 0 {
         Err(std::io::Error::last_os_error()
