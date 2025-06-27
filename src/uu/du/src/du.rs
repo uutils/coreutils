@@ -230,7 +230,7 @@ fn get_size_on_disk(path: &Path) -> u64 {
 
     unsafe {
         let mut file_info: FILE_STANDARD_INFO = core::mem::zeroed();
-        let file_info_ptr: *mut FILE_STANDARD_INFO = &mut file_info;
+        let file_info_ptr: *mut FILE_STANDARD_INFO = &raw mut file_info;
 
         let success = GetFileInformationByHandleEx(
             file.as_raw_handle() as HANDLE,
@@ -257,7 +257,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 
     unsafe {
         let mut file_info: FILE_ID_INFO = core::mem::zeroed();
-        let file_info_ptr: *mut FILE_ID_INFO = &mut file_info;
+        let file_info_ptr: *mut FILE_ID_INFO = &raw mut file_info;
 
         let success = GetFileInformationByHandleEx(
             file.as_raw_handle() as HANDLE,

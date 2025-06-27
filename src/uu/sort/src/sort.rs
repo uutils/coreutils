@@ -1077,7 +1077,7 @@ fn get_rlimit() -> UResult<usize> {
         rlim_cur: 0,
         rlim_max: 0,
     };
-    match unsafe { getrlimit(RLIMIT_NOFILE, &mut limit) } {
+    match unsafe { getrlimit(RLIMIT_NOFILE, &raw mut limit) } {
         0 => Ok(limit.rlim_cur as usize),
         _ => Err(UUsageError::new(2, get_message("sort-failed-fetch-rlimit"))),
     }
