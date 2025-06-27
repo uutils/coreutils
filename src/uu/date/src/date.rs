@@ -463,7 +463,7 @@ fn set_system_datetime(date: Zoned) -> UResult<()> {
         tv_nsec: ts.subsec_nanosecond() as _,
     };
 
-    let result = unsafe { clock_settime(CLOCK_REALTIME, &timespec) };
+    let result = unsafe { clock_settime(CLOCK_REALTIME, &raw const timespec) };
 
     if result == 0 {
         Ok(())
