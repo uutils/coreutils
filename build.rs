@@ -24,6 +24,7 @@ pub fn main() {
     }
 
     let out_dir = env::var("OUT_DIR").unwrap();
+    print!("OUT_DIR: {:?}", out_dir);
 
     let mut crates = Vec::new();
     for (key, val) in env::vars() {
@@ -57,6 +58,11 @@ pub fn main() {
             .as_bytes(),
     )
     .unwrap();
+
+    #[cfg(not(debug_assertions))]
+    {
+        copy_locales_release();
+    }
 
     let mut phf_map = phf_codegen::OrderedMap::<&str>::new();
     for krate in &crates {
@@ -105,4 +111,65 @@ pub fn main() {
     mf.write_all(b"\n}\n").unwrap();
 
     mf.flush().unwrap();
+}
+
+#[cfg(not(debug_assertions))]
+fn copy_locales_release() {
+    use std::path::PathBuf;
+    let enabled_crates = env::var("CARGO_CFG_FEATURE").unwrap();
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let uu_dir = Path::new(&manifest_dir).join("src/uu");
+
+    let target_dir = if let Ok(custom_target) = env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(custom_target)
+    } else {
+        Path::new(&manifest_dir).join("target")
+    };
+
+    let locales_dir = target_dir.join("release").join("locales");
+
+    if !locales_dir.exists() {
+        std::fs::create_dir_all(&locales_dir).expect("Failed to create locales directory");
+    }
+
+    for krate in enabled_crates.split(",") {
+        let uu_crate_locales_path = uu_dir.join(krate).join("locales");
+
+        if uu_crate_locales_path.exists() && uu_crate_locales_path.is_dir() {
+            let crate_locales_dir = locales_dir.join(krate);
+            if !crate_locales_dir.exists() {
+                std::fs::create_dir_all(&crate_locales_dir)
+                    .expect(&format!("Failed to create directory for {}", krate));
+            }
+
+            match uu_crate_locales_path.read_dir() {
+                Ok(read_dir) => {
+                    for entry_result in read_dir {
+                        match entry_result {
+                            Ok(entry) => {
+                                let file_name = entry.file_name();
+                                let source_path = entry.path();
+                                let dest_path = crate_locales_dir.join(&file_name);
+
+                                if let Err(err) = std::fs::copy(&source_path, &dest_path) {
+                                    eprintln!(
+                                        "Failed to copy {:?} to {:?}: {}",
+                                        source_path, dest_path, err
+                                    );
+                                } else {
+                                    println!(
+                                        "Copied locale file: {} -> {}",
+                                        source_path.display(),
+                                        dest_path.display()
+                                    );
+                                }
+                            }
+                            Err(err) => eprintln!("Error reading directory entry: {:?}", err),
+                        }
+                    }
+                }
+                Err(err) => eprintln!("Error reading locales directory for {}: {:?}", krate, err),
+            }
+        }
+    }
 }
