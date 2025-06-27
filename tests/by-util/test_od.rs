@@ -279,18 +279,19 @@ fn test_f64() {
 
 #[test]
 fn test_multibyte() {
+    let input = "’‐ˆ‘˜語🙂✅🐶𝛑Universität Tübingen \u{1B000}"; // spell-checker:disable-line
     new_ucmd!()
-        .arg("-c")
-        .arg("-w12")
-        .run_piped_stdin("Universität Tübingen \u{1B000}".as_bytes()) // spell-checker:disable-line
+        .args(&["-t", "c"])
+        .run_piped_stdin(input.as_bytes())
         .success()
         .no_stderr()
         .stdout_is(unindent(
-            "
-            0000000   U   n   i   v   e   r   s   i   t   ä  **   t
-            0000014       T   ü  **   b   i   n   g   e   n       \u{1B000}
-            0000030  **  **  **
-            0000033
+            r"
+            0000000 342 200 231 342 200 220 313 206 342 200 230 313 234 350 252 236
+            0000020 360 237 231 202 342 234 205 360 237 220 266 360 235 233 221   U
+            0000040   n   i   v   e   r   s   i   t 303 244   t       T 303 274   b
+            0000060   i   n   g   e   n     360 233 200 200
+            0000072
             ",
         ));
 }
@@ -714,10 +715,10 @@ fn test_ascii_dump() {
             r"
             0000000  00  01  0a  0d  10  1f  20  61  62  63  7d  7e  7f  80  90  a0  >...... abc}~....<
                     nul soh  nl  cr dle  us  sp   a   b   c   }   ~ del nul dle  sp
-                     \0 001  \n  \r 020 037       a   b   c   }   ~ 177  **  **  **  >...... abc}~....<
+                     \0 001  \n  \r 020 037       a   b   c   }   ~ 177 200 220 240  >...... abc}~....<
             0000020  b0  c0  d0  e0  f0  ff                                          >......<
                       0   @   P   `   p del
-                     ** 300 320 340 360 377                                          >......<
+                    260 300 320 340 360 377                                          >......<
             0000026
             ",
         ));
