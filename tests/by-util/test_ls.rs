@@ -4263,8 +4263,7 @@ fn test_ls_context_long() {
         let line: Vec<_> = result.stdout_str().split(' ').collect();
         assert!(line[0].ends_with('.'));
         assert!(line[4].starts_with("unconfined_u"));
-        let s: Vec<_> = line[4].split(':').collect();
-        assert!(s.len() == 4);
+        validate_selinux_context(line[4]);
     }
 }
 
@@ -4295,6 +4294,115 @@ fn test_ls_context_format() {
             .stdout_only(
                 unwrap_or_return!(expected_result(&ts, &["-Z", format.as_str(), "/"])).stdout_str(),
             );
+    }
+}
+
+/// Helper function to validate `SELinux` context format
+/// Returns the context parts if valid, panics with descriptive message if invalid
+#[cfg(feature = "feat_selinux")]
+fn validate_selinux_context(context: &str) {
+    assert!(
+        context.contains(':'),
+        "Expected SELinux context format (user:role:type:level), got: {}",
+        context
+    );
+
+    let context_parts: Vec<&str> = context.split(':').collect();
+    assert_eq!(
+        context_parts.len(),
+        4,
+        "SELinux context should have 4 components separated by colons, got: {}",
+        context
+    );
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_selinux_context_format() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("test skipped: Kernel has no support for SElinux context");
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("file");
+    at.symlink_file("file", "link");
+
+    // Test that ls -lnZ properly shows the context
+    for file in ["file", "link"] {
+        let result = scene.ucmd().args(&["-lnZ", file]).succeeds();
+        let output = result.stdout_str();
+
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(!lines.is_empty(), "Output should contain at least one line");
+
+        let first_line = lines[0];
+        let parts: Vec<&str> = first_line.split_whitespace().collect();
+        assert!(parts.len() >= 6, "Line should have at least 6 fields");
+
+        // The 5th field (0-indexed position 4) should contain the SELinux context
+        // Format: permissions links owner group context size date time name
+        let context = parts[4];
+        validate_selinux_context(context);
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_selinux_context_indicator() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("test skipped: Kernel has no support for SElinux context");
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("file");
+    at.symlink_file("file", "link");
+
+    // Test that ls -l shows "." indicator for files with SELinux contexts
+    for file in ["file", "link"] {
+        let result = scene.ucmd().args(&["-l", file]).succeeds();
+        let output = result.stdout_str();
+
+        // The 11th character should be "." indicating SELinux context
+        // -rw-rw-r--. (permissions + context indicator)
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(!lines.is_empty(), "Output should contain at least one line");
+
+        let first_line = lines[0];
+        let chars: Vec<char> = first_line.chars().collect();
+        assert!(
+            chars.len() >= 11,
+            "Line should be at least 11 characters long"
+        );
+
+        // The 11th character (0-indexed position 10) should be "." for SELinux context
+        assert_eq!(
+            chars[10], '.',
+            "Expected '.' indicator for SELinux context in position 11, got '{}' in line: {}",
+            chars[10], first_line
+        );
+    }
+
+    // Test that ls -lnZ properly shows the context
+    for file in ["file", "link"] {
+        let result = scene.ucmd().args(&["-lnZ", file]).succeeds();
+        let output = result.stdout_str();
+
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(!lines.is_empty(), "Output should contain at least one line");
+
+        let first_line = lines[0];
+        let parts: Vec<&str> = first_line.split_whitespace().collect();
+        assert!(parts.len() >= 6, "Line should have at least 6 fields");
+
+        // The 5th field (0-indexed position 4) should contain the SELinux context
+        // Format: permissions links owner group context size date time name
+        validate_selinux_context(parts[4]);
     }
 }
 
