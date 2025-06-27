@@ -24,7 +24,6 @@ pub fn main() {
     }
 
     let out_dir = env::var("OUT_DIR").unwrap();
-    print!("OUT_DIR: {:?}", out_dir);
 
     let mut crates = Vec::new();
     for (key, val) in env::vars() {
