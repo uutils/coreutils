@@ -353,7 +353,7 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     use std::env;
     // In release builds, look relative to executable
     let exe_path = env::current_exe().map_err(|e| {
-        LocalizationError::PathResolution(format!("Failed to get executable path: {}", e))
+        LocalizationError::PathResolution(format!("Failed to get executable path: {e}"))
     })?;
 
     let exe_dir = exe_path.parent().ok_or_else(|| {

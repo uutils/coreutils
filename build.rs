@@ -136,7 +136,7 @@ fn copy_locales() {
             let crate_locales_dir = locales_dir.join(krate);
             if !crate_locales_dir.exists() {
                 std::fs::create_dir_all(&crate_locales_dir)
-                    .expect("Failed to create directory for crate");
+                    .unwrap_or_else(|_| panic!("Failed to create directory for crate {krate}"));
             }
 
             match uu_crate_locales_path.read_dir() {
