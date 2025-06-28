@@ -9,4 +9,4 @@ LIBSTDBUF_DIR = "/usr/lib"
 # libstdbuf must be a shared library, so musl libc can't be linked statically
 # https://github.com/rust-lang/rust/issues/82193
 [build]
-rustflags = [ "-C", "target-feature=-crt-static" ]
+rustflags = ["-C", "target-feature=-crt-static"]
