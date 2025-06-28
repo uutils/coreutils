@@ -187,6 +187,7 @@ pub fn uu_app() -> Command {
         .about(get_message("install-about"))
         .override_usage(format_usage(&get_message("install-usage")))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         .arg(

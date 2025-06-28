@@ -447,8 +447,8 @@ impl fmt::Display for Table {
             while let Some((i, elem)) = col_iter.next() {
                 let is_last_col = col_iter.peek().is_none();
 
-                match self.alignments[i] {
-                    Alignment::Left => {
+                match self.alignments.get(i) {
+                    Some(Alignment::Left) => {
                         if is_last_col {
                             // no trailing spaces in last column
                             write!(f, "{elem}")?;
@@ -456,7 +456,10 @@ impl fmt::Display for Table {
                             write!(f, "{:<width$}", elem, width = self.widths[i])?;
                         }
                     }
-                    Alignment::Right => write!(f, "{:>width$}", elem, width = self.widths[i])?,
+                    Some(Alignment::Right) => {
+                        write!(f, "{:>width$}", elem, width = self.widths[i])?;
+                    }
+                    None => break,
                 }
 
                 if !is_last_col {
