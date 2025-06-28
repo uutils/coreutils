@@ -365,6 +365,15 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         return Err(1.into());
     }
 
+    // Check if compare is used with non-permission mode bits
+    if compare && specified_mode.is_some() {
+        let mode = specified_mode.unwrap();
+        let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
+        if mode & non_permission_bits != 0 {
+            show_error!("{}", get_message("install-warning-compare-ignored"));
+        }
+    }
+
     let owner = matches
         .get_one::<String>(OPT_OWNER)
         .map(|s| s.as_str())

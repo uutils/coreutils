@@ -643,7 +643,9 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
         .arg("-m")
         .arg("1644")
         .succeeds()
-        .no_stderr();
+        .stderr_contains(
+            "the --compare (-C) option is ignored when you specify a mode with non-permission bits",
+        );
 
     file2_meta = at.metadata(file2);
     let after_install_sticky = FileTime::from_last_modification_time(&file2_meta);
@@ -2222,20 +2224,37 @@ fn test_selinux() {
 
     let args = ["-Z", "--context=unconfined_u:object_r:user_tmp_t:s0"];
     for arg in args {
-        new_ucmd!()
+        let result = new_ucmd!()
             .arg(arg)
             .arg("-v")
             .arg(at.plus_as_string(src))
             .arg(at.plus_as_string(dest))
-            .succeeds()
-            .stdout_contains("orig' -> '");
+            .run();
+
+        // Skip test if SELinux is not enabled
+        if result
+            .stderr_str()
+            .contains("SELinux is not enabled on this system")
+        {
+            println!("Skipping SELinux test: SELinux is not enabled");
+            at.remove(&at.plus_as_string(dest));
+            continue;
+        }
+
+        result.success().stdout_contains("orig' -> '");
 
         let getfattr_output = Command::new("getfattr")
             .arg(at.plus_as_string(dest))
             .arg("-n")
             .arg("security.selinux")
-            .output()
-            .expect("Failed to run `getfattr` on the destination file");
+            .output();
+
+        // Skip test if getfattr is not available
+        let Ok(getfattr_output) = getfattr_output else {
+            println!("Skipping SELinux test: getfattr not available");
+            at.remove(&at.plus_as_string(dest));
+            continue;
+        };
         println!("{:?}", getfattr_output);
         assert!(
             getfattr_output.status.success(),
@@ -2267,14 +2286,69 @@ fn test_selinux_invalid_args() {
         "--context=nconfined_u:object_r:user_tmp_t:s0",
     ];
     for arg in args {
-        new_ucmd!()
+        let result = new_ucmd!()
             .arg(arg)
             .arg("-v")
             .arg(at.plus_as_string(src))
             .arg(at.plus_as_string(dest))
-            .fails()
-            .stderr_contains("failed to set default file creation");
+            .fails();
+
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.contains("failed to set default file creation")
+                || stderr.contains("SELinux is not enabled on this system"),
+            "Expected stderr to contain either 'failed to set default file creation' or 'SELinux is not enabled on this system', but got: '{}'",
+            stderr
+        );
 
         at.remove(&at.plus_as_string(dest));
+    }
+}
+
+#[test]
+#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
+fn test_install_compare_with_mode_bits() {
+    let test_cases = [
+        ("4755", "setuid bit", true),
+        ("2755", "setgid bit", true),
+        ("1755", "sticky bit", true),
+        ("7755", "setuid + setgid + sticky bits", true),
+        ("755", "permission-only mode", false),
+    ];
+
+    for (mode, description, should_warn) in test_cases {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let source = format!("source_file_{}", mode);
+        let dest = format!("dest_file_{}", mode);
+
+        at.write(&source, "test content");
+
+        let mode_arg = format!("--mode={}", mode);
+
+        if should_warn {
+            scene.ucmd().args(&["-C", &mode_arg, &source, &dest])
+                .succeeds()
+                .stderr_contains("the --compare (-C) option is ignored when you specify a mode with non-permission bits");
+        } else {
+            scene
+                .ucmd()
+                .args(&["-C", &mode_arg, &source, &dest])
+                .succeeds()
+                .no_stderr();
+
+            // Test second install should be no-op due to -C
+            scene
+                .ucmd()
+                .args(&["-C", &mode_arg, &source, &dest])
+                .succeeds()
+                .no_stderr();
+        }
+
+        assert!(
+            at.file_exists(&dest),
+            "Failed to create dest file for {}",
+            description
+        );
     }
 }
