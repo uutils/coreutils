@@ -47,6 +47,22 @@ use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS
 
 const ASCII_DEL: u8 = 127;
 
+// Sane defaults for control characters.
+const SANE_CONTROL_CHARS: [(S, u8); 12] = [
+    (S::VINTR, 3),     // ^C
+    (S::VQUIT, 28),    // ^\
+    (S::VERASE, 127),  // DEL
+    (S::VKILL, 21),    // ^U
+    (S::VEOF, 4),      // ^D
+    (S::VSTART, 17),   // ^Q
+    (S::VSTOP, 19),    // ^S
+    (S::VSUSP, 26),    // ^Z
+    (S::VREPRINT, 18), // ^R
+    (S::VWERASE, 23),  // ^W
+    (S::VLNEXT, 22),   // ^V
+    (S::VDISCARD, 15), // ^O
+];
+
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
     name: &'static str,
@@ -694,7 +710,21 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
 
 fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
     if !opts.all {
-        // TODO: this branch should print values that differ from defaults
+        // Print only control chars that differ from sane defaults
+        let mut printed = false;
+        for (text, cc_index) in CONTROL_CHARS {
+            let current_val = termios.control_chars[*cc_index as usize];
+            let sane_val = get_sane_control_char(*cc_index);
+
+            if current_val != sane_val {
+                print!("{text} = {}; ", control_char_to_string(current_val)?);
+                printed = true;
+            }
+        }
+
+        if printed {
+            println!();
+        }
         return Ok(());
     }
 
@@ -1023,6 +1053,24 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions> {
         .collect::<Vec<ArgOptions>>();
     flags.append(&mut ccs);
     flags
+}
+
+fn get_sane_control_char(cc_index: S) -> u8 {
+    for (sane_index, sane_val) in SANE_CONTROL_CHARS {
+        if sane_index == cc_index {
+            return sane_val;
+        }
+    }
+    // Default values for control chars not in the sane list
+    match cc_index {
+        S::VEOL => 0,
+        S::VEOL2 => 0,
+        S::VMIN => 1,
+        S::VTIME => 0,
+        #[cfg(target_os = "linux")]
+        S::VSWTC => 0,
+        _ => 0,
+    }
 }
 
 pub fn uu_app() -> Command {
