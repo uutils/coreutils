@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag ispeed ospeed
+// spell-checker:ignore vintr vquit verase vkill veof vstart vstop vsusp vreprint vwerase vlnext vdiscard veol vswtc vswtc
 
 mod flags;
 
@@ -37,6 +38,22 @@ use flags::BAUD_RATES;
 use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
 const ASCII_DEL: u8 = 127;
+
+// Sane defaults for control characters.
+const SANE_CONTROL_CHARS: [(SpecialCharacterIndices, u8); 12] = [
+    (SpecialCharacterIndices::VINTR, 3),     // ^C
+    (SpecialCharacterIndices::VQUIT, 28),    // ^\
+    (SpecialCharacterIndices::VERASE, 127),  // DEL
+    (SpecialCharacterIndices::VKILL, 21),    // ^U
+    (SpecialCharacterIndices::VEOF, 4),      // ^D
+    (SpecialCharacterIndices::VSTART, 17),   // ^Q
+    (SpecialCharacterIndices::VSTOP, 19),    // ^S
+    (SpecialCharacterIndices::VSUSP, 26),    // ^Z
+    (SpecialCharacterIndices::VREPRINT, 18), // ^R
+    (SpecialCharacterIndices::VWERASE, 23),  // ^W
+    (SpecialCharacterIndices::VLNEXT, 22),   // ^V
+    (SpecialCharacterIndices::VDISCARD, 15), // ^O
+];
 
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
@@ -112,6 +129,7 @@ enum ControlCharMappingError {
 enum SpecialSetting {
     Rows(u16),
     Cols(u16),
+    Sane,
 }
 
 enum PrintSetting {
@@ -367,6 +385,8 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
             } else if *arg == "size" {
                 valid_args.push(ArgOptions::Print(PrintSetting::Size));
+            } else if *arg == "sane" {
+                valid_args.push(ArgOptions::Special(SpecialSetting::Sane));
             // not a valid option
             } else {
                 return Err(USimpleError::new(
@@ -388,7 +408,7 @@ fn stty(opts: &Options) -> UResult<()> {
                 ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
                 ArgOptions::Flags(flag) => apply_setting(&mut termios, flag),
                 ArgOptions::Special(setting) => {
-                    apply_special_setting(setting, opts.file.as_raw_fd())?;
+                    apply_special_setting(setting, opts.file.as_raw_fd(), &mut termios)?;
                 }
                 ArgOptions::Print(setting) => {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
@@ -605,7 +625,21 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
 
 fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
     if !opts.all {
-        // TODO: this branch should print values that differ from defaults
+        // Print only control chars that differ from sane defaults
+        let mut printed = false;
+        for (text, cc_index) in CONTROL_CHARS {
+            let current_val = termios.control_chars[*cc_index as usize];
+            let sane_val = get_sane_control_char(*cc_index);
+
+            if current_val != sane_val {
+                print!("{text} = {}; ", control_char_to_string(current_val)?);
+                printed = true;
+            }
+        }
+
+        if printed {
+            println!();
+        }
         return Ok(());
     }
 
@@ -745,14 +779,28 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(SpecialCharacterIndices,
     termios.control_chars[mapping.0 as usize] = mapping.1;
 }
 
-fn apply_special_setting(setting: &SpecialSetting, fd: i32) -> nix::Result<()> {
-    let mut size = TermSize::default();
-    unsafe { tiocgwinsz(fd, &raw mut size)? };
+fn apply_special_setting(
+    setting: &SpecialSetting,
+    fd: i32,
+    termios: &mut Termios,
+) -> nix::Result<()> {
     match setting {
-        SpecialSetting::Rows(n) => size.rows = *n,
-        SpecialSetting::Cols(n) => size.columns = *n,
+        SpecialSetting::Rows(n) => {
+            let mut size = TermSize::default();
+            unsafe { tiocgwinsz(fd, &raw mut size)? };
+            size.rows = *n;
+            unsafe { tiocswinsz(fd, &raw mut size)? };
+        }
+        SpecialSetting::Cols(n) => {
+            let mut size = TermSize::default();
+            unsafe { tiocgwinsz(fd, &raw mut size)? };
+            size.columns = *n;
+            unsafe { tiocswinsz(fd, &raw mut size)? };
+        }
+        SpecialSetting::Sane => {
+            apply_sane_settings(termios);
+        }
     }
-    unsafe { tiocswinsz(fd, &raw mut size)? };
     Ok(())
 }
 
@@ -805,6 +853,61 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
         (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_string())),
         _ => unreachable!("No arguments provided: must have been caught earlier"),
     }
+}
+
+fn get_sane_control_char(cc_index: SpecialCharacterIndices) -> u8 {
+    for (sane_index, sane_val) in SANE_CONTROL_CHARS {
+        if sane_index == cc_index {
+            return sane_val;
+        }
+    }
+    // Default values for control chars not in the sane list
+    match cc_index {
+        SpecialCharacterIndices::VEOL => 0,
+        SpecialCharacterIndices::VEOL2 => 0,
+        SpecialCharacterIndices::VMIN => 1,
+        SpecialCharacterIndices::VTIME => 0,
+        #[cfg(target_os = "linux")]
+        SpecialCharacterIndices::VSWTC => 0,
+        _ => 0,
+    }
+}
+
+fn apply_sane_settings(termios: &mut Termios) {
+    // Set sane control characters
+    for (cc_index, sane_val) in SANE_CONTROL_CHARS {
+        termios.control_chars[cc_index as usize] = sane_val;
+    }
+
+    // Set other sane control character defaults
+    termios.control_chars[SpecialCharacterIndices::VEOL as usize] = 0;
+    termios.control_chars[SpecialCharacterIndices::VEOL2 as usize] = 0;
+    termios.control_chars[SpecialCharacterIndices::VMIN as usize] = 1;
+    termios.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
+    #[cfg(target_os = "linux")]
+    {
+        termios.control_chars[SpecialCharacterIndices::VSWTC as usize] = 0;
+    }
+
+    // Apply sane flags
+    use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
+
+    macro_rules! apply_sane_flags {
+        ($flags:ident) => {
+            for flag in $flags {
+                if flag.sane {
+                    flag.flag.apply(termios, true);
+                } else {
+                    flag.flag.apply(termios, false);
+                }
+            }
+        };
+    }
+
+    apply_sane_flags!(CONTROL_FLAGS);
+    apply_sane_flags!(INPUT_FLAGS);
+    apply_sane_flags!(OUTPUT_FLAGS);
+    apply_sane_flags!(LOCAL_FLAGS);
 }
 
 pub fn uu_app() -> Command {
