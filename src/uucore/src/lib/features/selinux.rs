@@ -345,7 +345,7 @@ mod tests {
                 SeLinuxError::SELinuxNotEnabled => {
                     // This is the expected error when SELinux is not enabled
                 }
-                err => panic!("Expected SELinuxNotEnabled error but got: {}", err),
+                err => panic!("Expected SELinuxNotEnabled error but got: {err}"),
             }
             return;
         }
@@ -372,8 +372,7 @@ mod tests {
 
             assert!(
                 new_context.contains("tmp_t"),
-                "Expected context to contain 'tmp_t', but got: {}",
-                new_context
+                "Expected context to contain 'tmp_t', but got: {new_context}"
             );
         } else {
             println!(
@@ -425,7 +424,7 @@ mod tests {
 
         if result.is_ok() {
             let context = result.unwrap();
-            println!("Retrieved SELinux context: {}", context);
+            println!("Retrieved SELinux context: {context}");
 
             assert!(
                 is_selinux_enabled(),
@@ -435,8 +434,7 @@ mod tests {
             if !context.is_empty() {
                 assert!(
                     context.contains(':'),
-                    "SELinux context '{}' doesn't match expected format",
-                    context
+                    "SELinux context '{context}' doesn't match expected format"
                 );
             }
         } else {
@@ -455,7 +453,7 @@ mod tests {
                         "Got ContextRetrievalFailure when SELinux is not enabled"
                     );
                     assert!(!e.is_empty(), "Error message should not be empty");
-                    println!("Context retrieval failure: {}", e);
+                    println!("Context retrieval failure: {e}");
                 }
                 SeLinuxError::ContextConversionFailure(ctx, e) => {
                     assert!(
@@ -463,17 +461,16 @@ mod tests {
                         "Got ContextConversionFailure when SELinux is not enabled"
                     );
                     assert!(!e.is_empty(), "Error message should not be empty");
-                    println!("Context conversion failure for '{}': {}", ctx, e);
+                    println!("Context conversion failure for '{ctx}': {e}");
                 }
                 SeLinuxError::ContextSetFailure(ctx, e) => {
                     assert!(!e.is_empty(), "Error message should not be empty");
-                    println!("Context conversion failure for '{}': {}", ctx, e);
+                    println!("Context conversion failure for '{ctx}': {e}");
                 }
                 SeLinuxError::FileOpenFailure(e) => {
                     assert!(
                         Path::new(path).exists(),
-                        "File open failure occurred despite file being created: {}",
-                        e
+                        "File open failure occurred despite file being created: {e}"
                     );
                 }
             }
@@ -618,10 +615,10 @@ mod tests {
         if let Err(err) = result {
             match err {
                 SeLinuxError::ContextSetFailure(_, _) => {
-                    println!("Note: Could not set context due to permissions: {}", err);
+                    println!("Note: Could not set context due to permissions: {err}");
                 }
                 unexpected => {
-                    panic!("Unexpected error: {}", unexpected);
+                    panic!("Unexpected error: {unexpected}");
                 }
             }
         }

@@ -14,6 +14,7 @@ use crate::columns::{Alignment, Column};
 use crate::filesystem::Filesystem;
 use crate::{BlockSize, Options};
 use uucore::fsext::{FsUsage, MountInfo};
+use uucore::locale::get_message;
 
 use std::fmt;
 use std::ops::AddAssign;
@@ -106,7 +107,7 @@ impl AddAssign for Row {
         let inodes_used = self.inodes_used + rhs.inodes_used;
         *self = Self {
             file: None,
-            fs_device: "total".into(),
+            fs_device: get_message("df-total"),
             fs_type: "-".into(),
             fs_mount: "-".into(),
             bytes,
@@ -261,7 +262,7 @@ impl<'a> RowFormatter<'a> {
             let string = match column {
                 Column::Source => {
                     if self.is_total_row {
-                        "total".to_string()
+                        get_message("df-total")
                     } else {
                         self.row.fs_device.to_string()
                     }
@@ -273,7 +274,7 @@ impl<'a> RowFormatter<'a> {
 
                 Column::Target => {
                     if self.is_total_row && !self.options.columns.contains(&Column::Source) {
-                        "total".to_string()
+                        get_message("df-total")
                     } else {
                         self.row.fs_mount.to_string()
                     }
@@ -325,32 +326,38 @@ impl Header {
 
         for column in &options.columns {
             let header = match column {
-                Column::Source => String::from("Filesystem"),
+                Column::Source => get_message("df-header-filesystem"),
                 Column::Size => match options.header_mode {
-                    HeaderMode::HumanReadable => String::from("Size"),
+                    HeaderMode::HumanReadable => get_message("df-header-size"),
                     HeaderMode::PosixPortability => {
-                        format!("{}-blocks", options.block_size.as_u64())
+                        format!(
+                            "{}{}",
+                            options.block_size.as_u64(),
+                            get_message("df-blocks-suffix")
+                        )
                     }
-                    _ => format!("{}-blocks", options.block_size),
+                    _ => format!("{}{}", options.block_size, get_message("df-blocks-suffix")),
                 },
-                Column::Used => String::from("Used"),
+                Column::Used => get_message("df-header-used"),
                 Column::Avail => match options.header_mode {
-                    HeaderMode::HumanReadable | HeaderMode::Output => String::from("Avail"),
-                    _ => String::from("Available"),
+                    HeaderMode::HumanReadable | HeaderMode::Output => {
+                        get_message("df-header-avail")
+                    }
+                    _ => get_message("df-header-available"),
                 },
                 Column::Pcent => match options.header_mode {
-                    HeaderMode::PosixPortability => String::from("Capacity"),
-                    _ => String::from("Use%"),
+                    HeaderMode::PosixPortability => get_message("df-header-capacity"),
+                    _ => get_message("df-header-use-percent"),
                 },
-                Column::Target => String::from("Mounted on"),
-                Column::Itotal => String::from("Inodes"),
-                Column::Iused => String::from("IUsed"),
-                Column::Iavail => String::from("IFree"),
-                Column::Ipcent => String::from("IUse%"),
-                Column::File => String::from("File"),
-                Column::Fstype => String::from("Type"),
+                Column::Target => get_message("df-header-mounted-on"),
+                Column::Itotal => get_message("df-header-inodes"),
+                Column::Iused => get_message("df-header-iused"),
+                Column::Iavail => get_message("df-header-iavail"),
+                Column::Ipcent => get_message("df-header-iuse-percent"),
+                Column::File => get_message("df-header-file"),
+                Column::Fstype => get_message("df-header-type"),
                 #[cfg(target_os = "macos")]
-                Column::Capacity => String::from("Capacity"),
+                Column::Capacity => get_message("df-header-capacity"),
             };
 
             headers.push(header);
@@ -383,7 +390,7 @@ impl Table {
         //
         // This accumulator is computed in case we need to display the
         // total counts in the last row of the table.
-        let mut total = Row::new("total");
+        let mut total = Row::new(&get_message("df-total"));
 
         for filesystem in filesystems {
             // If the filesystem is not empty, or if the options require
@@ -471,11 +478,19 @@ impl fmt::Display for Table {
 mod tests {
 
     use std::vec;
+    use uucore::locale::setup_localization;
 
     use crate::blocks::HumanReadable;
     use crate::columns::Column;
     use crate::table::{Header, HeaderMode, Row, RowFormatter, Table};
     use crate::{BlockSize, Options};
+
+    fn init() {
+        unsafe {
+            std::env::set_var("LANG", "C");
+        }
+        let _ = setup_localization("df");
+    }
 
     const COLUMNS_WITH_FS_TYPE: [Column; 7] = [
         Column::Source,
@@ -521,7 +536,9 @@ mod tests {
 
     #[test]
     fn test_default_header() {
+        init();
         let options = Options::default();
+
         assert_eq!(
             Header::get_headers(&options),
             vec!(
@@ -537,6 +554,7 @@ mod tests {
 
     #[test]
     fn test_header_with_fs_type() {
+        init();
         let options = Options {
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             ..Default::default()
@@ -557,6 +575,7 @@ mod tests {
 
     #[test]
     fn test_header_with_inodes() {
+        init();
         let options = Options {
             columns: COLUMNS_WITH_INODES.to_vec(),
             ..Default::default()
@@ -576,6 +595,7 @@ mod tests {
 
     #[test]
     fn test_header_with_block_size_1024() {
+        init();
         let options = Options {
             block_size: BlockSize::Bytes(3 * 1024),
             ..Default::default()
@@ -595,6 +615,7 @@ mod tests {
 
     #[test]
     fn test_human_readable_header() {
+        init();
         let options = Options {
             header_mode: HeaderMode::HumanReadable,
             ..Default::default()
@@ -607,6 +628,7 @@ mod tests {
 
     #[test]
     fn test_posix_portability_header() {
+        init();
         let options = Options {
             header_mode: HeaderMode::PosixPortability,
             ..Default::default()
@@ -626,6 +648,7 @@ mod tests {
 
     #[test]
     fn test_output_header() {
+        init();
         let options = Options {
             header_mode: HeaderMode::Output,
             ..Default::default()
@@ -645,6 +668,7 @@ mod tests {
 
     #[test]
     fn test_row_formatter() {
+        init();
         let options = Options {
             block_size: BlockSize::Bytes(1),
             ..Default::default()
@@ -669,6 +693,7 @@ mod tests {
 
     #[test]
     fn test_row_formatter_with_fs_type() {
+        init();
         let options = Options {
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             block_size: BlockSize::Bytes(1),
@@ -695,6 +720,7 @@ mod tests {
 
     #[test]
     fn test_row_formatter_with_inodes() {
+        init();
         let options = Options {
             columns: COLUMNS_WITH_INODES.to_vec(),
             block_size: BlockSize::Bytes(1),
@@ -720,6 +746,7 @@ mod tests {
 
     #[test]
     fn test_row_formatter_with_bytes_and_inodes() {
+        init();
         let options = Options {
             columns: vec![Column::Size, Column::Itotal],
             block_size: BlockSize::Bytes(100),
@@ -736,6 +763,7 @@ mod tests {
 
     #[test]
     fn test_row_formatter_with_human_readable_si() {
+        init();
         let options = Options {
             human_readable: Some(HumanReadable::Decimal),
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
@@ -762,6 +790,7 @@ mod tests {
 
     #[test]
     fn test_row_formatter_with_human_readable_binary() {
+        init();
         let options = Options {
             human_readable: Some(HumanReadable::Binary),
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
@@ -788,6 +817,7 @@ mod tests {
 
     #[test]
     fn test_row_formatter_with_round_up_usage() {
+        init();
         let options = Options {
             columns: vec![Column::Pcent],
             ..Default::default()
@@ -802,6 +832,7 @@ mod tests {
 
     #[test]
     fn test_row_formatter_with_round_up_byte_values() {
+        init();
         fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<String> {
             let options = Options {
                 block_size: BlockSize::Bytes(1000),
@@ -826,6 +857,7 @@ mod tests {
 
     #[test]
     fn test_row_converter_with_invalid_numbers() {
+        init();
         // copy from wsl linux
         let d = crate::Filesystem {
             file: None,
@@ -857,6 +889,7 @@ mod tests {
 
     #[test]
     fn test_table_column_width_computation_include_total_row() {
+        init();
         let d1 = crate::Filesystem {
             file: None,
             mount_info: crate::MountInfo {
@@ -915,6 +948,7 @@ mod tests {
 
     #[test]
     fn test_row_accumulation_u64_overflow() {
+        init();
         let total = u64::MAX as u128;
         let used1 = 3000u128;
         let used2 = 50000u128;

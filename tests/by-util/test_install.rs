@@ -448,6 +448,80 @@ fn test_install_nested_paths_copy_file() {
 }
 
 #[test]
+fn test_multiple_mode_arguments_override_not_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "source_dir";
+
+    let file = "source_file";
+    let gid = getegid();
+    let uid = geteuid();
+
+    at.touch(file);
+    at.mkdir(dir);
+
+    scene
+        .ucmd()
+        .args(&[
+            file,
+            &format!("{dir}/{file}"),
+            "--owner=invalid_owner",
+            "--owner",
+            &uid.to_string(),
+        ])
+        .succeeds()
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&[
+            file,
+            &format!("{dir}/{file}"),
+            "-o invalid_owner",
+            "-o",
+            &uid.to_string(),
+        ])
+        .succeeds()
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&[file, &format!("{dir}/{file}"), "--mode=999", "--mode=200"])
+        .succeeds()
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&[file, &format!("{dir}/{file}"), "-m 999", "-m 200"])
+        .succeeds()
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&[
+            file,
+            &format!("{dir}/{file}"),
+            "--group=invalid_group",
+            "--group",
+            &gid.to_string(),
+        ])
+        .succeeds()
+        .no_stderr();
+
+    scene
+        .ucmd()
+        .args(&[
+            file,
+            &format!("{dir}/{file}"),
+            "-g invalid_group",
+            "-g",
+            &gid.to_string(),
+        ])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 fn test_install_failing_omitting_directory() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

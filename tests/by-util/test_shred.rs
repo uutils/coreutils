@@ -292,3 +292,22 @@ fn test_random_source_dir() {
         .fails()
         .stderr_only("shred: foo.txt: pass 1/3 (random)...\nshred: foo.txt: File write pass failed: Is a directory\n");
 }
+
+#[test]
+fn test_shred_rename_exhaustion() {
+    // GNU: tests/shred/shred-remove.sh
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("test");
+    at.touch("000");
+
+    let result = scene.ucmd().arg("-vu").arg("test").succeeds();
+
+    result.stderr_contains("renamed to 0000");
+    result.stderr_contains("renamed to 001");
+    result.stderr_contains("renamed to 00");
+    result.stderr_contains("removed");
+
+    assert!(!at.file_exists("test"));
+}

@@ -1054,6 +1054,12 @@ fn test_batch_size_invalid() {
         .fails_with_code(2)
         .stderr_contains("sort: invalid --batch-size argument '0'")
         .stderr_contains("sort: minimum --batch-size argument is '2'");
+    // with -m, the error path is a bit different
+    TestScenario::new(util_name!())
+        .ucmd()
+        .args(&["-m", "--batch-size=a"])
+        .fails_with_code(2)
+        .stderr_contains("sort: invalid --batch-size argument 'a'");
 }
 
 #[test]

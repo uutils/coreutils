@@ -198,3 +198,9 @@ The number of random passes is deterministic in both GNU and uutils. However, uu
 
 GNU `unexpand` provides `--first-only` to convert only leading sequences of blanks. We support a
 second way: `-f` like busybox.
+
+Using `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than UTF-8.
+
+## `expand`
+
+`expand` also offers the `-U`/`--no-utf8` option to interpret input files as 8-bit ASCII instead of UTF-8.

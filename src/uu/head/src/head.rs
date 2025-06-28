@@ -33,27 +33,28 @@ mod options {
 
 mod parse;
 mod take;
+use std::collections::HashMap;
 use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 #[derive(Error, Debug)]
 enum HeadError {
     /// Wrapper around `io::Error`
-    #[error("error reading {name}: {err}")]
+    #[error("{}", get_message_with_args("head-error-reading-file", HashMap::from([("name".to_string(), name.clone()), ("err".to_string(), err.to_string())])))]
     Io { name: String, err: io::Error },
 
-    #[error("parse error: {0}")]
+    #[error("{}", get_message_with_args("head-error-parse-error", HashMap::from([("err".to_string(), 0.to_string())])))]
     ParseError(String),
 
-    #[error("bad argument encoding")]
+    #[error("{}", get_message("head-error-bad-encoding"))]
     BadEncoding,
 
-    #[error("{0}: number of -bytes or -lines is too large")]
+    #[error("{}", get_message("head-error-num-too-large"))]
     NumTooLarge(#[from] TryFromIntError),
 
-    #[error("clap error: {0}")]
+    #[error("{}", get_message_with_args("head-error-clap", HashMap::from([("err".to_string(), 0.to_string())])))]
     Clap(#[from] clap::Error),
 
     #[error("{0}")]
@@ -79,13 +80,7 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long("bytes")
                 .value_name("[-]NUM")
-                .help(
-                    "\
-                     print the first NUM bytes of each file;\n\
-                     with the leading '-', print all but the last\n\
-                     NUM bytes of each file\
-                     ",
-                )
+                .help(get_message("head-help-bytes"))
                 .overrides_with_all([options::BYTES_NAME, options::LINES_NAME])
                 .allow_hyphen_values(true),
         )
@@ -94,13 +89,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long("lines")
                 .value_name("[-]NUM")
-                .help(
-                    "\
-                     print the first NUM lines instead of the first 10;\n\
-                     with the leading '-', print all but the last\n\
-                     NUM lines of each file\
-                     ",
-                )
+                .help(get_message("head-help-lines"))
                 .overrides_with_all([options::LINES_NAME, options::BYTES_NAME])
                 .allow_hyphen_values(true),
         )
@@ -109,7 +98,7 @@ pub fn uu_app() -> Command {
                 .short('q')
                 .long("quiet")
                 .visible_alias("silent")
-                .help("never print headers giving file names")
+                .help(get_message("head-help-quiet"))
                 .overrides_with_all([options::VERBOSE_NAME, options::QUIET_NAME])
                 .action(ArgAction::SetTrue),
         )
@@ -117,7 +106,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::VERBOSE_NAME)
                 .short('v')
                 .long("verbose")
-                .help("always print headers giving file names")
+                .help(get_message("head-help-verbose"))
                 .overrides_with_all([options::QUIET_NAME, options::VERBOSE_NAME])
                 .action(ArgAction::SetTrue),
         )
@@ -132,7 +121,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO_NAME)
                 .short('z')
                 .long("zero-terminated")
-                .help("line delimiter is NUL, not newline")
+                .help(get_message("head-help-zero-terminated"))
                 .overrides_with(options::ZERO_NAME)
                 .action(ArgAction::SetTrue),
         )
@@ -160,16 +149,24 @@ impl Default for Mode {
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
         if let Some(v) = matches.get_one::<String>(options::BYTES_NAME) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {err}"))?;
+            let (n, all_but_last) = parse::parse_num(v).map_err(|err| {
+                get_message_with_args(
+                    "head-error-invalid-bytes",
+                    HashMap::from([("err".to_string(), err.to_string())]),
+                )
+            })?;
             if all_but_last {
                 Ok(Self::AllButLastBytes(n))
             } else {
                 Ok(Self::FirstBytes(n))
             }
         } else if let Some(v) = matches.get_one::<String>(options::LINES_NAME) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {err}"))?;
+            let (n, all_but_last) = parse::parse_num(v).map_err(|err| {
+                get_message_with_args(
+                    "head-error-invalid-lines",
+                    HashMap::from([("err".to_string(), err.to_string())]),
+                )
+            })?;
             if all_but_last {
                 Ok(Self::AllButLastLines(n))
             } else {
@@ -190,9 +187,9 @@ fn arg_iterate<'a>(
         if let Some(s) = second.to_str() {
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(parse::ParseError)) => Err(HeadError::ParseError(format!(
-                    "bad argument format: {}",
-                    s.quote()
+                Some(Err(parse::ParseError)) => Err(HeadError::ParseError(get_message_with_args(
+                    "head-error-bad-argument-format",
+                    HashMap::from([("arg".to_string(), s.quote().to_string())]),
                 ))),
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
@@ -239,7 +236,10 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        format!("error writing 'standard output': {err}"),
+        get_message_with_args(
+            "head-error-writing-stdout",
+            HashMap::from([("err".to_string(), err.to_string())]),
+        ),
     )
 }
 
@@ -480,7 +480,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         println!();
                     }
-                    println!("==> standard input <==");
+                    println!("{}", get_message("head-header-stdin"));
                 }
                 let stdin = io::stdin();
 
@@ -523,9 +523,9 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 let mut file = match File::open(name) {
                     Ok(f) => f,
                     Err(err) => {
-                        show!(err.map_err_context(|| format!(
-                            "cannot open {} for reading",
-                            name.quote()
+                        show!(err.map_err_context(|| get_message_with_args(
+                            "head-error-cannot-open",
+                            HashMap::from([("name".to_string(), name.quote().to_string())])
                         )));
                         continue;
                     }

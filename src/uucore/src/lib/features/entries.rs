@@ -220,8 +220,14 @@ impl Passwd {
         let name = CString::new(self.name.as_bytes()).unwrap();
         loop {
             ngroups_old = ngroups;
-            if unsafe { getgrouplist(name.as_ptr(), self.gid, groups.as_mut_ptr(), &mut ngroups) }
-                == -1
+            if unsafe {
+                getgrouplist(
+                    name.as_ptr(),
+                    self.gid,
+                    groups.as_mut_ptr(),
+                    &raw mut ngroups,
+                )
+            } == -1
             {
                 if ngroups == ngroups_old {
                     ngroups *= 2;

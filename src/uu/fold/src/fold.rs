@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, stdin};
+use std::io::{BufRead, BufReader, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -16,6 +16,9 @@ use uucore::format_usage;
 use uucore::locale::{get_message, get_message_with_args};
 
 const TAB_WIDTH: usize = 8;
+const NL: u8 = b'\n';
+const CR: u8 = b'\r';
+const TAB: u8 = b'\t';
 
 mod options {
     pub const BYTES: &str = "bytes";
@@ -141,18 +144,18 @@ fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResul
 ///
 ///  If `spaces` is `true`, attempt to break lines at whitespace boundaries.
 fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> UResult<()> {
-    let mut line = String::new();
+    let mut line = Vec::new();
 
     loop {
         if file
-            .read_line(&mut line)
+            .read_until(NL, &mut line)
             .map_err_context(|| get_message("fold-error-readline"))?
             == 0
         {
             break;
         }
 
-        if line == "\n" {
+        if line == [NL] {
             println!();
             line.truncate(0);
             continue;
@@ -166,8 +169,13 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             let slice = {
                 let slice = &line[i..i + width];
                 if spaces && i + width < len {
-                    match slice.rfind(|c: char| c.is_whitespace() && c != '\r') {
-                        Some(m) => &slice[..=m],
+                    match slice
+                        .iter()
+                        .enumerate()
+                        .rev()
+                        .find(|(_, c)| c.is_ascii_whitespace() && **c != CR)
+                    {
+                        Some((m, _)) => &slice[..=m],
                         None => slice,
                     }
                 } else {
@@ -178,7 +186,7 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             // Don't duplicate trailing newlines: if the slice is "\n", the
             // previous iteration folded just before the end of the line and
             // has already printed this newline.
-            if slice == "\n" {
+            if slice == [NL] {
                 break;
             }
 
@@ -187,9 +195,10 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             let at_eol = i >= len;
 
             if at_eol {
-                print!("{slice}");
+                stdout().write_all(slice)?;
             } else {
-                println!("{slice}");
+                stdout().write_all(slice)?;
+                stdout().write_all(&[NL])?;
             }
         }
 
@@ -209,8 +218,8 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
 #[allow(unused_assignments)]
 #[allow(clippy::cognitive_complexity)]
 fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> UResult<()> {
-    let mut line = String::new();
-    let mut output = String::new();
+    let mut line = Vec::new();
+    let mut output = Vec::new();
     let mut col_count = 0;
     let mut last_space = None;
 
@@ -226,8 +235,9 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> URe
                 None => output.len(),
             };
 
-            println!("{}", &output[..consume]);
-            output.replace_range(..consume, "");
+            stdout().write_all(&output[..consume])?;
+            stdout().write_all(&[NL])?;
+            output.drain(..consume);
 
             // we know there are no tabs left in output, so each char counts
             // as 1 column
@@ -239,15 +249,15 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> URe
 
     loop {
         if file
-            .read_line(&mut line)
+            .read_until(NL, &mut line)
             .map_err_context(|| get_message("fold-error-readline"))?
             == 0
         {
             break;
         }
 
-        for ch in line.chars() {
-            if ch == '\n' {
+        for ch in &line {
+            if *ch == NL {
                 // make sure to _not_ split output at whitespace, since we
                 // know the entire output will fit
                 last_space = None;
@@ -259,9 +269,9 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> URe
                 emit_output!();
             }
 
-            match ch {
-                '\r' => col_count = 0,
-                '\t' => {
+            match *ch {
+                CR => col_count = 0,
+                TAB => {
                     let next_tab_stop = col_count + TAB_WIDTH - col_count % TAB_WIDTH;
 
                     if next_tab_stop > width && !output.is_empty() {
@@ -271,21 +281,21 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> URe
                     col_count = next_tab_stop;
                     last_space = if spaces { Some(output.len()) } else { None };
                 }
-                '\x08' => {
+                0x08 => {
                     col_count = col_count.saturating_sub(1);
                 }
-                _ if spaces && ch.is_whitespace() => {
+                _ if spaces && ch.is_ascii_whitespace() => {
                     last_space = Some(output.len());
                     col_count += 1;
                 }
                 _ => col_count += 1,
             }
 
-            output.push(ch);
+            output.push(*ch);
         }
 
         if !output.is_empty() {
-            print!("{output}");
+            stdout().write_all(&output)?;
             output.truncate(0);
         }
 

@@ -1856,7 +1856,7 @@ mod gnu_cksum_c {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "todo"]
     fn test_signed_checksums() {
         todo!()
     }

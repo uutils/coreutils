@@ -175,13 +175,6 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
         target_os = "linux",
         target_os = "macos"
     ))]
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
-    ))]
     Flag::new_grouped("tab1", O::TAB1, O::TABDLY),
     #[cfg(any(
         target_os = "android",

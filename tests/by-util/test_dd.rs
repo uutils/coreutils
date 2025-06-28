@@ -396,7 +396,7 @@ fn test_null_fullblock() {
 }
 
 #[cfg(unix)]
-#[ignore] // See note below before using this test.
+#[ignore = "See note below before using this test."]
 #[test]
 fn test_fullblock() {
     let tname = "fullblock-from-urand";
@@ -555,7 +555,7 @@ fn test_ascii_521k_to_file() {
     );
 }
 
-#[ignore]
+#[ignore = ""]
 #[cfg(unix)]
 #[test]
 fn test_ascii_5_gibi_to_file() {

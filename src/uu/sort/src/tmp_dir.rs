@@ -8,9 +8,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use std::collections::HashMap;
 use tempfile::TempDir;
 use uucore::{
     error::{UResult, USimpleError},
+    locale::get_message_with_args,
     show_error,
 };
 
@@ -58,11 +60,23 @@ impl TmpDirWrapper {
             // and the program doesn't terminate before the handler has finished
             let _lock = lock.lock().unwrap();
             if let Err(e) = remove_tmp_dir(&path) {
-                show_error!("failed to delete temporary directory: {e}");
+                let mut args = HashMap::new();
+                args.insert("error".to_string(), e.to_string());
+                show_error!(
+                    "{}",
+                    get_message_with_args("sort-failed-to-delete-temporary-directory", args)
+                );
             }
             std::process::exit(2)
         })
-        .map_err(|e| USimpleError::new(2, format!("failed to set up signal handler: {e}")))
+        .map_err(|e| {
+            let mut args = HashMap::new();
+            args.insert("error".to_string(), e.to_string());
+            USimpleError::new(
+                2,
+                get_message_with_args("sort-failed-to-set-up-signal-handler", args),
+            )
+        })
     }
 
     pub fn next_file(&mut self) -> UResult<(File, PathBuf)> {

@@ -562,7 +562,7 @@ fn test_write_fast_fallthrough_uses_flush() {
 
 #[test]
 #[cfg(unix)]
-#[ignore]
+#[ignore = ""]
 fn test_domain_socket() {
     use std::io::prelude::*;
     use std::os::unix::net::UnixListener;

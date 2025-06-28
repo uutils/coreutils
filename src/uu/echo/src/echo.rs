@@ -145,20 +145,20 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::NO_NEWLINE)
                 .short('n')
-                .help("do not output the trailing newline")
+                .help(get_message("echo-help-no-newline"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
                 .short('e')
-                .help("enable interpretation of backslash escapes")
+                .help(get_message("echo-help-enable-escapes"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::DISABLE_BACKSLASH_ESCAPE),
         )
         .arg(
             Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
                 .short('E')
-                .help("disable interpretation of backslash escapes (default)")
+                .help(get_message("echo-help-disable-escapes"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ENABLE_BACKSLASH_ESCAPE),
         )
@@ -177,10 +177,7 @@ fn execute(
 ) -> UResult<()> {
     for (i, input) in arguments_after_options.into_iter().enumerate() {
         let Some(bytes) = bytes_from_os_string(input.as_os_str()) else {
-            return Err(USimpleError::new(
-                1,
-                "Non-UTF-8 arguments provided, but this platform does not support them",
-            ));
+            return Err(USimpleError::new(1, get_message("echo-error-non-utf8")));
         };
 
         if i > 0 {
