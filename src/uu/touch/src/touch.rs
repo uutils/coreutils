@@ -291,7 +291,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FORCE)
                 .short('f')
-                .long("force")
                 .help("(ignored)")
                 .hide(true)
                 .action(ArgAction::SetTrue),
