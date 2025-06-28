@@ -755,11 +755,11 @@ impl Stater {
         let chars = format_str.chars().collect::<Vec<char>>();
         let mut i = 0;
         while i < bound {
-            match chars[i] {
-                '%' => tokens.push(Self::handle_percent_case(
+            match chars.get(i) {
+                Some('%') => tokens.push(Self::handle_percent_case(
                     &chars, &mut i, bound, format_str,
                 )?),
-                '\\' => {
+                Some('\\') => {
                     if use_printf {
                         tokens.push(Self::handle_escape_sequences(
                             &chars, &mut i, bound, format_str,
@@ -768,7 +768,8 @@ impl Stater {
                         tokens.push(Token::Char('\\'));
                     }
                 }
-                c => tokens.push(Token::Char(c)),
+                Some(c) => tokens.push(Token::Char(*c)),
+                None => break,
             }
             i += 1;
         }
