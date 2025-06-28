@@ -138,13 +138,36 @@ fn test_chown_only_owner_colon() {
     let file1 = "test_chown_file1";
     at.touch(file1);
 
-    scene
-        .ucmd()
-        .arg(format!("{user_name}:"))
-        .arg("--verbose")
-        .arg(file1)
-        .succeeds()
-        .stderr_contains("retained as");
+    let result = scene.cmd("id").arg("-gn").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    // In some test environments user and group are different, and the user
+    // is not allowed the file to its current group, in those cases, it should fail.
+    if group_name == user_name {
+        scene
+            .ucmd()
+            .arg(format!("{user_name}:"))
+            .arg("--verbose")
+            .arg(file1)
+            .succeeds()
+            .stderr_contains("retained as");
+    } else {
+        let failure = scene
+            .ucmd()
+            .arg(format!("{user_name}:"))
+            .arg("--verbose")
+            .arg(file1)
+            .fails();
+        // Depending on the environment, it may be a forbidden group (failed to change) or group not existing (invalid group)
+        assert!(
+            failure.stderr_str().contains("failed to change")
+                || failure.stderr_str().contains("invalid group")
+        );
+    }
 
     scene
         .ucmd()
@@ -154,13 +177,17 @@ fn test_chown_only_owner_colon() {
         .succeeds()
         .stderr_contains("retained as");
 
-    scene
+    let failure = scene
         .ucmd()
         .arg("root:")
         .arg("--verbose")
         .arg(file1)
-        .fails()
-        .stderr_contains("failed to change");
+        .fails();
+    // Depending on the environment, it may be a forbidden group (failed to change) or group not existing (invalid group)
+    assert!(
+        failure.stderr_str().contains("failed to change")
+            || failure.stderr_str().contains("invalid group")
+    );
 }
 
 #[test]
