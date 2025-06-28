@@ -381,10 +381,10 @@ fn expand_line(
             }
         } else {
             (
-                match buf[byte] {
+                match buf.get(byte) {
                     // always take exactly 1 byte in strict ASCII mode
-                    0x09 => Tab,
-                    0x08 => Backspace,
+                    Some(0x09) => Tab,
+                    Some(0x08) => Backspace,
                     _ => Other,
                 },
                 1,

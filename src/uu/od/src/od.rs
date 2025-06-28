@@ -350,7 +350,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new("D")
                 .short('D')
-                .help(get_message("od-help-D"))
+                .help(get_message("od-help-d4"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
