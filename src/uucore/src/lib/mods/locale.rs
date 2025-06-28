@@ -1071,12 +1071,12 @@ invalid-syntax = This is { $missing
             source: std::io::Error::new(std::io::ErrorKind::NotFound, "File not found"),
             path: PathBuf::from("/test/path.ftl"),
         };
-        let error_string = format!("{}", io_error);
+        let error_string = format!("{io_error}");
         assert!(error_string.contains("I/O error loading"));
         assert!(error_string.contains("/test/path.ftl"));
 
         let bundle_error = LocalizationError::Bundle("Bundle creation failed".to_string());
-        let bundle_string = format!("{}", bundle_error);
+        let bundle_string = format!("{bundle_error}");
         assert!(bundle_string.contains("Bundle error: Bundle creation failed"));
     }
 
@@ -1096,8 +1096,7 @@ invalid-syntax = This is { $missing
             // The snippet should contain exactly the invalid text from es-ES.ftl
             assert!(
                 snippet.contains("This is { $missing"),
-                "snippet was `{}` but did not include the invalid text",
-                snippet
+                "snippet was `{snippet}` but did not include the invalid text"
             );
         } else {
             panic!("Expected LocalizationError::ParseResource with snippet");
