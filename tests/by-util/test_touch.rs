@@ -1012,7 +1012,7 @@ fn test_touch_f_option() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_f_option.txt";
 
-    ucmd.args(&["-f", file]).succeeds().no_stderr().no_stdout();
+    ucmd.args(&["-f", file]).succeeds().no_output();
 
     assert!(at.file_exists(file));
     // Clean up
