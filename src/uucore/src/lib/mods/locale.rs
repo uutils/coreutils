@@ -324,6 +324,7 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     init_localization(&locale, &locales_dir)
 }
 
+#[cfg(not(debug_assertions))]
 fn resolve_locales_dir_from_exe_dir(exe_dir: &Path, p: &str) -> Option<PathBuf> {
     // 1. <bindir>/locales/<prog>
     let coreutils = exe_dir.join("locales").join(p);
@@ -350,24 +351,54 @@ fn resolve_locales_dir_from_exe_dir(exe_dir: &Path, p: &str) -> Option<PathBuf> 
 
 /// Helper function to get the locales directory based on the build configuration
 fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
-    use std::env;
-    // In release builds, look relative to executable
-    let exe_path = env::current_exe().map_err(|e| {
-        LocalizationError::PathResolution(format!("Failed to get executable path: {e}"))
-    })?;
+    #[cfg(debug_assertions)]
+    {
+        // During development, use the project's locales directory
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        // from uucore path, load the locales directory from the program directory
+        let dev_path = PathBuf::from(manifest_dir)
+            .join("../uu")
+            .join(p)
+            .join("locales");
 
-    let exe_dir = exe_path.parent().ok_or_else(|| {
-        LocalizationError::PathResolution("Failed to get executable directory".to_string())
-    })?;
+        if dev_path.exists() {
+            return Ok(dev_path);
+        }
 
-    if let Some(dir) = resolve_locales_dir_from_exe_dir(exe_dir, p) {
-        return Ok(dir);
+        // Fallback for development if the expected path doesn't exist
+        let fallback_dev_path = PathBuf::from(manifest_dir).join(p);
+        if fallback_dev_path.exists() {
+            return Ok(fallback_dev_path);
+        }
+
+        Err(LocalizationError::LocalesDirNotFound(format!(
+            "Development locales directory not found at {} or {}",
+            dev_path.display(),
+            fallback_dev_path.display()
+        )))
     }
 
-    Err(LocalizationError::LocalesDirNotFound(format!(
-        "Release locales directory not found starting from {}",
-        exe_dir.display()
-    )))
+    #[cfg(not(debug_assertions))]
+    {
+        use std::env;
+        // In release builds, look relative to executable
+        let exe_path = env::current_exe().map_err(|e| {
+            LocalizationError::PathResolution(format!("Failed to get executable path: {}", e))
+        })?;
+
+        let exe_dir = exe_path.parent().ok_or_else(|| {
+            LocalizationError::PathResolution("Failed to get executable directory".to_string())
+        })?;
+
+        if let Some(dir) = resolve_locales_dir_from_exe_dir(exe_dir, p) {
+            return Ok(dir);
+        }
+
+        Err(LocalizationError::LocalesDirNotFound(format!(
+            "Release locales directory not found starting from {}",
+            exe_dir.display()
+        )))
+    }
 }
 
 #[cfg(test)]
@@ -1073,7 +1104,7 @@ invalid-syntax = This is { $missing
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(debug_assertions)))]
 mod fhs_tests {
     use super::*;
     use tempfile::TempDir;
