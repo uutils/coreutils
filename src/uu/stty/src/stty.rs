@@ -47,6 +47,22 @@ use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS
 
 const ASCII_DEL: u8 = 127;
 
+// Sane defaults for control characters.
+const SANE_CONTROL_CHARS: [(S, u8); 12] = [
+    (S::VINTR, 3),     // ^C
+    (S::VQUIT, 28),    // ^\
+    (S::VERASE, 127),  // DEL
+    (S::VKILL, 21),    // ^U
+    (S::VEOF, 4),      // ^D
+    (S::VSTART, 17),   // ^Q
+    (S::VSTOP, 19),    // ^S
+    (S::VSUSP, 26),    // ^Z
+    (S::VREPRINT, 18), // ^R
+    (S::VWERASE, 23),  // ^W
+    (S::VLNEXT, 22),   // ^V
+    (S::VDISCARD, 15), // ^O
+];
+
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
     name: &'static str,
@@ -123,6 +139,7 @@ enum SpecialSetting {
     Rows(u16),
     Cols(u16),
     Line(u8),
+    Sane,
 }
 
 enum PrintSetting {
@@ -436,6 +453,8 @@ fn stty(opts: &Options) -> UResult<()> {
                 set_arg = SetArg::TCSANOW;
             } else if arg == "size" {
                 valid_args.push(ArgOptions::Print(PrintSetting::Size));
+            } else if arg == "sane" {
+                valid_args.push(ArgOptions::Special(SpecialSetting::Sane));
             // not a valid option
             } else {
                 return Err(USimpleError::new(
@@ -694,7 +713,21 @@ fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
 
 fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
     if !opts.all {
-        // TODO: this branch should print values that differ from defaults
+        // Print only control chars that differ from sane defaults
+        let mut printed = false;
+        for (text, cc_index) in CONTROL_CHARS {
+            let current_val = termios.control_chars[*cc_index as usize];
+            let sane_val = get_sane_control_char(*cc_index);
+
+            if current_val != sane_val {
+                print!("{text} = {}; ", control_char_to_string(current_val)?);
+                printed = true;
+            }
+        }
+
+        if printed {
+            println!();
+        }
         return Ok(());
     }
 
@@ -835,7 +868,7 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 }
 
 fn apply_special_setting(
-    _termios: &mut Termios,
+    termios: &mut Termios,
     setting: &SpecialSetting,
     fd: i32,
 ) -> nix::Result<()> {
@@ -848,11 +881,13 @@ fn apply_special_setting(
             // nix only defines Termios's `line_discipline` field on these platforms
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
-                _termios.line_discipline = *_n;
+                termios.line_discipline = *_n;
             }
         }
+        SpecialSetting::Sane => {
+            apply_sane_settings(termios);
+        }
     }
-    unsafe { tiocswinsz(fd, &raw mut size)? };
     Ok(())
 }
 
@@ -1023,6 +1058,61 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions> {
         .collect::<Vec<ArgOptions>>();
     flags.append(&mut ccs);
     flags
+}
+
+fn get_sane_control_char(cc_index: S) -> u8 {
+    for (sane_index, sane_val) in SANE_CONTROL_CHARS {
+        if sane_index == cc_index {
+            return sane_val;
+        }
+    }
+    // Default values for control chars not in the sane list
+    match cc_index {
+        S::VEOL => 0,
+        S::VEOL2 => 0,
+        S::VMIN => 1,
+        S::VTIME => 0,
+        #[cfg(target_os = "linux")]
+        S::VSWTC => 0,
+        _ => 0,
+    }
+}
+
+fn apply_sane_settings(termios: &mut Termios) {
+    // Set sane control characters
+    for (cc_index, sane_val) in SANE_CONTROL_CHARS {
+        termios.control_chars[cc_index as usize] = sane_val;
+    }
+
+    // Set other sane control character defaults
+    termios.control_chars[S::VEOL as usize] = 0;
+    termios.control_chars[S::VEOL2 as usize] = 0;
+    termios.control_chars[S::VMIN as usize] = 1;
+    termios.control_chars[S::VTIME as usize] = 0;
+    #[cfg(target_os = "linux")]
+    {
+        termios.control_chars[S::VSWTC as usize] = 0;
+    }
+
+    // Apply sane flags
+    use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
+
+    macro_rules! apply_sane_flags {
+        ($flags:ident) => {
+            for flag in $flags {
+                if flag.sane {
+                    flag.flag.apply(termios, true);
+                } else {
+                    flag.flag.apply(termios, false);
+                }
+            }
+        };
+    }
+
+    apply_sane_flags!(CONTROL_FLAGS);
+    apply_sane_flags!(INPUT_FLAGS);
+    apply_sane_flags!(OUTPUT_FLAGS);
+    apply_sane_flags!(LOCAL_FLAGS);
 }
 
 pub fn uu_app() -> Command {
