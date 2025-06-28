@@ -58,10 +58,7 @@ pub fn main() {
     )
     .unwrap();
 
-    #[cfg(not(debug_assertions))]
-    {
-        copy_locales_release();
-    }
+    copy_locales();
 
     let mut phf_map = phf_codegen::OrderedMap::<&str>::new();
     for krate in &crates {
@@ -112,8 +109,7 @@ pub fn main() {
     mf.flush().unwrap();
 }
 
-#[cfg(not(debug_assertions))]
-fn copy_locales_release() {
+fn copy_locales() {
     use std::path::PathBuf;
     let enabled_crates = env::var("CARGO_CFG_FEATURE").unwrap();
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -125,20 +121,22 @@ fn copy_locales_release() {
         Path::new(&manifest_dir).join("target")
     };
 
-    let locales_dir = target_dir.join("release").join("locales");
+    let locales_dir = target_dir
+        .join(env::var("PROFILE").unwrap())
+        .join("locales");
 
     if !locales_dir.exists() {
         std::fs::create_dir_all(&locales_dir).expect("Failed to create locales directory");
     }
 
-    for krate in enabled_crates.split(",") {
+    for krate in enabled_crates.split(',') {
         let uu_crate_locales_path = uu_dir.join(krate).join("locales");
 
         if uu_crate_locales_path.exists() && uu_crate_locales_path.is_dir() {
             let crate_locales_dir = locales_dir.join(krate);
             if !crate_locales_dir.exists() {
                 std::fs::create_dir_all(&crate_locales_dir)
-                    .expect(&format!("Failed to create directory for {}", krate));
+                    .expect("Failed to create directory for crate");
             }
 
             match uu_crate_locales_path.read_dir() {
@@ -152,8 +150,10 @@ fn copy_locales_release() {
 
                                 if let Err(err) = std::fs::copy(&source_path, &dest_path) {
                                     eprintln!(
-                                        "Failed to copy {:?} to {:?}: {}",
-                                        source_path, dest_path, err
+                                        "Failed to copy {} to {}: {}",
+                                        source_path.display(),
+                                        dest_path.display(),
+                                        err
                                     );
                                 } else {
                                     println!(
