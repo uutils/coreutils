@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore datetime
 
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError};
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
@@ -26,7 +26,33 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::{env, fs};
 
-use uucore::locale::get_message;
+use std::collections::HashMap;
+use thiserror::Error;
+use uucore::locale::{get_message, get_message_with_args};
+
+#[derive(Debug, Error)]
+enum StatError {
+    #[error("{}", get_message_with_args("stat-error-invalid-quoting-style", HashMap::from([("style".to_string(), style.clone())])))]
+    InvalidQuotingStyle { style: String },
+    #[error("{}", get_message("stat-error-missing-operand"))]
+    MissingOperand,
+    #[error("{}", get_message_with_args("stat-error-invalid-directive", HashMap::from([("directive".to_string(), directive.clone())])))]
+    InvalidDirective { directive: String },
+    #[error("{}", get_message_with_args("stat-error-cannot-read-filesystem", HashMap::from([("error".to_string(), error.clone())])))]
+    CannotReadFilesystem { error: String },
+    #[error("{}", get_message("stat-error-stdin-filesystem-mode"))]
+    StdinFilesystemMode,
+    #[error("{}", get_message_with_args("stat-error-cannot-read-filesystem-info", HashMap::from([("file".to_string(), file.clone()), ("error".to_string(), error.clone())])))]
+    CannotReadFilesystemInfo { file: String, error: String },
+    #[error("{}", get_message_with_args("stat-error-cannot-stat", HashMap::from([("file".to_string(), file.clone()), ("error".to_string(), error.clone())])))]
+    CannotStat { file: String, error: String },
+}
+
+impl UError for StatError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
 
 mod options {
     pub const DEREFERENCE: &str = "dereference";
@@ -54,7 +80,10 @@ fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()>
     if end >= bound {
         return Err(USimpleError::new(
             1,
-            format!("{}: invalid directive", slice[beg..end].quote()),
+            StatError::InvalidDirective {
+                directive: slice[beg..end].quote().to_string(),
+            }
+            .to_string(),
         ));
     }
     Ok(())
@@ -104,7 +133,7 @@ enum QuotingStyle {
 }
 
 impl std::str::FromStr for QuotingStyle {
-    type Err = String;
+    type Err = StatError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -112,7 +141,9 @@ impl std::str::FromStr for QuotingStyle {
             "shell" => Ok(QuotingStyle::Shell),
             "shell-escape-always" => Ok(QuotingStyle::ShellEscapeAlways),
             // The others aren't exposed to the user
-            _ => Err(format!("Invalid quoting style: {s}")),
+            _ => Err(StatError::InvalidQuotingStyle {
+                style: s.to_string(),
+            }),
         }
     }
 }
@@ -144,24 +175,22 @@ trait ScanUtil {
 }
 
 impl ScanUtil for str {
+    /// Scans for a number at the beginning of the string
+    /// Returns the parsed number and the character count
+    /// Since we only deal with ASCII characters (+, -, 0-9), character count equals byte count
     fn scan_num<F>(&self) -> Option<(F, usize)>
     where
         F: std::str::FromStr,
     {
         let mut chars = self.chars();
-        let mut i = 0;
-        match chars.next() {
-            Some('-' | '+' | '0'..='9') => i += 1,
-            _ => return None,
-        }
-        for c in chars {
-            match c {
-                '0'..='9' => i += 1,
-                _ => break,
-            }
-        }
-        if i > 0 {
-            F::from_str(&self[..i]).ok().map(|x| (x, i))
+        let count = chars
+            .next()
+            .filter(|&c| c.is_ascii_digit() || c == '-' || c == '+')
+            .map(|_| 1 + chars.take_while(char::is_ascii_digit).count())
+            .unwrap_or(0);
+
+        if count > 0 {
+            F::from_str(&self[..count]).ok().map(|x| (x, count))
         } else {
             None
         }
@@ -607,6 +636,17 @@ impl Stater {
         }
     }
 
+    /// Converts a character index to a byte index in a UTF-8 string
+    /// This is necessary because Rust strings are UTF-8 encoded, so character positions
+    /// don't always align with byte positions for multi-byte characters
+    fn char_index_to_byte_index(format_str: &str, char_index: usize) -> usize {
+        format_str
+            .char_indices()
+            .nth(char_index)
+            .map(|(byte_idx, _)| byte_idx)
+            .unwrap_or(format_str.len())
+    }
+
     fn handle_percent_case(
         chars: &[char],
         i: &mut usize,
@@ -632,7 +672,8 @@ impl Stater {
         let mut precision = Precision::NotSpecified;
         let mut j = *i;
 
-        if let Some((field_width, offset)) = format_str[j..].scan_num::<usize>() {
+        let j_byte = Self::char_index_to_byte_index(format_str, j);
+        if let Some((field_width, offset)) = format_str[j_byte..].scan_num::<usize>() {
             width = field_width;
             j += offset;
 
@@ -641,7 +682,10 @@ impl Stater {
                 let invalid_directive: String = chars[old..=j.min(bound - 1)].iter().collect();
                 return Err(USimpleError::new(
                     1,
-                    format!("{}: invalid directive", invalid_directive.quote()),
+                    StatError::InvalidDirective {
+                        directive: invalid_directive.quote().to_string(),
+                    }
+                    .to_string(),
                 ));
             }
         }
@@ -651,7 +695,8 @@ impl Stater {
             j += 1;
             check_bound(format_str, bound, old, j)?;
 
-            match format_str[j..].scan_num::<i32>() {
+            let j_byte = Self::char_index_to_byte_index(format_str, j);
+            match format_str[j_byte..].scan_num::<i32>() {
                 Some((value, offset)) => {
                     if value >= 0 {
                         precision = Precision::Number(value as usize);
@@ -698,7 +743,7 @@ impl Stater {
     ) -> Token {
         *i += 1;
         if *i >= bound {
-            show_warning!("backslash at end of format");
+            show_warning!("{}", get_message("stat-warning-backslash-end-format"));
             return Token::Char('\\');
         }
         match chars[*i] {
@@ -728,22 +773,30 @@ impl Stater {
                 Token::Byte(value)
             }
             'x' => {
-                // Parse hexadecimal escape sequence
+                // Parse hexadecimal escape sequence (\xNN format)
+                // Uses UTF-8 safe byte indexing to handle multi-byte characters properly
                 if *i + 1 < bound {
-                    if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
+                    let byte_index = Self::char_index_to_byte_index(format_str, *i + 1);
+                    if let Some((c, offset)) = format_str[byte_index..].scan_char(16) {
                         *i += offset;
                         Token::Byte(c as u8)
                     } else {
-                        show_warning!("unrecognized escape '\\x'");
+                        show_warning!("{}", get_message("stat-warning-unrecognized-escape-x"));
                         Token::Byte(b'x')
                     }
                 } else {
-                    show_warning!("incomplete hex escape '\\x'");
+                    show_warning!("{}", get_message("stat-warning-incomplete-hex-escape"));
                     Token::Byte(b'x')
                 }
             }
             other => {
-                show_warning!("unrecognized escape '\\{other}'");
+                show_warning!(
+                    "{}",
+                    get_message_with_args(
+                        "stat-warning-unrecognized-escape",
+                        HashMap::from([("escape".to_string(), other.to_string())])
+                    )
+                );
                 Token::Byte(other as u8)
             }
         }
@@ -751,8 +804,8 @@ impl Stater {
 
     fn generate_tokens(format_str: &str, use_printf: bool) -> UResult<Vec<Token>> {
         let mut tokens = Vec::new();
-        let bound = format_str.len();
         let chars = format_str.chars().collect::<Vec<char>>();
+        let bound = chars.len();
         let mut i = 0;
         while i < bound {
             match chars.get(i) {
@@ -785,10 +838,7 @@ impl Stater {
             .map(|v| v.map(OsString::from).collect())
             .unwrap_or_default();
         if files.is_empty() {
-            return Err(Box::new(USimpleError {
-                code: 1,
-                message: "missing operand\nTry 'stat --help' for more information.".to_string(),
-            }));
+            return Err(Box::new(StatError::MissingOperand) as Box<dyn UError>);
         }
         let format_str = if matches.contains_id(options::PRINTF) {
             matches
@@ -819,8 +869,13 @@ impl Stater {
         } else {
             let mut mount_list = read_fs_list()
                 .map_err(|e| {
-                    let context = "cannot read table of mounted file systems";
-                    USimpleError::new(e.code(), format!("{context}: {e}"))
+                    USimpleError::new(
+                        e.code(),
+                        StatError::CannotReadFilesystem {
+                            error: e.to_string(),
+                        }
+                        .to_string(),
+                    )
                 })?
                 .iter()
                 .map(|mi| mi.mount_dir.clone())
@@ -907,17 +962,17 @@ impl Stater {
                                 match uucore::selinux::get_selinux_security_context(Path::new(file))
                                 {
                                     Ok(ctx) => OutputType::Str(ctx),
-                                    Err(_) => OutputType::Str(
-                                        "failed to get security context".to_string(),
-                                    ),
+                                    Err(_) => OutputType::Str(get_message(
+                                        "stat-selinux-failed-get-context",
+                                    )),
                                 }
                             } else {
-                                OutputType::Str("unsupported on this system".to_string())
+                                OutputType::Str(get_message("stat-selinux-unsupported-system"))
                             }
                         }
                         #[cfg(not(feature = "selinux"))]
                         {
-                            OutputType::Str("unsupported for this operating system".to_string())
+                            OutputType::Str(get_message("stat-selinux-unsupported-os"))
                         }
                     }
                     // device number in decimal
@@ -1028,7 +1083,7 @@ impl Stater {
         let display_name = file.to_string_lossy();
         let file = if cfg!(unix) && display_name == "-" {
             if self.show_fs {
-                show_error!("using '-' to denote standard input does not work in file system mode");
+                show_error!("{}", StatError::StdinFilesystemMode);
                 return 1;
             }
             if let Ok(p) = Path::new("/dev/stdin").canonicalize() {
@@ -1055,8 +1110,11 @@ impl Stater {
                 }
                 Err(e) => {
                     show_error!(
-                        "cannot read file system information for {}: {e}",
-                        display_name.quote(),
+                        "{}",
+                        StatError::CannotReadFilesystemInfo {
+                            file: display_name.quote().to_string(),
+                            error: e.to_string()
+                        }
                     );
                     return 1;
                 }
@@ -1092,7 +1150,13 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_error!("cannot stat {}: {e}", display_name.quote());
+                    show_error!(
+                        "{}",
+                        StatError::CannotStat {
+                            file: display_name.quote().to_string(),
+                            error: e.to_string()
+                        }
+                    );
                     return 1;
                 }
             }
@@ -1107,25 +1171,64 @@ impl Stater {
             if terse {
                 "%n %i %l %t %s %S %b %f %a %c %d\n".into()
             } else {
-                "  File: \"%n\"\n    ID: %-8i Namelen: %-7l Type: %T\nBlock \
-                 size: %-10s Fundamental block size: %S\nBlocks: Total: %-10b \
-                 Free: %-10f Available: %a\nInodes: Total: %-10c Free: %d\n"
-                    .into()
+                format!(
+                    "  {}: \"%n\"\n    {}: %-8i {}: %-7l {}: %T\n{} \
+                         {}: %-10s {} {}: %S\n{}: {}: %-10b \
+                         {}: %-10f {}: %a\n{}: {}: %-10c {}: %d\n",
+                    get_message("stat-word-file"),
+                    get_message("stat-word-id"),
+                    get_message("stat-word-namelen"),
+                    get_message("stat-word-type"),
+                    get_message("stat-word-block"),
+                    get_message("stat-word-size"),
+                    get_message("stat-word-fundamental"),
+                    get_message("stat-word-block-size"),
+                    get_message("stat-word-blocks"),
+                    get_message("stat-word-total"),
+                    get_message("stat-word-free"),
+                    get_message("stat-word-available"),
+                    get_message("stat-word-inodes"),
+                    get_message("stat-word-total"),
+                    get_message("stat-word-free")
+                )
             }
         } else if terse {
             "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n".into()
         } else {
-            [
-                "  File: %N\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\n",
-                if show_dev_type {
-                    "Device: %Dh/%dd\tInode: %-10i  Links: %-5h Device type: %t,%T\n"
-                } else {
-                    "Device: %Dh/%dd\tInode: %-10i  Links: %h\n"
-                },
-                "Access: (%04a/%10.10A)  Uid: (%5u/%8U)   Gid: (%5g/%8G)\n",
-                "Access: %x\nModify: %y\nChange: %z\n Birth: %w\n",
-            ]
-            .join("")
+            let device_line = if show_dev_type {
+                format!(
+                    "{}: %Dh/%dd\t{}: %-10i  {}: %-5h {} {}: %t,%T\n",
+                    get_message("stat-word-device"),
+                    get_message("stat-word-inode"),
+                    get_message("stat-word-links"),
+                    get_message("stat-word-device"),
+                    get_message("stat-word-type")
+                )
+            } else {
+                format!(
+                    "{}: %Dh/%dd\t{}: %-10i  {}: %h\n",
+                    get_message("stat-word-device"),
+                    get_message("stat-word-inode"),
+                    get_message("stat-word-links")
+                )
+            };
+
+            format!(
+                "  {}: %N\n  {}: %-10s\t{}: %-10b {} {}: %-6o %F\n{}{}: (%04a/%10.10A)  {}: (%5u/%8U)   {}: (%5g/%8G)\n{}: %x\n{}: %y\n{}: %z\n {}: %w\n",
+                get_message("stat-word-file"),
+                get_message("stat-word-size"),
+                get_message("stat-word-blocks"),
+                get_message("stat-word-io"),
+                get_message("stat-word-block"),
+                device_line,
+                get_message("stat-word-access"),
+                get_message("stat-word-uid"),
+                get_message("stat-word-gid"),
+                get_message("stat-word-access"),
+                get_message("stat-word-modify"),
+                get_message("stat-word-change"),
+                get_message("stat-word-birth")
+            )
         }
     }
 }
@@ -1155,42 +1258,35 @@ pub fn uu_app() -> Command {
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
-                .help("follow links")
+                .help(get_message("stat-help-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE_SYSTEM)
                 .short('f')
                 .long(options::FILE_SYSTEM)
-                .help("display file system status instead of file status")
+                .help(get_message("stat-help-file-system"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TERSE)
                 .short('t')
                 .long(options::TERSE)
-                .help("print the information in terse form")
+                .help(get_message("stat-help-terse"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FORMAT)
                 .short('c')
                 .long(options::FORMAT)
-                .help(
-                    "use the specified FORMAT instead of the default;
- output a newline after each use of FORMAT",
-                )
+                .help(get_message("stat-help-format"))
                 .value_name("FORMAT"),
         )
         .arg(
             Arg::new(options::PRINTF)
                 .long(options::PRINTF)
                 .value_name("FORMAT")
-                .help(
-                    "like --format, but interpret backslash escapes,
-            and do not output a mandatory trailing newline;
-            if you want a newline, include \n in FORMAT",
-                ),
+                .help(get_message("stat-help-printf")),
         )
         .arg(
             Arg::new(options::FILES)
