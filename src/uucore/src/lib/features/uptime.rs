@@ -13,19 +13,21 @@
 // See https://github.com/uutils/coreutils/pull/7289 for discussion.
 
 use crate::error::{UError, UResult};
+use crate::locale::{get_message, get_message_with_args};
 use chrono::Local;
 use libc::time_t;
+use std::collections::HashMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum UptimeError {
-    #[error("could not retrieve system uptime")]
+    #[error("{}", get_message("uptime-lib-error-system-uptime"))]
     SystemUptime,
-    #[error("could not retrieve system load average")]
+    #[error("{}", get_message("uptime-lib-error-system-loadavg"))]
     SystemLoadavg,
-    #[error("Windows does not have an equivalent to the load average on Unix-like systems")]
+    #[error("{}", get_message("uptime-lib-error-windows-loadavg"))]
     WindowsLoadavg,
-    #[error("boot time larger than current time")]
+    #[error("{}", get_message("uptime-lib-error-boot-time"))]
     BootTime,
 }
 
@@ -174,11 +176,14 @@ pub fn get_formatted_uptime(boot_time: Option<time_t>) -> UResult<String> {
     let up_days = up_secs / 86400;
     let up_hours = (up_secs - (up_days * 86400)) / 3600;
     let up_mins = (up_secs - (up_days * 86400) - (up_hours * 3600)) / 60;
-    match up_days.cmp(&1) {
-        std::cmp::Ordering::Equal => Ok(format!("{up_days:1} day, {up_hours:2}:{up_mins:02}")),
-        std::cmp::Ordering::Greater => Ok(format!("{up_days:1} days {up_hours:2}:{up_mins:02}")),
-        _ => Ok(format!("{up_hours:2}:{up_mins:02}")),
-    }
+
+    Ok(get_message_with_args(
+        "uptime-format",
+        HashMap::from([
+            ("days".to_string(), up_days.to_string()),
+            ("time".to_string(), format!("{up_hours:02}:{up_mins:02}")),
+        ]),
+    ))
 }
 
 /// Get the number of users currently logged in
@@ -305,11 +310,10 @@ pub fn get_nusers() -> usize {
 /// e.g. "0 users", "1 user", "2 users"
 #[inline]
 pub fn format_nusers(n: usize) -> String {
-    if n == 1 {
-        String::from("1 user")
-    } else {
-        format!("{n} users")
-    }
+    get_message_with_args(
+        "uptime-user-count",
+        HashMap::from([("count".to_string(), n.to_string())]),
+    )
 }
 
 /// Get the number of users currently logged in in a human-readable format
@@ -368,18 +372,27 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
 #[inline]
 pub fn get_formatted_loadavg() -> UResult<String> {
     let loadavg = get_loadavg()?;
-    Ok(format!(
-        "load average: {:.2}, {:.2}, {:.2}",
-        loadavg.0, loadavg.1, loadavg.2
+    Ok(get_message_with_args(
+        "uptime-lib-format-loadavg",
+        HashMap::from([
+            ("avg1".to_string(), format!("{:.2}", loadavg.0)),
+            ("avg5".to_string(), format!("{:.2}", loadavg.1)),
+            ("avg15".to_string(), format!("{:.2}", loadavg.2)),
+        ]),
     ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::locale;
 
     #[test]
     fn test_format_nusers() {
+        unsafe {
+            std::env::set_var("LANG", "en_US.UTF-8");
+        }
+        let _ = locale::setup_localization("uptime");
         assert_eq!("0 users", format_nusers(0));
         assert_eq!("1 user", format_nusers(1));
         assert_eq!("2 users", format_nusers(2));
