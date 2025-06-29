@@ -18,7 +18,9 @@ use std::{
 
 use crate::{
     error::{FromIo, UError, UResult, USimpleError},
-    os_str_as_bytes, os_str_from_bytes, read_os_string_lines, show, show_error, show_warning_caps,
+    os_str_as_bytes, os_str_from_bytes,
+    quoting_style::{QuotingStyle, locale_aware_escape_name},
+    read_os_string_lines, show, show_error, show_warning_caps,
     sum::{
         Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestWriter, Md5, Sha1, Sha3_224, Sha3_256,
         Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
@@ -734,7 +736,7 @@ fn get_file_to_check(
     opts: ChecksumOptions,
 ) -> Result<Box<dyn Read>, LineCheckError> {
     let filename_bytes = os_str_as_bytes(filename).expect("UTF-8 error");
-    let filename_lossy = String::from_utf8_lossy(filename_bytes);
+
     if filename == "-" {
         Ok(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
@@ -747,15 +749,23 @@ fn get_file_to_check(
                 opts.verbose,
             );
         };
+        let print_error = |err: io::Error| {
+            show!(err.map_err_context(|| {
+                locale_aware_escape_name(filename, QuotingStyle::SHELL_ESCAPE)
+                    // This is non destructive thanks to the escaping
+                    .to_string_lossy()
+                    .to_string()
+            }));
+        };
         match File::open(filename) {
             Ok(f) => {
                 if f.metadata()
                     .map_err(|_| LineCheckError::CantOpenFile)?
                     .is_dir()
                 {
-                    show!(USimpleError::new(
-                        1,
-                        format!("{filename_lossy}: Is a directory")
+                    print_error(io::Error::new(
+                        io::ErrorKind::IsADirectory,
+                        "Is a directory",
                     ));
                     // also regarded as a failed open
                     failed_open();
@@ -767,7 +777,7 @@ fn get_file_to_check(
             Err(err) => {
                 if !opts.ignore_missing {
                     // yes, we have both stderr and stdout here
-                    show!(err.map_err_context(|| filename_lossy.to_string()));
+                    print_error(err);
                     failed_open();
                 }
                 // we could not open the file but we want to continue

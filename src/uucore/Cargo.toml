@@ -93,7 +93,7 @@ default = []
 # * non-default features
 backup-control = []
 colors = []
-checksum = ["data-encoding", "sum"]
+checksum = ["data-encoding", "quoting-style", "sum"]
 encoding = ["data-encoding", "data-encoding-macro", "z85"]
 entries = ["libc"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
