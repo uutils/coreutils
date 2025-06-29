@@ -1015,6 +1015,5 @@ fn test_touch_f_option() {
     ucmd.args(&["-f", file]).succeeds().no_output();
 
     assert!(at.file_exists(file));
-    // Clean up
     at.remove(file);
 }
