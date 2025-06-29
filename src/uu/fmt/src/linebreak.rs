@@ -236,7 +236,11 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     let mut next_active_breaks = vec![];
 
     let stretch = args.opts.width - args.opts.goal;
-    let minlength = args.opts.goal.max(stretch + 1) - stretch;
+    let minlength = if args.opts.goal <= 10 {
+        1
+    } else {
+        args.opts.goal.max(stretch + 1) - stretch
+    };
     let mut new_linebreaks = vec![];
     let mut is_sentence_start = false;
     let mut least_demerits = 0;
@@ -384,11 +388,11 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a Wo
 const BAD_INFTY: i64 = 10_000_000;
 const BAD_INFTY_SQ: i64 = BAD_INFTY * BAD_INFTY;
 // badness = BAD_MULT * abs(r) ^ 3
-const BAD_MULT: f32 = 100.0;
+const BAD_MULT: f32 = 200.0;
 // DR_MULT is multiplier for delta-R between lines
 const DR_MULT: f32 = 600.0;
 // DL_MULT is penalty multiplier for short words at end of line
-const DL_MULT: f32 = 300.0;
+const DL_MULT: f32 = 10.0;
 
 fn compute_demerits(delta_len: isize, stretch: usize, wlen: usize, prev_rat: f32) -> (i64, f32) {
     // how much stretch are we using?
