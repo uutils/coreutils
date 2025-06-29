@@ -1900,11 +1900,7 @@ impl PathData {
             None => OnceCell::new(),
         };
 
-        let security_context = if config.context {
-            get_security_context(config, &p_buf, must_dereference)
-        } else {
-            String::new()
-        };
+        let security_context = get_security_context(config, &p_buf, must_dereference);
 
         Self {
             md: OnceCell::new(),
@@ -3339,7 +3335,10 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
             Err(err) => {
                 // The Path couldn't be dereferenced, so return early and set exit code 1
                 // to indicate a minor error
-                show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
+                // Only show error when context display is requested to avoid duplicate messages
+                if config.context {
+                    show!(LsError::IOErrorContext(p_buf.to_path_buf(), err, false));
+                }
                 return substitute_string;
             }
             Ok(_md) => (),
