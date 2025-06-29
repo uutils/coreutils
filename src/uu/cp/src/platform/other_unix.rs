@@ -13,6 +13,7 @@ use uucore::mode::get_umask;
 
 use crate::{
     CopyDebug, CopyResult, CpError, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode,
+    is_stream,
 };
 
 /// Copies `source` to `dest` for systems without copy-on-write
@@ -22,7 +23,6 @@ pub(crate) fn copy_on_write(
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
     context: &str,
-    source_is_fifo: bool,
     source_is_stream: bool,
 ) -> CopyResult<CopyDebug> {
     if reflink_mode != ReflinkMode::Never {
@@ -50,13 +50,16 @@ pub(crate) fn copy_on_write(
             .mode(mode)
             .open(dest)?;
 
+        let dest_is_stream = is_stream(&dst_file.metadata()?);
+        if !dest_is_stream {
+            // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
+            dst_file.set_len(0)?;
+        }
+
         buf_copy::copy_stream(&mut src_file, &mut dst_file)
             .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
             .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
-        if source_is_fifo {
-            dst_file.set_permissions(src_file.metadata()?.permissions())?;
-        }
         return Ok(copy_debug);
     }
 
