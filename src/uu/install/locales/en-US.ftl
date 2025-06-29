@@ -48,6 +48,9 @@ install-error-missing-file-operand = missing file operand
 install-error-missing-destination-operand = missing destination file operand after '{ $path }'
 install-error-failed-to-remove = Failed to remove existing file { $path }. Error: { $error }
 
+# Warning messages
+install-warning-compare-ignored = the --compare (-C) option is ignored when you specify a mode with non-permission bits
+
 # Verbose output
 install-verbose-creating-directory = creating directory { $path }
 install-verbose-creating-directory-step = install: creating directory { $path }

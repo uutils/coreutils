@@ -48,6 +48,9 @@ install-error-missing-file-operand = opérande de fichier manquant
 install-error-missing-destination-operand = opérande de fichier de destination manquant après '{ $path }'
 install-error-failed-to-remove = Échec de la suppression du fichier existant { $path }. Erreur : { $error }
 
+# Messages d'avertissement
+install-warning-compare-ignored = l'option --compare (-C) est ignorée quand un mode est indiqué avec des bits non liés à des droits
+
 # Sortie détaillée
 install-verbose-creating-directory = création du répertoire { $path }
 install-verbose-creating-directory-step = install : création du répertoire { $path }

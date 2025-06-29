@@ -365,6 +365,15 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         return Err(1.into());
     }
 
+    // Check if compare is used with non-permission mode bits
+    if compare && specified_mode.is_some() {
+        let mode = specified_mode.unwrap();
+        let non_permission_bits = 0o7000; // setuid, setgid, sticky bits
+        if mode & non_permission_bits != 0 {
+            show_error!("{}", get_message("install-warning-compare-ignored"));
+        }
+    }
+
     let owner = matches
         .get_one::<String>(OPT_OWNER)
         .map(|s| s.as_str())
@@ -1000,6 +1009,30 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
+/// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
+/// Returns true if the destination file's ownership would differ from what it should be after installation.
+fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    // Check if the destination file's owner differs from the effective user ID
+    if to_meta.uid() != geteuid() {
+        return true;
+    }
+
+    // For group, we need to determine what the group would be after installation
+    // If no group is specified, the behavior depends on the directory:
+    // - If the directory has setgid bit, the file inherits the directory's group
+    // - Otherwise, the file gets the user's effective group
+    let expected_gid = to
+        .parent()
+        .and_then(|parent| metadata(parent).ok())
+        .filter(|parent_meta| parent_meta.mode() & 0o2000 != 0)
+        .map(|parent_meta| parent_meta.gid())
+        .unwrap_or(getegid());
+
+    to_meta.gid() != expected_gid
+}
+
 /// Return true if a file is necessary to copy. This is the case when:
 ///
 /// - _from_ or _to_ is nonexistent;
@@ -1030,6 +1063,13 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
         return Ok(true);
     };
 
+    // Check if the destination is a symlink (should always be replaced)
+    if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
+        if to_symlink_meta.file_type().is_symlink() {
+            return Ok(true);
+        }
+    }
+
     // Define special file mode bits (setuid, setgid, sticky).
     let extra_mode: u32 = 0o7000;
     // Define all file mode bits (including permissions).
@@ -1038,7 +1078,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
 
     // Check if any special mode bits are set in the specified mode,
     // source file mode, or destination file mode.
-    if b.specified_mode.unwrap_or(0) & extra_mode != 0
+    if b.mode() & extra_mode != 0
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
@@ -1079,13 +1119,8 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
         if group_id != to_meta.gid() {
             return Ok(true);
         }
-    } else {
-        #[cfg(not(target_os = "windows"))]
-        // Check if the destination file's owner or group
-        // differs from the effective user/group ID of the process.
-        if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
-            return Ok(true);
-        }
+    } else if needs_copy_for_ownership(to, &to_meta) {
+        return Ok(true);
     }
 
     // Check if the contents of the source and destination files differ.
