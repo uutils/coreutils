@@ -1006,3 +1006,14 @@ fn test_obsolete_posix_format_with_year() {
     assert!(at.file_exists("11111111"));
     assert!(!at.file_exists("0101000090"));
 }
+
+#[test]
+fn test_touch_f_option() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_f_option.txt";
+
+    ucmd.args(&["-f", file]).succeeds().no_output();
+
+    assert!(at.file_exists(file));
+    at.remove(file);
+}
