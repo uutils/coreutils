@@ -231,6 +231,10 @@ cyBvdmVyIHRoZSBsYXp5IGRvZy4=
 #[test]
 fn test_manpage() {
     use std::process::{Command, Stdio};
+    unsafe {
+        // force locale to english to avoid issues with manpage output
+        std::env::set_var("LANG", "C");
+    }
 
     let test_scenario = TestScenario::new("");
 

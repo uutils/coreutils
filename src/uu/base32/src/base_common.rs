@@ -6,6 +6,7 @@
 // spell-checker:ignore hexupper lsbf msbf unpadded nopad aGVsbG8sIHdvcmxkIQ
 
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -17,6 +18,7 @@ use uucore::encoding::{
 use uucore::encoding::{EncodingWrapper, SupportsFastDecodeAndEncode};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
+use uucore::locale::{get_message, get_message_with_args};
 
 pub const BASE_CMD_PARSE_ERROR: i32 = 1;
 
@@ -50,7 +52,10 @@ impl Config {
                 if let Some(extra_op) = values.next() {
                     return Err(UUsageError::new(
                         BASE_CMD_PARSE_ERROR,
-                        format!("extra operand {}", extra_op.quote()),
+                        get_message_with_args(
+                            "base-common-extra-operand",
+                            HashMap::from([("operand".to_string(), extra_op.quote().to_string())]),
+                        ),
                     ));
                 }
 
@@ -62,7 +67,13 @@ impl Config {
                     if !path.exists() {
                         return Err(USimpleError::new(
                             BASE_CMD_PARSE_ERROR,
-                            format!("{}: No such file or directory", path.maybe_quote()),
+                            get_message_with_args(
+                                "base-common-no-such-file",
+                                HashMap::from([(
+                                    "file".to_string(),
+                                    path.maybe_quote().to_string(),
+                                )]),
+                            ),
                         ));
                     }
 
@@ -78,7 +89,10 @@ impl Config {
                 num.parse::<usize>().map_err(|_| {
                     USimpleError::new(
                         BASE_CMD_PARSE_ERROR,
-                        format!("invalid wrap size: {}", num.quote()),
+                        get_message_with_args(
+                            "base-common-invalid-wrap-size",
+                            HashMap::from([("size".to_string(), num.quote().to_string())]),
+                        ),
                     )
                 })
             })
@@ -114,7 +128,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
                 .short('d')
                 .visible_short_alias('D')
                 .long(options::DECODE)
-                .help("decode data")
+                .help(get_message("base-common-help-decode"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::DECODE),
         )
@@ -122,7 +136,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
             Arg::new(options::IGNORE_GARBAGE)
                 .short('i')
                 .long(options::IGNORE_GARBAGE)
-                .help("when decoding, ignore non-alphabetic characters")
+                .help(get_message("base-common-help-ignore-garbage"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::IGNORE_GARBAGE),
         )
@@ -131,7 +145,10 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
                 .short('w')
                 .long(options::WRAP)
                 .value_name("COLS")
-                .help(format!("wrap encoded lines after COLS character (default {WRAP_DEFAULT}, 0 to disable wrapping)"))
+                .help(get_message_with_args(
+                    "base-common-help-wrap",
+                    HashMap::from([("default".to_string(), WRAP_DEFAULT.to_string())]),
+                ))
                 .overrides_with(options::WRAP),
         )
         // "multiple" arguments are used to check whether there is more than one
@@ -813,7 +830,10 @@ fn format_read_error(kind: ErrorKind) -> String {
         }
     }
 
-    format!("read error: {kind_string_capitalized}")
+    get_message_with_args(
+        "base-common-read-error",
+        HashMap::from([("error".to_string(), kind_string_capitalized)]),
+    )
 }
 
 #[cfg(test)]
