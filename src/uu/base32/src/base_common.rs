@@ -53,7 +53,7 @@ impl Config {
                     return Err(UUsageError::new(
                         BASE_CMD_PARSE_ERROR,
                         get_message_with_args(
-                            "base32-extra-operand",
+                            "base-common-extra-operand",
                             HashMap::from([("operand".to_string(), extra_op.quote().to_string())]),
                         ),
                     ));
@@ -68,7 +68,7 @@ impl Config {
                         return Err(USimpleError::new(
                             BASE_CMD_PARSE_ERROR,
                             get_message_with_args(
-                                "base32-no-such-file",
+                                "base-common-no-such-file",
                                 HashMap::from([(
                                     "file".to_string(),
                                     path.maybe_quote().to_string(),
@@ -90,7 +90,7 @@ impl Config {
                     USimpleError::new(
                         BASE_CMD_PARSE_ERROR,
                         get_message_with_args(
-                            "base32-invalid-wrap-size",
+                            "base-common-invalid-wrap-size",
                             HashMap::from([("size".to_string(), num.quote().to_string())]),
                         ),
                     )
@@ -128,7 +128,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
                 .short('d')
                 .visible_short_alias('D')
                 .long(options::DECODE)
-                .help(get_message("base32-help-decode"))
+                .help(get_message("base-common-help-decode"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::DECODE),
         )
@@ -136,7 +136,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
             Arg::new(options::IGNORE_GARBAGE)
                 .short('i')
                 .long(options::IGNORE_GARBAGE)
-                .help(get_message("base32-help-ignore-garbage"))
+                .help(get_message("base-common-help-ignore-garbage"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::IGNORE_GARBAGE),
         )
@@ -146,7 +146,7 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
                 .long(options::WRAP)
                 .value_name("COLS")
                 .help(get_message_with_args(
-                    "base32-help-wrap",
+                    "base-common-help-wrap",
                     HashMap::from([("default".to_string(), WRAP_DEFAULT.to_string())]),
                 ))
                 .overrides_with(options::WRAP),
@@ -831,7 +831,7 @@ fn format_read_error(kind: ErrorKind) -> String {
     }
 
     get_message_with_args(
-        "base32-read-error",
+        "base-common-read-error",
         HashMap::from([("error".to_string(), kind_string_capitalized)]),
     )
 }
