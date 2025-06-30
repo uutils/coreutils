@@ -436,7 +436,7 @@ fn test_touch_no_dereference() {
 
 #[test]
 fn test_touch_reference() {
-    let scenario = TestScenario::new("touch");
+    let scenario = TestScenario::new(util_name!());
     let (at, mut _ucmd) = (scenario.fixtures.clone(), scenario.ucmd());
     let file_a = "test_touch_reference_a";
     let file_b = "test_touch_reference_b";

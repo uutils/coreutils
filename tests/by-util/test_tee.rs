@@ -4,8 +4,7 @@
 // file that was distributed with this source code.
 #![allow(clippy::borrow_as_ptr)]
 
-use uutests::util::TestScenario;
-use uutests::{at_and_ucmd, new_ucmd, util_name};
+use uutests::{at_and_ucmd, new_ucmd};
 
 use regex::Regex;
 use std::process::Stdio;
@@ -161,7 +160,7 @@ fn test_tee_output_not_buffered() {
 
 #[cfg(target_os = "linux")]
 mod linux_only {
-    use uutests::util::{AtPath, CmdResult, TestScenario, UCommand};
+    use uutests::util::{AtPath, CmdResult, UCommand};
 
     use std::fmt::Write;
     use std::fs::File;
@@ -169,7 +168,6 @@ mod linux_only {
     use std::time::Duration;
     use uutests::at_and_ucmd;
     use uutests::new_ucmd;
-    use uutests::util_name;
 
     fn make_broken_pipe() -> File {
         use libc::c_int;
