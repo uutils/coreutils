@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag ispeed ospeed
+// spell-checker:ignore tcsadrain
 
 mod flags;
 
@@ -11,7 +12,7 @@ use crate::flags::AllFlags;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
-    ControlFlags, InputFlags, LocalFlags, OutputFlags, SpecialCharacterIndices, Termios,
+    ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices, Termios,
     cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
@@ -238,6 +239,7 @@ fn stty(opts: &Options) -> UResult<()> {
         ));
     }
 
+    let mut set_arg = SetArg::TCSADRAIN;
     let mut valid_args: Vec<ArgOptions> = Vec::new();
 
     if let Some(args) = &opts.settings {
@@ -365,6 +367,10 @@ fn stty(opts: &Options) -> UResult<()> {
                         ),
                     ));
                 }
+            } else if *arg == "drain" {
+                set_arg = SetArg::TCSADRAIN;
+            } else if *arg == "-drain" {
+                set_arg = SetArg::TCSANOW;
             } else if *arg == "size" {
                 valid_args.push(ArgOptions::Print(PrintSetting::Size));
             // not a valid option
@@ -395,12 +401,8 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
             }
         }
-        tcsetattr(
-            opts.file.as_fd(),
-            nix::sys::termios::SetArg::TCSANOW,
-            &termios,
-        )
-        .expect("Could not write terminal attributes");
+        tcsetattr(opts.file.as_fd(), set_arg, &termios)
+            .expect("Could not write terminal attributes");
     } else {
         // TODO: Figure out the right error message for when tcgetattr fails
         let termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
