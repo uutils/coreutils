@@ -7,6 +7,8 @@ use std::sync::OnceLock;
 
 use icu_locale::{Locale, locale};
 
+#[cfg(feature = "i18n-collator")]
+pub mod collator;
 #[cfg(feature = "i18n-decimal")]
 pub mod decimal;
 
@@ -65,14 +67,14 @@ fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
 fn get_collating_locale() -> &'static (Locale, UEncoding) {
     static COLLATING_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
 
-    COLLATING_LOCALE.get_or_init(|| {get_locale_from_env("LC_COLLATE")})
+    COLLATING_LOCALE.get_or_init(|| get_locale_from_env("LC_COLLATE"))
 }
 
 /// Get the numeric locale from the environment
 pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
     static NUMERIC_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
 
-    NUMERIC_LOCALE.get_or_init(|| {get_locale_from_env("LC_NUMERIC")})
+    NUMERIC_LOCALE.get_or_init(|| get_locale_from_env("LC_NUMERIC"))
 }
 
 /// Return the encoding deduced from the locale environment variable.
