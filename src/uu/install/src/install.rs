@@ -956,7 +956,7 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
 fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
-    if b.compare && !need_copy(from, to, b)? {
+    if b.compare && !need_copy(from, to, b) {
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
@@ -1050,23 +1050,23 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
 ///
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
-fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
+fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     // Attempt to retrieve metadata for the source file.
     // If this fails, assume the file needs to be copied.
     let Ok(from_meta) = metadata(from) else {
-        return Ok(true);
+        return true;
     };
 
     // Attempt to retrieve metadata for the destination file.
     // If this fails, assume the file needs to be copied.
     let Ok(to_meta) = metadata(to) else {
-        return Ok(true);
+        return true;
     };
 
     // Check if the destination is a symlink (should always be replaced)
     if let Ok(to_symlink_meta) = fs::symlink_metadata(to) {
         if to_symlink_meta.file_type().is_symlink() {
-            return Ok(true);
+            return true;
         }
     }
 
@@ -1082,27 +1082,27 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
-        return Ok(true);
+        return true;
     }
 
     // Check if the mode of the destination file differs from the specified mode.
     if b.mode() != to_meta.mode() & all_modes {
-        return Ok(true);
+        return true;
     }
 
     // Check if either the source or destination is not a file.
     if !from_meta.is_file() || !to_meta.is_file() {
-        return Ok(true);
+        return true;
     }
 
     // Check if the file sizes differ.
     if from_meta.len() != to_meta.len() {
-        return Ok(true);
+        return true;
     }
 
     #[cfg(feature = "selinux")]
     if b.preserve_context && contexts_differ(from, to) {
-        return Ok(true);
+        return true;
     }
 
     // TODO: if -P (#1809) and from/to contexts mismatch, return true.
@@ -1110,25 +1110,25 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
     // Check if the owner ID is specified and differs from the destination file's owner.
     if let Some(owner_id) = b.owner_id {
         if owner_id != to_meta.uid() {
-            return Ok(true);
+            return true;
         }
     }
 
     // Check if the group ID is specified and differs from the destination file's group.
     if let Some(group_id) = b.group_id {
         if group_id != to_meta.gid() {
-            return Ok(true);
+            return true;
         }
     } else if needs_copy_for_ownership(to, &to_meta) {
-        return Ok(true);
+        return true;
     }
 
     // Check if the contents of the source and destination files differ.
     if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
-        return Ok(true);
+        return true;
     }
 
-    Ok(false)
+    false
 }
 
 #[cfg(feature = "selinux")]
