@@ -3,12 +3,29 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use std::cmp::Ordering;
+
 use uucore::{
     IntoCharByteIterator,
-    i18n::{UEncoding, get_locale_encoding},
+    i18n::{
+        UEncoding,
+        collator::{AlternateHandling, CollatorOptions, locale_cmp, try_init_collator},
+        get_locale_encoding,
+    },
 };
 
 use crate::syntax_tree::{MaybeNonUtf8Str, MaybeNonUtf8String};
+
+/// Perform a locale-aware string comparison using the current locale's
+/// collator.
+pub(crate) fn locale_comparison(a: &MaybeNonUtf8Str, b: &MaybeNonUtf8Str) -> Ordering {
+    // Initialize the collator
+    let mut opts = CollatorOptions::default();
+    opts.alternate_handling = Some(AlternateHandling::Shifted); // This is black magic
+    let _ = try_init_collator(opts);
+
+    locale_cmp(a, b)
+}
 
 /// Perform an index search with an approach that differs with regard to the
 /// given locale.

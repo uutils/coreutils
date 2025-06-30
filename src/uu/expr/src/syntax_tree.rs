@@ -11,7 +11,10 @@ use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
 
-use crate::{ExprError, ExprResult, locale_aware::locale_aware_index};
+use crate::{
+    ExprError, ExprResult,
+    locale_aware::{locale_aware_index, locale_comparison},
+};
 
 pub(crate) type MaybeNonUtf8String = Vec<u8>;
 pub(crate) type MaybeNonUtf8Str = [u8];
@@ -66,29 +69,27 @@ impl BinOp {
 
 impl RelationOp {
     fn eval(&self, a: ExprResult<NumOrStr>, b: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
+        // Make sure that the given comparison validates the relational operator.
+        let check_cmp = |cmp| {
+            use RelationOp::{Eq, Geq, Gt, Leq, Lt, Neq};
+            use std::cmp::Ordering::{Equal, Greater, Less};
+            matches!(
+                (self, cmp),
+                (Lt | Leq | Neq, Less) | (Leq | Eq | Geq, Equal) | (Gt | Geq | Neq, Greater)
+            )
+        };
+
         let a = a?;
         let b = b?;
         let b = if let (Some(a), Some(b)) = (&a.to_bigint(), &b.to_bigint()) {
-            match self {
-                Self::Lt => a < b,
-                Self::Leq => a <= b,
-                Self::Eq => a == b,
-                Self::Neq => a != b,
-                Self::Gt => a > b,
-                Self::Geq => a >= b,
-            }
+            check_cmp(a.cmp(b))
         } else {
             // These comparisons should be using locale settings
+
             let a = a.eval_as_string();
             let b = b.eval_as_string();
-            match self {
-                Self::Lt => a < b,
-                Self::Leq => a <= b,
-                Self::Eq => a == b,
-                Self::Neq => a != b,
-                Self::Gt => a > b,
-                Self::Geq => a >= b,
-            }
+
+            check_cmp(locale_comparison(&a, &b))
         };
         if b { Ok(1.into()) } else { Ok(0.into()) }
     }
