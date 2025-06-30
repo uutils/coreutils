@@ -26,7 +26,7 @@ pub mod format;
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;
-#[cfg(feature = "i18n")]
+#[cfg(feature = "i18n-common")]
 pub mod i18n;
 #[cfg(feature = "lines")]
 pub mod lines;
