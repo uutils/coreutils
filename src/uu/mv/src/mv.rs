@@ -689,8 +689,10 @@ fn rename(
     to: &Path,
     opts: &Options,
     multi_progress: Option<&MultiProgress>,
-    hardlink_tracker: Option<&mut HardlinkTracker>,
-    hardlink_scanner: Option<&HardlinkGroupScanner>,
+    #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
+    #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
+    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
+    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
 ) -> io::Result<()> {
     let mut backup_path = None;
 
@@ -770,7 +772,14 @@ fn rename(
         }
     }
 
-    rename_with_fallback(from, to, multi_progress, hardlink_tracker, hardlink_scanner)?;
+    #[cfg(unix)]
+    {
+        rename_with_fallback(from, to, multi_progress, hardlink_tracker, hardlink_scanner)?;
+    }
+    #[cfg(not(unix))]
+    {
+        rename_with_fallback(from, to, multi_progress, None, None)?;
+    }
 
     if opts.verbose {
         let message = match backup_path {
@@ -817,8 +826,10 @@ fn rename_with_fallback(
     from: &Path,
     to: &Path,
     multi_progress: Option<&MultiProgress>,
-    hardlink_tracker: Option<&mut HardlinkTracker>,
-    hardlink_scanner: Option<&HardlinkGroupScanner>,
+    #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
+    #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
+    #[cfg(not(unix))] _hardlink_tracker: Option<()>,
+    #[cfg(not(unix))] _hardlink_scanner: Option<()>,
 ) -> io::Result<()> {
     fs::rename(from, to).or_else(|err| {
         #[cfg(windows)]
@@ -841,21 +852,35 @@ fn rename_with_fallback(
         if file_type.is_symlink() {
             rename_symlink_fallback(from, to)
         } else if file_type.is_dir() {
-            with_optional_hardlink_context(
-                hardlink_tracker,
-                hardlink_scanner,
-                |tracker, scanner| {
-                    rename_dir_fallback_with_hardlinks(from, to, multi_progress, tracker, scanner)
-                },
-            )
+            #[cfg(unix)]
+            {
+                with_optional_hardlink_context(
+                    hardlink_tracker,
+                    hardlink_scanner,
+                    |tracker, scanner| {
+                        rename_dir_fallback(from, to, multi_progress, Some(tracker), Some(scanner))
+                    },
+                )
+            }
+            #[cfg(not(unix))]
+            {
+                rename_dir_fallback(from, to, multi_progress)
+            }
         } else if is_fifo(file_type) {
             rename_fifo_fallback(from, to)
         } else {
-            with_optional_hardlink_context(
-                hardlink_tracker,
-                hardlink_scanner,
-                |tracker, scanner| rename_file_fallback(from, to, tracker, scanner),
-            )
+            #[cfg(unix)]
+            {
+                with_optional_hardlink_context(
+                    hardlink_tracker,
+                    hardlink_scanner,
+                    |tracker, scanner| rename_file_fallback(from, to, Some(tracker), Some(scanner)),
+                )
+            }
+            #[cfg(not(unix))]
+            {
+                rename_file_fallback(from, to)
+            }
         }
     })
 }
@@ -909,12 +934,12 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     ))
 }
 
-fn rename_dir_fallback_with_hardlinks(
+fn rename_dir_fallback(
     from: &Path,
     to: &Path,
     multi_progress: Option<&MultiProgress>,
-    hardlink_tracker: &mut HardlinkTracker,
-    hardlink_scanner: &HardlinkGroupScanner,
+    #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
+    #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
     // We remove the destination directory if it exists to match the
     // behavior of `fs::rename`. As far as I can tell, `fs_extra`'s
@@ -943,11 +968,13 @@ fn rename_dir_fallback_with_hardlinks(
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
     let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| HashMap::new());
 
-    // Use custom directory copying that preserves hardlinks
-    let result = copy_dir_with_hardlinks(
+    // Use directory copying (with or without hardlink support)
+    let result = copy_dir_contents(
         from,
         to,
+        #[cfg(unix)]
         hardlink_tracker,
+        #[cfg(unix)]
         hardlink_scanner,
         progress_bar.as_ref(),
     );
@@ -963,29 +990,37 @@ fn rename_dir_fallback_with_hardlinks(
     Ok(())
 }
 
-/// Copy directory recursively while preserving hardlinks
-fn copy_dir_with_hardlinks(
+/// Copy directory recursively, optionally preserving hardlinks
+fn copy_dir_contents(
     from: &Path,
     to: &Path,
-    hardlink_tracker: &mut HardlinkTracker,
-    hardlink_scanner: &HardlinkGroupScanner,
+    #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
+    #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
     progress_bar: Option<&ProgressBar>,
 ) -> io::Result<()> {
     // Create the destination directory
     fs::create_dir_all(to)?;
 
     // Recursively copy contents
-    copy_dir_contents_with_hardlinks(from, to, hardlink_tracker, hardlink_scanner, progress_bar)?;
+    #[cfg(unix)]
+    {
+        if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
+            copy_dir_contents_recursive(from, to, tracker, scanner, progress_bar)?;
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        copy_dir_contents_recursive(from, to, progress_bar)?;
+    }
 
     Ok(())
 }
 
-/// Recursively copy directory contents while preserving hardlinks
-fn copy_dir_contents_with_hardlinks(
+fn copy_dir_contents_recursive(
     from_dir: &Path,
     to_dir: &Path,
-    hardlink_tracker: &mut HardlinkTracker,
-    hardlink_scanner: &HardlinkGroupScanner,
+    #[cfg(unix)] hardlink_tracker: &mut HardlinkTracker,
+    #[cfg(unix)] hardlink_scanner: &HardlinkGroupScanner,
     progress_bar: Option<&ProgressBar>,
 ) -> io::Result<()> {
     let entries = fs::read_dir(from_dir)?;
@@ -1003,16 +1038,30 @@ fn copy_dir_contents_with_hardlinks(
         if from_path.is_dir() {
             // Recursively copy subdirectory
             fs::create_dir_all(&to_path)?;
-            copy_dir_contents_with_hardlinks(
+            copy_dir_contents_recursive(
                 &from_path,
                 &to_path,
+                #[cfg(unix)]
                 hardlink_tracker,
+                #[cfg(unix)]
                 hardlink_scanner,
                 progress_bar,
             )?;
         } else {
-            // Copy file, preserving hardlinks
-            copy_file_with_hardlinks(&from_path, &to_path, hardlink_tracker, hardlink_scanner)?;
+            // Copy file with or without hardlink support based on platform
+            #[cfg(unix)]
+            {
+                copy_file_with_hardlinks_helper(
+                    &from_path,
+                    &to_path,
+                    hardlink_tracker,
+                    hardlink_scanner,
+                )?;
+            }
+            #[cfg(not(unix))]
+            {
+                fs::copy(&from_path, &to_path)?;
+            }
         }
 
         if let Some(pb) = progress_bar {
@@ -1025,8 +1074,8 @@ fn copy_dir_contents_with_hardlinks(
     Ok(())
 }
 
-/// Copy a single file, creating hardlinks if it's part of a hardlink group
-fn copy_file_with_hardlinks(
+#[cfg(unix)]
+fn copy_file_with_hardlinks_helper(
     from: &Path,
     to: &Path,
     hardlink_tracker: &mut HardlinkTracker,
@@ -1035,15 +1084,12 @@ fn copy_file_with_hardlinks(
     // Check if this file should be a hardlink to an already-copied file
     use crate::hardlink::HardlinkOptions;
     let hardlink_options = HardlinkOptions::default();
-    #[cfg(unix)]
+    // Create a hardlink instead of copying
+    if let Some(existing_target) =
+        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)?
     {
-        // Create a hardlink instead of copying
-        if let Some(existing_target) =
-            hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)?
-        {
-            fs::hard_link(&existing_target, to)?;
-            return Ok(());
-        }
+        fs::hard_link(&existing_target, to)?;
+        return Ok(());
     }
 
     // Regular file copy
@@ -1051,7 +1097,7 @@ fn copy_file_with_hardlinks(
     {
         fs::copy(from, to).and_then(|_| fsxattr::copy_xattrs(&from, &to))?;
     }
-    #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
+    #[cfg(any(target_os = "macos", target_os = "redox"))]
     {
         fs::copy(from, to)?;
     }
@@ -1062,8 +1108,8 @@ fn copy_file_with_hardlinks(
 fn rename_file_fallback(
     from: &Path,
     to: &Path,
-    hardlink_tracker: &mut HardlinkTracker,
-    hardlink_scanner: &HardlinkGroupScanner,
+    #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
+    #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
     // Remove existing target file if it exists
     if to.is_symlink() {
@@ -1084,17 +1130,19 @@ fn rename_file_fallback(
     }
 
     // Check if this file is part of a hardlink group and if so, create a hardlink instead of copying
-    use crate::hardlink::HardlinkOptions;
-    let hardlink_options = HardlinkOptions::default();
-    if let Some(existing_target) =
-        hardlink_tracker.check_hardlink(from, to, hardlink_scanner, &hardlink_options)?
+    #[cfg(unix)]
     {
-        // Create a hardlink to the first moved file instead of copying
-        #[cfg(unix)]
-        {
-            fs::hard_link(&existing_target, to)?;
-            fs::remove_file(from)?;
-            return Ok(());
+        if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
+            use crate::hardlink::HardlinkOptions;
+            let hardlink_options = HardlinkOptions::default();
+            if let Some(existing_target) =
+                tracker.check_hardlink(from, to, scanner, &hardlink_options)?
+            {
+                // Create a hardlink to the first moved file instead of copying
+                fs::hard_link(&existing_target, to)?;
+                fs::remove_file(from)?;
+                return Ok(());
+            }
         }
     }
 
