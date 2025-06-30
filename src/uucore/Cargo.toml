@@ -114,9 +114,10 @@ format = [
   "num-traits",
   "quoting-style",
 ]
-i18n-all = ["i18n-decimal"]
-i18n-common = ["icu_locale", "icu_provider"]
-i18n-decimal = ["i18n-common", "icu_decimal", "icu_locale", "icu_provider"]
+i18n-all = ["i18n-collator", "i18n-decimal"]
+i18n-common = ["icu_locale"]
+i18n-collator = ["i18n-common", "icu_collator"]
+i18n-decimal = ["i18n-common", "icu_decimal", "icu_provider"]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
