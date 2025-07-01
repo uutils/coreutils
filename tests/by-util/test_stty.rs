@@ -260,3 +260,36 @@ fn line() {
         .fails()
         .stderr_contains("invalid integer argument: '256'");
 }
+
+#[test]
+fn min_and_time() {
+    new_ucmd!()
+        .args(&["min"])
+        .fails()
+        .stderr_contains("missing argument to 'min'");
+
+    new_ucmd!()
+        .args(&["time"])
+        .fails()
+        .stderr_contains("missing argument to 'time'");
+
+    new_ucmd!()
+        .args(&["min", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument: '-1'");
+
+    new_ucmd!()
+        .args(&["time", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument: '-1'");
+
+    new_ucmd!()
+        .args(&["min", "256"])
+        .fails()
+        .stderr_contains("invalid integer argument: '256': Value too large for defined data type");
+
+    new_ucmd!()
+        .args(&["time", "256"])
+        .fails()
+        .stderr_contains("invalid integer argument: '256': Value too large for defined data type");
+}

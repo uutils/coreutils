@@ -306,13 +306,13 @@ fn stty(opts: &Options) -> UResult<()> {
                 match args_iter.next() {
                     Some(line) => {
                         if let Ok(n) = line.parse::<u32>() {
-                            if n < 255 {
+                            if n < 256 {
                                 valid_args.push(ArgOptions::Special(SpecialSetting::Line(n as u8)));
                             } else {
                                 return Err(USimpleError::new(
                                     1,
                                     get_message_with_args(
-                                        "stty-error-missing-argument",
+                                        "stty-error-invalid-integer-argument",
                                         HashMap::from([("value".to_string(), format!("'{}'", n))]),
                                     ),
                                 ));
@@ -337,7 +337,43 @@ fn stty(opts: &Options) -> UResult<()> {
                         ));
                     }
                 }
-            // baud rate setting
+            } else if *arg == "min" {
+                match args_iter.next() {
+                    Some(min) => match parse_u8_or_err(min) {
+                        Ok(n) => {
+                            valid_args
+                                .push(ArgOptions::Mapping((SpecialCharacterIndices::VMIN, n)));
+                        }
+                        Err(e) => return Err(USimpleError::new(1, e)),
+                    },
+                    None => {
+                        return Err(USimpleError::new(
+                            1,
+                            get_message_with_args(
+                                "stty-error-missing-argument",
+                                HashMap::from([("arg".to_string(), arg.to_string())]),
+                            ),
+                        ));
+                    }
+                }
+            } else if *arg == "time" {
+                match args_iter.next() {
+                    Some(time) => match parse_u8_or_err(time) {
+                        Ok(n) => valid_args
+                            .push(ArgOptions::Mapping((SpecialCharacterIndices::VTIME, n))),
+                        Err(e) => return Err(USimpleError::new(1, e)),
+                    },
+                    None => {
+                        return Err(USimpleError::new(
+                            1,
+                            get_message_with_args(
+                                "stty-error-missing-argument",
+                                HashMap::from([("arg".to_string(), arg.to_string())]),
+                            ),
+                        ));
+                    }
+                }
+                // baud rate setting
             } else if let Some(baud_flag) = string_to_baud(arg) {
                 valid_args.push(ArgOptions::Flags(baud_flag));
             // non control char flag
@@ -445,6 +481,26 @@ fn stty(opts: &Options) -> UResult<()> {
         print_settings(&termios, opts).expect("TODO: make proper error here from nix error");
     }
     Ok(())
+}
+
+// GNU uses different error messages if values overflow or underflow a u8
+// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
+fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
+    if let Ok(n) = arg.parse::<u32>() {
+        if n < 256 {
+            Ok(n as u8)
+        } else {
+            Err(get_message_with_args(
+                "stty-error-invalid-integer-argument-value-too-large",
+                HashMap::from([("value".to_string(), format!("'{}'", arg))]),
+            ))
+        }
+    } else {
+        Err(get_message_with_args(
+            "stty-error-invalid-integer-argument",
+            HashMap::from([("value".to_string(), format!("'{}'", arg))]),
+        ))
+    }
 }
 
 // GNU uses an unsigned 32 bit integer for row/col sizes, but then wraps around 16 bits
