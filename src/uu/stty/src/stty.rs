@@ -113,6 +113,7 @@ enum ControlCharMappingError {
 enum SpecialSetting {
     Rows(u16),
     Cols(u16),
+    Line(u8),
 }
 
 enum PrintSetting {
@@ -301,6 +302,41 @@ fn stty(opts: &Options) -> UResult<()> {
                         ));
                     }
                 }
+            } else if *arg == "line" {
+                match args_iter.next() {
+                    Some(line) => {
+                        if let Ok(n) = line.parse::<u32>() {
+                            if n < 255 {
+                                valid_args.push(ArgOptions::Special(SpecialSetting::Line(n as u8)));
+                            } else {
+                                return Err(USimpleError::new(
+                                    1,
+                                    get_message_with_args(
+                                        "stty-error-missing-argument",
+                                        HashMap::from([("value".to_string(), format!("'{}'", n))]),
+                                    ),
+                                ));
+                            }
+                        } else {
+                            return Err(USimpleError::new(
+                                1,
+                                get_message_with_args(
+                                    "stty-error-invalid-integer-argument",
+                                    HashMap::from([("value".to_string(), format!("'{}'", line))]),
+                                ),
+                            ));
+                        }
+                    }
+                    None => {
+                        return Err(USimpleError::new(
+                            1,
+                            get_message_with_args(
+                                "stty-error-missing-argument",
+                                HashMap::from([("arg".to_string(), arg.to_string())]),
+                            ),
+                        ));
+                    }
+                }
             // baud rate setting
             } else if let Some(baud_flag) = string_to_baud(arg) {
                 valid_args.push(ArgOptions::Flags(baud_flag));
@@ -394,7 +430,7 @@ fn stty(opts: &Options) -> UResult<()> {
                 ArgOptions::Mapping(mapping) => apply_char_mapping(&mut termios, mapping),
                 ArgOptions::Flags(flag) => apply_setting(&mut termios, flag),
                 ArgOptions::Special(setting) => {
-                    apply_special_setting(setting, opts.file.as_raw_fd())?;
+                    apply_special_setting(&mut termios, setting, opts.file.as_raw_fd())?;
                 }
                 ArgOptions::Print(setting) => {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
@@ -747,12 +783,23 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(SpecialCharacterIndices,
     termios.control_chars[mapping.0 as usize] = mapping.1;
 }
 
-fn apply_special_setting(setting: &SpecialSetting, fd: i32) -> nix::Result<()> {
+fn apply_special_setting(
+    _termios: &mut Termios,
+    setting: &SpecialSetting,
+    fd: i32,
+) -> nix::Result<()> {
     let mut size = TermSize::default();
     unsafe { tiocgwinsz(fd, &raw mut size)? };
     match setting {
         SpecialSetting::Rows(n) => size.rows = *n,
         SpecialSetting::Cols(n) => size.columns = *n,
+        SpecialSetting::Line(_n) => {
+            // nix only defines Termios's `line_discipline` field on these platforms
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            {
+                _termios.line_discipline = *_n;
+            }
+        }
     }
     unsafe { tiocswinsz(fd, &raw mut size)? };
     Ok(())

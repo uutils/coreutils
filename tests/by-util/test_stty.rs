@@ -241,3 +241,22 @@ fn row_column_sizes() {
         .fails()
         .stderr_contains("missing argument to 'rows'");
 }
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn line() {
+    new_ucmd!()
+        .args(&["line"])
+        .fails()
+        .stderr_contains("missing argument to 'line'");
+
+    new_ucmd!()
+        .args(&["line", "-1"])
+        .fails()
+        .stderr_contains("invalid integer argument: '-1'");
+
+    new_ucmd!()
+        .args(&["line", "256"])
+        .fails()
+        .stderr_contains("invalid integer argument: '256'");
+}
