@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore libc's setpriority
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 #[cfg(not(target_os = "android"))]

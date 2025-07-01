@@ -18,6 +18,7 @@ macro_rules! test_digest {
 
     mod $id {
         use uutests::util::*;
+        use uutests::util_name;
         static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
         static BITS_ARG: &'static str = concat!("--bits=", stringify!($size));
         static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");
@@ -26,21 +27,21 @@ macro_rules! test_digest {
 
         #[test]
         fn test_single_file() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg(INPUT_FILE).succeeds().no_stderr().stdout_str()));
         }
 
         #[test]
         fn test_stdin() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).pipe_in_fixture(INPUT_FILE).succeeds().no_stderr().stdout_str()));
         }
 
         #[test]
         fn test_nonames() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             // EXPECTED_FILE has no newline character at the end
             if DIGEST_ARG == "--b3sum" {
                 // Option only available on b3sum
@@ -53,7 +54,7 @@ macro_rules! test_digest {
 
         #[test]
         fn test_check() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
             println!("Check file='{}'", ts.fixtures.read(CHECK_FILE));
 
@@ -66,7 +67,7 @@ macro_rules! test_digest {
 
         #[test]
         fn test_zero() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--zero").arg(INPUT_FILE).succeeds().no_stderr().stdout_str()));
         }
@@ -76,7 +77,6 @@ macro_rules! test_digest {
         #[test]
         fn test_text_mode() {
             use uutests::new_ucmd;
-            use uutests::util_name;
 
             // TODO Replace this with hard-coded files that store the
             // expected output of text mode on an input file that has
@@ -101,7 +101,7 @@ macro_rules! test_digest {
 
         #[test]
         fn test_missing_file() {
-            let ts = TestScenario::new("hashsum");
+            let ts = TestScenario::new(util_name!());
             let at = &ts.fixtures;
 
             at.write("a", "file1\n");

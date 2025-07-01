@@ -5,10 +5,9 @@
 // spell-checker:ignore (words) nosuchgroup groupname
 
 use uucore::process::getegid;
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
+use uutests::{at_and_ucmd, new_ucmd};
+#[cfg(not(target_vendor = "apple"))]
+use uutests::{util::TestScenario, util_name};
 
 #[test]
 fn test_invalid_option() {
@@ -370,7 +369,7 @@ fn test_traverse_symlinks() {
         (&["-P"][..], false, false),
         (&["-L"][..], true, true),
     ] {
-        let scenario = TestScenario::new("chgrp");
+        let scenario = TestScenario::new(util_name!());
 
         let (at, mut ucmd) = (scenario.fixtures.clone(), scenario.ucmd());
 

@@ -22,13 +22,12 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_resolve() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("foo");
     at.symlink_file("foo", "bar");
 
-    scene.ucmd().arg("bar").succeeds().stdout_contains("foo\n");
+    ucmd.arg("bar").succeeds().stdout_contains("foo\n");
 }
 
 #[test]

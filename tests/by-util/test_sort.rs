@@ -10,8 +10,6 @@ use std::time::Duration;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -38,8 +36,7 @@ fn test_buffer_sizes() {
     #[cfg(not(target_os = "linux"))]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
-        TestScenario::new(util_name!())
-            .ucmd()
+        new_ucmd!()
             .arg("-n")
             .arg("-S")
             .arg(buffer_size)
@@ -52,8 +49,7 @@ fn test_buffer_sizes() {
     {
         let buffer_sizes = ["1000G", "10T"];
         for buffer_size in &buffer_sizes {
-            TestScenario::new(util_name!())
-                .ucmd()
+            new_ucmd!()
                 .arg("-n")
                 .arg("-S")
                 .arg(buffer_size)
@@ -1007,8 +1003,7 @@ fn test_compress_merge() {
 #[cfg(not(target_os = "android"))]
 fn test_compress_fail() {
     #[cfg(not(windows))]
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -1023,8 +1018,7 @@ fn test_compress_fail() {
     // "thread 'main' panicked at 'called `Option::unwrap()` on ...
     // So, don't check the output
     #[cfg(windows)]
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -1038,8 +1032,7 @@ fn test_compress_fail() {
 
 #[test]
 fn test_merge_batches() {
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .timeout(Duration::from_secs(120))
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
@@ -1048,15 +1041,14 @@ fn test_merge_batches() {
 
 #[test]
 fn test_batch_size_invalid() {
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg("--batch-size=0")
         .fails_with_code(2)
         .stderr_contains("sort: invalid --batch-size argument '0'")
         .stderr_contains("sort: minimum --batch-size argument is '2'");
+
     // with -m, the error path is a bit different
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .args(&["-m", "--batch-size=a"])
         .fails_with_code(2)
         .stderr_contains("sort: invalid --batch-size argument 'a'");
@@ -1065,16 +1057,15 @@ fn test_batch_size_invalid() {
 #[test]
 fn test_batch_size_too_large() {
     let large_batch_size = "18446744073709551616";
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg(format!("--batch-size={large_batch_size}"))
         .fails_with_code(2)
         .stderr_contains(format!(
             "--batch-size argument '{large_batch_size}' too large"
         ));
+
     #[cfg(target_os = "linux")]
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg(format!("--batch-size={large_batch_size}"))
         .fails_with_code(2)
         .stderr_contains("maximum --batch-size argument with current rlimit is");
@@ -1082,8 +1073,7 @@ fn test_batch_size_too_large() {
 
 #[test]
 fn test_merge_batch_size() {
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -1108,8 +1098,7 @@ fn test_merge_batch_size_with_limit() {
     // 2 descriptors for CTRL+C handling logic (to be reworked at some point)
     // 2 descriptors for the input files (i.e. batch-size of 2).
     let limit_fd = 3 + 2 + 2;
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=2")
         .arg("-m")
@@ -1210,13 +1199,12 @@ fn test_separator_null() {
 #[test]
 fn test_output_is_input() {
     let input = "a\nb\nc\n";
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", input);
-    scene
-        .ucmd()
-        .args(&["-m", "-u", "-o", "file", "file", "file", "file"])
+
+    ucmd.args(&["-m", "-u", "-o", "file", "file", "file", "file"])
         .succeeds();
     assert_eq!(at.read("file"), input);
 }
@@ -1400,12 +1388,11 @@ fn test_files0_from_minus_in_stdin() {
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "empty"
 fn test_files0_from_empty() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
-    scene
-        .ucmd()
-        .args(&["--files0-from", "file"])
+
+    ucmd.args(&["--files0-from", "file"])
         .fails_with_code(2)
         .stderr_only("sort: no input from 'file'\n");
 }
@@ -1443,13 +1430,12 @@ fn test_files0_from_nul2() {
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "1"
 fn test_files0_from_1() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", "a");
-    scene
-        .ucmd()
-        .args(&["--files0-from", "-"])
+
+    ucmd.args(&["--files0-from", "-"])
         .pipe_in("file")
         .succeeds()
         .stdout_only("a\n");
@@ -1458,13 +1444,12 @@ fn test_files0_from_1() {
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "1a"
 fn test_files0_from_1a() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", "a");
-    scene
-        .ucmd()
-        .args(&["--files0-from", "-"])
+
+    ucmd.args(&["--files0-from", "-"])
         .pipe_in("file\0")
         .succeeds()
         .stdout_only("a\n");
@@ -1473,13 +1458,12 @@ fn test_files0_from_1a() {
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "2"
 fn test_files0_from_2() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", "a");
-    scene
-        .ucmd()
-        .args(&["--files0-from", "-"])
+
+    ucmd.args(&["--files0-from", "-"])
         .pipe_in("file\0file")
         .succeeds()
         .stdout_only("a\na\n");
@@ -1488,13 +1472,12 @@ fn test_files0_from_2() {
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "2a"
 fn test_files0_from_2a() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", "a");
-    scene
-        .ucmd()
-        .args(&["--files0-from", "-"])
+
+    ucmd.args(&["--files0-from", "-"])
         .pipe_in("file\0file\0")
         .succeeds()
         .stdout_only("a\na\n");
