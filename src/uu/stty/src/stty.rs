@@ -319,7 +319,43 @@ fn stty(opts: &Options) -> UResult<()> {
                         ));
                     }
                 }
-            // baud rate setting
+            } else if *arg == "min" {
+                match args_iter.next() {
+                    Some(min) => match parse_u8_or_err(min) {
+                        Ok(n) => {
+                            valid_args
+                                .push(ArgOptions::Mapping((SpecialCharacterIndices::VMIN, n)));
+                        }
+                        Err(e) => return Err(USimpleError::new(1, e)),
+                    },
+                    None => {
+                        return Err(USimpleError::new(
+                            1,
+                            get_message_with_args(
+                                "stty-error-missing-argument",
+                                HashMap::from([("arg".to_string(), arg.to_string())]),
+                            ),
+                        ));
+                    }
+                }
+            } else if *arg == "time" {
+                match args_iter.next() {
+                    Some(time) => match parse_u8_or_err(time) {
+                        Ok(n) => valid_args
+                            .push(ArgOptions::Mapping((SpecialCharacterIndices::VTIME, n))),
+                        Err(e) => return Err(USimpleError::new(1, e)),
+                    },
+                    None => {
+                        return Err(USimpleError::new(
+                            1,
+                            get_message_with_args(
+                                "stty-error-missing-argument",
+                                HashMap::from([("arg".to_string(), arg.to_string())]),
+                            ),
+                        ));
+                    }
+                }
+                // baud rate setting
             } else if let Some(baud_flag) = string_to_baud(arg) {
                 valid_args.push(ArgOptions::Flags(baud_flag));
             // non control char flag
