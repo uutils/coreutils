@@ -1554,3 +1554,13 @@ fn test_failed_write_is_reported() {
         .fails()
         .stderr_is("tr: write error: No space left on device\n");
 }
+
+#[test]
+fn test_broken_pipe_no_error() {
+    new_ucmd!()
+        .args(&["e", "a"])
+        .pipe_in("hello".repeat(100))
+        .run_stdout_starts_with(b"")
+        .success()
+        .stderr_is("");
+}

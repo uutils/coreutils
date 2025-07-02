@@ -13,7 +13,7 @@ use operation::{
 };
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::io::{BufWriter, Write, stdin, stdout};
+use std::io::{BufWriter, ErrorKind, Write, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
@@ -157,9 +157,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
     }
 
-    buffered_stdout
-        .flush()
-        .map_err_context(|| get_message("tr-error-write-error"))?;
+    // Handle broken pipe errors gracefully during flush.
+    match buffered_stdout.flush() {
+        Ok(()) => {}
+        Err(err) if err.kind() == ErrorKind::BrokenPipe => {}
+        Err(err) => return Err(err.map_err_context(|| get_message("tr-error-write-error"))),
+    }
 
     Ok(())
 }
