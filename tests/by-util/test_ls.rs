@@ -4298,7 +4298,6 @@ fn test_ls_context_format() {
 }
 
 /// Helper function to validate `SELinux` context format
-/// Returns the context parts if valid, panics with descriptive message if invalid
 #[cfg(feature = "feat_selinux")]
 fn validate_selinux_context(context: &str) {
     assert!(
