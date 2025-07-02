@@ -218,6 +218,24 @@ fn test_recursive_multiple() {
     assert!(!at.file_exists(file_b));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_recursive_long_filepath() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_recursive_directory";
+    let mkdir = "test_rm_recursive_directory/".repeat(35);
+    let file_a = mkdir.clone() + "test_rm_recursive_file_a";
+    assert!(file_a.len() > 1000);
+
+    at.mkdir_all(&mkdir);
+    at.touch(&file_a);
+
+    ucmd.arg("-r").arg(dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir));
+    assert!(!at.file_exists(file_a));
+}
+
 #[test]
 fn test_directory_without_flag() {
     let (at, mut ucmd) = at_and_ucmd!();
