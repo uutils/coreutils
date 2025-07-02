@@ -27,7 +27,10 @@ use uucore::mode::get_umask;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
 #[cfg(feature = "selinux")]
-use uucore::selinux::{contexts_differ, set_selinux_security_context};
+use uucore::selinux::{
+    contexts_differ, set_selinux_context_for_created_directories_install,
+    set_selinux_default_context_for_install, set_selinux_security_context,
+};
 use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
@@ -57,6 +60,7 @@ pub struct Behavior {
     no_target_dir: bool,
     preserve_context: bool,
     context: Option<String>,
+    default_context: bool,
 }
 
 #[derive(Error, Debug)]
@@ -157,6 +161,7 @@ static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_PRESERVE_CONTEXT: &str = "preserve-context";
 static OPT_CONTEXT: &str = "context";
+static OPT_DEFAULT_CONTEXT: &str = "default-context";
 
 static ARG_FILES: &str = "files";
 
@@ -290,8 +295,13 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_CONTEXT)
+            Arg::new(OPT_DEFAULT_CONTEXT)
                 .short('Z')
+                .help(get_message("install-help-default-context"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_CONTEXT)
                 .long(OPT_CONTEXT)
                 .help(get_message("install-help-context"))
                 .value_name("CONTEXT")
@@ -403,6 +413,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     };
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
+    let default_context = matches.get_flag(OPT_DEFAULT_CONTEXT);
 
     Ok(Behavior {
         main_function,
@@ -425,6 +436,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         no_target_dir,
         preserve_context: matches.get_flag(OPT_PRESERVE_CONTEXT),
         context,
+        default_context,
     })
 }
 
@@ -463,6 +475,16 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
                     continue;
                 }
 
+                // Set SELinux context for all created directories if needed
+                #[cfg(feature = "selinux")]
+                if b.context.is_some() || b.default_context {
+                    let context = get_context_for_selinux(b);
+                    set_selinux_context_for_created_directories_install(
+                        path_to_create.as_path(),
+                        context,
+                    );
+                }
+
                 if b.verbose {
                     println!(
                         "{}",
@@ -487,7 +509,12 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
 
             // Set SELinux context for directory if needed
             #[cfg(feature = "selinux")]
-            show_if_err!(set_selinux_context(path, b));
+            if b.default_context {
+                show_if_err!(set_selinux_default_context_for_install(path));
+            } else if b.context.is_some() {
+                let context = get_context_for_selinux(b);
+                show_if_err!(set_selinux_security_context(path, context));
+            }
         }
         // If the exit code was set, or show! has been called at least once
         // (which sets the exit code as well), function execution will end after
@@ -605,6 +632,13 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
 
                 if let Err(e) = fs::create_dir_all(to_create) {
                     return Err(InstallError::CreateDirFailed(to_create.to_path_buf(), e).into());
+                }
+
+                // Set SELinux context for all created directories if needed
+                #[cfg(feature = "selinux")]
+                if b.context.is_some() || b.default_context {
+                    let context = get_context_for_selinux(b);
+                    set_selinux_context_for_created_directories_install(to_create, context);
                 }
             }
         }
@@ -975,8 +1009,13 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     if b.preserve_context {
         uucore::selinux::preserve_security_context(from, to)
             .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+    } else if b.default_context {
+        set_selinux_default_context_for_install(to)
+            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
     } else if b.context.is_some() {
-        set_selinux_context(to, b)?;
+        let context = get_context_for_selinux(b);
+        set_selinux_security_context(to, context)
+            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
     }
 
     if b.verbose {
@@ -1003,6 +1042,15 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     }
 
     Ok(())
+}
+
+#[cfg(feature = "selinux")]
+fn get_context_for_selinux(b: &Behavior) -> Option<&String> {
+    if b.default_context {
+        None
+    } else {
+        b.context.as_ref()
+    }
 }
 
 /// Check if a file needs to be copied due to ownership differences when no explicit group is specified.
