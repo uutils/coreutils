@@ -4306,9 +4306,8 @@ fn validate_selinux_context(context: &str) {
         context
     );
 
-    let context_parts: Vec<&str> = context.split(':').collect();
     assert_eq!(
-        context_parts.len(),
+        context.split(':').count(),
         4,
         "SELinux context should have 4 components separated by colons, got: {}",
         context
