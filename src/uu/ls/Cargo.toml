@@ -52,4 +52,4 @@ name = "ls"
 path = "src/main.rs"
 
 [features]
-feat_selinux = ["selinux"]
+feat_selinux = ["selinux", "uucore/selinux"]

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) wipesync prefill
+// spell-checker:ignore (words) wipesync prefill couldnt
 
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
@@ -20,7 +20,8 @@ use uucore::parser::parse_size::parse_size_u64;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, show_error, show_if_err};
 
-use uucore::locale::get_message;
+use std::collections::HashMap;
+use uucore::locale::{get_message, get_message_with_args};
 
 pub mod options {
     pub const FORCE: &str = "force";
@@ -242,7 +243,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     if !matches.contains_id(options::FILE) {
-        return Err(UUsageError::new(1, "missing file operand"));
+        return Err(UUsageError::new(
+            1,
+            get_message("shred-missing-file-operand"),
+        ));
     }
 
     let iterations = match matches.get_one::<String>(options::ITERATIONS) {
@@ -251,7 +255,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Err(_) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("invalid number of passes: {}", s.quote()),
+                    get_message_with_args(
+                        "shred-invalid-number-of-passes",
+                        HashMap::from([("passes".to_string(), s.quote().to_string())]),
+                    ),
                 ));
             }
         },
@@ -262,7 +269,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(filepath) => RandomSource::Read(File::open(filepath).map_err(|_| {
             USimpleError::new(
                 1,
-                format!("cannot open random source: {}", filepath.quote()),
+                get_message_with_args(
+                    "shred-cannot-open-random-source",
+                    HashMap::from([("source".to_string(), filepath.quote().to_string())]),
+                ),
             )
         })?),
         None => RandomSource::System,
@@ -321,14 +331,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::FORCE)
                 .long(options::FORCE)
                 .short('f')
-                .help("change permissions to allow writing if necessary")
+                .help(get_message("shred-force-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ITERATIONS)
                 .long(options::ITERATIONS)
                 .short('n')
-                .help("overwrite N times instead of the default (3)")
+                .help(get_message("shred-iterations-help"))
                 .value_name("NUMBER")
                 .default_value("3"),
         )
@@ -337,12 +347,12 @@ pub fn uu_app() -> Command {
                 .long(options::SIZE)
                 .short('s')
                 .value_name("N")
-                .help("shred this many bytes (suffixes like K, M, G accepted)"),
+                .help(get_message("shred-size-help")),
         )
         .arg(
             Arg::new(options::WIPESYNC)
                 .short('u')
-                .help("deallocate and remove file after overwriting")
+                .help(get_message("shred-deallocate-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -357,37 +367,34 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value(options::remove::WIPESYNC)
-                .help("like -u but give control on HOW to delete;  See below")
+                .help(get_message("shred-remove-help"))
                 .action(ArgAction::Set),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
                 .short('v')
-                .help("show progress")
+                .help(get_message("shred-verbose-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::EXACT)
                 .long(options::EXACT)
                 .short('x')
-                .help(
-                    "do not round file sizes up to the next full block;\n\
-                     this is the default for non-regular files",
-                )
+                .help(get_message("shred-exact-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .short('z')
-                .help("add a final overwrite with zeros to hide shredding")
+                .help(get_message("shred-zero-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RANDOM_SOURCE)
                 .long(options::RANDOM_SOURCE)
-                .help("take random bytes from FILE")
+                .help(get_message("shred-random-source-help"))
                 .value_hint(clap::ValueHint::FilePath)
                 .action(ArgAction::Set),
         )
@@ -405,7 +412,13 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
         .and_then(|size| parse_size_u64(size.as_str()).ok())
         .or_else(|| {
             if let Some(size) = size_str_opt {
-                show_error!("invalid file size: {}", size.quote());
+                show_error!(
+                    "{}",
+                    get_message_with_args(
+                        "shred-invalid-file-size",
+                        HashMap::from([("size".to_string(), size.quote().to_string())])
+                    )
+                );
                 // TODO: replace with our error management
                 std::process::exit(1);
             }
@@ -439,13 +452,19 @@ fn wipe_file(
     if !path.exists() {
         return Err(USimpleError::new(
             1,
-            format!("{}: No such file or directory", path.maybe_quote()),
+            get_message_with_args(
+                "shred-no-such-file-or-directory",
+                HashMap::from([("file".to_string(), path.maybe_quote().to_string())]),
+            ),
         ));
     }
     if !path.is_file() {
         return Err(USimpleError::new(
             1,
-            format!("{}: Not a file", path.maybe_quote()),
+            get_message_with_args(
+                "shred-not-a-file",
+                HashMap::from([("file".to_string(), path.maybe_quote().to_string())]),
+            ),
         ));
     }
 
@@ -518,7 +537,12 @@ fn wipe_file(
         .write(true)
         .truncate(false)
         .open(path)
-        .map_err_context(|| format!("{}: failed to open for writing", path.maybe_quote()))?;
+        .map_err_context(|| {
+            get_message_with_args(
+                "shred-failed-to-open-for-writing",
+                HashMap::from([("file".to_string(), path.maybe_quote().to_string())]),
+            )
+        })?;
 
     let size = match size {
         Some(size) => size,
@@ -528,23 +552,35 @@ fn wipe_file(
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
         if verbose {
             let pass_name = pass_name(&pass_type);
+            let msg = get_message_with_args(
+                "shred-pass-progress",
+                HashMap::from([("file".to_string(), path.maybe_quote().to_string())]),
+            );
             show_error!(
-                "{}: pass {}/{total_passes} ({pass_name})...",
-                path.maybe_quote(),
-                i + 1,
+                "{} {}/{total_passes} ({pass_name})...",
+                msg,
+                (i + 1).to_string()
             );
         }
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
         show_if_err!(
-            do_pass(&mut file, &pass_type, exact, random_source, size)
-                .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))
+            do_pass(&mut file, &pass_type, exact, random_source, size).map_err_context(|| {
+                get_message_with_args(
+                    "shred-file-write-pass-failed",
+                    HashMap::from([("file".to_string(), path.maybe_quote().to_string())]),
+                )
+            })
         );
     }
 
     if remove_method != RemoveMethod::None {
-        do_remove(path, path_str, verbose, remove_method)
-            .map_err_context(|| format!("{}: failed to remove file", path.maybe_quote()))?;
+        do_remove(path, path_str, verbose, remove_method).map_err_context(|| {
+            get_message_with_args(
+                "shred-failed-to-remove-file",
+                HashMap::from([("file".to_string(), path.maybe_quote().to_string())]),
+            )
+        })?;
     }
     Ok(())
 }
@@ -615,9 +651,10 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
                 Ok(()) => {
                     if verbose {
                         show_error!(
-                            "{}: renamed to {}",
-                            last_path.maybe_quote(),
-                            new_path.display()
+                            "{}: {} {}",
+                            last_path.maybe_quote().to_string(),
+                            get_message("shred-renamed-to",),
+                            new_path.display().to_string()
                         );
                     }
 
@@ -634,11 +671,15 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
                     break;
                 }
                 Err(e) => {
-                    show_error!(
-                        "{}: Couldn't rename to {}: {e}",
-                        last_path.maybe_quote(),
-                        new_path.quote(),
+                    let msg = get_message_with_args(
+                        "shred-couldnt-rename",
+                        HashMap::from([
+                            ("file".to_string(), last_path.maybe_quote().to_string()),
+                            ("new_name".to_string(), new_path.quote().to_string()),
+                            ("error".to_string(), e.to_string()),
+                        ]),
                     );
+                    show_error!("{}", msg);
                     // TODO: replace with our error management
                     std::process::exit(1);
                 }
@@ -656,7 +697,13 @@ fn do_remove(
     remove_method: RemoveMethod,
 ) -> Result<(), io::Error> {
     if verbose {
-        show_error!("{}: removing", orig_filename.maybe_quote());
+        show_error!(
+            "{}",
+            get_message_with_args(
+                "shred-removing",
+                HashMap::from([("file".to_string(), orig_filename.maybe_quote().to_string())])
+            )
+        );
     }
 
     let remove_path = if remove_method == RemoveMethod::Unlink {
@@ -670,7 +717,13 @@ fn do_remove(
     }
 
     if verbose {
-        show_error!("{}: removed", orig_filename.maybe_quote());
+        show_error!(
+            "{}",
+            get_message_with_args(
+                "shred-removed",
+                HashMap::from([("file".to_string(), orig_filename.maybe_quote().to_string())])
+            )
+        );
     }
 
     Ok(())

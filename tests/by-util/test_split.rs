@@ -498,13 +498,11 @@ fn test_split_obs_lines_standalone_overflow() {
 /// Test for obsolete lines option as part of invalid combined short options
 #[test]
 fn test_split_obs_lines_within_invalid_combined_shorts() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
 
-    scene
-        .ucmd()
-        .args(&["-2fb", "file"])
+    ucmd.args(&["-2fb", "file"])
         .fails_with_code(1)
         .stderr_contains("error: unexpected argument '-f' found\n");
 }
@@ -512,18 +510,16 @@ fn test_split_obs_lines_within_invalid_combined_shorts() {
 /// Test for obsolete lines option as part of combined short options
 #[test]
 fn test_split_obs_lines_within_combined_shorts() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let name = "obs-lines-within-shorts";
-    RandomFile::new(at, name).add_lines(400);
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    scene
-        .ucmd()
-        .args(&["-x200de", name])
+    let name = "obs-lines-within-shorts";
+    RandomFile::new(&at, name).add_lines(400);
+
+    ucmd.args(&["-x200de", name])
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(at, ".", r"x\d\d$");
+    let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
@@ -534,6 +530,7 @@ fn test_split_obs_lines_within_combined_shorts_tailing_suffix_length() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "obs-lines-combined-shorts-tailing-suffix-length";
     RandomFile::new(&at, name).add_lines(1000);
+
     ucmd.args(&["-d200a4", name]).succeeds();
 
     let glob = Glob::new(&at, ".", r"x\d\d\d\d$");
@@ -544,18 +541,17 @@ fn test_split_obs_lines_within_combined_shorts_tailing_suffix_length() {
 /// Test for obsolete lines option starts as part of combined short options
 #[test]
 fn test_split_obs_lines_starts_combined_shorts() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let name = "obs-lines-starts-shorts";
-    RandomFile::new(at, name).add_lines(400);
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    scene
-        .ucmd()
-        .args(&["-200xd", name])
+    let name = "obs-lines-starts-shorts";
+    RandomFile::new(&at, name).add_lines(400);
+
+    ucmd.args(&["-200xd", name])
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(at, ".", r"x\d\d$");
+
+    let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
@@ -647,18 +643,17 @@ fn test_split_obs_lines_as_other_option_value() {
 /// last one wins
 #[test]
 fn test_split_multiple_obs_lines_standalone() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let name = "multiple-obs-lines";
-    RandomFile::new(at, name).add_lines(400);
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    scene
-        .ucmd()
-        .args(&["-3000", "-200", name])
+    let name = "multiple-obs-lines";
+    RandomFile::new(&at, name).add_lines(400);
+
+    ucmd.args(&["-3000", "-200", name])
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(at, ".", r"x[[:alpha:]][[:alpha:]]$");
+
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
@@ -667,18 +662,17 @@ fn test_split_multiple_obs_lines_standalone() {
 /// last one wins
 #[test]
 fn test_split_multiple_obs_lines_within_combined() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    let name = "multiple-obs-lines";
-    RandomFile::new(at, name).add_lines(400);
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    scene
-        .ucmd()
-        .args(&["-d5000x", "-e200d", name])
+    let name = "multiple-obs-lines";
+    RandomFile::new(&at, name).add_lines(400);
+
+    ucmd.args(&["-d5000x", "-e200d", name])
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(at, ".", r"x\d\d$");
+
+    let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
@@ -720,9 +714,12 @@ fn test_split_invalid_bytes_size() {
 #[test]
 fn test_split_overflow_bytes_size() {
     let (at, mut ucmd) = at_and_ucmd!();
+
     let name = "test_split_overflow_bytes_size";
     RandomFile::new(&at, name).add_bytes(1000);
+
     ucmd.args(&["-b", "1Y", name]).succeeds();
+
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 1);
     assert_eq!(glob.collate(), at.read_bytes(name));
@@ -731,7 +728,9 @@ fn test_split_overflow_bytes_size() {
 #[test]
 fn test_split_stdin_num_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
+
     ucmd.args(&["--number=1"]).pipe_in("").succeeds();
+
     assert_eq!(at.read("xaa"), "");
     assert!(!at.plus("xab").exists());
 }
@@ -1374,10 +1373,11 @@ fn test_line_bytes_no_eof() {
 
 #[test]
 fn test_guard_input() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
-    ts.ucmd()
+    scene
+        .ucmd()
         .args(&["-C", "6"])
         .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
         .succeeds()
@@ -1385,7 +1385,8 @@ fn test_guard_input() {
         .no_stderr();
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 
-    ts.ucmd()
+    scene
+        .ucmd()
         .args(&["-C", "6"])
         .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
         .succeeds()
@@ -1393,7 +1394,8 @@ fn test_guard_input() {
         .no_stderr();
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 
-    ts.ucmd()
+    scene
+        .ucmd()
         .args(&["-C", "6", "xaa"])
         .fails()
         .stderr_only("split: 'xaa' would overwrite input; aborting\n");

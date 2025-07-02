@@ -6,12 +6,14 @@
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
+use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{ExitCode, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
@@ -19,7 +21,25 @@ use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 use uucore::{format_usage, show, show_error};
 
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
+
+#[derive(Debug, Error)]
+enum ChmodError {
+    #[error("{}", get_message_with_args("chmod-error-cannot-stat", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    CannotStat(String),
+    #[error("{}", get_message_with_args("chmod-error-dangling-symlink", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    DanglingSymlink(String),
+    #[error("{}", get_message_with_args("chmod-error-no-such-file", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    NoSuchFile(String),
+    #[error("{}", get_message_with_args("chmod-error-preserve-root", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    PreserveRoot(String),
+    #[error("{}", get_message_with_args("chmod-error-permission-denied", HashMap::from([("file".to_string(), _0.quote().to_string())])))]
+    PermissionDenied(String),
+    #[error("{}", get_message_with_args("chmod-error-new-permissions", HashMap::from([("file".to_string(), _0.clone()), ("actual".to_string(), _1.clone()), ("expected".to_string(), _2.clone())])))]
+    NewPermissions(String, String, String),
+}
+
+impl UError for ChmodError {}
 
 mod options {
     pub const HELP: &str = "help";
@@ -103,11 +123,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let fmode = match matches.get_one::<String>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode() & 0o7777),
-            Err(err) => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("cannot stat attributes of {}: {err}", fref.quote()),
-                ));
+            Err(_) => {
+                return Err(ChmodError::CannotStat(fref.to_string()).into());
             }
         },
         None => None,
@@ -135,7 +152,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if files.is_empty() {
-        return Err(UUsageError::new(1, "missing operand".to_string()));
+        return Err(UUsageError::new(
+            1,
+            get_message("chmod-error-missing-operand"),
+        ));
     }
 
     let (recursive, dereference, traverse_symlinks) =
@@ -168,14 +188,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information.")
+                .help(get_message("chmod-help-print-help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::CHANGES)
                 .long(options::CHANGES)
                 .short('c')
-                .help("like verbose but report only when a change is made")
+                .help(get_message("chmod-help-changes"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -183,40 +203,40 @@ pub fn uu_app() -> Command {
                 .long(options::QUIET)
                 .visible_alias("silent")
                 .short('f')
-                .help("suppress most error messages")
+                .help(get_message("chmod-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
                 .short('v')
-                .help("output a diagnostic for every file processed")
+                .help(get_message("chmod-help-verbose"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_PRESERVE_ROOT)
                 .long(options::NO_PRESERVE_ROOT)
-                .help("do not treat '/' specially (the default)")
+                .help(get_message("chmod-help-no-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESERVE_ROOT)
                 .long(options::PRESERVE_ROOT)
-                .help("fail to operate recursively on '/'")
+                .help(get_message("chmod-help-preserve-root"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .long(options::RECURSIVE)
                 .short('R')
-                .help("change files and directories recursively")
+                .help(get_message("chmod-help-recursive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REFERENCE)
                 .long("reference")
                 .value_hint(clap::ValueHint::FilePath)
-                .help("use RFILE's mode instead of MODE values"),
+                .help(get_message("chmod-help-reference")),
         )
         .arg(
             Arg::new(options::MODE).required_unless_present(options::REFERENCE),
@@ -265,27 +285,21 @@ impl Chmoder {
                     }
 
                     if !self.quiet {
-                        show!(USimpleError::new(
-                            1,
-                            format!("cannot operate on dangling symlink {}", filename.quote()),
-                        ));
+                        show!(ChmodError::DanglingSymlink(filename.to_string()));
                         set_exit_code(1);
                     }
 
                     if self.verbose {
                         println!(
-                            "failed to change mode of {} from 0000 (---------) to 1500 (r-x-----T)",
-                            filename.quote()
+                            "{}",
+                            get_message_with_args(
+                                "chmod-verbose-failed-dangling",
+                                HashMap::from([("file".to_string(), filename.quote().to_string())])
+                            )
                         );
                     }
                 } else if !self.quiet {
-                    show!(USimpleError::new(
-                        1,
-                        format!(
-                            "cannot access {}: No such file or directory",
-                            filename.quote()
-                        )
-                    ));
+                    show!(ChmodError::NoSuchFile(filename.to_string()));
                 }
                 // GNU exits with exit code 1 even if -q or --quiet are passed
                 // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
@@ -298,13 +312,7 @@ impl Chmoder {
                 continue;
             }
             if self.recursive && self.preserve_root && filename == "/" {
-                return Err(USimpleError::new(
-                    1,
-                    format!(
-                        "it is dangerous to operate recursively on {}\nchmod: use --no-preserve-root to override this failsafe",
-                        filename.quote()
-                    ),
-                ));
+                return Err(ChmodError::PreserveRoot(filename.to_string()).into());
             }
             if self.recursive {
                 r = self.walk_dir(file);
@@ -368,12 +376,9 @@ impl Chmoder {
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
                     // These two filenames would normally be conditionally
                     // quoted, but GNU's tests expect them to always be quoted
-                    Err(USimpleError::new(
-                        1,
-                        format!("{}: Permission denied", file.quote()),
-                    ))
+                    Err(ChmodError::PermissionDenied(file.to_string_lossy().to_string()).into())
                 } else {
-                    Err(USimpleError::new(1, format!("{}: {err}", file.quote())))
+                    Err(ChmodError::CannotStat(file.to_string_lossy().to_string()).into())
                 };
             }
         };
@@ -420,15 +425,12 @@ impl Chmoder {
                 self.change_file(fperm, new_mode, file)?;
                 // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
                 if (new_mode & !naively_expected_new_mode) != 0 {
-                    return Err(USimpleError::new(
-                        1,
-                        format!(
-                            "{}: new permissions are {}, not {}",
-                            file.maybe_quote(),
-                            display_permissions_unix(new_mode as mode_t, false),
-                            display_permissions_unix(naively_expected_new_mode as mode_t, false)
-                        ),
-                    ));
+                    return Err(ChmodError::NewPermissions(
+                        file.to_string_lossy().to_string(),
+                        display_permissions_unix(new_mode as mode_t, false),
+                        display_permissions_unix(naively_expected_new_mode as mode_t, false),
+                    )
+                    .into());
                 }
             }
         }

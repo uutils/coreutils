@@ -27,6 +27,10 @@ dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
 wild = "2.2.1"
 glob = { workspace = true, optional = true }
+icu_collator = { workspace = true, optional = true, features = [
+  "compiled_data",
+] }
+icu_locale = { workspace = true, optional = true, features = ["compiled_data"] }
 itertools = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
   "formatting",
@@ -89,7 +93,7 @@ default = []
 # * non-default features
 backup-control = []
 colors = []
-checksum = ["data-encoding", "sum"]
+checksum = ["data-encoding", "quoting-style", "sum"]
 encoding = ["data-encoding", "data-encoding-macro", "z85"]
 entries = ["libc"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
@@ -106,6 +110,7 @@ format = [
   "num-traits",
   "quoting-style",
 ]
+i18n = ["icu_collator", "icu_locale"]
 mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
@@ -113,7 +118,7 @@ parser = ["extendedbigdecimal", "glob", "num-traits"]
 pipes = []
 process = ["libc"]
 proc-info = ["tty", "walkdir"]
-quoting-style = []
+quoting-style = ["i18n"]
 ranges = []
 ringbuffer = []
 selinux = ["dep:selinux"]

@@ -9,15 +9,44 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError};
+
 use uucore::format_usage;
 
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
-use uucore::locale::get_message;
+use std::collections::HashMap;
+use thiserror::Error;
+use uucore::locale::{get_message, get_message_with_args};
 
 mod linebreak;
 mod parasplit;
+
+#[derive(Debug, Error)]
+enum FmtError {
+    #[error("{}", get_message_with_args("fmt-error-invalid-goal", HashMap::from([("goal".to_string(), .0.quote().to_string())])))]
+    InvalidGoal(String),
+    #[error("{}", get_message("fmt-error-goal-greater-than-width"))]
+    GoalGreaterThanWidth,
+    #[error("{}", get_message_with_args("fmt-error-invalid-width", HashMap::from([("width".to_string(), .0.quote().to_string())])))]
+    InvalidWidth(String),
+    #[error("{}", get_message_with_args("fmt-error-width-out-of-range", HashMap::from([("width".to_string(), .0.to_string())])))]
+    WidthOutOfRange(usize),
+    #[error("{}", get_message_with_args("fmt-error-invalid-tabwidth", HashMap::from([("tabwidth".to_string(), .0.quote().to_string())])))]
+    InvalidTabWidth(String),
+    #[error("{}", get_message_with_args("fmt-error-first-option-width", HashMap::from([("option".to_string(), .0.to_string())])))]
+    FirstOptionWidth(char),
+    #[error("{}", get_message("fmt-error-read"))]
+    ReadError,
+    #[error("{}", get_message_with_args("fmt-error-invalid-width-malformed", HashMap::from([("width".to_string(), .0.quote().to_string())])))]
+    InvalidWidthMalformed(String),
+}
+
+impl From<FmtError> for Box<dyn uucore::error::UError> {
+    fn from(err: FmtError) -> Self {
+        USimpleError::new(1, err.to_string())
+    }
+}
 
 const MAX_WIDTH: usize = 2500;
 const DEFAULT_GOAL: usize = 70;
@@ -92,10 +121,7 @@ impl FmtOptions {
             match goal_str.parse::<usize>() {
                 Ok(goal) => Some(goal),
                 Err(_) => {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid goal: {}", goal_str.quote()),
-                    ));
+                    return Err(FmtError::InvalidGoal(goal_str.clone()).into());
                 }
             }
         } else {
@@ -105,7 +131,7 @@ impl FmtOptions {
         let (width, goal) = match (width_opt, goal_opt) {
             (Some(w), Some(g)) => {
                 if g > w {
-                    return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
+                    return Err(FmtError::GoalGreaterThanWidth.into());
                 }
                 (w, g)
             }
@@ -119,7 +145,7 @@ impl FmtOptions {
             }
             (None, Some(g)) => {
                 if g > DEFAULT_WIDTH {
-                    return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
+                    return Err(FmtError::GoalGreaterThanWidth.into());
                 }
                 let w = (g * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO).max(g + 3);
                 (w, g)
@@ -132,21 +158,15 @@ impl FmtOptions {
         );
 
         if width > MAX_WIDTH {
-            return Err(USimpleError::new(
-                1,
-                format!("invalid width: '{width}': Numerical result out of range"),
-            ));
+            return Err(FmtError::WidthOutOfRange(width).into());
         }
 
         let mut tabwidth = 8;
         if let Some(s) = matches.get_one::<String>(options::TAB_WIDTH) {
             tabwidth = match s.parse::<usize>() {
                 Ok(t) => t,
-                Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("Invalid TABWIDTH specification: {}: {e}", s.quote()),
-                    ));
+                Err(_) => {
+                    return Err(FmtError::InvalidTabWidth(s.clone()).into());
                 }
             };
         };
@@ -192,13 +212,22 @@ fn process_file(
     let mut fp = BufReader::new(match file_name {
         "-" => Box::new(stdin()) as Box<dyn Read + 'static>,
         _ => {
-            let f = File::open(file_name)
-                .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
+            let f = File::open(file_name).map_err_context(|| {
+                get_message_with_args(
+                    "fmt-error-cannot-open-for-reading",
+                    HashMap::from([("file".to_string(), file_name.quote().to_string())]),
+                )
+            })?;
             if f.metadata()
-                .map_err_context(|| format!("cannot get metadata for {}", file_name.quote()))?
+                .map_err_context(|| {
+                    get_message_with_args(
+                        "fmt-error-cannot-get-metadata",
+                        HashMap::from([("file".to_string(), file_name.quote().to_string())]),
+                    )
+                })?
                 .is_dir()
             {
-                return Err(USimpleError::new(1, "read error".to_string()));
+                return Err(FmtError::ReadError.into());
             }
 
             Box::new(f) as Box<dyn Read + 'static>
@@ -211,20 +240,20 @@ fn process_file(
             Err(s) => {
                 ostream
                     .write_all(s.as_bytes())
-                    .map_err_context(|| "failed to write output".to_string())?;
+                    .map_err_context(|| get_message("fmt-error-failed-to-write-output"))?;
                 ostream
                     .write_all(b"\n")
-                    .map_err_context(|| "failed to write output".to_string())?;
+                    .map_err_context(|| get_message("fmt-error-failed-to-write-output"))?;
             }
             Ok(para) => break_lines(&para, fmt_opts, ostream)
-                .map_err_context(|| "failed to write output".to_string())?,
+                .map_err_context(|| get_message("fmt-error-failed-to-write-output"))?,
         }
     }
 
     // flush the output after each file
     ostream
         .flush()
-        .map_err_context(|| "failed to write output".to_string())?;
+        .map_err_context(|| get_message("fmt-error-failed-to-write-output"))?;
 
     Ok(())
 }
@@ -251,10 +280,11 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
                 if in_first_pos && i == 0 {
                     None
                 } else {
-                    let first_num = x.chars().nth(1).expect("a negative number should be at least two characters long");
-                    Some(Err(
-                        UUsageError::new(1, format!("invalid option -- {first_num}; -WIDTH is recognized only when it is the first\noption; use -w N instead"))
-                    ))
+                    let first_num = x
+                        .chars()
+                        .nth(1)
+                        .expect("a negative number should be at least two characters long");
+                    Some(Err(FmtError::FirstOptionWidth(first_num).into()))
                 }
             } else {
                 Some(Ok(x.clone()))
@@ -275,10 +305,7 @@ fn extract_width(matches: &ArgMatches) -> UResult<Option<usize>> {
         return if let Ok(width) = width_str.parse::<usize>() {
             Ok(Some(width))
         } else {
-            Err(USimpleError::new(
-                1,
-                format!("invalid width: {}", width_str.quote()),
-            ))
+            Err(FmtError::InvalidWidth(width_str.clone()).into())
         };
     }
 
@@ -307,13 +334,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             && first_arg.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
             && first_arg.chars().skip(2).any(|c| !c.is_ascii_digit());
         if malformed_number {
-            return Err(USimpleError::new(
-                1,
-                format!(
-                    "invalid width: {}",
-                    first_arg.strip_prefix('-').unwrap().quote()
-                ),
-            ));
+            return Err(FmtError::InvalidWidthMalformed(
+                first_arg.strip_prefix('-').unwrap().to_string(),
+            )
+            .into());
         }
     }
 
@@ -343,102 +367,70 @@ pub fn uu_app() -> Command {
             Arg::new(options::CROWN_MARGIN)
                 .short('c')
                 .long(options::CROWN_MARGIN)
-                .help(
-                    "First and second line of paragraph \
-                    may have different indentations, in which \
-                    case the first line's indentation is preserved, \
-                    and each subsequent line's indentation matches the second line.",
-                )
+                .help(get_message("fmt-crown-margin-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TAGGED_PARAGRAPH)
                 .short('t')
                 .long("tagged-paragraph")
-                .help(
-                    "Like -c, except that the first and second line of a paragraph *must* \
-                    have different indentation or they are treated as separate paragraphs.",
-                )
+                .help(get_message("fmt-tagged-paragraph-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESERVE_HEADERS)
                 .short('m')
                 .long("preserve-headers")
-                .help(
-                    "Attempt to detect and preserve mail headers in the input. \
-                    Be careful when combining this flag with -p.",
-                )
+                .help(get_message("fmt-preserve-headers-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SPLIT_ONLY)
                 .short('s')
                 .long("split-only")
-                .help("Split lines only, do not reflow.")
+                .help(get_message("fmt-split-only-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::UNIFORM_SPACING)
                 .short('u')
                 .long("uniform-spacing")
-                .help(
-                    "Insert exactly one \
-                    space between words, and two between sentences. \
-                    Sentence breaks in the input are detected as [?!.] \
-                    followed by two spaces or a newline; other punctuation \
-                    is not interpreted as a sentence break.",
-                )
+                .help(get_message("fmt-uniform-spacing-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PREFIX)
                 .short('p')
                 .long("prefix")
-                .help(
-                    "Reformat only lines \
-                    beginning with PREFIX, reattaching PREFIX to reformatted lines. \
-                    Unless -x is specified, leading whitespace will be ignored \
-                    when matching PREFIX.",
-                )
+                .help(get_message("fmt-prefix-help"))
                 .value_name("PREFIX"),
         )
         .arg(
             Arg::new(options::SKIP_PREFIX)
                 .short('P')
                 .long("skip-prefix")
-                .help(
-                    "Do not reformat lines \
-                    beginning with PSKIP. Unless -X is specified, leading whitespace \
-                    will be ignored when matching PSKIP",
-                )
+                .help(get_message("fmt-skip-prefix-help"))
                 .value_name("PSKIP"),
         )
         .arg(
             Arg::new(options::EXACT_PREFIX)
                 .short('x')
                 .long("exact-prefix")
-                .help(
-                    "PREFIX must match at the \
-                    beginning of the line with no preceding whitespace.",
-                )
+                .help(get_message("fmt-exact-prefix-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::EXACT_SKIP_PREFIX)
                 .short('X')
                 .long("exact-skip-prefix")
-                .help(
-                    "PSKIP must match at the \
-                    beginning of the line with no preceding whitespace.",
-                )
+                .help(get_message("fmt-exact-skip-prefix-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
                 .short('w')
                 .long("width")
-                .help("Fill output lines up to a maximum of WIDTH columns, default 75. This can be specified as a negative number in the first argument.")
+                .help(get_message("fmt-width-help"))
                 // We must accept invalid values if they are overridden later. This is not supported by clap, so accept all strings instead.
                 .value_name("WIDTH"),
         )
@@ -446,7 +438,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::GOAL)
                 .short('g')
                 .long("goal")
-                .help("Goal width, default of 93% of WIDTH. Must be less than or equal to WIDTH.")
+                .help(get_message("fmt-goal-help"))
                 // We must accept invalid values if they are overridden later. This is not supported by clap, so accept all strings instead.
                 .value_name("GOAL"),
         )
@@ -454,21 +446,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::QUICK)
                 .short('q')
                 .long("quick")
-                .help(
-                    "Break lines more quickly at the \
-            expense of a potentially more ragged appearance.",
-                )
+                .help(get_message("fmt-quick-help"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TAB_WIDTH)
                 .short('T')
                 .long("tab-width")
-                .help(
-                    "Treat tabs as TABWIDTH spaces for \
-                    determining line length, default 8. Note that this is used only for \
-                    calculating line lengths; tabs are preserved in the output.",
-                )
+                .help(get_message("fmt-tab-width-help"))
                 .value_name("TABWIDTH"),
         )
         .arg(

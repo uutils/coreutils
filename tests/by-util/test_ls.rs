@@ -106,6 +106,7 @@ fn test_invalid_value_time_style() {
         .arg("-g")
         .arg("--time-style=definitely_invalid_value")
         .fails_with_code(2)
+        .stderr_contains("time-style argument 'definitely_invalid_value'")
         .no_stdout();
     // If it only looks temporarily like it might be used, no error:
     new_ucmd!()
@@ -1897,7 +1898,7 @@ fn test_ls_long_ctime() {
 }
 
 #[test]
-#[ignore]
+#[ignore = ""]
 fn test_ls_order_birthtime() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2688,6 +2689,71 @@ mod quoting {
             ],
             &[],
         );
+    }
+
+    #[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))]
+    #[test]
+    /// This test creates files with an UTF-8 encoded name and verify that it
+    /// gets escaped depending on the used locale.
+    fn test_locale_aware_quoting() {
+        let cases: &[(&[u8], _, _, &[&str])] = &[
+            (
+                "😁".as_bytes(),               // == b"\xF0\x9F\x98\x81"
+                "''$'\\360\\237\\230\\201'\n", // ASCII sees 4 bytes
+                "😁\n",                        // UTF-8 sees an emoji
+                &["--quoting-style=shell-escape"],
+            ),
+            (
+                "€".as_bytes(),           // == b"\xE2\x82\xAC"
+                "''$'\\342\\202\\254'\n", // ASCII sees 3 bytes
+                "€\n",                    // UTF-8 still only 2
+                &["--quoting-style=shell-escape"],
+            ),
+            (
+                b"\xC2\x80\xC2\x81", // 2 first Unicode control characters
+                "????\n",            // ASCII sees 4 bytes
+                "??\n",              // UTF-8 sees only 2
+                &["--quoting-style=literal", "--hide-control-char"],
+            ),
+            (
+                b"\xC2\xC2\x81",
+                "???\n", // ASCII sees 3 bytes
+                "??\n",  // UTF-8 still only 2
+                &["--quoting-style=literal", "--hide-control-char"],
+            ),
+            (
+                b"\xC2\x81\xC2",
+                "???\n", // ASCII sees 3 bytes
+                "??\n",  // UTF-8 still only 2
+                &["--quoting-style=literal", "--hide-control-char"],
+            ),
+        ];
+
+        for (filename, ascii_ref, utf_8_ref, args) in cases {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+
+            let filename = uucore::os_str_from_bytes(filename)
+                .expect("Filename is valid Unicode supported on Linux");
+
+            at.touch(filename);
+
+            // When the locale does not handle UTF-8 encoding, escaping is done.
+            scene
+                .ucmd()
+                .env("LC_ALL", "C") // Non UTF-8 locale
+                .args(args)
+                .succeeds()
+                .stdout_only(ascii_ref);
+
+            // When the locale has UTF-8 support, the symbol is shown as-is.
+            scene
+                .ucmd()
+                .env("LC_ALL", "en_US.UTF-8") // UTF-8 locale
+                .args(args)
+                .succeeds()
+                .stdout_only(utf_8_ref);
+        }
     }
 }
 
@@ -4197,8 +4263,7 @@ fn test_ls_context_long() {
         let line: Vec<_> = result.stdout_str().split(' ').collect();
         assert!(line[0].ends_with('.'));
         assert!(line[4].starts_with("unconfined_u"));
-        let s: Vec<_> = line[4].split(':').collect();
-        assert!(s.len() == 4);
+        validate_selinux_context(line[4]);
     }
 }
 
@@ -4229,6 +4294,113 @@ fn test_ls_context_format() {
             .stdout_only(
                 unwrap_or_return!(expected_result(&ts, &["-Z", format.as_str(), "/"])).stdout_str(),
             );
+    }
+}
+
+/// Helper function to validate `SELinux` context format
+#[cfg(feature = "feat_selinux")]
+fn validate_selinux_context(context: &str) {
+    assert!(
+        context.contains(':'),
+        "Expected SELinux context format (user:role:type:level), got: {}",
+        context
+    );
+
+    assert_eq!(
+        context.split(':').count(),
+        4,
+        "SELinux context should have 4 components separated by colons, got: {}",
+        context
+    );
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_selinux_context_format() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("test skipped: Kernel has no support for SElinux context");
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("file");
+    at.symlink_file("file", "link");
+
+    // Test that ls -lnZ properly shows the context
+    for file in ["file", "link"] {
+        let result = scene.ucmd().args(&["-lnZ", file]).succeeds();
+        let output = result.stdout_str();
+
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(!lines.is_empty(), "Output should contain at least one line");
+
+        let first_line = lines[0];
+        let parts: Vec<&str> = first_line.split_whitespace().collect();
+        assert!(parts.len() >= 6, "Line should have at least 6 fields");
+
+        // The 5th field (0-indexed position 4) should contain the SELinux context
+        // Format: permissions links owner group context size date time name
+        let context = parts[4];
+        validate_selinux_context(context);
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_selinux_context_indicator() {
+    if !uucore::selinux::is_selinux_enabled() {
+        println!("test skipped: Kernel has no support for SElinux context");
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("file");
+    at.symlink_file("file", "link");
+
+    // Test that ls -l shows "." indicator for files with SELinux contexts
+    for file in ["file", "link"] {
+        let result = scene.ucmd().args(&["-l", file]).succeeds();
+        let output = result.stdout_str();
+
+        // The 11th character should be "." indicating SELinux context
+        // -rw-rw-r--. (permissions + context indicator)
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(!lines.is_empty(), "Output should contain at least one line");
+
+        let first_line = lines[0];
+        let chars: Vec<char> = first_line.chars().collect();
+        assert!(
+            chars.len() >= 11,
+            "Line should be at least 11 characters long"
+        );
+
+        // The 11th character (0-indexed position 10) should be "." for SELinux context
+        assert_eq!(
+            chars[10], '.',
+            "Expected '.' indicator for SELinux context in position 11, got '{}' in line: {}",
+            chars[10], first_line
+        );
+    }
+
+    // Test that ls -lnZ properly shows the context
+    for file in ["file", "link"] {
+        let result = scene.ucmd().args(&["-lnZ", file]).succeeds();
+        let output = result.stdout_str();
+
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(!lines.is_empty(), "Output should contain at least one line");
+
+        let first_line = lines[0];
+        let parts: Vec<&str> = first_line.split_whitespace().collect();
+        assert!(parts.len() >= 6, "Line should have at least 6 fields");
+
+        // The 5th field (0-indexed position 4) should contain the SELinux context
+        // Format: permissions links owner group context size date time name
+        validate_selinux_context(parts[4]);
     }
 }
 

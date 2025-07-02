@@ -111,10 +111,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if Error::last_os_error().raw_os_error().unwrap() != 0 {
         return Err(USimpleError::new(
             125,
-            get_message_with_args(
-                "nice-error-getpriority",
-                HashMap::from([("error".to_string(), Error::last_os_error().to_string())]),
-            ),
+            format!("getpriority: {}", Error::last_os_error()),
         ));
     }
 
@@ -183,13 +180,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         execvp(args[0], args.as_mut_ptr());
     }
 
-    show_error!(
-        "{}",
-        get_message_with_args(
-            "nice-error-execvp",
-            HashMap::from([("error".to_string(), Error::last_os_error().to_string())])
-        )
-    );
+    show_error!("execvp: {}", Error::last_os_error());
 
     let exit_code = if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
         127

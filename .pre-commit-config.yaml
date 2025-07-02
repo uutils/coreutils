@@ -19,10 +19,12 @@ repos:
         args: [ --fix=lf ]
       - id: trailing-whitespace
 
-  - repo: https://github.com/uutils/pre-commit-fluent-hook
-    rev: v0.0.1
+  - repo: https://github.com/mozilla-l10n/moz-fluent-linter
+    rev: v0.4.8
     hooks:
-    -   id: check-fluent
+      - id: fluent_linter
+        files: \.ftl$
+        args: [--config, .github/fluent_linter_config.yml, src/uu/]
 
   - repo: local
     hooks:

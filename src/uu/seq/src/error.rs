@@ -5,9 +5,11 @@
 // spell-checker:ignore numberparse
 //! Errors returned by seq.
 use crate::numberparse::ParseNumberError;
+use std::collections::HashMap;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
+use uucore::locale::{get_message, get_message_with_args};
 
 #[derive(Debug, Error)]
 pub enum SeqError {
@@ -15,29 +17,32 @@ pub enum SeqError {
     ///
     /// The parameters are the [`String`] argument as read from the
     /// command line and the underlying parsing error itself.
-    #[error("invalid {} argument: {}", parse_error_type(.1), .0.quote())]
+    #[error("{}", get_message_with_args("seq-error-parse", HashMap::from([("type".to_string(), parse_error_type(.1).to_string()), ("arg".to_string(), .0.quote().to_string())])))]
     ParseError(String, ParseNumberError),
 
     /// The increment argument was zero, which is not allowed.
     ///
     /// The parameter is the increment argument as a [`String`] as read
     /// from the command line.
-    #[error("invalid Zero increment value: {}", .0.quote())]
+    #[error("{}", get_message_with_args("seq-error-zero-increment", HashMap::from([("arg".to_string(), .0.quote().to_string())])))]
     ZeroIncrement(String),
 
     /// No arguments were passed to this function, 1 or more is required
-    #[error("missing operand")]
+    #[error("{}", get_message_with_args("seq-error-no-arguments", HashMap::new()))]
     NoArguments,
 
     /// Both a format and equal width where passed to seq
-    #[error("format string may not be specified when printing equal width strings")]
+    #[error(
+        "{}",
+        get_message_with_args("seq-error-format-and-equal-width", HashMap::new())
+    )]
     FormatAndEqualWidth,
 }
 
-fn parse_error_type(e: &ParseNumberError) -> &'static str {
+fn parse_error_type(e: &ParseNumberError) -> String {
     match e {
-        ParseNumberError::Float => "floating point",
-        ParseNumberError::Nan => "'not-a-number'",
+        ParseNumberError::Float => get_message("seq-parse-error-type-float"),
+        ParseNumberError::Nan => get_message("seq-parse-error-type-nan"),
     }
 }
 

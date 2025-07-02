@@ -16,6 +16,7 @@ use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
@@ -26,7 +27,7 @@ use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, show};
 
 use crate::error::TouchError;
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 /// Options contains all the possible behaviors and flags for touch.
 ///
@@ -98,6 +99,7 @@ pub mod options {
     pub static NO_CREATE: &str = "no-create";
     pub static NO_DEREF: &str = "no-dereference";
     pub static TIME: &str = "time";
+    pub static FORCE: &str = "force";
 }
 
 static ARG_FILES: &str = "files";
@@ -192,9 +194,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .ok_or_else(|| {
             USimpleError::new(
                 1,
-                format!(
-                    "missing file operand\nTry '{} --help' for more information.",
-                    uucore::execution_phrase()
+                get_message_with_args(
+                    "touch-error-missing-file-operand",
+                    HashMap::from([(
+                        "help_command".to_string(),
+                        uucore::execution_phrase().to_string(),
+                    )]),
                 ),
             )
         })?
@@ -263,19 +268,19 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information.")
+                .help(get_message("touch-help-help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::ACCESS)
                 .short('a')
-                .help("change only the access time")
+                .help(get_message("touch-help-access"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::sources::TIMESTAMP)
                 .short('t')
-                .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
+                .help(get_message("touch-help-timestamp"))
                 .value_name("STAMP"),
         )
         .arg(
@@ -283,38 +288,42 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::sources::DATE)
                 .allow_hyphen_values(true)
-                .help("parse argument and use it instead of current time")
+                .help(get_message("touch-help-date"))
                 .value_name("STRING")
                 .conflicts_with(options::sources::TIMESTAMP),
         )
         .arg(
+            Arg::new(options::FORCE)
+                .short('f')
+                .help("(ignored)")
+                .hide(true)
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(options::MODIFICATION)
                 .short('m')
-                .help("change only the modification time")
+                .help(get_message("touch-help-modification"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CREATE)
                 .short('c')
                 .long(options::NO_CREATE)
-                .help("do not create any files")
+                .help(get_message("touch-help-no-create"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREF)
                 .short('h')
                 .long(options::NO_DEREF)
-                .help(
-                    "affect each symbolic link instead of any referenced file \
-                     (only for systems that can change the timestamps of a symlink)",
-                )
+                .help(get_message("touch-help-no-deref"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::sources::REFERENCE)
                 .short('r')
                 .long(options::sources::REFERENCE)
-                .help("use this file's times instead of the current time")
+                .help(get_message("touch-help-reference"))
                 .value_name("FILE")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath)
@@ -323,11 +332,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)
-                .help(
-                    "change only the specified time: \"access\", \"atime\", or \
-                     \"use\" are equivalent to -a; \"modify\" or \"mtime\" are \
-                     equivalent to -m",
-                )
+                .help(get_message("touch-help-time"))
                 .value_name("WORD")
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("atime").alias("access").alias("use"),
@@ -442,7 +447,12 @@ fn touch_file(
 
     if let Err(e) = metadata_result {
         if e.kind() != ErrorKind::NotFound {
-            return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
+            return Err(e.map_err_context(|| {
+                get_message_with_args(
+                    "touch-error-setting-times-of",
+                    HashMap::from([("filename".to_string(), filename.quote().to_string())]),
+                )
+            }));
         }
 
         if opts.no_create {
@@ -452,9 +462,9 @@ fn touch_file(
         if opts.no_deref {
             let e = USimpleError::new(
                 1,
-                format!(
-                    "setting times of {}: No such file or directory",
-                    filename.quote()
+                get_message_with_args(
+                    "touch-error-setting-times-no-such-file",
+                    HashMap::from([("filename".to_string(), filename.quote().to_string())]),
                 ),
             );
             if opts.strict {
@@ -475,12 +485,20 @@ fn touch_file(
                 false
             };
             if is_directory {
-                let custom_err = Error::other("No such file or directory");
-                return Err(
-                    custom_err.map_err_context(|| format!("cannot touch {}", filename.quote()))
-                );
+                let custom_err = Error::other(get_message("touch-error-no-such-file-or-directory"));
+                return Err(custom_err.map_err_context(|| {
+                    get_message_with_args(
+                        "touch-error-cannot-touch",
+                        HashMap::from([("filename".to_string(), filename.quote().to_string())]),
+                    )
+                }));
             }
-            let e = e.map_err_context(|| format!("cannot touch {}", path.quote()));
+            let e = e.map_err_context(|| {
+                get_message_with_args(
+                    "touch-error-cannot-touch",
+                    HashMap::from([("filename".to_string(), path.quote().to_string())]),
+                )
+            });
             if opts.strict {
                 return Err(e);
             }
@@ -543,12 +561,22 @@ fn update_times(
         ChangeTimes::AtimeOnly => (
             atime,
             stat(path, !opts.no_deref)
-                .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?
+                .map_err_context(|| {
+                    get_message_with_args(
+                        "touch-error-failed-to-get-attributes",
+                        HashMap::from([("path".to_string(), path.quote().to_string())]),
+                    )
+                })?
                 .1,
         ),
         ChangeTimes::MtimeOnly => (
             stat(path, !opts.no_deref)
-                .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?
+                .map_err_context(|| {
+                    get_message_with_args(
+                        "touch-error-failed-to-get-attributes",
+                        HashMap::from([("path".to_string(), path.quote().to_string())]),
+                    )
+                })?
                 .0,
             mtime,
         ),
@@ -563,7 +591,12 @@ fn update_times(
     } else {
         set_file_times(path, atime, mtime)
     }
-    .map_err_context(|| format!("setting times of {}", path.quote()))
+    .map_err_context(|| {
+        get_message_with_args(
+            "touch-error-setting-times-of-path",
+            HashMap::from([("path".to_string(), path.quote().to_string())]),
+        )
+    })
 }
 
 /// Get metadata of the provided path
@@ -645,9 +678,15 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> Result<FileTime, TouchError
 /// - 68 and before is interpreted as 20xx
 /// - 69 and after is interpreted as 19xx
 fn prepend_century(s: &str) -> UResult<String> {
-    let first_two_digits = s[..2]
-        .parse::<u32>()
-        .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", s.quote())))?;
+    let first_two_digits = s[..2].parse::<u32>().map_err(|_| {
+        USimpleError::new(
+            1,
+            get_message_with_args(
+                "touch-error-invalid-date-ts-format",
+                HashMap::from([("date".to_string(), s.quote().to_string())]),
+            ),
+        )
+    })?;
     Ok(format!(
         "{}{s}",
         if first_two_digits > 68 { 19 } else { 20 }
@@ -678,17 +717,30 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         _ => {
             return Err(USimpleError::new(
                 1,
-                format!("invalid date format {}", s.quote()),
+                get_message_with_args(
+                    "touch-error-invalid-date-format",
+                    HashMap::from([("date".to_string(), s.quote().to_string())]),
+                ),
             ));
         }
     };
 
-    let local = NaiveDateTime::parse_from_str(&ts, format)
-        .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
+    let local = NaiveDateTime::parse_from_str(&ts, format).map_err(|_| {
+        USimpleError::new(
+            1,
+            get_message_with_args(
+                "touch-error-invalid-date-ts-format",
+                HashMap::from([("date".to_string(), ts.quote().to_string())]),
+            ),
+        )
+    })?;
     let LocalResult::Single(mut local) = Local.from_local_datetime(&local) else {
         return Err(USimpleError::new(
             1,
-            format!("invalid date ts format {}", ts.quote()),
+            get_message_with_args(
+                "touch-error-invalid-date-ts-format",
+                HashMap::from([("date".to_string(), ts.quote().to_string())]),
+            ),
         ));
     };
 
@@ -709,7 +761,10 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     if local.hour() != local2.hour() {
         return Err(USimpleError::new(
             1,
-            format!("invalid date format {}", s.quote()),
+            get_message_with_args(
+                "touch-error-invalid-date-format",
+                HashMap::from([("date".to_string(), s.quote().to_string())]),
+            ),
         ));
     }
 
@@ -763,15 +818,22 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
 
         let buffer_size = match ret {
             ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
-                return Err(TouchError::WindowsStdoutPathError(format!(
-                    "GetFinalPathNameByHandleW failed with code {ret}"
+                return Err(TouchError::WindowsStdoutPathError(get_message_with_args(
+                    "touch-error-windows-stdout-path-failed",
+                    HashMap::from([("code".to_string(), ret.to_string())]),
                 )));
             }
             0 => {
-                return Err(TouchError::WindowsStdoutPathError(format!(
-                    "GetFinalPathNameByHandleW failed with code {}",
-                    // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
-                    unsafe { GetLastError() },
+                return Err(TouchError::WindowsStdoutPathError(get_message_with_args(
+                    "touch-error-windows-stdout-path-failed",
+                    HashMap::from([(
+                        "code".to_string(),
+                        format!(
+                            "{}",
+                            // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
+                            unsafe { GetLastError() }
+                        ),
+                    )]),
                 )));
             }
             e => e as usize,
@@ -794,8 +856,17 @@ mod tests {
     };
 
     #[cfg(windows)]
+    use std::env;
+    #[cfg(windows)]
+    use uucore::locale;
+
+    #[cfg(windows)]
     #[test]
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
+        unsafe {
+            env::set_var("LANG", "C");
+        }
+        let _ = locale::setup_localization("touch");
         // We can trigger an error by not setting stdout to anything (will
         // fail with code 1)
         assert!(

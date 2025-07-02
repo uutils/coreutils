@@ -33,6 +33,9 @@ PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= $(PREFIX)/bin
 DATAROOTDIR ?= $(PREFIX)/share
+LIBSTDBUF_DIR ?= $(PREFIX)/libexec/coreutils
+# Export variable so that it is used during the build
+export LIBSTDBUF_DIR
 
 INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
 
@@ -199,6 +202,8 @@ ifneq ($(OS),Windows_NT)
 	PROGS := $(PROGS) $(UNIX_PROGS)
 # Build the selinux command even if not on the system
 	PROGS := $(PROGS) $(SELINUX_PROGS)
+# Always use external libstdbuf when building with make (Unix only)
+	CARGOFLAGS += --features feat_external_libstdbuf
 endif
 
 UTILS ?= $(PROGS)
@@ -438,6 +443,10 @@ endif
 
 install: build install-manpages install-completions install-locales
 	mkdir -p $(INSTALLDIR_BIN)
+ifneq ($(OS),Windows_NT)
+	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
+	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf* $(DESTDIR)$(LIBSTDBUF_DIR)/
+endif
 ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	$(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
@@ -452,6 +461,10 @@ else
 endif
 
 uninstall:
+ifneq ($(OS),Windows_NT)
+	rm -f $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf*
+	-rmdir $(DESTDIR)$(LIBSTDBUF_DIR) 2>/dev/null || true
+endif
 ifeq (${MULTICALL}, y)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)coreutils)
 endif

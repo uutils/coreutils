@@ -25,6 +25,7 @@ getrandom
 globset
 indicatif
 itertools
+iuse
 langid
 lscolors
 mdbook

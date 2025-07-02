@@ -7,9 +7,11 @@
 
 use crate::{OPT_BYTES, OPT_LINE_BYTES, OPT_LINES, OPT_NUMBER};
 use clap::{ArgMatches, parser::ValueSource};
+use std::collections::HashMap;
 use thiserror::Error;
 use uucore::{
     display::Quotable,
+    locale::{get_message, get_message_with_args},
     parser::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
 };
 
@@ -69,7 +71,7 @@ pub enum NumberTypeError {
     /// -n r/N
     /// -n r/K/N
     /// ```
-    #[error("invalid number of chunks: {}", .0.quote())]
+    #[error("{}", get_message_with_args("split-error-invalid-number-of-chunks", HashMap::from([("chunks".to_string(), .0.quote().to_string())])))]
     NumberOfChunks(String),
 
     /// The chunk number was invalid.
@@ -84,7 +86,7 @@ pub enum NumberTypeError {
     /// -n l/K/N
     /// -n r/K/N
     /// ```
-    #[error("invalid chunk number: {}", .0.quote())]
+    #[error("{}", get_message_with_args("split-error-invalid-chunk-number", HashMap::from([("chunk".to_string(), .0.quote().to_string())])))]
     ChunkNumber(String),
 }
 
@@ -198,11 +200,11 @@ pub enum Strategy {
 #[derive(Debug, Error)]
 pub enum StrategyError {
     /// Invalid number of lines.
-    #[error("invalid number of lines: {0}")]
+    #[error("{}", get_message_with_args("split-error-invalid-number-of-lines", HashMap::from([("error".to_string(), .0.to_string())])))]
     Lines(ParseSizeError),
 
     /// Invalid number of bytes.
-    #[error("invalid number of bytes: {0}")]
+    #[error("{}", get_message_with_args("split-error-invalid-number-of-bytes", HashMap::from([("error".to_string(), .0.to_string())])))]
     Bytes(ParseSizeError),
 
     /// Invalid number type.
@@ -210,7 +212,7 @@ pub enum StrategyError {
     NumberType(NumberTypeError),
 
     /// Multiple chunking strategies were specified (but only one should be).
-    #[error("cannot split in more than one way")]
+    #[error("{}", get_message("split-error-cannot-split-more-than-one-way"))]
     MultipleWays,
 }
 
