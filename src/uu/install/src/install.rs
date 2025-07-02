@@ -1125,13 +1125,3 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
 
     false
 }
-
-#[cfg(feature = "selinux")]
-fn set_selinux_context(path: &Path, behavior: &Behavior) -> UResult<()> {
-    if !behavior.preserve_context && behavior.context.is_some() {
-        // Use the provided context set by -Z/--context
-        set_selinux_security_context(path, behavior.context.as_ref())
-            .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
-    }
-    Ok(())
-}
