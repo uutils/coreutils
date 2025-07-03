@@ -99,7 +99,7 @@ fn is_flag(arg: &OsStr, options: &mut Options) -> bool {
 ///
 /// - Vector of non-flag arguments.
 /// - [`Options`], describing how teh arguments should be interpreted.
-fn filter_flags(mut args: impl uucore::Args) -> (Vec<OsString>, Options) {
+fn filter_flags(mut args: impl Iterator<Item = OsString>) -> (Vec<OsString>, Options) {
     let mut arguments = Vec::with_capacity(args.size_hint().0);
     let mut options = Options::default();
 
@@ -124,7 +124,7 @@ fn filter_flags(mut args: impl uucore::Args) -> (Vec<OsString>, Options) {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // args[0] is the name of the binary.
-    let mut args = args.skip(1).peekable();
+    let args: Vec<OsString> = args.skip(1).collect();
 
     // Check POSIX compatibility mode
     //
@@ -140,13 +140,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let is_posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
 
     let (args, options) = match is_posixly_correct {
-        // if POSIXLY_CORRECT is not set we filter the flags normally
-        false => filter_flags(args),
+        // If POSIXLY_CORRECT is not set and the first argument
+        // is `--help`, GNU coreutils prints the help message.
+        //
+        // Verify this using:
+        //
+        //   POSIXLY_CORRECT=1 echo --help
+        //                     echo --help
+        false if args.len() == 1 && args[0] == "--help" => {
+            uu_app().print_help()?;
+            return Ok(());
+        }
 
-        true if args.peek().is_some_and(|arg| arg == "-n") => {
+        // if POSIXLY_CORRECT is not set we filter the flags normally
+        false => filter_flags(args.into_iter()),
+
+        true if args.first().is_some_and(|arg| arg == "-n") => {
             // if POSIXLY_CORRECT is set and the first argument is the "-n" flag
             // we filter flags normally but 'escaped' is activated nonetheless.
-            let (args, _) = filter_flags(args);
+            let (args, _) = filter_flags(args.into_iter());
             (
                 args,
                 Options {
@@ -159,7 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         true => {
             // if POSIXLY_CORRECT is set and the first argument is not the "-n" flag
             // we just collect all arguments as every argument is considered an argument.
-            (args.collect(), Options::posixly_correct_default())
+            (args, Options::posixly_correct_default())
         }
     };
 
