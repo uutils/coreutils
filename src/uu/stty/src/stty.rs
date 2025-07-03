@@ -266,7 +266,7 @@ fn stty(opts: &Options) -> UResult<()> {
                         1,
                         get_message_with_args(
                             "stty-error-missing-argument",
-                            HashMap::from([("arg".to_string(), arg.to_string())]),
+                            HashMap::from([("arg".to_string(), (*arg).to_string())]),
                         ),
                     ));
                 }
@@ -282,8 +282,8 @@ fn stty(opts: &Options) -> UResult<()> {
                                 get_message_with_args(
                                     "stty-error-invalid-speed",
                                     HashMap::from([
-                                        ("arg".to_string(), arg.to_string()),
-                                        ("speed".to_string(), speed.to_string()),
+                                        ("arg".to_string(), (*arg).to_string()),
+                                        ("speed".to_string(), (*speed).to_string()),
                                     ]),
                                 ),
                             ));
@@ -294,7 +294,7 @@ fn stty(opts: &Options) -> UResult<()> {
                             1,
                             get_message_with_args(
                                 "stty-error-missing-argument",
-                                HashMap::from([("arg".to_string(), arg.to_string())]),
+                                HashMap::from([("arg".to_string(), (*arg).to_string())]),
                             ),
                         ));
                     }
@@ -316,7 +316,7 @@ fn stty(opts: &Options) -> UResult<()> {
                         1,
                         get_message_with_args(
                             "stty-error-invalid-argument",
-                            HashMap::from([("arg".to_string(), arg.to_string())]),
+                            HashMap::from([("arg".to_string(), (*arg).to_string())]),
                         ),
                     ));
                 }
@@ -339,7 +339,7 @@ fn stty(opts: &Options) -> UResult<()> {
                         1,
                         get_message_with_args(
                             "stty-error-missing-argument",
-                            HashMap::from([("arg".to_string(), arg.to_string())]),
+                            HashMap::from([("arg".to_string(), (*arg).to_string())]),
                         ),
                     ));
                 }
@@ -361,7 +361,7 @@ fn stty(opts: &Options) -> UResult<()> {
                         1,
                         get_message_with_args(
                             "stty-error-missing-argument",
-                            HashMap::from([("arg".to_string(), arg.to_string())]),
+                            HashMap::from([("arg".to_string(), (*arg).to_string())]),
                         ),
                     ));
                 }
@@ -373,7 +373,7 @@ fn stty(opts: &Options) -> UResult<()> {
                     1,
                     get_message_with_args(
                         "stty-error-invalid-argument",
-                        HashMap::from([("arg".to_string(), arg.to_string())]),
+                        HashMap::from([("arg".to_string(), (*arg).to_string())]),
                     ),
                 ));
             }
@@ -469,7 +469,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
                 "{} ",
                 get_message_with_args(
                     "stty-output-speed",
-                    HashMap::from([("speed".to_string(), text.to_string())])
+                    HashMap::from([("speed".to_string(), (*text).to_string())])
                 )
             );
             break;

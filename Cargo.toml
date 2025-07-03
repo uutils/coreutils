@@ -645,7 +645,6 @@ redundant_else = "allow"                     # 58
 map_unwrap_or = "allow"                      # 54
 cast_precision_loss = "allow"                # 52
 unnested_or_patterns = "allow"               # 40
-inefficient_to_string = "allow"              # 38
 unnecessary_wraps = "allow"                  # 37
 cast_lossless = "allow"                      # 33
 ignored_unit_patterns = "allow"              # 29
