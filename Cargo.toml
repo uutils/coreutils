@@ -626,6 +626,7 @@ unused_qualifications = "warn"
 all = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
+match_bool = "allow"                         # 8310
 cargo_common_metadata = "allow"              # 3240
 multiple_crate_versions = "allow"            # 2314
 missing_errors_doc = "allow"                 # 1504
