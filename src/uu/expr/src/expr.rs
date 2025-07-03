@@ -16,6 +16,7 @@ use uucore::{
     format_usage,
 };
 
+mod locale_aware;
 mod syntax_tree;
 
 mod options {

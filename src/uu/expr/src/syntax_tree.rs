@@ -11,7 +11,7 @@ use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
 
-use crate::{ExprError, ExprResult};
+use crate::{ExprError, ExprResult, locale_aware::locale_aware_index};
 
 pub(crate) type MaybeNonUtf8String = Vec<u8>;
 pub(crate) type MaybeNonUtf8Str = [u8];
@@ -249,14 +249,8 @@ impl StringOp {
             Self::Index => {
                 let left = left?.eval_as_string();
                 let right = right?.eval_as_string();
-                for (current_idx, ch_h) in left.iter().enumerate() {
-                    for ch_n in &right {
-                        if ch_n == ch_h {
-                            return Ok((current_idx + 1).into());
-                        }
-                    }
-                }
-                Ok(0.into())
+
+                Ok(locale_aware_index(&left, &right).into())
             }
         }
     }

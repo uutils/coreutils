@@ -124,6 +124,7 @@ use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::str;
+use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
@@ -460,6 +461,91 @@ macro_rules! prompt_yes(
         uucore::read_yes()
     })
 );
+
+/// Represent either a character or a byte.
+/// Used to iterate on partially valid UTF-8 data
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CharByte {
+    Char(char),
+    Byte(u8),
+}
+
+impl From<char> for CharByte {
+    fn from(value: char) -> Self {
+        CharByte::Char(value)
+    }
+}
+
+impl From<u8> for CharByte {
+    fn from(value: u8) -> Self {
+        CharByte::Byte(value)
+    }
+}
+
+impl From<&u8> for CharByte {
+    fn from(value: &u8) -> Self {
+        CharByte::Byte(*value)
+    }
+}
+
+struct Utf8ChunkIterator<'a> {
+    iter: Box<dyn Iterator<Item = CharByte> + 'a>,
+}
+
+impl Iterator for Utf8ChunkIterator<'_> {
+    type Item = CharByte;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<'a> From<Utf8Chunk<'a>> for Utf8ChunkIterator<'a> {
+    fn from(chk: Utf8Chunk<'a>) -> Utf8ChunkIterator<'a> {
+        Self {
+            iter: Box::new(
+                chk.valid()
+                    .chars()
+                    .map(CharByte::from)
+                    .chain(chk.invalid().iter().map(CharByte::from)),
+            ),
+        }
+    }
+}
+
+/// Iterates on the valid and invalid parts of a byte sequence with regard to
+/// the UTF-8 encoding.
+pub struct CharByteIterator<'a> {
+    iter: Box<dyn Iterator<Item = CharByte> + 'a>,
+}
+
+impl<'a> CharByteIterator<'a> {
+    /// Make a `CharByteIterator` from a byte slice.
+    /// [`CharByteIterator`]
+    pub fn new(input: &'a [u8]) -> CharByteIterator<'a> {
+        Self {
+            iter: Box::new(input.utf8_chunks().flat_map(Utf8ChunkIterator::from)),
+        }
+    }
+}
+
+impl Iterator for CharByteIterator<'_> {
+    type Item = CharByte;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+pub trait IntoCharByteIterator<'a> {
+    fn iter_char_bytes(self) -> CharByteIterator<'a>;
+}
+
+impl<'a> IntoCharByteIterator<'a> for &'a [u8] {
+    fn iter_char_bytes(self) -> CharByteIterator<'a> {
+        CharByteIterator::new(self)
+    }
+}
 
 #[cfg(test)]
 mod tests {
