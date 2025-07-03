@@ -58,3 +58,13 @@ fn index_with_locale(
 pub(crate) fn locale_aware_index(left: &MaybeNonUtf8Str, right: &MaybeNonUtf8Str) -> usize {
     index_with_locale(left, right, get_locale_encoding())
 }
+
+/// Perform a string length calculation depending on the current locale. In
+/// UTF-8 locale, it will count valid UTF-8 chars, and fallback to counting
+/// bytes otherwise. In Non UTF-8 locale, directly return input byte length.
+pub(crate) fn locale_aware_length(input: &MaybeNonUtf8Str) -> usize {
+    match get_locale_encoding() {
+        UEncoding::Utf8 => std::str::from_utf8(input).map_or(input.len(), |s| s.chars().count()),
+        UEncoding::Ascii => input.len(),
+    }
+}
