@@ -377,6 +377,24 @@ pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
     Ok(s)
 }
 
+/// Converts an `OsString` into a `Vec<u8>`, parsing as UTF-8 on non-unix platforms.
+///
+/// This always succeeds on unix platforms,
+/// and fails on other platforms if the bytes can't be parsed as UTF-8.
+pub fn os_string_to_vec(s: OsString) -> mods::error::UResult<Vec<u8>> {
+    #[cfg(unix)]
+    let v = s.into_vec();
+    #[cfg(not(unix))]
+    let v = s
+        .into_string()
+        .map_err(|_| {
+            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+        })?
+        .into();
+
+    Ok(v)
+}
+
 /// Equivalent to `std::BufRead::lines` which outputs each line as a `Vec<u8>`,
 /// which avoids panicking on non UTF-8 input.
 pub fn read_byte_lines<R: std::io::Read>(

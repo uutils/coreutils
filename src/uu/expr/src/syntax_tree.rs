@@ -7,11 +7,14 @@
 
 use std::{cell::Cell, collections::BTreeMap};
 
-use num_bigint::{BigInt, ParseBigIntError};
+use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::{ExprError, ExprResult};
+
+pub(crate) type MaybeNonUtf8String = Vec<u8>;
+pub(crate) type MaybeNonUtf8Str = [u8];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
@@ -65,7 +68,7 @@ impl RelationOp {
     fn eval(&self, a: ExprResult<NumOrStr>, b: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
         let a = a?;
         let b = b?;
-        let b = if let (Ok(a), Ok(b)) = (&a.to_bigint(), &b.to_bigint()) {
+        let b = if let (Some(a), Some(b)) = (&a.to_bigint(), &b.to_bigint()) {
             match self {
                 Self::Lt => a < b,
                 Self::Leq => a <= b,
@@ -147,8 +150,17 @@ impl StringOp {
                 Ok(left)
             }
             Self::Match => {
-                let left = left?.eval_as_string();
-                let right = right?.eval_as_string();
+                let left = String::from_utf8(left?.eval_as_string()).map_err(|u| {
+                    ExprError::UnsupportedNonUtf8Match(
+                        String::from_utf8_lossy(u.as_bytes()).into_owned(),
+                    )
+                })?;
+                let right = String::from_utf8(right?.eval_as_string()).map_err(|u| {
+                    ExprError::UnsupportedNonUtf8Match(
+                        String::from_utf8_lossy(u.as_bytes()).into_owned(),
+                    )
+                })?;
+
                 check_posix_regex_errors(&right)?;
 
                 // Transpile the input pattern from BRE syntax to `onig` crate's `Syntax::grep`
@@ -237,8 +249,8 @@ impl StringOp {
             Self::Index => {
                 let left = left?.eval_as_string();
                 let right = right?.eval_as_string();
-                for (current_idx, ch_h) in left.chars().enumerate() {
-                    for ch_n in right.to_string().chars() {
+                for (current_idx, ch_h) in left.iter().enumerate() {
+                    for ch_n in &right {
                         if ch_n == ch_h {
                             return Ok((current_idx + 1).into());
                         }
@@ -361,33 +373,33 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
 }
 
 /// Precedence for infix binary operators
-const PRECEDENCE: &[&[(&str, BinOp)]] = &[
-    &[("|", BinOp::String(StringOp::Or))],
-    &[("&", BinOp::String(StringOp::And))],
+const PRECEDENCE: &[&[(&MaybeNonUtf8Str, BinOp)]] = &[
+    &[(b"|", BinOp::String(StringOp::Or))],
+    &[(b"&", BinOp::String(StringOp::And))],
     &[
-        ("<", BinOp::Relation(RelationOp::Lt)),
-        ("<=", BinOp::Relation(RelationOp::Leq)),
-        ("=", BinOp::Relation(RelationOp::Eq)),
-        ("!=", BinOp::Relation(RelationOp::Neq)),
-        (">=", BinOp::Relation(RelationOp::Geq)),
-        (">", BinOp::Relation(RelationOp::Gt)),
+        (b"<", BinOp::Relation(RelationOp::Lt)),
+        (b"<=", BinOp::Relation(RelationOp::Leq)),
+        (b"=", BinOp::Relation(RelationOp::Eq)),
+        (b"!=", BinOp::Relation(RelationOp::Neq)),
+        (b">=", BinOp::Relation(RelationOp::Geq)),
+        (b">", BinOp::Relation(RelationOp::Gt)),
     ],
     &[
-        ("+", BinOp::Numeric(NumericOp::Add)),
-        ("-", BinOp::Numeric(NumericOp::Sub)),
+        (b"+", BinOp::Numeric(NumericOp::Add)),
+        (b"-", BinOp::Numeric(NumericOp::Sub)),
     ],
     &[
-        ("*", BinOp::Numeric(NumericOp::Mul)),
-        ("/", BinOp::Numeric(NumericOp::Div)),
-        ("%", BinOp::Numeric(NumericOp::Mod)),
+        (b"*", BinOp::Numeric(NumericOp::Mul)),
+        (b"/", BinOp::Numeric(NumericOp::Div)),
+        (b"%", BinOp::Numeric(NumericOp::Mod)),
     ],
-    &[(":", BinOp::String(StringOp::Match))],
+    &[(b":", BinOp::String(StringOp::Match))],
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NumOrStr {
     Num(BigInt),
-    Str(String),
+    Str(MaybeNonUtf8String),
 }
 
 impl From<usize> for NumOrStr {
@@ -404,30 +416,37 @@ impl From<BigInt> for NumOrStr {
 
 impl From<String> for NumOrStr {
     fn from(str: String) -> Self {
+        Self::Str(str.into())
+    }
+}
+
+impl From<MaybeNonUtf8String> for NumOrStr {
+    fn from(str: MaybeNonUtf8String) -> Self {
         Self::Str(str)
     }
 }
 
 impl NumOrStr {
-    pub fn to_bigint(&self) -> Result<BigInt, ParseBigIntError> {
+    pub fn to_bigint(&self) -> Option<BigInt> {
         match self {
-            Self::Num(num) => Ok(num.clone()),
-            Self::Str(str) => str.parse::<BigInt>(),
+            Self::Num(num) => Some(num.clone()),
+            Self::Str(str) => std::str::from_utf8(str).ok()?.parse::<BigInt>().ok(),
         }
     }
 
     pub fn eval_as_bigint(self) -> ExprResult<BigInt> {
         match self {
             Self::Num(num) => Ok(num),
-            Self::Str(str) => str
+            Self::Str(str) => String::from_utf8(str)
+                .map_err(|_| ExprError::NonIntegerArgument)?
                 .parse::<BigInt>()
                 .map_err(|_| ExprError::NonIntegerArgument),
         }
     }
 
-    pub fn eval_as_string(self) -> String {
+    pub fn eval_as_string(self) -> MaybeNonUtf8String {
         match self {
-            Self::Num(num) => num.to_string(),
+            Self::Num(num) => num.to_string().into(),
             Self::Str(str) => str,
         }
     }
@@ -447,7 +466,7 @@ pub enum AstNodeInner {
         value: NumOrStr,
     },
     Leaf {
-        value: String,
+        value: MaybeNonUtf8String,
     },
     BinOp {
         op_type: BinOp,
@@ -465,7 +484,7 @@ pub enum AstNodeInner {
 }
 
 impl AstNode {
-    pub fn parse(input: &[impl AsRef<str>]) -> ExprResult<Self> {
+    pub fn parse(input: &[impl AsRef<MaybeNonUtf8Str>]) -> ExprResult<Self> {
         Parser::new(input).parse()
     }
 
@@ -492,7 +511,7 @@ impl AstNode {
                     result_stack.insert(node.id, Ok(value.clone()));
                 }
                 AstNodeInner::Leaf { value, .. } => {
-                    result_stack.insert(node.id, Ok(value.to_string().into()));
+                    result_stack.insert(node.id, Ok(value.to_owned().into()));
                 }
                 AstNodeInner::BinOp {
                     op_type,
@@ -529,7 +548,7 @@ impl AstNode {
                         continue;
                     };
 
-                    let string: String = string?.eval_as_string();
+                    let string: MaybeNonUtf8String = string?.eval_as_string();
 
                     // The GNU docs say:
                     //
@@ -550,7 +569,11 @@ impl AstNode {
                         .unwrap_or(0);
 
                     if let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) {
-                        let result = string.chars().skip(pos).take(length).collect::<String>();
+                        let result = string
+                            .into_iter()
+                            .skip(pos)
+                            .take(length)
+                            .collect::<MaybeNonUtf8String>();
                         result_stack.insert(node.id, Ok(result.into()));
                     } else {
                         result_stack.insert(node.id, Ok(String::new().into()));
@@ -565,7 +588,7 @@ impl AstNode {
                         continue;
                     };
 
-                    let length = string?.eval_as_string().chars().count();
+                    let length = string?.eval_as_string().iter().count();
                     result_stack.insert(node.id, Ok(length.into()));
                 }
             }
@@ -591,17 +614,17 @@ fn get_next_id() -> u32 {
     })
 }
 
-struct Parser<'a, S: AsRef<str>> {
+struct Parser<'a, S: AsRef<MaybeNonUtf8Str>> {
     input: &'a [S],
     index: usize,
 }
 
-impl<'a, S: AsRef<str>> Parser<'a, S> {
+impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
     fn new(input: &'a [S]) -> Self {
         Self { input, index: 0 }
     }
 
-    fn next(&mut self) -> ExprResult<&'a str> {
+    fn next(&mut self) -> ExprResult<&'a MaybeNonUtf8Str> {
         let next = self.input.get(self.index);
         if let Some(next) = next {
             self.index += 1;
@@ -610,12 +633,12 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
             // The indexing won't panic, because we know that the input size
             // is greater than zero.
             Err(ExprError::MissingArgument(
-                self.input[self.index - 1].as_ref().into(),
+                String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into_owned(),
             ))
         }
     }
 
-    fn accept<T>(&mut self, f: impl Fn(&str) -> Option<T>) -> Option<T> {
+    fn accept<T>(&mut self, f: impl Fn(&MaybeNonUtf8Str) -> Option<T>) -> Option<T> {
         let next = self.input.get(self.index)?;
         let tok = f(next.as_ref());
         if let Some(tok) = tok {
@@ -632,7 +655,9 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
         }
         let res = self.parse_expression()?;
         if let Some(arg) = self.input.get(self.index) {
-            return Err(ExprError::UnexpectedArgument(arg.as_ref().into()));
+            return Err(ExprError::UnexpectedArgument(
+                String::from_utf8_lossy(arg.as_ref()).into_owned(),
+            ));
         }
         Ok(res)
     }
@@ -675,7 +700,7 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
     fn parse_simple_expression(&mut self) -> ExprResult<AstNode> {
         let first = self.next()?;
         let inner = match first {
-            "match" => {
+            b"match" => {
                 let left = self.parse_simple_expression()?;
                 let right = self.parse_simple_expression()?;
                 AstNodeInner::BinOp {
@@ -684,7 +709,7 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
                     right: Box::new(right),
                 }
             }
-            "substr" => {
+            b"substr" => {
                 let string = self.parse_simple_expression()?;
                 let pos = self.parse_simple_expression()?;
                 let length = self.parse_simple_expression()?;
@@ -694,7 +719,7 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
                     length: Box::new(length),
                 }
             }
-            "index" => {
+            b"index" => {
                 let left = self.parse_simple_expression()?;
                 let right = self.parse_simple_expression()?;
                 AstNodeInner::BinOp {
@@ -703,32 +728,32 @@ impl<'a, S: AsRef<str>> Parser<'a, S> {
                     right: Box::new(right),
                 }
             }
-            "length" => {
+            b"length" => {
                 let string = self.parse_simple_expression()?;
                 AstNodeInner::Length {
                     string: Box::new(string),
                 }
             }
-            "+" => AstNodeInner::Leaf {
+            b"+" => AstNodeInner::Leaf {
                 value: self.next()?.into(),
             },
-            "(" => {
+            b"(" => {
                 // Evaluate the node just after parsing to we detect arithmetic
                 // errors before checking for the closing parenthesis.
                 let s = self.parse_expression()?.evaluated()?;
 
                 match self.next() {
-                    Ok(")") => {}
+                    Ok(b")") => {}
                     // Since we have parsed at least a '(', there will be a token
                     // at `self.index - 1`. So this indexing won't panic.
                     Ok(_) => {
                         return Err(ExprError::ExpectedClosingBraceInsteadOf(
-                            self.input[self.index - 1].as_ref().into(),
+                            String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
                         ));
                     }
                     Err(ExprError::MissingArgument(_)) => {
                         return Err(ExprError::ExpectedClosingBraceAfter(
-                            self.input[self.index - 1].as_ref().into(),
+                            String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
                         ));
                     }
                     Err(e) => return Err(e),
@@ -752,11 +777,11 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
         NumOrStr::Num(num) => num != &BigInt::from(0),
         NumOrStr::Str(str) => {
             // Edge case: `-` followed by nothing is truthy
-            if str == "-" {
+            if str == b"-" {
                 return true;
             }
 
-            let mut bytes = str.bytes();
+            let mut bytes = str.iter().copied();
 
             // Empty string is falsy
             let Some(first) = bytes.next() else {
@@ -922,7 +947,7 @@ mod test {
             .unwrap()
             .eval()
             .unwrap();
-        assert_eq!(result.eval_as_string(), "");
+        assert_eq!(result.eval_as_string(), b"");
     }
 
     #[test]
@@ -931,13 +956,13 @@ mod test {
             .unwrap()
             .eval()
             .unwrap();
-        assert_eq!(result.eval_as_string(), "0");
+        assert_eq!(result.eval_as_string(), b"0");
 
         let result = AstNode::parse(&["*cats", ":", r"*cats"])
             .unwrap()
             .eval()
             .unwrap();
-        assert_eq!(result.eval_as_string(), "5");
+        assert_eq!(result.eval_as_string(), b"5");
     }
 
     #[test]
@@ -946,7 +971,7 @@ mod test {
             .unwrap()
             .eval()
             .unwrap();
-        assert_eq!(result.eval_as_string(), "0");
+        assert_eq!(result.eval_as_string(), b"0");
     }
 
     #[test]
