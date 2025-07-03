@@ -268,7 +268,7 @@ struct Stater {
 ///
 /// # Arguments
 ///
-/// * `output` - A reference to the OutputType enum containing the value to be printed.
+/// * `output` - A reference to the [`OutputType`] enum containing the value to be printed.
 /// * `flags` - A Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed output.
 /// * `precision` - How many digits of precision, if any.

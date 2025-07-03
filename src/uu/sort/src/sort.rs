@@ -933,7 +933,7 @@ impl FieldSelector {
     }
 
     /// Get the selection that corresponds to this selector for the line.
-    /// If needs_fields returned false, tokens may be empty.
+    /// If `needs_fields` returned false, tokens may be empty.
     fn get_selection<'a>(&self, line: &'a str, tokens: &[Field]) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
@@ -964,7 +964,7 @@ impl FieldSelector {
     }
 
     /// Look up the range in the line that corresponds to this selector.
-    /// If needs_fields returned false, tokens must be None.
+    /// If `needs_fields` returned false, tokens must be None.
     fn get_range(&self, line: &str, tokens: Option<&[Field]>) -> Range<usize> {
         enum Resolution {
             // The start index of the resolved character, inclusive
@@ -1878,8 +1878,8 @@ pub enum GeneralBigDecimalParseResult {
     Infinity,
 }
 
-/// Parse the beginning string into a GeneralBigDecimalParseResult.
-/// Using a GeneralBigDecimalParseResult instead of ExtendedBigDecimal is necessary to correctly order floats.
+/// Parse the beginning string into a [`GeneralBigDecimalParseResult`].
+/// Using a [`GeneralBigDecimalParseResult`] instead of [`ExtendedBigDecimal`] is necessary to correctly order floats.
 #[inline(always)]
 fn general_bd_parse(a: &str) -> GeneralBigDecimalParseResult {
     // Parse digits, and fold in recoverable errors
@@ -1946,7 +1946,7 @@ enum Month {
     December,
 }
 
-/// Parse the beginning string into a Month, returning Month::Unknown on errors.
+/// Parse the beginning string into a Month, returning [`Month::Unknown`] on errors.
 fn month_parse(line: &str) -> Month {
     let line = line.trim();
 

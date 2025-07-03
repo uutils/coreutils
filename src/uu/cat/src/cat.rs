@@ -188,7 +188,7 @@ struct InputHandle<R: FdReadable> {
 /// Concrete enum of recognized file types.
 ///
 /// *Note*: `cat`-ing a directory should result in an
-/// CatError::IsDirectory
+/// [`CatError::IsDirectory`]
 enum InputType {
     Directory,
     File,

@@ -539,7 +539,7 @@ impl Settings {
 }
 
 /// When using `--filter` option, writing to child command process stdin
-/// could fail with BrokenPipe error
+/// could fail with [`ErrorKind::BrokenPipe`] error
 /// It can be safely ignored
 fn ignorable_io_error(error: &io::Error, settings: &Settings) -> bool {
     error.kind() == ErrorKind::BrokenPipe && settings.filter.is_some()
@@ -560,7 +560,7 @@ fn custom_write<T: Write>(bytes: &[u8], writer: &mut T, settings: &Settings) -> 
 
 /// Custom wrapper for `write_all()` method
 /// Similar to [`custom_write`], but returns true or false
-/// depending on if `--filter` stdin is still open (no BrokenPipe error)
+/// depending on if `--filter` stdin is still open (no [`ErrorKind::BrokenPipe`] error)
 /// Should not be used for Kth chunk number sub-strategies
 /// as those do not work with `--filter` option
 fn custom_write_all<T: Write>(
@@ -923,7 +923,7 @@ trait ManageOutFiles {
         settings: &Settings,
     ) -> UResult<&mut BufWriter<Box<dyn Write>>>;
     /// Initialize a new set of output files
-    /// Each OutFile is generated with filename, while the writer for it could be
+    /// Each [`OutFile`] is generated with filename, while the writer for it could be
     /// optional, to be instantiated later by the calling function as needed.
     /// Optional writers could happen in the following situations:
     /// * in [`n_chunks_by_line`] and [`n_chunks_by_line_round_robin`] if `elide_empty_files` parameter is set to `true`

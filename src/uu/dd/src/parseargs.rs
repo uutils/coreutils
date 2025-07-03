@@ -446,7 +446,7 @@ fn show_zero_multiplier_warning() {
     );
 }
 
-/// Parse bytes using str::parse, then map error if needed.
+/// Parse bytes using [`str::parse`], then map error if needed.
 fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
     s[..i]
         .parse()
@@ -502,7 +502,7 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
 }
 
 /// Parse byte and multiplier like 512, 5KiB, or 1G.
-/// Uses uucore::parse_size, and adds the 'w' and 'c' suffixes which are mentioned
+/// Uses [`uucore::parser::parse_size`], and adds the 'w' and 'c' suffixes which are mentioned
 /// in dd's info page.
 pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
     // TODO On my Linux system, there seems to be a maximum block size of 4096 bytes:

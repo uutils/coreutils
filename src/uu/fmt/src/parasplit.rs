@@ -207,10 +207,10 @@ impl Iterator for FileLines<'_> {
     }
 }
 
-/// A paragraph : a collection of FileLines that are to be formatted
+/// A paragraph : a collection of [`FileLines`] that are to be formatted
 /// plus info about the paragraph's indentation
 ///
-/// We only retain the String from the FileLine; the other info
+/// We only retain the String from the [`FileLine`]; the other info
 /// is only there to help us in deciding how to merge lines into Paragraphs
 #[derive(Debug)]
 pub struct Paragraph {

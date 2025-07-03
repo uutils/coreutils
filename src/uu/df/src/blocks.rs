@@ -40,8 +40,8 @@ const SI_BASES: [u128; 10] = [
     1_000_000_000_000_000_000_000_000_000,
 ];
 
-/// A SuffixType determines whether the suffixes are 1000 or 1024 based, and whether they are
-/// intended for HumanReadable mode or not.
+/// A `SuffixType` determines whether the suffixes are 1000 or 1024 based, and whether they are
+/// intended for `HumanReadable` mode or not.
 #[derive(Clone, Copy)]
 pub(crate) enum SuffixType {
     Iec,

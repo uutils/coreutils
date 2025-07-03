@@ -42,10 +42,10 @@ pub struct Config<'a> {
     /// Print message for each created directory.
     pub verbose: bool,
 
-    /// Set SELinux security context.
+    /// Set `SELinux` security context.
     pub set_selinux_context: bool,
 
-    /// Specific SELinux context.
+    /// Specific `SELinux` context.
     pub context: Option<&'a String>,
 }
 

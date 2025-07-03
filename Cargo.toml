@@ -635,7 +635,6 @@ multiple_crate_versions = "allow"            # 2314
 missing_errors_doc = "allow"                 # 1504
 missing_panics_doc = "allow"                 # 946
 must_use_candidate = "allow"                 # 322
-doc_markdown = "allow"                       # 267
 match_same_arms = "allow"                    # 212
 unnecessary_semicolon = "allow"              # 156
 redundant_closure_for_method_calls = "allow" # 133

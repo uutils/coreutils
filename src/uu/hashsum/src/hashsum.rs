@@ -57,7 +57,7 @@ struct Options<'a> {
 ///
 /// # Returns
 ///
-/// Returns a UResult of a tuple containing the algorithm name, the hasher instance, and
+/// Returns a [`UResult`] of a tuple containing the algorithm name, the hasher instance, and
 /// the output length in bits or an Err if multiple hash algorithms are specified or if a
 /// required flag is missing.
 #[allow(clippy::cognitive_complexity)]

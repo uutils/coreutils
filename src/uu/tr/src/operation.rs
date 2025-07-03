@@ -581,7 +581,7 @@ impl Sequence {
 pub trait SymbolTranslator {
     fn translate(&mut self, current: u8) -> Option<u8>;
 
-    /// Takes two SymbolTranslators and creates a new SymbolTranslator over both in sequence.
+    /// Takes two [`SymbolTranslator`]s and creates a new [`SymbolTranslator`] over both in sequence.
     ///
     /// This behaves pretty much identical to [`Iterator::chain`].
     fn chain<T>(self, other: T) -> ChainedSymbolTranslator<Self, T>

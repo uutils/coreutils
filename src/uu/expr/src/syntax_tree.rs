@@ -331,7 +331,7 @@ where
 ///
 /// This method is not comprehensively checking all cases in which
 /// a regular expression could be invalid; any cases not caught will
-/// result in a [ExprError::InvalidRegexExpression] when passing the
+/// result in a [`ExprError::InvalidRegexExpression`] when passing the
 /// regular expression through the Oniguruma bindings. This method is
 /// intended to just identify a few situations for which GNU coreutils
 /// has specific error messages.

@@ -18,7 +18,7 @@ use uucore::{
 
 use crate::SortError;
 
-/// A wrapper around TempDir that may only exist once in a process.
+/// A wrapper around [`TempDir`] that may only exist once in a process.
 ///
 /// `TmpDirWrapper` handles the allocation of new temporary files in this temporary directory and
 /// deleting the whole directory when `SIGINT` is received. Creating a second `TmpDirWrapper` will

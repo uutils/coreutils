@@ -69,8 +69,8 @@ fn is_echo_flag(arg: &OsString, echo_options: &mut EchoOptions) -> bool {
 /// Processes command line arguments, separating flags from normal arguments
 /// Returns:
 /// - Vector of non-flag arguments
-/// - trailing_newline: whether to print a trailing newline
-/// - escape: whether to process escape sequences
+/// - `trailing_newline`: whether to print a trailing newline
+/// - `escape`: whether to process escape sequences
 fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
     let mut result = Vec::new();
     let mut echo_options = EchoOptions {

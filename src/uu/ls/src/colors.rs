@@ -147,9 +147,8 @@ impl<'a> StyleManager<'a> {
 }
 
 /// Colors the provided name based on the style determined for the given path
-/// This function is quite long because it tries to leverage DirEntry to avoid
-/// unnecessary calls to stat()
-/// and manages the symlink errors
+/// This function is quite long because it tries to leverage [`DirEntry`] to avoid
+/// unnecessary calls to stat and manages the symlink errors
 pub(crate) fn color_name(
     name: OsString,
     path: &PathData,

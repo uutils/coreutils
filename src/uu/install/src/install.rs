@@ -655,8 +655,8 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
 ///
 /// # Parameters
 ///
-/// _files_ must all exist as non-directories.
-/// _target_dir_ must be a directory.
+/// `files` must all exist as non-directories.
+/// `target_dir` must be a directory.
 ///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
@@ -768,7 +768,7 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     }
 }
 
-/// Copy a non-special file using std::fs::copy.
+/// Copy a non-special file using [`fs::copy`].
 ///
 /// # Parameters
 /// * `from` - The source file path.

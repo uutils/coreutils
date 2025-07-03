@@ -29,10 +29,10 @@ enum CloneFallback {
     /// Use [`std::fs::copy`].
     FSCopy,
 
-    /// Use sparse_copy
+    /// Use [`sparse_copy`]
     SparseCopy,
 
-    /// Use sparse_copy_without_hole
+    /// Use [`sparse_copy_without_hole`]
     SparseCopyWithoutHole,
 }
 
@@ -43,9 +43,9 @@ enum CopyMethod {
     SparseCopy,
     /// Use [`std::fs::copy`].
     FSCopy,
-    /// Default (can either be sparse_copy or FSCopy)
+    /// Default (can either be [`CopyMethod::SparseCopy`] or [`CopyMethod::FSCopy`])
     Default,
-    /// Use sparse_copy_without_hole
+    /// Use [`sparse_copy_without_hole`]
     SparseCopyWithoutHole,
 }
 
@@ -124,8 +124,8 @@ fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     Ok(false)
 }
 
-/// Optimized sparse_copy, doesn't create holes for large sequences of zeros in non sparse_files
-/// Used when --sparse=auto
+/// Optimized [`sparse_copy`] doesn't create holes for large sequences of zeros in non `sparse_files`
+/// Used when `--sparse=auto`
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn sparse_copy_without_hole<P>(source: P, dest: P) -> std::io::Result<()>
 where
@@ -175,7 +175,7 @@ where
     Ok(())
 }
 /// Perform a sparse copy from one file to another.
-/// Creates a holes for large sequences of zeros in non_sparse_files, used for --sparse=always
+/// Creates a holes for large sequences of zeros in `non_sparse_files`, used for `--sparse=always`
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
@@ -470,7 +470,7 @@ fn handle_reflink_never_sparse_never(source: &Path) -> Result<CopyDebug, std::io
 }
 
 /// Handles debug results when flags are "--reflink=auto" and "--sparse=never", files will be copied
-/// through cloning them with fallback switching to std::fs::copy
+/// through cloning them with fallback switching to [`std::fs::copy`]
 fn handle_reflink_auto_sparse_never(source: &Path) -> Result<CopyDebug, std::io::Error> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
