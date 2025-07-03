@@ -11,6 +11,7 @@ use std::io::{self, StdoutLock, Write};
 use uucore::error::{UResult, USimpleError};
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
 use uucore::format_usage;
+use uucore::os_str_as_bytes;
 
 use uucore::locale::get_message;
 
@@ -99,7 +100,7 @@ fn is_flag(arg: &OsStr, options: &mut Options) -> bool {
 ///
 /// - Vector of non-flag arguments.
 /// - [`Options`], describing how teh arguments should be interpreted.
-fn filter_flags(mut args: impl uucore::Args) -> (Vec<OsString>, Options) {
+fn filter_flags(mut args: impl Iterator<Item = OsString>) -> (Vec<OsString>, Options) {
     let mut arguments = Vec::with_capacity(args.size_hint().0);
     let mut options = Options::default();
 
@@ -124,7 +125,7 @@ fn filter_flags(mut args: impl uucore::Args) -> (Vec<OsString>, Options) {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // args[0] is the name of the binary.
-    let mut args = args.skip(1).peekable();
+    let args: Vec<OsString> = args.skip(1).collect();
 
     // Check POSIX compatibility mode
     //
@@ -139,14 +140,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // > representation. For example, echo -e '\x2dn'.
     let is_posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
 
-    let (args, options) = match is_posixly_correct {
-        // if POSIXLY_CORRECT is not set we filter the flags normally
-        false => filter_flags(args),
-
-        true if args.peek().is_some_and(|arg| arg == "-n") => {
+    let (args, options) = if is_posixly_correct {
+        if args.first().is_some_and(|arg| arg == "-n") {
             // if POSIXLY_CORRECT is set and the first argument is the "-n" flag
             // we filter flags normally but 'escaped' is activated nonetheless.
-            let (args, _) = filter_flags(args);
+            let (args, _) = filter_flags(args.into_iter());
             (
                 args,
                 Options {
@@ -154,13 +152,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     ..Options::posixly_correct_default()
                 },
             )
-        }
-
-        true => {
+        } else {
             // if POSIXLY_CORRECT is set and the first argument is not the "-n" flag
-            // we just collect all arguments as every argument is considered an argument.
-            (args.collect(), Options::posixly_correct_default())
+            // we just collect all arguments as no arguments are interpreted as flags.
+            (args, Options::posixly_correct_default())
         }
+    } else if args.len() == 1 && args[0] == "--help" {
+        // If POSIXLY_CORRECT is not set and the first argument
+        // is `--help`, GNU coreutils prints the help message.
+        //
+        // Verify this using:
+        //
+        //   POSIXLY_CORRECT=1 echo --help
+        //                     echo --help
+        uu_app().print_help()?;
+        return Ok(());
+    } else {
+        // if POSIXLY_CORRECT is not set we filter the flags normally
+        filter_flags(args.into_iter())
     };
 
     execute(&mut io::stdout().lock(), args, options)?;
@@ -211,9 +220,8 @@ pub fn uu_app() -> Command {
 
 fn execute(stdout: &mut StdoutLock, args: Vec<OsString>, options: Options) -> UResult<()> {
     for (i, arg) in args.into_iter().enumerate() {
-        let Some(bytes) = bytes_from_os_string(arg.as_os_str()) else {
-            return Err(USimpleError::new(1, get_message("echo-error-non-utf8")));
-        };
+        let bytes = os_str_as_bytes(arg.as_os_str())
+            .map_err(|_| USimpleError::new(1, get_message("echo-error-non-utf8")))?;
 
         if i > 0 {
             stdout.write_all(b" ")?;
@@ -235,19 +243,4 @@ fn execute(stdout: &mut StdoutLock, args: Vec<OsString>, options: Options) -> UR
     }
 
     Ok(())
-}
-
-fn bytes_from_os_string(input: &OsStr) -> Option<&[u8]> {
-    #[cfg(target_family = "unix")]
-    {
-        use std::os::unix::ffi::OsStrExt;
-
-        Some(input.as_bytes())
-    }
-
-    #[cfg(not(target_family = "unix"))]
-    {
-        // TODO: Verify that this works correctly on these platforms
-        input.to_str().map(|st| st.as_bytes())
-    }
 }
