@@ -518,8 +518,8 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
     }
 }
 
-// Some env variables can be passed
-// For now, we are only verifying if empty or not and known for TERM
+/// Some env variables can be passed
+/// For now, we are only verifying if empty or not and known for `TERM`
 fn is_color_compatible_term() -> bool {
     let is_term_set = std::env::var("TERM").is_ok();
     let is_colorterm_set = std::env::var("COLORTERM").is_ok();
@@ -3322,8 +3322,8 @@ fn display_inode(metadata: &Metadata) -> String {
     get_inode(metadata)
 }
 
-// This returns the SELinux security context as UTF8 `String`.
-// In the long term this should be changed to `OsStr`, see discussions at #2621/#2656
+/// This returns the `SELinux` security context as UTF8 `String`.
+/// In the long term this should be changed to [`OsStr`], see discussions at #2621/#2656
 fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
     let substitute_string = "?".to_string();
     // If we must dereference, ensure that the symlink is actually valid even if the system

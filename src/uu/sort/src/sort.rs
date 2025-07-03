@@ -978,7 +978,7 @@ impl FieldSelector {
             TooHigh,
         }
 
-        // Get the index for this line given the KeyPosition
+        /// Get the index for this line given the [`KeyPosition`]
         fn resolve_index(
             line: &str,
             tokens: Option<&[Field]>,

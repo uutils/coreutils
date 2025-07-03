@@ -49,7 +49,7 @@ fn generate_wc_args() -> String {
     args.join(" ")
 }
 
-// Function to generate a random string of lines, including invalid ones
+/// Function to generate a random string of lines, including invalid ones
 fn generate_random_lines(count: usize) -> String {
     let mut rng = rand::rng();
     let mut lines = Vec::new();

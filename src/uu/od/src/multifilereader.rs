@@ -102,11 +102,11 @@ impl MultifileReader<'_> {
 }
 
 impl io::Read for MultifileReader<'_> {
-    // Fill buf with bytes read from the list of files
-    // Returns Ok(<number of bytes read>)
-    // Handles io errors itself, thus always returns OK
-    // Fills the provided buffer completely, unless it has run out of input.
-    // If any call returns short (< buf.len()), all subsequent calls will return Ok<0>
+    /// Fill buf with bytes read from the list of files
+    /// Returns `Ok(<number of bytes read>)`
+    /// Handles io errors itself, thus always returns OK
+    /// Fills the provided buffer completely, unless it has run out of input.
+    /// If any call returns short (`< buf.len()`), all subsequent calls will return Ok<0>
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut xfrd = 0;
         // while buffer we are filling is not full.. May go through several files.

@@ -104,7 +104,7 @@ fn cut_bytes<R: Read, W: Write>(
     Ok(())
 }
 
-// Output delimiter is explicitly specified
+/// Output delimiter is explicitly specified
 fn cut_fields_explicit_out_delim<R: Read, W: Write, M: Matcher>(
     reader: R,
     out: &mut W,
@@ -189,7 +189,7 @@ fn cut_fields_explicit_out_delim<R: Read, W: Write, M: Matcher>(
     Ok(())
 }
 
-// Output delimiter is the same as input delimiter
+/// Output delimiter is the same as input delimiter
 fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
     reader: R,
     out: &mut W,
@@ -260,7 +260,7 @@ fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
     Ok(())
 }
 
-// The input delimiter is identical to `newline_char`
+/// The input delimiter is identical to `newline_char`
 fn cut_fields_newline_char_delim<R: Read, W: Write>(
     reader: R,
     out: &mut W,
@@ -402,8 +402,8 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
     );
 }
 
-// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
-// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
+/// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
+/// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
 fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter, Option<&[u8]>)> {
     let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
     let delim_opt = matches.get_one::<OsString>(options::DELIMITER);

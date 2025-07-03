@@ -1338,8 +1338,8 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize {
     (ibs / gcd) * obs
 }
 
-// Calculate the buffer size appropriate for this loop iteration, respecting
-// a count=N if present.
+/// Calculate the buffer size appropriate for this loop iteration, respecting
+/// a `count=N` if present.
 fn calc_loop_bsize(
     count: Option<Num>,
     rstat: &ReadStat,
@@ -1362,8 +1362,8 @@ fn calc_loop_bsize(
     }
 }
 
-// Decide if the current progress is below a count=N limit or return
-// true if no such limit is set.
+/// Decide if the current progress is below a `count=N` limit or return
+/// `true` if no such limit is set.
 fn below_count_limit(count: Option<Num>, rstat: &ReadStat) -> bool {
     match count {
         Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < n,

@@ -69,7 +69,7 @@ fn parse_userspec(spec: &str) -> UserSpec {
     }
 }
 
-// Pre-condition: `list_str` is non-empty.
+/// Pre-condition: `list_str` is non-empty.
 fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
     let split: Vec<&str> = list_str.split(',').collect();
     if split.len() == 1 {

@@ -107,8 +107,8 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
     Ok((number, suffix))
 }
 
-// Returns the implicit precision of a number, which is the count of digits after the dot. For
-// example, 1.23 has an implicit precision of 2.
+/// Returns the implicit precision of a number, which is the count of digits after the dot. For
+/// example, 1.23 has an implicit precision of 2.
 fn parse_implicit_precision(s: &str) -> usize {
     match s.split_once('.') {
         Some((_, decimal_part)) => decimal_part
@@ -217,7 +217,7 @@ pub fn div_round(n: f64, d: f64, method: RoundMethod) -> f64 {
     }
 }
 
-// Rounds to the specified number of decimal points.
+/// Rounds to the specified number of decimal points.
 fn round_with_precision(n: f64, method: RoundMethod, precision: usize) -> f64 {
     let p = 10.0_f64.powf(precision as f64);
 

@@ -21,10 +21,10 @@ pub enum ParseNumberError {
     Nan,
 }
 
-// Compute the number of integral and fractional digits in input string,
-// and wrap the result in a PreciseNumber.
-// We know that the string has already been parsed correctly, so we don't
-// need to be too careful.
+/// Compute the number of integral and fractional digits in input string,
+/// and wrap the result in a PreciseNumber.
+/// We know that the string has already been parsed correctly, so we don't
+/// need to be too careful.
 fn compute_num_digits(input: &str, ebd: ExtendedBigDecimal) -> PreciseNumber {
     let input = input.to_lowercase();
     let input = input.trim_start();

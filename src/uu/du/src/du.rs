@@ -198,9 +198,9 @@ impl Stat {
 }
 
 #[cfg(windows)]
-// https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.last_access_time
-// "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
-// "If the underlying filesystem does not support last access time, the returned value is 0."
+/// <https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.last_access_time>
+/// "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
+/// "If the underlying filesystem does not support last access time, the returned value is 0."
 fn windows_time_to_unix_time(win_time: u64) -> u64 {
     (win_time / 10_000_000).saturating_sub(11_644_473_600)
 }
@@ -454,7 +454,7 @@ impl UError for DuError {
     }
 }
 
-// Read a file and return each line in a vector of String
+/// Read a file and return each line in a vector of String
 fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
     let file = File::open(filename).expect("no such file");
     let buf = BufReader::new(file);
@@ -464,8 +464,8 @@ fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
         .collect()
 }
 
-// Given the --exclude-from and/or --exclude arguments, returns the globset lists
-// to ignore the files
+/// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
+/// to ignore the files
 fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
         .get_many::<String>(options::EXCLUDE_FROM)
@@ -595,7 +595,7 @@ impl StatPrinter {
     }
 }
 
-// Read file paths from the specified file, separated by null characters
+/// Read file paths from the specified file, separated by null characters
 fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     let reader: Box<dyn BufRead> = if file_name == "-" {
         // Read from standard input
