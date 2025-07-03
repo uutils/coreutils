@@ -111,7 +111,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-// check a path, given as a slice of it's components and an operating mode
+/// check a path, given as a slice of it's components and an operating mode
 fn check_path(mode: &Mode, path: &[String]) -> bool {
     match *mode {
         Mode::Basic => check_basic(path),
@@ -121,7 +121,7 @@ fn check_path(mode: &Mode, path: &[String]) -> bool {
     }
 }
 
-// check a path in basic compatibility mode
+/// check a path in basic compatibility mode
 fn check_basic(path: &[String]) -> bool {
     let joined_path = path.join("/");
     let total_len = joined_path.len();
@@ -174,7 +174,7 @@ fn check_basic(path: &[String]) -> bool {
     check_searchable(&joined_path)
 }
 
-// check a path in extra compatibility mode
+/// check a path in extra compatibility mode
 fn check_extra(path: &[String]) -> bool {
     // components: leading hyphens
     for p in path {
@@ -202,7 +202,7 @@ fn check_extra(path: &[String]) -> bool {
     true
 }
 
-// check a path in default mode (using the file system)
+/// check a path in default mode (using the file system)
 fn check_default(path: &[String]) -> bool {
     let joined_path = path.join("/");
     let total_len = joined_path.len();
@@ -260,7 +260,7 @@ fn check_default(path: &[String]) -> bool {
     check_searchable(&joined_path)
 }
 
-// check whether a path is or if other problems arise
+/// check whether a path is or if other problems arise
 fn check_searchable(path: &str) -> bool {
     // we use lstat, just like the original implementation
     match fs::symlink_metadata(path) {
@@ -276,7 +276,7 @@ fn check_searchable(path: &str) -> bool {
     }
 }
 
-// check whether a path segment contains only valid (read: portable) characters
+/// check whether a path segment contains only valid (read: portable) characters
 fn check_portable_chars(path_segment: &str) -> bool {
     const VALID_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
     for (i, ch) in path_segment.as_bytes().iter().enumerate() {

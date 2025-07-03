@@ -26,9 +26,9 @@ fn char_width(c: char) -> usize {
     }
 }
 
-// GNU fmt has a more restrictive definition of whitespace than Unicode.
-// It only considers ASCII whitespace characters (space, tab, newline, etc.)
-// and excludes many Unicode whitespace characters like non-breaking spaces.
+/// GNU fmt has a more restrictive definition of whitespace than Unicode.
+/// It only considers ASCII whitespace characters (space, tab, newline, etc.)
+/// and excludes many Unicode whitespace characters like non-breaking spaces.
 fn is_fmt_whitespace(c: char) -> bool {
     // Only ASCII whitespace characters are considered whitespace in GNU fmt
     matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0B' | '\x0C')
@@ -43,7 +43,7 @@ pub enum Line {
 }
 
 impl Line {
-    // when we know that it's a FormatLine, as in the ParagraphStream iterator
+    /// when we know that it's a [`Line::FormatLine`], as in the [`ParagraphStream`] iterator
     fn get_formatline(self) -> FileLine {
         match self {
             Self::FormatLine(fl) => fl,
@@ -51,7 +51,7 @@ impl Line {
         }
     }
 
-    // when we know that it's a NoFormatLine, as in the ParagraphStream iterator
+    /// when we know that it's a [`Line::NoFormatLine`], as in the [`ParagraphStream`] iterator
     fn get_noformatline(self) -> (String, bool) {
         match self {
             Self::NoFormatLine(s, b) => (s, b),

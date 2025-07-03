@@ -55,7 +55,7 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
 }
 
-// Copies words from `i` into `buf`, separated by spaces.
+/// Copies words from `i` into `buf`, separated by spaces.
 fn args_into_buffer<'a>(
     buf: &mut Vec<u8>,
     i: Option<impl Iterator<Item = &'a OsString>>,
@@ -95,8 +95,8 @@ fn args_into_buffer<'a>(
     Ok(())
 }
 
-// Assumes buf holds a single output line forged from the command line arguments, copies it
-// repeatedly until the buffer holds as many copies as it can under BUF_SIZE.
+/// Assumes buf holds a single output line forged from the command line arguments, copies it
+/// repeatedly until the buffer holds as many copies as it can under [`BUF_SIZE`].
 fn prepare_buffer(buf: &mut Vec<u8>) {
     if buf.len() * 2 > BUF_SIZE {
         return;

@@ -96,9 +96,9 @@ pub enum ChrootError {
 }
 
 impl UError for ChrootError {
-    // 125 if chroot itself fails
-    // 126 if command is found but cannot be invoked
-    // 127 if command cannot be found
+    /// 125 if chroot itself fails
+    /// 126 if command is found but cannot be invoked
+    /// 127 if command cannot be found
     fn code(&self) -> i32 {
         match self {
             Self::CommandFailed(_, _) => 126,

@@ -409,8 +409,8 @@ fn stty(opts: &Options) -> UResult<()> {
     Ok(())
 }
 
-// GNU uses an unsigned 32 bit integer for row/col sizes, but then wraps around 16 bits
-// this function returns Some(n), where n is a u16 row/col size, or None if the string arg cannot be parsed as a u32
+/// GNU uses an unsigned 32 bit integer for row/col sizes, but then wraps around 16 bits
+/// this function returns Some(n), where n is a u16 row/col size, or None if the string arg cannot be parsed as a u32
 fn parse_rows_cols(arg: &str) -> Option<u16> {
     if let Ok(n) = arg.parse::<u32>() {
         return Some((n % (u16::MAX as u32 + 1)) as u16);
@@ -549,7 +549,7 @@ fn string_to_baud(arg: &str) -> Option<AllFlags> {
     None
 }
 
-// return Some(flag) if the input is a valid flag, None if not
+/// return `Some(flag)` if the input is a valid flag, `None` if not
 fn string_to_flag(option: &str) -> Option<AllFlags> {
     let remove = option.starts_with('-');
     let name = option.trim_start_matches('-');
@@ -756,15 +756,15 @@ fn apply_special_setting(setting: &SpecialSetting, fd: i32) -> nix::Result<()> {
     Ok(())
 }
 
-// GNU stty defines some valid values for the control character mappings
-// 1. Standard character, can be a a single char (ie 'C') or hat notation (ie '^C')
-// 2. Integer
-//      a. hexadecimal, prefixed by '0x'
-//      b. octal, prefixed by '0'
-//      c. decimal, no prefix
-// 3. Disabling the control character: '^-' or 'undef'
-//
-// This function returns the ascii value of valid control chars, or ControlCharMappingError if invalid
+/// GNU stty defines some valid values for the control character mappings
+/// 1. Standard character, can be a a single char (ie 'C') or hat notation (ie '^C')
+/// 2. Integer
+///    a. hexadecimal, prefixed by '0x'
+///    b. octal, prefixed by '0'
+///    c. decimal, no prefix
+/// 3. Disabling the control character: '^-' or 'undef'
+///
+/// This function returns the ascii value of valid control chars, or [`ControlCharMappingError`] if invalid
 fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
     if s == "undef" || s == "^-" || s.is_empty() {
         return Ok(0);
