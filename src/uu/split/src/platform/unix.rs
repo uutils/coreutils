@@ -14,7 +14,7 @@ use uucore::fs::FileInformation;
 use uucore::locale::get_message_with_args;
 use uucore::show;
 
-/// A writer that writes to a shell_process' stdin
+/// A writer that writes to a `shell_process`' stdin
 ///
 /// We use a shell process (not directly calling a sub-process) so we can forward the name of the
 /// corresponding output file (xaa, xab, xac… ). This is the way it was implemented in GNU split.

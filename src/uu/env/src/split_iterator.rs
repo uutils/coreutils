@@ -7,9 +7,9 @@
 // licensed under the Apache License, Version 2.0 <LICENSE-APACHE>
 // or the MIT license <LICENSE-MIT>, at your option.
 //
-//! Process command line according to parsing rules of original GNU env.
+//! Process command line according to parsing rules of the original GNU env.
 //! Even though it looks quite like a POSIX syntax, the original
-//! "shell_words" implementation had to be adapted significantly.
+//! `shell_words` implementation had to be adapted significantly.
 //!
 //! Apart from the grammar differences, there is a new feature integrated: $VARIABLE expansion.
 //!

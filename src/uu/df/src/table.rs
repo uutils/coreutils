@@ -297,7 +297,7 @@ impl<'a> RowFormatter<'a> {
     }
 }
 
-/// A HeaderMode defines what header labels should be shown.
+/// A `HeaderMode` defines what header labels should be shown.
 pub(crate) enum HeaderMode {
     Default,
     // the user used -h or -H

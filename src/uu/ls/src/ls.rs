@@ -77,6 +77,7 @@ use uucore::{parser::parse_glob, show, show_error, show_warning};
 mod dired;
 use dired::{DiredOutput, is_dired_arg_present};
 mod colors;
+use crate::options::QUOTING_STYLE;
 use colors::{StyleManager, color_name};
 
 pub mod options {
@@ -583,12 +584,12 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
     }
 }
 
-/// Match the argument given to --quoting-style or the QUOTING_STYLE env variable.
+/// Match the argument given to --quoting-style or the [`QUOTING_STYLE`] env variable.
 ///
 /// # Arguments
 ///
 /// * `style`: the actual argument string
-/// * `show_control` - A boolean value representing whether or not to show control characters.
+/// * `show_control` - A boolean value representing whether to show control characters.
 ///
 /// # Returns
 ///
@@ -609,18 +610,18 @@ fn match_quoting_style_name(style: &str, show_control: bool) -> Option<QuotingSt
 
 /// Extracts the quoting style to use based on the options provided.
 /// If no options are given, it looks if a default quoting style is provided
-/// through the QUOTING_STYLE environment variable.
+/// through the [`QUOTING_STYLE`] environment variable.
 ///
 /// # Arguments
 ///
-/// * `options` - A reference to a clap::ArgMatches object containing command line arguments.
+/// * `options` - A reference to a [`clap::ArgMatches`] object containing command line arguments.
 /// * `show_control` - A boolean value representing whether or not to show control characters.
 ///
 /// # Returns
 ///
-/// A QuotingStyle variant representing the quoting style to use.
+/// A [`QuotingStyle`] variant representing the quoting style to use.
 fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> QuotingStyle {
-    let opt_quoting_style = options.get_one::<String>(options::QUOTING_STYLE);
+    let opt_quoting_style = options.get_one::<String>(QUOTING_STYLE);
 
     if let Some(style) = opt_quoting_style {
         match match_quoting_style_name(style, show_control) {
@@ -670,7 +671,7 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
 ///
 /// # Returns
 ///
-/// An IndicatorStyle variant representing the indicator style to use.
+/// An [`IndicatorStyle`] variant representing the indicator style to use.
 fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
@@ -998,7 +999,7 @@ impl Config {
         let zero_colors_opts = [options::COLOR];
         let zero_show_control_opts = [options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS];
         let zero_quoting_style_opts = [
-            options::QUOTING_STYLE,
+            QUOTING_STYLE,
             options::quoting::C,
             options::quoting::ESCAPE,
             options::quoting::LITERAL,
@@ -1330,8 +1331,8 @@ pub fn uu_app() -> Command {
         )
         // Quoting style
         .arg(
-            Arg::new(options::QUOTING_STYLE)
-                .long(options::QUOTING_STYLE)
+            Arg::new(QUOTING_STYLE)
+                .long(QUOTING_STYLE)
                 .help(get_message("ls-help-set-quoting-style"))
                 .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("literal"),
@@ -1343,7 +1344,7 @@ pub fn uu_app() -> Command {
                     PossibleValue::new("escape"),
                 ]))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1356,7 +1357,7 @@ pub fn uu_app() -> Command {
                 .alias("l")
                 .help(get_message("ls-help-literal-quoting-style"))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1369,7 +1370,7 @@ pub fn uu_app() -> Command {
                 .long(options::quoting::ESCAPE)
                 .help(get_message("ls-help-escape-quoting-style"))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -1382,7 +1383,7 @@ pub fn uu_app() -> Command {
                 .long(options::quoting::C)
                 .help(get_message("ls-help-c-quoting-style"))
                 .overrides_with_all([
-                    options::QUOTING_STYLE,
+                    QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
@@ -2703,7 +2704,7 @@ fn display_grid(
     Ok(())
 }
 
-/// This writes to the BufWriter state.out a single string of the output of `ls -l`.
+/// This writes to the [`BufWriter`] `state.out` a single string of the output of `ls -l`.
 ///
 /// It writes the following keys, in order:
 /// * `inode` ([`get_inode`], config-optional)
@@ -2717,8 +2718,8 @@ fn display_grid(
 /// * `item_name` ([`display_item_name`])
 ///
 /// This function needs to display information in columns:
-/// * permissions and system_time are already guaranteed to be pre-formatted in fixed length.
-/// * item_name is the last column and is left-aligned.
+/// * permissions and `system_time` are already guaranteed to be pre-formatted in fixed length.
+/// * `item_name` is the last column and is left-aligned.
 /// * Everything else needs to be padded using [`pad_left`].
 ///
 /// That's why we have the parameters:

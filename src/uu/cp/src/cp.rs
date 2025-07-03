@@ -48,11 +48,11 @@ mod platform;
 
 #[derive(Debug, Error)]
 pub enum CpError {
-    /// Simple io::Error wrapper
+    /// Simple [`io::Error`] wrapper
     #[error("{0}")]
     IoErr(#[from] io::Error),
 
-    /// Wrapper for io::Error with path context
+    /// Wrapper for [`io::Error`] with path context
     #[error("{1}: {0}")]
     IoErrContext(io::Error, String),
 
@@ -65,11 +65,11 @@ pub enum CpError {
     #[error("{}", get_message("cp-error-not-all-files-copied"))]
     NotAllFilesCopied,
 
-    /// Simple walkdir::Error wrapper
+    /// Simple [`walkdir::Error`] wrapper
     #[error("{0}")]
     WalkDirErr(#[from] walkdir::Error),
 
-    /// Simple std::path::StripPrefixError wrapper
+    /// Simple [`StripPrefixError`] wrapper
     #[error(transparent)]
     StripPrefixError(#[from] StripPrefixError),
 
@@ -84,9 +84,9 @@ pub enum CpError {
     #[error("{0}")]
     InvalidArgument(String),
 
-    /// All standard options are included as an an implementation
+    /// All standard options are included as an implementation
     /// path, but those that are not implemented yet should return
-    /// a NotImplemented error.
+    /// a `NotImplemented` error.
     #[error("{}", get_message_with_args("cp-error-option-not-implemented", HashMap::from([("option".to_string(), 0.to_string())])))]
     NotImplemented(String),
 
@@ -931,8 +931,8 @@ impl Attributes {
         }
     }
 
-    /// Set the field to Preserve::NO { explicit: true } if the corresponding field
-    /// in other is set to Preserve::Yes { .. }.
+    /// Set the field to `Preserve::No { explicit: true }` if the corresponding field
+    /// in other is set to `Preserve::Yes { .. }`.
     pub fn diff(self, other: &Self) -> Self {
         fn update_preserve_field(current: Preserve, other: Preserve) -> Preserve {
             if matches!(other, Preserve::Yes { .. }) {
@@ -1254,7 +1254,7 @@ impl Options {
 }
 
 impl TargetType {
-    /// Return TargetType required for `target`.
+    /// Return [`TargetType`] required for `target`.
     ///
     /// Treat target as a dir if we have multiple sources or the target
     /// exists and already is a directory
@@ -1875,7 +1875,7 @@ fn context_for(src: &Path, dest: &Path) -> String {
 }
 
 /// Implements a simple backup copy for the destination file .
-/// if is_dest_symlink flag is set to true dest will be renamed to backup_path
+/// if `is_dest_symlink` flag is set to true dest will be renamed to `backup_path`
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
 fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<PathBuf> {
     if is_dest_symlink {

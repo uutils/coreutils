@@ -543,7 +543,7 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
 ///   copied from the provided file. Otherwise, the new directory will have the default
 ///   attributes for the current user.
 /// - This method excludes certain permissions if ownership or special mode bits could
-///   potentially change. (See `test_dir_perm_race_with_preserve_mode_and_ownership``)
+///   potentially change. (See `test_dir_perm_race_with_preserve_mode_and_ownership`)
 /// - The `recursive` flag determines whether parent directories should be created
 ///   if they do not already exist.
 // we need to allow unused_variable since `options` might be unused in non unix systems

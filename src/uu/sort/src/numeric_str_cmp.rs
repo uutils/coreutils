@@ -5,12 +5,12 @@
 
 //! Fast comparison for strings representing a base 10 number without precision loss.
 //!
-//! To be able to short-circuit when comparing, [NumInfo] must be passed along with each number
-//! to [numeric_str_cmp]. [NumInfo] is generally obtained by calling [NumInfo::parse] and should be cached.
-//! It is allowed to arbitrarily modify the exponent afterwards, which is equivalent to shifting the decimal point.
+//! To be able to short-circuit when comparing, [`NumInfo`] must be passed along with each number
+//! to [`numeric_str_cmp`]. [`NumInfo`] is generally obtained by calling [`NumInfo::parse`] and should be cached.
+//! It is allowed to arbitrarily modify the exponent afterward, which is equivalent to shifting the decimal point.
 //!
-//! More specifically, exponent can be understood so that the original number is in (1..10)*10^exponent.
-//! From that follows the constraints of this algorithm: It is able to compare numbers in ±(1*10^[i64::MIN]..10*10^[i64::MAX]).
+//! More specifically, exponent can be understood so that the original number is in `(1..10)*10^exponent`.
+//! From that follows the constraints of this algorithm: It is able to compare numbers in ±(1*10^[`i64::MIN`]..10*10^[`i64::MAX`]).
 
 use std::{cmp::Ordering, ops::Range};
 
@@ -43,8 +43,8 @@ impl Default for NumInfoParseSettings {
 }
 
 impl NumInfo {
-    /// Parse NumInfo for this number.
-    /// Also returns the range of num that should be passed to numeric_str_cmp later.
+    /// Parse [`NumInfo`] for this number.
+    /// Also returns the range of num that should be passed to [`numeric_str_cmp`] later.
     ///
     /// Leading zeros will be excluded from the returned range. If the number consists of only zeros,
     /// an empty range (idx..idx) is returned so that idx is the char after the last zero.
@@ -213,7 +213,7 @@ pub fn human_numeric_str_cmp(
 }
 
 /// Compare two numbers as strings without parsing them as a number first. This should be more performant and can handle numbers more precisely.
-/// NumInfo is needed to provide a fast path for most numbers.
+/// [`NumInfo`] is needed to provide a fast path for most numbers.
 #[inline(always)]
 pub fn numeric_str_cmp((a, a_info): (&str, &NumInfo), (b, b_info): (&str, &NumInfo)) -> Ordering {
     // check for a difference in the sign

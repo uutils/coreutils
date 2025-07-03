@@ -123,9 +123,9 @@ mod format {
     pub(crate) const YYYYMMDDHHMM_OFFSET: &str = "%Y-%m-%d %H:%M %z";
 }
 
-/// Convert a DateTime with a TZ offset into a FileTime
+/// Convert a [`DateTime`] with a TZ offset into a [`FileTime`]
 ///
-/// The DateTime is converted into a unix timestamp from which the FileTime is
+/// The [`DateTime`] is converted into a unix timestamp from which the [`FileTime`] is
 /// constructed.
 fn datetime_to_filetime<T: TimeZone>(dt: &DateTime<T>) -> FileTime {
     FileTime::from_unix_time(dt.timestamp(), dt.timestamp_subsec_nanos())
@@ -693,9 +693,9 @@ fn prepend_century(s: &str) -> UResult<String> {
     ))
 }
 
-/// Parses a timestamp string into a FileTime.
+/// Parses a timestamp string into a [`FileTime`].
 ///
-/// This function attempts to parse a string into a FileTime
+/// This function attempts to parse a string into a [`FileTime`]
 /// As expected by gnu touch -t : `[[cc]yy]mmddhhmm[.ss]`
 ///
 /// Note that  If the year is specified with only two digits,
@@ -772,9 +772,9 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 }
 
 // TODO: this may be a good candidate to put in fsext.rs
-/// Returns a PathBuf to stdout.
+/// Returns a [`PathBuf`] to stdout.
 ///
-/// On Windows, uses GetFinalPathNameByHandleW to attempt to get the path
+/// On Windows, uses `GetFinalPathNameByHandleW` to attempt to get the path
 /// from the stdout handle.
 fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     #[cfg(all(unix, not(target_os = "android")))]
