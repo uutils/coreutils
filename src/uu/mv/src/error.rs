@@ -2,36 +2,30 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use std::collections::HashMap;
 use thiserror::Error;
 use uucore::error::UError;
+use uucore::locale::get_message_with_args;
 
 #[derive(Debug, Error)]
 pub enum MvError {
-    #[error("cannot stat {0}: No such file or directory")]
+    #[error("{}", get_message_with_args("mv-error-no-such-file", HashMap::from([("path".to_string(), .0.clone())])))]
     NoSuchFile(String),
-
-    #[error("cannot stat {0}: Not a directory")]
+    #[error("{}", get_message_with_args("mv-error-cannot-stat-not-directory", HashMap::from([("path".to_string(), .0.clone())])))]
     CannotStatNotADirectory(String),
-
-    #[error("{0} and {1} are the same file")]
+    #[error("{}", get_message_with_args("mv-error-same-file", HashMap::from([("source".to_string(), .0.clone()), ("target".to_string(), .1.clone())])))]
     SameFile(String, String),
-
-    #[error("cannot move {0} to a subdirectory of itself, {1}")]
+    #[error("{}", get_message_with_args("mv-error-self-target-subdirectory", HashMap::from([("source".to_string(), .0.clone()), ("target".to_string(), .1.clone())])))]
     SelfTargetSubdirectory(String, String),
-
-    #[error("cannot overwrite directory {0} with non-directory")]
+    #[error("{}", get_message_with_args("mv-error-directory-to-non-directory", HashMap::from([("path".to_string(), .0.clone())])))]
     DirectoryToNonDirectory(String),
-
-    #[error("cannot overwrite non-directory {1} with directory {0}")]
+    #[error("{}", get_message_with_args("mv-error-non-directory-to-directory", HashMap::from([("source".to_string(), .0.clone()), ("target".to_string(), .1.clone())])))]
     NonDirectoryToDirectory(String, String),
-
-    #[error("target {0}: Not a directory")]
+    #[error("{}", get_message_with_args("mv-error-not-directory", HashMap::from([("path".to_string(), .0.clone())])))]
     NotADirectory(String),
-
-    #[error("target directory {0}: Not a directory")]
+    #[error("{}", get_message_with_args("mv-error-target-not-directory", HashMap::from([("path".to_string(), .0.clone())])))]
     TargetNotADirectory(String),
-
-    #[error("failed to access {0}: Not a directory")]
+    #[error("{}", get_message_with_args("mv-error-failed-access-not-directory", HashMap::from([("path".to_string(), .0.clone())])))]
     FailedToAccessNotADirectory(String),
 }
 

@@ -8,7 +8,7 @@ use crate::format::spec::ArgumentLocation;
 use crate::{
     error::set_exit_code,
     parser::num_parser::{ExtendedParser, ExtendedParserError},
-    quoting_style::{Quotes, QuotingStyle, escape_name},
+    quoting_style::{QuotingStyle, locale_aware_escape_name},
     show_error, show_warning,
 };
 use os_display::Quotable;
@@ -153,12 +153,7 @@ fn extract_value<T: Default>(p: Result<T, ExtendedParserError<'_, T>>, input: &s
         Ok(v) => v,
         Err(e) => {
             set_exit_code(1);
-            let input = escape_name(
-                OsStr::new(input),
-                &QuotingStyle::C {
-                    quotes: Quotes::None,
-                },
-            );
+            let input = locale_aware_escape_name(OsStr::new(input), QuotingStyle::C_NO_QUOTES);
             match e {
                 ExtendedParserError::Overflow(v) => {
                     show_error!("{}: Numerical result out of range", input.quote());

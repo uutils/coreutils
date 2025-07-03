@@ -9,7 +9,9 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use uucore::display::{Quotable, println_verbatim};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
+use uucore::locale::{get_message, get_message_with_args};
 
+use std::collections::HashMap;
 use std::env;
 use std::ffi::OsStr;
 use std::io::ErrorKind;
@@ -24,8 +26,6 @@ use std::os::unix::prelude::PermissionsExt;
 use rand::Rng;
 use tempfile::Builder;
 use thiserror::Error;
-
-use uucore::locale::get_message;
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -44,35 +44,30 @@ const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
 
-#[derive(Debug, Error)]
+#[derive(Error, Debug)]
 enum MkTempError {
-    #[error("could not persist file {path}", path = .0.quote())]
+    #[error("{}", get_message_with_args("mktemp-error-persist-file", HashMap::from([("path".to_string(), .0.quote().to_string())])))]
     PersistError(PathBuf),
 
-    #[error("with --suffix, template {template} must end in X", template = .0.quote())]
+    #[error("{}", get_message_with_args("mktemp-error-must-end-in-x", HashMap::from([("template".to_string(), .0.quote().to_string())])))]
     MustEndInX(String),
 
-    #[error("too few X's in template {template}", template = .0.quote())]
+    #[error("{}", get_message_with_args("mktemp-error-too-few-xs", HashMap::from([("template".to_string(), .0.quote().to_string())])))]
     TooFewXs(String),
 
-    /// The template prefix contains a path separator (e.g. `"a/bXXX"`).
-    #[error("invalid template, {template}, contains directory separator", template = .0.quote())]
+    #[error("{}", get_message_with_args("mktemp-error-prefix-contains-separator", HashMap::from([("template".to_string(), .0.quote().to_string())])))]
     PrefixContainsDirSeparator(String),
 
-    /// The template suffix contains a path separator (e.g. `"XXXa/b"`).
-    #[error("invalid suffix {suffix}, contains directory separator", suffix = .0.quote())]
+    #[error("{}", get_message_with_args("mktemp-error-suffix-contains-separator", HashMap::from([("suffix".to_string(), .0.quote().to_string())])))]
     SuffixContainsDirSeparator(String),
 
-    #[error("invalid template, {template}; with --tmpdir, it may not be absolute", template = .0.quote())]
+    #[error("{}", get_message_with_args("mktemp-error-invalid-template", HashMap::from([("template".to_string(), .0.quote().to_string())])))]
     InvalidTemplate(String),
 
-    #[error("too many templates")]
+    #[error("{}", get_message("mktemp-error-too-many-templates"))]
     TooManyTemplates,
 
-    /// When a specified temporary directory could not be found.
-    #[error("failed to create {template_type} via template {template}: No such file or directory",
-            template_type = .0,
-            template = .1.quote())]
+    #[error("{}", get_message_with_args("mktemp-error-not-found", HashMap::from([("template_type".to_string(), .0.clone()), ("template".to_string(), .1.quote().to_string())])))]
     NotFound(String, String),
 }
 
@@ -295,7 +290,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         && val == &clap::error::ContextValue::String("[template]".into())
                 })
             {
-                return Err(UUsageError::new(1, "too many templates"));
+                return Err(UUsageError::new(
+                    1,
+                    get_message("mktemp-error-too-many-templates"),
+                ));
             }
             return Err(e.into());
         }
@@ -340,7 +338,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         res
     };
-    println_verbatim(res?).map_err_context(|| "failed to print directory name".to_owned())
+    println_verbatim(res?).map_err_context(|| get_message("mktemp-error-failed-print"))
 }
 
 pub fn uu_app() -> Command {
@@ -353,36 +351,33 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_DIRECTORY)
                 .short('d')
                 .long(OPT_DIRECTORY)
-                .help("Make a directory instead of a file")
+                .help(get_message("mktemp-help-directory"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_DRY_RUN)
                 .short('u')
                 .long(OPT_DRY_RUN)
-                .help("do not create anything; merely print a name (unsafe)")
+                .help(get_message("mktemp-help-dry-run"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_QUIET)
                 .short('q')
                 .long("quiet")
-                .help("Fail silently if an error occurs.")
+                .help(get_message("mktemp-help-quiet"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SUFFIX)
                 .long(OPT_SUFFIX)
-                .help(
-                    "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
-                     This option is implied if TEMPLATE does not end with X.",
-                )
+                .help(get_message("mktemp-help-suffix"))
                 .value_name("SUFFIX"),
         )
         .arg(
             Arg::new(OPT_P)
                 .short('p')
-                .help("short form of --tmpdir")
+                .help(get_message("mktemp-help-p"))
                 .value_name("DIR")
                 .num_args(1)
                 .value_parser(ValueParser::path_buf())
@@ -391,12 +386,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_TMPDIR)
                 .long(OPT_TMPDIR)
-                .help(
-                    "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
-                     $TMPDIR ($TMP on windows) if set, else /tmp. With this option, \
-                     TEMPLATE must not be an absolute name; unlike with -t, TEMPLATE \
-                     may contain slashes, but mktemp creates only the final component",
-                )
+                .help(get_message("mktemp-help-tmpdir"))
                 .value_name("DIR")
                 // Allows use of default argument just by setting --tmpdir. Else,
                 // use provided input to generate tmpdir
@@ -410,10 +400,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_T)
                 .short('t')
-                .help(
-                    "Generate a template (using the supplied prefix and TMPDIR \
-                (TMP on windows) if set) to create a filename template [deprecated]",
-                )
+                .help(get_message("mktemp-help-t"))
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(ARG_TEMPLATE).num_args(..=1))
@@ -475,7 +462,7 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
             let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
             let s = path.display().to_string();
-            Err(MkTempError::NotFound("directory".to_string(), s).into())
+            Err(MkTempError::NotFound(get_message("mktemp-template-type-directory"), s).into())
         }
         Err(e) => Err(e.into()),
     }
@@ -505,7 +492,7 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
             let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
             let path = Path::new(dir).join(filename);
             let s = path.display().to_string();
-            Err(MkTempError::NotFound("file".to_string(), s).into())
+            Err(MkTempError::NotFound(get_message("mktemp-template-type-file"), s).into())
         }
         Err(e) => Err(e.into()),
     }

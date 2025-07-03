@@ -76,7 +76,7 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
         let name = split[0].trim();
         if name.is_empty() {
             // --groups=" "
-            // chroot: invalid group ‘ ’
+            // chroot: invalid group ' '
             Err(ChrootError::InvalidGroup(name.to_string()))
         } else {
             // --groups="blah"
@@ -84,7 +84,7 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
         }
     } else if split.iter().all(|s| s.is_empty()) {
         // --groups=","
-        // chroot: invalid group list ‘,’
+        // chroot: invalid group list ','
         Err(ChrootError::InvalidGroupList(list_str.to_string()))
     } else {
         let mut result = vec![];
@@ -97,7 +97,7 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
                     continue;
                 } else {
                     // --groups=", "
-                    // chroot: invalid group ‘ ’
+                    // chroot: invalid group ' '
                     show!(ChrootError::InvalidGroup(name.to_string()));
                     err = true;
                 }
@@ -107,7 +107,7 @@ fn parse_group_list(list_str: &str) -> Result<Vec<String>, ChrootError> {
                     && trimmed_name.ends_with(|c: char| !c.is_numeric())
                 {
                     // --groups="0trail"
-                    // chroot: invalid group ‘0trail’
+                    // chroot: invalid group '0trail'
                     show!(ChrootError::InvalidGroup(name.to_string()));
                     err = true;
                 } else {
@@ -176,7 +176,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         return Err(UUsageError::new(
             125,
-            "option --skip-chdir only permitted if NEWROOT is old '/'",
+            get_message("chroot-error-skip-chdir-only-permitted"),
         ));
     }
 
@@ -251,23 +251,19 @@ pub fn uu_app() -> Command {
             Arg::new(options::GROUPS)
                 .long(options::GROUPS)
                 .overrides_with(options::GROUPS)
-                .help("Comma-separated list of groups to switch to")
+                .help(get_message("chroot-help-groups"))
                 .value_name("GROUP1,GROUP2..."),
         )
         .arg(
             Arg::new(options::USERSPEC)
                 .long(options::USERSPEC)
-                .help("Colon-separated user and group to switch to.")
+                .help(get_message("chroot-help-userspec"))
                 .value_name("USER:GROUP"),
         )
         .arg(
             Arg::new(options::SKIP_CHDIR)
                 .long(options::SKIP_CHDIR)
-                .help(
-                    "Use this option to not change the working directory \
-                    to / after changing the root directory to newroot, \
-                    i.e., inside the chroot.",
-                )
+                .help(get_message("chroot-help-skip-chdir"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

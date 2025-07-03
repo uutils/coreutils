@@ -251,3 +251,29 @@ fn util_manpage() {
     let output_str = String::from_utf8(output.stdout).unwrap();
     assert!(output_str.contains("\n.TH true 1 "), "{output_str:?}");
 }
+
+#[test]
+fn util_version() {
+    use std::process::{Command, Stdio};
+
+    let scenario = TestScenario::new("--version");
+    if !scenario.bin_path.exists() {
+        println!("Skipping test: Binary not found at {:?}", scenario.bin_path);
+        return;
+    }
+    for arg in ["-V", "--version"] {
+        let child = Command::new(&scenario.bin_path)
+            .arg(arg)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert_eq!(output.status.code(), Some(0));
+        assert_eq!(output.stderr, b"");
+        let output_str = String::from_utf8(output.stdout).unwrap();
+        let ver = std::env::var("CARGO_PKG_VERSION").unwrap();
+        assert_eq!(format!("coreutils {ver} (multi-call binary)\n"), output_str);
+    }
+}

@@ -3,19 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
-
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
     format_usage,
     parser::parse_time,
     show_error,
 };
-
-use clap::{Arg, ArgAction, Command};
-
-use uucore::locale::get_message;
 
 mod options {
     pub const NUMBER: &str = "NUMBER";
@@ -30,9 +28,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .ok_or_else(|| {
             USimpleError::new(
                 1,
-                format!(
-                    "missing operand\nTry '{} --help' for more information.",
-                    uucore::execution_phrase()
+                get_message_with_args(
+                    "sleep-error-missing-operand",
+                    HashMap::from([(
+                        "program".to_string(),
+                        uucore::execution_phrase().to_string(),
+                    )]),
                 ),
             )
         })?
@@ -51,7 +52,7 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
         .arg(
             Arg::new(options::NUMBER)
-                .help("pause for NUMBER seconds")
+                .help(get_message("sleep-help-number"))
                 .value_name(options::NUMBER)
                 .action(ArgAction::Append),
         )

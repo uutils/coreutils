@@ -5,8 +5,6 @@
 
 // spell-checker:ignore fffffffffffffffc
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn basic_literal() {
@@ -906,6 +904,10 @@ fn pad_unsigned_three() {
         ("%#.3x", "0x003"),
         ("%#.3X", "0X003"),
         ("%#.3o", "003"),
+        ("%#05x", "0x003"),
+        ("%#05X", "0X003"),
+        ("%3x", "  3"),
+        ("%3X", "  3"),
     ] {
         new_ucmd!()
             .args(&[format, "3"])

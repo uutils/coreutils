@@ -12,6 +12,7 @@
     clippy::missing_errors_doc
 )]
 
+use core::str;
 #[cfg(unix)]
 use libc::mode_t;
 #[cfg(unix)]
@@ -758,6 +759,29 @@ impl CmdResult {
         self
     }
 
+    /// Verify if stdout contains a byte sequence
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_bytes(b"hello \xff");
+    /// ```
+    #[track_caller]
+    pub fn stdout_contains_bytes<T: AsRef<[u8]>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stdout()
+                .windows(cmp.as_ref().len())
+                .any(|sub| sub == cmp.as_ref()),
+            "'{:?}'\ndoes not contain\n'{:?}'",
+            self.stdout(),
+            cmp.as_ref()
+        );
+        self
+    }
+
     /// Verify if stderr contains a specific string
     ///
     /// # Examples
@@ -775,6 +799,29 @@ impl CmdResult {
             self.stderr_str().contains(cmp.as_ref()),
             "'{}' does not contain '{}'",
             self.stderr_str(),
+            cmp.as_ref()
+        );
+        self
+    }
+
+    /// Verify if stderr contains a byte sequence
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// new_ucmd!()
+    /// .arg("--help")
+    /// .succeeds()
+    /// .stdout_contains_bytes(b"hello \xff");
+    /// ```
+    #[track_caller]
+    pub fn stderr_contains_bytes<T: AsRef<[u8]>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stderr()
+                .windows(cmp.as_ref().len())
+                .any(|sub| sub == cmp.as_ref()),
+            "'{:?}'\ndoes not contain\n'{:?}'",
+            self.stderr(),
             cmp.as_ref()
         );
         self

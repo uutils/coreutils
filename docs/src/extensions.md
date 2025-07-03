@@ -153,6 +153,15 @@ See also comments under `printf` for formatting precision and differences.
 
 `seq` provides `-t`/`--terminator` to set the terminator character.
 
+## `sort`
+
+When sorting with `-g`/`--general-numeric-sort`, arbitrary precision decimal numbers
+are parsed and compared, unlike GNU coreutils that uses platform-specific long
+double floating point numbers.
+
+Extremely large or small values can still overflow or underflow to infinity or zero,
+see note in `seq`.
+
 ## `ls`
 
 GNU `ls` provides two ways to use a long listing format: `-l` and `--format=long`. We support a
@@ -184,3 +193,14 @@ Just like on macOS, `base32/base64/basenc` provides `-D` to decode data.
 ## `shred`
 
 The number of random passes is deterministic in both GNU and uutils. However, uutils `shred` computes the number of random passes in a simplified way, specifically `max(3, x / 10)`, which is very close but not identical to the number of random passes that GNU would do. This also satisfies an expectation that reasonable users might have, namely that the number of random passes increases monotonically with the number of passes overall; GNU `shred` violates this assumption.
+
+## `unexpand`
+
+GNU `unexpand` provides `--first-only` to convert only leading sequences of blanks. We support a
+second way: `-f` like busybox.
+
+Using `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than UTF-8.
+
+## `expand`
+
+`expand` also offers the `-U`/`--no-utf8` option to interpret input files as 8-bit ASCII instead of UTF-8.

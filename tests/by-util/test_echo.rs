@@ -7,7 +7,6 @@
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util::UCommand;
-use uutests::util_name;
 
 #[test]
 fn test_default() {
@@ -654,7 +653,7 @@ fn test_cmd_result_stdout_str_check_when_false_then_panics() {
 #[cfg(unix)]
 #[test]
 fn test_cmd_result_signal_when_normal_exit_then_no_signal() {
-    let result = TestScenario::new("echo").ucmd().run();
+    let result = new_ucmd!().run();
     assert!(result.signal().is_none());
 }
 

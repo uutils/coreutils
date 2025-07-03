@@ -48,7 +48,7 @@ pub(crate) enum FsError {
 /// Check whether `mount` has been over-mounted.
 ///
 /// `mount` is considered over-mounted if it there is an element in
-/// `mounts` after mount that has the same mount_dir.
+/// `mounts` after mount that has the same `mount_dir`.
 #[cfg(not(windows))]
 fn is_over_mounted(mounts: &[MountInfo], mount: &MountInfo) -> bool {
     let last_mount_for_dir = mounts

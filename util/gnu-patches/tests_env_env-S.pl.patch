@@ -2,27 +2,41 @@ Index: gnu/tests/env/env-S.pl
 ===================================================================
 --- gnu.orig/tests/env/env-S.pl
 +++ gnu/tests/env/env-S.pl
-@@ -212,27 +212,28 @@ my @Tests =
-       {ERR=>"$prog: no terminating quote in -S string\n"}],
+@@ -200,36 +200,37 @@ my @Tests =
+
+      # Test Error Conditions
+      ['err1', q[-S'"\\c"'], {EXIT=>125},
+-      {ERR=>"$prog: '\\c' must not appear in double-quoted -S string\n"}],
++      {ERR=>"$prog: '\\c' must not appear in double-quoted -S string at position 2\n"}],
+      ['err2', q[-S'A=B\\'], {EXIT=>125},
+-      {ERR=>"$prog: invalid backslash at end of string in -S\n"}],
++      {ERR=>"$prog: invalid backslash at end of string in -S at position 4 in context Unquoted\n"}],
+      ['err3', q[-S'"A=B\\"'], {EXIT=>125},
+-      {ERR=>"$prog: no terminating quote in -S string\n"}],
++      {ERR=>"$prog: no terminating quote in -S string at position 6 for quote '\"'\n"}],
+      ['err4', q[-S"'A=B\\\\'"], {EXIT=>125},
+-      {ERR=>"$prog: no terminating quote in -S string\n"}],
++      {ERR=>"$prog: no terminating quote in -S string at position 6 for quote '''\n"}],
       ['err5', q[-S'A=B\\q'], {EXIT=>125},
-       {ERR=>"$prog: invalid sequence '\\q' in -S\n"}],
+-      {ERR=>"$prog: invalid sequence '\\q' in -S\n"}],
 -     ['err6', q[-S'A=$B'], {EXIT=>125},
 -      {ERR=>"$prog: only \${VARNAME} expansion is supported, error at: \$B\n"}],
++      {ERR=>"$prog: invalid sequence '\\q' in -S at position 4\n"}],
 +     ['err6', q[-S'A=$B echo hello'], {EXIT=>0},
 +      {OUT=>"hello"}],
       ['err7', q[-S'A=${B'], {EXIT=>125},
 -      {ERR=>"$prog: only \${VARNAME} expansion is supported, " .
 -           "error at: \${B\n"}],
-+      {ERR=>"$prog" . qq[: variable name issue (at 5): Missing closing brace\n]}],
++      {ERR=>"$prog" . qq[: variable name issue (at 5): Missing closing brace at position 5\n]}],
       ['err8', q[-S'A=${B%B}'], {EXIT=>125},
 -      {ERR=>"$prog: only \${VARNAME} expansion is supported, " .
 -           "error at: \${B%B}\n"}],
-+      {ERR=>"$prog" . qq[: variable name issue (at 5): Unexpected character: '%', expected a closing brace ('}') or colon (':')\n]}],
++      {ERR=>"$prog" . qq[: variable name issue (at 5): Unexpected character: '%', expected a closing brace ('}') or colon (':') at position 5\n]}],
       ['err9', q[-S'A=${9B}'], {EXIT=>125},
 -      {ERR=>"$prog: only \${VARNAME} expansion is supported, " .
 -           "error at: \${9B}\n"}],
-+      {ERR=>"$prog" . qq[: variable name issue (at 4): Unexpected character: '9', expected variable name must not start with 0..9\n]}],
- 
++      {ERR=>"$prog" . qq[: variable name issue (at 4): Unexpected character: '9', expected variable name must not start with 0..9 at position 4\n]}],
+
       # Test incorrect shebang usage (extraneous whitespace).
       ['err_sp2', q['-v -S cat -n'], {EXIT=>125},
 -      {ERR=>"env: invalid option -- ' '\n" .
@@ -42,6 +56,6 @@ Index: gnu/tests/env/env-S.pl
 +            "Usage: $prog [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]\n\n" .
 +            "For more information, try '--help'.\n" .
 +            "$prog: use -[v]S to pass options in shebang lines\n"}],
- 
+
       # Also diagnose incorrect shebang usage when failing to exec.
       # This typically happens with:

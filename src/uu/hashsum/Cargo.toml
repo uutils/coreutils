@@ -20,9 +20,6 @@ path = "src/hashsum.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["checksum", "sum"] }
-memchr = { workspace = true }
-regex = { workspace = true }
-hex = { workspace = true }
 
 [[bin]]
 name = "hashsum"

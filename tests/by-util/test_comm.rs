@@ -309,7 +309,7 @@ fn zero_terminated_with_total() {
     }
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
+#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
 #[test]
 fn check_order() {
     let scene = TestScenario::new(util_name!());
@@ -324,7 +324,7 @@ fn check_order() {
         .stderr_is("error to be defined");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
+#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
 #[test]
 fn nocheck_order() {
     let scene = TestScenario::new(util_name!());
@@ -340,7 +340,7 @@ fn nocheck_order() {
 // when neither --check-order nor --no-check-order is provided,
 // stderr and the error code behaves like check order, but stdout
 // behaves like nocheck_order. However with some quirks detailed below.
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
+#[cfg_attr(not(feature = "test_unimplemented"), ignore = "")]
 #[test]
 fn defaultcheck_order() {
     let scene = TestScenario::new(util_name!());

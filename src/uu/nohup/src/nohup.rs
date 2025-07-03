@@ -8,6 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use libc::{SIG_IGN, SIGHUP};
 use libc::{c_char, dup2, execvp, signal};
+use std::collections::HashMap;
 use std::env;
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
@@ -19,7 +20,8 @@ use uucore::display::Quotable;
 use uucore::error::{UClapError, UError, UResult, set_exit_code};
 use uucore::{format_usage, show_error};
 
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
+
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
 static EXIT_CANCELED: i32 = 125;
@@ -33,20 +35,21 @@ mod options {
 
 #[derive(Debug, Error)]
 enum NohupError {
-    #[error("Cannot detach from console")]
+    #[error("{}", get_message("nohup-error-cannot-detach"))]
     CannotDetach,
 
-    #[error("Cannot replace {name}: {err}", name = .0, err = .1)]
+    #[error("{}", get_message_with_args("nohup-error-cannot-replace", HashMap::from([("name".to_string(), _0.to_string()), ("err".to_string(), _1.to_string())])))]
     CannotReplace(&'static str, #[source] Error),
 
-    #[error("failed to open {path}: {err}", path = NOHUP_OUT.quote(), err = .1)]
+    #[error("{}", get_message_with_args("nohup-error-open-failed", HashMap::from([("path".to_string(), NOHUP_OUT.quote().to_string()), ("err".to_string(), _1.to_string())])))]
     OpenFailed(i32, #[source] Error),
 
-    #[error("failed to open {first_path}: {first_err}\nfailed to open {second_path}: {second_err}",
-            first_path = NOHUP_OUT.quote(),
-            first_err = .1,
-            second_path = .2.quote(),
-            second_err = .3)]
+    #[error("{}", get_message_with_args("nohup-error-open-failed-both", HashMap::from([
+        ("first_path".to_string(), NOHUP_OUT.quote().to_string()),
+        ("first_err".to_string(), _1.to_string()),
+        ("second_path".to_string(), _2.quote().to_string()),
+        ("second_err".to_string(), _3.to_string())
+    ])))]
     OpenFailed2(i32, #[source] Error, String, Error),
 }
 
@@ -141,8 +144,11 @@ fn find_stdout() -> UResult<File> {
     {
         Ok(t) => {
             show_error!(
-                "ignoring input and appending output to {}",
-                NOHUP_OUT.quote()
+                "{}",
+                get_message_with_args(
+                    "nohup-ignoring-input-appending-output",
+                    HashMap::from([("path".to_string(), NOHUP_OUT.quote().to_string())])
+                )
             );
             Ok(t)
         }
@@ -157,8 +163,11 @@ fn find_stdout() -> UResult<File> {
             match OpenOptions::new().create(true).append(true).open(&homeout) {
                 Ok(t) => {
                     show_error!(
-                        "ignoring input and appending output to {}",
-                        homeout_str.quote()
+                        "{}",
+                        get_message_with_args(
+                            "nohup-ignoring-input-appending-output",
+                            HashMap::from([("path".to_string(), homeout_str.quote().to_string())])
+                        )
                     );
                     Ok(t)
                 }

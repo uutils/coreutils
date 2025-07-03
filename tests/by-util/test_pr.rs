@@ -7,8 +7,7 @@
 use chrono::{DateTime, Duration, Utc};
 use std::fs::metadata;
 use uutests::new_ucmd;
-use uutests::util::{TestScenario, UCommand};
-use uutests::util_name;
+use uutests::util::UCommand;
 
 const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
 

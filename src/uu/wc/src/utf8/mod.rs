@@ -14,9 +14,9 @@ use std::str;
 /// Incremental, zero-copy UTF-8 decoding with error handling
 ///
 /// The original implementation was written by Simon Sapin in the utf-8 crate <https://crates.io/crates/utf-8>.
-/// uu_wc used to depend on that crate.
+/// `uu_wc` used to depend on that crate.
 /// The author archived the repository <https://github.com/SimonSapin/rust-utf8>.
-/// They suggested incorporating the source directly into uu_wc <https://github.com/uutils/coreutils/issues/4289>.
+/// They suggested incorporating the source directly into `uu_wc` <https://github.com/uutils/coreutils/issues/4289>.
 ///
 
 #[derive(Debug, Copy, Clone)]
@@ -53,9 +53,9 @@ impl Incomplete {
         &self.buffer[..len]
     }
 
-    /// (consumed_from_input, None): not enough input
-    /// (consumed_from_input, Some(Err(()))): error bytes in buffer
-    /// (consumed_from_input, Some(Ok(()))): UTF-8 string in buffer
+    /// `(consumed_from_input, None)`: not enough input
+    /// `(consumed_from_input, Some(Err(())))`: error bytes in buffer
+    /// `(consumed_from_input, Some(Ok(())))`: UTF-8 string in buffer
     fn try_complete_offsets(&mut self, input: &[u8]) -> (usize, Option<Result<(), ()>>) {
         let initial_buffer_len = self.buffer_len as usize;
         let copied_from_input;

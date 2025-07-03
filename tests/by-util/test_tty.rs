@@ -5,8 +5,6 @@
 use std::fs::File;
 
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 #[cfg(not(windows))]
@@ -70,7 +68,9 @@ fn test_help() {
 #[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_stdout_fail() {
     use std::process::{Command, Stdio};
-    let ts = TestScenario::new(util_name!());
+    use uutests::at_and_ts;
+
+    let (_, ts) = at_and_ts!();
     // Sleep inside a shell to ensure the process doesn't finish before we've
     // closed its stdout
     let mut proc = Command::new("sh")

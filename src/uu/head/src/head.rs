@@ -3,9 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) seekable
+// spell-checker:ignore (vars) seekable memrchr
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
+use memchr::memrchr_iter;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
@@ -32,27 +33,28 @@ mod options {
 
 mod parse;
 mod take;
+use std::collections::HashMap;
 use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 #[derive(Error, Debug)]
 enum HeadError {
     /// Wrapper around `io::Error`
-    #[error("error reading {name}: {err}")]
+    #[error("{}", get_message_with_args("head-error-reading-file", HashMap::from([("name".to_string(), name.clone()), ("err".to_string(), err.to_string())])))]
     Io { name: String, err: io::Error },
 
-    #[error("parse error: {0}")]
+    #[error("{}", get_message_with_args("head-error-parse-error", HashMap::from([("err".to_string(), 0.to_string())])))]
     ParseError(String),
 
-    #[error("bad argument encoding")]
+    #[error("{}", get_message("head-error-bad-encoding"))]
     BadEncoding,
 
-    #[error("{0}: number of -bytes or -lines is too large")]
+    #[error("{}", get_message("head-error-num-too-large"))]
     NumTooLarge(#[from] TryFromIntError),
 
-    #[error("clap error: {0}")]
+    #[error("{}", get_message_with_args("head-error-clap", HashMap::from([("err".to_string(), 0.to_string())])))]
     Clap(#[from] clap::Error),
 
     #[error("{0}")]
@@ -78,13 +80,7 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long("bytes")
                 .value_name("[-]NUM")
-                .help(
-                    "\
-                     print the first NUM bytes of each file;\n\
-                     with the leading '-', print all but the last\n\
-                     NUM bytes of each file\
-                     ",
-                )
+                .help(get_message("head-help-bytes"))
                 .overrides_with_all([options::BYTES_NAME, options::LINES_NAME])
                 .allow_hyphen_values(true),
         )
@@ -93,13 +89,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long("lines")
                 .value_name("[-]NUM")
-                .help(
-                    "\
-                     print the first NUM lines instead of the first 10;\n\
-                     with the leading '-', print all but the last\n\
-                     NUM lines of each file\
-                     ",
-                )
+                .help(get_message("head-help-lines"))
                 .overrides_with_all([options::LINES_NAME, options::BYTES_NAME])
                 .allow_hyphen_values(true),
         )
@@ -108,7 +98,7 @@ pub fn uu_app() -> Command {
                 .short('q')
                 .long("quiet")
                 .visible_alias("silent")
-                .help("never print headers giving file names")
+                .help(get_message("head-help-quiet"))
                 .overrides_with_all([options::VERBOSE_NAME, options::QUIET_NAME])
                 .action(ArgAction::SetTrue),
         )
@@ -116,7 +106,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::VERBOSE_NAME)
                 .short('v')
                 .long("verbose")
-                .help("always print headers giving file names")
+                .help(get_message("head-help-verbose"))
                 .overrides_with_all([options::QUIET_NAME, options::VERBOSE_NAME])
                 .action(ArgAction::SetTrue),
         )
@@ -131,7 +121,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO_NAME)
                 .short('z')
                 .long("zero-terminated")
-                .help("line delimiter is NUL, not newline")
+                .help(get_message("head-help-zero-terminated"))
                 .overrides_with(options::ZERO_NAME)
                 .action(ArgAction::SetTrue),
         )
@@ -159,16 +149,24 @@ impl Default for Mode {
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
         if let Some(v) = matches.get_one::<String>(options::BYTES_NAME) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {err}"))?;
+            let (n, all_but_last) = parse::parse_num(v).map_err(|err| {
+                get_message_with_args(
+                    "head-error-invalid-bytes",
+                    HashMap::from([("err".to_string(), err.to_string())]),
+                )
+            })?;
             if all_but_last {
                 Ok(Self::AllButLastBytes(n))
             } else {
                 Ok(Self::FirstBytes(n))
             }
         } else if let Some(v) = matches.get_one::<String>(options::LINES_NAME) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {err}"))?;
+            let (n, all_but_last) = parse::parse_num(v).map_err(|err| {
+                get_message_with_args(
+                    "head-error-invalid-lines",
+                    HashMap::from([("err".to_string(), err.to_string())]),
+                )
+            })?;
             if all_but_last {
                 Ok(Self::AllButLastLines(n))
             } else {
@@ -189,9 +187,9 @@ fn arg_iterate<'a>(
         if let Some(s) = second.to_str() {
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(parse::ParseError)) => Err(HeadError::ParseError(format!(
-                    "bad argument format: {}",
-                    s.quote()
+                Some(Err(parse::ParseError)) => Err(HeadError::ParseError(get_message_with_args(
+                    "head-error-bad-argument-format",
+                    HashMap::from([("arg".to_string(), s.quote().to_string())]),
                 ))),
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
@@ -238,7 +236,10 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        format!("error writing 'standard output': {err}"),
+        get_message_with_args(
+            "head-error-writing-stdout",
+            HashMap::from([("err".to_string(), err.to_string())]),
+        ),
     )
 }
 
@@ -363,30 +364,50 @@ where
 
     let mut buffer = [0u8; BUF_SIZE];
 
-    let mut i = 0u64;
     let mut lines = 0u64;
+    let mut check_last_byte_first_loop = true;
+    let mut bytes_remaining_to_search = file_size;
 
     loop {
         // the casts here are ok, `buffer.len()` should never be above a few k
-        let bytes_remaining_to_search = file_size - i;
-        let bytes_to_read_this_loop = bytes_remaining_to_search.min(BUF_SIZE.try_into().unwrap());
+        let bytes_to_read_this_loop =
+            bytes_remaining_to_search.min(buffer.len().try_into().unwrap());
         let read_start_offset = bytes_remaining_to_search - bytes_to_read_this_loop;
         let buffer = &mut buffer[..bytes_to_read_this_loop.try_into().unwrap()];
+        bytes_remaining_to_search -= bytes_to_read_this_loop;
 
         input.seek(SeekFrom::Start(read_start_offset))?;
         input.read_exact(buffer)?;
-        for byte in buffer.iter().rev() {
-            if byte == &separator {
-                lines += 1;
-            }
-            // if it were just `n`,
+
+        // Unfortunately need special handling for the case that the input file doesn't have
+        // a terminating `separator` character.
+        // If the input file doesn't end with a `separator` character, add an extra line to our
+        // `line` counter. In the case that `n` is 0 we need to return here since we've
+        // obviously found our 0th-line-from-the-end offset.
+        if check_last_byte_first_loop {
+            check_last_byte_first_loop = false;
+            if let Some(last_byte_of_file) = buffer.last() {
+                if last_byte_of_file != &separator {
+                    if n == 0 {
+                        input.rewind()?;
+                        return Ok(file_size);
+                    }
+                    assert_eq!(lines, 0);
+                    lines = 1;
+                }
+            };
+        }
+
+        for separator_offset in memrchr_iter(separator, &buffer[..]) {
+            lines += 1;
             if lines == n + 1 {
                 input.rewind()?;
-                return Ok(file_size - i);
+                return Ok(read_start_offset
+                    + TryInto::<u64>::try_into(separator_offset).unwrap()
+                    + 1);
             }
-            i += 1;
         }
-        if file_size - i == 0 {
+        if read_start_offset == 0 {
             input.rewind()?;
             return Ok(0);
         }
@@ -459,7 +480,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         println!();
                     }
-                    println!("==> standard input <==");
+                    println!("{}", get_message("head-header-stdin"));
                 }
                 let stdin = io::stdin();
 
@@ -502,9 +523,9 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 let mut file = match File::open(name) {
                     Ok(f) => f,
                     Err(err) => {
-                        show!(err.map_err_context(|| format!(
-                            "cannot open {} for reading",
-                            name.quote()
+                        show!(err.map_err_context(|| get_message_with_args(
+                            "head-error-cannot-open",
+                            HashMap::from([("name".to_string(), name.quote().to_string())])
                         )));
                         continue;
                     }
@@ -731,5 +752,24 @@ mod tests {
             find_nth_line_from_end(&mut input, lines_in_input_file + 1000, b'\n').unwrap(),
             0
         );
+    }
+
+    #[test]
+    fn test_find_nth_line_from_end_non_terminated() {
+        // Validate the find_nth_line_from_end for files that are not terminated with a final
+        // newline character.
+        let input_file = "a\nb";
+        let mut input = Cursor::new(input_file);
+        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 3);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 2);
+    }
+
+    #[test]
+    fn test_find_nth_line_from_end_empty() {
+        // Validate the find_nth_line_from_end for files that are empty.
+        let input_file = "";
+        let mut input = Cursor::new(input_file);
+        assert_eq!(find_nth_line_from_end(&mut input, 0, b'\n').unwrap(), 0);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, b'\n').unwrap(), 0);
     }
 }

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 #![cfg(target_os = "linux")]
 
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter, Write};
 use std::io;
@@ -11,6 +12,7 @@ use std::str::Utf8Error;
 
 use uucore::display::Quotable;
 use uucore::error::UError;
+use uucore::locale::{get_message, get_message_with_args};
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
@@ -25,10 +27,10 @@ pub(crate) mod error_exit_status {
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
-    #[error("No command is specified")]
+    #[error("{}", get_message("runcon-error-no-command"))]
     MissingCommand,
 
-    #[error("runcon may be used only on a SELinux kernel")]
+    #[error("{}", get_message("runcon-error-selinux-not-enabled"))]
     SELinuxNotEnabled,
 
     #[error(transparent)]
@@ -37,19 +39,19 @@ pub(crate) enum Error {
     #[error(transparent)]
     CommandLine(#[from] clap::Error),
 
-    #[error("{operation} failed")]
+    #[error("{}", get_message_with_args("runcon-error-operation-failed", HashMap::from([("operation".to_string(), get_message(.operation))])))]
     SELinux {
         operation: &'static str,
         source: selinux::errors::Error,
     },
 
-    #[error("{operation} failed")]
+    #[error("{}", get_message_with_args("runcon-error-operation-failed", HashMap::from([("operation".to_string(), get_message(.operation))])))]
     Io {
         operation: &'static str,
         source: io::Error,
     },
 
-    #[error("{operation} failed on {}", .operand1.quote())]
+    #[error("{}", get_message_with_args("runcon-error-operation-failed-on", HashMap::from([("operation".to_string(), get_message(.operation)), ("operand".to_string(), .operand1.quote().to_string())])))]
     Io1 {
         operation: &'static str,
         operand1: OsString,

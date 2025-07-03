@@ -5,8 +5,6 @@
 // spell-checker:ignore contenta
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -93,6 +91,24 @@ fn unexpand_first_only_1() {
         .pipe_in("        A     B")
         .succeeds()
         .stdout_is("\t\t  A     B");
+}
+
+#[test]
+fn unexpand_first_only_2() {
+    new_ucmd!()
+        .args(&["-t3", "-f"])
+        .pipe_in("        A     B")
+        .succeeds()
+        .stdout_is("\t\t  A     B");
+}
+
+#[test]
+fn unexpand_first_only_3() {
+    new_ucmd!()
+        .args(&["-f", "-t8"])
+        .pipe_in("        A     B")
+        .succeeds()
+        .stdout_is("\tA     B");
 }
 
 #[test]

@@ -136,7 +136,7 @@ jobs:
       working-directory: ${{ steps.vars.outputs.path_GNU }}
 
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v10
+      uses: dawidd6/action-download-artifact@v11
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
@@ -166,6 +166,7 @@ jobs:
         sudo locale-gen --keep-existing sv_SE
         sudo locale-gen --keep-existing sv_SE.UTF-8
         sudo locale-gen --keep-existing en_US
+        sudo locale-gen --keep-existing en_US.UTF-8
         sudo locale-gen --keep-existing ru_RU.KOI8-R
 
         sudo update-locale

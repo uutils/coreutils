@@ -3,10 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::ffi::OsString;
-
 use clap::Command;
-
+use std::ffi::OsString;
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 use uucore::locale::get_message;
@@ -17,13 +15,13 @@ mod platform;
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().try_get_matches_from(args)?;
     let username = whoami()?;
-    println_verbatim(username).map_err_context(|| "failed to print username".into())?;
+    println_verbatim(username).map_err_context(|| get_message("whoami-error-failed-to-print"))?;
     Ok(())
 }
 
 /// Get the current username
 pub fn whoami() -> UResult<OsString> {
-    platform::get_username().map_err_context(|| "failed to get username".into())
+    platform::get_username().map_err_context(|| get_message("whoami-error-failed-to-get"))
 }
 
 pub fn uu_app() -> Command {

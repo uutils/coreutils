@@ -5,6 +5,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
@@ -13,8 +14,7 @@ use std::slice::Iter;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::line_ending::LineEnding;
-
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 mod options {
     pub const DELIMITER: &str = "delimiters";
@@ -49,14 +49,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::SERIAL)
                 .long(options::SERIAL)
                 .short('s')
-                .help("paste one file at a time instead of in parallel")
+                .help(get_message("paste-help-serial"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
                 .short('d')
-                .help("reuse characters from LIST instead of TABs")
+                .help(get_message("paste-help-delimiter"))
                 .value_name("LIST")
                 .default_value("\t")
                 .hide_default_value(true),
@@ -72,7 +72,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO_TERMINATED)
                 .long(options::ZERO_TERMINATED)
                 .short('z')
-                .help("line delimiter is NUL, not newline")
+                .help(get_message("paste-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -237,7 +237,10 @@ fn parse_delimiters(delimiters: &str) -> UResult<Box<[Box<[u8]>]>> {
                 None => {
                     return Err(USimpleError::new(
                         1,
-                        format!("delimiter list ends with an unescaped backslash: {delimiters}"),
+                        get_message_with_args(
+                            "paste-error-delimiter-unescaped-backslash",
+                            HashMap::from([("delimiters".to_string(), delimiters.to_string())]),
+                        ),
                     ));
                 }
             },
@@ -365,7 +368,15 @@ impl InputSource {
             InputSource::File(bu) => bu.read_until(byte, buf)?,
             InputSource::StandardInput(rc) => rc
                 .try_borrow()
-                .map_err(|bo| USimpleError::new(1, format!("{bo}")))?
+                .map_err(|bo| {
+                    USimpleError::new(
+                        1,
+                        get_message_with_args(
+                            "paste-error-stdin-borrow",
+                            HashMap::from([("error".to_string(), bo.to_string())]),
+                        ),
+                    )
+                })?
                 .lock()
                 .read_until(byte, buf)?,
         };

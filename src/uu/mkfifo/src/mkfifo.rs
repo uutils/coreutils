@@ -5,14 +5,14 @@
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use libc::mkfifo;
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::{format_usage, show};
-
-use uucore::locale::get_message;
 
 mod options {
     pub static MODE: &str = "mode";
@@ -29,7 +29,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // if mode is passed, ignore umask
         Some(m) => match usize::from_str_radix(m, 8) {
             Ok(m) => m,
-            Err(e) => return Err(USimpleError::new(1, format!("invalid mode: {e}"))),
+            Err(e) => {
+                return Err(USimpleError::new(
+                    1,
+                    get_message_with_args(
+                        "mkfifo-error-invalid-mode",
+                        HashMap::from([("error".to_string(), e.to_string())]),
+                    ),
+                ));
+            }
         },
         // Default value + umask if present
         None => 0o666 & !(uucore::mode::get_umask() as usize),
@@ -37,7 +45,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let fifos: Vec<String> = match matches.get_many::<String>(options::FIFO) {
         Some(v) => v.cloned().collect(),
-        None => return Err(USimpleError::new(1, "missing operand")),
+        None => {
+            return Err(USimpleError::new(
+                1,
+                get_message("mkfifo-error-missing-operand"),
+            ));
+        }
     };
 
     for f in fifos {
@@ -48,7 +61,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if err == -1 {
             show!(USimpleError::new(
                 1,
-                format!("cannot create fifo {}: File exists", f.quote()),
+                get_message_with_args(
+                    "mkfifo-error-cannot-create-fifo",
+                    HashMap::from([("path".to_string(), f.quote().to_string())]),
+                ),
             ));
         }
 
@@ -56,7 +72,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode as u32)) {
             return Err(USimpleError::new(
                 1,
-                format!("cannot set permissions on {}: {e}", f.quote()),
+                get_message_with_args(
+                    "mkfifo-error-cannot-set-permissions",
+                    HashMap::from([
+                        ("path".to_string(), f.quote().to_string()),
+                        ("error".to_string(), e.to_string()),
+                    ]),
+                ),
             ));
         }
 
@@ -92,13 +114,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::MODE)
                 .short('m')
                 .long(options::MODE)
-                .help("file permissions for the fifo")
+                .help(get_message("mkfifo-help-mode"))
                 .value_name("MODE"),
         )
         .arg(
             Arg::new(options::SELINUX)
                 .short('Z')
-                .help("set the SELinux security context to default type")
+                .help(get_message("mkfifo-help-selinux"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -108,10 +130,7 @@ pub fn uu_app() -> Command {
                 .value_parser(value_parser!(String))
                 .num_args(0..=1)
                 .require_equals(true)
-                .help(
-                    "like -Z, or if CTX is specified then set the SELinux \
-                    or SMACK security context to CTX",
-                ),
+                .help(get_message("mkfifo-help-context")),
         )
         .arg(
             Arg::new(options::FIFO)

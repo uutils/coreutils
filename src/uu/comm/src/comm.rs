@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) delim mkdelim pairable
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fs::{File, metadata};
 use std::io::{self, BufRead, BufReader, Read, Stdin, stdin};
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -15,7 +16,7 @@ use uucore::line_ending::LineEnding;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
-use uucore::locale::get_message;
+use uucore::locale::{get_message, get_message_with_args};
 
 mod options {
     pub const COLUMN_1: &str = "1";
@@ -103,8 +104,11 @@ impl OrderChecker {
         let is_ordered = current_line >= &self.last_line;
         if !is_ordered && !self.has_error {
             eprintln!(
-                "comm: file {} is not in sorted order",
-                self.file_num.as_str()
+                "{}",
+                get_message_with_args(
+                    "comm-error-file-not-sorted",
+                    HashMap::from([("file_num".to_string(), self.file_num.as_str().to_string())])
+                )
             );
             self.has_error = true;
         }
@@ -247,13 +251,16 @@ fn comm(a: &mut LineReader, b: &mut LineReader, delim: &str, opts: &ArgMatches) 
 
     if opts.get_flag(options::TOTAL) {
         let line_ending = LineEnding::from_zero_flag(opts.get_flag(options::ZERO_TERMINATED));
-        print!("{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}total{line_ending}");
+        print!(
+            "{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}{}{line_ending}",
+            get_message("comm-total")
+        );
     }
 
     if should_check_order && (checker1.has_error || checker2.has_error) {
         // Print the input error message once at the end
         if input_error {
-            eprintln!("comm: input is not in sorted order");
+            eprintln!("{}", get_message("comm-error-input-not-sorted"));
         }
         Err(USimpleError::new(1, ""))
     } else {
@@ -266,7 +273,7 @@ fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
         Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
     } else {
         if metadata(name)?.is_dir() {
-            return Err(io::Error::other("Is a directory"));
+            return Err(io::Error::other(get_message("comm-error-is-directory")));
         }
         let f = File::open(name)?;
         Ok(LineReader::new(
@@ -298,7 +305,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // Note: This intentionally deviate from the GNU error message by inserting the word "conflicting".
             return Err(USimpleError::new(
                 1,
-                "multiple conflicting output delimiters specified",
+                get_message("comm-error-multiple-conflicting-delimiters"),
             ));
         }
     }
@@ -320,25 +327,25 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::COLUMN_1)
                 .short('1')
-                .help("suppress column 1 (lines unique to FILE1)")
+                .help(get_message("comm-help-column-1"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_2)
                 .short('2')
-                .help("suppress column 2 (lines unique to FILE2)")
+                .help(get_message("comm-help-column-2"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_3)
                 .short('3')
-                .help("suppress column 3 (lines that appear in both files)")
+                .help(get_message("comm-help-column-3"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
-                .help("separate columns with STR")
+                .help(get_message("comm-help-delimiter"))
                 .value_name("STR")
                 .default_value(options::DELIMITER_DEFAULT)
                 .allow_hyphen_values(true)
@@ -350,7 +357,7 @@ pub fn uu_app() -> Command {
                 .long(options::ZERO_TERMINATED)
                 .short('z')
                 .overrides_with(options::ZERO_TERMINATED)
-                .help("line delimiter is NUL, not newline")
+                .help(get_message("comm-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -366,19 +373,19 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TOTAL)
                 .long(options::TOTAL)
-                .help("output a summary")
+                .help(get_message("comm-help-total"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHECK_ORDER)
                 .long(options::CHECK_ORDER)
-                .help("check that the input is correctly sorted, even if all input lines are pairable")
+                .help(get_message("comm-help-check-order"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CHECK_ORDER)
                 .long(options::NO_CHECK_ORDER)
-                .help("do not check that the input is correctly sorted")
+                .help(get_message("comm-help-no-check-order"))
                 .action(ArgAction::SetTrue)
                 .conflicts_with(options::CHECK_ORDER),
         )

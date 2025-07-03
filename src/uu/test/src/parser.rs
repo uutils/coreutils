@@ -40,9 +40,9 @@ pub enum Symbol {
 }
 
 impl Symbol {
-    /// Create a new Symbol from an OsString.
+    /// Create a new Symbol from an [`OsString`].
     ///
-    /// Returns Symbol::None in place of None
+    /// Returns `Symbol::None` in place of None
     fn new(token: Option<OsString>) -> Self {
         match token {
             Some(s) => match s.to_str() {
@@ -66,13 +66,13 @@ impl Symbol {
         }
     }
 
-    /// Convert this Symbol into a Symbol::Literal, useful for cases where
+    /// Convert this Symbol into a [`Symbol::Literal`], useful for cases where
     /// test treats an operator as a string operand (test has no reserved
     /// words).
     ///
     /// # Panics
     ///
-    /// Panics if `self` is Symbol::None
+    /// Panics if `self` is [`Symbol::None`]
     fn into_literal(self) -> Self {
         Self::Literal(match self {
             Self::LParen => OsString::from("("),
@@ -106,7 +106,7 @@ impl std::fmt::Display for Symbol {
     }
 }
 
-/// Recursive descent parser for test, which converts a list of OsStrings
+/// Recursive descent parser for test, which converts a list of [`OsString`]s
 /// (typically command line arguments) into a stack of Symbols in postfix
 /// order.
 ///
