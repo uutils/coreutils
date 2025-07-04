@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io;
+use std::iter::Peekable;
 use std::path::{Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
@@ -24,7 +25,7 @@ use uucore::locale::{get_message, get_message_with_args};
 use uucore::show;
 use uucore::show_error;
 use uucore::uio_error;
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 use crate::{
     Attributes, CopyResult, CpError, Options, Preserve, aligned_ancestors, context_for,
@@ -291,6 +292,94 @@ fn copy_direntry(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn inner_copy_directory(
+    direntry_iter: &mut Peekable<walkdir::IntoIter>,
+    context: &Context,
+    do_fix_permissions: bool,
+    fixing_attributes: &Attributes,
+    progress_bar: Option<&ProgressBar>,
+    options: &Options,
+    symlinked_files: &mut HashSet<FileInformation>,
+    copied_destinations: &HashSet<PathBuf>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
+) -> CopyResult<()> {
+    while let Some(Err(e)) = direntry_iter.peek() {
+        // Print an error message, but continue traversing the directory.
+        show_error!("{e}");
+        let _ = direntry_iter.next();
+    }
+
+    match direntry_iter.next() {
+        // everything has been copied: return
+        None => Ok(()),
+        // next errors have been processed
+        Some(Err(_)) => unreachable!(),
+        // copy children, then fix permissions
+        Some(Ok(direntry)) => {
+            let path = direntry.path().to_path_buf();
+            let entry = Entry::new(context, &path, options.no_target_dir)?;
+            let local_to_target = entry.local_to_target.clone();
+            let source_absolute = entry.source_absolute.clone();
+
+            // if entry is a directory, and it doesn't already exist in the destination,
+            // fix its permissions (done at the end of the match arm)
+            let to_be_fixed = !entry.local_to_target.exists() && entry.source_absolute.is_dir();
+
+            // copy current file
+            copy_direntry(
+                progress_bar,
+                entry,
+                options,
+                symlinked_files,
+                options.preserve_hard_links(),
+                copied_destinations,
+                copied_files,
+            )?;
+
+            // recursively copy direntry children
+            let mut next_path_option = direntry_iter.peek().and_then(|result| {
+                result
+                    .as_ref()
+                    .ok()
+                    .map(|direntry| direntry.path().to_path_buf())
+            });
+
+            while let Some(next_path) = next_path_option {
+                if next_path.strip_prefix(&path).is_err() {
+                    break;
+                }
+                inner_copy_directory(
+                    direntry_iter,
+                    context,
+                    do_fix_permissions,
+                    fixing_attributes,
+                    progress_bar,
+                    options,
+                    symlinked_files,
+                    copied_destinations,
+                    copied_files,
+                )?;
+
+                // fetch the path to the next element yielded by direntry_iter
+                next_path_option = direntry_iter.peek().and_then(|result| {
+                    result
+                        .as_ref()
+                        .ok()
+                        .map(|direntry| direntry.path().to_path_buf())
+                });
+            }
+
+            // fix permissions
+            if do_fix_permissions && to_be_fixed {
+                copy_attributes(&source_absolute, &local_to_target, fixing_attributes)?;
+            }
+
+            Ok(())
+        }
+    }
+}
+
 /// Read the contents of the directory `root` and recursively copy the
 /// contents to `target`.
 ///
@@ -377,8 +466,6 @@ pub(crate) fn copy_directory(
     };
     let target = tmp.as_path();
 
-    let preserve_hard_links = options.preserve_hard_links();
-
     // Collect some paths here that are invariant during the traversal
     // of the given directory, like the current working directory and
     // the target directory.
@@ -393,12 +480,6 @@ pub(crate) fn copy_directory(
         }
     };
 
-    // The directory we were in during the previous iteration
-    let mut last_iter: Option<DirEntry> = None;
-
-    // list of directories whose permissions needs fixing
-    let mut dirs_to_fix: Vec<Entry> = Vec::new();
-
     // attributes used when fixing permissions
     let fixing_attributes = Attributes {
         mode: options
@@ -410,88 +491,23 @@ pub(crate) fn copy_directory(
 
     let do_fix_permissions = !matches!(options.attributes.mode, Preserve::No { explicit: true });
 
-    // fix permissions only for those folders that aren't ancestor to direntry
-    let fix_permissions = |direntry: Option<&DirEntry>, dirs: &mut Vec<Entry>| -> CopyResult<()> {
-        if !do_fix_permissions {
-            return Ok(());
-        }
-        while let Some(dir) = dirs.last() {
-            if let Some(direntry) = direntry {
-                // stop if dir is an ancestor of direntry
-                if direntry.path().strip_prefix(&dir.local_to_target).is_ok() {
-                    break;
-                }
-            }
-
-            let dir = dirs.pop().expect("dirs is non-empty");
-
-            copy_attributes(
-                &dir.source_absolute,
-                &dir.local_to_target,
-                &fixing_attributes,
-            )?;
-        }
-
-        Ok(())
-    };
-
-    // Traverse the contents of the directory, copying each one.
-    for direntry_result in WalkDir::new(root)
+    let mut direntry_iter = WalkDir::new(root)
         .same_file_system(options.one_file_system)
         .follow_links(options.dereference)
-    {
-        match direntry_result {
-            Ok(direntry) => {
-                let path = direntry.path().to_path_buf();
-                let entry = Entry::new(&context, &path, options.no_target_dir)?;
+        .into_iter()
+        .peekable();
 
-                // if entry is a directory, and it doesn't already exist in the destination, add it
-                // to dirs_to_fix (done at the end of the loop)
-                let to_be_fixed = !entry.local_to_target.exists() && entry.source_absolute.is_dir();
-
-                copy_direntry(
-                    progress_bar,
-                    entry,
-                    options,
-                    symlinked_files,
-                    preserve_hard_links,
-                    copied_destinations,
-                    copied_files,
-                )?;
-
-                // We omit certain permissions when creating directories
-                // to prevent other users from accessing them before they're done.
-                // We thus need to fix the permissions of each directory we copy
-                // once it's contents are ready.
-                // This "fixup" is implemented here in a somewhat memory-efficient manner.
-                //
-                // We detect iterations where we "walk up" the directory tree,
-                // and fix permissions on all the directories we exited.
-                if let Some(last_iter) = &last_iter {
-                    let went_down = direntry.path().strip_prefix(last_iter.path()).is_ok();
-
-                    if !went_down {
-                        fix_permissions(Some(&direntry), &mut dirs_to_fix)?;
-                    }
-                }
-
-                last_iter = Some(direntry);
-
-                // add entry to dirs_to_fix
-                if to_be_fixed {
-                    // can't clone an Entry so build a new one
-                    let entry = Entry::new(&context, &path, options.no_target_dir)?;
-                    dirs_to_fix.push(entry);
-                }
-            }
-
-            // Print an error message, but continue traversing the directory.
-            Err(e) => show_error!("{e}"),
-        }
-    }
-
-    // Handle final directory permission fixes.
-    fix_permissions(None, &mut dirs_to_fix)?;
+    inner_copy_directory(
+        &mut direntry_iter,
+        &context,
+        do_fix_permissions,
+        &fixing_attributes,
+        progress_bar,
+        options,
+        symlinked_files,
+        copied_destinations,
+        copied_files,
+    )?;
 
     // Also fix permissions for parent directories,
     // if we were asked to create them.
