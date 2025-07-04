@@ -51,7 +51,7 @@ pub use crate::features::fast_inc;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
-#[cfg(feature = "i18n")]
+#[cfg(feature = "i18n-common")]
 pub use crate::features::i18n;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
@@ -124,6 +124,7 @@ use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::str;
+use std::str::Utf8Chunk;
 use std::sync::{LazyLock, atomic::Ordering};
 
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
@@ -377,6 +378,24 @@ pub fn os_string_from_vec(vec: Vec<u8>) -> mods::error::UResult<OsString> {
     Ok(s)
 }
 
+/// Converts an `OsString` into a `Vec<u8>`, parsing as UTF-8 on non-unix platforms.
+///
+/// This always succeeds on unix platforms,
+/// and fails on other platforms if the bytes can't be parsed as UTF-8.
+pub fn os_string_to_vec(s: OsString) -> mods::error::UResult<Vec<u8>> {
+    #[cfg(unix)]
+    let v = s.into_vec();
+    #[cfg(not(unix))]
+    let v = s
+        .into_string()
+        .map_err(|_| {
+            mods::error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
+        })?
+        .into();
+
+    Ok(v)
+}
+
 /// Equivalent to `std::BufRead::lines` which outputs each line as a `Vec<u8>`,
 /// which avoids panicking on non UTF-8 input.
 pub fn read_byte_lines<R: std::io::Read>(
@@ -442,6 +461,91 @@ macro_rules! prompt_yes(
         uucore::read_yes()
     })
 );
+
+/// Represent either a character or a byte.
+/// Used to iterate on partially valid UTF-8 data
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CharByte {
+    Char(char),
+    Byte(u8),
+}
+
+impl From<char> for CharByte {
+    fn from(value: char) -> Self {
+        CharByte::Char(value)
+    }
+}
+
+impl From<u8> for CharByte {
+    fn from(value: u8) -> Self {
+        CharByte::Byte(value)
+    }
+}
+
+impl From<&u8> for CharByte {
+    fn from(value: &u8) -> Self {
+        CharByte::Byte(*value)
+    }
+}
+
+struct Utf8ChunkIterator<'a> {
+    iter: Box<dyn Iterator<Item = CharByte> + 'a>,
+}
+
+impl Iterator for Utf8ChunkIterator<'_> {
+    type Item = CharByte;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl<'a> From<Utf8Chunk<'a>> for Utf8ChunkIterator<'a> {
+    fn from(chk: Utf8Chunk<'a>) -> Utf8ChunkIterator<'a> {
+        Self {
+            iter: Box::new(
+                chk.valid()
+                    .chars()
+                    .map(CharByte::from)
+                    .chain(chk.invalid().iter().map(CharByte::from)),
+            ),
+        }
+    }
+}
+
+/// Iterates on the valid and invalid parts of a byte sequence with regard to
+/// the UTF-8 encoding.
+pub struct CharByteIterator<'a> {
+    iter: Box<dyn Iterator<Item = CharByte> + 'a>,
+}
+
+impl<'a> CharByteIterator<'a> {
+    /// Make a `CharByteIterator` from a byte slice.
+    /// [`CharByteIterator`]
+    pub fn new(input: &'a [u8]) -> CharByteIterator<'a> {
+        Self {
+            iter: Box::new(input.utf8_chunks().flat_map(Utf8ChunkIterator::from)),
+        }
+    }
+}
+
+impl Iterator for CharByteIterator<'_> {
+    type Item = CharByte;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+pub trait IntoCharByteIterator<'a> {
+    fn iter_char_bytes(self) -> CharByteIterator<'a>;
+}
+
+impl<'a> IntoCharByteIterator<'a> for &'a [u8] {
+    fn iter_char_bytes(self) -> CharByteIterator<'a> {
+        CharByteIterator::new(self)
+    }
+}
 
 #[cfg(test)]
 mod tests {
