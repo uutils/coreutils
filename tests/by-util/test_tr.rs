@@ -1561,6 +1561,5 @@ fn test_broken_pipe_no_error() {
         .args(&["e", "a"])
         .pipe_in("hello".repeat(100))
         .run_stdout_starts_with(b"")
-        .success()
-        .stderr_is("");
+        .fails_silently();
 }

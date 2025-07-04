@@ -13,10 +13,12 @@ use operation::{
 };
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::io::{BufWriter, ErrorKind, Write, stdin, stdout};
+use std::io::{BufWriter, Write, stdin, stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
+#[cfg(not(target_os = "windows"))]
+use uucore::libc;
 use uucore::{format_usage, os_str_as_bytes, show};
 
 use uucore::locale::{get_message, get_message_with_args};
@@ -31,6 +33,15 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // When we receive a SIGPIPE signal, we want to terminate the process so
+    // that we don't print any error messages to stderr. Rust ignores SIGPIPE
+    // (see https://github.com/rust-lang/rust/issues/62569), so we restore it's
+    // default action here.
+    #[cfg(not(target_os = "windows"))]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     let matches = uu_app().try_get_matches_from(args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);
@@ -157,10 +168,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         translate_input(&mut locked_stdin, &mut buffered_stdout, op)?;
     }
 
-    // Handle broken pipe errors gracefully during flush.
+    #[cfg(not(target_os = "windows"))]
+    buffered_stdout
+        .flush()
+        .map_err_context(|| get_message("tr-error-write-error"))?;
+
+    // SIGPIPE is not available on Windows.
+    #[cfg(target_os = "windows")]
     match buffered_stdout.flush() {
         Ok(()) => {}
-        Err(err) if err.kind() == ErrorKind::BrokenPipe => {}
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => std::process::exit(13),
         Err(err) => return Err(err.map_err_context(|| get_message("tr-error-write-error"))),
     }
 
