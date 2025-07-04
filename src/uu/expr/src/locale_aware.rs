@@ -6,7 +6,7 @@
 use std::cmp::Ordering;
 
 use uucore::{
-    IntoCharByteIterator,
+    CharByte, IntoCharByteIterator,
     i18n::{
         UEncoding,
         collator::{AlternateHandling, CollatorOptions, locale_cmp, try_init_collator},
@@ -67,4 +67,45 @@ pub(crate) fn locale_aware_length(input: &MaybeNonUtf8Str) -> usize {
         UEncoding::Utf8 => std::str::from_utf8(input).map_or(input.len(), |s| s.chars().count()),
         UEncoding::Ascii => input.len(),
     }
+}
+
+fn substr_with_locale(
+    s: MaybeNonUtf8String,
+    pos: usize,
+    len: usize,
+    encoding: UEncoding,
+) -> MaybeNonUtf8String {
+    match encoding {
+        UEncoding::Utf8 => {
+            // Create a buffer with the heuristic that all the chars are ASCII
+            // and are 1-byte long.
+            let mut string = MaybeNonUtf8String::with_capacity(len);
+            let mut buf = [0; 4];
+
+            // Iterate on char-bytes, and skip them accordingly.
+            // For each character (or byte) in the right range,
+            // push it to the string.
+            for cb in s.iter_char_bytes().skip(pos).take(len) {
+                match cb {
+                    CharByte::Char(c) => {
+                        let len = c.encode_utf8(&mut buf).len();
+                        string.extend(&buf[..len]);
+                    }
+                    CharByte::Byte(b) => string.push(b),
+                }
+            }
+            string
+        }
+        UEncoding::Ascii => s.into_iter().skip(pos).take(len).collect(),
+    }
+}
+
+/// Given a byte sequence, a position and a length, return the corresponding
+/// substring depending on the current locale.
+pub(crate) fn locale_aware_substr(
+    s: MaybeNonUtf8String,
+    pos: usize,
+    len: usize,
+) -> MaybeNonUtf8String {
+    substr_with_locale(s, pos, len, get_locale_encoding())
 }

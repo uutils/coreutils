@@ -13,7 +13,9 @@ use onig::{Regex, RegexOptions, Syntax};
 
 use crate::{
     ExprError, ExprResult,
-    locale_aware::{locale_aware_index, locale_aware_length, locale_comparison},
+    locale_aware::{
+        locale_aware_index, locale_aware_length, locale_aware_substr, locale_comparison,
+    },
 };
 
 pub(crate) type MaybeNonUtf8String = Vec<u8>;
@@ -564,11 +566,7 @@ impl AstNode {
                         .unwrap_or(0);
 
                     if let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) {
-                        let result = string
-                            .into_iter()
-                            .skip(pos)
-                            .take(length)
-                            .collect::<MaybeNonUtf8String>();
+                        let result = locale_aware_substr(string, pos, length);
                         result_stack.insert(node.id, Ok(result.into()));
                     } else {
                         result_stack.insert(node.id, Ok(String::new().into()));
