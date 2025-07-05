@@ -708,12 +708,16 @@ where
         let filtered = buf.iter().filter_map(|&c| translator.translate(c));
         output_buf.extend(filtered);
 
+        #[cfg(not(target_os = "windows"))]
+        output
+            .write_all(&output_buf)
+            .map_err_context(|| get_message("tr-error-write-error"))?;
+
+        // SIGPIPE is not available on Windows.
+        #[cfg(target_os = "windows")]
         if let Err(err) = output.write_all(&output_buf) {
-            // Treat broken pipe as a successful termination, which is the
-            // expected behavior when stdout is a pipeline and the downstream
-            // process terminates.
             if err.kind() == std::io::ErrorKind::BrokenPipe {
-                break;
+                std::process::exit(13);
             } else {
                 return Err(err.map_err_context(|| get_message("tr-error-write-error")));
             }
