@@ -204,3 +204,23 @@ fn test_hex_timeout_ending_with_d() {
         .fails_with_code(124)
         .no_output();
 }
+
+#[test]
+fn test_terminate_child_on_receiving_terminate() {
+    let mut timeout_cmd = new_ucmd!()
+        .args(&[
+            "10",
+            "sh",
+            "-c",
+            "trap 'echo child received TERM' TERM; sleep 5",
+        ])
+        .run_no_wait();
+    timeout_cmd.delay(100);
+    timeout_cmd.kill_with_custom_signal(nix::sys::signal::Signal::SIGTERM);
+    timeout_cmd
+        .make_assertion()
+        .is_not_alive()
+        .with_current_output()
+        .code_is(143)
+        .stdout_contains("child received TERM");
+}
