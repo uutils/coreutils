@@ -241,3 +241,19 @@ fn row_column_sizes() {
         .fails()
         .stderr_contains("missing argument to 'rows'");
 }
+
+#[test]
+fn non_negatable_combo() {
+    new_ucmd!()
+        .args(&["-dec"])
+        .fails()
+        .stderr_contains("invalid argument '-dec'");
+    new_ucmd!()
+        .args(&["-crt"])
+        .fails()
+        .stderr_contains("invalid argument '-crt'");
+    new_ucmd!()
+        .args(&["-ek"])
+        .fails()
+        .stderr_contains("invalid argument '-ek'");
+}
