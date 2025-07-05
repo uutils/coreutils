@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io;
+use std::iter::Peekable;
 use std::path::{Path, PathBuf, StripPrefixError};
 
 use indicatif::ProgressBar;
@@ -24,11 +25,11 @@ use uucore::locale::{get_message, get_message_with_args};
 use uucore::show;
 use uucore::show_error;
 use uucore::uio_error;
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 use crate::{
-    CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes, copy_file,
-    copy_link,
+    Attributes, CopyResult, CpError, Options, Preserve, aligned_ancestors, context_for,
+    copy_attributes, copy_file, copy_link,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -79,12 +80,6 @@ fn get_local_to_root_parent(
         }
         None => Ok(path.to_path_buf()),
     }
-}
-
-/// Given an iterator, return all its items except the last.
-fn skip_last<T>(mut iter: impl Iterator<Item = T>) -> impl Iterator<Item = T> {
-    let last = iter.next();
-    iter.scan(last, |state, item| state.replace(item))
 }
 
 /// Paths that are invariant throughout the traversal when copying a directory.
@@ -297,6 +292,94 @@ fn copy_direntry(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn inner_copy_directory(
+    direntry_iter: &mut Peekable<walkdir::IntoIter>,
+    context: &Context,
+    do_fix_permissions: bool,
+    fixing_attributes: &Attributes,
+    progress_bar: Option<&ProgressBar>,
+    options: &Options,
+    symlinked_files: &mut HashSet<FileInformation>,
+    copied_destinations: &HashSet<PathBuf>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
+) -> CopyResult<()> {
+    while let Some(Err(e)) = direntry_iter.peek() {
+        // Print an error message, but continue traversing the directory.
+        show_error!("{e}");
+        let _ = direntry_iter.next();
+    }
+
+    match direntry_iter.next() {
+        // everything has been copied: return
+        None => Ok(()),
+        // next errors have been processed
+        Some(Err(_)) => unreachable!(),
+        // copy children, then fix permissions
+        Some(Ok(direntry)) => {
+            let path = direntry.path().to_path_buf();
+            let entry = Entry::new(context, &path, options.no_target_dir)?;
+            let local_to_target = entry.local_to_target.clone();
+            let source_absolute = entry.source_absolute.clone();
+
+            // if entry is a directory, and it doesn't already exist in the destination,
+            // fix its permissions (done at the end of the match arm)
+            let to_be_fixed = !entry.local_to_target.exists() && entry.source_absolute.is_dir();
+
+            // copy current file
+            copy_direntry(
+                progress_bar,
+                entry,
+                options,
+                symlinked_files,
+                options.preserve_hard_links(),
+                copied_destinations,
+                copied_files,
+            )?;
+
+            // recursively copy direntry children
+            let mut next_path_option = direntry_iter.peek().and_then(|result| {
+                result
+                    .as_ref()
+                    .ok()
+                    .map(|direntry| direntry.path().to_path_buf())
+            });
+
+            while let Some(next_path) = next_path_option {
+                if next_path.strip_prefix(&path).is_err() {
+                    break;
+                }
+                inner_copy_directory(
+                    direntry_iter,
+                    context,
+                    do_fix_permissions,
+                    fixing_attributes,
+                    progress_bar,
+                    options,
+                    symlinked_files,
+                    copied_destinations,
+                    copied_files,
+                )?;
+
+                // fetch the path to the next element yielded by direntry_iter
+                next_path_option = direntry_iter.peek().and_then(|result| {
+                    result
+                        .as_ref()
+                        .ok()
+                        .map(|direntry| direntry.path().to_path_buf())
+                });
+            }
+
+            // fix permissions
+            if do_fix_permissions && to_be_fixed {
+                copy_attributes(&source_absolute, &local_to_target, fixing_attributes)?;
+            }
+
+            Ok(())
+        }
+    }
+}
+
 /// Read the contents of the directory `root` and recursively copy the
 /// contents to `target`.
 ///
@@ -383,8 +466,6 @@ pub(crate) fn copy_directory(
     };
     let target = tmp.as_path();
 
-    let preserve_hard_links = options.preserve_hard_links();
-
     // Collect some paths here that are invariant during the traversal
     // of the given directory, like the current working directory and
     // the target directory.
@@ -399,104 +480,34 @@ pub(crate) fn copy_directory(
         }
     };
 
-    // The directory we were in during the previous iteration
-    let mut last_iter: Option<DirEntry> = None;
+    // attributes used when fixing permissions
+    let fixing_attributes = Attributes {
+        mode: options
+            .attributes
+            .mode
+            .max(Preserve::Yes { required: false }),
+        ..options.attributes
+    };
 
-    // Traverse the contents of the directory, copying each one.
-    for direntry_result in WalkDir::new(root)
+    let do_fix_permissions = !matches!(options.attributes.mode, Preserve::No { explicit: true });
+
+    let mut direntry_iter = WalkDir::new(root)
         .same_file_system(options.one_file_system)
         .follow_links(options.dereference)
-    {
-        match direntry_result {
-            Ok(direntry) => {
-                let entry = Entry::new(&context, direntry.path(), options.no_target_dir)?;
+        .into_iter()
+        .peekable();
 
-                copy_direntry(
-                    progress_bar,
-                    entry,
-                    options,
-                    symlinked_files,
-                    preserve_hard_links,
-                    copied_destinations,
-                    copied_files,
-                )?;
-
-                // We omit certain permissions when creating directories
-                // to prevent other users from accessing them before they're done.
-                // We thus need to fix the permissions of each directory we copy
-                // once it's contents are ready.
-                // This "fixup" is implemented here in a memory-efficient manner.
-                //
-                // We detect iterations where we "walk up" the directory tree,
-                // and fix permissions on all the directories we exited.
-                // (Note that there can be more than one! We might step out of
-                // `./a/b/c` into `./a/`, in which case we'll need to fix the
-                // permissions of both `./a/b/c` and `./a/b`, in that order.)
-                if direntry.file_type().is_dir() {
-                    // If true, last_iter is not a parent of this iter.
-                    // The means we just exited a directory.
-                    let went_up = if let Some(last_iter) = &last_iter {
-                        last_iter.path().strip_prefix(direntry.path()).is_ok()
-                    } else {
-                        false
-                    };
-
-                    if went_up {
-                        // Compute the "difference" between `last_iter` and `direntry`.
-                        // For example, if...
-                        // - last_iter = `a/b/c/d`
-                        // - direntry = `a/b`
-                        // then diff = `c/d`
-                        //
-                        // All the unwraps() here are unreachable.
-                        let last_iter = last_iter.as_ref().unwrap();
-                        let diff = last_iter.path().strip_prefix(direntry.path()).unwrap();
-
-                        // Fix permissions for every entry in `diff`, inside-out.
-                        // We skip the last directory (which will be `.`) because
-                        // its permissions will be fixed when we walk _out_ of it.
-                        // (at this point, we might not be done copying `.`!)
-                        for p in skip_last(diff.ancestors()) {
-                            let src = direntry.path().join(p);
-                            let entry = Entry::new(&context, &src, options.no_target_dir)?;
-
-                            copy_attributes(
-                                &entry.source_absolute,
-                                &entry.local_to_target,
-                                &options.attributes,
-                            )?;
-                        }
-                    }
-
-                    last_iter = Some(direntry);
-                }
-            }
-
-            // Print an error message, but continue traversing the directory.
-            Err(e) => show_error!("{e}"),
-        }
-    }
-
-    // Handle final directory permission fixes.
-    // This is almost the same as the permission-fixing code above,
-    // with minor differences (commented)
-    if let Some(last_iter) = last_iter {
-        let diff = last_iter.path().strip_prefix(root).unwrap();
-
-        // Do _not_ skip `.` this time, since we know we're done.
-        // This is where we fix the permissions of the top-level
-        // directory we just copied.
-        for p in diff.ancestors() {
-            let src = root.join(p);
-            let entry = Entry::new(&context, &src, options.no_target_dir)?;
-
-            copy_attributes(
-                &entry.source_absolute,
-                &entry.local_to_target,
-                &options.attributes,
-            )?;
-        }
-    }
+    inner_copy_directory(
+        &mut direntry_iter,
+        &context,
+        do_fix_permissions,
+        &fixing_attributes,
+        progress_bar,
+        options,
+        symlinked_files,
+        copied_destinations,
+        copied_files,
+    )?;
 
     // Also fix permissions for parent directories,
     // if we were asked to create them.
