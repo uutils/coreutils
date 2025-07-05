@@ -198,7 +198,7 @@ enum PtxError {
     #[error("{}", get_message("ptx-error-dumb-format"))]
     DumbFormat,
 
-    #[error("{}", get_message_with_args("ptx-error-not-implemented", HashMap::from([("feature".to_string(), .0.to_string())])))]
+    #[error("{}", get_message_with_args("ptx-error-not-implemented", HashMap::from([("feature".to_string(), (*.0).to_string())])))]
     NotImplemented(&'static str),
 
     #[error("{0}")]

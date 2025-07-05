@@ -330,7 +330,7 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 
 #[cfg(test)]
 pub fn parse_format_flags_str(args_str: &[&'static str]) -> Result<Vec<FormatterItemInfo>, String> {
-    let args: Vec<String> = args_str.iter().map(|s| s.to_string()).collect();
+    let args: Vec<String> = args_str.iter().map(|s| (*s).to_string()).collect();
     parse_format_flags(&args).map(|v| {
         // tests using this function assume add_ascii_dump is not set
         v.into_iter()
