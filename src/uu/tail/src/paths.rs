@@ -158,7 +158,6 @@ impl FileExtTail for File {
 pub trait MetadataExtTail {
     fn is_tailable(&self) -> bool;
     fn got_truncated(&self, other: &Metadata) -> UResult<bool>;
-    fn get_block_size(&self) -> u64;
     fn file_id_eq(&self, other: &Metadata) -> bool;
 }
 
@@ -178,17 +177,6 @@ impl MetadataExtTail for Metadata {
     /// Return true if the file was modified and is now shorter
     fn got_truncated(&self, other: &Metadata) -> UResult<bool> {
         Ok(other.len() < self.len() && other.modified()? != self.modified()?)
-    }
-
-    fn get_block_size(&self) -> u64 {
-        #[cfg(unix)]
-        {
-            self.blocks()
-        }
-        #[cfg(not(unix))]
-        {
-            self.len()
-        }
     }
 
     fn file_id_eq(&self, _other: &Metadata) -> bool {

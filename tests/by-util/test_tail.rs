@@ -4923,3 +4923,13 @@ fn test_failed_write_is_reported() {
         .fails()
         .stderr_is("tail: No space left on device\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_dev_zero() {
+    let ts = TestScenario::new("tail");
+    ts.ucmd()
+        .args(&["-c", "1", "/dev/zero"])
+        .succeeds()
+        .stdout_only("\0");
+}
