@@ -229,10 +229,7 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     let uid = parse_uid(user, spec, sep)?;
     let gid = parse_gid(group, spec)?;
 
-    if user.chars().next().map(char::is_numeric).unwrap_or(false)
-        && group.is_empty()
-        && spec != user
-    {
+    if user.chars().next().is_some_and(char::is_numeric) && group.is_empty() && spec != user {
         // if the arg starts with an id numeric value, the group isn't set but the separator is provided,
         // we should fail with an error
         return Err(USimpleError::new(

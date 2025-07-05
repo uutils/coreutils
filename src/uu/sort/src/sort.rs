@@ -1219,8 +1219,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // "0" is default - threads = num of cores
         settings.threads = matches
             .get_one::<String>(options::PARALLEL)
-            .map(String::from)
-            .unwrap_or_else(|| "0".to_string());
+            .map_or_else(|| "0".to_string(), String::from);
         unsafe {
             env::set_var("RAYON_NUM_THREADS", &settings.threads);
         }
@@ -1238,8 +1237,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut tmp_dir = TmpDirWrapper::new(
         matches
             .get_one::<String>(options::TMP_DIR)
-            .map(PathBuf::from)
-            .unwrap_or_else(env::temp_dir),
+            .map_or_else(env::temp_dir, PathBuf::from),
     );
 
     settings.compress_prog = matches

@@ -146,8 +146,7 @@ impl HardlinkTracker {
             let has_hardlinks = scanner
                 .hardlink_groups
                 .get(&key)
-                .map(|group| group.len() > 1)
-                .unwrap_or(false);
+                .is_some_and(|group| group.len() > 1);
 
             if has_hardlinks {
                 if options.verbose {

@@ -376,8 +376,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let owner = matches
         .get_one::<String>(OPT_OWNER)
-        .map(|s| s.as_str())
-        .unwrap_or("")
+        .map_or("", |s| s.as_str())
         .to_string();
 
     let owner_id = if owner.is_empty() {
@@ -391,8 +390,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let group = matches
         .get_one::<String>(OPT_GROUP)
-        .map(|s| s.as_str())
-        .unwrap_or("")
+        .map_or("", |s| s.as_str())
         .to_string();
 
     let group_id = if group.is_empty() {
@@ -420,8 +418,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         strip_program: String::from(
             matches
                 .get_one::<String>(OPT_STRIP_PROGRAM)
-                .map(|s| s.as_str())
-                .unwrap_or(DEFAULT_STRIP_PROGRAM),
+                .map_or(DEFAULT_STRIP_PROGRAM, |s| s.as_str()),
         ),
         create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
@@ -503,8 +500,7 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
     !path.exists()
-        && (path.parent().map(Path::is_dir).unwrap_or(true)
-            || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
+        && (path.parent().is_none_or(Path::is_dir) || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
 }
 
 /// Test if the path is an existing directory or ends with a trailing separator.
@@ -1027,8 +1023,7 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
         .parent()
         .and_then(|parent| metadata(parent).ok())
         .filter(|parent_meta| parent_meta.mode() & 0o2000 != 0)
-        .map(|parent_meta| parent_meta.gid())
-        .unwrap_or(getegid());
+        .map_or(getegid(), |parent_meta| parent_meta.gid());
 
     to_meta.gid() != expected_gid
 }

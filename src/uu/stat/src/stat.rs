@@ -186,8 +186,7 @@ impl ScanUtil for str {
         let count = chars
             .next()
             .filter(|&c| c.is_ascii_digit() || c == '-' || c == '+')
-            .map(|_| 1 + chars.take_while(char::is_ascii_digit).count())
-            .unwrap_or(0);
+            .map_or(0, |_| 1 + chars.take_while(char::is_ascii_digit).count());
 
         if count > 0 {
             F::from_str(&self[..count]).ok().map(|x| (x, count))
@@ -643,8 +642,7 @@ impl Stater {
         format_str
             .char_indices()
             .nth(char_index)
-            .map(|(byte_idx, _)| byte_idx)
-            .unwrap_or(format_str.len())
+            .map_or(format_str.len(), |(byte_idx, _)| byte_idx)
     }
 
     fn handle_percent_case(
@@ -847,8 +845,7 @@ impl Stater {
         } else {
             matches
                 .get_one::<String>(options::FORMAT)
-                .map(|s| s.as_str())
-                .unwrap_or("")
+                .map_or("", |s| s.as_str())
         };
 
         let use_printf = matches.contains_id(options::PRINTF);
@@ -1025,11 +1022,11 @@ impl Stater {
                     }
 
                     // time of file birth, human-readable; - if unknown
-                    'w' => OutputType::Str(
-                        meta.birth()
-                            .map(|(sec, nsec)| pretty_time(sec as i64, nsec as i64))
-                            .unwrap_or(String::from("-")),
-                    ),
+                    'w' => {
+                        OutputType::Str(meta.birth().map_or(String::from("-"), |(sec, nsec)| {
+                            pretty_time(sec as i64, nsec as i64)
+                        }))
+                    }
 
                     // time of file birth, seconds since Epoch; 0 if unknown
                     'W' => OutputType::Unsigned(meta.birth().unwrap_or_default().0),

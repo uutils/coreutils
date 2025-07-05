@@ -1160,8 +1160,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)
-        .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
+        .map_or_else(|| vec![Path::new(".")], |v| v.map(Path::new).collect());
 
     list(locs, &config)
 }
@@ -2135,7 +2134,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map(|md| md.len()).unwrap_or(0)));
+            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map_or(0, |md| md.len())));
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
@@ -2194,8 +2193,7 @@ fn is_hidden(file_path: &DirEntry) -> bool {
         file_path
             .file_name()
             .to_str()
-            .map(|res| res.starts_with('.'))
-            .unwrap_or(false)
+            .is_some_and(|res| res.starts_with('.'))
     }
 }
 
