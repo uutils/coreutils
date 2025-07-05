@@ -209,7 +209,7 @@ mod tests {
 
         use crate::filesystem::{FsError, mount_info_from_path};
 
-        // Create a fake `MountInfo` with the given directory name.
+        /// Create a fake `MountInfo` with the given directory name.
         fn mount_info(mount_dir: &str) -> MountInfo {
             MountInfo {
                 dev_id: String::default(),
@@ -223,7 +223,7 @@ mod tests {
             }
         }
 
-        // Check whether two `MountInfo` instances are equal.
+        /// Check whether two `MountInfo` instances are equal.
         fn mount_info_eq(m1: &MountInfo, m2: &MountInfo) -> bool {
             m1.dev_id == m2.dev_id
                 && m1.dev_name == m2.dev_name

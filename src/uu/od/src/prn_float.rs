@@ -41,8 +41,8 @@ fn format_flo16(f: f16) -> String {
     format_float(f64::from(f), 9, 4)
 }
 
-// formats float with 8 significant digits, eg 12345678 or -1.2345678e+12
-// always returns a string of 14 characters
+/// formats float with 8 significant digits, eg 12345678 or -1.2345678e+12
+/// always returns a string of 14 characters
 fn format_flo32(f: f32) -> String {
     let width: usize = 14;
     let precision: usize = 8;

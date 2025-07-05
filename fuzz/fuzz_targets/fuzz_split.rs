@@ -58,7 +58,7 @@ fn generate_split_args() -> String {
     args.join(" ")
 }
 
-// Function to generate a random string of lines
+/// Function to generate a random string of lines
 fn generate_random_lines(count: usize) -> String {
     let mut rng = rand::rng();
     let mut lines = Vec::new();

@@ -630,8 +630,8 @@ fn do_pass(
     Ok(())
 }
 
-// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
-// Return the path of the file after its last renaming or None if error
+/// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
+/// Return the path of the file after its last renaming or None in case of an error
 fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Option<PathBuf> {
     let file_name_len = orig_path.file_name().unwrap().to_str().unwrap().len();
 

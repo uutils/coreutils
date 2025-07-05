@@ -162,8 +162,8 @@ impl<'a> Inputs<'a> {
         }
     }
 
-    // Creates an iterator which yields values borrowed from the command line arguments.
-    // Returns an error if the file specified in --files0-from cannot be opened.
+    /// Creates an iterator which yields values borrowed from the command line arguments.
+    /// Returns an error if the file specified in --files0-from cannot be opened.
     fn try_iter(
         &'a self,
         settings: &'a Settings<'a>,
@@ -300,8 +300,8 @@ fn is_stdin_small_file() -> bool {
 }
 
 #[cfg(not(unix))]
-// Windows presents a piped stdin as a "normal file" with a length equal to however many bytes
-// have been buffered at the time it's checked. To be safe, we must never assume it's a file.
+/// Windows presents a piped stdin as a "normal file" with a length equal to however many bytes
+/// have been buffered at the time it's checked. To be safe, we must never assume it's a file.
 fn is_stdin_small_file() -> bool {
     false
 }

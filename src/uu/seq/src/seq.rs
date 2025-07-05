@@ -50,8 +50,8 @@ struct SeqOptions<'a> {
 /// The elements are (first, increment, last).
 type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 
-// Turn short args with attached value, for example "-s,", into two args "-s" and "," to make
-// them work with clap.
+/// Turn short args with attached value, for example "-s,", into two args "-s" and "," to make
+/// them work with clap.
 fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
     let mut v: Vec<OsString> = Vec::new();
 
