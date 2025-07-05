@@ -515,6 +515,12 @@ fn partial_help_argument() {
 }
 
 #[test]
+fn only_help_argument_prints_help() {
+    assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help\n");
+    assert_ne!(new_ucmd!().arg("--help").succeeds().stdout(), b"--help"); // This one is just in case.
+}
+
+#[test]
 fn multibyte_escape_unicode() {
     // spell-checker:disable-next-line
     // Tests suggested by kkew3
