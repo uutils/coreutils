@@ -311,22 +311,7 @@ pub(crate) fn copy_directory(
     symlinked_files: &mut HashSet<FileInformation>,
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
-    source_in_command_line: bool,
 ) -> CopyResult<()> {
-    // if no-dereference is enabled and this is a symlink, copy it as a file
-    if !options.dereference(source_in_command_line) && root.is_symlink() {
-        return copy_file(
-            progress_bar,
-            root,
-            target,
-            options,
-            symlinked_files,
-            copied_destinations,
-            copied_files,
-            source_in_command_line,
-        );
-    }
-
     if !options.recursive {
         return Err(get_message_with_args(
             "cp-error-omitting-directory",
