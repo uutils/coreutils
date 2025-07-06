@@ -93,6 +93,14 @@ fn test_single_1_line() {
 }
 
 #[test]
+fn test_single_1_line_presume_input_pipe() {
+    new_ucmd!()
+        .args(&["---presume-input-pipe", "-n", "1", INPUT])
+        .succeeds()
+        .stdout_is_fixture("lorem_ipsum_1_line.expected");
+}
+
+#[test]
 fn test_single_5_chars() {
     new_ucmd!()
         .args(&["-c", "5", INPUT])
