@@ -221,8 +221,7 @@ fn check_dest_is_fifo(dest: &Path) -> bool {
     }
 }
 
-/// Copy the contents of a stream from `source` to `dest`. The `if_fifo` argument is used to
-/// determine if we need to modify the file's attributes before and after copying.
+/// Copy the contents of a stream from `source` to `dest`.
 fn copy_stream<P>(source: P, dest: P) -> std::io::Result<u64>
 where
     P: AsRef<Path>,
@@ -266,11 +265,6 @@ where
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.
-///
-/// The `source_is_fifo` flag must be set to `true` if and only if
-/// `source` is a FIFO (also known as a named pipe). In this case,
-/// copy-on-write is not possible, so we copy the contents using
-/// [`std::io::copy`].
 pub(crate) fn copy_on_write(
     source: &Path,
     dest: &Path,

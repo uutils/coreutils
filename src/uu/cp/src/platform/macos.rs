@@ -20,9 +20,6 @@ use crate::{
 };
 
 /// Copies `source` to `dest` using copy-on-write if possible.
-///
-/// The `source_is_fifo` flag must be set to `true` if and only if
-/// `source` is a FIFO (also known as a named pipe).
 pub(crate) fn copy_on_write(
     source: &Path,
     dest: &Path,
