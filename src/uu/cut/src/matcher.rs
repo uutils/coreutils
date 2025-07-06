@@ -34,9 +34,8 @@ impl Matcher for ExactMatcher<'_> {
                         || haystack[match_idx + 1..].starts_with(&self.needle[1..])
                     {
                         return Some((match_idx, match_idx + self.needle.len()));
-                    } else {
-                        pos = match_idx + 1;
                     }
+                    pos = match_idx + 1;
                 }
                 None => {
                     return None;

@@ -10,11 +10,9 @@ use std::ffi::{OsStr, OsString};
 use std::io::{self, StdoutLock, Write};
 use uucore::error::{UResult, USimpleError};
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::format_usage;
 
-const ABOUT: &str = help_about!("echo.md");
-const USAGE: &str = help_usage!("echo.md");
-const AFTER_HELP: &str = help_section!("after help", "echo.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const STRING: &str = "STRING";
@@ -71,8 +69,8 @@ fn is_echo_flag(arg: &OsString, echo_options: &mut EchoOptions) -> bool {
 /// Processes command line arguments, separating flags from normal arguments
 /// Returns:
 /// - Vector of non-flag arguments
-/// - trailing_newline: whether to print a trailing newline
-/// - escape: whether to process escape sequences
+/// - `trailing_newline`: whether to print a trailing newline
+/// - `escape`: whether to process escape sequences
 fn filter_echo_flags(args: impl uucore::Args) -> (Vec<OsString>, bool, bool) {
     let mut result = Vec::new();
     let mut echo_options = EchoOptions {
@@ -141,26 +139,26 @@ pub fn uu_app() -> Command {
         .trailing_var_arg(true)
         .allow_hyphen_values(true)
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("echo-about"))
+        .after_help(get_message("echo-after-help"))
+        .override_usage(format_usage(&get_message("echo-usage")))
         .arg(
             Arg::new(options::NO_NEWLINE)
                 .short('n')
-                .help("do not output the trailing newline")
+                .help(get_message("echo-help-no-newline"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
                 .short('e')
-                .help("enable interpretation of backslash escapes")
+                .help(get_message("echo-help-enable-escapes"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::DISABLE_BACKSLASH_ESCAPE),
         )
         .arg(
             Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
                 .short('E')
-                .help("disable interpretation of backslash escapes (default)")
+                .help(get_message("echo-help-disable-escapes"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ENABLE_BACKSLASH_ESCAPE),
         )
@@ -179,10 +177,7 @@ fn execute(
 ) -> UResult<()> {
     for (i, input) in arguments_after_options.into_iter().enumerate() {
         let Some(bytes) = bytes_from_os_string(input.as_os_str()) else {
-            return Err(USimpleError::new(
-                1,
-                "Non-UTF-8 arguments provided, but this platform does not support them",
-            ));
+            return Err(USimpleError::new(1, get_message("echo-error-non-utf8")));
         };
 
         if i > 0 {

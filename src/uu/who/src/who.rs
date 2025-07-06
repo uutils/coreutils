@@ -6,7 +6,8 @@
 // spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr runlvline pidstr exitstr hoststr
 
 use clap::{Arg, ArgAction, Command};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
+use uucore::locale::get_message;
 
 mod platform;
 
@@ -28,120 +29,114 @@ mod options {
     pub const FILE: &str = "FILE"; // if length=1: FILE, if length=2: ARG1 ARG2
 }
 
-#[cfg(target_env = "musl")]
-const ABOUT: &str = concat!(
-    help_about!("who.md"),
-    "\n\nNote: When built with musl libc, the `who` utility will not display any \n",
-    "information about logged-in users. This is due to musl's stub implementation \n",
-    "of `utmpx` functions, which prevents access to the necessary data."
-);
-
-#[cfg(not(target_env = "musl"))]
-const ABOUT: &str = help_about!("who.md");
-
-const USAGE: &str = help_usage!("who.md");
-
-#[cfg(target_os = "linux")]
-static RUNLEVEL_HELP: &str = "print current runlevel";
-#[cfg(not(target_os = "linux"))]
-static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
+fn get_runlevel_help() -> String {
+    #[cfg(target_os = "linux")]
+    return get_message("who-help-runlevel");
+    #[cfg(not(target_os = "linux"))]
+    return get_message("who-help-runlevel-non-linux");
+}
 
 #[uucore::main]
 use platform::uumain;
 
 pub fn uu_app() -> Command {
+    #[cfg(not(target_env = "musl"))]
+    let about = get_message("who-about");
+    #[cfg(target_env = "musl")]
+    let about = get_message("who-about") + &get_message("who-about-musl-warning");
+
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(about)
+        .override_usage(format_usage(&get_message("who-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::ALL)
                 .long(options::ALL)
                 .short('a')
-                .help("same as -b -d --login -p -r -t -T -u")
+                .help(get_message("who-help-all"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BOOT)
                 .long(options::BOOT)
                 .short('b')
-                .help("time of last system boot")
+                .help(get_message("who-help-boot"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DEAD)
                 .long(options::DEAD)
                 .short('d')
-                .help("print dead processes")
+                .help(get_message("who-help-dead"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::HEADING)
                 .long(options::HEADING)
                 .short('H')
-                .help("print line of column headings")
+                .help(get_message("who-help-heading"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::LOGIN)
                 .long(options::LOGIN)
                 .short('l')
-                .help("print system login processes")
+                .help(get_message("who-help-login"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::LOOKUP)
                 .long(options::LOOKUP)
-                .help("attempt to canonicalize hostnames via DNS")
+                .help(get_message("who-help-lookup"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ONLY_HOSTNAME_USER)
                 .short('m')
-                .help("only hostname and user associated with stdin")
+                .help(get_message("who-help-only-hostname-user"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PROCESS)
                 .long(options::PROCESS)
                 .short('p')
-                .help("print active processes spawned by init")
+                .help(get_message("who-help-process"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COUNT)
                 .long(options::COUNT)
                 .short('q')
-                .help("all login names and number of users logged on")
+                .help(get_message("who-help-count"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RUNLEVEL)
                 .long(options::RUNLEVEL)
                 .short('r')
-                .help(RUNLEVEL_HELP)
+                .help(get_runlevel_help())
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHORT)
                 .long(options::SHORT)
                 .short('s')
-                .help("print only name, line, and time (default)")
+                .help(get_message("who-help-short"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)
                 .short('t')
-                .help("print last system clock change")
+                .help(get_message("who-help-time"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::USERS)
                 .long(options::USERS)
                 .short('u')
-                .help("list users logged in")
+                .help(get_message("who-help-users"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -150,7 +145,7 @@ pub fn uu_app() -> Command {
                 .short('T')
                 .visible_short_alias('w')
                 .visible_aliases(["message", "writable"])
-                .help("add user's message status as +, - or ?")
+                .help(get_message("who-help-mesg"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

@@ -19,7 +19,7 @@ use uucore::error::UResult;
 /// block read at a time.
 pub const BLOCK_SIZE: u64 = 1 << 16;
 
-/// The size of the backing buffer of a LinesChunk or BytesChunk in bytes. The value of BUFFER_SIZE
+/// The size of the backing buffer of a [`LinesChunk`] or [`BytesChunk`] in bytes. The value of `BUFFER_SIZE`
 /// originates from the BUFSIZ constant in stdio.h and the libc crate to make stream IO efficient.
 /// In the latter the value is constantly set to 8192 on all platforms, where the value in stdio.h
 /// is determined on each platform differently. Since libc chose 8192 as a reasonable default the
@@ -115,8 +115,8 @@ pub struct BytesChunk {
     /// [`BytesChunk::fill`]
     buffer: ChunkBuffer,
 
-    /// Stores the number of bytes, this buffer holds. This is not equal to buffer.len(), since the
-    /// [`BytesChunk`] may store less bytes than the internal buffer can hold. In addition
+    /// Stores the number of bytes, this buffer holds. This is not equal to `buffer.len()`, since the
+    /// [`BytesChunk`] may store less bytes than the internal buffer can hold. In addition,
     /// [`BytesChunk`] may be reused, what makes it necessary to track the number of stored bytes.
     /// The choice of usize is sufficient here, since the number of bytes max value is
     /// [`BUFFER_SIZE`], which is a usize.
@@ -582,13 +582,13 @@ impl LinesChunkBuffer {
         if self.chunks.is_empty() {
             // chunks is empty when a file is empty so quitting early here
             return Ok(());
-        } else {
-            let length = &self.chunks.len();
-            let last = &mut self.chunks[length - 1];
-            if !last.get_buffer().ends_with(&[self.delimiter]) {
-                last.lines += 1;
-                self.lines += 1;
-            }
+        }
+
+        let length = &self.chunks.len();
+        let last = &mut self.chunks[length - 1];
+        if !last.get_buffer().ends_with(&[self.delimiter]) {
+            last.lines += 1;
+            self.lines += 1;
         }
 
         // skip unnecessary chunks and save the first chunk which may hold some lines we have to

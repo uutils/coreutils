@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal
 
 mod check;
 mod chunks;
@@ -17,6 +17,7 @@ mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
 
+use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
@@ -29,6 +30,7 @@ use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, nume
 use rand::{Rng, rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
@@ -44,17 +46,17 @@ use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::line_ending::LineEnding;
+use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::version_cmp::version_cmp;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::{format_usage, show_error};
 
 use crate::tmp_dir::TmpDirWrapper;
 
-const ABOUT: &str = help_about!("sort.md");
-const USAGE: &str = help_usage!("sort.md");
-const AFTER_HELP: &str = help_section!("after help", "sort.md");
+use uucore::locale::{get_message, get_message_with_args};
 
 mod options {
     pub mod modes {
@@ -130,35 +132,50 @@ pub enum SortError {
         silent: bool,
     },
 
-    #[error("open failed: {}: {}", .path.maybe_quote(), strip_errno(.error))]
-    OpenFailed { path: String, error: std::io::Error },
+    #[error("{}", get_message_with_args("sort-open-failed", HashMap::from([("path".to_string(), format!("{}", .path.maybe_quote())), ("error".to_string(), strip_errno(.error))])))]
+    OpenFailed {
+        path: PathBuf,
+        error: std::io::Error,
+    },
 
-    #[error("failed to parse key {}: {}", .key.quote(), .msg)]
+    #[error("{}", get_message_with_args("sort-parse-key-error", HashMap::from([("key".to_string(), .key.quote().to_string()), ("msg".to_string(), .msg.clone())])))]
     ParseKeyError { key: String, msg: String },
 
-    #[error("cannot read: {}: {}", .path.maybe_quote(), strip_errno(.error))]
+    #[error("{}", get_message_with_args("sort-cannot-read", HashMap::from([("path".to_string(), format!("{}", .path.maybe_quote())), ("error".to_string(), strip_errno(.error))])))]
     ReadFailed {
         path: PathBuf,
         error: std::io::Error,
     },
 
-    #[error("failed to open temporary file: {}", strip_errno(.error))]
+    #[error("{}", get_message_with_args("sort-open-tmp-file-failed", HashMap::from([("error".to_string(), strip_errno(.error))])))]
     OpenTmpFileFailed { error: std::io::Error },
 
-    #[error("couldn't execute compress program: errno {code}")]
+    #[error("{}", get_message_with_args("sort-compress-prog-execution-failed", HashMap::from([("code".to_string(), .code.to_string())])))]
     CompressProgExecutionFailed { code: i32 },
 
-    #[error("{} terminated abnormally", .prog.quote())]
+    #[error("{}", get_message_with_args("sort-compress-prog-terminated-abnormally", HashMap::from([("prog".to_string(), .prog.quote().to_string())])))]
     CompressProgTerminatedAbnormally { prog: String },
 
-    #[error("cannot create temporary file in '{}':", .path.display())]
+    #[error("{}", get_message_with_args("sort-cannot-create-tmp-file", HashMap::from([("path".to_string(), format!("{}", .path.display()))])))]
     TmpFileCreationFailed { path: PathBuf },
+
+    #[error("{}", get_message_with_args("sort-file-operands-combined", HashMap::from([("file".to_string(), format!("{}", .file.display())), ("help".to_string(), uucore::execution_phrase().to_string())])))]
+    FileOperandsCombined { file: PathBuf },
 
     #[error("{error}")]
     Uft8Error { error: Utf8Error },
 
-    #[error("multiple output files specified")]
+    #[error("{}", get_message("sort-multiple-output-files"))]
     MultipleOutputFiles,
+
+    #[error("{}", get_message("sort-minus-in-stdin"))]
+    MinusInStdIn,
+
+    #[error("{}", get_message_with_args("sort-no-input-from", HashMap::from([("file".to_string(), format!("{}", .file.display()))])))]
+    EmptyInputFile { file: PathBuf },
+
+    #[error("{}", get_message_with_args("sort-invalid-zero-length-filename", HashMap::from([("file".to_string(), format!("{}", .file.display())), ("line_num".to_string(), .line_num.to_string())])))]
+    ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
 
 impl UError for SortError {
@@ -174,7 +191,14 @@ fn format_disorder(file: &OsString, line_number: &usize, line: &String, silent: 
     if *silent {
         String::new()
     } else {
-        format!("{}:{}: disorder: {line}", file.maybe_quote(), line_number)
+        get_message_with_args(
+            "sort-error-disorder",
+            HashMap::from([
+                ("file".to_string(), file.maybe_quote().to_string()),
+                ("line_number".to_string(), line_number.to_string()),
+                ("line".to_string(), line.to_owned()),
+            ]),
+        )
     }
 }
 
@@ -204,24 +228,25 @@ impl SortMode {
 }
 
 pub struct Output {
-    file: Option<(String, File)>,
+    file: Option<(OsString, File)>,
 }
 
 impl Output {
-    fn new(name: Option<&str>) -> UResult<Self> {
+    fn new(name: Option<&OsStr>) -> UResult<Self> {
         let file = if let Some(name) = name {
+            let path = Path::new(name);
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
             #[allow(clippy::suspicious_open_options)]
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
-                .open(name)
+                .open(path)
                 .map_err(|e| SortError::OpenFailed {
-                    path: name.to_owned(),
+                    path: path.to_owned(),
                     error: e,
                 })?;
-            Some((name.to_owned(), file))
+            Some((name.to_os_string(), file))
         } else {
             None
         };
@@ -239,9 +264,9 @@ impl Output {
         })
     }
 
-    fn as_output_name(&self) -> Option<&str> {
+    fn as_output_name(&self) -> Option<&OsStr> {
         match &self.file {
-            Some((name, _file)) => Some(name),
+            Some((name, _file)) => Some(name.as_os_str()),
             None => None,
         }
     }
@@ -299,7 +324,10 @@ impl GlobalSettings {
             .parse(input.trim())?;
 
         usize::try_from(size).map_err(|_| {
-            ParseSizeError::SizeTooBig(format!("Buffer size {size} does not fit in address space"))
+            ParseSizeError::SizeTooBig(get_message_with_args(
+                "sort-error-buffer-size-too-big",
+                HashMap::from([("size".to_string(), size.to_string())]),
+            ))
         })
     }
 
@@ -373,16 +401,26 @@ impl KeySettings {
             SortMode::Numeric | SortMode::HumanNumeric | SortMode::GeneralNumeric | SortMode::Month
         ) {
             if dictionary_order {
-                return Err(format!(
-                    "options '-{}{}' are incompatible",
-                    'd',
-                    mode.get_short_name().unwrap()
+                return Err(get_message_with_args(
+                    "sort-options-incompatible",
+                    HashMap::from([
+                        ("opt1".to_string(), "d".to_string()),
+                        (
+                            "opt2".to_string(),
+                            mode.get_short_name().unwrap().to_string(),
+                        ),
+                    ]),
                 ));
             } else if ignore_non_printing {
-                return Err(format!(
-                    "options '-{}{}' are incompatible",
-                    'i',
-                    mode.get_short_name().unwrap()
+                return Err(get_message_with_args(
+                    "sort-options-incompatible",
+                    HashMap::from([
+                        ("opt1".to_string(), "i".to_string()),
+                        (
+                            "opt2".to_string(),
+                            mode.get_short_name().unwrap().to_string(),
+                        ),
+                    ]),
                 ));
             }
         }
@@ -391,10 +429,18 @@ impl KeySettings {
 
     fn set_sort_mode(&mut self, mode: SortMode) -> Result<(), String> {
         if self.mode != SortMode::Default && self.mode != mode {
-            return Err(format!(
-                "options '-{}{}' are incompatible",
-                self.mode.get_short_name().unwrap(),
-                mode.get_short_name().unwrap()
+            return Err(get_message_with_args(
+                "sort-options-incompatible",
+                HashMap::from([
+                    (
+                        "opt1".to_string(),
+                        self.mode.get_short_name().unwrap().to_string(),
+                    ),
+                    (
+                        "opt2".to_string(),
+                        mode.get_short_name().unwrap().to_string(),
+                    ),
+                ]),
             ));
         }
         Self::check_compatibility(mode, self.ignore_non_printing, self.dictionary_order)?;
@@ -434,7 +480,7 @@ impl Default for KeySettings {
     }
 }
 enum Selection<'a> {
-    AsF64(GeneralF64ParseResult),
+    AsBigDecimal(GeneralBigDecimalParseResult),
     WithNumInfo(&'a str, NumInfo),
     Str(&'a str),
 }
@@ -476,7 +522,7 @@ impl<'a> Line<'a> {
             .map(|selector| (selector, selector.get_selection(line, token_buffer)))
         {
             match selection {
-                Selection::AsF64(parsed_float) => line_data.parsed_floats.push(parsed_float),
+                Selection::AsBigDecimal(parsed_float) => line_data.parsed_floats.push(parsed_float),
                 Selection::WithNumInfo(str, num_info) => {
                     line_data.num_infos.push(num_info);
                     line_data.selections.push(str);
@@ -607,7 +653,7 @@ impl<'a> Line<'a> {
             )?;
 
             if selection.is_empty() {
-                writeln!(writer, "^ no match for key")?;
+                writeln!(writer, "{}", get_message("sort-error-no-match-for-key"))?;
             } else {
                 writeln!(
                     writer,
@@ -632,7 +678,7 @@ impl<'a> Line<'a> {
         {
             // A last resort comparator is in use, underline the whole line.
             if self.line.is_empty() {
-                writeln!(writer, "^ no match for key")?;
+                writeln!(writer, "{}", get_message("sort-error-no-match-for-key"))?;
             } else {
                 writeln!(
                     writer,
@@ -705,25 +751,41 @@ impl KeyPosition {
     fn new(key: &str, default_char_index: usize, ignore_blanks: bool) -> Result<Self, String> {
         let mut field_and_char = key.split('.');
 
-        let field = field_and_char
-            .next()
-            .ok_or_else(|| format!("invalid key {}", key.quote()))?;
+        let field = field_and_char.next().ok_or_else(|| {
+            get_message_with_args(
+                "sort-invalid-key",
+                HashMap::from([("key".to_string(), key.quote().to_string())]),
+            )
+        })?;
         let char = field_and_char.next();
 
         let field = match field.parse::<usize>() {
             Ok(f) => f,
             Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
             Err(e) => {
-                return Err(format!("failed to parse field index {} {e}", field.quote(),));
+                return Err(get_message_with_args(
+                    "sort-failed-parse-field-index",
+                    HashMap::from([
+                        ("field".to_string(), field.quote().to_string()),
+                        ("error".to_string(), e.to_string()),
+                    ]),
+                ));
             }
         };
         if field == 0 {
-            return Err("field index can not be 0".to_string());
+            return Err(get_message("sort-field-index-cannot-be-zero"));
         }
 
         let char = char.map_or(Ok(default_char_index), |char| {
-            char.parse()
-                .map_err(|e| format!("failed to parse character index {}: {e}", char.quote()))
+            char.parse().map_err(|e: std::num::ParseIntError| {
+                get_message_with_args(
+                    "sort-failed-parse-char-index",
+                    HashMap::from([
+                        ("char".to_string(), char.quote().to_string()),
+                        ("error".to_string(), e.to_string()),
+                    ]),
+                )
+            })
         })?;
 
         Ok(Self {
@@ -822,7 +884,12 @@ impl FieldSelector {
                     'R' => key_settings.set_sort_mode(SortMode::Random)?,
                     'r' => key_settings.reverse = true,
                     'V' => key_settings.set_sort_mode(SortMode::Version)?,
-                    c => return Err(format!("invalid option: '{c}'")),
+                    c => {
+                        return Err(get_message_with_args(
+                            "sort-invalid-option",
+                            HashMap::from([("option".to_string(), c.to_string())]),
+                        ));
+                    }
                 }
             }
             Ok(ignore_blanks)
@@ -848,7 +915,7 @@ impl FieldSelector {
         settings: KeySettings,
     ) -> Result<Self, String> {
         if from.char == 0 {
-            Err("invalid character index 0 for the start position of a field".to_string())
+            Err(get_message("sort-invalid-char-index-zero-start"))
         } else {
             Ok(Self {
                 needs_selection: (from.field != 1
@@ -866,7 +933,7 @@ impl FieldSelector {
     }
 
     /// Get the selection that corresponds to this selector for the line.
-    /// If needs_fields returned false, tokens may be empty.
+    /// If `needs_fields` returned false, tokens may be empty.
     fn get_selection<'a>(&self, line: &'a str, tokens: &[Field]) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
@@ -888,8 +955,8 @@ impl FieldSelector {
             range = &range[num_range];
             Selection::WithNumInfo(range, info)
         } else if self.settings.mode == SortMode::GeneralNumeric {
-            // Parse this number as f64, as this is the requirement for general numeric sorting.
-            Selection::AsF64(general_f64_parse(&range[get_leading_gen(range)]))
+            // Parse this number as BigDecimal, as this is the requirement for general numeric sorting.
+            Selection::AsBigDecimal(general_bd_parse(&range[get_leading_gen(range)]))
         } else {
             // This is not a numeric sort, so we don't need a NumCache.
             Selection::Str(range)
@@ -897,7 +964,7 @@ impl FieldSelector {
     }
 
     /// Look up the range in the line that corresponds to this selector.
-    /// If needs_fields returned false, tokens must be None.
+    /// If `needs_fields` returned false, tokens must be None.
     fn get_range(&self, line: &str, tokens: Option<&[Field]>) -> Range<usize> {
         enum Resolution {
             // The start index of the resolved character, inclusive
@@ -990,7 +1057,7 @@ impl FieldSelector {
 }
 
 /// Creates an `Arg` that conflicts with all other sort modes.
-fn make_sort_mode_arg(mode: &'static str, short: char, help: &'static str) -> Arg {
+fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     let mut arg = Arg::new(mode)
         .short(short)
         .long(mode)
@@ -1010,11 +1077,13 @@ fn get_rlimit() -> UResult<usize> {
         rlim_cur: 0,
         rlim_max: 0,
     };
-    match unsafe { getrlimit(RLIMIT_NOFILE, &mut limit) } {
+    match unsafe { getrlimit(RLIMIT_NOFILE, &raw mut limit) } {
         0 => Ok(limit.rlim_cur as usize),
-        _ => Err(UUsageError::new(2, "Failed to fetch rlimit")),
+        _ => Err(UUsageError::new(2, get_message("sort-failed-fetch-rlimit"))),
     }
 }
+
+const STDIN_FILE: &str = "-";
 
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
@@ -1039,7 +1108,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Prevent -o/--output to be specified multiple times
     if matches
-        .get_occurrences::<String>(options::OUTPUT)
+        .get_occurrences::<OsString>(options::OUTPUT)
         .is_some_and(|out| out.len() > 1)
     {
         return Err(SortError::MultipleOutputFiles.into());
@@ -1049,21 +1118,45 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
     let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
-        let files0_from: Vec<OsString> = matches
-            .get_many::<OsString>(options::FILES0_FROM)
-            .map(|v| v.map(ToOwned::to_owned).collect())
+        let files0_from: PathBuf = matches
+            .get_one::<OsString>(options::FILES0_FROM)
+            .map(|v| v.into())
             .unwrap_or_default();
 
+        // Cannot combine FILES with FILES0_FROM
+        if let Some(s) = matches.get_one::<OsString>(options::FILES) {
+            return Err(SortError::FileOperandsCombined { file: s.into() }.into());
+        }
+
         let mut files = Vec::new();
-        for path in &files0_from {
-            let reader = open(path)?;
-            let buf_reader = BufReader::new(reader);
-            for line in buf_reader.split(b'\0').flatten() {
-                files.push(OsString::from(
-                    std::str::from_utf8(&line)
-                        .expect("Could not parse string from zero terminated input."),
-                ));
+
+        // sort errors with "cannot open: [...]" instead of "cannot read: [...]" here
+        let reader = open_with_open_failed_error(&files0_from)?;
+        let buf_reader = BufReader::new(reader);
+        for (line_num, line) in buf_reader.split(b'\0').flatten().enumerate() {
+            let f = std::str::from_utf8(&line)
+                .expect("Could not parse string from zero terminated input.");
+            match f {
+                STDIN_FILE => {
+                    return Err(SortError::MinusInStdIn.into());
+                }
+                "" => {
+                    return Err(SortError::ZeroLengthFileName {
+                        file: files0_from,
+                        line_num: line_num + 1,
+                    }
+                    .into());
+                }
+                _ => {}
             }
+
+            files.push(OsString::from(
+                std::str::from_utf8(&line)
+                    .expect("Could not parse string from zero terminated input."),
+            ));
+        }
+        if files.is_empty() {
+            return Err(SortError::EmptyInputFile { file: files0_from }.into());
         }
         files
     } else {
@@ -1157,8 +1250,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match n_merge.parse::<usize>() {
             Ok(parsed_value) => {
                 if parsed_value < 2 {
-                    show_error!("invalid --batch-size argument '{n_merge}'");
-                    return Err(UUsageError::new(2, "minimum --batch-size argument is '2'"));
+                    show_error!(
+                        "{}",
+                        get_message_with_args(
+                            "sort-invalid-batch-size-arg",
+                            HashMap::from([("arg".to_string(), n_merge.to_string())])
+                        )
+                    );
+                    return Err(UUsageError::new(
+                        2,
+                        get_message("sort-minimum-batch-size-two"),
+                    ));
                 }
                 settings.merge_batch_size = parsed_value;
             }
@@ -1166,19 +1268,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let error_message = if *e.kind() == IntErrorKind::PosOverflow {
                     #[cfg(target_os = "linux")]
                     {
-                        show_error!("--batch-size argument {} too large", n_merge.quote());
+                        show_error!(
+                            "{}",
+                            get_message_with_args(
+                                "sort-batch-size-too-large",
+                                HashMap::from([("arg".to_string(), n_merge.quote().to_string())])
+                            )
+                        );
 
-                        format!(
-                            "maximum --batch-size argument with current rlimit is {}",
-                            get_rlimit()?
+                        get_message_with_args(
+                            "sort-maximum-batch-size-rlimit",
+                            HashMap::from([("rlimit".to_string(), get_rlimit()?.to_string())]),
                         )
                     }
                     #[cfg(not(target_os = "linux"))]
                     {
-                        format!("--batch-size argument {} too large", n_merge.quote())
+                        get_message_with_args(
+                            "sort-batch-size-too-large",
+                            HashMap::from([("arg".to_string(), n_merge.quote().to_string())]),
+                        )
                     }
                 } else {
-                    format!("invalid --batch-size argument {}", n_merge.quote())
+                    get_message_with_args(
+                        "sort-invalid-batch-size-arg",
+                        HashMap::from([("arg".to_string(), n_merge.to_string())]),
+                    )
                 };
 
                 return Err(UUsageError::new(2, error_message));
@@ -1212,11 +1326,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if files.is_empty() {
         /* if no file, default to stdin */
-        files.push("-".to_string().into());
+        files.push(OsString::from(STDIN_FILE));
     } else if settings.check && files.len() != 1 {
         return Err(UUsageError::new(
             2,
-            format!("extra operand {} not allowed with -c", files[1].quote()),
+            get_message_with_args(
+                "sort-extra-operand-not-allowed-with-c",
+                HashMap::from([("operand".to_string(), files[1].quote().to_string())]),
+            ),
         ));
     }
 
@@ -1224,7 +1341,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut separator = arg.to_str().ok_or_else(|| {
             UUsageError::new(
                 2,
-                format!("separator is not valid unicode: {}", arg.quote()),
+                get_message_with_args(
+                    "sort-separator-not-valid-unicode",
+                    HashMap::from([("arg".to_string(), arg.quote().to_string())]),
+                ),
             )
         })?;
         if separator == "\\0" {
@@ -1236,9 +1356,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if separator.len() != 1 {
             return Err(UUsageError::new(
                 2,
-                format!(
-                    "separator must be exactly one character long: {}",
-                    separator.quote()
+                get_message_with_args(
+                    "sort-separator-must-be-one-char",
+                    HashMap::from([("separator".to_string(), separator.quote().to_string())]),
                 ),
             ));
         }
@@ -1282,8 +1402,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let output = Output::new(
         matches
-            .get_one::<String>(options::OUTPUT)
-            .map(|s| s.as_str()),
+            .get_one::<OsString>(options::OUTPUT)
+            .map(|s| s.as_os_str()),
     )?;
 
     settings.init_precomputed();
@@ -1298,9 +1418,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("sort-about"))
+        .after_help(get_message("sort-after-help"))
+        .override_usage(format_usage(&get_message("sort-usage")))
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
@@ -1308,13 +1428,13 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information.")
+                .help(get_message("sort-help-help"))
                 .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::VERSION)
                 .long(options::VERSION)
-                .help("Print version information.")
+                .help(get_message("sort-help-version"))
                 .action(ArgAction::Version),
         )
         .arg(
@@ -1333,38 +1453,38 @@ pub fn uu_app() -> Command {
         .arg(make_sort_mode_arg(
             options::modes::HUMAN_NUMERIC,
             'h',
-            "compare according to human readable sizes, eg 1M > 100k",
+            get_message("sort-help-human-numeric"),
         ))
         .arg(make_sort_mode_arg(
             options::modes::MONTH,
             'M',
-            "compare according to month name abbreviation",
+            get_message("sort-help-month"),
         ))
         .arg(make_sort_mode_arg(
             options::modes::NUMERIC,
             'n',
-            "compare according to string numerical value",
+            get_message("sort-help-numeric"),
         ))
         .arg(make_sort_mode_arg(
             options::modes::GENERAL_NUMERIC,
             'g',
-            "compare according to string general numerical value",
+            get_message("sort-help-general-numeric"),
         ))
         .arg(make_sort_mode_arg(
             options::modes::VERSION,
             'V',
-            "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
+            get_message("sort-help-version-sort"),
         ))
         .arg(make_sort_mode_arg(
             options::modes::RANDOM,
             'R',
-            "shuffle in random order",
+            get_message("sort-help-random"),
         ))
         .arg(
             Arg::new(options::DICTIONARY_ORDER)
                 .short('d')
                 .long(options::DICTIONARY_ORDER)
-                .help("consider only blanks and alphanumeric characters")
+                .help(get_message("sort-help-dictionary-order"))
                 .conflicts_with_all([
                     options::modes::NUMERIC,
                     options::modes::GENERAL_NUMERIC,
@@ -1377,7 +1497,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::MERGE)
                 .short('m')
                 .long(options::MERGE)
-                .help("merge already sorted files; do not sort")
+                .help(get_message("sort-help-merge"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1392,31 +1512,28 @@ pub fn uu_app() -> Command {
                     options::check::DIAGNOSE_FIRST,
                 ]))
                 .conflicts_with_all([options::OUTPUT, options::check::CHECK_SILENT])
-                .help("check for sorted input; do not sort"),
+                .help(get_message("sort-help-check")),
         )
         .arg(
             Arg::new(options::check::CHECK_SILENT)
                 .short('C')
                 .long(options::check::CHECK_SILENT)
                 .conflicts_with_all([options::OUTPUT, options::check::CHECK])
-                .help(
-                    "exit successfully if the given file is already sorted, \
-                and exit with status 1 otherwise.",
-                )
+                .help(get_message("sort-help-check-silent"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_CASE)
                 .short('f')
                 .long(options::IGNORE_CASE)
-                .help("fold lower case to upper case characters")
+                .help(get_message("sort-help-ignore-case"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_NONPRINTING)
                 .short('i')
                 .long(options::IGNORE_NONPRINTING)
-                .help("ignore nonprinting characters")
+                .help(get_message("sort-help-ignore-nonprinting"))
                 .conflicts_with_all([
                     options::modes::NUMERIC,
                     options::modes::GENERAL_NUMERIC,
@@ -1429,14 +1546,15 @@ pub fn uu_app() -> Command {
             Arg::new(options::IGNORE_LEADING_BLANKS)
                 .short('b')
                 .long(options::IGNORE_LEADING_BLANKS)
-                .help("ignore leading blanks when finding sort keys in each line")
+                .help(get_message("sort-help-ignore-leading-blanks"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OUTPUT)
                 .short('o')
                 .long(options::OUTPUT)
-                .help("write output to FILENAME instead of stdout")
+                .help(get_message("sort-help-output"))
+                .value_parser(ValueParser::os_string())
                 .value_name("FILENAME")
                 .value_hint(clap::ValueHint::FilePath)
                 // To detect multiple occurrences and raise an error
@@ -1446,28 +1564,28 @@ pub fn uu_app() -> Command {
             Arg::new(options::REVERSE)
                 .short('r')
                 .long(options::REVERSE)
-                .help("reverse the output")
+                .help(get_message("sort-help-reverse"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::STABLE)
                 .short('s')
                 .long(options::STABLE)
-                .help("stabilize sort by disabling last-resort comparison")
+                .help(get_message("sort-help-stable"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::UNIQUE)
                 .short('u')
                 .long(options::UNIQUE)
-                .help("output only the first of an equal run")
+                .help(get_message("sort-help-unique"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::KEY)
                 .short('k')
                 .long(options::KEY)
-                .help("sort by a key")
+                .help(get_message("sort-help-key"))
                 .action(ArgAction::Append)
                 .num_args(1),
         )
@@ -1475,63 +1593,62 @@ pub fn uu_app() -> Command {
             Arg::new(options::SEPARATOR)
                 .short('t')
                 .long(options::SEPARATOR)
-                .help("custom separator for -k")
+                .help(get_message("sort-help-separator"))
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help("line delimiter is NUL, not newline")
+                .help(get_message("sort-help-zero-terminated"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PARALLEL)
                 .long(options::PARALLEL)
-                .help("change the number of threads running concurrently to NUM_THREADS")
+                .help(get_message("sort-help-parallel"))
                 .value_name("NUM_THREADS"),
         )
         .arg(
             Arg::new(options::BUF_SIZE)
                 .short('S')
                 .long(options::BUF_SIZE)
-                .help("sets the maximum SIZE of each segment in number of sorted items")
+                .help(get_message("sort-help-buf-size"))
                 .value_name("SIZE"),
         )
         .arg(
             Arg::new(options::TMP_DIR)
                 .short('T')
                 .long(options::TMP_DIR)
-                .help("use DIR for temporaries, not $TMPDIR or /tmp")
+                .help(get_message("sort-help-tmp-dir"))
                 .value_name("DIR")
                 .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
             Arg::new(options::COMPRESS_PROG)
                 .long(options::COMPRESS_PROG)
-                .help("compress temporary files with PROG, decompress with PROG -d; PROG has to take input from stdin and output to stdout")
+                .help(get_message("sort-help-compress-prog"))
                 .value_name("PROG")
                 .value_hint(clap::ValueHint::CommandName),
         )
         .arg(
             Arg::new(options::BATCH_SIZE)
                 .long(options::BATCH_SIZE)
-                .help("Merge at most N_MERGE inputs at once.")
+                .help(get_message("sort-help-batch-size"))
                 .value_name("N_MERGE"),
         )
         .arg(
             Arg::new(options::FILES0_FROM)
                 .long(options::FILES0_FROM)
-                .help("read input from the files specified by NUL-terminated NUL_FILES")
-                .value_name("NUL_FILES")
-                .action(ArgAction::Append)
+                .help(get_message("sort-help-files0-from"))
+                .value_name("NUL_FILE")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::DEBUG)
                 .long(options::DEBUG)
-                .help("underline the parts of the line that are actually used for sorting")
+                .help(get_message("sort-help-debug"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1552,7 +1669,10 @@ fn exec(
         merge::merge(files, settings, output, tmp_dir)
     } else if settings.check {
         if files.len() > 1 {
-            Err(UUsageError::new(2, "only one file allowed with -c"))
+            Err(UUsageError::new(
+                2,
+                get_message("sort-only-one-file-allowed-with-c"),
+            ))
         } else {
             check::check(files.first().unwrap(), settings)
         }
@@ -1749,35 +1869,47 @@ fn get_leading_gen(input: &str) -> Range<usize> {
     leading_whitespace_len..input.len()
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Debug)]
-pub enum GeneralF64ParseResult {
+#[derive(Clone, PartialEq, PartialOrd, Debug)]
+pub enum GeneralBigDecimalParseResult {
     Invalid,
-    NaN,
-    NegInfinity,
-    Number(f64),
+    Nan,
+    MinusInfinity,
+    Number(BigDecimal),
     Infinity,
 }
 
-/// Parse the beginning string into a GeneralF64ParseResult.
-/// Using a GeneralF64ParseResult instead of f64 is necessary to correctly order floats.
+/// Parse the beginning string into a [`GeneralBigDecimalParseResult`].
+/// Using a [`GeneralBigDecimalParseResult`] instead of [`ExtendedBigDecimal`] is necessary to correctly order floats.
 #[inline(always)]
-fn general_f64_parse(a: &str) -> GeneralF64ParseResult {
-    // The actual behavior here relies on Rust's implementation of parsing floating points.
-    // For example "nan", "inf" (ignoring the case) and "infinity" are only parsed to floats starting from 1.53.
-    // TODO: Once our minimum supported Rust version is 1.53 or above, we should add tests for those cases.
-    match a.parse::<f64>() {
-        Ok(a) if a.is_nan() => GeneralF64ParseResult::NaN,
-        Ok(a) if a == f64::NEG_INFINITY => GeneralF64ParseResult::NegInfinity,
-        Ok(a) if a == f64::INFINITY => GeneralF64ParseResult::Infinity,
-        Ok(a) => GeneralF64ParseResult::Number(a),
-        Err(_) => GeneralF64ParseResult::Invalid,
+fn general_bd_parse(a: &str) -> GeneralBigDecimalParseResult {
+    // Parse digits, and fold in recoverable errors
+    let ebd = match ExtendedBigDecimal::extended_parse(a) {
+        Err(ExtendedParserError::NotNumeric) => return GeneralBigDecimalParseResult::Invalid,
+        Err(
+            ExtendedParserError::PartialMatch(ebd, _)
+            | ExtendedParserError::Overflow(ebd)
+            | ExtendedParserError::Underflow(ebd),
+        )
+        | Ok(ebd) => ebd,
+    };
+
+    match ebd {
+        ExtendedBigDecimal::BigDecimal(bd) => GeneralBigDecimalParseResult::Number(bd),
+        ExtendedBigDecimal::Infinity => GeneralBigDecimalParseResult::Infinity,
+        ExtendedBigDecimal::MinusInfinity => GeneralBigDecimalParseResult::MinusInfinity,
+        // Minus zero and zero are equal
+        ExtendedBigDecimal::MinusZero => GeneralBigDecimalParseResult::Number(0.into()),
+        ExtendedBigDecimal::Nan | ExtendedBigDecimal::MinusNan => GeneralBigDecimalParseResult::Nan,
     }
 }
 
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
 /// Stops coercing at the first non-numeric char.
 /// We explicitly need to convert to f64 in this case.
-fn general_numeric_compare(a: &GeneralF64ParseResult, b: &GeneralF64ParseResult) -> Ordering {
+fn general_numeric_compare(
+    a: &GeneralBigDecimalParseResult,
+    b: &GeneralBigDecimalParseResult,
+) -> Ordering {
     a.partial_cmp(b).unwrap()
 }
 
@@ -1814,7 +1946,7 @@ enum Month {
     December,
 }
 
-/// Parse the beginning string into a Month, returning Month::Unknown on errors.
+/// Parse the beginning string into a Month, returning [`Month::Unknown`] on errors.
 fn month_parse(line: &str) -> Month {
     let line = line.trim();
 
@@ -1865,9 +1997,14 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 ) -> UResult<()> {
     let output_name = output
         .as_output_name()
-        .unwrap_or("standard output")
+        .unwrap_or(OsStr::new("standard output"))
         .to_owned();
-    let ctx = || format!("write failed: {}", output_name.maybe_quote());
+    let ctx = || {
+        get_message_with_args(
+            "sort-error-write-failed",
+            HashMap::from([("output".to_string(), output_name.maybe_quote().to_string())]),
+        )
+    };
 
     let mut writer = output.into_write();
     for line in iter {
@@ -1879,16 +2016,34 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 
 fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
     let path = path.as_ref();
-    if path == "-" {
+    if path == STDIN_FILE {
         let stdin = stdin();
         return Ok(Box::new(stdin) as Box<dyn Read + Send>);
     }
 
     let path = Path::new(path);
-
     match File::open(path) {
         Ok(f) => Ok(Box::new(f) as Box<dyn Read + Send>),
         Err(error) => Err(SortError::ReadFailed {
+            path: path.to_owned(),
+            error,
+        }
+        .into()),
+    }
+}
+
+fn open_with_open_failed_error(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
+    // On error, returns an OpenFailed error instead of a ReadFailed error
+    let path = path.as_ref();
+    if path == STDIN_FILE {
+        let stdin = stdin();
+        return Ok(Box::new(stdin) as Box<dyn Read + Send>);
+    }
+
+    let path = Path::new(path);
+    match File::open(path) {
+        Ok(f) => Ok(Box::new(f) as Box<dyn Read + Send>),
+        Err(error) => Err(SortError::OpenFailed {
             path: path.to_owned(),
             error,
         }
@@ -1900,13 +2055,27 @@ fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String
     // NOTE:
     // GNU's sort echos affected flag, -S or --buffer-size, depending on user's selection
     match error {
-        ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{option} argument {}", s.quote())
-        }
-        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            format!("invalid --{option} argument {}", s.quote())
-        }
-        ParseSizeError::SizeTooBig(_) => format!("--{option} argument {} too large", s.quote()),
+        ParseSizeError::InvalidSuffix(_) => get_message_with_args(
+            "sort-invalid-suffix-in-option-arg",
+            HashMap::from([
+                ("option".to_string(), option.to_string()),
+                ("arg".to_string(), s.quote().to_string()),
+            ]),
+        ),
+        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => get_message_with_args(
+            "sort-invalid-option-arg",
+            HashMap::from([
+                ("option".to_string(), option.to_string()),
+                ("arg".to_string(), s.quote().to_string()),
+            ]),
+        ),
+        ParseSizeError::SizeTooBig(_) => get_message_with_args(
+            "sort-option-arg-too-large",
+            HashMap::from([
+                ("option".to_string(), option.to_string()),
+                ("arg".to_string(), s.quote().to_string()),
+            ]),
+        ),
     }
 }
 

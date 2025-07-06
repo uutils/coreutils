@@ -12,7 +12,7 @@ pub enum Radix {
 
 /// provides the byte offset printed at the left margin
 pub struct InputOffset {
-    /// The radix to print the byte offset. NoPrefix will not print a byte offset.
+    /// The radix to print the byte offset. [`Radix::NoPrefix`] will not print a byte offset.
     radix: Radix,
     /// The current position. Initialize at `new`, increase using `increase_position`.
     byte_pos: u64,

@@ -4,8 +4,7 @@
 // file that was distributed with this source code.
 use std::env;
 use uutests::new_ucmd;
-use uutests::util::{TestScenario, is_ci};
-use uutests::util_name;
+use uutests::util::is_ci;
 
 #[test]
 fn test_invalid_arg() {

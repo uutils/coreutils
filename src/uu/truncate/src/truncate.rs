@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
 use clap::{Arg, ArgAction, Command};
+use std::collections::HashMap;
 use std::fs::{OpenOptions, metadata};
 use std::io::ErrorKind;
 #[cfg(unix)]
@@ -12,8 +13,9 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
+use uucore::locale::{get_message, get_message_with_args};
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
-use uucore::{format_usage, help_about, help_section, help_usage};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -71,10 +73,6 @@ impl TruncateMode {
     }
 }
 
-const ABOUT: &str = help_about!("truncate.md");
-const AFTER_HELP: &str = help_section!("after help", "truncate.md");
-const USAGE: &str = help_usage!("truncate.md");
-
 pub mod options {
     pub static IO_BLOCKS: &str = "io-blocks";
     pub static NO_CREATE: &str = "no-create";
@@ -86,7 +84,7 @@ pub mod options {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
-        .after_help(AFTER_HELP)
+        .after_help(get_message("truncate-after-help"))
         .try_get_matches_from(args)
         .map_err(|e| {
             e.print().expect("Error writing clap::Error");
@@ -102,7 +100,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     if files.is_empty() {
-        Err(UUsageError::new(1, "missing file operand"))
+        Err(UUsageError::new(
+            1,
+            get_message("truncate-error-missing-file-operand"),
+        ))
     } else {
         let io_blocks = matches.get_flag(options::IO_BLOCKS);
         let no_create = matches.get_flag(options::NO_CREATE);
@@ -117,24 +118,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("truncate-about"))
+        .override_usage(format_usage(&get_message("truncate-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::IO_BLOCKS)
                 .short('o')
                 .long(options::IO_BLOCKS)
-                .help(
-                    "treat SIZE as the number of I/O blocks of the file rather than bytes \
-            (NOT IMPLEMENTED)",
-                )
+                .help(get_message("truncate-help-io-blocks"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CREATE)
                 .short('c')
                 .long(options::NO_CREATE)
-                .help("do not create files that do not exist")
+                .help(get_message("truncate-help-no-create"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -142,7 +140,7 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .long(options::REFERENCE)
                 .required_unless_present(options::SIZE)
-                .help("base the size of each file on the size of RFILE")
+                .help(get_message("truncate-help-reference"))
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -151,10 +149,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(options::SIZE)
                 .required_unless_present(options::REFERENCE)
-                .help(
-                    "set or adjust the size of each file according to SIZE, which is in \
-            bytes unless --io-blocks is specified",
-                )
+                .help(get_message("truncate-help-size"))
                 .value_name("SIZE"),
         )
         .arg(
@@ -184,20 +179,26 @@ fn file_truncate(filename: &str, create: bool, size: u64) -> UResult<()> {
         if metadata.file_type().is_fifo() {
             return Err(USimpleError::new(
                 1,
-                format!(
-                    "cannot open {} for writing: No such device or address",
-                    filename.quote()
+                get_message_with_args(
+                    "truncate-error-cannot-open-no-device",
+                    HashMap::from([("filename".to_string(), filename.quote().to_string())]),
                 ),
             ));
         }
     }
+
     let path = Path::new(filename);
     match OpenOptions::new().write(true).create(create).open(path) {
         Ok(file) => file.set_len(size),
         Err(e) if e.kind() == ErrorKind::NotFound && !create => Ok(()),
         Err(e) => Err(e),
     }
-    .map_err_context(|| format!("cannot open {} for writing", filename.quote()))
+    .map_err_context(|| {
+        get_message_with_args(
+            "truncate-error-cannot-open-for-writing",
+            HashMap::from([("filename".to_string(), filename.quote().to_string())]),
+        )
+    })
 }
 
 /// Truncate files to a size relative to a given file.
@@ -224,33 +225,49 @@ fn truncate_reference_and_size(
     create: bool,
 ) -> UResult<()> {
     let mode = match parse_mode_and_size(size_string) {
-        Err(e) => return Err(USimpleError::new(1, format!("Invalid number: {e}"))),
+        Err(e) => {
+            return Err(USimpleError::new(
+                1,
+                get_message_with_args(
+                    "truncate-error-invalid-number",
+                    HashMap::from([("error".to_string(), e.to_string())]),
+                ),
+            ));
+        }
         Ok(TruncateMode::Absolute(_)) => {
             return Err(USimpleError::new(
                 1,
-                String::from("you must specify a relative '--size' with '--reference'"),
+                get_message("truncate-error-must-specify-relative-size"),
             ));
         }
         Ok(m) => m,
     };
+
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
-        return Err(USimpleError::new(1, "division by zero"));
+        return Err(USimpleError::new(
+            1,
+            get_message("truncate-error-division-by-zero"),
+        ));
     }
+
     let metadata = metadata(rfilename).map_err(|e| match e.kind() {
         ErrorKind::NotFound => USimpleError::new(
             1,
-            format!(
-                "cannot stat {}: No such file or directory",
-                rfilename.quote()
+            get_message_with_args(
+                "truncate-error-cannot-stat-no-such-file",
+                HashMap::from([("filename".to_string(), rfilename.quote().to_string())]),
             ),
         ),
         _ => e.map_err_context(String::new),
     })?;
+
     let fsize = metadata.len();
     let tsize = mode.to_size(fsize);
+
     for filename in filenames {
         file_truncate(filename, create, tsize)?;
     }
+
     Ok(())
 }
 
@@ -275,17 +292,20 @@ fn truncate_reference_file_only(
     let metadata = metadata(rfilename).map_err(|e| match e.kind() {
         ErrorKind::NotFound => USimpleError::new(
             1,
-            format!(
-                "cannot stat {}: No such file or directory",
-                rfilename.quote()
+            get_message_with_args(
+                "truncate-error-cannot-stat-no-such-file",
+                HashMap::from([("filename".to_string(), rfilename.quote().to_string())]),
             ),
         ),
         _ => e.map_err_context(String::new),
     })?;
+
     let tsize = metadata.len();
+
     for filename in filenames {
         file_truncate(filename, create, tsize)?;
     }
+
     Ok(())
 }
 
@@ -307,11 +327,23 @@ fn truncate_reference_file_only(
 ///
 /// If at least one file is a named pipe (also known as a fifo).
 fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> UResult<()> {
-    let mode = parse_mode_and_size(size_string)
-        .map_err(|e| USimpleError::new(1, format!("Invalid number: {e}")))?;
+    let mode = parse_mode_and_size(size_string).map_err(|e| {
+        USimpleError::new(
+            1,
+            get_message_with_args(
+                "truncate-error-invalid-number",
+                HashMap::from([("error".to_string(), e.to_string())]),
+            ),
+        )
+    })?;
+
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
-        return Err(USimpleError::new(1, "division by zero"));
+        return Err(USimpleError::new(
+            1,
+            get_message("truncate-error-division-by-zero"),
+        ));
     }
+
     for filename in filenames {
         let fsize = match metadata(filename) {
             Ok(m) => {
@@ -319,9 +351,9 @@ fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> 
                 if m.file_type().is_fifo() {
                     return Err(USimpleError::new(
                         1,
-                        format!(
-                            "cannot open {} for writing: No such device or address",
-                            filename.quote()
+                        get_message_with_args(
+                            "truncate-error-cannot-open-no-device",
+                            HashMap::from([("filename".to_string(), filename.quote().to_string())]),
                         ),
                     ));
                 }
@@ -333,6 +365,7 @@ fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> 
         // TODO: Fix duplicate call to stat
         file_truncate(filename, create, tsize)?;
     }
+
     Ok(())
 }
 
@@ -344,6 +377,7 @@ fn truncate(
     filenames: &[String],
 ) -> UResult<()> {
     let create = !no_create;
+
     // There are four possibilities
     // - reference file given and size given,
     // - reference file given but no size given,

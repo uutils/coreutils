@@ -2,18 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//  *
-//  * Synced with http://lingrok.org/xref/coreutils/src/tty.c
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
 use uucore::error::{UResult, set_exit_code};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
-const ABOUT: &str = help_about!("tty.md");
-const USAGE: &str = help_usage!("tty.md");
+use uucore::locale::get_message;
 
 mod options {
     pub const SILENT: &str = "silent";
@@ -42,7 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(name) => writeln!(stdout, "{}", name.display()),
         Err(_) => {
             set_exit_code(1);
-            writeln!(stdout, "not a tty")
+            writeln!(stdout, "{}", get_message("tty-not-a-tty"))
         }
     };
 
@@ -58,15 +55,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("tty-about"))
+        .override_usage(format_usage(&get_message("tty-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SILENT)
                 .long(options::SILENT)
                 .visible_alias("quiet")
                 .short('s')
-                .help("print nothing, only return an exit status")
+                .help(get_message("tty-help-silent"))
                 .action(ArgAction::SetTrue),
         )
 }

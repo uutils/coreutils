@@ -10,8 +10,6 @@ use std::time::Duration;
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -38,8 +36,7 @@ fn test_buffer_sizes() {
     #[cfg(not(target_os = "linux"))]
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
-        TestScenario::new(util_name!())
-            .ucmd()
+        new_ucmd!()
             .arg("-n")
             .arg("-S")
             .arg(buffer_size)
@@ -52,8 +49,7 @@ fn test_buffer_sizes() {
     {
         let buffer_sizes = ["1000G", "10T"];
         for buffer_size in &buffer_sizes {
-            TestScenario::new(util_name!())
-                .ucmd()
+            new_ucmd!()
                 .arg("-n")
                 .arg("-S")
                 .arg(buffer_size)
@@ -1007,8 +1003,7 @@ fn test_compress_merge() {
 #[cfg(not(target_os = "android"))]
 fn test_compress_fail() {
     #[cfg(not(windows))]
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -1023,8 +1018,7 @@ fn test_compress_fail() {
     // "thread 'main' panicked at 'called `Option::unwrap()` on ...
     // So, don't check the output
     #[cfg(windows)]
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -1038,8 +1032,7 @@ fn test_compress_fail() {
 
 #[test]
 fn test_merge_batches() {
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .timeout(Duration::from_secs(120))
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
@@ -1048,27 +1041,31 @@ fn test_merge_batches() {
 
 #[test]
 fn test_batch_size_invalid() {
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg("--batch-size=0")
         .fails_with_code(2)
         .stderr_contains("sort: invalid --batch-size argument '0'")
         .stderr_contains("sort: minimum --batch-size argument is '2'");
+
+    // with -m, the error path is a bit different
+    new_ucmd!()
+        .args(&["-m", "--batch-size=a"])
+        .fails_with_code(2)
+        .stderr_contains("sort: invalid --batch-size argument 'a'");
 }
 
 #[test]
 fn test_batch_size_too_large() {
     let large_batch_size = "18446744073709551616";
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg(format!("--batch-size={large_batch_size}"))
         .fails_with_code(2)
         .stderr_contains(format!(
             "--batch-size argument '{large_batch_size}' too large"
         ));
+
     #[cfg(target_os = "linux")]
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg(format!("--batch-size={large_batch_size}"))
         .fails_with_code(2)
         .stderr_contains("maximum --batch-size argument with current rlimit is");
@@ -1076,8 +1073,7 @@ fn test_batch_size_too_large() {
 
 #[test]
 fn test_merge_batch_size() {
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -1102,8 +1098,7 @@ fn test_merge_batch_size_with_limit() {
     // 2 descriptors for CTRL+C handling logic (to be reworked at some point)
     // 2 descriptors for the input files (i.e. batch-size of 2).
     let limit_fd = 3 + 2 + 2;
-    TestScenario::new(util_name!())
-        .ucmd()
+    new_ucmd!()
         .limit(Resource::NOFILE, limit_fd, limit_fd)
         .arg("--batch-size=2")
         .arg("-m")
@@ -1204,13 +1199,12 @@ fn test_separator_null() {
 #[test]
 fn test_output_is_input() {
     let input = "a\nb\nc\n";
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.touch("file");
     at.append("file", input);
-    scene
-        .ucmd()
-        .args(&["-m", "-u", "-o", "file", "file", "file", "file"])
+
+    ucmd.args(&["-m", "-u", "-o", "file", "file", "file", "file"])
         .succeeds();
     assert_eq!(at.read("file"), input);
 }
@@ -1353,4 +1347,212 @@ fn test_multiple_output_files() {
         .args(&["-o", "foo", "-o", "bar"])
         .fails_with_code(2)
         .stderr_is("sort: multiple output files specified\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "f-extra-arg"
+fn test_files0_from_extra_arg() {
+    new_ucmd!()
+        .args(&["--files0-from", "-", "foo"])
+        .fails_with_code(2)
+        .stderr_contains(
+            "sort: extra operand 'foo'\nfile operands cannot be combined with --files0-from\n",
+        )
+        .no_stdout();
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "missing"
+fn test_files0_from_missing() {
+    new_ucmd!()
+        .args(&["--files0-from", "missing_file"])
+        .fails_with_code(2)
+        .stderr_only(
+            #[cfg(not(windows))]
+            "sort: open failed: missing_file: No such file or directory\n",
+            #[cfg(windows)]
+            "sort: open failed: missing_file: The system cannot find the file specified.\n",
+        );
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "minus-in-stdin"
+fn test_files0_from_minus_in_stdin() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in("-")
+        .fails_with_code(2)
+        .stderr_only("sort: when reading file names from stdin, no file name of '-' allowed\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "empty"
+fn test_files0_from_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+
+    ucmd.args(&["--files0-from", "file"])
+        .fails_with_code(2)
+        .stderr_only("sort: no input from 'file'\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
+fn test_files0_from_empty_non_regular() {
+    new_ucmd!()
+        .args(&["--files0-from", "/dev/null"])
+        .fails_with_code(2)
+        .stderr_only("sort: no input from '/dev/null'\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "nul-1"
+fn test_files0_from_nul() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in("\0")
+        .fails_with_code(2)
+        .stderr_only("sort: -:1: invalid zero-length file name\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "nul-2"
+fn test_files0_from_nul2() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in("\0\0")
+        .fails_with_code(2)
+        .stderr_only("sort: -:1: invalid zero-length file name\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "1"
+fn test_files0_from_1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.append("file", "a");
+
+    ucmd.args(&["--files0-from", "-"])
+        .pipe_in("file")
+        .succeeds()
+        .stdout_only("a\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "1a"
+fn test_files0_from_1a() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.append("file", "a");
+
+    ucmd.args(&["--files0-from", "-"])
+        .pipe_in("file\0")
+        .succeeds()
+        .stdout_only("a\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "2"
+fn test_files0_from_2() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.append("file", "a");
+
+    ucmd.args(&["--files0-from", "-"])
+        .pipe_in("file\0file")
+        .succeeds()
+        .stdout_only("a\na\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "2a"
+fn test_files0_from_2a() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.append("file", "a");
+
+    ucmd.args(&["--files0-from", "-"])
+        .pipe_in("file\0file\0")
+        .succeeds()
+        .stdout_only("a\na\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "zero-len"
+fn test_files0_from_zero_length() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in("g\0\0b\0\0")
+        .fails_with_code(2)
+        .stderr_only("sort: -:2: invalid zero-length file name\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-float.sh
+fn test_g_float() {
+    let input = "0\n-3.3621031431120935063e-4932\n3.3621031431120935063e-4932\n";
+    let output = "-3.3621031431120935063e-4932\n0\n3.3621031431120935063e-4932\n";
+    new_ucmd!()
+        .args(&["-g"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+// Test misc numbers ("'a" is not interpreted as literal, trailing text is ignored...)
+fn test_g_misc() {
+    let input = "1\n100\n90\n'a\n85hello\n";
+    let output = "'a\n1\n85hello\n90\n100\n";
+    new_ucmd!()
+        .args(&["-g"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+// Test numbers with a large number of digits, where only the last digit is different.
+// We use scientific notation to make sure string sorting does not correctly order them.
+fn test_g_arbitrary() {
+    let input = [
+        // GNU coreutils doesn't handle those correctly as they don't fit exactly in long double
+        "3",
+        "3.000000000000000000000000000000000000000000000000000000000000000004",
+        "0.3000000000000000000000000000000000000000000000000000000000000000002e1",
+        "0.03000000000000000000000000000000000000000000000000000000000000000003e2",
+        "0.003000000000000000000000000000000000000000000000000000000000000000001e3",
+        // GNU coreutils does handle those correctly though
+        "10",
+        "10.000000000000004",
+        "1.0000000000000002e1",
+        "0.10000000000000003e2",
+        "0.010000000000000001e3",
+    ]
+    .join("\n");
+    let output = [
+        "3",
+        "0.003000000000000000000000000000000000000000000000000000000000000000001e3",
+        "0.3000000000000000000000000000000000000000000000000000000000000000002e1",
+        "0.03000000000000000000000000000000000000000000000000000000000000000003e2",
+        "3.000000000000000000000000000000000000000000000000000000000000000004",
+        "10",
+        "0.010000000000000001e3",
+        "1.0000000000000002e1",
+        "0.10000000000000003e2",
+        "10.000000000000004",
+    ]
+    .join("\n")
+        + "\n";
+    new_ucmd!()
+        .args(&["-g"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
 }

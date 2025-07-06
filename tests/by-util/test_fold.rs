@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
@@ -553,4 +551,31 @@ fn test_obsolete_syntax() {
         .arg("space_separated_words.txt")
         .succeeds()
         .stdout_is("test1\n \ntest2\n \ntest3\n \ntest4\n \ntest5\n \ntest6\n ");
+}
+#[test]
+fn test_byte_break_at_non_utf8_character() {
+    new_ucmd!()
+        .arg("-b")
+        .arg("-s")
+        .arg("-w")
+        .arg("40")
+        .arg("non_utf8.input")
+        .succeeds()
+        .stdout_is_fixture_bytes("non_utf8.expected");
+}
+#[test]
+fn test_tab_advances_at_non_utf8_character() {
+    new_ucmd!()
+        .arg("-w8")
+        .arg("non_utf8_tab_stops.input")
+        .succeeds()
+        .stdout_is_fixture_bytes("non_utf8_tab_stops_w8.expected");
+}
+#[test]
+fn test_all_tab_advances_at_non_utf8_character() {
+    new_ucmd!()
+        .arg("-w16")
+        .arg("non_utf8_tab_stops.input")
+        .succeeds()
+        .stdout_is_fixture_bytes("non_utf8_tab_stops_w16.expected");
 }

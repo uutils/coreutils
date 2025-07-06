@@ -14,8 +14,6 @@ pub mod buf_copy;
 pub mod checksum;
 #[cfg(feature = "colors")]
 pub mod colors;
-#[cfg(feature = "custom-tz-fmt")]
-pub mod custom_tz_fmt;
 #[cfg(feature = "encoding")]
 pub mod encoding;
 #[cfg(feature = "extendedbigdecimal")]
@@ -28,6 +26,8 @@ pub mod format;
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;
+#[cfg(feature = "i18n")]
+pub mod i18n;
 #[cfg(feature = "lines")]
 pub mod lines;
 #[cfg(feature = "parser")]

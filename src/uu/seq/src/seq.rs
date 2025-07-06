@@ -15,7 +15,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
-use uucore::{fast_inc::fast_inc, format_usage, help_about, help_usage};
+use uucore::{fast_inc::fast_inc, format_usage};
 
 mod error;
 
@@ -28,8 +28,7 @@ mod numberparse;
 use crate::error::SeqError;
 use crate::number::PreciseNumber;
 
-const ABOUT: &str = help_about!("seq.md");
-const USAGE: &str = help_usage!("seq.md");
+use uucore::locale::get_message;
 
 const OPT_SEPARATOR: &str = "separator";
 const OPT_TERMINATOR: &str = "terminator";
@@ -222,32 +221,32 @@ pub fn uu_app() -> Command {
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("seq-about"))
+        .override_usage(format_usage(&get_message("seq-usage")))
         .arg(
             Arg::new(OPT_SEPARATOR)
                 .short('s')
                 .long("separator")
-                .help("Separator character (defaults to \\n)"),
+                .help(get_message("seq-help-separator")),
         )
         .arg(
             Arg::new(OPT_TERMINATOR)
                 .short('t')
                 .long("terminator")
-                .help("Terminator character (defaults to \\n)"),
+                .help(get_message("seq-help-terminator")),
         )
         .arg(
             Arg::new(OPT_EQUAL_WIDTH)
                 .short('w')
                 .long("equal-width")
-                .help("Equalize widths of all numbers by padding with zeros")
+                .help(get_message("seq-help-equal-width"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_FORMAT)
                 .short('f')
                 .long(OPT_FORMAT)
-                .help("use printf style floating-point FORMAT"),
+                .help(get_message("seq-help-format")),
         )
         .arg(
             // we use allow_hyphen_values instead of allow_negative_numbers because clap removed

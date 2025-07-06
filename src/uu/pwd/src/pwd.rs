@@ -8,13 +8,12 @@ use clap::{Arg, Command};
 use std::env;
 use std::io;
 use std::path::PathBuf;
-use uucore::{format_usage, help_about, help_usage};
+use uucore::format_usage;
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 
-const ABOUT: &str = help_about!("pwd.md");
-const USAGE: &str = help_usage!("pwd.md");
+use uucore::locale::get_message;
 const OPT_LOGICAL: &str = "logical";
 const OPT_PHYSICAL: &str = "physical";
 
@@ -120,7 +119,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         physical_path()
     }
-    .map_err_context(|| "failed to get current directory".to_owned())?;
+    .map_err_context(|| get_message("pwd-error-failed-to-get-current-directory"))?;
 
     // \\?\ is a prefix Windows gives to paths under certain circumstances,
     // including when canonicalizing them.
@@ -133,22 +132,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(Into::into)
         .unwrap_or(cwd);
 
-    println_verbatim(cwd).map_err_context(|| "failed to print current directory".to_owned())?;
-
+    println_verbatim(cwd)
+        .map_err_context(|| get_message("pwd-error-failed-to-print-current-directory"))?;
     Ok(())
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("pwd-about"))
+        .override_usage(format_usage(&get_message("pwd-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_LOGICAL)
                 .short('L')
                 .long(OPT_LOGICAL)
-                .help("use PWD from environment, even if it contains symlinks")
+                .help(get_message("pwd-help-logical"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -156,7 +155,7 @@ pub fn uu_app() -> Command {
                 .short('P')
                 .long(OPT_PHYSICAL)
                 .overrides_with(OPT_LOGICAL)
-                .help("avoid all symlinks")
+                .help(get_message("pwd-help-physical"))
                 .action(ArgAction::SetTrue),
         )
 }

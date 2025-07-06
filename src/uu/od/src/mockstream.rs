@@ -54,7 +54,7 @@ pub struct FailingMockStream {
 }
 
 impl FailingMockStream {
-    /// Creates a FailingMockStream
+    /// Creates a [`FailingMockStream`]
     ///
     /// When `read` or `write` is called, it will return an error `repeat_count` times.
     /// `kind` and `message` can be specified to define the exact error.

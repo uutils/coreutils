@@ -5,10 +5,8 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::env;
-use uucore::{error::UResult, format_usage, help_about, help_usage};
-
-const ABOUT: &str = help_about!("printenv.md");
-const USAGE: &str = help_usage!("printenv.md");
+use uucore::locale::get_message;
+use uucore::{error::UResult, format_usage};
 
 static OPT_NULL: &str = "null";
 
@@ -56,14 +54,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .about(get_message("printenv-about"))
+        .override_usage(format_usage(&get_message("printenv-usage")))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_NULL)
                 .short('0')
                 .long(OPT_NULL)
-                .help("end each output line with 0 byte rather than newline")
+                .help(get_message("printenv-help-null"))
                 .action(ArgAction::SetTrue),
         )
         .arg(

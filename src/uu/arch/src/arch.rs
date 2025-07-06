@@ -7,11 +7,10 @@ use platform_info::*;
 
 use clap::Command;
 use uucore::error::{UResult, USimpleError};
-use uucore::locale::{self, get_message};
+use uucore::locale::get_message;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    locale::setup_localization(uucore::util_name())?;
     uu_app().try_get_matches_from(args)?;
 
     let uts =

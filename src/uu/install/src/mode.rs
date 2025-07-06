@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use uucore::locale::get_message_with_args;
 #[cfg(not(windows))]
 use uucore::mode;
 
@@ -25,7 +27,16 @@ pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
     use std::os::unix::fs::PermissionsExt;
     use uucore::{display::Quotable, show_error};
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).map_err(|err| {
-        show_error!("{}: chmod failed with error {err}", path.maybe_quote());
+        show_error!(
+            "{}",
+            get_message_with_args(
+                "install-error-chmod-failed-detailed",
+                HashMap::from([
+                    ("path".to_string(), path.maybe_quote().to_string()),
+                    ("error".to_string(), err.to_string())
+                ])
+            )
+        );
     })
 }
 

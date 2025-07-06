@@ -5,8 +5,6 @@
 use glob::glob;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 /// Returns a string of numbers with the given range, each on a new line.
 /// The upper bound is not included.

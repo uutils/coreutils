@@ -5,7 +5,7 @@
 
 use std::io::IsTerminal;
 
-use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
+use uutests::{at_and_ucmd, new_ucmd};
 
 #[cfg(unix)]
 #[test]
@@ -75,8 +75,8 @@ fn test_file_arg() {
     // but I am leaving this for later
     if std::io::stdout().is_terminal() {
         // Directory as argument
-        let mut ucmd = TestScenario::new(util_name!()).ucmd();
-        ucmd.arg(".")
+        new_ucmd!()
+            .arg(".")
             .succeeds()
             .stderr_contains("'.' is a directory.");
 
@@ -87,14 +87,14 @@ fn test_file_arg() {
             .succeeds()
             .stderr_contains("is a directory");
 
-        ucmd = TestScenario::new(util_name!()).ucmd();
-        ucmd.arg("nonexistent_file")
+        new_ucmd!()
+            .arg("nonexistent_file")
             .succeeds()
             .stderr_contains("No such file or directory");
 
         // Multiple nonexistent files
-        ucmd = TestScenario::new(util_name!()).ucmd();
-        ucmd.arg("file2")
+        new_ucmd!()
+            .arg("file2")
             .arg("file3")
             .succeeds()
             .stderr_contains("file2")

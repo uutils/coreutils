@@ -26,6 +26,31 @@ use nix::sys::termios::{
     SpecialCharacterIndices as S,
 };
 
+pub enum AllFlags<'a> {
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    Baud(u32),
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    Baud(BaudRate),
+    ControlFlags((&'a Flag<C>, bool)),
+    InputFlags((&'a Flag<I>, bool)),
+    LocalFlags((&'a Flag<L>, bool)),
+    OutputFlags((&'a Flag<O>, bool)),
+}
+
 pub const CONTROL_FLAGS: &[Flag<C>] = &[
     Flag::new("parenb", C::PARENB),
     Flag::new("parodd", C::PARODD),
@@ -143,13 +168,6 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
         target_os = "macos"
     ))]
     Flag::new_grouped("tab0", O::TAB0, O::TABDLY).sane(),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "haiku",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "macos"
-    ))]
     #[cfg(any(
         target_os = "android",
         target_os = "haiku",

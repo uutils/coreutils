@@ -4,12 +4,11 @@
 // file that was distributed with this source code.
 #![allow(clippy::borrow_as_ptr)]
 
-use uutests::util::TestScenario;
-use uutests::{at_and_ucmd, new_ucmd, util_name};
+use uutests::{at_and_ucmd, new_ucmd};
 
 use regex::Regex;
-#[cfg(target_os = "linux")]
-use std::fmt::Write;
+use std::process::Stdio;
+use std::time::Duration;
 
 // tests for basic tee functionality.
 // inspired by:
@@ -93,27 +92,6 @@ fn test_tee_append() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
-fn test_tee_no_more_writeable_1() {
-    // equals to 'tee /dev/full out2 <multi_read' call
-    let (at, mut ucmd) = at_and_ucmd!();
-    let content = (1..=10).fold(String::new(), |mut output, x| {
-        writeln!(output, "{x}").unwrap();
-        output
-    });
-    let file_out = "tee_file_out";
-
-    ucmd.arg("/dev/full")
-        .arg(file_out)
-        .pipe_in(&content[..])
-        .fails()
-        .stdout_contains(&content)
-        .stderr_contains("No space left on device");
-
-    assert_eq!(at.read(file_out), content);
-}
-
-#[test]
 fn test_readonly() {
     let (at, mut ucmd) = at_and_ucmd!();
     let content_tee = "hello";
@@ -135,34 +113,54 @@ fn test_readonly() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
-fn test_tee_no_more_writeable_2() {
-    // should be equals to 'tee out1 out2 >/dev/full <multi_read' call
-    // but currently there is no way to redirect stdout to /dev/full
-    // so this test is disabled
-    let (_at, mut ucmd) = at_and_ucmd!();
-    let _content = (1..=10).fold(String::new(), |mut output, x| {
-        let _ = writeln!(output, "{x}");
-        output
+fn test_tee_output_not_buffered() {
+    // POSIX says: The tee utility shall not buffer output
+
+    // If the output is buffered, the test will hang, so we run it in
+    // a separate thread to stop execution by timeout.
+    let handle = std::thread::spawn(move || {
+        let content = "a";
+        let file_out = "tee_file_out";
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        let mut child = ucmd
+            .arg(file_out)
+            .set_stdin(Stdio::piped())
+            .set_stdout(Stdio::piped())
+            .run_no_wait();
+
+        // We write to the input pipe, but do not close it. If the output is
+        // buffered, reading from output pipe will hang indefinitely, as we
+        // will never write anything else to it.
+        child.write_in(content.as_bytes());
+
+        let out = String::from_utf8(child.stdout_exact_bytes(1)).unwrap();
+        assert_eq!(&out, content);
+
+        // Writing to a file may take a couple hundreds nanoseconds
+        child.delay(1);
+        assert_eq!(at.read(file_out), content);
     });
-    let file_out_a = "tee_file_out_a";
-    let file_out_b = "tee_file_out_b";
 
-    let _result = ucmd
-        .arg(file_out_a)
-        .arg(file_out_b)
-        .pipe_in("/dev/full")
-        .succeeds(); // TODO: expected to succeed currently; change to fails() when required
+    // Give some time for the `tee` to create an output file. Some platforms
+    // take a lot of time to spin up the process and create the output file
+    for _ in 0..100 {
+        std::thread::sleep(Duration::from_millis(1));
+        if handle.is_finished() {
+            break;
+        }
+    }
 
-    // TODO: comment in after https://github.com/uutils/coreutils/issues/1805 is fixed
-    // assert_eq!(at.read(file_out_a), content);
-    // assert_eq!(at.read(file_out_b), content);
-    // assert!(result.stderr.contains("No space left on device"));
+    assert!(
+        handle.is_finished(),
+        "Nothing was received through output pipe"
+    );
+    handle.join().unwrap();
 }
 
 #[cfg(target_os = "linux")]
 mod linux_only {
-    use uutests::util::{AtPath, CmdResult, TestScenario, UCommand};
+    use uutests::util::{AtPath, CmdResult, UCommand};
 
     use std::fmt::Write;
     use std::fs::File;
@@ -170,7 +168,6 @@ mod linux_only {
     use std::time::Duration;
     use uutests::at_and_ucmd;
     use uutests::new_ucmd;
-    use uutests::util_name;
 
     fn make_broken_pipe() -> File {
         use libc::c_int;
@@ -580,5 +577,49 @@ mod linux_only {
 
         expect_success(&output);
         expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_tee_no_more_writeable_1() {
+        // equals to 'tee /dev/full out2 <multi_read' call
+        let (at, mut ucmd) = at_and_ucmd!();
+        let content = (1..=10).fold(String::new(), |mut output, x| {
+            writeln!(output, "{x}").unwrap();
+            output
+        });
+        let file_out = "tee_file_out";
+
+        ucmd.arg("/dev/full")
+            .arg(file_out)
+            .pipe_in(&content[..])
+            .fails()
+            .stdout_contains(&content)
+            .stderr_contains("No space left on device");
+
+        assert_eq!(at.read(file_out), content);
+    }
+
+    #[test]
+    fn test_tee_no_more_writeable_2() {
+        use std::fs::File;
+        let (at, mut ucmd) = at_and_ucmd!();
+        let content = (1..=10).fold(String::new(), |mut output, x| {
+            let _ = writeln!(output, "{x}");
+            output
+        });
+        let file_out_a = "tee_file_out_a";
+        let file_out_b = "tee_file_out_b";
+        let dev_full = File::options().append(true).open("/dev/full").unwrap();
+
+        let result = ucmd
+            .arg(file_out_a)
+            .arg(file_out_b)
+            .set_stdout(dev_full)
+            .pipe_in(content.as_bytes())
+            .fails();
+
+        assert_eq!(at.read(file_out_a), content);
+        assert_eq!(at.read(file_out_b), content);
+        assert!(result.stderr_str().contains("No space left on device"));
     }
 }

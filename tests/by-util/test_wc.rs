@@ -3,11 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-use uutests::util::{TestScenario, vec_of_size};
-use uutests::util_name;
+use uutests::util::vec_of_size;
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
 #[test]
@@ -276,13 +275,12 @@ fn test_single_all_counts() {
 #[cfg(unix)]
 #[test]
 fn test_gnu_compatible_quotation() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     at.mkdir("some-dir1");
     at.touch("some-dir1/12\n34.txt");
-    scene
-        .ucmd()
-        .args(&["some-dir1/12\n34.txt"])
+
+    ucmd.args(&["some-dir1/12\n34.txt"])
         .succeeds()
         .stdout_is("0 0 0 'some-dir1/12'$'\\n''34.txt'\n");
 }
@@ -290,27 +288,25 @@ fn test_gnu_compatible_quotation() {
 #[cfg(feature = "test_risky_names")]
 #[test]
 fn test_non_unicode_names() {
-    let scene = TestScenario::new(util_name!());
+    let (at, mut ucmd) = at_and_ucmd!();
+
     let target1 = uucore::os_str_from_bytes(b"some-dir1/1\xC0\n.txt")
         .expect("Only unix platforms can test non-unicode names");
     let target2 = uucore::os_str_from_bytes(b"some-dir1/2\xC0\t.txt")
         .expect("Only unix platforms can test non-unicode names");
-    let at = &scene.fixtures;
+
     at.mkdir("some-dir1");
     at.touch(&target1);
     at.touch(&target2);
-    scene
-        .ucmd()
-        .args(&[target1, target2])
-        .succeeds()
-        .stdout_is_bytes(
-            [
-                b"0 0 0 'some-dir1/1'$'\\300\\n''.txt'\n".to_vec(),
-                b"0 0 0 some-dir1/2\xC0\t.txt\n".to_vec(),
-                b"0 0 0 total\n".to_vec(),
-            ]
-            .concat(),
-        );
+
+    ucmd.args(&[target1, target2]).succeeds().stdout_is_bytes(
+        [
+            b"0 0 0 'some-dir1/1'$'\\300\\n''.txt'\n".to_vec(),
+            b"0 0 0 some-dir1/2\xC0\t.txt\n".to_vec(),
+            b"0 0 0 total\n".to_vec(),
+        ]
+        .concat(),
+    );
 }
 
 #[test]

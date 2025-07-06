@@ -8,15 +8,13 @@
 use clap::{Arg, ArgAction, Command, value_parser};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use libc::{dev_t, mode_t};
+use std::collections::HashMap;
 use std::ffi::CString;
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
-use uucore::{format_usage, help_about, help_section, help_usage};
-
-const ABOUT: &str = help_about!("mknod.md");
-const USAGE: &str = help_usage!("mknod.md");
-const AFTER_HELP: &str = help_section!("after help", "mknod.md");
+use uucore::format_usage;
+use uucore::locale::{get_message, get_message_with_args};
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
@@ -58,10 +56,10 @@ pub struct Config<'a> {
 
     pub dev: dev_t,
 
-    /// Set SELinux security context.
+    /// Set `SELinux` security context.
     pub set_selinux_context: bool,
 
-    /// Specific SELinux context.
+    /// Specific `SELinux` context.
     pub context: Option<&'a String>,
 }
 
@@ -132,14 +130,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         (FileType::Fifo, _, _) => {
             return Err(UUsageError::new(
                 1,
-                "Fifos do not have major and minor device numbers.",
+                get_message("mknod-error-fifo-no-major-minor"),
             ));
         }
         (_, Some(&major), Some(&minor)) => makedev(major, minor),
         _ => {
             return Err(UUsageError::new(
                 1,
-                "Special files require major and minor device numbers.",
+                get_message("mknod-error-special-require-major-minor"),
             ));
         }
     };
@@ -159,47 +157,47 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(uucore::crate_version!())
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
-        .about(ABOUT)
+        .override_usage(format_usage(&get_message("mknod-usage")))
+        .after_help(get_message("mknod-after-help"))
+        .about(get_message("mknod-about"))
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)
                 .short('m')
                 .long("mode")
                 .value_name("MODE")
-                .help("set file permission bits to MODE, not a=rw - umask"),
+                .help(get_message("mknod-help-mode")),
         )
         .arg(
             Arg::new("name")
                 .value_name("NAME")
-                .help("name of the new file")
+                .help(get_message("mknod-help-name"))
                 .required(true)
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .arg(
             Arg::new(options::TYPE)
                 .value_name("TYPE")
-                .help("type of the new file (b, c, u or p)")
+                .help(get_message("mknod-help-type"))
                 .required(true)
                 .value_parser(parse_type),
         )
         .arg(
             Arg::new(options::MAJOR)
                 .value_name(options::MAJOR)
-                .help("major file type")
+                .help(get_message("mknod-help-major"))
                 .value_parser(value_parser!(u64)),
         )
         .arg(
             Arg::new(options::MINOR)
                 .value_name(options::MINOR)
-                .help("minor file type")
+                .help(get_message("mknod-help-minor"))
                 .value_parser(value_parser!(u64)),
         )
         .arg(
             Arg::new(options::SELINUX)
                 .short('Z')
-                .help("set SELinux security context of each created directory to the default type")
+                .help(get_message("mknod-help-selinux"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -209,7 +207,7 @@ pub fn uu_app() -> Command {
                 .value_parser(value_parser!(String))
                 .num_args(0..=1)
                 .require_equals(true)
-                .help("like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX")
+                .help(get_message("mknod-help-context")),
         )
 }
 
@@ -217,10 +215,15 @@ fn get_mode(str_mode: Option<&String>) -> Result<mode_t, String> {
     match str_mode {
         None => Ok(MODE_RW_UGO),
         Some(str_mode) => uucore::mode::parse_mode(str_mode)
-            .map_err(|e| format!("invalid mode ({e})"))
+            .map_err(|e| {
+                get_message_with_args(
+                    "mknod-error-invalid-mode",
+                    HashMap::from([("error".to_string(), e.to_string())]),
+                )
+            })
             .and_then(|mode| {
                 if mode > 0o777 {
-                    Err("mode must specify only file permission bits".to_string())
+                    Err(get_message("mknod-error-mode-permission-bits-only"))
                 } else {
                     Ok(mode)
                 }
@@ -233,11 +236,14 @@ fn parse_type(tpe: &str) -> Result<FileType, String> {
     // 'mknod /dev/rst0 character 18 0'.
     tpe.chars()
         .next()
-        .ok_or_else(|| "missing device type".to_string())
+        .ok_or_else(|| get_message("mknod-error-missing-device-type"))
         .and_then(|first_char| match first_char {
             'b' => Ok(FileType::Block),
             'c' | 'u' => Ok(FileType::Character),
             'p' => Ok(FileType::Fifo),
-            _ => Err(format!("invalid device type {}", tpe.quote())),
+            _ => Err(get_message_with_args(
+                "mknod-error-invalid-device-type",
+                HashMap::from([("type".to_string(), tpe.quote().to_string())]),
+            )),
         })
 }

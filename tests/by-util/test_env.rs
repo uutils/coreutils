@@ -522,7 +522,7 @@ fn test_split_string_into_args_s_escaped_c_not_allowed() {
     let out = scene.ucmd().args(&[r#"-S"\c""#]).fails().stderr_move_str();
     assert_eq!(
         out,
-        "env: '\\c' must not appear in double-quoted -S string\n"
+        "env: '\\c' must not appear in double-quoted -S string at position 2\n"
     );
 }
 
@@ -608,91 +608,91 @@ fn test_env_parsing_errors() {
         .arg("-S\\|echo hallo") // no quotes, invalid escape sequence |
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\|' in -S\n");
+        .stderr_is("env: invalid sequence '\\|' in -S at position 1\n");
 
     ts.ucmd()
         .arg("-S\\a") // no quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 1\n");
 
     ts.ucmd()
         .arg("-S\"\\a\"") // double quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r#"-S"\a""#) // same as before, just using r#""#
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
 
     ts.ucmd()
         .arg("-S'\\a'") // single quotes, invalid escape sequence a
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\a' in -S\n");
+        .stderr_is("env: invalid sequence '\\a' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S\|\&\;") // no quotes, invalid escape sequence |
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\|' in -S\n");
+        .stderr_is("env: invalid sequence '\\|' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r"-S\<\&\;") // no quotes, invalid escape sequence <
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\<' in -S\n");
+        .stderr_is("env: invalid sequence '\\<' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r"-S\>\&\;") // no quotes, invalid escape sequence >
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\>' in -S\n");
+        .stderr_is("env: invalid sequence '\\>' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r"-S\`\&\;") // no quotes, invalid escape sequence `
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r#"-S"\`\&\;""#) // double quotes, invalid escape sequence `
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S'\`\&\;'") // single quotes, invalid escape sequence `
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S\`") // ` escaped without quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 1\n");
 
     ts.ucmd()
         .arg(r#"-S"\`""#) // ` escaped in double quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .arg(r"-S'\`'") // ` escaped in single quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\`' in -S\n");
+        .stderr_is("env: invalid sequence '\\`' in -S at position 2\n");
 
     ts.ucmd()
         .args(&[r"-S\🦉"]) // ` escaped in single quotes
         .fails_with_code(125)
         .no_stdout()
-        .stderr_is("env: invalid sequence '\\\u{FFFD}' in -S\n"); // gnu doesn't show the owl. Instead a invalid unicode ?
+        .stderr_is("env: invalid sequence '\\\u{FFFD}' in -S at position 1\n"); // gnu doesn't show the owl. Instead a invalid unicode ?
 }
 
 #[test]

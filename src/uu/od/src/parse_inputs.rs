@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 use super::options;
 use clap::ArgMatches;
+use std::collections::HashMap;
+use uucore::locale::{get_message, get_message_with_args};
 
 /// Abstraction for getopts
 pub trait CommandLineOpts {
@@ -122,7 +124,10 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
                     m,
                     None,
                 ))),
-                _ => Err(format!("invalid offset: {}", input_strings[1])),
+                _ => Err(get_message_with_args(
+                    "od-error-invalid-offset",
+                    HashMap::from([("offset".to_string(), input_strings[1].to_string())]),
+                )),
             }
         }
         3 => {
@@ -134,13 +139,19 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
                     n,
                     Some(m),
                 ))),
-                (Err(_), _) => Err(format!("invalid offset: {}", input_strings[1])),
-                (_, Err(_)) => Err(format!("invalid label: {}", input_strings[2])),
+                (Err(_), _) => Err(get_message_with_args(
+                    "od-error-invalid-offset",
+                    HashMap::from([("offset".to_string(), input_strings[1].to_string())]),
+                )),
+                (_, Err(_)) => Err(get_message_with_args(
+                    "od-error-invalid-label",
+                    HashMap::from([("label".to_string(), input_strings[2].to_string())]),
+                )),
             }
         }
-        _ => Err(format!(
-            "too many inputs after --traditional: {}",
-            input_strings[3]
+        _ => Err(get_message_with_args(
+            "od-error-too-many-inputs",
+            HashMap::from([("input".to_string(), input_strings[3].to_string())]),
         )),
     }
 }
@@ -171,7 +182,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
     }
     match u64::from_str_radix(&s[start..len], radix) {
         Ok(i) => Ok(i * multiply),
-        Err(_) => Err("parse failed"),
+        Err(_) => Err(get_message("od-error-parse-failed").leak()),
     }
 }
 

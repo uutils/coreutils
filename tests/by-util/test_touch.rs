@@ -436,7 +436,7 @@ fn test_touch_no_dereference() {
 
 #[test]
 fn test_touch_reference() {
-    let scenario = TestScenario::new("touch");
+    let scenario = TestScenario::new(util_name!());
     let (at, mut _ucmd) = (scenario.fixtures.clone(), scenario.ucmd());
     let file_a = "test_touch_reference_a";
     let file_b = "test_touch_reference_b";
@@ -1005,4 +1005,15 @@ fn test_obsolete_posix_format_with_year() {
         .no_output();
     assert!(at.file_exists("11111111"));
     assert!(!at.file_exists("0101000090"));
+}
+
+#[test]
+fn test_touch_f_option() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_f_option.txt";
+
+    ucmd.args(&["-f", file]).succeeds().no_output();
+
+    assert!(at.file_exists(file));
+    at.remove(file);
 }

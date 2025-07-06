@@ -5,8 +5,6 @@
 // spell-checker:ignore (paths) gnutest ronna quetta
 
 use uutests::new_ucmd;
-use uutests::util::TestScenario;
-use uutests::util_name;
 
 #[test]
 fn test_invalid_arg() {
