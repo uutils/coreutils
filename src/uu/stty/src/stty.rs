@@ -247,7 +247,7 @@ fn stty(opts: &Options) -> UResult<()> {
     if let Some(args) = &opts.settings {
         let mut args_iter = args.iter();
         // iterate over args: skip to next arg if current one is a control char
-        while let Some(arg) = args_iter.next() {
+        while let Some(&arg) = args_iter.next() {
             // control char
             if let Some(char_index) = cc_to_index(arg) {
                 if let Some(mapping) = args_iter.next() {
@@ -275,7 +275,7 @@ fn stty(opts: &Options) -> UResult<()> {
                     ));
                 }
             // ispeed/ospeed baud rate setting
-            } else if *arg == "ispeed" || *arg == "ospeed" {
+            } else if arg == "ispeed" || arg == "ospeed" {
                 match args_iter.next() {
                     Some(speed) => {
                         if let Some(baud_flag) = string_to_baud(speed) {
@@ -303,7 +303,7 @@ fn stty(opts: &Options) -> UResult<()> {
                         ));
                     }
                 }
-            } else if *arg == "line" {
+            } else if arg == "line" {
                 match args_iter.next() {
                     Some(line) => match parse_u8_or_err(line) {
                         Ok(n) => valid_args.push(ArgOptions::Special(SpecialSetting::Line(n))),
@@ -319,7 +319,7 @@ fn stty(opts: &Options) -> UResult<()> {
                         ));
                     }
                 }
-            } else if *arg == "min" {
+            } else if arg == "min" {
                 match args_iter.next() {
                     Some(min) => match parse_u8_or_err(min) {
                         Ok(n) => {
@@ -338,7 +338,7 @@ fn stty(opts: &Options) -> UResult<()> {
                         ));
                     }
                 }
-            } else if *arg == "time" {
+            } else if arg == "time" {
                 match args_iter.next() {
                     Some(time) => match parse_u8_or_err(time) {
                         Ok(n) => valid_args
@@ -377,7 +377,7 @@ fn stty(opts: &Options) -> UResult<()> {
                     ));
                 }
                 valid_args.push(flag.into());
-            } else if *arg == "rows" {
+            } else if arg == "rows" {
                 if let Some(rows) = args_iter.next() {
                     if let Some(n) = parse_rows_cols(rows) {
                         valid_args.push(ArgOptions::Special(SpecialSetting::Rows(n)));
@@ -399,7 +399,7 @@ fn stty(opts: &Options) -> UResult<()> {
                         ),
                     ));
                 }
-            } else if *arg == "columns" || *arg == "cols" {
+            } else if arg == "columns" || arg == "cols" {
                 if let Some(cols) = args_iter.next() {
                     if let Some(n) = parse_rows_cols(cols) {
                         valid_args.push(ArgOptions::Special(SpecialSetting::Cols(n)));
@@ -421,11 +421,11 @@ fn stty(opts: &Options) -> UResult<()> {
                         ),
                     ));
                 }
-            } else if *arg == "drain" {
+            } else if arg == "drain" {
                 set_arg = SetArg::TCSADRAIN;
-            } else if *arg == "-drain" {
+            } else if arg == "-drain" {
                 set_arg = SetArg::TCSANOW;
-            } else if *arg == "size" {
+            } else if arg == "size" {
                 valid_args.push(ArgOptions::Print(PrintSetting::Size));
             // not a valid option
             } else {
