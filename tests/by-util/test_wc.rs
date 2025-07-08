@@ -465,9 +465,11 @@ fn test_files_from_pseudo_filesystem() {
     let result = new_ucmd!().arg("-c").arg("/proc/cpuinfo").succeeds();
     assert_ne!(result.stdout_str(), "0 /proc/cpuinfo\n");
 
+    let ts = TestScenario::new(util_name!());
     // the following block fails on Android with a "Permission denied" error
+    // also skip in case the kernel was not built with profiling support, e.g. WSL
     #[cfg(target_os = "linux")]
-    {
+    if ts.fixtures.file_exists("/sys/kernel/profiling") {
         let (at, mut ucmd) = at_and_ucmd!();
         let result = ucmd.arg("-c").arg("/sys/kernel/profiling").succeeds();
         let actual = at.read("/sys/kernel/profiling").len();
