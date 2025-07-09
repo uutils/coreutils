@@ -105,7 +105,7 @@ thread_local! {
     static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
 }
 
-// Initialize localization with a specific locale and config
+/// Initialize localization with a specific locale and config
 fn init_localization(
     locale: &LanguageIdentifier,
     locales_dir: &Path,
@@ -135,7 +135,7 @@ fn init_localization(
     Ok(())
 }
 
-// Create a bundle for a specific locale
+/// Create a bundle for a specific locale
 fn create_bundle(
     locale: &LanguageIdentifier,
     locales_dir: &Path,
@@ -266,7 +266,7 @@ pub fn get_message_with_args(id: &str, ftl_args: HashMap<String, String>) -> Str
     get_message_internal(id, Some(args))
 }
 
-// Function to detect system locale from environment variables
+/// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     let locale_str = std::env::var("LANG")
         .unwrap_or_else(|_| DEFAULT_LOCALE.to_string())
@@ -410,7 +410,7 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
-    // Helper function to create a temporary directory with test locale files
+    /// Helper function to create a temporary directory with test locale files
     fn create_test_locales_dir() -> TempDir {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
 

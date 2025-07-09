@@ -102,8 +102,8 @@ fn parse_unit(s: &str) -> Result<Unit> {
     }
 }
 
-// Parses a unit size. Suffixes are turned into their integer representations. For example, 'K'
-// will return `Ok(1000)`, and '2K' will return `Ok(2000)`.
+/// Parses a unit size. Suffixes are turned into their integer representations. For example, 'K'
+/// will return `Ok(1000)`, and '2K' will return `Ok(2000)`.
 fn parse_unit_size(s: &str) -> Result<usize> {
     let number: String = s.chars().take_while(char::is_ascii_digit).collect();
     let suffix = &s[number.len()..];
@@ -126,12 +126,12 @@ fn parse_unit_size(s: &str) -> Result<usize> {
     ))
 }
 
-// Parses a suffix of a unit size and returns the corresponding multiplier. For example,
-// the suffix 'K' will return `Some(1000)`, and 'Ki' will return `Some(1024)`.
-//
-// If the suffix is empty, `Some(1)` is returned.
-//
-// If the suffix is unknown, `None` is returned.
+/// Parses a suffix of a unit size and returns the corresponding multiplier. For example,
+/// the suffix 'K' will return `Some(1000)`, and 'Ki' will return `Some(1024)`.
+///
+/// If the suffix is empty, `Some(1)` is returned.
+///
+/// If the suffix is unknown, `None` is returned.
 fn parse_unit_size_suffix(s: &str) -> Option<usize> {
     if s.is_empty() {
         return Some(1);

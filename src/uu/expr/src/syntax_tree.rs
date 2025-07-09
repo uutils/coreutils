@@ -580,9 +580,9 @@ thread_local! {
     static NODE_ID: Cell<u32> = const { Cell::new(1) };
 }
 
-// We create unique identifiers for each node in the AST.
-// This is used to transform the recursive algorithm into an iterative one.
-// It is used to store the result of each node's evaluation in a BtreeMap.
+/// We create unique identifiers for each node in the AST.
+/// This is used to transform the recursive algorithm into an iterative one.
+/// It is used to store the result of each node's evaluation in a `BtreeMap`.
 fn get_next_id() -> u32 {
     NODE_ID.with(|id| {
         let current = id.get();

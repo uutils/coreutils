@@ -492,8 +492,8 @@ pub fn uu_app_custom() -> Command {
     command
 }
 
-// hashsum is handled differently in build.rs, therefore this is not the same
-// as in other utilities.
+/// hashsum is handled differently in build.rs
+/// therefore, this is different from other utilities.
 fn uu_app(binary_name: &str) -> (Command, bool) {
     match binary_name {
         // These all support the same options.

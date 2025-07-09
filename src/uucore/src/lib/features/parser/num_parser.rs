@@ -128,7 +128,7 @@ impl<'a, T> ExtendedParserError<'a, T>
 where
     T: Zero,
 {
-    // Extract the value out of an error, if possible.
+    /// Extract the value out of an error, if possible.
     fn extract(self) -> T {
         match self {
             Self::NotNumeric => T::zero(),
@@ -138,9 +138,9 @@ where
         }
     }
 
-    // Map an error to another, using the provided conversion function.
-    // The error (self) takes precedence over errors happening during the
-    // conversion.
+    /// Map an error to another, using the provided conversion function.
+    /// The error (self) takes precedence over errors happening during the
+    /// conversion.
     fn map<U>(
         self,
         f: impl FnOnce(T) -> Result<U, ExtendedParserError<'a, U>>,
@@ -334,7 +334,7 @@ fn parse_exponent(base: Base, str: &str) -> (Option<BigInt>, &str) {
     (None, str)
 }
 
-// Parse a multiplier from allowed suffixes (e.g. s/m/h).
+/// Parse a multiplier from allowed suffixes (e.g. s/m/h).
 fn parse_suffix_multiplier<'a>(str: &'a str, allowed_suffixes: &[(char, u32)]) -> (u32, &'a str) {
     if let Some(ch) = str.chars().next() {
         if let Some(mul) = allowed_suffixes
@@ -384,8 +384,8 @@ fn parse_special_value<'a>(
     Err(ExtendedParserError::NotNumeric)
 }
 
-// Underflow/Overflow errors always contain 0 or infinity.
-// overflow: true for overflow, false for underflow.
+/// Underflow/Overflow errors always contain 0 or infinity.
+/// overflow: true for overflow, false for underflow.
 fn make_error<'a>(overflow: bool, negative: bool) -> ExtendedParserError<'a, ExtendedBigDecimal> {
     let mut v = if overflow {
         ExtendedBigDecimal::Infinity
@@ -402,15 +402,15 @@ fn make_error<'a>(overflow: bool, negative: bool) -> ExtendedParserError<'a, Ext
     }
 }
 
-// Compute bd**exp using exponentiation by squaring algorithm, while maintaining the
-// precision specified in ctx (the number of digits would otherwise explode).
-//
-// Algorithm comes from https://en.wikipedia.org/wiki/Exponentiation_by_squaring
-//
-// TODO: Still pending discussion in https://github.com/akubera/bigdecimal-rs/issues/147,
-// we do lose a little bit of precision, and the last digits may not be correct.
-// Note: This has been copied from the latest revision in https://github.com/akubera/bigdecimal-rs/pull/148,
-// so it's using minimum Rust version of `bigdecimal-rs`.
+/// Compute bd**exp using exponentiation by squaring algorithm, while maintaining the
+/// precision specified in ctx (the number of digits would otherwise explode).
+///
+/// Algorithm comes from <https://en.wikipedia.org/wiki/Exponentiation_by_squaring>
+///
+/// TODO: Still pending discussion in <https://github.com/akubera/bigdecimal-rs/issues/147>,
+/// we do lose a little bit of precision, and the last digits may not be correct.
+/// Note: This has been copied from the latest revision in <https://github.com/akubera/bigdecimal-rs/pull/148>,
+/// so it's using minimum Rust version of `bigdecimal-rs`.
 fn pow_with_context(bd: &BigDecimal, exp: i64, ctx: &Context) -> BigDecimal {
     if exp == 0 {
         return 1.into();
@@ -467,7 +467,7 @@ fn pow_with_context(bd: &BigDecimal, exp: i64, ctx: &Context) -> BigDecimal {
     trim_precision(bd_x * bd_y, ctx, 0)
 }
 
-// Construct an ExtendedBigDecimal based on parsed data
+/// Construct an [`ExtendedBigDecimal`] based on parsed data
 fn construct_extended_big_decimal<'a>(
     digits: BigUint,
     negative: bool,

@@ -563,7 +563,7 @@ fn write_padded(
     .map_err(FormatError::IoError)
 }
 
-// Check for a number ending with a '$'
+/// Check for a number ending with a '$'
 fn eat_argument_position(rest: &mut &[u8], index: &mut usize) -> Option<ArgumentLocation> {
     let original_index = *index;
     if let Some(pos) = eat_number(rest, index) {

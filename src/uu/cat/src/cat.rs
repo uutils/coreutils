@@ -590,7 +590,7 @@ fn write_lines<R: FdReadable>(
     Ok(())
 }
 
-// \r followed by \n is printed as ^M when show_ends is enabled, so that \r\n prints as ^M$
+/// `\r` followed by `\n` is printed as `^M` when `show_ends` is enabled, so that `\r\n` prints as `^M$`
 fn write_new_line<W: Write>(
     writer: &mut W,
     options: &OutputOptions,
@@ -634,6 +634,7 @@ fn write_end<W: Write>(writer: &mut W, in_buf: &[u8], options: &OutputOptions) -
 // We need to stop at \r because it may be written as ^M depending on the byte after and settings;
 // however, write_nonprint_to_end doesn't need to stop at \r because it will always write \r as ^M.
 // Return the number of written symbols
+
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
     // using memchr2 significantly improves performances
     match memchr2(b'\n', b'\r', in_buf) {

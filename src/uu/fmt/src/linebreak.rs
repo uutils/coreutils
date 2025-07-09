@@ -92,8 +92,8 @@ pub fn break_lines(
     }
 }
 
-// break_simple implements a "greedy" breaking algorithm: print words until
-// maxlength would be exceeded, then print a linebreak and indent and continue.
+/// `break_simple` implements a "greedy" breaking algorithm: print words until
+/// maxlength would be exceeded, then print a linebreak and indent and continue.
 fn break_simple<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     mut iter: T,
     args: &mut BreakArgs<'a>,
@@ -130,10 +130,10 @@ fn accum_words_simple<'a>(
     }
 }
 
-// break_knuth_plass implements an "optimal" breaking algorithm in the style of
-//    Knuth, D.E., and Plass, M.F. "Breaking Paragraphs into Lines." in Software,
-//    Practice and Experience. Vol. 11, No. 11, November 1981.
-//    http://onlinelibrary.wiley.com/doi/10.1002/spe.4380111102/pdf
+/// `break_knuth_plass` implements an "optimal" breaking algorithm in the style of
+/// Knuth, D.E., and Plass, M.F. "Breaking Paragraphs into Lines." in Software,
+/// Practice and Experience. Vol. 11, No. 11, November 1981.
+/// <http://onlinelibrary.wiley.com/doi/10.1002/spe.4380111102/pdf>
 fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
     mut iter: T,
     args: &mut BreakArgs<'a>,
@@ -463,7 +463,7 @@ fn restart_active_breaks<'a>(
     }
 }
 
-// Number of spaces to add before a word, based on mode, newline, sentence start.
+/// Number of spaces to add before a word, based on mode, newline, sentence start.
 fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize {
     if uniform || newline {
         if start || (newline && punct) { 2 } else { 1 }
@@ -472,8 +472,8 @@ fn compute_slen(uniform: bool, newline: bool, start: bool, punct: bool) -> usize
     }
 }
 
-// If we're on a fresh line, slen=0 and we slice off leading whitespace.
-// Otherwise, compute slen and leave whitespace alone.
+/// If we're on a fresh line, `slen=0` and we slice off leading whitespace.
+/// Otherwise, compute `slen` and leave whitespace alone.
 fn slice_if_fresh(
     fresh: bool,
     word: &str,
@@ -490,13 +490,13 @@ fn slice_if_fresh(
     }
 }
 
-// Write a newline and add the indent.
+/// Write a newline and add the indent.
 fn write_newline(indent: &str, ostream: &mut BufWriter<Stdout>) -> std::io::Result<()> {
     ostream.write_all(b"\n")?;
     ostream.write_all(indent.as_bytes())
 }
 
-// Write the word, along with slen spaces.
+/// Write the word, along with slen spaces.
 fn write_with_spaces(
     word: &str,
     slen: usize,
