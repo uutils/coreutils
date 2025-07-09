@@ -63,3 +63,4 @@ expr-error-unmatched-opening-brace = Accolade ouvrante {"\\{"} non appariée
 expr-error-invalid-bracket-content = Contenu invalide de {"\\{\\}"}
 expr-error-trailing-backslash = Barre oblique inverse en fin
 expr-error-too-big-range-quantifier-index = Expression régulière trop grande
+expr-error-match-utf8 = match ne supporte pas l'encodage UTF-8 invalide dans { $arg }
