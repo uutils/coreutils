@@ -111,7 +111,7 @@ impl<'a> SplitIterator<'a> {
             (None, Some(default)) => {
                 self.expander.put_native_string(default);
             }
-        };
+        }
 
         Ok(())
     }

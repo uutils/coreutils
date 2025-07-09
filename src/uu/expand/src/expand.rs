@@ -405,7 +405,7 @@ fn expand_line(
                         output.write_all(&options.tspaces.as_bytes()[..nts])?;
                     } else {
                         output.write_all(" ".repeat(nts).as_bytes())?;
-                    };
+                    }
                 } else {
                     output.write_all(&buf[byte..byte + nbytes])?;
                 }

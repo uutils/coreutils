@@ -79,7 +79,7 @@ fn open(name: &str) -> UResult<Box<dyn Read>> {
                         HashMap::from([("name".to_string(), name.maybe_quote().to_string())]),
                     ),
                 ));
-            };
+            }
             // Silent the warning as we want to the error message
             if path.metadata().is_err() {
                 return Err(USimpleError::new(
@@ -89,7 +89,7 @@ fn open(name: &str) -> UResult<Box<dyn Read>> {
                         HashMap::from([("name".to_string(), name.maybe_quote().to_string())]),
                     ),
                 ));
-            };
+            }
             let f = File::open(path).map_err_context(String::new)?;
             Ok(Box::new(f) as Box<dyn Read>)
         }

@@ -2272,7 +2272,7 @@ fn enter_directory(
             let entry_path_data =
                 PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
             entries.push(entry_path_data);
-        };
+        }
     }
 
     sort_entries(&mut entries, config, &mut state.out);
@@ -2460,7 +2460,7 @@ fn display_additional_leading_info(
             write!(result, "{s} ").unwrap();
         } else {
             write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
-        };
+        }
     }
     Ok(result)
 }
@@ -2594,7 +2594,7 @@ fn display_items(
                     write!(state.out, "{}", config.line_ending)?;
                 }
             }
-        };
+        }
     }
 
     Ok(())
@@ -2814,7 +2814,7 @@ fn display_item_long(
                     padding.minor,
                 );
             }
-        };
+        }
 
         output_display.extend(b" ");
         display_date(md, config, state, &mut output_display)?;

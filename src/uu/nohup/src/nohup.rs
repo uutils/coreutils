@@ -72,7 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
         return Err(NohupError::CannotDetach.into());
-    };
+    }
 
     let cstrs: Vec<CString> = matches
         .get_many::<String>(options::CMD)

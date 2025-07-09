@@ -541,7 +541,7 @@ where
                 input_offset.print_final_offset();
                 return Err(1.into());
             }
-        };
+        }
     }
 
     if input_decoder.has_error() {

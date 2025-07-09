@@ -69,7 +69,7 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
                 }
             }
             Err(_) => return Err(byte_count),
-        };
+        }
     }
 
     Ok(byte_count)

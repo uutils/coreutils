@@ -169,7 +169,7 @@ impl FmtOptions {
                     return Err(FmtError::InvalidTabWidth(s.clone()).into());
                 }
             };
-        };
+        }
 
         if tabwidth < 1 {
             tabwidth = 1;

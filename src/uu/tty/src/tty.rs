@@ -29,7 +29,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             Err(1.into())
         };
-    };
+    }
 
     let mut stdout = std::io::stdout();
 
@@ -47,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Don't return to prevent a panic later when another flush is attempted
         // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
         std::process::exit(3);
-    };
+    }
 
     Ok(())
 }

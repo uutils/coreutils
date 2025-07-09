@@ -207,15 +207,15 @@ mod tests {
         match patterns.first() {
             Some(Pattern::UpToLine(24, ExecutePattern::Times(1))) => (),
             _ => panic!("expected UpToLine pattern"),
-        };
+        }
         match patterns.get(1) {
             Some(Pattern::UpToLine(42, ExecutePattern::Always)) => (),
             _ => panic!("expected UpToLine pattern"),
-        };
+        }
         match patterns.get(2) {
             Some(Pattern::UpToLine(50, ExecutePattern::Times(5))) => (),
             _ => panic!("expected UpToLine pattern"),
-        };
+        }
     }
 
     #[test]
@@ -242,42 +242,42 @@ mod tests {
                 assert_eq!(parsed_reg, "test1.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
         match patterns.get(1) {
             Some(Pattern::UpToMatch(reg, 0, ExecutePattern::Always)) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test2.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
         match patterns.get(2) {
             Some(Pattern::UpToMatch(reg, 0, ExecutePattern::Times(5))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test3.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
         match patterns.get(3) {
             Some(Pattern::UpToMatch(reg, 3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test4.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
         match patterns.get(4) {
             Some(Pattern::UpToMatch(reg, 3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test5.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
         match patterns.get(5) {
             Some(Pattern::UpToMatch(reg, -3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test6.*end$");
             }
             _ => panic!("expected UpToMatch pattern"),
-        };
+        }
     }
 
     #[test]
@@ -304,42 +304,42 @@ mod tests {
                 assert_eq!(parsed_reg, "test1.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
         match patterns.get(1) {
             Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Always)) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test2.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
         match patterns.get(2) {
             Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Times(5))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test3.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
         match patterns.get(3) {
             Some(Pattern::SkipToMatch(reg, 3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test4.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
         match patterns.get(4) {
             Some(Pattern::SkipToMatch(reg, 3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test5.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
         match patterns.get(5) {
             Some(Pattern::SkipToMatch(reg, -3, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test6.*end$");
             }
             _ => panic!("expected SkipToMatch pattern"),
-        };
+        }
     }
 
     #[test]

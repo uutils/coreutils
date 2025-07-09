@@ -346,7 +346,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             stats.consecutive_empty_lines += 1;
         } else {
             stats.consecutive_empty_lines = 0;
-        };
+        }
 
         let new_numbering_style = match SectionDelimiter::parse(&line, &settings.section_delimiter)
         {

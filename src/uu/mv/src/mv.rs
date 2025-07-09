@@ -406,7 +406,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                 }
             }
             OverwriteMode::Force => {}
-        };
+        }
         Err(MvError::NonDirectoryToDirectory(
             source.quote().to_string(),
             target.quote().to_string(),
@@ -672,7 +672,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
                 match multi_progress {
                     Some(ref pb) => pb.suspend(|| show!(e)),
                     None => show!(e),
-                };
+                }
             }
             Ok(()) => (),
         }
@@ -749,7 +749,7 @@ fn rename(
                 }
             }
             OverwriteMode::Force => {}
-        };
+        }
 
         backup_path = backup_control::get_backup_path(opts.backup, to, &opts.suffix);
         if let Some(ref backup_path) = backup_path {
@@ -805,7 +805,7 @@ fn rename(
                 println!("{message}");
             }),
             None => println!("{message}"),
-        };
+        }
     }
     Ok(())
 }

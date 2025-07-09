@@ -136,7 +136,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 bits: *bits,
             })?,
             None => return Err(ChecksumError::BitsRequiredForShake128.into()),
-        };
+        }
     }
     if matches.get_flag("shake256") {
         match matches.get_one::<usize>("bits") {
@@ -146,7 +146,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 bits: *bits,
             })?,
             None => return Err(ChecksumError::BitsRequiredForShake256.into()),
-        };
+        }
     }
 
     if alg.is_none() {

@@ -204,10 +204,10 @@ where
                         (Err(err), _) => return Err(err),
                         // continue the splitting process
                         (Ok(()), _) => (),
-                    };
+                    }
                 }
             }
-        };
+        }
     }
     Ok(())
 }
@@ -429,7 +429,7 @@ impl SplitWriter<'_> {
                             self.writeln(&line)?;
                         }
                         _ => (),
-                    };
+                    }
                     offset -= 1;
 
                     // write the extra lines required by the offset
@@ -444,7 +444,7 @@ impl SplitWriter<'_> {
                                     pattern_as_str.to_string(),
                                 ));
                             }
-                        };
+                        }
                         offset -= 1;
                     }
                     self.finish_split();
@@ -726,7 +726,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((1, Ok(line))) => {
@@ -735,7 +735,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
@@ -747,7 +747,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         input_splitter.rewind_buffer();
 
@@ -757,7 +757,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
@@ -765,7 +765,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((3, Ok(line))) => {
@@ -773,7 +773,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         assert!(input_splitter.next().is_none());
     }
@@ -799,7 +799,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((1, Ok(line))) => {
@@ -808,7 +808,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
@@ -817,7 +817,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         input_splitter.rewind_buffer();
 
@@ -828,7 +828,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((0, Ok(line))) => {
@@ -836,7 +836,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((1, Ok(line))) => {
@@ -844,7 +844,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((2, Ok(line))) => {
@@ -852,7 +852,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         match input_splitter.next() {
             Some((3, Ok(line))) => {
@@ -860,7 +860,7 @@ mod tests {
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
             item => panic!("wrong item: {item:?}"),
-        };
+        }
 
         assert!(input_splitter.next().is_none());
     }

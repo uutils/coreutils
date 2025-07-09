@@ -231,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // BSD's `id` ignores all but the first specified user
             pline(possible_pw.as_ref().map(|v| v.uid));
             return Ok(());
-        };
+        }
         if matches.get_flag(options::OPT_HUMAN_READABLE) {
             // BSD's `id` ignores all but the first specified user
             pretty(possible_pw);

@@ -504,7 +504,7 @@ fn touch_file(
             }
             show!(e);
             return Ok(());
-        };
+        }
 
         // Minor optimization: if no reference time, timestamp, or date was specified, we're done.
         if opts.source == Source::Now && opts.date.is_none() {
@@ -924,6 +924,6 @@ mod tests {
             Err(TouchError::InvalidFiletime(filetime)) => assert_eq!(filetime, invalid_filetime),
             Err(e) => panic!("Expected TouchError::InvalidFiletime, got {e}"),
             Ok(_) => panic!("Expected to error with TouchError::InvalidFiletime but succeeded"),
-        };
+        }
     }
 }

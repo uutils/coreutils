@@ -368,7 +368,7 @@ impl<'a> Input<'a> {
                     ),
                 ));
             }
-        };
+        }
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
@@ -1105,7 +1105,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             output_thread,
             truncate,
         );
-    };
+    }
 
     // Create a common buffer with a capacity of the block size.
     // This is the max size needed.

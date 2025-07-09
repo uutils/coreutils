@@ -63,7 +63,7 @@ impl WatcherRx {
                         HashMap::from([("path".to_string(), path.display().to_string())]),
                     ),
                 ));
-            };
+            }
         }
         if path.is_relative() {
             path = path.canonicalize()?;
@@ -255,7 +255,7 @@ impl Observer {
                     watcher = Box::new(notify::PollWatcher::new(tx_clone, watcher_config).unwrap());
                 }
                 Err(e) => return Err(USimpleError::new(1, e.to_string())),
-            };
+            }
         }
 
         self.watcher_rx = Some(WatcherRx::new(watcher, rx));

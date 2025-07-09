@@ -338,7 +338,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     match matches.get_many::<OsString>(options::FILE) {
         Some(files) => cksum(opts, files.map(OsStr::new))?,
         None => cksum(opts, iter::once(OsStr::new("-")))?,
-    };
+    }
 
     Ok(())
 }

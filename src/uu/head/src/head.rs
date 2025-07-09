@@ -395,7 +395,7 @@ where
                     assert_eq!(lines, 0);
                     lines = 1;
                 }
-            };
+            }
         }
 
         for separator_offset in memrchr_iter(separator, &buffer[..]) {
