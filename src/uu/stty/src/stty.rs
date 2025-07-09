@@ -982,7 +982,7 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions> {
                 "-igncr", "-icrnl", "-ixon", "-ixoff", "-icanon", "-opost", "-isig", "-iuclc",
                 "-xcase", "-ixany", "-imaxbel",
             ];
-            // TODO: add 'min 1' and 'time 0' settings here after they have been implemented
+            ccs = vec![(S::VMIN, "1"), (S::VTIME, "0")];
         }
         "sane" => {
             flags = vec![
