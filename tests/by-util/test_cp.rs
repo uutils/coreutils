@@ -927,7 +927,7 @@ fn test_cp_arg_no_clobber_twice() {
         .arg(TEST_HELLO_WORLD_DEST)
         .arg("--debug")
         .succeeds()
-        .stdout_contains(format!("skipped '{}'", TEST_HELLO_WORLD_DEST));
+        .stdout_contains(format!("skipped '{TEST_HELLO_WORLD_DEST}'"));
 
     assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "some-content");
     // Should be empty as the "no-clobber" should keep
@@ -6306,7 +6306,7 @@ fn get_getfattr_output(f: &str) -> String {
         .arg("security.selinux")
         .output()
         .expect("Failed to run `getfattr` on the destination file");
-    println!("{:?}", getfattr_output);
+    println!("{getfattr_output:?}");
     assert!(
         getfattr_output.status.success(),
         "getfattr did not run successfully: {}",
@@ -6444,12 +6444,12 @@ fn test_cp_preserve_selinux_admin_context() {
     let cmd_result = ts
         .ucmd()
         .arg("-Z")
-        .arg(format!("--context={}", default_context))
+        .arg(format!("--context={default_context}"))
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
 
-    println!("cp command result: {:?}", cmd_result);
+    println!("cp command result: {cmd_result:?}");
 
     if !cmd_result.succeeded() {
         println!("Skipping test: Cannot set SELinux context, system may not support this context");
@@ -6459,7 +6459,7 @@ fn test_cp_preserve_selinux_admin_context() {
     assert!(at.file_exists(TEST_HELLO_WORLD_DEST));
 
     let selinux_perm_dest = get_getfattr_output(&at.plus_as_string(TEST_HELLO_WORLD_DEST));
-    println!("Destination SELinux context: {}", selinux_perm_dest);
+    println!("Destination SELinux context: {selinux_perm_dest}");
 
     assert_eq!(default_context, selinux_perm_dest);
 
@@ -6679,7 +6679,7 @@ fn test_cp_preserve_context_root() {
         .status();
 
     if !chcon_result.is_ok_and(|status| status.success()) {
-        println!("Skipping test: Failed to set context: {}", context);
+        println!("Skipping test: Failed to set context: {context}");
         return;
     }
 
@@ -6688,8 +6688,8 @@ fn test_cp_preserve_context_root() {
     if let Ok(result) = run_ucmd_as_root(&scene, &["--preserve=context", source_file, dest_file]) {
         let src_ctx = get_getfattr_output(&at.plus_as_string(source_file));
         let dest_ctx = get_getfattr_output(&at.plus_as_string(dest_file));
-        println!("Source context: {}", src_ctx);
-        println!("Destination context: {}", dest_ctx);
+        println!("Source context: {src_ctx}");
+        println!("Destination context: {dest_ctx}");
 
         if !result.succeeded() {
             println!("Skipping test: Failed to copy with preserved context");
@@ -6700,9 +6700,7 @@ fn test_cp_preserve_context_root() {
 
         assert!(
             dest_context.contains("root:object_r:tmp_t"),
-            "Expected context '{}' not found in destination context: '{}'",
-            context,
-            dest_context
+            "Expected context '{context}' not found in destination context: '{dest_context}'",
         );
     } else {
         print!("Test skipped; requires root user");

@@ -110,7 +110,7 @@ impl ProgUpdate {
                     "dd-progress-truncated-record",
                     HashMap::from([("count".to_string(), count.to_string())]),
                 );
-                writeln!(w, "{}", message)?;
+                writeln!(w, "{message}")?;
             }
         }
         Ok(())
@@ -347,7 +347,7 @@ impl ReadStat {
                 ("partial".to_string(), self.reads_partial.to_string()),
             ]),
         );
-        writeln!(w, "{}", message)?;
+        writeln!(w, "{message}")?;
         Ok(())
     }
 }
@@ -407,7 +407,7 @@ impl WriteStat {
                 ("partial".to_string(), self.writes_partial.to_string()),
             ]),
         );
-        writeln!(w, "{}", message)
+        writeln!(w, "{message}")
     }
 }
 

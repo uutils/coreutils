@@ -162,7 +162,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ]),
         );
 
-        if write!(std::io::stderr(), "{}", warning_msg).is_err() {
+        if write!(std::io::stderr(), "{warning_msg}").is_err() {
             set_exit_code(125);
             return Ok(());
         }

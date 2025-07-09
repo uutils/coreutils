@@ -211,7 +211,7 @@ fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
 ///
 /// // Get a localized greeting (from .ftl files)
 /// let greeting = get_message("greeting");
-/// println!("{}", greeting);
+/// println!("{greeting}");
 /// ```
 pub fn get_message(id: &str) -> String {
     get_message_internal(id, None)
@@ -246,7 +246,7 @@ pub fn get_message(id: &str) -> String {
 /// args.insert("count".to_string(), "3".to_string());
 ///
 /// let message = get_message_with_args("notification", args);
-/// println!("{}", message);
+/// println!("{message}");
 /// ```
 pub fn get_message_with_args(id: &str, ftl_args: HashMap<String, String>) -> String {
     let mut args = FluentArgs::new();
@@ -312,7 +312,7 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 /// // Other locale files like "fr-FR.ftl" are optional
 /// match setup_localization("./locales") {
 ///     Ok(_) => println!("Localization initialized successfully"),
-///     Err(e) => eprintln!("Failed to initialize localization: {}", e),
+///     Err(e) => eprintln!("Failed to initialize localization: {e}"),
 /// }
 /// ```
 pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
@@ -383,7 +383,7 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
         use std::env;
         // In release builds, look relative to executable
         let exe_path = env::current_exe().map_err(|e| {
-            LocalizationError::PathResolution(format!("Failed to get executable path: {}", e))
+            LocalizationError::PathResolution(format!("Failed to get executable path: {e}"))
         })?;
 
         let exe_dir = exe_path.parent().ok_or_else(|| {
