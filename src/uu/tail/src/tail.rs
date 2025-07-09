@@ -310,7 +310,7 @@ fn tail_stdin(
                 observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
             }
         }
-    };
+    }
 
     Ok(())
 }

@@ -84,7 +84,7 @@ fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UR
                 show_error!("{error_message}");
             }
             InvalidModes::Ignore => {}
-        };
+        }
         println!("{input_line}");
     }
 

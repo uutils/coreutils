@@ -76,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     HashMap::from([("arg".to_string(), second_file.quote().to_string())]),
                 ),
             ));
-        };
+        }
         Mode::Default(file.into())
     };
 

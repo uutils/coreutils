@@ -1403,7 +1403,7 @@ where
         // if there is nothing else to read - exit the loop
         if num_bytes_read == 0 {
             break;
-        };
+        }
 
         let bytes = line.as_slice();
         if let Some(chunk_number) = kth_chunk {

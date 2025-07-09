@@ -671,7 +671,7 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
                 writer.write_all(in_buf).unwrap();
                 return in_buf.len() + count;
             }
-        };
+        }
     }
 }
 

@@ -819,7 +819,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             CpError::NotAllFilesCopied => {}
             // Else we caught a fatal bubbled-up error, log it to stderr
             _ => show_error!("{error}"),
-        };
+        }
         set_exit_code(EXIT_ERR);
     }
 
@@ -1046,7 +1046,7 @@ impl Options {
             if !dir.is_dir() {
                 return Err(CpError::NotADirectory(dir.clone()));
             }
-        };
+        }
         // cp follows POSIX conventions for overriding options such as "-a",
         // "-d", "--preserve", and "--no-preserve". We can use clap's
         // override-all behavior to achieve this, but there's a challenge: when
@@ -1648,7 +1648,7 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<
                 show_error_if_needed(&error);
             }
         }
-    };
+    }
     Ok(())
 }
 
@@ -2314,7 +2314,7 @@ fn handle_copy_mode(
                 .open(dest)
                 .unwrap();
         }
-    };
+    }
 
     Ok(PerformedAction::Copied)
 }
@@ -2513,7 +2513,7 @@ fn copy_file(
             }
 
             return Ok(());
-        };
+        }
     }
 
     // Calculate the context upfront before canonicalizing the path

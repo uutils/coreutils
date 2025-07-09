@@ -1087,11 +1087,11 @@ fn exec<Sep: Separator>(file1: &str, file2: &str, settings: Settings, sep: Sep) 
     if let Err(e) = state1.finalize(&mut writer, &input, &repr) {
         writer.flush()?;
         return Err(e);
-    };
+    }
     if let Err(e) = state2.finalize(&mut writer, &input, &repr) {
         writer.flush()?;
         return Err(e);
-    };
+    }
 
     writer.flush()?;
 

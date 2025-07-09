@@ -81,7 +81,7 @@ mod tests {
         match split_name {
             Err(CsplitError::InvalidNumber(_)) => (),
             _ => panic!("should fail with InvalidNumber"),
-        };
+        }
     }
 
     #[test]
@@ -90,7 +90,7 @@ mod tests {
         match split_name {
             Err(CsplitError::SuffixFormatIncorrect) => (),
             _ => panic!("should fail with SuffixFormatIncorrect"),
-        };
+        }
     }
 
     #[test]
@@ -99,7 +99,7 @@ mod tests {
         match split_name {
             Err(CsplitError::SuffixFormatIncorrect) => (),
             _ => panic!("should fail with SuffixFormatIncorrect"),
-        };
+        }
     }
 
     #[test]
@@ -244,6 +244,6 @@ mod tests {
         match split_name {
             Err(CsplitError::SuffixFormatTooManyPercents) => (),
             _ => panic!("should fail with SuffixFormatTooManyPercents"),
-        };
+        }
     }
 }

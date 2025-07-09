@@ -110,7 +110,7 @@ impl NumericOp {
             Self::Mod => {
                 if a.checked_div(&b).is_none() {
                     return Err(ExprError::DivisionByZero);
-                };
+                }
                 a % b
             }
         }))

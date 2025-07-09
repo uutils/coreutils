@@ -109,7 +109,7 @@ fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
         (false, Padding::Space) => print!("{result:>width$}"),
         (true, Padding::Zero) => print!("{result:0<width$}"),
         (true, Padding::Space) => print!("{result:<width$}"),
-    };
+    }
 }
 
 #[derive(Debug)]

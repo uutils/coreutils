@@ -1312,7 +1312,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         settings.check_silent = true;
         settings.check = true;
-    };
+    }
 
     settings.ignore_case = matches.get_flag(options::IGNORE_CASE);
 
