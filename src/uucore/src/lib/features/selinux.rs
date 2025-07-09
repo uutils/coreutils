@@ -91,7 +91,7 @@ fn selinux_error_description(mut error: &dyn Error) -> String {
 /// // Set the default SELinux context for a file
 /// let result = set_selinux_security_context(Path::new("/path/to/file"), None);
 /// if let Err(err) = result {
-///     eprintln!("Failed to set default context: {}", err);
+///     eprintln!("Failed to set default context: {err}");
 /// }
 /// ```
 ///
@@ -104,7 +104,7 @@ fn selinux_error_description(mut error: &dyn Error) -> String {
 /// let context = String::from("unconfined_u:object_r:user_home_t:s0");
 /// let result = set_selinux_security_context(Path::new("/path/to/file"), Some(&context));
 /// if let Err(err) = result {
-///     eprintln!("Failed to set context: {}", err);
+///     eprintln!("Failed to set context: {err}");
 /// }
 /// ```
 pub fn set_selinux_security_context(
@@ -187,14 +187,14 @@ pub fn set_selinux_security_context(
 ///         if context.is_empty() {
 ///             println!("No SELinux context found for the file");
 ///         } else {
-///             println!("SELinux context: {}", context);
+///             println!("SELinux context: {context}");
 ///         }
 ///     },
 ///     Err(SeLinuxError::SELinuxNotEnabled) => println!("SELinux is not enabled on this system"),
-///     Err(SeLinuxError::FileOpenFailure(e)) => println!("Failed to open the file: {}", e),
-///     Err(SeLinuxError::ContextRetrievalFailure(e)) => println!("Failed to retrieve the security context: {}", e),
-///     Err(SeLinuxError::ContextConversionFailure(ctx, e)) => println!("Failed to convert context '{}': {}", ctx, e),
-///     Err(SeLinuxError::ContextSetFailure(ctx, e)) => println!("Failed to set context '{}': {}", ctx, e),
+///     Err(SeLinuxError::FileOpenFailure(e)) => println!("Failed to open the file: {e}"),
+///     Err(SeLinuxError::ContextRetrievalFailure(e)) => println!("Failed to retrieve the security context: {e}"),
+///     Err(SeLinuxError::ContextConversionFailure(ctx, e)) => println!("Failed to convert context '{ctx}': {e}"),
+///     Err(SeLinuxError::ContextSetFailure(ctx, e)) => println!("Failed to set context '{ctx}': {e}"),
 /// }
 /// ```
 pub fn get_selinux_security_context(path: &Path) -> Result<String, SeLinuxError> {
@@ -307,7 +307,7 @@ pub fn contexts_differ(from_path: &Path, to_path: &Path) -> bool {
 /// // Preserve the SELinux context from source to destination
 /// match preserve_security_context(Path::new("/path/to/source"), Path::new("/path/to/destination")) {
 ///     Ok(_) => println!("Context preserved successfully (or SELinux is not enabled)"),
-///     Err(err) => eprintln!("Failed to preserve context: {}", err),
+///     Err(err) => eprintln!("Failed to preserve context: {err}"),
 /// }
 /// ```
 pub fn preserve_security_context(from_path: &Path, to_path: &Path) -> Result<(), SeLinuxError> {

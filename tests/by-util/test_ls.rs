@@ -4302,15 +4302,13 @@ fn test_ls_context_format() {
 fn validate_selinux_context(context: &str) {
     assert!(
         context.contains(':'),
-        "Expected SELinux context format (user:role:type:level), got: {}",
-        context
+        "Expected SELinux context format (user:role:type:level), got: {context}"
     );
 
     assert_eq!(
         context.split(':').count(),
         4,
-        "SELinux context should have 4 components separated by colons, got: {}",
-        context
+        "SELinux context should have 4 components separated by colons, got: {context}"
     );
 }
 

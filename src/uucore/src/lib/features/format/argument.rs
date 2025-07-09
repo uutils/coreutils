@@ -105,8 +105,7 @@ impl<'a> FormatArguments<'a> {
                             // Emit a warning if there are additional characters
                             let remaining: String = chars.collect();
                             show_warning!(
-                                "{}: character(s) following character constant have been ignored",
-                                remaining
+                                "{remaining}: character(s) following character constant have been ignored"
                             );
                         }
                         return first_char as u64; // Use only the first character

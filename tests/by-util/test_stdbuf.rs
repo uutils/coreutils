@@ -198,13 +198,13 @@ fn test_libstdbuf_preload() {
     let arch_mismatch_line = uutils_debug
         .lines()
         .find(|line| line.contains("cannot be preloaded"));
-    println!("LD_DEBUG output: {}", uutils_debug);
+    println!("LD_DEBUG output: {uutils_debug}");
     let no_arch_mismatch = arch_mismatch_line.is_none();
 
-    println!("libstdbuf in lookup path: {}", libstdbuf_in_path);
-    println!("No architecture mismatch: {}", no_arch_mismatch);
+    println!("libstdbuf in lookup path: {libstdbuf_in_path}");
+    println!("No architecture mismatch: {no_arch_mismatch}");
     if let Some(error_line) = arch_mismatch_line {
-        println!("Architecture mismatch error: {}", error_line);
+        println!("Architecture mismatch error: {error_line}");
     }
 
     assert!(

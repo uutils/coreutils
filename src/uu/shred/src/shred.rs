@@ -557,8 +557,7 @@ fn wipe_file(
                 HashMap::from([("file".to_string(), path.maybe_quote().to_string())]),
             );
             show_error!(
-                "{} {}/{total_passes} ({pass_name})...",
-                msg,
+                "{msg} {}/{total_passes} ({pass_name})...",
                 (i + 1).to_string()
             );
         }
@@ -679,7 +678,7 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
                             ("error".to_string(), e.to_string()),
                         ]),
                     );
-                    show_error!("{}", msg);
+                    show_error!("{msg}");
                     // TODO: replace with our error management
                     std::process::exit(1);
                 }

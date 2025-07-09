@@ -2255,7 +2255,7 @@ fn test_selinux() {
             at.remove(&at.plus_as_string(dest));
             continue;
         };
-        println!("{:?}", getfattr_output);
+        println!("{getfattr_output:?}");
         assert!(
             getfattr_output.status.success(),
             "getfattr did not run successfully: {}",
@@ -2297,8 +2297,7 @@ fn test_selinux_invalid_args() {
         assert!(
             stderr.contains("failed to set default file creation")
                 || stderr.contains("SELinux is not enabled on this system"),
-            "Expected stderr to contain either 'failed to set default file creation' or 'SELinux is not enabled on this system', but got: '{}'",
-            stderr
+            "Expected stderr to contain either 'failed to set default file creation' or 'SELinux is not enabled on this system', but got: '{stderr}'"
         );
 
         at.remove(&at.plus_as_string(dest));
@@ -2319,12 +2318,12 @@ fn test_install_compare_with_mode_bits() {
     for (mode, description, should_warn) in test_cases {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
-        let source = format!("source_file_{}", mode);
-        let dest = format!("dest_file_{}", mode);
+        let source = format!("source_file_{mode}");
+        let dest = format!("dest_file_{mode}");
 
         at.write(&source, "test content");
 
-        let mode_arg = format!("--mode={}", mode);
+        let mode_arg = format!("--mode={mode}");
 
         if should_warn {
             scene.ucmd().args(&["-C", &mode_arg, &source, &dest])
@@ -2347,8 +2346,7 @@ fn test_install_compare_with_mode_bits() {
 
         assert!(
             at.file_exists(&dest),
-            "Failed to create dest file for {}",
-            description
+            "Failed to create dest file for {description}"
         );
     }
 }

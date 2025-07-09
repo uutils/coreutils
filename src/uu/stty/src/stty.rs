@@ -255,11 +255,11 @@ fn stty(opts: &Options) -> UResult<()> {
                         let message = match e {
                             ControlCharMappingError::IntOutOfRange(val) => get_message_with_args(
                                 "stty-error-invalid-integer-argument-value-too-large",
-                                HashMap::from([("value".to_string(), format!("'{}'", val))]),
+                                HashMap::from([("value".to_string(), format!("'{val}'"))]),
                             ),
                             ControlCharMappingError::MultipleChars(val) => get_message_with_args(
                                 "stty-error-invalid-integer-argument",
-                                HashMap::from([("value".to_string(), format!("'{}'", val))]),
+                                HashMap::from([("value".to_string(), format!("'{val}'"))]),
                             ),
                         };
                         USimpleError::new(1, message)
@@ -386,7 +386,7 @@ fn stty(opts: &Options) -> UResult<()> {
                             1,
                             get_message_with_args(
                                 "stty-error-invalid-integer-argument",
-                                HashMap::from([("value".to_string(), format!("'{}'", rows))]),
+                                HashMap::from([("value".to_string(), format!("'{rows}'"))]),
                             ),
                         ));
                     }
@@ -408,7 +408,7 @@ fn stty(opts: &Options) -> UResult<()> {
                             1,
                             get_message_with_args(
                                 "stty-error-invalid-integer-argument",
-                                HashMap::from([("value".to_string(), format!("'{}'", cols))]),
+                                HashMap::from([("value".to_string(), format!("'{cols}'"))]),
                             ),
                         ));
                     }
@@ -471,11 +471,11 @@ fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
     arg.parse::<u8>().map_err(|e| match e.kind() {
         IntErrorKind::PosOverflow => get_message_with_args(
             "stty-error-invalid-integer-argument-value-too-large",
-            HashMap::from([("value".to_string(), format!("'{}'", arg))]),
+            HashMap::from([("value".to_string(), format!("'{arg}'"))]),
         ),
         _ => get_message_with_args(
             "stty-error-invalid-integer-argument",
-            HashMap::from([("value".to_string(), format!("'{}'", arg))]),
+            HashMap::from([("value".to_string(), format!("'{arg}'"))]),
         ),
     })
 }

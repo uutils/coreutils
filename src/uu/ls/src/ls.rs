@@ -173,7 +173,7 @@ const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
 #[derive(Error, Debug)]
 enum LsError {
-    #[error("{}", get_message_with_args("ls-error-invalid-line-width", HashMap::from([("width".to_string(), format!("'{}'", _0))])))]
+    #[error("{}", get_message_with_args("ls-error-invalid-line-width", HashMap::from([("width".to_string(), format!("'{_0}'"))])))]
     InvalidLineWidth(String),
 
     #[error("{}", get_message_with_args("ls-error-general-io", HashMap::from([("error".to_string(), _0.to_string())])))]
@@ -196,7 +196,7 @@ enum LsError {
     })]
     IOErrorContext(PathBuf, std::io::Error, bool),
 
-    #[error("{}", get_message_with_args("ls-error-invalid-block-size", HashMap::from([("size".to_string(), format!("'{}'", _0))])))]
+    #[error("{}", get_message_with_args("ls-error-invalid-block-size", HashMap::from([("size".to_string(), format!("'{_0}'"))])))]
     BlockSizeParseError(String),
 
     #[error("{}", get_message("ls-error-dired-and-zero-incompatible"))]

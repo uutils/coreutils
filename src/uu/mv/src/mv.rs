@@ -563,7 +563,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         // Pre-scan files if needed
         if let Err(e) = scanner.scan_files(files, &hardlink_options) {
             if hardlink_options.verbose {
-                eprintln!("mv: warning: failed to scan files for hardlinks: {}", e);
+                eprintln!("mv: warning: failed to scan files for hardlinks: {e}");
                 eprintln!("mv: continuing without hardlink preservation");
             } else {
                 // Show warning in non-verbose mode for serious errors

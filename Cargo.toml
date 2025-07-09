@@ -589,7 +589,6 @@ debug = true
 [lints.clippy]
 multiple_crate_versions = "allow"
 cargo_common_metadata = "allow"
-uninlined_format_args = "allow"
 missing_panics_doc = "allow"
 # TODO remove when https://github.com/rust-lang/rust-clippy/issues/13774 is fixed
 large_stack_arrays = "allow"
@@ -639,7 +638,6 @@ cast_possible_wrap = "allow"                 # 78
 cast_sign_loss = "allow"                     # 70
 struct_excessive_bools = "allow"             # 68
 cast_precision_loss = "allow"                # 52
-uninlined_format_args = "allow"              # 35
 cast_lossless = "allow"                      # 35
 unnecessary_wraps = "allow"                  # 33
 ignored_unit_patterns = "allow"              # 21

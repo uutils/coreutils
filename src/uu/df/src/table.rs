@@ -453,11 +453,11 @@ impl fmt::Display for Table {
                             // no trailing spaces in last column
                             write!(f, "{elem}")?;
                         } else {
-                            write!(f, "{:<width$}", elem, width = self.widths[i])?;
+                            write!(f, "{elem:<width$}", width = self.widths[i])?;
                         }
                     }
                     Some(Alignment::Right) => {
-                        write!(f, "{:>width$}", elem, width = self.widths[i])?;
+                        write!(f, "{elem:>width$}", width = self.widths[i])?;
                     }
                     None => break,
                 }

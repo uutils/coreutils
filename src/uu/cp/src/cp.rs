@@ -429,7 +429,7 @@ impl Display for OffloadReflinkDebug {
             Self::Unsupported => get_message("cp-debug-enum-unsupported"),
             Self::Unknown => get_message("cp-debug-enum-unknown"),
         };
-        write!(f, "{}", msg)
+        write!(f, "{msg}")
     }
 }
 
@@ -443,7 +443,7 @@ impl Display for SparseDebug {
             Self::Unsupported => get_message("cp-debug-enum-unsupported"),
             Self::Unknown => get_message("cp-debug-enum-unknown"),
         };
-        write!(f, "{}", msg)
+        write!(f, "{msg}")
     }
 }
 
@@ -1399,7 +1399,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                     ("source".to_string(), source.quote().to_string()),
                 ]),
             );
-            show_warning!("{}", msg);
+            show_warning!("{msg}");
         } else {
             let dest = construct_dest_path(source, target, target_type, options)
                 .unwrap_or_else(|_| target.to_path_buf());
@@ -1614,13 +1614,13 @@ impl OverwriteMode {
                         "cp-prompt-overwrite-with-mode",
                         HashMap::from([("path".to_string(), path.quote().to_string())]),
                     );
-                    prompt_yes!("{} {octal} ({human_readable})?", prompt_msg)
+                    prompt_yes!("{prompt_msg} {octal} ({human_readable})?")
                 } else {
                     let prompt_msg = get_message_with_args(
                         "cp-prompt-overwrite",
                         HashMap::from([("path".to_string(), path.quote().to_string())]),
                     );
-                    prompt_yes!("{}", prompt_msg)
+                    prompt_yes!("{prompt_msg}")
                 };
 
                 if prompt_yes_result {

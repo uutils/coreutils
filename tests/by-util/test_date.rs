@@ -467,7 +467,7 @@ fn test_relative_weekdays() {
                 .to_lowercase();
             new_ucmd!()
                 .arg("-d")
-                .arg(format!("{} {}", direction, weekday))
+                .arg(format!("{direction} {weekday}"))
                 .arg("--rfc-3339=seconds")
                 .arg("--utc")
                 .succeeds()

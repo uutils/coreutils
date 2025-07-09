@@ -53,9 +53,9 @@ pub enum HardlinkError {
 impl std::fmt::Display for HardlinkError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HardlinkError::Io(e) => write!(f, "I/O error during hardlink operation: {}", e),
+            HardlinkError::Io(e) => write!(f, "I/O error during hardlink operation: {e}"),
             HardlinkError::Scan(msg) => {
-                write!(f, "Failed to scan files for hardlinks: {}", msg)
+                write!(f, "Failed to scan files for hardlinks: {msg}")
             }
             HardlinkError::Preservation { source, target } => {
                 write!(

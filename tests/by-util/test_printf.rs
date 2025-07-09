@@ -84,10 +84,10 @@ fn escaped_unicode_incomplete() {
 #[test]
 fn escaped_unicode_invalid() {
     for arg in ["\\ud9d0", "\\U0000D8F9"] {
-        new_ucmd!().arg(arg).fails_with_code(1).stderr_only(format!(
-            "printf: invalid universal character name {}\n",
-            arg
-        ));
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .stderr_only(format!("printf: invalid universal character name {arg}\n"));
     }
 }
 

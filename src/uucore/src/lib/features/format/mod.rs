@@ -115,8 +115,7 @@ impl Display for FormatError {
             Self::MissingHex => write!(f, "missing hexadecimal number in escape"),
             Self::InvalidCharacter(escape_char, digits) => write!(
                 f,
-                "invalid universal character name \\{}{}",
-                escape_char,
+                "invalid universal character name \\{escape_char}{}",
                 String::from_utf8_lossy(digits)
             ),
         }
