@@ -8,9 +8,7 @@ name = "coreutils"
 description = "coreutils ~ GNU coreutils (updated); implemented as universal (cross-platform) utils, written in Rust"
 default-run = "coreutils"
 repository = "https://github.com/uutils/coreutils"
-readme = "README.md"
 rust-version = "1.85.0"
-build = "build.rs"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -51,15 +49,15 @@ feat_acl = ["cp/feat_acl"]
 # * Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
 feat_selinux = [
   "cp/selinux",
+  "feat_require_selinux",
   "id/selinux",
   "install/selinux",
   "ls/selinux",
   "mkdir/selinux",
   "mkfifo/selinux",
   "mknod/selinux",
-  "stat/selinux",
   "selinux",
-  "feat_require_selinux",
+  "stat/selinux",
 ]
 ##
 ## feature sets
@@ -77,11 +75,11 @@ feat_common_core = [
   "csplit",
   "cut",
   "date",
+  "dd",
   "df",
   "dir",
   "dircolors",
   "dirname",
-  "dd",
   "du",
   "echo",
   "env",
@@ -125,11 +123,11 @@ feat_common_core = [
   "tail",
   "tee",
   "test",
+  "touch",
   "tr",
   "true",
   "truncate",
   "tsort",
-  "touch",
   "unexpand",
   "uniq",
   "unlink",
@@ -162,8 +160,8 @@ feat_os_unix = [
   "feat_Tier1",
   #
   "feat_require_unix",
-  "feat_require_unix_utmpx",
   "feat_require_unix_hostid",
+  "feat_require_unix_utmpx",
 ]
 # "feat_os_windows" == set of utilities which can be built/run on modern/usual windows platforms
 feat_os_windows = [
@@ -388,13 +386,13 @@ uu_base32 = { version = "0.1.0", path = "src/uu/base32" }
 uutests = { version = "0.1.0", package = "uutests", path = "tests/uutests" }
 
 [dependencies]
-clap = { workspace = true }
-uucore = { workspace = true }
-clap_complete = { workspace = true }
-clap_mangen = { workspace = true }
-phf = { workspace = true }
+clap.workspace = true
+uucore.workspace = true
+clap_complete.workspace = true
+clap_mangen.workspace = true
+phf.workspace = true
 selinux = { workspace = true, optional = true }
-textwrap = { workspace = true }
+textwrap.workspace = true
 zip = { workspace = true, optional = true }
 
 uuhelp_parser = { optional = true, version = ">=0.0.19", path = "src/uuhelp_parser" }
@@ -513,20 +511,20 @@ yes = { optional = true, version = "0.1.0", package = "uu_yes", path = "src/uu/y
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
 
 [dev-dependencies]
-chrono = { workspace = true }
-ctor = { workspace = true }
-filetime = { workspace = true }
-glob = { workspace = true }
-libc = { workspace = true }
-num-prime = { workspace = true }
+chrono.workspace = true
+ctor.workspace = true
+filetime.workspace = true
+glob.workspace = true
+libc.workspace = true
+num-prime.workspace = true
 pretty_assertions = "1.4.0"
-rand = { workspace = true }
-regex = { workspace = true }
+rand.workspace = true
+regex.workspace = true
 sha1 = { workspace = true, features = ["std"] }
-tempfile = { workspace = true }
+tempfile.workspace = true
 time = { workspace = true, features = ["local-offset"] }
 unindent = "0.2.3"
-uutests = { workspace = true }
+uutests.workspace = true
 uucore = { workspace = true, features = [
   "mode",
   "entries",
@@ -534,14 +532,14 @@ uucore = { workspace = true, features = [
   "signals",
   "utmpx",
 ] }
-walkdir = { workspace = true }
+walkdir.workspace = true
 hex-literal = "1.0.0"
-rstest = { workspace = true }
+rstest.workspace = true
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["process", "signal", "user", "term"] }
 rlimit = "0.10.1"
-xattr = { workspace = true }
+xattr.workspace = true
 
 # Used in test_uptime::test_uptime_with_file_containing_valid_boot_time_utmpx_record
 # to deserialize an utmpx struct into a binary file
@@ -552,7 +550,7 @@ serde-big-array = "0.5.1"
 
 
 [build-dependencies]
-phf_codegen = { workspace = true }
+phf_codegen.workspace = true
 
 [[bin]]
 name = "coreutils"
@@ -627,58 +625,37 @@ all = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 cargo_common_metadata = "allow"              # 3240
-multiple_crate_versions = "allow"            # 2314
-missing_errors_doc = "allow"                 # 1504
+multiple_crate_versions = "allow"            # 2882
+missing_errors_doc = "allow"                 # 1572
 missing_panics_doc = "allow"                 # 946
 must_use_candidate = "allow"                 # 322
-match_same_arms = "allow"                    # 212
-unnecessary_semicolon = "allow"              # 156
-redundant_closure_for_method_calls = "allow" # 133
-cast_possible_truncation = "allow"           # 118
-too_many_lines = "allow"                     # 81
-cast_possible_wrap = "allow"                 # 76
-trivially_copy_pass_by_ref = "allow"         # 74
+match_same_arms = "allow"                    # 204
+unnecessary_semicolon = "allow"              # 154
+redundant_closure_for_method_calls = "allow" # 125
+cast_possible_truncation = "allow"           # 122
+too_many_lines = "allow"                     # 101
+trivially_copy_pass_by_ref = "allow"         # 84
+single_match_else = "allow"                  # 82
+cast_possible_wrap = "allow"                 # 78
 cast_sign_loss = "allow"                     # 70
 struct_excessive_bools = "allow"             # 68
-single_match_else = "allow"                  # 66
-redundant_else = "allow"                     # 58
 cast_precision_loss = "allow"                # 52
-unnested_or_patterns = "allow"               # 40
-unnecessary_wraps = "allow"                  # 37
-cast_lossless = "allow"                      # 33
-ignored_unit_patterns = "allow"              # 29
-needless_continue = "allow"                  # 28
-items_after_statements = "allow"             # 22
+uninlined_format_args = "allow"              # 35
+cast_lossless = "allow"                      # 35
+unnecessary_wraps = "allow"                  # 33
+ignored_unit_patterns = "allow"              # 21
 similar_names = "allow"                      # 20
+large_stack_arrays = "allow"                 # 20
 wildcard_imports = "allow"                   # 18
-used_underscore_binding = "allow"            # 16
-large_stack_arrays = "allow"                 # 14
+used_underscore_binding = "allow"            # 18
+needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
-# semicolon_if_nothing_returned = "allow"  # 9
-used_underscore_items = "allow"    # 8
-return_self_not_must_use = "allow" # 8
-needless_pass_by_value = "allow"   # 8
-# manual_let_else = "allow"  # 8
-# needless_raw_string_hashes = "allow"  # 7
-inline_always = "allow" # 6
-# format_push_string = "allow"  # 6
-fn_params_excessive_bools = "allow" # 6
-# single_char_pattern = "allow"  # 4
-# ptr_cast_constness = "allow"  # 4
-# match_wildcard_for_single_variants = "allow"  # 4
-# manual_is_variant_and = "allow"  # 4
-# explicit_deref_methods = "allow"  # 4
-# enum_glob_use = "allow"  # 3
-# unnecessary_literal_bound = "allow"  # 2
-# stable_sort_primitive = "allow"  # 2
-should_panic_without_expect = "allow" # 2
-# ptr_as_ptr = "allow"  # 2
-# needless_for_each = "allow"  # 2
-if_not_else = "allow"             # 2
-expl_impl_clone_on_copy = "allow" # 2
-# cloned_instead_of_copied = "allow"  # 2
-# borrow_as_ptr = "allow"  # 2
-bool_to_int_with_if = "allow" # 2
-# ref_as_ptr = "allow"  # 2
-# unreadable_literal = "allow"  # 1
-uninlined_format_args = "allow" # ?
+items_after_statements = "allow"             # 11
+return_self_not_must_use = "allow"           # 8
+redundant_else = "allow"                     # 6
+needless_continue = "allow"                  # 6
+inline_always = "allow"                      # 6
+fn_params_excessive_bools = "allow"          # 6
+used_underscore_items = "allow"              # 2
+should_panic_without_expect = "allow"        # 2
+expl_impl_clone_on_copy = "allow"            # 2
