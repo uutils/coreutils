@@ -695,7 +695,11 @@ impl CmdResult {
     #[track_caller]
     pub fn fails_silently(&self) -> &Self {
         assert!(!self.succeeded());
-        assert!(self.stderr.is_empty());
+        assert!(
+            self.stderr.is_empty(),
+            "Expected stderr to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
