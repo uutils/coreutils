@@ -4898,6 +4898,19 @@ fn test_when_piped_input_then_no_broken_pipe() {
 }
 
 #[test]
+fn test_when_output_closed_then_no_broken_pie() {
+    let mut cmd = new_ucmd!();
+    let mut child = cmd
+        .args(&[FOOBAR_TXT])
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+    // Dropping the stdout should not lead to an error.
+    // The "Broken pipe" error should be silently ignored.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[test]
 fn test_child_when_run_with_stderr_to_stdout() {
     let ts = TestScenario::new("tail");
     let at = &ts.fixtures;
