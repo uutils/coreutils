@@ -9,6 +9,7 @@
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
+// spell-checker:ignore cbreak decctlq evenp litout oddp
 
 use crate::Flag;
 
@@ -364,4 +365,24 @@ pub const CONTROL_CHARS: &[(&str, S)] = &[
     ("lnext", S::VLNEXT),
     // Discards the current line.
     ("discard", S::VDISCARD),
+];
+
+/// This constant lists all possible combination settings, using a bool to represent if the setting is negatable
+pub const COMBINATION_SETTINGS: &[(&str, bool)] = &[
+    ("LCASE", true),
+    ("lcase", true),
+    ("cbreak", true),
+    ("cooked", true),
+    ("crt", false),
+    ("dec", false),
+    ("decctlq", true),
+    ("ek", false),
+    ("evenp", true),
+    ("litout", true),
+    ("nl", true),
+    ("oddp", true),
+    ("parity", true),
+    ("pass8", true),
+    ("raw", true),
+    ("sane", false),
 ];

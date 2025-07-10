@@ -4,16 +4,23 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag ispeed ospeed
-// spell-checker:ignore tcsadrain
+// spell-checker:ignore parenb parodd cmspar hupcl cstopb cread clocal crtscts CSIZE
+// spell-checker:ignore ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixoff ixon iuclc ixany imaxbel iutf
+// spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofdel nldly crdly tabdly bsdly vtdly ffdly ofill
+// spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
+// spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
+// spell-checker:ignore sigquit sigtstp
+// spell-checker:ignore cbreak decctlq evenp litout oddp tcsadrain
 
 mod flags;
 
 use crate::flags::AllFlags;
+use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 use nix::sys::termios::{
-    ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices, Termios,
-    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
+    ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
+    Termios, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::collections::HashMap;
@@ -106,6 +113,7 @@ enum Device {
     Stdout(Stdout),
 }
 
+#[derive(Debug)]
 enum ControlCharMappingError {
     IntOutOfRange(String),
     MultipleChars(String),
@@ -123,7 +131,7 @@ enum PrintSetting {
 
 enum ArgOptions<'a> {
     Flags(AllFlags<'a>),
-    Mapping((SpecialCharacterIndices, u8)),
+    Mapping((S, u8)),
     Special(SpecialSetting),
     Print(PrintSetting),
 }
@@ -323,8 +331,7 @@ fn stty(opts: &Options) -> UResult<()> {
                 match args_iter.next() {
                     Some(min) => match parse_u8_or_err(min) {
                         Ok(n) => {
-                            valid_args
-                                .push(ArgOptions::Mapping((SpecialCharacterIndices::VMIN, n)));
+                            valid_args.push(ArgOptions::Mapping((S::VMIN, n)));
                         }
                         Err(e) => return Err(USimpleError::new(1, e)),
                     },
@@ -341,8 +348,7 @@ fn stty(opts: &Options) -> UResult<()> {
             } else if arg == "time" {
                 match args_iter.next() {
                     Some(time) => match parse_u8_or_err(time) {
-                        Ok(n) => valid_args
-                            .push(ArgOptions::Mapping((SpecialCharacterIndices::VTIME, n))),
+                        Ok(n) => valid_args.push(ArgOptions::Mapping((S::VTIME, n))),
                         Err(e) => return Err(USimpleError::new(1, e)),
                     },
                     None => {
@@ -377,6 +383,9 @@ fn stty(opts: &Options) -> UResult<()> {
                     ));
                 }
                 valid_args.push(flag.into());
+            // combination setting
+            } else if let Some(combo) = string_to_combo(arg) {
+                valid_args.append(&mut combo_to_flags(combo));
             } else if arg == "rows" {
                 if let Some(rows) = args_iter.next() {
                     if let Some(n) = parse_rows_cols(rows) {
@@ -581,13 +590,22 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     Ok(())
 }
 
-fn cc_to_index(option: &str) -> Option<SpecialCharacterIndices> {
+fn cc_to_index(option: &str) -> Option<S> {
     for cc in CONTROL_CHARS {
         if option == cc.0 {
             return Some(cc.1);
         }
     }
     None
+}
+
+fn string_to_combo(arg: &str) -> Option<&str> {
+    let is_negated = arg.starts_with('-');
+    let name = arg.trim_start_matches('-');
+    COMBINATION_SETTINGS
+        .iter()
+        .find(|&&(combo_name, is_negatable)| name == combo_name && (!is_negated || is_negatable))
+        .map(|_| arg)
 }
 
 fn string_to_baud(arg: &str) -> Option<AllFlags> {
@@ -693,11 +711,11 @@ fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
             HashMap::from([
                 (
                     "min".to_string(),
-                    termios.control_chars[SpecialCharacterIndices::VMIN as usize].to_string()
+                    termios.control_chars[S::VMIN as usize].to_string()
                 ),
                 (
                     "time".to_string(),
-                    termios.control_chars[SpecialCharacterIndices::VTIME as usize].to_string()
+                    termios.control_chars[S::VTIME as usize].to_string()
                 )
             ])
         )
@@ -812,7 +830,7 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &AllFlags) {
     }
 }
 
-fn apply_char_mapping(termios: &mut Termios, mapping: &(SpecialCharacterIndices, u8)) {
+fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
     termios.control_chars[mapping.0 as usize] = mapping.1;
 }
 
@@ -887,6 +905,124 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
         (Some(_), Some(_)) => Err(ControlCharMappingError::MultipleChars(s.to_string())),
         _ => unreachable!("No arguments provided: must have been caught earlier"),
     }
+}
+
+// decomposes a combination argument into a vec of corresponding flags
+fn combo_to_flags(combo: &str) -> Vec<ArgOptions> {
+    let mut flags = Vec::new();
+    let mut ccs = Vec::new();
+    match combo {
+        "lcase" | "LCASE" => {
+            flags = vec!["xcase", "iuclc", "olcuc"];
+        }
+        "-lcase" | "-LCASE" => {
+            flags = vec!["-xcase", "-iuclc", "-olcuc"];
+        }
+        "cbreak" => {
+            flags = vec!["-icanon"];
+        }
+        "-cbreak" => {
+            flags = vec!["icanon"];
+        }
+        "cooked" | "-raw" => {
+            flags = vec![
+                "brkint", "ignpar", "istrip", "icrnl", "ixon", "opost", "isig", "icanon",
+            ];
+            ccs = vec![(S::VEOF, "^D"), (S::VEOL, "")];
+        }
+        "crt" => {
+            flags = vec!["echoe", "echoctl", "echoke"];
+        }
+        "dec" => {
+            flags = vec!["echoe", "echoctl", "echoke", "-ixany"];
+            ccs = vec![(S::VINTR, "^C"), (S::VERASE, "^?"), (S::VKILL, "^U")];
+        }
+        "decctlq" => {
+            flags = vec!["ixany"];
+        }
+        "-decctlq" => {
+            flags = vec!["-ixany"];
+        }
+        "ek" => {
+            ccs = vec![(S::VERASE, "^?"), (S::VKILL, "^U")];
+        }
+        "evenp" | "parity" => {
+            flags = vec!["parenb", "-parodd", "cs7"];
+        }
+        "-evenp" | "-parity" => {
+            flags = vec!["-parenb", "cs8"];
+        }
+        "litout" => {
+            flags = vec!["-parenb", "-istrip", "-opost", "cs8"];
+        }
+        "-litout" => {
+            flags = vec!["parenb", "istrip", "opost", "cs7"];
+        }
+        "nl" => {
+            flags = vec!["-icrnl", "-onlcr"];
+        }
+        "-nl" => {
+            flags = vec!["icrnl", "-inlcr", "-igncr", "onlcr", "-ocrnl", "-onlret"];
+        }
+        "oddp" => {
+            flags = vec!["parenb", "parodd", "cs7"];
+        }
+        "-oddp" => {
+            flags = vec!["-parenb", "cs8"];
+        }
+        "pass8" => {
+            flags = vec!["-parenb", "-istrip", "cs8"];
+        }
+        "-pass8" => {
+            flags = vec!["parenb", "istrip", "cs7"];
+        }
+        "raw" | "-cooked" => {
+            flags = vec![
+                "-ignbrk", "-brkint", "-ignpar", "-parmrk", "-inpck", "-istrip", "-inlcr",
+                "-igncr", "-icrnl", "-ixon", "-ixoff", "-icanon", "-opost", "-isig", "-iuclc",
+                "-xcase", "-ixany", "-imaxbel",
+            ];
+            ccs = vec![(S::VMIN, "1"), (S::VTIME, "0")];
+        }
+        "sane" => {
+            flags = vec![
+                "cread", "-ignbrk", "brkint", "-inlcr", "-igncr", "icrnl", "icanon", "iexten",
+                "echo", "echoe", "echok", "-echonl", "-noflsh", "-ixoff", "-iutf8", "-iuclc",
+                "-xcase", "-ixany", "imaxbel", "-olcuc", "-ocrnl", "opost", "-ofill", "onlcr",
+                "-onocr", "-onlret", "nl0", "cr0", "tab0", "bs0", "vt0", "ff0", "isig", "-tostop",
+                "-ofdel", "-echoprt", "echoctl", "echoke", "-extproc", "-flusho",
+            ];
+            ccs = vec![
+                (S::VINTR, "^C"),
+                (S::VQUIT, "^\\"),
+                (S::VERASE, "^?"),
+                (S::VKILL, "^U"),
+                (S::VEOF, "^D"),
+                (S::VEOL, ""),
+                (S::VEOL2, ""),
+                #[cfg(target_os = "linux")]
+                (S::VSWTC, ""),
+                (S::VSTART, "^Q"),
+                (S::VSTOP, "^S"),
+                (S::VSUSP, "^Z"),
+                (S::VREPRINT, "^R"),
+                (S::VWERASE, "^W"),
+                (S::VLNEXT, "^V"),
+                (S::VDISCARD, "^O"),
+            ];
+        }
+        _ => unreachable!("invalid combination setting: must have been caught earlier"),
+    }
+    let mut flags = flags
+        .iter()
+        .filter_map(|f| string_to_flag(f).map(ArgOptions::Flags))
+        .collect::<Vec<ArgOptions>>();
+    let mut ccs = ccs
+        .iter()
+        .map(|cc| ArgOptions::Mapping((cc.0, string_to_control_char(cc.1).unwrap())))
+        .collect::<Vec<ArgOptions>>();
+    flags.append(&mut ccs);
+    flags
 }
 
 pub fn uu_app() -> Command {
