@@ -159,7 +159,7 @@ impl<'a> FormatArguments<'a> {
         if bytes.len() > len {
             return Err(ExtendedParserError::PartialMatch(
                 val,
-                String::from_utf8_lossy(&bytes[len..]).to_string(),
+                String::from_utf8_lossy(&bytes[len..]).into_owned(),
             ));
         }
 
