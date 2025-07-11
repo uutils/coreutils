@@ -6,11 +6,11 @@
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::env;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::io::{self, StdoutLock, Write};
-use uucore::error::{UResult, USimpleError};
+use uucore::error::UResult;
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
-use uucore::format_usage;
+use uucore::{format_usage, os_str_as_bytes};
 
 use uucore::locale::get_message;
 
@@ -176,10 +176,9 @@ fn execute(
     escaped: bool,
 ) -> UResult<()> {
     for (i, input) in arguments_after_options.into_iter().enumerate() {
-        let Some(bytes) = bytes_from_os_string(input.as_os_str()) else {
-            return Err(USimpleError::new(1, get_message("echo-error-non-utf8")));
-        };
+        let bytes = os_str_as_bytes(&input)?;
 
+        // Don't print a space before the first argument
         if i > 0 {
             stdout_lock.write_all(b" ")?;
         }
@@ -200,20 +199,4 @@ fn execute(
     }
 
     Ok(())
-}
-
-fn bytes_from_os_string(input: &OsStr) -> Option<&[u8]> {
-    #[cfg(target_family = "unix")]
-    {
-        use std::os::unix::ffi::OsStrExt;
-
-        Some(input.as_bytes())
-    }
-
-    #[cfg(not(target_family = "unix"))]
-    {
-        // TODO
-        // Verify that this works correctly on these platforms
-        input.to_str().map(|st| st.as_bytes())
-    }
 }

@@ -968,7 +968,7 @@ fn process_checksum_line(
     cached_line_format: &mut Option<LineFormat>,
     last_algo: &mut Option<String>,
 ) -> Result<(), LineCheckError> {
-    let line_bytes = os_str_as_bytes(line)?;
+    let line_bytes = os_str_as_bytes(line).map_err(|e| LineCheckError::UError(Box::new(e)))?;
 
     // Early return on empty or commented lines.
     if line.is_empty() || line_bytes.starts_with(b"#") {
