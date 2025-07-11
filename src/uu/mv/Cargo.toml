@@ -41,6 +41,9 @@ windows-sys = { workspace = true, features = [
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
+[features]
+selinux = ["uucore/selinux"]
+
 [[bin]]
 name = "mv"
 path = "src/main.rs"
