@@ -5,6 +5,8 @@
 
 // spell-checker:ignore nconfined
 
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
@@ -108,7 +110,6 @@ fn test_create_fifo_with_umask() {
 #[test]
 #[cfg(feature = "feat_selinux")]
 fn test_mkfifo_selinux() {
-    use std::process::Command;
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let dest = "test_file";
@@ -121,23 +122,10 @@ fn test_mkfifo_selinux() {
         ts.ucmd().arg(arg).arg(dest).succeeds();
         assert!(at.is_fifo("test_file"));
 
-        let getfattr_output = Command::new("getfattr")
-            .arg(at.plus_as_string(dest))
-            .arg("-n")
-            .arg("security.selinux")
-            .output()
-            .expect("Failed to run `getfattr` on the destination file");
-        println!("{getfattr_output:?}");
+        let context_value = get_getfattr_output(&at.plus_as_string(dest));
         assert!(
-            getfattr_output.status.success(),
-            "getfattr did not run successfully: {}",
-            String::from_utf8_lossy(&getfattr_output.stderr)
-        );
-
-        let stdout = String::from_utf8_lossy(&getfattr_output.stdout);
-        assert!(
-            stdout.contains("unconfined_u"),
-            "Expected 'foo' not found in getfattr output:\n{stdout}"
+            context_value.contains("unconfined_u"),
+            "Expected 'unconfined_u' not found in getfattr output:\n{context_value}"
         );
         at.remove(&at.plus_as_string(dest));
     }
