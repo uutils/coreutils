@@ -546,6 +546,9 @@ pub(crate) fn parse<'a>(
     target: ParseTarget,
     allowed_suffixes: &[(char, u32)],
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<'a, ExtendedBigDecimal>> {
+    // Note: literals with ' and " prefixes are parsed earlier on in argument parsing,
+    // before UTF-8 conversion.
+
     let trimmed_input = input.trim_ascii_start();
 
     // Initial minus/plus sign
