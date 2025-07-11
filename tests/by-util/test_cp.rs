@@ -6706,3 +6706,23 @@ fn test_cp_preserve_context_root() {
         print!("Test skipped; requires root user");
     }
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_cp_no_dereference_symlink_with_parents() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("directory");
+    at.symlink_file("directory", "symlink-to-directory");
+
+    ts.ucmd()
+        .args(&["--parents", "--no-dereference", "symlink-to-directory", "x"])
+        .fails()
+        .stderr_contains("with --parents, the destination must be a directory");
+
+    at.mkdir("x");
+    ts.ucmd()
+        .args(&["--parents", "--no-dereference", "symlink-to-directory", "x"])
+        .succeeds();
+    assert_eq!(at.resolve_link("x/symlink-to-directory"), "directory");
+}
