@@ -6,6 +6,8 @@
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel
 use uucore::display::Quotable;
+#[cfg(feature = "feat_selinux")]
+use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
 
@@ -6294,30 +6296,6 @@ fn test_cp_from_stream_permission() {
 
     assert_eq!(at.read(target), test_string);
     assert_eq!(at.metadata(target).permissions().mode(), 0o100_777);
-}
-
-#[cfg(feature = "feat_selinux")]
-fn get_getfattr_output(f: &str) -> String {
-    use std::process::Command;
-
-    let getfattr_output = Command::new("getfattr")
-        .arg(f)
-        .arg("-n")
-        .arg("security.selinux")
-        .output()
-        .expect("Failed to run `getfattr` on the destination file");
-    println!("{getfattr_output:?}");
-    assert!(
-        getfattr_output.status.success(),
-        "getfattr did not run successfully: {}",
-        String::from_utf8_lossy(&getfattr_output.stderr)
-    );
-
-    String::from_utf8_lossy(&getfattr_output.stdout)
-        .split('"')
-        .nth(1)
-        .unwrap_or("")
-        .to_string()
 }
 
 #[test]

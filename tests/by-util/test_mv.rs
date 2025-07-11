@@ -10,11 +10,8 @@ use rstest::rstest;
 use std::io::Write;
 #[cfg(not(windows))]
 use std::path::Path;
-<<<<<<< HEAD
-=======
-#[cfg(feature = "selinux")]
+#[cfg(feature = "feat_selinux")]
 use uucore::selinux::get_getfattr_output;
->>>>>>> 947680a6d (fix build)
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, util_name};
@@ -2497,8 +2494,6 @@ fn test_mv_cross_device_permission_denied() {
 #[test]
 #[cfg(feature = "selinux")]
 fn test_mv_selinux_context() {
-    use std::process::Command;
-
     let test_cases = [
         ("-Z", None),
         (
@@ -2513,16 +2508,14 @@ fn test_mv_selinux_context() {
         let src = "source.txt";
         let dest = "dest.txt";
 
-        at.touch(&src);
-
-    for (arg, context_value, expected_context) in test_cases {
+        at.touch(src);
 
         let mut cmd = scene.ucmd();
         cmd.arg(arg);
 
         let result = cmd
-            .arg(at.plus_as_string(&src))
-            .arg(at.plus_as_string(&dest))
+            .arg(at.plus_as_string(src))
+            .arg(at.plus_as_string(dest))
             .run();
 
         // Skip test if SELinux is not enabled
@@ -2535,41 +2528,22 @@ fn test_mv_selinux_context() {
         }
 
         result.success();
-        assert!(at.file_exists(&dest));
-        assert!(!at.file_exists(&src));
+        assert!(at.file_exists(dest));
+        assert!(!at.file_exists(src));
 
         // Verify SELinux context was set using getfattr
-        let getfattr_output = Command::new("getfattr")
-            .arg(at.plus_as_string(&dest))
-            .arg("-n")
-            .arg("security.selinux")
-            .output();
-
-        if let Ok(output) = getfattr_output {
-            let selinux_context = String::from_utf8_lossy(&output.stdout);
-            if !selinux_context.is_empty() {
-                match expected_context {
-                    Some(expected) => {
-                        let context_value =
-                            selinux_context.split('"').nth(1).unwrap_or("").to_string();
-                        assert!(
-                            context_value.contains(expected),
-                            "Expected context to contain '{}', got: {}",
-                            expected,
-                            context_value
-                        );
-                    }
-                    None => {
-                        if selinux_context.contains("security.selinux") {
-                            println!("SELinux context successfully set with {} flag", arg);
-                        }
-                    }
-                }
+        let context_value = get_getfattr_output(&at.plus_as_string(dest));
+        if !context_value.is_empty() {
+            if let Some(expected) = expected_context {
+                assert!(
+                    context_value.contains(expected),
+                    "Expected context to contain '{expected}', got: {context_value}"
+                );
             }
         }
 
         // Clean up files
-        let _ = std::fs::remove_file(at.plus_as_string(&dest));
-        let _ = std::fs::remove_file(at.plus_as_string(&src));
+        let _ = std::fs::remove_file(at.plus_as_string(dest));
+        let _ = std::fs::remove_file(at.plus_as_string(src));
     }
 }
