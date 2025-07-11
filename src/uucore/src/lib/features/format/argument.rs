@@ -172,7 +172,7 @@ impl<'a> FormatArguments<'a> {
     }
 }
 
-fn extract_value<T: Default>(p: Result<T, ExtendedParserError<'_, T>>, input: &str) -> T {
+fn extract_value<T: Default>(p: Result<T, ExtendedParserError<T>>, input: &str) -> T {
     match p {
         Ok(v) => v,
         Err(e) => {
