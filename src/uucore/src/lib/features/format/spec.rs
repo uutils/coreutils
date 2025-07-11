@@ -357,7 +357,7 @@ impl Spec {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or_default();
                 write_padded(
                     writer,
-                    &[args.next_char(position)?],
+                    &[args.next_char(position)],
                     width,
                     *align_left || neg_width,
                 )
@@ -419,7 +419,7 @@ impl Spec {
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
                 let precision = resolve_asterisk_precision(*precision, args).unwrap_or_default();
-                let i = args.next_i64(position)?;
+                let i = args.next_i64(position);
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -447,7 +447,7 @@ impl Spec {
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
                 let precision = resolve_asterisk_precision(*precision, args).unwrap_or_default();
-                let i = args.next_u64(position)?;
+                let i = args.next_u64(position);
 
                 if precision as u64 > i32::MAX as u64 {
                     return Err(FormatError::InvalidPrecision(precision.to_string()));
@@ -478,7 +478,7 @@ impl Spec {
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
                 let precision = resolve_asterisk_precision(*precision, args);
-                let f: ExtendedBigDecimal = args.next_extended_big_decimal(position)?;
+                let f: ExtendedBigDecimal = args.next_extended_big_decimal(position);
 
                 if precision.is_some_and(|p| p as u64 > i32::MAX as u64) {
                     return Err(FormatError::InvalidPrecision(
@@ -515,7 +515,7 @@ fn resolve_asterisk_width(
     match option {
         None => None,
         Some(CanAsterisk::Asterisk(loc)) => {
-            let nb = args.next_i64(&loc).unwrap_or(0);
+            let nb = args.next_i64(&loc);
             if nb < 0 {
                 Some((usize::try_from(-(nb as isize)).ok().unwrap_or(0), true))
             } else {
@@ -534,7 +534,7 @@ fn resolve_asterisk_precision(
 ) -> Option<usize> {
     match option {
         None => None,
-        Some(CanAsterisk::Asterisk(loc)) => match args.next_i64(&loc).unwrap_or(0) {
+        Some(CanAsterisk::Asterisk(loc)) => match args.next_i64(&loc) {
             v if v >= 0 => usize::try_from(v).ok(),
             v if v < 0 => Some(0usize),
             _ => None,
