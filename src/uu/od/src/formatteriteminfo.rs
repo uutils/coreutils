@@ -7,18 +7,11 @@
 use std::fmt;
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FormatWriter {
     IntWriter(fn(u64) -> String),
     FloatWriter(fn(f64) -> String),
     MultibyteWriter(fn(&[u8]) -> String),
-}
-
-impl Clone for FormatWriter {
-    #[inline]
-    fn clone(&self) -> Self {
-        *self
-    }
 }
 
 impl fmt::Debug for FormatWriter {
