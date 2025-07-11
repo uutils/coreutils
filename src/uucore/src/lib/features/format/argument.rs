@@ -115,42 +115,74 @@ impl<'a> FormatArguments<'a> {
         }
     }
 
+    // Parse an OsStr that we know to start with a '/"
+    fn parse_quote_start<T>(os: &OsStr) -> Result<T, ExtendedParserError<T>>
+    where
+        T: ExtendedParser + From<u8> + From<u32> + Default,
+    {
+        // If this fails (this can only happens on Windows), then just
+        // return NotNumeric.
+        let s = match os_str_as_bytes(os) {
+            Ok(s) => s,
+            Err(_) => return Err(ExtendedParserError::NotNumeric),
+        };
+
+        let bytes = match s.split_first() {
+            Some((b'"', bytes)) | Some((b'\'', bytes)) => bytes,
+            _ => {
+                // This really can't happen, the string we are given must start with '/".
+                debug_assert!(false);
+                return Err(ExtendedParserError::NotNumeric);
+            }
+        };
+
+        if bytes.is_empty() {
+            return Err(ExtendedParserError::NotNumeric);
+        }
+
+        let (val, len) = if let Some(c) = bytes
+            .utf8_chunks()
+            .next()
+            .expect("bytes should not be empty")
+            .valid()
+            .chars()
+            .next()
+        {
+            // Valid UTF-8 character, cast the codepoint to u32 then T
+            // (largest unicode codepoint is only 3 bytes, so this is safe)
+            ((c as u32).into(), c.len_utf8())
+        } else {
+            // Not a valid UTF-8 character, use the first byte
+            (bytes[0].into(), 1)
+        };
+        // Emit a warning if there are additional characters
+        if bytes.len() > len {
+            return Err(ExtendedParserError::PartialMatch(
+                val,
+                String::from_utf8_lossy(&bytes[len..]).to_string(),
+            ));
+        }
+
+        Ok(val)
+    }
+
     fn get_num<T>(os: &OsStr) -> T
     where
         T: ExtendedParser + From<u8> + From<u32> + Default,
     {
-        // FIXME: Remove unwrap
-        let s = os_str_as_bytes(os).unwrap();
-        // Check if the string begins with a quote, and is therefore a literal
-        if let Some((&first, bytes)) = s.split_first() {
-            if (first == b'"' || first == b'\'') && !bytes.is_empty() {
-                let (val, len) = if let Some(c) = bytes
-                    .utf8_chunks()
-                    .next()
-                    .expect("bytes should not be empty")
-                    .valid()
-                    .chars()
-                    .next()
-                {
-                    // Valid UTF-8 character, cast the codepoint to u32 then T
-                    // (largest unicode codepoint is only 3 bytes, so this is safe)
-                    ((c as u32).into(), c.len_utf8())
-                } else {
-                    // Not a valid UTF-8 character, use the first byte
-                    (bytes[0].into(), 1)
-                };
-                // Emit a warning if there are additional characters
-                if bytes.len() > len {
-                    show_warning!(
-                        "{}: character(s) following character constant have been ignored",
-                        String::from_utf8_lossy(&bytes[len..])
-                    );
-                }
-                return val;
-            }
-        }
         let s = os.to_string_lossy();
-        extract_value(T::extended_parse(&s), &s)
+        let first = s.as_bytes().first().copied();
+
+        let quote_start = first == Some(b'"') || first == Some(b'\'');
+        let parsed = if quote_start {
+            // The string begins with a quote
+            Self::parse_quote_start(os)
+        } else {
+            T::extended_parse(&s)
+        };
+
+        // Get the best possible value, even if parsed was an error.
+        extract_value(parsed, &s, quote_start)
     }
 
     fn get_at_relative_position(&mut self, pos: NonZero<usize>) -> Option<&'a FormatArgument> {
@@ -172,7 +204,11 @@ impl<'a> FormatArguments<'a> {
     }
 }
 
-fn extract_value<T: Default>(p: Result<T, ExtendedParserError<T>>, input: &str) -> T {
+fn extract_value<T: Default>(
+    p: Result<T, ExtendedParserError<T>>,
+    input: &str,
+    quote_start: bool,
+) -> T {
     match p {
         Ok(v) => v,
         Err(e) => {
@@ -192,8 +228,8 @@ fn extract_value<T: Default>(p: Result<T, ExtendedParserError<T>>, input: &str) 
                     Default::default()
                 }
                 ExtendedParserError::PartialMatch(v, rest) => {
-                    let bytes = input.as_encoded_bytes();
-                    if !bytes.is_empty() && (bytes[0] == b'\'' || bytes[0] == b'"') {
+                    if quote_start {
+                        set_exit_code(0);
                         show_warning!(
                             "{rest}: character(s) following character constant have been ignored"
                         );
