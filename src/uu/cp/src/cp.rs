@@ -1502,7 +1502,7 @@ fn copy_source(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
-    if source_path.is_dir() {
+    if source_path.is_dir() && (options.dereference || !source_path.is_symlink()) {
         // Copy as directory
         copy_directory(
             progress_bar,
